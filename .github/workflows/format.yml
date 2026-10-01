@@ -80,6 +80,25 @@ jobs:
             echo "All files are correctly formatted."
           fi
 
+      - name: Explain why the format bot is not used
+        if: steps.format.outputs.changed == 'true' && steps.bot.outputs.token == ''
+        env:
+          IS_PULL_REQUEST: ${{ github.event_name == 'pull_request' }}
+          IS_SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          HAS_CLIENT_ID: ${{ vars.FORMAT_BOT_CLIENT_ID != '' }}
+          TOKEN_STEP: ${{ steps.bot.outcome }}
+        run: |
+          if [ "$IS_PULL_REQUEST" != "true" ]; then
+            reason="the run was not triggered by a pull request (event: ${{ github.event_name }})"
+          elif [ "$IS_SAME_REPO" != "true" ]; then
+            reason="the pull request comes from a fork"
+          elif [ "$HAS_CLIENT_ID" != "true" ]; then
+            reason="the repository variable FORMAT_BOT_CLIENT_ID is not visible (Settings > Secrets and variables > Actions > Variables tab, at repository level)"
+          else
+            reason="the token could not be generated (token step: $TOKEN_STEP), check FORMAT_BOT_PRIVATE_KEY and the app installation"
+          fi
+          echo "::warning title=Format bot not used::Formatting is only checked because $reason."
+
       - name: Fail on unformatted code (no bot available)
         if: steps.format.outputs.changed == 'true' && steps.bot.outputs.token == ''
         run: |
