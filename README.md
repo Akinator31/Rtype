@@ -53,7 +53,7 @@ export CPM_SOURCE_CACHE=$HOME/.cache/CPM
 cd build && cpack -C Release
 ```
 
-This produces `r-type-<version>-Linux.tar.gz` or `r-type-<version>-Windows.zip`.
+This produces one archive per program (client and server): `.tar.gz` on Linux, `.zip` on Windows.
 
 ## Run
 
@@ -95,6 +95,8 @@ See [Writing documentation](docs/contributing/documentation.md) to add a page.
   links or pages missing from the navigation) and deploys it to GitHub Pages from `main`.
 - [Format](.github/workflows/format.yml) formats C++ files with clang-format: on pull requests, a bot
   commits the fixes to the branch and comments on the pull request.
+- [Release](.github/workflows/release.yml) publishes a GitHub release with the client and server for Linux
+  and Windows when a `vX.Y.Z` tag is pushed. See [Releasing](docs/contributing/releasing.md).
 
 ## Project layout
 

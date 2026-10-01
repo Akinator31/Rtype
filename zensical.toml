@@ -36,6 +36,7 @@ nav = [
     "contributing/index.md",
     "contributing/testing.md",
     "contributing/documentation.md",
+    "contributing/releasing.md",
     "contributing/templates.md",
     "contributing/repository-setup.md",
   ] },

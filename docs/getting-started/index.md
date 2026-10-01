@@ -12,6 +12,7 @@ This section gets you from a fresh clone to a running client and server.
 
 !!! tip "Prebuilt binaries"
 
-    Every push builds the project on Linux and Windows. The resulting archives
-    (`r-type-linux`, `r-type-windows`) can be downloaded from the **Artifacts** section of the
-    corresponding run in the [Build workflow](https://github.com/Akinator31/Rtype/actions/workflows/build.yml).
+    Released versions of the client and the server, for Linux and Windows, are available on the
+    [Releases page](https://github.com/Akinator31/Rtype/releases). Every push also builds the project; its
+    archives can be downloaded from the **Artifacts** section of the corresponding run in the
+    [Build workflow](https://github.com/Akinator31/Rtype/actions/workflows/build.yml).
