@@ -1,0 +1,32 @@
+# C++ code style, checked by the "Format" workflow (clang-format 23, see requirements-dev.txt).
+# Format a file: clang-format -i path/to/file.cpp
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+IndentWidth: 4
+ColumnLimit: 110
+AccessModifierOffset: -4
+NamespaceIndentation: None
+
+# Braces on their own line for functions, classes and namespaces, attached for control statements
+BreakBeforeBraces: Linux
+
+PointerAlignment: Right
+ReferenceAlignment: Right
+
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: Yes
+
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Project headers ("...") first, then third-party (<raylib.h>, <catch2/...>), then the standard library
+  - Regex: '^"'
+    Priority: 1
+  - Regex: '^<[a-z_]+>$'
+    Priority: 3
+  - Regex: '^<'
+    Priority: 2
