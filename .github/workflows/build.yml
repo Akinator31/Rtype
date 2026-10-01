@@ -1,0 +1,71 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-24.04
+          - name: windows
+            os: windows-2022
+
+    env:
+      CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install system libraries (X11 / OpenGL)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+
+      - name: Restore dependency cache
+        uses: actions/cache@v6
+        with:
+          path: .cpm-cache
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/**', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DRTYPE_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C ${{ env.BUILD_TYPE }} --output-on-failure
+
+      - name: Package
+        working-directory: build
+        run: cpack -C ${{ env.BUILD_TYPE }}
+
+      # The .tar.gz keeps the executable permissions of the Linux binaries
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: r-type-${{ matrix.name }}
+          path: |
+            build/r-type-*.zip
+            build/r-type-*.tar.gz
+          if-no-files-found: error
