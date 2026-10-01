@@ -5,9 +5,10 @@ on:
     branches: ["**"]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -60,7 +61,6 @@ jobs:
         working-directory: build
         run: cpack -C ${{ env.BUILD_TYPE }}
 
-      # The .tar.gz keeps the executable permissions of the Linux binaries
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:

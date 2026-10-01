@@ -8,7 +8,8 @@
 - Every pull request is reviewed by at least one other team member and must pass the CI
   (*Build*, *Format* and, when relevant, *Documentation*).
 - Work is tracked in GitHub issues; reference the issue in the pull request (`Closes #12`).
-- Important milestones (deliveries, defenses) are tagged: `v1.0.0`, `v2.0.0`.
+- Important milestones (deliveries, defenses) are tagged: `v1.0.0`, `v2.0.0`. Pushing a tag publishes a
+  release automatically, see [Releasing](releasing.md).
 
 ## Commit messages
 

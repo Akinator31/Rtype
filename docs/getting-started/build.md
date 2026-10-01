@@ -84,8 +84,9 @@ cd build
 cpack -C Release
 ```
 
-This produces `r-type-<version>-Linux.tar.gz` or `r-type-<version>-Windows.zip`, containing the two
-binaries.
+This produces one archive per program: `r-type-<version>-Linux-client.tar.gz` and
+`r-type-<version>-Linux-server.tar.gz` on Linux, `.zip` files on Windows. Published versions are built the
+same way, see [Releasing](../contributing/releasing.md).
 
 ## Troubleshooting
 
