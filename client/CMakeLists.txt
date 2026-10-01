@@ -13,4 +13,4 @@ add_executable(r-type_client
 )
 target_link_libraries(r-type_client PRIVATE rtype_options raylib)
 
-install(TARGETS r-type_client RUNTIME DESTINATION . COMPONENT rtype)
+install(TARGETS r-type_client RUNTIME DESTINATION . COMPONENT client)
