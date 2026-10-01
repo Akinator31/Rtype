@@ -1,0 +1,134 @@
+name: Format
+
+# On pull requests from this repository, unformatted C++ code is fixed automatically: the format bot
+# (a GitHub App, see docs/contributing/repository-setup.md) commits the result to the branch and comments on
+# the pull request. Elsewhere (forks, pushes to main, bot not configured), the job only checks and fails.
+
+on:
+  # No path filter on pull requests: the check can then be required by the branch protection of main
+  pull_request:
+  push:
+    branches: ["main"]
+    paths:
+      - "**/*.cpp"
+      - "**/*.hpp"
+      - "**/*.h"
+      - ".clang-format"
+      - "requirements-dev.txt"
+      - ".github/workflows/format.yml"
+  workflow_dispatch:
+
+# Not cancelled: a run that just pushed a fix must still be able to post its comment
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BOT_COMMIT_MESSAGE: "style: apply clang-format"
+
+jobs:
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    steps:
+      # Commits pushed with this token trigger the other workflows, unlike the default GITHUB_TOKEN
+      - name: Generate format bot token
+        id: bot
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          vars.FORMAT_BOT_CLIENT_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.FORMAT_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FORMAT_BOT_PRIVATE_KEY }}
+
+      # On a pull request, check out the branch itself (not the merge commit) so the bot can push to it
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          token: ${{ steps.bot.outputs.token || github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      # Same clang-format version for everyone, pinned in requirements-dev.txt
+      - name: Install clang-format
+        run: pip install -r requirements-dev.txt
+
+      # Tracked C++ files only: submodules and fetched dependencies are left alone
+      - name: Run clang-format
+        id: format
+        run: |
+          clang-format --version
+          git ls-files -z '*.cpp' '*.hpp' '*.h' | xargs -0 --no-run-if-empty clang-format -i
+          git diff --name-only > "$RUNNER_TEMP/formatted.txt"
+          if [ -s "$RUNNER_TEMP/formatted.txt" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Files to reformat:"
+            cat "$RUNNER_TEMP/formatted.txt"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "All files are correctly formatted."
+          fi
+
+      - name: Fail on unformatted code (no bot available)
+        if: steps.format.outputs.changed == 'true' && steps.bot.outputs.token == ''
+        run: |
+          git diff
+          echo "::error::Some files are not formatted. Run clang-format -i on them (see docs/contributing/testing.md#formatting)."
+          exit 1
+
+      # Safety net against an endless loop if clang-format were not idempotent
+      - name: Fail if the bot's own commit is still unformatted
+        if: steps.format.outputs.changed == 'true' && steps.bot.outputs.token != ''
+        run: |
+          if [ "$(git log -1 --format=%s)" = "$BOT_COMMIT_MESSAGE" ]; then
+            git diff
+            echo "::error::Code is still unformatted after the format bot's commit."
+            exit 1
+          fi
+
+      - name: Commit and push the formatted files
+        if: steps.format.outputs.changed == 'true' && steps.bot.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          BOT_SLUG: ${{ steps.bot.outputs.app-slug }}
+        run: |
+          bot_id=$(gh api "/users/${BOT_SLUG}[bot]" --jq .id)
+          git config user.name "${BOT_SLUG}[bot]"
+          git config user.email "${bot_id}+${BOT_SLUG}[bot]@users.noreply.github.com"
+          git commit --all --message "$BOT_COMMIT_MESSAGE"
+          git push
+
+      - name: Comment on the pull request
+        if: steps.format.outputs.changed == 'true' && steps.bot.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "### :robot: Code formatted automatically"
+            echo
+            echo "clang-format reformatted the following files and pushed a commit (\`$BOT_COMMIT_MESSAGE\`) to this branch:"
+            echo
+            sed 's/.*/- `&`/' "$RUNNER_TEMP/formatted.txt"
+            echo
+            echo "**Before pushing again**, get this commit with:"
+            echo
+            echo '```sh'
+            echo 'git pull --rebase'
+            echo '```'
+            echo
+            echo "Tip: enable *format on save* in your editor (it reads \`.clang-format\`) and this step will not be needed."
+          } > "$RUNNER_TEMP/comment.md"
+          gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
