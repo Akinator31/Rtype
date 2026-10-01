@@ -1,0 +1,117 @@
+# Documentation site configuration (https://zensical.org)
+#
+# Adding a page: create the .md file under docs/ and list it in `nav` below.
+# `scripts/check_docs_nav.py` (run by the CI) fails if a page is missing from `nav`.
+
+[project]
+site_name = "R-Type"
+site_description = "Networked R-Type clone built on our own C++ game engine"
+site_url = "https://akinator31.github.io/Rtype/"
+repo_url = "https://github.com/Akinator31/Rtype"
+repo_name = "Akinator31/Rtype"
+edit_uri = "edit/main/docs/"
+copyright = "R-Type team — Epitech B-CPP-500"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = [
+    "getting-started/index.md",
+    "getting-started/build.md",
+  ] },
+  { "Architecture" = [
+    "architecture/index.md",
+  ] },
+  { "Network protocol" = [
+    "protocol/index.md",
+  ] },
+  { "Technical decisions" = [
+    "decisions/index.md",
+    "decisions/0001-cpm-package-manager.md",
+    "decisions/0002-raylib-graphics-library.md",
+    "decisions/0003-documentation-tooling.md",
+    "decisions/0004-testing-tools.md",
+  ] },
+  { "Accessibility" = "accessibility.md" },
+  { "Contributing" = [
+    "contributing/index.md",
+    "contributing/testing.md",
+    "contributing/documentation.md",
+    "contributing/templates.md",
+    "contributing/repository-setup.md",
+  ] },
+  { "API reference" = "reference/index.md" },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.action.edit",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[project.theme.icon]
+logo = "lucide/rocket"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "indigo"
+accent = "deep-orange"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "indigo"
+accent = "deep-orange"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/Akinator31/Rtype"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.betterem = {}
+pymdownx.details = {}
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tasklist.custom_checkbox = true

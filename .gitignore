@@ -1,0 +1,22 @@
+# Build outputs
+build/
+cmake-build-*/
+out/
+
+# CPM dependency cache (when CPM_SOURCE_CACHE points inside the repository)
+.cpm-cache/
+
+# IDE / tooling
+.vscode/
+.idea/
+.vs/
+.cache/
+compile_commands.json
+CMakeUserPresets.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation output
+site/

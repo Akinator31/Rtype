@@ -1,0 +1,157 @@
+# Testing policy
+
+This page defines how R-Type is tested: which tools are used, what must be tested, how the code has to be
+designed to be testable, and which steps are still to be set up. The choice of tools is explained in
+[ADR 0004](../decisions/0004-testing-tools.md).
+
+## Goals
+
+The subject sets requirements that are hard to prove without automated tests:
+
+| Requirement | How we prove it |
+|---|---|
+| Malformed packets must not crash the client or the server, nor consume excessive memory | Unit tests for every rejection case, and **fuzzing** of the packet decoder |
+| The server is multithreaded and keeps running when a client crashes | **ThreadSanitizer** and an integration test that kills a client |
+| Clients and servers on Linux and Windows play together | Unit tests of the binary encoding, run on **both platforms** in CI |
+| Time flow does not depend on CPU speed | Game logic tested with an injected, fixed time step |
+
+## Tools
+
+| Purpose | Tool | Status |
+|---|---|---|
+| Unit and integration tests | [Catch2 v3](https://github.com/catchorg/Catch2), fetched by CPM | :white_check_mark: In place |
+| Test runner | CTest | :white_check_mark: In place |
+| Code formatting | clang-format 23 (`.clang-format`, `requirements-dev.txt`), applied by the format bot | :white_check_mark: In place |
+| Memory errors and undefined behaviour | AddressSanitizer + UndefinedBehaviorSanitizer | :hourglass: Step 2 |
+| Packet decoder robustness | libFuzzer (Clang) | :hourglass: Step 2 |
+| Data races in the server | ThreadSanitizer | :hourglass: Step 3 |
+| Static analysis | clang-tidy | :hourglass: Step 3 |
+| Coverage report | gcovr, published with this documentation | :hourglass: Step 4 |
+| Performance measurements | Catch2 benchmarks | :hourglass: Step 4 |
+
+## Test levels
+
+Unit tests
+:   Most of the tests. One behaviour per test, no network, no window, no sleeping. Targets: ECS, serialization,
+    protocol messages (valid and invalid), game rules (movement, collisions, spawning).
+
+Integration tests
+:   The server and two to four headless "bot" clients in the same test, over UDP on `127.0.0.1`: connection,
+    propagation of a move, abrupt disconnection of a client.
+
+Fuzzing
+:   The packet decoder receives millions of random or mutated datagrams. Any crash, sanitizer report or
+    excessive allocation is a bug.
+
+Smoke tests
+:   The binaries start and exit cleanly (`smoke.*` tests, registered with `add_test` in `tests/CMakeLists.txt`).
+
+## Designing testable code
+
+These rules are what make the tests above possible. They also match the decoupling expected from the
+engine.
+
+- **The engine is a library** linked by the client, the server and the tests. Tests never link the client
+  or server executables.
+- **Game logic does not depend on raylib**: it runs without a window, in the server and in tests.
+- **Time and randomness are injected**: systems receive the elapsed time instead of reading a clock, and
+  random generators take a seed. A test always replays the same way.
+- **Networking is behind an interface**: tests use a fake socket, which can also drop, duplicate or reorder
+  packets on purpose.
+
+## Rules for contributions
+
+- A pull request that adds or changes behaviour comes with tests for it.
+- A bug fix comes with a test that fails without the fix.
+- Every pull request must pass the *Build* (both platforms, tests included) and *Format* workflows.
+  Formatting is fixed by the format bot, see [Formatting](#formatting).
+- Tests are deterministic: no dependency on time, network outside `127.0.0.1`, or execution order.
+
+## Writing a test
+
+Tests live in `tests/`. Add the file to `rtype_tests` in `tests/CMakeLists.txt`; each `TEST_CASE` then appears
+as a separate CTest test.
+
+```cpp
+#include <catch2/catch_test_macros.hpp>
+
+TEST_CASE("A packet shorter than the header is rejected", "[protocol]")
+{
+    const std::array<std::byte, 2> data{};
+    REQUIRE_FALSE(decodePacket(data).has_value());
+}
+```
+
+- Name the test after the expected behaviour, as a sentence.
+- Tag it with its subsystem: `[ecs]`, `[protocol]`, `[network]`, `[game]`, `[platform]`.
+- Use `SECTION`s to share a setup between related checks.
+
+## Running the tests
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Run a subset with Catch2 tags, or with a CTest name filter:
+
+```sh
+./build/bin/rtype_tests "[protocol]"
+ctest --test-dir build -C Release -R smoke
+```
+
+Tests are built by default; configure with `-DRTYPE_BUILD_TESTS=OFF` to skip them.
+
+### Formatting
+
+Nothing to install: on pull requests, the *Format* workflow **formats the code automatically**. When a file
+needs it, the format bot pushes a `style: apply clang-format` commit to your branch and leaves a comment.
+Get its commit before pushing again:
+
+```sh
+git pull --rebase
+```
+
+To avoid this round trip, enable *format on save* in your editor: VS Code (C/C++ extension), CLion and
+Visual Studio read the repository's `.clang-format` without extra setup.
+
+To format by hand with the exact version used by the CI:
+
+```sh
+pip install -r requirements-dev.txt
+clang-format -i path/to/file.cpp
+```
+
+## Continuous integration
+
+| Workflow | Runs | Checks |
+|---|---|---|
+| *Build* | Every push and pull request, Linux and Windows | Compilation, all CTest tests, packaging |
+| *Format* | Every pull request, and pushes to `main` that change C++ files | Formats tracked C++ files; on pull requests the bot commits the fixes, elsewhere unformatted code fails the job |
+
+## Roadmap
+
+Steps still to set up, and what triggers each of them. Tick the box and move the tool to *In place* above
+when done.
+
+### Step 2 — when the protocol decoder and the ECS exist
+
+- [ ] CI job `sanitizers`: Debug build with Clang, `-fsanitize=address,undefined`, runs all tests (Linux).
+- [ ] Fuzz target `tests/fuzz/packet_decoder.cpp` (`LLVMFuzzerTestOneInput`) calling the packet decoder.
+- [ ] CI job `fuzz`: runs the fuzzer for a few minutes on pull requests that touch the network code, and
+      longer every night; crashing inputs are kept as regression tests.
+- [ ] Unit tests for every message of the [protocol](../protocol/index.md), including each rejection case.
+
+### Step 3 — when the server runs several threads
+
+- [ ] CI job `tsan`: `-fsanitize=thread` build running the server tests.
+- [ ] Integration test: server and bot clients over `127.0.0.1`, including a client killed mid-game.
+- [ ] clang-tidy with a small set of checks (`bugprone-*`, `performance-*`), extended progressively.
+
+### Step 4 — part 2 of the project
+
+- [ ] Coverage report (gcovr) published under `/coverage/` of this site.
+- [ ] Catch2 benchmarks for serialization and ECS iteration.
+- [ ] Network condition simulation (loss, latency, reordering) in the fake socket, with measurements of
+      bandwidth and responsiveness.

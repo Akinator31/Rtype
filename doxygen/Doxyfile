@@ -1,0 +1,39 @@
+# Doxygen configuration for the C++ API reference, published under /api/ of the documentation site.
+# Only non-default values are set here. Run from the repository root, after `zensical build`:
+#   doxygen doxygen/Doxyfile
+
+PROJECT_NAME           = "R-Type"
+PROJECT_BRIEF          = "C++ API reference"
+
+OUTPUT_DIRECTORY       = site/api
+HTML_OUTPUT            = .
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+CREATE_SUBDIRS         = NO
+
+# Sources: every C++ file of the repository (new folders such as engine/ are picked up
+# automatically), without build outputs and fetched dependencies
+INPUT                  = doxygen/mainpage.md .
+USE_MDFILE_AS_MAINPAGE = doxygen/mainpage.md
+RECURSIVE              = YES
+FILE_PATTERNS          = *.hpp *.h *.cpp
+EXCLUDE                = build site docs tests .git .github .cache .cpm-cache doxygen/doxygen-awesome-css
+EXCLUDE_PATTERNS       = */build/* */cmake-build-*/* */_deps/* */.cpm-cache/*
+STRIP_FROM_PATH        = .
+
+# List everything, even what is not commented yet, and sort members as declared
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+SORT_MEMBER_DOCS       = NO
+JAVADOC_AUTOBRIEF      = YES
+WARN_IF_UNDOCUMENTED   = NO
+QUIET                  = YES
+
+# Theme: doxygen-awesome-css (git submodule, `git submodule update --init` after cloning)
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+HTML_COLORSTYLE        = LIGHT
+HTML_EXTRA_STYLESHEET  = doxygen/doxygen-awesome-css/doxygen-awesome.css \
+                         doxygen/doxygen-awesome-css/doxygen-awesome-sidebar-only.css
