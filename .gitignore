@@ -20,3 +20,6 @@ Thumbs.db
 
 # Documentation output
 site/
+
+# Others
+.neocmake.toml
