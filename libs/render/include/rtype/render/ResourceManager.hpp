@@ -34,6 +34,9 @@ private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
 
+    // The renderer reads the loaded resources to draw them
+    friend class Renderer;
+
 public:
     /// Creates an empty manager.
     /// @param window The open window. It must outlive the manager.

@@ -11,6 +11,7 @@ add_executable(rtype_tests
     paths.cpp
     platform_assumptions.cpp
     resource_cache.cpp
+    viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE rtype_options rtype::render Catch2::Catch2WithMain)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
