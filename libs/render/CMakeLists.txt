@@ -9,6 +9,7 @@ CPMAddPackage(
 )
 
 add_library(rtype_render
+    src/ResourceManager.cpp
     src/Window.cpp
 )
 add_library(rtype::render ALIAS rtype_render)
