@@ -9,6 +9,7 @@ CPMAddPackage(
 )
 
 add_library(rtype_render
+    src/Paths.cpp
     src/ResourceManager.cpp
     src/Window.cpp
 )

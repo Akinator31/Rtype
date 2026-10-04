@@ -50,6 +50,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 ```
 apps/       executables, one subdirectory per program
   client/   graphical client (r-type_client)
+    assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
 libs/       libraries shared by the programs, one subdirectory per library
 tests/      unit and smoke tests (Catch2)
@@ -68,3 +69,8 @@ libs/<name>/
   include/rtype/<name>/   public headers, included as <rtype/<name>/Header.hpp>
   src/                    implementation
 ```
+
+The client's assets live in `apps/client/assets/`. The build copies them next to the executable
+(`build/bin/assets/`) and the client package ships them in the same place, so the client loads them from
+`rtype::render::applicationDirectory() / "assets"` and finds them wherever it is started from. Paths given
+to the `ResourceManager` are relative to this directory, for instance `"sprites/player.png"`.
