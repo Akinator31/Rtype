@@ -48,11 +48,23 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 ## Repository layout
 
 ```
-client/     graphical client (r-type_client)
-server/     game server (r-type_server)
+apps/       executables, one subdirectory per program
+  client/   graphical client (r-type_client)
+  server/   game server (r-type_server)
+libs/       libraries shared by the programs, one subdirectory per library
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
 docs/       this documentation (Zensical)
 doxygen/    API reference configuration
 scripts/    developer and CI scripts
+```
+
+Each library keeps its public headers apart from its implementation, so that the libraries it depends on
+(raylib, for instance) stay out of its interface:
+
+```
+libs/<name>/
+  CMakeLists.txt
+  include/rtype/<name>/   public headers, included as <rtype/<name>/Header.hpp>
+  src/                    implementation
 ```

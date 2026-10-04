@@ -27,8 +27,8 @@ else()
   target_compile_options(rtype_options INTERFACE -Wall -Wextra -Wpedantic)
 endif()
 
-add_subdirectory(server)
-add_subdirectory(client)
+add_subdirectory(libs)
+add_subdirectory(apps)
 
 if(RTYPE_BUILD_TESTS)
   enable_testing()
