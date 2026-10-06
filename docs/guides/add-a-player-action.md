@@ -34,8 +34,8 @@ gamepad buttons, and reacts to it in the client. It is for anyone adding gamepla
     Remember that keys are physical positions named after a QWERTY keyboard: `Key::Q` is the `A` key on
     AZERTY. Check that the new keys do not conflict with other actions.
 
-3. **React to it** in the client, after `controls.update(devices)`. Choose the function matching the
-   behaviour you want:
+3. **React to it** in the client, after `controls.update(devices, window.frameTime())`. Choose the function
+   matching the behaviour you want:
 
     ```cpp
     if (controls.wasPressed(Action::ChargedShot)) {
@@ -43,11 +43,12 @@ gamepad buttons, and reacts to it in the client. It is for anyone adding gamepla
     }
     if (controls.wasReleased(Action::ChargedShot)) {
         // fire: true for one frame when the key goes up
+        const float charge = controls.heldDuration(Action::ChargedShot);   // seconds it was held
     }
     ```
 
-    Use `isActive()` for something that lasts while the input is held, and `strength()` for an analog
-    value between 0 and 1.
+    Use `isActive()` for something that lasts while the input is held, `wasRepeated()` for something that
+    repeats while it is held, and `strength()` for an analog value between 0 and 1.
 
 4. **Update the documentation**: add the action to the table of default controls in
    [Input](../architecture/input.md#controls-of-r-type).
