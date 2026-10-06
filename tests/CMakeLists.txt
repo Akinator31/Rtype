@@ -10,13 +10,14 @@ include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
 add_executable(rtype_tests
     action_map.cpp
     ecs.cpp
+    log.cpp
     paths.cpp
     platform_assumptions.cpp
     resource_cache.cpp
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
-    rtype_options rtype::ecs rtype::input rtype::render Catch2::Catch2WithMain)
+    rtype_options rtype::ecs rtype::input rtype::log rtype::render Catch2::Catch2WithMain)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 
 # Smoke tests: the binaries start and exit cleanly
