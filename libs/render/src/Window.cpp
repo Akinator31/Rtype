@@ -32,6 +32,8 @@ Window::Window(const WindowSettings &settings)
     if (!IsWindowReady()) {
         throw std::runtime_error("Cannot open the window");
     }
+    // raylib closes the window when Escape is pressed: disable it, the game decides what Escape does
+    SetExitKey(KEY_NULL);
     SetTargetFPS(settings.targetFps);
     windowOpen = true;
 }

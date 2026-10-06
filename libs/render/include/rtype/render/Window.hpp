@@ -37,7 +37,8 @@ public:
     Window(Window &&) = delete;
     Window &operator=(Window &&) = delete;
 
-    /// Tells whether the player asked to close the window (close button or Escape key).
+    /// Tells whether the player asked to close the window, with its close button or the system shortcut
+    /// (Alt+F4 for instance). The Escape key does not close the window: what it does is up to the game.
     [[nodiscard]] bool shouldClose() const;
 
     /// Current width of the drawable area, in pixels.

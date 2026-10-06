@@ -134,6 +134,7 @@ stick at the same time does not move faster.
 | `MoveLeft` | ++arrow-left++ or ++a++ (++q++ on AZERTY) | D-pad left, left stick left |
 | `MoveRight` | ++arrow-right++ or ++d++ | D-pad right, left stick right |
 | `Shoot` | ++space++ | Bottom face button, right trigger |
+| `Menu` | ++escape++ | Start |
 
 When moving, the client normalises the direction: pushing up and right at the same time must not move faster
 than pushing in one direction.
@@ -169,7 +170,8 @@ buttons and gestures.
 
 ## Limits and next steps
 
-- **Escape closes the window**: this is raylib's default behaviour, to be replaced by a pause menu.
+- **The menu is a placeholder**: `Menu` opens an empty screen in the demo. It does not pause the game,
+  which is shared with the other players, and its content (options, controls, quit) is still to be done.
 - **Bindings are not saved**: the controls chosen by a player are lost when the game closes.
 - **No mouse support** yet for the menus.
 - **The actions are not sent to the server yet**: they will be encoded in the `INPUT` message of the

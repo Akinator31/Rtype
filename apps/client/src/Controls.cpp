@@ -37,6 +37,9 @@ input::ActionMap<Action> defaultControls()
     controls.bind(Action::Shoot, Binding::gamepadButton(GamepadButton::FaceDown));
     controls.bind(Action::Shoot, Binding::gamepadAxis(GamepadAxis::RightTrigger, AxisDirection::Positive));
 
+    controls.bind(Action::Menu, Binding::key(Key::Escape));
+    controls.bind(Action::Menu, Binding::gamepadButton(GamepadButton::Start));
+
     return controls;
 }
 

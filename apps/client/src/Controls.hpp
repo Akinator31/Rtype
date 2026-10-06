@@ -12,10 +12,11 @@ enum class Action {
     MoveLeft,
     MoveRight,
     Shoot,
+    Menu,
 };
 
-/// Default controls: arrows or WASD (ZQSD on AZERTY) and Space on the keyboard, D-pad or left stick and the
-/// bottom face button or right trigger on the first gamepad.
+/// Default controls: arrows or WASD (ZQSD on AZERTY), Space and Escape on the keyboard; D-pad or left stick,
+/// bottom face button or right trigger, and Start on the first gamepad.
 [[nodiscard]] input::ActionMap<Action> defaultControls();
 
 } // namespace rtype::client
