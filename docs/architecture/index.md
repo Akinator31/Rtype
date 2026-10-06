@@ -45,30 +45,18 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | **Audio** | Music and sound effects | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
 
-## Rendering
+## Client libraries
 
-The render library (`libs/render`, namespace `rtype::render`) wraps raylib: its public headers contain no
-raylib type, so the rest of the client never depends on raylib directly.
+The client is built on three libraries. Each one has its own page:
 
-| Class | Role |
-|---|---|
-| `Window` | Opens the window and closes it when destroyed. Only one can exist. |
-| `ResourceManager` | Loads textures and fonts once, and hands out handles (`TextureId`, `FontId`) to refer to them. |
-| `Renderer` | Draws textures, text and shapes between `beginFrame()` and `endFrame()`. |
+| Library | Role | Page |
+|---|---|---|
+| `libs/render` | Window, textures and fonts, drawing at a fixed logical resolution. Wraps raylib. | [Rendering](rendering.md) |
+| `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
+| `libs/ecs` | Entities, components and systems. Shared with the server, so it never depends on raylib. | — |
 
-The three objects depend on each other: they are created in this order and destroyed in the reverse one,
-which C++ does automatically when they are declared in this order.
-
-```cpp
-const Window window;
-ResourceManager resources(window, applicationDirectory() / "assets");
-Renderer renderer(window, resources);
-```
-
-The game is drawn at a fixed **logical resolution** (1920x1080 by default), whatever the size of the window:
-all positions and sizes are in game units, so the server and the client agree on coordinates. At the end of
-each frame, the image is scaled to fit the window while keeping its aspect ratio, with black bars on the
-sides if needed.
+Their public headers contain no raylib type: raylib is a private dependency of `render` and `input`, and the
+client code only uses our own classes. The server links none of them except the ECS.
 
 ## Repository layout
 
@@ -78,6 +66,9 @@ apps/       executables, one subdirectory per program
     assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
 libs/       libraries shared by the programs, one subdirectory per library
+  ecs/      entity component system (client and server)
+  input/    keyboard and gamepad input (client)
+  render/   window, resources and drawing (client)
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
 docs/       this documentation (Zensical)
