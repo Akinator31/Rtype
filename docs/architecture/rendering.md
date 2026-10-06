@@ -144,6 +144,9 @@ original size with 320 pixels of black bar on each side.
 | `drawTexture(id, position, tint)` | A whole texture at its original size. |
 | `drawTexture(id, source, destination, rotation, tint)` | Part of a texture (one frame of a sprite sheet), stretched to the destination and rotated around its centre, in degrees. |
 | `drawRectangle(rectangle, color)` | A filled rectangle. |
+| `drawCircle(center, radius, color)` | A filled circle, for instance a star or a round projectile. |
+| `drawLine(start, end, thickness, color)` | A straight line of any thickness, for instance a laser. |
+| `drawTriangle(first, second, third, color)` | A filled triangle, for instance a placeholder ship. |
 | `drawText(font, text, position, size, color)` | Text with a loaded font. |
 | `drawText(text, position, size, color)` | Text with raylib's built-in font, for debugging. |
 | `drawFps(position)` | The number of frames per second, for debugging. |
@@ -169,6 +172,9 @@ These details only matter when working inside `libs/render`:
 - **Name clashes.** Our `Vector2`, `Rectangle` and `Color` have the same names as raylib's types. Inside the
   library, raylib's ones are written `::Rectangle`, and raylib's colour macros (`WHITE`, `BLACK`...) cannot
   be used, as they expand to our `Color`.
+- **Triangle winding.** raylib only draws triangles whose corners are given counter-clockwise on screen: the
+  others are culled without any warning. `drawTriangle()` reorders the corners, so they can be given in any
+  order.
 - **Upside-down render target.** OpenGL stores off-screen images upside down: `endFrame()` copies the image
   with a negative source height to flip it back.
 
