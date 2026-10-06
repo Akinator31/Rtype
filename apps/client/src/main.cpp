@@ -9,6 +9,7 @@
 #include "rtype/render/Window.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <exception>
 #include <string>
@@ -20,12 +21,16 @@ void run()
 {
     using namespace rtype::render;
     using rtype::client::Action;
+    using rtype::client::MenuAction;
+
+    const rtype::log::Logger logger("client");
 
     const Window window;
     ResourceManager resources(window, applicationDirectory() / "assets");
     Renderer renderer(window, resources);
     const rtype::input::Devices devices(window);
     rtype::input::ActionMap<Action> controls = rtype::client::defaultControls();
+    rtype::input::ActionMap<MenuAction> menuControls = rtype::client::defaultMenuControls();
 
     const float titleSize = 160.0f;
     const FontId font = resources.loadFont("fonts/FiraSans-Black.ttf", static_cast<int>(titleSize));
@@ -35,19 +40,44 @@ void run()
     const float greetingSize = 48.0f;
 
     // Demo of the controls: the image moves with the movement actions, Shoot counts the shots, Menu opens a
-    // placeholder menu during which the other actions are ignored
+    // placeholder menu, navigated with the menu actions, during which the game actions are ignored
     const float speed = 600.0f;
     const float imageSize = 300.0f;
     Vector2 position{200.0f, 200.0f};
     int shots = 0;
     bool menuOpen = false;
+    const std::array<std::string, 3> menuItems{"Resume", "Options", "Quit"};
+    std::size_t selectedItem = 0;
 
     while (!window.shouldClose()) {
         const Vector2 game = renderer.gameSize();
 
-        controls.update(devices);
-        if (controls.wasPressed(Action::Menu)) {
-            menuOpen = !menuOpen;
+        // Both maps are updated every frame, but only the one matching the state at the start of the frame is
+        // read: Escape opens the menu in game and closes it in the menu, never both in the same frame
+        const bool menuWasOpen = menuOpen;
+        controls.update(devices, window.frameTime());
+        menuControls.update(devices, window.frameTime());
+        if (!menuWasOpen && controls.wasPressed(Action::Menu)) {
+            menuOpen = true;
+            selectedItem = 0;
+        }
+        if (menuWasOpen) {
+            // wasRepeated(): holding Up or Down keeps moving the selection after a short delay
+            if (menuControls.wasRepeated(MenuAction::Up)) {
+                selectedItem = (selectedItem + menuItems.size() - 1) % menuItems.size();
+            }
+            if (menuControls.wasRepeated(MenuAction::Down)) {
+                selectedItem = (selectedItem + 1) % menuItems.size();
+            }
+            if (menuControls.wasPressed(MenuAction::Back)) {
+                menuOpen = false;
+            } else if (menuControls.wasPressed(MenuAction::Confirm)) {
+                if (selectedItem == 0) {
+                    menuOpen = false;
+                } else {
+                    logger.info("Menu item \"{}\" is not implemented yet", menuItems[selectedItem]);
+                }
+            }
         }
         Vector2 direction{controls.strength(Action::MoveRight) - controls.strength(Action::MoveLeft),
                           controls.strength(Action::MoveDown) - controls.strength(Action::MoveUp)};
@@ -62,7 +92,7 @@ void run()
             std::clamp(position.x + direction.x * speed * window.frameTime(), 0.0f, game.x - imageSize);
         position.y =
             std::clamp(position.y + direction.y * speed * window.frameTime(), 0.0f, game.y - imageSize);
-        if (!menuOpen && controls.wasPressed(Action::Shoot)) {
+        if (!menuWasOpen && controls.wasPressed(Action::Shoot)) {
             ++shots;
         }
         const Vector2 titleArea = renderer.measureText(font, title, titleSize);
@@ -80,14 +110,14 @@ void run()
         renderer.drawFps({10.0f, 10.0f});
         if (menuOpen) {
             const std::string menuTitle = "Menu";
-            const std::string menuHint = "Press Escape or Start to go back";
+            const std::string menuHint = "Up / Down to choose, Enter to confirm, Escape to go back";
             const Vector2 menuTitleArea = renderer.measureText(font, menuTitle, titleSize);
             const Vector2 menuHintArea = renderer.measureText(menuHint, greetingSize);
             renderer.drawRectangle({0.0f, 0.0f, game.x, game.y}, {0, 0, 0, 180});
             renderer.drawText(font, menuTitle,
                               {(game.x - menuTitleArea.x) / 2.0f, game.y / 2.0f - menuTitleArea.y}, titleSize,
                               colors::White);
-            renderer.drawText(menuHint, {(game.x - menuHintArea.x) / 2.0f, game.y / 2.0f + 40.0f},
+            renderer.drawText(menuHint, {(game.x - menuHintArea.x) / 2.0f, game.y - menuHintArea.y - 40.0f},
                               greetingSize, colors::White);
 
             renderer.drawRectangle({100.0f, 100.0f, 50.0f, 90.0f}, colors::Yellow);
@@ -96,6 +126,22 @@ void run()
             renderer.drawLine({100.0f, 540.0f}, {1800.0f, 540.0f}, 8.0f, colors::Red);
             renderer.drawCircle({960.0f, 240.0f}, 50.0f, colors::Red);
             renderer.drawTriangle({150.0f, 540.0f}, {100.0f, 510.0f}, {100.0f, 570.0f}, colors::Blue);
+
+            const float itemSize = 64.0f;
+            const float itemSpacing = 100.0f;
+            for (std::size_t item = 0; item < menuItems.size(); ++item) {
+                const Vector2 itemArea = renderer.measureText(font, menuItems[item], itemSize);
+                const Vector2 itemPosition{(game.x - itemArea.x) / 2.0f,
+                                           game.y / 2.0f + static_cast<float>(item) * itemSpacing};
+                const bool selected = item == selectedItem;
+                if (selected) {
+                    renderer.drawRectangleOutline({itemPosition.x - 30.0f, itemPosition.y - 10.0f,
+                                                   itemArea.x + 60.0f, itemArea.y + 20.0f},
+                                                  4.0f, colors::Yellow);
+                }
+                renderer.drawText(font, menuItems[item], itemPosition, itemSize,
+                                  selected ? colors::Yellow : colors::White);
+            }
         }
         renderer.endFrame();
     }
