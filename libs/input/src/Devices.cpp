@@ -43,6 +43,12 @@ int toRaylib(Key key)
         return KEY_TAB;
     case Key::Backspace:
         return KEY_BACKSPACE;
+    case Key::Delete:
+        return KEY_DELETE;
+    case Key::Home:
+        return KEY_HOME;
+    case Key::End:
+        return KEY_END;
     case Key::LeftShift:
         return KEY_LEFT_SHIFT;
     case Key::RightShift:
@@ -151,6 +157,26 @@ float Devices::gamepadAxis(int gamepad, GamepadAxis axis) const
     const float value = GetGamepadAxisMovement(gamepad, toRaylib(axis));
     // raylib gives triggers from -1 (released) to 1 (pressed): bring them to 0..1 like the documentation says
     return isTrigger(axis) ? std::clamp((value + 1.0f) / 2.0f, 0.0f, 1.0f) : std::clamp(value, -1.0f, 1.0f);
+}
+
+std::u32string Devices::takeTypedText()
+{
+    std::u32string text;
+    for (int character = GetCharPressed(); character != 0; character = GetCharPressed()) {
+        text += static_cast<char32_t>(character);
+    }
+    return text;
+}
+
+std::string Devices::clipboardText() const
+{
+    const char *text = GetClipboardText();
+    return text == nullptr ? std::string() : std::string(text);
+}
+
+void Devices::setClipboardText(const std::string &text)
+{
+    SetClipboardText(text.c_str());
 }
 
 } // namespace rtype::input

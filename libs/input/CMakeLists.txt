@@ -3,6 +3,7 @@
 add_library(rtype_input
     src/Binding.cpp
     src/Devices.cpp
+    src/TextInput.cpp
 )
 add_library(rtype::input ALIAS rtype_input)
 target_include_directories(rtype_input PUBLIC include)

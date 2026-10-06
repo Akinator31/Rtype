@@ -45,11 +45,15 @@ private:
     float _repeatDelay = 0.4f;
     float _repeatInterval = 0.1f;
 
-    // Number of repeats that happened after holding for this long: -1 before the first one
+    // Number of repeats that happened after holding for this long: -1 before the first one. The small
+    // tolerance keeps a repeat that falls exactly on a frame: in float, (0.5 - 0.4) / 0.1 gives 0.9999999
     [[nodiscard]] float repeatCount(float heldDuration) const
     {
-        return heldDuration < _repeatDelay ? -1.0f
-                                           : std::floor((heldDuration - _repeatDelay) / _repeatInterval);
+        constexpr float tolerance = 1e-4f;
+        if (heldDuration + tolerance < _repeatDelay) {
+            return -1.0f;
+        }
+        return std::floor((heldDuration - _repeatDelay) / _repeatInterval + tolerance);
     }
 
     [[nodiscard]] const State *find(Action action) const
