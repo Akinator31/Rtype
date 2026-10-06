@@ -10,6 +10,7 @@ technical and comparative study of the project.
 | [0002](0002-raylib-graphics-library.md) | raylib for the client | Accepted |
 | [0003](0003-documentation-tooling.md) | Zensical and Doxygen for the documentation | Accepted |
 | [0004](0004-testing-tools.md) | Catch2, sanitizers, fuzzing and clang-format for testing | Accepted |
+| [0005](0005-ecs-component-storage.md) | Indexed vectors for the ECS component caches | Accepted |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.
