@@ -20,6 +20,13 @@ nav = [
   ] },
   { "Architecture" = [
     "architecture/index.md",
+    "architecture/rendering.md",
+    "architecture/input.md",
+  ] },
+  { "Guides" = [
+    "guides/index.md",
+    "guides/draw-a-sprite.md",
+    "guides/add-a-player-action.md",
   ] },
   { "Network protocol" = [
     "protocol/index.md",
