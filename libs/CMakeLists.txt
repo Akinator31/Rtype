@@ -14,4 +14,5 @@ CPMAddPackage(
 
 add_subdirectory(ecs)
 add_subdirectory(input)
+add_subdirectory(log)
 add_subdirectory(render)
