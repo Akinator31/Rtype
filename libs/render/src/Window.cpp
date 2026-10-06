@@ -1,5 +1,7 @@
 #include "rtype/render/Window.hpp"
 
+#include "RaylibLog.hpp"
+
 #include <raylib.h>
 
 #include <stdexcept>
@@ -27,6 +29,7 @@ Window::Window(const WindowSettings &settings)
     if (settings.vsync) {
         flags |= FLAG_VSYNC_HINT;
     }
+    detail::redirectRaylibLogs();
     SetConfigFlags(flags);
     InitWindow(settings.width, settings.height, settings.title.c_str());
     if (!IsWindowReady()) {

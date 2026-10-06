@@ -38,7 +38,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 
 | Layer | Responsibility | Used by |
 |---|---|---|
-| **Core** | Entities, components, systems (`libs/ecs`), timing, logging | Client, server |
+| **Core** | Entities, components, systems (`libs/ecs`), logging (`libs/log`), timing | Client, server |
 | **Networking** | Sockets, binary serialization, the [protocol](../protocol/index.md) | Client, server |
 | **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
@@ -78,18 +78,20 @@ Four rules keep them from mixing:
 
 In VR, the same two passes are drawn on the board (world) and on a floating panel (interface).
 
-## Client libraries
+## Libraries
 
-The client is built on three libraries. Each one has its own page:
+The programs are built on four libraries. Each one has its own page:
 
 | Library | Role | Page |
 |---|---|---|
 | `libs/render` | Window, textures and fonts, drawing at a fixed logical resolution. Wraps raylib. | [Rendering](rendering.md) |
 | `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
 | `libs/ecs` | Entities, components and systems. Shared with the server, so it never depends on raylib. | — |
+| `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
 
 Their public headers contain no raylib type: raylib is a private dependency of `render` and `input`, and the
-client code only uses our own classes. The server links none of them except the ECS.
+client code only uses our own classes. The server only links the ECS and the log library, which do not
+depend on raylib.
 
 ## Repository layout
 
@@ -101,6 +103,7 @@ apps/       executables, one subdirectory per program
 libs/       libraries shared by the programs, one subdirectory per library
   ecs/      entity component system (client and server)
   input/    keyboard and gamepad input (client)
+  log/      logging (client and server)
   render/   window, resources and drawing (client)
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
