@@ -1,7 +1,7 @@
 add_executable(r-type_client
     src/main.cpp
 )
-target_link_libraries(r-type_client PRIVATE rtype_options rtype::render)
+target_link_libraries(r-type_client PRIVATE rtype_options rtype::ecs rtype::render)
 
 # The client finds its assets next to its executable, both in the build tree and once installed.
 # A custom target runs on every build, so that a modified asset is copied even if the code did not change.

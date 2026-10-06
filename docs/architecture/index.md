@@ -38,7 +38,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 
 | Layer | Responsibility | Used by |
 |---|---|---|
-| **Core** | Entities, components, systems, timing, logging | Client, server |
+| **Core** | Entities, components, systems (`libs/ecs`), timing, logging | Client, server |
 | **Networking** | Sockets, binary serialization, the [protocol](../protocol/index.md) | Client, server |
 | **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
 | **Rendering** | Sprites, star-field, UI, built on raylib | Client |

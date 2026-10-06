@@ -1,3 +1,4 @@
+#include "rtype/ecs/Ecs.hpp"
 #include "rtype/render/Paths.hpp"
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -15,7 +16,6 @@ void run()
 {
     using namespace rtype::render;
 
-    // Declaration order matters: resources and renderer are destroyed before the window they depend on
     const Window window;
     ResourceManager resources(window, applicationDirectory() / "assets");
     Renderer renderer(window, resources);
@@ -24,6 +24,8 @@ void run()
     const FontId font = resources.loadFont("fonts/FiraSans-Black.ttf", static_cast<int>(titleSize));
     const TextureId texture = resources.loadTexture("images/big_mama.png");
     const std::string title = "R-Type";
+    const std::string greeting = rtype::ecs::helloWorld();
+    const float greetingSize = 48.0f;
 
     while (!window.shouldClose()) {
         const Vector2 game = renderer.gameSize();
@@ -33,6 +35,9 @@ void run()
         renderer.drawTexture(texture, {200.0f, 200.0f});
         renderer.drawText(font, title, {(game.x - titleArea.x) / 2.0f, (game.y - titleArea.y) / 2.0f},
                           titleSize, colors::White);
+        const Vector2 greetingArea = renderer.measureText(greeting, greetingSize);
+        renderer.drawText(greeting, {(game.x - greetingArea.x) / 2.0f, game.y - greetingArea.y - 40.0f},
+                          greetingSize, colors::Blue);
         renderer.drawFps({10.0f, 10.0f});
         renderer.endFrame();
     }
