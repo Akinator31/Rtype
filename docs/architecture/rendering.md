@@ -91,6 +91,13 @@ noticed immediately.
     default. **JPEG is not supported**, and is a poor choice for sprites anyway, since it has no
     transparency. Fonts are TTF or OTF files.
 
+### Fonts
+
+By default, raylib only renders the ASCII characters of a font: any other character is drawn as "?". The
+`ResourceManager` also renders the Latin-1 characters, which cover the accented letters of most Western
+European languages ("é", "ç", "ü", "ß"...), plus "œ", "Œ" and "€". Characters outside of this set, for
+instance from Cyrillic or Asian scripts, are still drawn as "?".
+
 ### Where assets are found
 
 Assets live in `apps/client/assets/`. The build copies them next to the executable, and the client package

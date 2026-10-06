@@ -32,6 +32,7 @@ and future VR controllers are interchangeable sources.*
 | `Devices` | The `InputSource` reading the real keyboard and gamepads. The only file that uses raylib. |
 | `Binding` | One physical input: a key, a gamepad button, or one direction of a stick or trigger. |
 | `ActionMap<Action>` | Binds each action to its inputs, and updates the actions once per frame. |
+| `TextInput` | The text of an input field, edited with the typed characters and Backspace. |
 
 The library does not know the actions of R-Type: the client defines them, in
 `apps/client/src/Controls.hpp`, and `ActionMap` is a template over their type.
@@ -174,9 +175,13 @@ same key can then mean something else in a menu: ++escape++ opens the menu in ga
 
 | Menu action | Keyboard | Gamepad (first one) |
 |---|---|---|
-| `Up`, `Down`, `Left`, `Right` | Arrows or ++w++ ++a++ ++s++ ++d++ (++z++ ++q++ ++s++ ++d++ on AZERTY) | D-pad, left stick |
-| `Confirm` | ++enter++ or ++space++ | Bottom face button |
-| `Back` | ++escape++ or ++backspace++ | Right face button, Start |
+| `Up`, `Down`, `Left`, `Right` | Arrows | D-pad, left stick |
+| `Confirm` | ++enter++ | Bottom face button |
+| `Back` | ++escape++ | Right face button, Start |
+
+The menu controls only use keys that do not type text: menus can contain [text fields](#text-entry), where
+letters, ++space++ and ++backspace++ edit the text. If ++s++ also moved the selection down, typing a name
+containing an "s" would leave the field.
 
 Menu navigation reads `wasRepeated()`, so holding a direction scrolls through the items. The menu map has a
 larger dead zone (0.5) than the game one, so that a stick touched slightly does not skip an item.
@@ -212,10 +217,100 @@ if (length > 1.0f) {
 
 To add an action, follow [Add a player action](../guides/add-a-player-action.md).
 
+## Text entry
+
+A text field, such as a server address or a player name, reads **characters**, not keys. Characters follow
+the keyboard layout and its modifiers: ++shift+a++ gives "A", and the accent keys of a French keyboard give
+"é". The `InputSource` gives the characters typed since the previous frame with `takeTypedText()`, and a
+`TextInput` turns them into the text of a field:
+
+```cpp
+TextInput address;
+address.setMaxLength(21);
+address.setFilter([](char32_t c) { return (c >= U'0' && c <= U'9') || c == U'.' || c == U':'; });
+
+// Once per frame, while the field has the focus
+address.update(devices, window.frameTime());
+renderer.drawText(font, address.text(), position, 48.0f, colors::White);
+```
+
+- `setMaxLength()` limits the number of characters; `setFilter()` decides which characters are accepted, for
+  instance only digits and dots for an address. Control characters (tabulation, line feed...) are always
+  refused. Both also apply to pasted text.
+- The text is stored in **UTF-8**, ready to be drawn. `length()` counts characters, which can be less than
+  the size in bytes: "é" takes two bytes.
+- `wasChanged()` tells whether the text changed at the last update, for instance to validate it while it is
+  typed.
+
+### Editing
+
+A `TextInput` behaves like the text fields of common applications:
+
+| Keys | Effect |
+|---|---|
+| Typing | Inserts at the cursor, replacing the selection if there is one. |
+| ++arrow-left++ / ++arrow-right++ | Moves the cursor by one character. With a selection, goes to its start or its end. |
+| ++ctrl+arrow-left++ / ++ctrl+arrow-right++ | Moves the cursor by one word. |
+| ++home++ / ++end++ | Moves the cursor to the start or the end of the text. |
+| ++shift++ + any of the moves above | Selects the text between the cursor and where it started. |
+| ++backspace++ / ++del++ | Erases the selection, or the character before or after the cursor. |
+| ++ctrl+backspace++ / ++ctrl+del++ | Erases the word before or after the cursor. |
+| ++ctrl+a++ | Selects the whole text. |
+| ++ctrl+c++ / ++ctrl+x++ / ++ctrl+v++ | Copies or cuts the selection, pastes the clipboard. |
+
+Moving the cursor and erasing [repeat](#repeating-and-holding) while the keys are held. The clipboard is the
+system one: text copied from a browser can be pasted in the game, and the other way around.
+
+!!! note "Control+A on AZERTY keyboards"
+
+    Keys are physical positions, and the A key of an AZERTY keyboard is where QWERTY keyboards have Q. Select
+    all is bound to both positions, so ++ctrl+a++ works on both keyboards; as a side effect, ++ctrl+q++ also
+    selects everything on a QWERTY keyboard. C, X and V are at the same place on QWERTY, AZERTY and QWERTZ
+    keyboards.
+
+The cursor and the selection are given as **byte offsets** in `text()`. To draw them, measure the text
+before them:
+
+```cpp
+const auto offsetOf = [&](std::size_t byte) {
+    return position.x + renderer.measureText(font, field.text().substr(0, byte), size).x;
+};
+
+if (!field.selection().empty()) {   // selection, behind the text
+    const float begin = offsetOf(field.selection().begin);
+    renderer.drawRectangle({begin, position.y, offsetOf(field.selection().end) - begin, height}, selectionColor);
+}
+renderer.drawText(font, field.text(), position, size, colors::White);
+const float cursorX = offsetOf(field.cursor());   // cursor, on top of the text
+renderer.drawLine({cursorX, position.y}, {cursorX, position.y + height}, 3.0f, colors::White);
+```
+
+### Reading characters once per frame
+
+!!! warning "Once per frame, while the field has the focus"
+
+    Typed characters are consumed when they are read: a second call to `takeTypedText()` in the same frame
+    returns nothing. Only the field that has the focus calls `update()`; characters typed while no field has
+    the focus are lost, not delayed.
+
+The fonts loaded by the `ResourceManager` include the accented Latin letters, so that typed names are drawn
+correctly (see [Fonts](rendering.md#fonts)).
+
+### Why not an existing library
+
+Libraries such as [Dear ImGui](https://github.com/ocornut/imgui) or [RmlUi](https://github.com/mikke89/RmlUi)
+provide complete text fields. They also read the input and draw the interface themselves, outside of our
+`Renderer` and `ActionMap`, which would mean adapters for the rendering, the gamepad navigation and the VR
+panel, and would replace the light interface layer chosen in
+[ADR 0005](../decisions/0005-world-in-ecs-interface-in-ui-layer.md). For the few text fields of the game (player
+name, server address), a small class built on our input is simpler. Dear ImGui remains a good candidate for
+development tools, such as an in-game console or an entity inspector, which do not need to look like the game.
+
 ## Testing
 
-`tests/action_map.cpp` tests the `ActionMap` with a `FakeInput`, an `InputSource` whose keys, buttons and
-axes are set by the test. No window nor device is needed, so the tests run in the CI:
+`tests/action_map.cpp` and `tests/text_input.cpp` test the `ActionMap` and the `TextInput` with a
+`FakeInput` (`tests/FakeInput.hpp`), an `InputSource` whose keys, buttons, axes, typed text and clipboard are
+set by the test. No window nor device is needed, so the tests run in the CI:
 
 ```cpp
 FakeInput input;
@@ -232,8 +327,10 @@ buttons and gestures.
 
 ## Limits and next steps
 
-- **The menu is a placeholder**: the demo menu can be navigated, but its items do nothing yet except
-  *Resume*. It does not pause the game, which is shared with the other players.
+- **The menu is a placeholder**: the demo menu can be navigated and its name can be edited, but *Quit* does
+  nothing yet. It does not pause the game, which is shared with the other players.
+- **Text fields are single-line**, without undo, mouse selection, nor scrolling: a text wider than its field
+  overflows it. This is enough for a player name or a server address.
 - **Bindings are not saved**: the controls chosen by a player are lost when the game closes.
 - **No mouse support** yet for the menus.
 - **The actions are not sent to the server yet**: they will be encoded in the `INPUT` message of the
