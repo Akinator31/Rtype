@@ -145,11 +145,16 @@ original size with 320 pixels of black bar on each side.
 | `drawTexture(id, source, destination, rotation, tint)` | Part of a texture (one frame of a sprite sheet), stretched to the destination and rotated around its centre, in degrees. |
 | `drawRectangle(rectangle, color)` | A filled rectangle. |
 | `drawCircle(center, radius, color)` | A filled circle, for instance a star or a round projectile. |
+| `drawRectangleOutline(rectangle, thickness, color)` | The outline of a rectangle, for instance a hitbox or a button frame. |
+| `drawCircleOutline(center, radius, thickness, color)` | The outline of a circle, for instance a round hitbox. |
 | `drawLine(start, end, thickness, color)` | A straight line of any thickness, for instance a laser. |
 | `drawTriangle(first, second, third, color)` | A filled triangle, for instance a placeholder ship. |
 | `drawText(font, text, position, size, color)` | Text with a loaded font. |
 | `drawText(text, position, size, color)` | Text with raylib's built-in font, for debugging. |
 | `drawFps(position)` | The number of frames per second, for debugging. |
+
+Outlines are drawn **inside** the shape: the outer edge of the outline is the edge of the rectangle or
+circle. An outline drawn around a hitbox therefore shows exactly the area that collides.
 
 `textureSize()` and `measureText()` give sizes without drawing, for instance to centre a text. The tint is
 multiplied with the texture: white keeps it unchanged, a lower alpha fades it.

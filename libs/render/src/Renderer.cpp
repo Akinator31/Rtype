@@ -5,6 +5,7 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace rtype::render
@@ -183,6 +184,27 @@ void Renderer::drawCircle(Vector2 center, float radius, Color color)
     _impl->requireFrame();
     if (radius > 0.0f) {
         DrawCircleV(toRaylib(center), radius, toRaylib(color));
+    }
+}
+
+void Renderer::drawRectangleOutline(Rectangle rectangle, float thickness, Color color)
+{
+    _impl->requireFrame();
+    if (thickness > 0.0f && rectangle.width > 0.0f && rectangle.height > 0.0f) {
+        // raylib draws the outline inside the rectangle, and fills it if the outline is thicker than half of
+        // it
+        DrawRectangleLinesEx(toRaylib(rectangle), thickness, toRaylib(color));
+    }
+}
+
+void Renderer::drawCircleOutline(Vector2 center, float radius, float thickness, Color color)
+{
+    _impl->requireFrame();
+    if (thickness > 0.0f && radius > 0.0f) {
+        // A ring between the radius and the radius minus the thickness; 0 segments lets raylib pick enough of
+        // them for the circle to look round
+        const float innerRadius = std::max(radius - thickness, 0.0f);
+        DrawRing(toRaylib(center), innerRadius, radius, 0.0f, 360.0f, 0, toRaylib(color));
     }
 }
 
