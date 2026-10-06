@@ -23,6 +23,9 @@ public:
     [[nodiscard]] bool isKeyDown(Key key) const override;
     [[nodiscard]] bool isGamepadButtonDown(int gamepad, GamepadButton button) const override;
     [[nodiscard]] float gamepadAxis(int gamepad, GamepadAxis axis) const override;
+    [[nodiscard]] std::u32string takeTypedText() override;
+    [[nodiscard]] std::string clipboardText() const override;
+    void setClipboardText(const std::string &text) override;
 };
 
 } // namespace rtype::input

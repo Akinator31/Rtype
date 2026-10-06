@@ -54,33 +54,29 @@ input::ActionMap<MenuAction> defaultMenuControls()
     input::ActionMap<MenuAction> controls;
     // A stick must be clearly pushed to move in a menu: a slight touch would skip an item
     controls.setDeadZone(0.5f);
+    // Only keys that do not type text: menus can contain text fields, where letters, Space and Backspace edit
+    // the text instead of moving or confirming
 
     controls.bind(MenuAction::Up, Binding::key(Key::Up));
-    controls.bind(MenuAction::Up, Binding::key(Key::W));
     controls.bind(MenuAction::Up, Binding::gamepadButton(GamepadButton::DPadUp));
     controls.bind(MenuAction::Up, Binding::gamepadAxis(GamepadAxis::LeftY, AxisDirection::Negative));
 
     controls.bind(MenuAction::Down, Binding::key(Key::Down));
-    controls.bind(MenuAction::Down, Binding::key(Key::S));
     controls.bind(MenuAction::Down, Binding::gamepadButton(GamepadButton::DPadDown));
     controls.bind(MenuAction::Down, Binding::gamepadAxis(GamepadAxis::LeftY, AxisDirection::Positive));
 
     controls.bind(MenuAction::Left, Binding::key(Key::Left));
-    controls.bind(MenuAction::Left, Binding::key(Key::A));
     controls.bind(MenuAction::Left, Binding::gamepadButton(GamepadButton::DPadLeft));
     controls.bind(MenuAction::Left, Binding::gamepadAxis(GamepadAxis::LeftX, AxisDirection::Negative));
 
     controls.bind(MenuAction::Right, Binding::key(Key::Right));
-    controls.bind(MenuAction::Right, Binding::key(Key::D));
     controls.bind(MenuAction::Right, Binding::gamepadButton(GamepadButton::DPadRight));
     controls.bind(MenuAction::Right, Binding::gamepadAxis(GamepadAxis::LeftX, AxisDirection::Positive));
 
     controls.bind(MenuAction::Confirm, Binding::key(Key::Enter));
-    controls.bind(MenuAction::Confirm, Binding::key(Key::Space));
     controls.bind(MenuAction::Confirm, Binding::gamepadButton(GamepadButton::FaceDown));
 
     controls.bind(MenuAction::Back, Binding::key(Key::Escape));
-    controls.bind(MenuAction::Back, Binding::key(Key::Backspace));
     controls.bind(MenuAction::Back, Binding::gamepadButton(GamepadButton::FaceRight));
     controls.bind(MenuAction::Back, Binding::gamepadButton(GamepadButton::Start));
 

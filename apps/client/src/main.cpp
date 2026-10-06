@@ -1,6 +1,7 @@
 #include "Controls.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/input/Devices.hpp"
+#include "rtype/input/TextInput.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/render/Paths.hpp"
 #include "rtype/render/Renderer.hpp"
@@ -28,7 +29,7 @@ void run()
     const Window window;
     ResourceManager resources(window, applicationDirectory() / "assets");
     Renderer renderer(window, resources);
-    const rtype::input::Devices devices(window);
+    rtype::input::Devices devices(window);
     rtype::input::ActionMap<Action> controls = rtype::client::defaultControls();
     rtype::input::ActionMap<MenuAction> menuControls = rtype::client::defaultMenuControls();
 
@@ -46,8 +47,14 @@ void run()
     Vector2 position{200.0f, 200.0f};
     int shots = 0;
     bool menuOpen = false;
-    const std::array<std::string, 3> menuItems{"Resume", "Options", "Quit"};
+    const std::array<std::string, 3> menuItems{"Resume", "Name: ", "Quit"};
+    const std::size_t nameItem = 1;
     std::size_t selectedItem = 0;
+    // The name is edited while its item is selected
+    rtype::input::TextInput name;
+    name.setText("Player");
+    name.setMaxLength(16);
+    name.setFilter([](char32_t c) { return (c >= U'0' && c <= U'9') || c == U'.' || c == U':'; });
 
     while (!window.shouldClose()) {
         const Vector2 game = renderer.gameSize();
@@ -69,11 +76,19 @@ void run()
             if (menuControls.wasRepeated(MenuAction::Down)) {
                 selectedItem = (selectedItem + 1) % menuItems.size();
             }
+            if (selectedItem == nameItem) {
+                name.update(devices, window.frameTime());
+                if (name.wasChanged()) {
+                    logger.debug("Name changed to \"{}\"", name.text());
+                }
+            }
             if (menuControls.wasPressed(MenuAction::Back)) {
                 menuOpen = false;
             } else if (menuControls.wasPressed(MenuAction::Confirm)) {
                 if (selectedItem == 0) {
                     menuOpen = false;
+                } else if (selectedItem == nameItem) {
+                    logger.info("Name set to \"{}\"", name.text());
                 } else {
                     logger.info("Menu item \"{}\" is not implemented yet", menuItems[selectedItem]);
                 }
@@ -130,17 +145,37 @@ void run()
             const float itemSize = 64.0f;
             const float itemSpacing = 100.0f;
             for (std::size_t item = 0; item < menuItems.size(); ++item) {
-                const Vector2 itemArea = renderer.measureText(font, menuItems[item], itemSize);
+                const bool selected = item == selectedItem;
+                const std::string label = item == nameItem ? menuItems[item] + name.text() : menuItems[item];
+                const Vector2 itemArea = renderer.measureText(font, label, itemSize);
                 const Vector2 itemPosition{(game.x - itemArea.x) / 2.0f,
                                            game.y / 2.0f + static_cast<float>(item) * itemSpacing};
-                const bool selected = item == selectedItem;
                 if (selected) {
                     renderer.drawRectangleOutline({itemPosition.x - 30.0f, itemPosition.y - 10.0f,
                                                    itemArea.x + 60.0f, itemArea.y + 20.0f},
                                                   4.0f, colors::Yellow);
                 }
-                renderer.drawText(font, menuItems[item], itemPosition, itemSize,
+                // While the name is edited: selection behind the text, cursor after it. Their positions are
+                // the widths of the text before them.
+                const bool editing = selected && item == nameItem;
+                const float textStart =
+                    itemPosition.x + renderer.measureText(font, menuItems[item], itemSize).x;
+                const auto offsetOf = [&](std::size_t byte) {
+                    return textStart + renderer.measureText(font, name.text().substr(0, byte), itemSize).x;
+                };
+                if (editing && !name.selection().empty()) {
+                    const float begin = offsetOf(name.selection().begin);
+                    renderer.drawRectangle(
+                        {begin, itemPosition.y, offsetOf(name.selection().end) - begin, itemArea.y},
+                        {0, 121, 241, 160});
+                }
+                renderer.drawText(font, label, itemPosition, itemSize,
                                   selected ? colors::Yellow : colors::White);
+                if (editing) {
+                    const float cursorX = offsetOf(name.cursor());
+                    renderer.drawLine({cursorX, itemPosition.y}, {cursorX, itemPosition.y + itemArea.y}, 3.0f,
+                                      colors::White);
+                }
             }
         }
         renderer.endFrame();

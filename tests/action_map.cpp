@@ -1,14 +1,11 @@
 // The ActionMap is tested with a fake input source: no window, no real device.
 
+#include "FakeInput.hpp"
 #include "rtype/input/ActionMap.hpp"
 #include "rtype/input/Binding.hpp"
 #include "rtype/input/InputSource.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <map>
-#include <set>
-#include <utility>
 
 using namespace rtype::input;
 
@@ -18,26 +15,6 @@ namespace
 enum class Action {
     MoveUp,
     Shoot,
-};
-
-// Input source whose keys, buttons and axes are set by the test
-class FakeInput : public InputSource
-{
-public:
-    std::set<Key> keys;
-    std::set<std::pair<int, GamepadButton>> buttons;
-    std::map<std::pair<int, GamepadAxis>, float> axes;
-
-    [[nodiscard]] bool isKeyDown(Key key) const override { return keys.contains(key); }
-    [[nodiscard]] bool isGamepadButtonDown(int gamepad, GamepadButton button) const override
-    {
-        return buttons.contains({gamepad, button});
-    }
-    [[nodiscard]] float gamepadAxis(int gamepad, GamepadAxis axis) const override
-    {
-        const auto it = axes.find({gamepad, axis});
-        return it == axes.end() ? 0.0f : it->second;
-    }
 };
 
 } // namespace
@@ -257,4 +234,21 @@ TEST_CASE("The held duration is kept on the update where the action is released"
 
     actions.update(input, 0.5f);
     REQUIRE(actions.heldDuration(Action::Shoot) == 0.0f);
+}
+
+TEST_CASE("A repeat falling exactly on an update is not lost to rounding", "[input]")
+{
+    ActionMap<Action> actions;
+    actions.bind(Action::MoveUp, Binding::key(Key::Up));
+    actions.setRepeat(0.4f, 0.1f);
+    FakeInput input;
+    input.keys = {Key::Up};
+
+    actions.update(input, 0.0f);
+    actions.update(input, 0.4f);
+    REQUIRE(actions.wasRepeated(Action::MoveUp));
+
+    // In float, (0.5 - 0.4) / 0.1 is slightly below 1: the second repeat must still happen at 0.5 s
+    actions.update(input, 0.1f);
+    REQUIRE(actions.wasRepeated(Action::MoveUp));
 }

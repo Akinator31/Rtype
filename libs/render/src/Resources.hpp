@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace rtype::render
 {
@@ -46,15 +47,37 @@ public:
     [[nodiscard]] const Texture2D &get() const { return _texture; }
 };
 
+// Characters rendered when a font is loaded: by default, raylib only renders ASCII, and any other character
+// is drawn as '?'. Latin-1 adds the accented letters of most Western European languages, completed with the
+// French "œ" and the euro sign.
+inline std::vector<int> fontCharacters()
+{
+    std::vector<int> characters;
+    for (int character = 0x20; character <= 0x7E; ++character) {
+        characters.push_back(character);
+    }
+    for (int character = 0xA0; character <= 0xFF; ++character) {
+        characters.push_back(character);
+    }
+    characters.insert(characters.end(), {0x152, 0x153, 0x20AC});
+    return characters;
+}
+
 // Owns a font: its glyphs in memory and its texture in graphics memory. A moved-from font frees nothing.
 class Font
 {
 private:
     ::Font _font;
 
+    static ::Font load(const std::filesystem::path &file, int size)
+    {
+        std::vector<int> characters = fontCharacters();
+        return LoadFontEx(file.string().c_str(), size, characters.data(),
+                          static_cast<int>(characters.size()));
+    }
+
 public:
-    Font(const std::filesystem::path &file, int size)
-        : _font(LoadFontEx(file.string().c_str(), size, nullptr, 0))
+    Font(const std::filesystem::path &file, int size) : _font(load(file, size))
     {
         if (!IsFontValid(_font)) {
             throw std::runtime_error("Cannot load font " + file.string());

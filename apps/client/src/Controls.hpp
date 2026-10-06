@@ -32,9 +32,9 @@ enum class MenuAction {
 /// bottom face button or right trigger, and Start on the first gamepad.
 [[nodiscard]] input::ActionMap<Action> defaultControls();
 
-/// Default menu controls: arrows or WASD (ZQSD on AZERTY), Enter or Space to confirm, Escape or Backspace to
-/// go back on the keyboard; D-pad or left stick, bottom face button to confirm, right face button or Start to
-/// go back on the first gamepad.
+/// Default menu controls: arrows, Enter to confirm and Escape to go back on the keyboard; D-pad or left
+/// stick, bottom face button to confirm, right face button or Start to go back on the first gamepad. Keys
+/// that type text are left out, so that they can be used in text fields.
 [[nodiscard]] input::ActionMap<MenuAction> defaultMenuControls();
 
 } // namespace rtype::client

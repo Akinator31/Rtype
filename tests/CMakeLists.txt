@@ -14,6 +14,7 @@ add_executable(rtype_tests
     paths.cpp
     platform_assumptions.cpp
     resource_cache.cpp
+    text_input.cpp
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
