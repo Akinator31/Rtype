@@ -104,10 +104,11 @@ menu needs to let players choose their own controls.
 
 `update()` reads the input source and updates every action. It is called **once per frame**, before
 reading the actions, which keep the state read there until the next update: all the code of a frame sees the
-same state.
+same state. It also takes the time elapsed since the previous frame, used to repeat held actions and to
+measure how long they are held.
 
 ```cpp
-controls.update(devices);
+controls.update(devices, window.frameTime());
 
 const float up = controls.strength(Action::MoveUp);   // 0..1, for analog movement
 if (controls.wasPressed(Action::Shoot)) { fire(); }
@@ -118,10 +119,40 @@ if (controls.wasPressed(Action::Shoot)) { fire(); }
 | `isActive(action)` | The action is held. | Moving, continuous fire. |
 | `wasPressed(action)` | The action started at the last update (one frame only). | Firing once per press, validating a menu. |
 | `wasReleased(action)` | The action stopped at the last update (one frame only). | Charged shot released. |
+| `wasRepeated(action)` | The action was pressed, or is held and repeats (see below). | Moving in a menu, auto-fire. |
 | `strength(action)` | Returns 0..1: the strongest of its bindings. | Analog movement. |
+| `heldDuration(action)` | Returns how long the action has been held, in seconds. | Charged shot. |
 
 The strength of an action is the **maximum** of its bindings, not their sum: holding the up arrow and the
 stick at the same time does not move faster.
+
+### Repeating and holding
+
+Holding ++arrow-down++ in a menu should move the selection once, then keep moving it after a short delay,
+like in a text editor. `wasRepeated()` gives this behaviour: it is true when the action is pressed, then
+again after a delay, then at regular intervals while it is held.
+
+```mermaid
+flowchart LR
+    Press["Pressed<br/>repeat"] -- "0.4 s" --> First["Repeat"]
+    First -- "0.1 s" --> Second["Repeat"]
+    Second -- "0.1 s" --> Third["..."]
+```
+
+*A held action repeats when pressed, after 0.4 s, then every 0.1 s.*
+
+The delay and the interval are set with `setRepeat(delay, interval)`, 0.4 s and 0.1 s by default. Repeating
+needs the elapsed time given to `update()`: without it, an action is only repeated when it is pressed.
+
+`heldDuration()` gives how long an action has been held. On the update where the action is released, it still
+gives how long it was held, so that a shot charged while holding the button can be fired on release:
+
+```cpp
+if (controls.wasReleased(Action::Shoot)) {
+    const float charge = std::min(controls.heldDuration(Action::Shoot) / 2.0f, 1.0f);   // full after 2 s
+    fire(charge);
+}
+```
 
 ## Controls of R-Type
 
@@ -135,6 +166,37 @@ stick at the same time does not move faster.
 | `MoveRight` | ++arrow-right++ or ++d++ | D-pad right, left stick right |
 | `Shoot` | ++space++ | Bottom face button, right trigger |
 | `Menu` | ++escape++ | Start |
+
+### Menu controls
+
+Menus have their own actions, `MenuAction`, in a separate `ActionMap` defined by `defaultMenuControls()`. The
+same key can then mean something else in a menu: ++escape++ opens the menu in game, and goes back in a menu.
+
+| Menu action | Keyboard | Gamepad (first one) |
+|---|---|---|
+| `Up`, `Down`, `Left`, `Right` | Arrows or ++w++ ++a++ ++s++ ++d++ (++z++ ++q++ ++s++ ++d++ on AZERTY) | D-pad, left stick |
+| `Confirm` | ++enter++ or ++space++ | Bottom face button |
+| `Back` | ++escape++ or ++backspace++ | Right face button, Start |
+
+Menu navigation reads `wasRepeated()`, so holding a direction scrolls through the items. The menu map has a
+larger dead zone (0.5) than the game one, so that a stick touched slightly does not skip an item.
+
+Both maps are updated every frame, but only one of them is read, depending on whether a menu was open **at
+the start of the frame**. Otherwise, the ++escape++ press that opens the menu would also close it in the same
+frame.
+
+```cpp
+const bool menuWasOpen = menuOpen;
+controls.update(devices, window.frameTime());
+menuControls.update(devices, window.frameTime());
+
+if (!menuWasOpen && controls.wasPressed(Action::Menu)) {
+    menuOpen = true;
+}
+if (menuWasOpen && menuControls.wasPressed(MenuAction::Back)) {
+    menuOpen = false;
+}
+```
 
 When moving, the client normalises the direction: pushing up and right at the same time must not move faster
 than pushing in one direction.
@@ -170,8 +232,8 @@ buttons and gestures.
 
 ## Limits and next steps
 
-- **The menu is a placeholder**: `Menu` opens an empty screen in the demo. It does not pause the game,
-  which is shared with the other players, and its content (options, controls, quit) is still to be done.
+- **The menu is a placeholder**: the demo menu can be navigated, but its items do nothing yet except
+  *Resume*. It does not pause the game, which is shared with the other players.
 - **Bindings are not saved**: the controls chosen by a player are lost when the game closes.
 - **No mouse support** yet for the menus.
 - **The actions are not sent to the server yet**: they will be encoded in the `INPUT` message of the

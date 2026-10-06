@@ -4,6 +4,7 @@
 #include "rtype/input/InputSource.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <unordered_map>
 #include <vector>
 
@@ -21,8 +22,8 @@ namespace rtype::input
 /// actions.bind(Action::Shoot, Binding::key(Key::Space));
 /// actions.bind(Action::Shoot, Binding::gamepadButton(GamepadButton::FaceDown));
 ///
-/// // Once per frame
-/// actions.update(devices);
+/// // Once per frame, with the time elapsed since the previous frame
+/// actions.update(devices, frameTime);
 /// if (actions.wasPressed(Action::Shoot)) { ... }
 /// @endcode
 /// @tparam Action Type identifying the actions, usually an enum class.
@@ -35,10 +36,21 @@ private:
         float strength = 0.0f;
         bool active = false;
         bool wasActive = false;
+        float heldDuration = 0.0f;
+        bool repeated = false;
     };
 
     std::unordered_map<Action, State> _actions;
     float _deadZone = 0.25f;
+    float _repeatDelay = 0.4f;
+    float _repeatInterval = 0.1f;
+
+    // Number of repeats that happened after holding for this long: -1 before the first one
+    [[nodiscard]] float repeatCount(float heldDuration) const
+    {
+        return heldDuration < _repeatDelay ? -1.0f
+                                           : std::floor((heldDuration - _repeatDelay) / _repeatInterval);
+    }
 
     [[nodiscard]] const State *find(Action action) const
     {
@@ -83,9 +95,19 @@ public:
     /// not come back to the centre need a larger value. Clamped between 0 and 0.95.
     void setDeadZone(float deadZone) { _deadZone = std::clamp(deadZone, 0.0f, 0.95f); }
 
+    /// Sets how held actions repeat (see wasRepeated()): first repeat after `delay` seconds, then one every
+    /// `interval` seconds. 0.4 s and 0.1 s by default, like text editors. The interval is at least 0.01 s.
+    void setRepeat(float delay, float interval)
+    {
+        _repeatDelay = std::max(delay, 0.0f);
+        _repeatInterval = std::max(interval, 0.01f);
+    }
+
     /// Reads the input source and updates every action. Call it once per frame, before reading the actions:
     /// they keep the state read here until the next update.
-    void update(const InputSource &source)
+    /// @param elapsed Time since the previous update, in seconds. It is only needed by heldDuration() and
+    /// wasRepeated(): without it, actions are never repeated.
+    void update(const InputSource &source, float elapsed = 0.0f)
     {
         for (auto &[action, state] : _actions) {
             state.wasActive = state.active;
@@ -94,6 +116,22 @@ public:
                 state.strength = std::max(state.strength, binding.strength(source, _deadZone));
             }
             state.active = state.strength > 0.0f;
+
+            if (!state.active) {
+                // On the update where it is released, the action keeps how long it was held
+                if (!state.wasActive) {
+                    state.heldDuration = 0.0f;
+                }
+                state.repeated = false;
+            } else if (!state.wasActive) {
+                // Just pressed: the press itself counts as the first repeat
+                state.heldDuration = 0.0f;
+                state.repeated = true;
+            } else {
+                const float before = state.heldDuration;
+                state.heldDuration += elapsed;
+                state.repeated = repeatCount(state.heldDuration) > repeatCount(before);
+            }
         }
     }
 
@@ -118,6 +156,24 @@ public:
     {
         const State *state = find(action);
         return state != nullptr && state->active && !state->wasActive;
+    }
+
+    /// Tells whether the action was pressed or repeated at the last update: true when it is pressed, then
+    /// again at regular intervals while it is held (see setRepeat()). For instance, holding Down in a menu
+    /// moves the selection once, then keeps moving it after a short delay.
+    [[nodiscard]] bool wasRepeated(Action action) const
+    {
+        const State *state = find(action);
+        return state != nullptr && state->repeated;
+    }
+
+    /// How long the action has been held, in seconds: 0 when it was just pressed, and when it is not held.
+    /// On the update where it is released (wasReleased()), it still gives how long it was held, so that a
+    /// shot charged while holding the button can be fired on release.
+    [[nodiscard]] float heldDuration(Action action) const
+    {
+        const State *state = find(action);
+        return state == nullptr ? 0.0f : state->heldDuration;
     }
 
     /// Tells whether the action stopped at the last update: true for one frame only.
