@@ -84,6 +84,21 @@ public:
     /// @throws std::logic_error if no frame is started.
     void drawCircle(Vector2 center, float radius, Color color);
 
+    /// Draws the outline of a rectangle, for instance a hitbox or the frame of a button.
+    /// @param thickness Width of the outline, in game units. It is drawn inside the rectangle, so that the
+    /// outer edge of the outline is the edge of the rectangle. Nothing is drawn if it is not strictly
+    /// positive.
+    /// @throws std::logic_error if no frame is started.
+    void drawRectangleOutline(Rectangle rectangle, float thickness, Color color);
+
+    /// Draws the outline of a circle, for instance a round hitbox.
+    /// @param center Centre of the circle, in game units.
+    /// @param radius Radius, in game units. Nothing is drawn if it is not strictly positive.
+    /// @param thickness Width of the outline, in game units. It is drawn inside the circle, so that the outer
+    /// edge of the outline is the edge of the circle. Nothing is drawn if it is not strictly positive.
+    /// @throws std::logic_error if no frame is started.
+    void drawCircleOutline(Vector2 center, float radius, float thickness, Color color);
+
     /// Draws a straight line.
     /// @param start First end of the line, in game units.
     /// @param end Second end of the line, in game units.
