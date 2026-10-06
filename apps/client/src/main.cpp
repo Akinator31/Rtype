@@ -1,6 +1,7 @@
 #include "Controls.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/input/Devices.hpp"
+#include "rtype/log/Logger.hpp"
 #include "rtype/render/Paths.hpp"
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -10,7 +11,6 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
-#include <iostream>
 #include <string>
 
 namespace
@@ -105,10 +105,15 @@ void run()
 
 int main()
 {
+    const rtype::log::Logger logger("client");
+
+    if (const auto problem = rtype::log::configureFromEnvironment()) {
+        logger.warning("{}", *problem);
+    }
     try {
         run();
     } catch (const std::exception &error) {
-        std::cerr << "r-type_client: " << error.what() << std::endl;
+        logger.error("{}", error.what());
         return 84;
     }
     return 0;
