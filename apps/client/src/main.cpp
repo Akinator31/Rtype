@@ -34,28 +34,35 @@ void run()
     const std::string greeting = rtype::ecs::helloWorld();
     const float greetingSize = 48.0f;
 
-    // Demo of the controls: the image moves with the movement actions, Shoot counts the shots
+    // Demo of the controls: the image moves with the movement actions, Shoot counts the shots, Menu opens a
+    // placeholder menu during which the other actions are ignored
     const float speed = 600.0f;
     const float imageSize = 300.0f;
     Vector2 position{200.0f, 200.0f};
     int shots = 0;
+    bool menuOpen = false;
 
     while (!window.shouldClose()) {
         const Vector2 game = renderer.gameSize();
 
         controls.update(devices);
+        if (controls.wasPressed(Action::Menu)) {
+            menuOpen = !menuOpen;
+        }
         Vector2 direction{controls.strength(Action::MoveRight) - controls.strength(Action::MoveLeft),
                           controls.strength(Action::MoveDown) - controls.strength(Action::MoveUp)};
         // Moving diagonally must not be faster than moving straight
         const float length = std::hypot(direction.x, direction.y);
-        if (length > 1.0f) {
+        if (menuOpen) {
+            direction = {0.0f, 0.0f};
+        } else if (length > 1.0f) {
             direction = {direction.x / length, direction.y / length};
         }
         position.x =
             std::clamp(position.x + direction.x * speed * window.frameTime(), 0.0f, game.x - imageSize);
         position.y =
             std::clamp(position.y + direction.y * speed * window.frameTime(), 0.0f, game.y - imageSize);
-        if (controls.wasPressed(Action::Shoot)) {
+        if (!menuOpen && controls.wasPressed(Action::Shoot)) {
             ++shots;
         }
         const Vector2 titleArea = renderer.measureText(font, title, titleSize);
@@ -71,6 +78,18 @@ void run()
                           greetingSize, colors::Blue);
         renderer.drawText("Shots: " + std::to_string(shots), {10.0f, 50.0f}, 40.0f, colors::Red);
         renderer.drawFps({10.0f, 10.0f});
+        if (menuOpen) {
+            const std::string menuTitle = "Menu";
+            const std::string menuHint = "Press Escape or Start to go back";
+            const Vector2 menuTitleArea = renderer.measureText(font, menuTitle, titleSize);
+            const Vector2 menuHintArea = renderer.measureText(menuHint, greetingSize);
+            renderer.drawRectangle({0.0f, 0.0f, game.x, game.y}, {0, 0, 0, 180});
+            renderer.drawText(font, menuTitle,
+                              {(game.x - menuTitleArea.x) / 2.0f, game.y / 2.0f - menuTitleArea.y}, titleSize,
+                              colors::White);
+            renderer.drawText(menuHint, {(game.x - menuHintArea.x) / 2.0f, game.y / 2.0f + 40.0f},
+                              greetingSize, colors::White);
+        }
         renderer.endFrame();
     }
 }

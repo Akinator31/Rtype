@@ -43,11 +43,15 @@ and only one can exist at a time, since raylib supports a single window: creatin
 ```cpp
 const Window window({.width = 1920, .height = 1080, .title = "R-Type", .targetFps = 144});
 
-while (!window.shouldClose()) { ... }   // close button or Escape key
+while (!window.shouldClose()) { ... }   // close button or system shortcut (Alt+F4)
 const float dt = window.frameTime();    // duration of the last frame, in seconds
 ```
 
 `WindowSettings` also sets whether the window is resizable and whether vertical synchronisation is on.
+
+raylib closes the window when ++escape++ is pressed by default. `Window` disables this: in a game, Escape
+opens a menu rather than quitting without confirmation. The client binds it to the `Menu` action, see
+[Controls of R-Type](input.md#controls-of-r-type).
 
 ## Resources
 
