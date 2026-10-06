@@ -41,9 +41,42 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | **Core** | Entities, components, systems (`libs/ecs`), timing, logging | Client, server |
 | **Networking** | Sockets, binary serialization, the [protocol](../protocol/index.md) | Client, server |
 | **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
-| **Rendering** | Sprites, star-field, UI, built on raylib | Client |
+| **Rendering** | Window, textures, drawing, built on raylib | Client |
+| **Interface** | Menus, options, HUD: screens and widgets, outside of the ECS | Client |
 | **Audio** | Music and sound effects | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
+
+## World and interface
+
+The client draws two kinds of things, kept apart as decided in
+[ADR 0005](../decisions/0005-world-in-ecs-interface-in-ui-layer.md):
+
+- the **world** (ships, Bydos, missiles, star-field, and health bars or names following an entity) is made
+  of ECS entities, drawn by the render system;
+- the **interface** (menus, options, connection screen, HUD fixed on screen) is a light layer of screens and
+  widgets, which does not know the ECS.
+
+```mermaid
+flowchart TB
+    subgraph Frame["One frame of the client"]
+        direction TB
+        World["1. World pass<br/>render system (ECS)"]
+        UI["2. Interface pass<br/>active screen and HUD"]
+    end
+    World --> Renderer["Renderer<br/>(the only one drawing)"]
+    UI --> Renderer
+```
+
+*Each frame draws the world first, then the interface on top of it; both go through the `Renderer`.*
+
+Four rules keep them from mixing:
+
+1. Only the `Renderer` draws: neither the ECS nor the interface calls raylib.
+2. The world is always drawn first, the interface on top of it.
+3. The interface does not read the ECS: the game code gives it plain values (score, lives, players).
+4. The ECS does not know the interface.
+
+In VR, the same two passes are drawn on the board (world) and on a floating panel (interface).
 
 ## Client libraries
 
