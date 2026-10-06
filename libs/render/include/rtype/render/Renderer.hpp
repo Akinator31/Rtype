@@ -78,6 +78,23 @@ public:
     /// @throws std::logic_error if no frame is started.
     void drawRectangle(Rectangle rectangle, Color color);
 
+    /// Draws a filled circle.
+    /// @param center Centre of the circle, in game units.
+    /// @param radius Radius, in game units. Nothing is drawn if it is not strictly positive.
+    /// @throws std::logic_error if no frame is started.
+    void drawCircle(Vector2 center, float radius, Color color);
+
+    /// Draws a straight line.
+    /// @param start First end of the line, in game units.
+    /// @param end Second end of the line, in game units.
+    /// @param thickness Width of the line, in game units.
+    /// @throws std::logic_error if no frame is started.
+    void drawLine(Vector2 start, Vector2 end, float thickness, Color color);
+
+    /// Draws a filled triangle. The corners can be given in any order.
+    /// @throws std::logic_error if no frame is started.
+    void drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color color);
+
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.
     /// @param size Height of the characters, in game units.

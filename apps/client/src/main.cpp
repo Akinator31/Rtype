@@ -89,6 +89,10 @@ void run()
                               colors::White);
             renderer.drawText(menuHint, {(game.x - menuHintArea.x) / 2.0f, game.y / 2.0f + 40.0f},
                               greetingSize, colors::White);
+
+            renderer.drawLine({100.0f, 540.0f}, {1800.0f, 540.0f}, 8.0f, colors::Red);
+            renderer.drawCircle({960.0f, 240.0f}, 50.0f, colors::Red);
+            renderer.drawTriangle({150.0f, 540.0f}, {100.0f, 510.0f}, {100.0f, 570.0f}, colors::Blue);
         }
         renderer.endFrame();
     }

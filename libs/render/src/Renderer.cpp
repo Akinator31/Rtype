@@ -43,6 +43,15 @@ float builtinFontSpacing(float size)
     return size / builtinFontSize;
 }
 
+// Tells whether the corners are in the order raylib draws: counter-clockwise on screen. With the y axis
+// pointing down, it is the order for which this cross product is negative.
+bool isCounterClockwise(Vector2 first, Vector2 second, Vector2 third)
+{
+    const float cross =
+        (second.x - first.x) * (third.y - first.y) - (second.y - first.y) * (third.x - first.x);
+    return cross < 0.0f;
+}
+
 // Owns the off-screen image the game is drawn to, at the game's logical resolution
 class RenderTarget
 {
@@ -167,6 +176,31 @@ void Renderer::drawRectangle(Rectangle rectangle, Color color)
 {
     _impl->requireFrame();
     DrawRectangleRec(toRaylib(rectangle), toRaylib(color));
+}
+
+void Renderer::drawCircle(Vector2 center, float radius, Color color)
+{
+    _impl->requireFrame();
+    if (radius > 0.0f) {
+        DrawCircleV(toRaylib(center), radius, toRaylib(color));
+    }
+}
+
+void Renderer::drawLine(Vector2 start, Vector2 end, float thickness, Color color)
+{
+    _impl->requireFrame();
+    DrawLineEx(toRaylib(start), toRaylib(end), thickness, toRaylib(color));
+}
+
+void Renderer::drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color color)
+{
+    _impl->requireFrame();
+    // raylib silently skips triangles given clockwise (their back face is culled): put the corners in its
+    // order
+    if (!isCounterClockwise(first, second, third)) {
+        std::swap(second, third);
+    }
+    DrawTriangle(toRaylib(first), toRaylib(second), toRaylib(third), toRaylib(color));
 }
 
 void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color)
