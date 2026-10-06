@@ -193,3 +193,68 @@ TEST_CASE("Bindings can be changed", "[input]")
     actions.clear(Action::Shoot);
     REQUIRE(actions.bindings(Action::Shoot).empty());
 }
+
+TEST_CASE("A held action repeats after a delay, then at regular intervals", "[input]")
+{
+    ActionMap<Action> actions;
+    actions.bind(Action::MoveUp, Binding::key(Key::Up));
+    actions.setRepeat(0.5f, 0.25f);
+    FakeInput input;
+    input.keys = {Key::Up};
+
+    // The press itself counts as the first repeat
+    actions.update(input, 0.0f);
+    REQUIRE(actions.wasRepeated(Action::MoveUp));
+
+    // Nothing until the delay is over
+    actions.update(input, 0.25f);
+    REQUIRE_FALSE(actions.wasRepeated(Action::MoveUp));
+    actions.update(input, 0.125f);
+    REQUIRE_FALSE(actions.wasRepeated(Action::MoveUp));
+
+    // Held for 0.5 s: first repeat, then one every 0.25 s
+    actions.update(input, 0.125f);
+    REQUIRE(actions.wasRepeated(Action::MoveUp));
+    actions.update(input, 0.125f);
+    REQUIRE_FALSE(actions.wasRepeated(Action::MoveUp));
+    actions.update(input, 0.125f);
+    REQUIRE(actions.wasRepeated(Action::MoveUp));
+}
+
+TEST_CASE("Actions do not repeat without the elapsed time", "[input]")
+{
+    ActionMap<Action> actions;
+    actions.bind(Action::MoveUp, Binding::key(Key::Up));
+    FakeInput input;
+    input.keys = {Key::Up};
+
+    actions.update(input);
+    REQUIRE(actions.wasRepeated(Action::MoveUp));
+    for (int frame = 0; frame < 100; ++frame) {
+        actions.update(input);
+        REQUIRE_FALSE(actions.wasRepeated(Action::MoveUp));
+    }
+}
+
+TEST_CASE("The held duration is kept on the update where the action is released", "[input]")
+{
+    ActionMap<Action> actions;
+    actions.bind(Action::Shoot, Binding::key(Key::Space));
+    FakeInput input;
+
+    input.keys = {Key::Space};
+    actions.update(input, 0.5f);
+    REQUIRE(actions.heldDuration(Action::Shoot) == 0.0f);
+    actions.update(input, 0.5f);
+    actions.update(input, 0.25f);
+    REQUIRE(actions.heldDuration(Action::Shoot) == 0.75f);
+
+    // Released: a charged shot can read how long it was charged
+    input.keys.clear();
+    actions.update(input, 0.5f);
+    REQUIRE(actions.wasReleased(Action::Shoot));
+    REQUIRE(actions.heldDuration(Action::Shoot) == 0.75f);
+
+    actions.update(input, 0.5f);
+    REQUIRE(actions.heldDuration(Action::Shoot) == 0.0f);
+}
