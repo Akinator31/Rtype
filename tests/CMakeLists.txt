@@ -12,8 +12,9 @@ add_executable(rtype_tests
     platform_assumptions.cpp
     resource_cache.cpp
     viewport.cpp
+    ecs.cpp
 )
-target_link_libraries(rtype_tests PRIVATE rtype_options rtype::render Catch2::Catch2WithMain)
+target_link_libraries(rtype_tests PRIVATE rtype_options rtype::render rtype::ecs Catch2::Catch2WithMain)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 
 # Smoke tests: the binaries start and exit cleanly
