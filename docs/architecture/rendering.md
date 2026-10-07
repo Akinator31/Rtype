@@ -203,6 +203,39 @@ Drawing outside of a frame, starting a frame twice or ending a frame that was no
 `std::logic_error`, with a message telling how to fix the call. These are programming errors: raylib would
 otherwise draw to the wrong place without any warning.
 
+### Colour filters
+
+A colour filter changes the colours of the whole image, interface included, for colour-blind players or
+players with low vision:
+
+```cpp
+renderer.setColorFilter(ColorFilter::Deuteranopia);
+```
+
+| Filter | For | Effect |
+|---|---|---|
+| `Protanopia`, `Deuteranopia` | Players who do not perceive red or green (red-green colour blindness, about 8% of men) | Shifts the colours they confuse towards colours they can tell apart. |
+| `Tritanopia` | Players who do not perceive blue (blue-yellow colour blindness, rare) | Same, for blue and yellow. |
+| `SimulateProtanopia`, `SimulateDeuteranopia`, `SimulateTritanopia` | The team | Shows the game as a colour-blind player sees it, to check that sprites stay distinguishable. |
+| `HighContrast` | Players with low vision | Stronger contrast and saturation. |
+
+The filter is a **shader** (a small program run by the graphics card on every pixel) applied in `endFrame()`,
+when the off-screen image is copied to the window: the game keeps drawing with its normal colours, and the
+filter costs one pass over the image. If the graphics card cannot compile it, a warning is logged and the game
+is shown unfiltered.
+
+**How it works.** Simulation uses the matrices of Machado, Oliveira and Fernandes (2009), applied to linear
+colours (without the sRGB gamma curve). Correction, also called daltonisation, computes the difference
+between the original colour and the simulated one, which is what the player cannot see, and moves it to the
+channels they can see. For a player with deuteranopia, the perceived difference between the red and the
+green of the test palette goes from 60 to 129 (on a scale of 0 to 441) with the correction.
+
+!!! warning "A help, not a substitute"
+
+    Correction makes confused colours easier to tell apart, it does not restore them. The game must not
+    rely on colour only: player ships, enemies and projectiles should also differ by shape, as planned in
+    [Accessibility](../accessibility.md). The simulation filters are the way to check it.
+
 ## Implementation notes
 
 These details only matter when working inside `libs/render`:
