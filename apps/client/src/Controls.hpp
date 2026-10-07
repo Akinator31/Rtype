@@ -13,6 +13,8 @@ enum class Action {
     MoveRight,
     Shoot,
     Menu,
+    /// Switches between a window and fullscreen. Read in game and in menus: its key does not type text.
+    ToggleFullscreen,
 };
 
 /// What the player can do in a menu. Menus have their own actions, separate from the game ones: the same key
@@ -31,8 +33,8 @@ enum class MenuAction {
     Click,
 };
 
-/// Default controls: arrows or WASD (ZQSD on AZERTY), Space and Escape on the keyboard; D-pad or left stick,
-/// bottom face button or right trigger, and Start on the first gamepad.
+/// Default controls: arrows or WASD (ZQSD on AZERTY), Space, Escape and F11 on the keyboard; D-pad or left
+/// stick, bottom face button or right trigger, and Start on the first gamepad.
 [[nodiscard]] input::ActionMap<Action> defaultControls();
 
 /// Default menu controls: arrows, Enter to confirm and Escape to go back on the keyboard; D-pad or left
