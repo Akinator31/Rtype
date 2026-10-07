@@ -1,12 +1,12 @@
 #pragma once
 
-#include "ecs/Component/ComponentCache.hpp"
-#include "ecs/Component/ComponentCaches.hpp"
+#include "rtype/ecs/Component/ComponentCache.hpp"
+#include "rtype/ecs/Component/ComponentCaches.hpp"
 
 #include <typeindex>
 #include <vector>
 
-namespace ecs
+namespace rtype::ecs
 {
 
 class System
@@ -33,4 +33,4 @@ public:
     [[nodiscard]] const std::vector<std::type_index> &componentTypes() const;
 };
 
-} // namespace ecs
+} // namespace rtype::ecs

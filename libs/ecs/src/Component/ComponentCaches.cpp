@@ -1,6 +1,6 @@
-#include "ecs/Component/ComponentCaches.hpp"
+#include "rtype/ecs/Component/ComponentCaches.hpp"
 
-namespace ecs
+namespace rtype::ecs
 {
 
 void ComponentCaches::erase(entity_t entity)
@@ -10,4 +10,4 @@ void ComponentCaches::erase(entity_t entity)
     }
 }
 
-} // namespace ecs
+} // namespace rtype::ecs

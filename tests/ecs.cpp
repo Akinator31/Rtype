@@ -1,8 +1,8 @@
-#include "ecs/Ecs.hpp"
+#include "rtype/ecs/Ecs.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace ecs;
+using namespace rtype::ecs;
 
 namespace
 {

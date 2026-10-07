@@ -16,7 +16,6 @@ add_executable(rtype_tests
     resource_cache.cpp
     text_input.cpp
     viewport.cpp
-    ecs.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::ecs rtype::input rtype::log rtype::render Catch2::Catch2WithMain)

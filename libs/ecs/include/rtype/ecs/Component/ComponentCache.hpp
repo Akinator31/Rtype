@@ -1,14 +1,14 @@
 #pragma once
 
-#include "ecs/Component/ICache.hpp"
-#include "ecs/Entity/Entity.hpp"
+#include "rtype/ecs/Component/ICache.hpp"
+#include "rtype/ecs/Entity/Entity.hpp"
 
 #include <cstddef>
 #include <optional>
 #include <utility>
 #include <vector>
 
-namespace ecs
+namespace rtype::ecs
 {
 
 /// Components of one type. The index is the entity id, so reaching the component of an entity is a
@@ -50,4 +50,4 @@ public:
     [[nodiscard]] std::size_t size() const { return _slots.size(); }
 };
 
-} // namespace ecs
+} // namespace rtype::ecs

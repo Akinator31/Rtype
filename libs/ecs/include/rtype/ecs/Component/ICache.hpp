@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ecs/Entity/Entity.hpp"
+#include "rtype/ecs/Entity/Entity.hpp"
 
-namespace ecs
+namespace rtype::ecs
 {
 
 /// Type-erased base of ComponentCache, so ComponentCaches can drop an entity from every cache.
@@ -13,4 +13,4 @@ public:
     virtual void erase(entity_t entity) = 0;
 };
 
-} // namespace ecs
+} // namespace rtype::ecs

@@ -1,14 +1,14 @@
 #pragma once
 
-#include "ecs/Component/ComponentCache.hpp"
-#include "ecs/Component/ICache.hpp"
-#include "ecs/Entity/Entity.hpp"
+#include "rtype/ecs/Component/ComponentCache.hpp"
+#include "rtype/ecs/Component/ICache.hpp"
+#include "rtype/ecs/Entity/Entity.hpp"
 
 #include <memory>
 #include <typeindex>
 #include <unordered_map>
 
-namespace ecs
+namespace rtype::ecs
 {
 
 /// One ComponentCache per component type.
@@ -33,4 +33,4 @@ public:
     void erase(entity_t entity);
 };
 
-} // namespace ecs
+} // namespace rtype::ecs
