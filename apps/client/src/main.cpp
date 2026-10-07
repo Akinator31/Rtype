@@ -27,7 +27,7 @@ void run()
 
     const rtype::log::Logger logger("client");
 
-    const Window window;
+    Window window;
     ResourceManager resources(window, applicationDirectory() / "assets");
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
@@ -48,11 +48,13 @@ void run()
     Vector2 position{200.0f, 200.0f};
     int shots = 0;
     bool menuOpen = false;
-    const std::array<std::string, 3> menuItems{"Resume", "Name: ", "Quit"};
+    const std::array<std::string, 4> menuItems{"Resume", "Name: ", "Fullscreen: ", "Quit"};
     const std::size_t nameItem = 1;
+    const std::size_t fullscreenItem = 2;
+    const std::size_t quitItem = 3;
     std::size_t selectedItem = 0;
     // Area of each item on screen, kept from the previous frame to know which item is under the mouse pointer
-    std::array<Rectangle, 3> itemAreas{};
+    std::array<Rectangle, 4> itemAreas{};
     rtype::input::MousePosition previousMouse = devices.mousePosition();
     // The name is edited while its item is selected
     rtype::input::TextInput name;
@@ -71,6 +73,9 @@ void run()
         if (!menuWasOpen && controls.wasPressed(Action::Menu)) {
             menuOpen = true;
             selectedItem = 0;
+        }
+        if (controls.wasPressed(Action::ToggleFullscreen)) {
+            window.setFullscreen(!window.isFullscreen());
         }
 
         // The pointer is converted to game units: the game is scaled and may have black bars around it
@@ -92,8 +97,10 @@ void run()
                 menuOpen = false;
             } else if (item == nameItem) {
                 logger.info("Name set to \"{}\"", name.text());
-            } else {
-                logger.info("Menu item \"{}\" is not implemented yet", menuItems[item]);
+            } else if (item == fullscreenItem) {
+                window.setFullscreen(!window.isFullscreen());
+            } else if (item == quitItem) {
+                window.requestClose();
             }
         };
         if (menuWasOpen) {
@@ -124,6 +131,9 @@ void run()
                 activate(*hoveredItem);
             }
         }
+        // The pointer is only useful in menus: it would hide part of the game
+        window.setCursorVisible(menuOpen);
+
         Vector2 direction{controls.strength(Action::MoveRight) - controls.strength(Action::MoveLeft),
                           controls.strength(Action::MoveDown) - controls.strength(Action::MoveUp)};
         // Moving diagonally must not be faster than moving straight
@@ -176,7 +186,12 @@ void run()
             const float itemSpacing = 100.0f;
             for (std::size_t item = 0; item < menuItems.size(); ++item) {
                 const bool selected = item == selectedItem;
-                const std::string label = item == nameItem ? menuItems[item] + name.text() : menuItems[item];
+                std::string label = menuItems[item];
+                if (item == nameItem) {
+                    label += name.text();
+                } else if (item == fullscreenItem) {
+                    label += window.isFullscreen() ? "On" : "Off";
+                }
                 const Vector2 itemArea = renderer.measureText(font, label, itemSize);
                 const Vector2 itemPosition{(game.x - itemArea.x) / 2.0f,
                                            game.y / 2.0f + static_cast<float>(item) * itemSpacing};

@@ -168,6 +168,7 @@ if (controls.wasReleased(Action::Shoot)) {
 | `MoveRight` | ++arrow-right++ or ++d++ | D-pad right, left stick right |
 | `Shoot` | ++space++ | Bottom face button, right trigger |
 | `Menu` | ++escape++ | Start |
+| `ToggleFullscreen` | ++f11++ | — |
 
 ### Menu controls
 
@@ -372,8 +373,9 @@ buttons and gestures.
 
 ## Limits and next steps
 
-- **The menu is a placeholder**: the demo menu can be navigated and its name can be edited, but *Quit* does
-  nothing yet. It does not pause the game, which is shared with the other players.
+- **The menu is a demo**: it shows the controls (navigation, text field, fullscreen, quit), but the real
+  menus of the game are still to be built in the interface layer. It does not pause the game, which is shared
+  with the other players.
 - **Text fields are single-line**, without undo, mouse selection, nor scrolling: a text wider than its field
   overflows it. This is enough for a player name or a server address.
 - **Bindings are not saved**: the controls chosen by a player are lost when the game closes.

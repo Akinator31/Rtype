@@ -16,6 +16,8 @@ struct WindowSettings {
     bool vsync = true;
     /// Maximum number of frames per second, or 0 for no limit.
     int targetFps = 60;
+    /// Opens the window in fullscreen (see Window::setFullscreen()).
+    bool fullscreen = false;
 };
 
 /// The game window, open for as long as this object exists.
@@ -25,6 +27,9 @@ struct WindowSettings {
 /// window: create them after it and destroy them before it.
 class Window
 {
+private:
+    bool _closeRequested = false;
+
 public:
     /// Opens the window.
     /// @throws std::logic_error if a window is already open.
@@ -37,9 +42,12 @@ public:
     Window(Window &&) = delete;
     Window &operator=(Window &&) = delete;
 
-    /// Tells whether the player asked to close the window, with its close button or the system shortcut
-    /// (Alt+F4 for instance). The Escape key does not close the window: what it does is up to the game.
+    /// Tells whether the window should close: the player used its close button or the system shortcut (Alt+F4
+    /// for instance), or the game called requestClose(). The Escape key does not close the window: what it
+    /// does is up to the game.
     [[nodiscard]] bool shouldClose() const;
+    /// Asks the window to close, for instance from a "Quit" button: shouldClose() returns true from now on.
+    void requestClose();
 
     /// Current width of the drawable area, in pixels.
     [[nodiscard]] int width() const;
@@ -48,6 +56,31 @@ public:
 
     /// Duration of the last frame, in seconds. Use it to make movement independent of the frame rate.
     [[nodiscard]] float frameTime() const;
+
+    /// Switches between a window and fullscreen.
+    ///
+    /// Fullscreen is a borderless window covering the screen it is on, at the resolution of that screen: the
+    /// screen keeps its video mode, so switching is instant and other windows are not disturbed. Leaving
+    /// fullscreen restores the previous size and position of the window.
+    void setFullscreen(bool fullscreen);
+    /// Tells whether the window is in fullscreen.
+    [[nodiscard]] bool isFullscreen() const;
+
+    /// Resizes the window, in pixels. Leaves fullscreen first if needed.
+    void setSize(int width, int height);
+    /// Changes the title of the window.
+    void setTitle(const std::string &title);
+
+    /// Shows or hides the mouse pointer while it is over the window, for instance to hide it during the game
+    /// and show it in menus.
+    void setCursorVisible(bool visible);
+    /// Tells whether the mouse pointer is shown over the window.
+    [[nodiscard]] bool isCursorVisible() const;
+
+    /// Turns vertical synchronisation on or off, see WindowSettings::vsync.
+    void setVsync(bool vsync);
+    /// Sets the maximum number of frames per second, or 0 for no limit.
+    void setTargetFps(int fps);
 };
 
 } // namespace rtype::render

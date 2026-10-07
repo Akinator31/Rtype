@@ -41,13 +41,39 @@ and only one can exist at a time, since raylib supports a single window: creatin
 `std::logic_error`.
 
 ```cpp
-const Window window({.width = 1920, .height = 1080, .title = "R-Type", .targetFps = 144});
+Window window({.width = 1920, .height = 1080, .title = "R-Type", .targetFps = 144});
 
-while (!window.shouldClose()) { ... }   // close button or system shortcut (Alt+F4)
+while (!window.shouldClose()) { ... }   // close button, system shortcut (Alt+F4), or requestClose()
 const float dt = window.frameTime();    // duration of the last frame, in seconds
 ```
 
-`WindowSettings` also sets whether the window is resizable and whether vertical synchronisation is on.
+`WindowSettings` also sets whether the window is resizable, whether vertical synchronisation is on, and
+whether it opens in fullscreen.
+
+### Window options
+
+Most settings can be changed while the game runs, for instance from an options menu:
+
+| Function | Effect |
+|---|---|
+| `setFullscreen(bool)`, `isFullscreen()` | Switches between a window and fullscreen. |
+| `setSize(width, height)` | Resizes the window, in pixels. Leaves fullscreen first. |
+| `setTitle(title)` | Changes the title of the window. |
+| `setCursorVisible(bool)`, `isCursorVisible()` | Shows or hides the mouse pointer over the window. |
+| `setVsync(bool)` | Turns vertical synchronisation on or off. |
+| `setTargetFps(fps)` | Sets the maximum number of frames per second, 0 for no limit. |
+| `requestClose()` | Asks the window to close, for instance from a *Quit* button: `shouldClose()` then returns true. |
+
+**Fullscreen** is a borderless window covering the screen it is on, at the resolution of that screen. raylib
+also has an exclusive fullscreen, which changes the video mode of the screen to match the window: it is slow
+to switch, can rearrange the other screens, and behaves badly when switching to another application. Since the
+game is already scaled to any window size, the borderless mode loses nothing. Leaving fullscreen restores the
+previous size and position of the window.
+
+The client switches fullscreen with ++f11++ (the `ToggleFullscreen` action) or from the menu, and hides the
+mouse pointer during the game, where it would hide part of the screen.
+
+### Escape key
 
 raylib closes the window when ++escape++ is pressed by default. `Window` disables this: in a game, Escape
 opens a menu rather than quitting without confirmation. The client binds it to the `Menu` action, see

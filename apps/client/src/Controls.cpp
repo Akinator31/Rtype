@@ -40,6 +40,8 @@ input::ActionMap<Action> defaultControls()
     controls.bind(Action::Menu, Binding::key(Key::Escape));
     controls.bind(Action::Menu, Binding::gamepadButton(GamepadButton::Start));
 
+    controls.bind(Action::ToggleFullscreen, Binding::key(Key::F11));
+
     return controls;
 }
 
