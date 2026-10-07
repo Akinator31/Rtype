@@ -9,4 +9,5 @@ add_library(rtype_render
 add_library(rtype::render ALIAS rtype_render)
 target_include_directories(rtype_render PUBLIC include)
 
-target_link_libraries(rtype_render PRIVATE rtype_options rtype::log raylib)
+# core is public: the public headers use its handles
+target_link_libraries(rtype_render PUBLIC rtype::core PRIVATE rtype_options rtype::log raylib)

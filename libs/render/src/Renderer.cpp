@@ -86,14 +86,14 @@ public:
 } // namespace
 
 struct Renderer::Impl {
-    const ResourceCache<detail::Texture, TextureId> &textures;
-    const ResourceCache<detail::Font, FontId> &fonts;
+    const core::ResourceCache<detail::Texture, TextureId> &textures;
+    const core::ResourceCache<detail::Font, FontId> &fonts;
     Vector2 gameSize;
     RenderTarget target;
     bool inFrame = false;
 
-    Impl(const ResourceCache<detail::Texture, TextureId> &textureCache,
-         const ResourceCache<detail::Font, FontId> &fontCache, Vector2 size)
+    Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
+         const core::ResourceCache<detail::Font, FontId> &fontCache, Vector2 size)
         : textures(textureCache), fonts(fontCache), gameSize(size), target(size)
     {
     }
