@@ -43,7 +43,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
 | **Interface** | Menus, options, HUD: screens and widgets, outside of the ECS | Client |
-| **Audio** | Music and sound effects | Client |
+| **Audio** | Music and sound effects, built on raylib (`libs/audio`) | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
 
 ## World and interface
@@ -80,7 +80,7 @@ In VR, the same two passes are drawn on the board (world) and on a floating pane
 
 ## Libraries
 
-The programs are built on four libraries. Each one has its own page:
+The programs are built on six libraries:
 
 | Library | Role | Page |
 |---|---|---|
@@ -88,10 +88,12 @@ The programs are built on four libraries. Each one has its own page:
 | `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
 | `libs/ecs` | Entities, components and systems. Shared with the server, so it never depends on raylib. | — |
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
+| `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
+| `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 
-Their public headers contain no raylib type: raylib is a private dependency of `render` and `input`, and the
-client code only uses our own classes. The server only links the ECS and the log library, which do not
-depend on raylib.
+Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
+and the client code only uses our own classes. The server only links the ECS, the log library and the core
+library, which do not depend on raylib.
 
 ## Repository layout
 
@@ -101,6 +103,8 @@ apps/       executables, one subdirectory per program
     assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
 libs/       libraries shared by the programs, one subdirectory per library
+  audio/    sound effects and music (client)
+  core/     handles and resource caches (all)
   ecs/      entity component system (client and server)
   input/    keyboard and gamepad input (client)
   log/      logging (client and server)

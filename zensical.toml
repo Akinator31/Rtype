@@ -23,6 +23,7 @@ nav = [
     "architecture/rendering.md",
     "architecture/input.md",
     "architecture/logging.md",
+    "architecture/audio.md",
   ] },
   { "Guides" = [
     "guides/index.md",
