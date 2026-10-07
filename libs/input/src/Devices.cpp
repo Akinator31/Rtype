@@ -124,6 +124,23 @@ int toRaylib(GamepadAxis axis)
     return GAMEPAD_AXIS_LEFT_X;
 }
 
+int toRaylib(MouseButton button)
+{
+    switch (button) {
+    case MouseButton::Left:
+        return MOUSE_BUTTON_LEFT;
+    case MouseButton::Right:
+        return MOUSE_BUTTON_RIGHT;
+    case MouseButton::Middle:
+        return MOUSE_BUTTON_MIDDLE;
+    case MouseButton::Back:
+        return MOUSE_BUTTON_SIDE;
+    case MouseButton::Forward:
+        return MOUSE_BUTTON_EXTRA;
+    }
+    return MOUSE_BUTTON_LEFT;
+}
+
 bool isTrigger(GamepadAxis axis)
 {
     return axis == GamepadAxis::LeftTrigger || axis == GamepadAxis::RightTrigger;
@@ -157,6 +174,23 @@ float Devices::gamepadAxis(int gamepad, GamepadAxis axis) const
     const float value = GetGamepadAxisMovement(gamepad, toRaylib(axis));
     // raylib gives triggers from -1 (released) to 1 (pressed): bring them to 0..1 like the documentation says
     return isTrigger(axis) ? std::clamp((value + 1.0f) / 2.0f, 0.0f, 1.0f) : std::clamp(value, -1.0f, 1.0f);
+}
+
+MousePosition Devices::mousePosition() const
+{
+    const ::Vector2 position = GetMousePosition();
+    return {position.x, position.y};
+}
+
+bool Devices::isMouseButtonDown(MouseButton button) const
+{
+    return IsMouseButtonDown(toRaylib(button));
+}
+
+float Devices::mouseWheel() const
+{
+    // Vertical wheel only: the horizontal one of some mice and touchpads is not used
+    return GetMouseWheelMoveV().y;
 }
 
 std::u32string Devices::takeTypedText()

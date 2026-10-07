@@ -124,6 +124,12 @@ Vector2 Renderer::gameSize() const
     return _impl->gameSize;
 }
 
+Vector2 Renderer::windowToGame(Vector2 position) const
+{
+    const Vector2 windowSize{static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
+    return render::windowToGame(position, windowSize, _impl->gameSize);
+}
+
 void Renderer::beginFrame(Color background)
 {
     if (_impl->inFrame) {

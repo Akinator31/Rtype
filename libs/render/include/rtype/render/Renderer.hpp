@@ -53,6 +53,15 @@ public:
     /// Logical resolution of the game, in game units.
     [[nodiscard]] Vector2 gameSize() const;
 
+    /// Converts a position in the window, such as the mouse pointer, into game units, taking into account the
+    /// scaling and the black bars. A position in the black bars is outside of the game: it is negative, or
+    /// larger than gameSize().
+    /// @code
+    /// const MousePosition mouse = devices.mousePosition();
+    /// const Vector2 pointer = renderer.windowToGame({mouse.x, mouse.y});
+    /// @endcode
+    [[nodiscard]] Vector2 windowToGame(Vector2 position) const;
+
     /// Starts a new frame and fills it with the background colour.
     /// @throws std::logic_error if a frame is already started.
     void beginFrame(Color background = colors::Black);
