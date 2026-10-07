@@ -13,6 +13,7 @@
 #include <array>
 #include <cmath>
 #include <exception>
+#include <optional>
 #include <string>
 
 namespace
@@ -50,6 +51,9 @@ void run()
     const std::array<std::string, 3> menuItems{"Resume", "Name: ", "Quit"};
     const std::size_t nameItem = 1;
     std::size_t selectedItem = 0;
+    // Area of each item on screen, kept from the previous frame to know which item is under the mouse pointer
+    std::array<Rectangle, 3> itemAreas{};
+    rtype::input::MousePosition previousMouse = devices.mousePosition();
     // The name is edited while its item is selected
     rtype::input::TextInput name;
     name.setText("Player");
@@ -68,7 +72,36 @@ void run()
             menuOpen = true;
             selectedItem = 0;
         }
+
+        // The pointer is converted to game units: the game is scaled and may have black bars around it
+        const rtype::input::MousePosition mouse = devices.mousePosition();
+        const bool mouseMoved = mouse.x != previousMouse.x || mouse.y != previousMouse.y;
+        previousMouse = mouse;
+        const Vector2 pointer = renderer.windowToGame({mouse.x, mouse.y});
+        std::optional<std::size_t> hoveredItem;
+        for (std::size_t item = 0; item < itemAreas.size(); ++item) {
+            const Rectangle &area = itemAreas[item];
+            if (pointer.x >= area.x && pointer.x < area.x + area.width && pointer.y >= area.y &&
+                pointer.y < area.y + area.height) {
+                hoveredItem = item;
+            }
+        }
+
+        const auto activate = [&](std::size_t item) {
+            if (item == 0) {
+                menuOpen = false;
+            } else if (item == nameItem) {
+                logger.info("Name set to \"{}\"", name.text());
+            } else {
+                logger.info("Menu item \"{}\" is not implemented yet", menuItems[item]);
+            }
+        };
         if (menuWasOpen) {
+            // The mouse only selects when it moves: a still pointer over an item must not prevent choosing
+            // another one with the keyboard
+            if (mouseMoved && hoveredItem) {
+                selectedItem = *hoveredItem;
+            }
             // wasRepeated(): holding Up or Down keeps moving the selection after a short delay
             if (menuControls.wasRepeated(MenuAction::Up)) {
                 selectedItem = (selectedItem + menuItems.size() - 1) % menuItems.size();
@@ -85,13 +118,10 @@ void run()
             if (menuControls.wasPressed(MenuAction::Back)) {
                 menuOpen = false;
             } else if (menuControls.wasPressed(MenuAction::Confirm)) {
-                if (selectedItem == 0) {
-                    menuOpen = false;
-                } else if (selectedItem == nameItem) {
-                    logger.info("Name set to \"{}\"", name.text());
-                } else {
-                    logger.info("Menu item \"{}\" is not implemented yet", menuItems[selectedItem]);
-                }
+                activate(selectedItem);
+            } else if (menuControls.wasPressed(MenuAction::Click) && hoveredItem) {
+                selectedItem = *hoveredItem;
+                activate(*hoveredItem);
             }
         }
         Vector2 direction{controls.strength(Action::MoveRight) - controls.strength(Action::MoveLeft),
@@ -150,10 +180,10 @@ void run()
                 const Vector2 itemArea = renderer.measureText(font, label, itemSize);
                 const Vector2 itemPosition{(game.x - itemArea.x) / 2.0f,
                                            game.y / 2.0f + static_cast<float>(item) * itemSpacing};
+                itemAreas[item] = {itemPosition.x - 30.0f, itemPosition.y - 10.0f, itemArea.x + 60.0f,
+                                   itemArea.y + 20.0f};
                 if (selected) {
-                    renderer.drawRectangleOutline({itemPosition.x - 30.0f, itemPosition.y - 10.0f,
-                                                   itemArea.x + 60.0f, itemArea.y + 20.0f},
-                                                  4.0f, colors::Yellow);
+                    renderer.drawRectangleOutline(itemAreas[item], 4.0f, colors::Yellow);
                 }
                 // While the name is edited: selection behind the text, cursor after it. Their positions are
                 // the widths of the text before them.
