@@ -1,4 +1,6 @@
 #include "Controls.hpp"
+#include "rtype/audio/AudioDevice.hpp"
+#include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/input/TextInput.hpp"
@@ -30,6 +32,10 @@ void run()
     Window window;
     ResourceManager resources(window, applicationDirectory() / "assets");
     Renderer renderer(window, resources);
+    // After the window, so that raylib's messages about the audio output are logged like the others
+    rtype::audio::AudioDevice audioDevice;
+    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets");
+    const rtype::audio::SoundId shotSound = audio.loadSound("sounds/train.mp3");
     rtype::input::Devices devices(window);
     rtype::input::ActionMap<Action> controls = rtype::client::defaultControls();
     rtype::input::ActionMap<MenuAction> menuControls = rtype::client::defaultMenuControls();
@@ -48,13 +54,15 @@ void run()
     Vector2 position{200.0f, 200.0f};
     int shots = 0;
     bool menuOpen = false;
-    const std::array<std::string, 4> menuItems{"Resume", "Name: ", "Fullscreen: ", "Quit"};
+    const std::array<std::string, 5> menuItems{"Resume",
+                                               "Name: ", "Fullscreen: ", "Effects volume: ", "Quit"};
     const std::size_t nameItem = 1;
     const std::size_t fullscreenItem = 2;
-    const std::size_t quitItem = 3;
+    const std::size_t volumeItem = 3;
+    const std::size_t quitItem = 4;
     std::size_t selectedItem = 0;
     // Area of each item on screen, kept from the previous frame to know which item is under the mouse pointer
-    std::array<Rectangle, 4> itemAreas{};
+    std::array<Rectangle, 5> itemAreas{};
     rtype::input::MousePosition previousMouse = devices.mousePosition();
     // The name is edited while its item is selected
     rtype::input::TextInput name;
@@ -63,6 +71,8 @@ void run()
     name.setFilter([](char32_t c) { return (c >= U'0' && c <= U'9') || c == U'.' || c == U':'; });
 
     while (!window.shouldClose()) {
+        // Keeps the music stream fed, once per frame
+        audio.update();
         const Vector2 game = renderer.gameSize();
 
         // Both maps are updated every frame, but only the one matching the state at the start of the frame is
@@ -113,6 +123,14 @@ void run()
             if (menuControls.wasRepeated(MenuAction::Up)) {
                 selectedItem = (selectedItem + menuItems.size() - 1) % menuItems.size();
             }
+            // Left and Right change the value of the selected item: here, the volume of the sound effects
+            if (selectedItem == volumeItem && menuControls.wasRepeated(MenuAction::Left)) {
+                audio.setEffectsVolume(audio.effectsVolume() - 0.1f);
+            }
+            if (selectedItem == volumeItem && menuControls.wasRepeated(MenuAction::Right)) {
+                audio.setEffectsVolume(audio.effectsVolume() + 0.1f);
+                audio.play(shotSound);
+            }
             if (menuControls.wasRepeated(MenuAction::Down)) {
                 selectedItem = (selectedItem + 1) % menuItems.size();
             }
@@ -149,6 +167,7 @@ void run()
             std::clamp(position.y + direction.y * speed * window.frameTime(), 0.0f, game.y - imageSize);
         if (!menuWasOpen && controls.wasPressed(Action::Shoot)) {
             ++shots;
+            audio.play(shotSound);
         }
         const Vector2 titleArea = renderer.measureText(font, title, titleSize);
 
@@ -191,6 +210,9 @@ void run()
                     label += name.text();
                 } else if (item == fullscreenItem) {
                     label += window.isFullscreen() ? "On" : "Off";
+                } else if (item == volumeItem) {
+                    label +=
+                        std::to_string(static_cast<int>(std::lround(audio.effectsVolume() * 100.0f))) + "%";
                 }
                 const Vector2 itemArea = renderer.measureText(font, label, itemSize);
                 const Vector2 itemPosition{(game.x - itemArea.x) / 2.0f,
