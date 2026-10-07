@@ -6,27 +6,31 @@
 #include <typeindex>
 #include <vector>
 
-namespace ecs {
+namespace ecs
+{
 
-class System {
+class System
+{
     std::vector<std::type_index> _componentTypes;
 
-  protected:
+protected:
     /// Declares that the system uses component T and returns its cache. To call once per type,
     /// from the constructor of the system, which then keeps the reference.
-    template <typename T> ComponentCache<T>& use(ComponentCaches& caches) {
+    template <typename T>
+    ComponentCache<T> &use(ComponentCaches &caches)
+    {
         _componentTypes.emplace_back(typeid(T));
         return caches.cache<T>();
     }
 
-  public:
+public:
     bool enabled = true;
 
     virtual ~System();
     virtual void update() = 0;
 
     /// Component types used by the system.
-    [[nodiscard]] const std::vector<std::type_index>& componentTypes() const;
+    [[nodiscard]] const std::vector<std::type_index> &componentTypes() const;
 };
 
 } // namespace ecs

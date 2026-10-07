@@ -1,10 +1,12 @@
 #include "ecs/System/System.hpp"
 
-namespace ecs {
+namespace ecs
+{
 
 System::~System() = default;
 
-const std::vector<std::type_index>& System::componentTypes() const {
+const std::vector<std::type_index> &System::componentTypes() const
+{
     return _componentTypes;
 }
 

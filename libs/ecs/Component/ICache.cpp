@@ -1,6 +1,7 @@
 #include "ecs/Component/ICache.hpp"
 
-namespace ecs {
+namespace ecs
+{
 
 ICache::~ICache() = default;
 

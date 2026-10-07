@@ -4,7 +4,8 @@
 
 using namespace ecs;
 
-namespace {
+namespace
+{
 
 struct Position {
     int x = 0;
@@ -13,15 +14,19 @@ struct Velocity {
     int dx = 0;
 };
 
-class Movement : public System {
-    ComponentCache<Position>& _positions;
-    ComponentCache<Velocity>& _velocities;
+class Movement : public System
+{
+    ComponentCache<Position> &_positions;
+    ComponentCache<Velocity> &_velocities;
 
-  public:
-    explicit Movement(ComponentCaches& caches)
-        : _positions(use<Position>(caches)), _velocities(use<Velocity>(caches)) {}
+public:
+    explicit Movement(ComponentCaches &caches)
+        : _positions(use<Position>(caches)), _velocities(use<Velocity>(caches))
+    {
+    }
 
-    void update() override {
+    void update() override
+    {
         for (entity_t e = 0; e < _positions.size(); ++e) {
             if (_positions.has(e) && _velocities.has(e)) {
                 _positions.get(e).x += _velocities.get(e).dx;
@@ -30,15 +35,16 @@ class Movement : public System {
     }
 };
 
-class DestroyAll : public System {
-    ComponentCache<Position>& _positions;
-    Ecs& _ecs;
+class DestroyAll : public System
+{
+    ComponentCache<Position> &_positions;
+    Ecs &_ecs;
 
-  public:
-    DestroyAll(ComponentCaches& caches, Ecs& ecs)
-        : _positions(use<Position>(caches)), _ecs(ecs) {}
+public:
+    DestroyAll(ComponentCaches &caches, Ecs &ecs) : _positions(use<Position>(caches)), _ecs(ecs) {}
 
-    void update() override {
+    void update() override
+    {
         for (entity_t e = 0; e < _positions.size(); ++e) {
             if (_positions.has(e)) {
                 _ecs.destroyEntity(e);
@@ -49,7 +55,8 @@ class DestroyAll : public System {
 
 } // namespace
 
-TEST_CASE("A cache stores components by entity id", "[ecs][cache]") {
+TEST_CASE("A cache stores components by entity id", "[ecs][cache]")
+{
     ComponentCache<Position> cache;
     REQUIRE_FALSE(cache.has(5));
     cache.emplace(5, 42);
@@ -61,9 +68,10 @@ TEST_CASE("A cache stores components by entity id", "[ecs][cache]") {
     cache.erase(1000); // out of range: no-op
 }
 
-TEST_CASE("ComponentCaches hands out one stable cache per type", "[ecs][cache]") {
+TEST_CASE("ComponentCaches hands out one stable cache per type", "[ecs][cache]")
+{
     ComponentCaches caches;
-    auto& positions = caches.cache<Position>();
+    auto &positions = caches.cache<Position>();
     caches.cache<Velocity>();
     REQUIRE(&caches.cache<Position>() == &positions);
     positions.emplace(0);
@@ -71,7 +79,8 @@ TEST_CASE("ComponentCaches hands out one stable cache per type", "[ecs][cache]")
     REQUIRE_FALSE(positions.has(0));
 }
 
-TEST_CASE("Entity ids are recycled", "[ecs]") {
+TEST_CASE("Entity ids are recycled", "[ecs]")
+{
     Ecs ecs;
     const entity_t a = ecs.createEntity();
     const entity_t b = ecs.createEntity();
@@ -84,7 +93,8 @@ TEST_CASE("Entity ids are recycled", "[ecs]") {
     REQUIRE_FALSE(ecs.hasComponent<Position>(a));
 }
 
-TEST_CASE("A system only touches entities with all its components", "[ecs][system]") {
+TEST_CASE("A system only touches entities with all its components", "[ecs][system]")
+{
     Ecs ecs;
     ecs.registerSystem<Movement>();
     const entity_t moving = ecs.createEntity();
@@ -97,9 +107,10 @@ TEST_CASE("A system only touches entities with all its components", "[ecs][syste
     REQUIRE(ecs.getComponent<Position>(still).x == 10);
 }
 
-TEST_CASE("A disabled system is skipped", "[ecs][system]") {
+TEST_CASE("A disabled system is skipped", "[ecs][system]")
+{
     Ecs ecs;
-    auto& movement = ecs.registerSystem<Movement>();
+    auto &movement = ecs.registerSystem<Movement>();
     const entity_t e = ecs.createEntity();
     ecs.addComponent<Position>(e, 0);
     ecs.addComponent<Velocity>(e, 1);
@@ -111,7 +122,8 @@ TEST_CASE("A disabled system is skipped", "[ecs][system]") {
     REQUIRE(ecs.getComponent<Position>(e).x == 1);
 }
 
-TEST_CASE("A system can destroy entities while iterating", "[ecs][system]") {
+TEST_CASE("A system can destroy entities while iterating", "[ecs][system]")
+{
     Ecs ecs;
     ecs.registerSystem<DestroyAll>(ecs);
     const entity_t a = ecs.createEntity();
@@ -123,9 +135,10 @@ TEST_CASE("A system can destroy entities while iterating", "[ecs][system]") {
     REQUIRE_FALSE(ecs.isAlive(b));
 }
 
-TEST_CASE("A system lists the component types it uses", "[ecs][system]") {
+TEST_CASE("A system lists the component types it uses", "[ecs][system]")
+{
     Ecs ecs;
-    const auto& types = ecs.registerSystem<Movement>().componentTypes();
+    const auto &types = ecs.registerSystem<Movement>().componentTypes();
     REQUIRE(types.size() == 2);
     REQUIRE(types[0] == std::type_index(typeid(Position)));
     REQUIRE(types[1] == std::type_index(typeid(Velocity)));
