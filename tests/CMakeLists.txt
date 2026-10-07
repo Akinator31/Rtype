@@ -10,6 +10,7 @@ include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
 add_executable(rtype_tests
     action_map.cpp
     audio.cpp
+    color_filter.cpp
     ecs.cpp
     log.cpp
     paths.cpp
