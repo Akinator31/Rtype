@@ -54,15 +54,18 @@ void run()
     Vector2 position{200.0f, 200.0f};
     int shots = 0;
     bool menuOpen = false;
-    const std::array<std::string, 5> menuItems{"Resume",
-                                               "Name: ", "Fullscreen: ", "Effects volume: ", "Quit"};
+    const std::array<std::string, 6> menuItems{
+        "Resume", "Name: ", "Fullscreen: ", "Effects volume: ", "Colour filter: ", "Quit"};
     const std::size_t nameItem = 1;
     const std::size_t fullscreenItem = 2;
     const std::size_t volumeItem = 3;
-    const std::size_t quitItem = 4;
+    const std::size_t filterItem = 4;
+    const std::size_t quitItem = 5;
+    // The colour filters, in the order the menu goes through them
+    constexpr int filterCount = static_cast<int>(ColorFilter::HighContrast) + 1;
     std::size_t selectedItem = 0;
     // Area of each item on screen, kept from the previous frame to know which item is under the mouse pointer
-    std::array<Rectangle, 5> itemAreas{};
+    std::array<Rectangle, 6> itemAreas{};
     rtype::input::MousePosition previousMouse = devices.mousePosition();
     // The name is edited while its item is selected
     rtype::input::TextInput name;
@@ -130,6 +133,12 @@ void run()
             if (selectedItem == volumeItem && menuControls.wasRepeated(MenuAction::Right)) {
                 audio.setEffectsVolume(audio.effectsVolume() + 0.1f);
                 audio.play(shotSound);
+            }
+            if (selectedItem == filterItem &&
+                (menuControls.wasRepeated(MenuAction::Left) || menuControls.wasRepeated(MenuAction::Right))) {
+                const int step = menuControls.wasRepeated(MenuAction::Right) ? 1 : filterCount - 1;
+                renderer.setColorFilter(static_cast<ColorFilter>(
+                    (static_cast<int>(renderer.colorFilter()) + step) % filterCount));
             }
             if (menuControls.wasRepeated(MenuAction::Down)) {
                 selectedItem = (selectedItem + 1) % menuItems.size();
@@ -213,6 +222,8 @@ void run()
                 } else if (item == volumeItem) {
                     label +=
                         std::to_string(static_cast<int>(std::lround(audio.effectsVolume() * 100.0f))) + "%";
+                } else if (item == filterItem) {
+                    label += colorFilterName(renderer.colorFilter());
                 }
                 const Vector2 itemArea = renderer.measureText(font, label, itemSize);
                 const Vector2 itemPosition{(game.x - itemArea.x) / 2.0f,
