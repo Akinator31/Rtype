@@ -3,7 +3,7 @@
 // Private to the render library: the raylib resources behind the handles of the ResourceManager, shared
 // between the ResourceManager, which loads them, and the Renderer, which draws them.
 
-#include "rtype/render/ResourceCache.hpp"
+#include "rtype/core/ResourceCache.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
 #include <raylib.h>
@@ -104,8 +104,8 @@ public:
 
 struct ResourceManager::Impl {
     std::filesystem::path assetsDirectory;
-    ResourceCache<detail::Texture, TextureId> textures;
-    ResourceCache<detail::Font, FontId> fonts;
+    core::ResourceCache<detail::Texture, TextureId> textures;
+    core::ResourceCache<detail::Font, FontId> fonts;
 };
 
 } // namespace rtype::render

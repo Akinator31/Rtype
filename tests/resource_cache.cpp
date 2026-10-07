@@ -1,7 +1,7 @@
 // The ResourceCache does not depend on raylib: these tests use fake resources, without a window.
 
-#include "rtype/render/Handle.hpp"
-#include "rtype/render/ResourceCache.hpp"
+#include "rtype/core/Handle.hpp"
+#include "rtype/core/ResourceCache.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -12,10 +12,10 @@
 namespace
 {
 
-using FakeId = rtype::render::Handle<struct FakeTag>;
+using FakeId = rtype::core::Handle<struct FakeTag>;
 // Move-only like the real resources, which own graphics memory
 using FakeResource = std::unique_ptr<std::string>;
-using FakeCache = rtype::render::ResourceCache<FakeResource, FakeId>;
+using FakeCache = rtype::core::ResourceCache<FakeResource, FakeId>;
 
 FakeResource makeResource(const std::string &content)
 {

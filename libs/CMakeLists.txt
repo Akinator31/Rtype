@@ -12,6 +12,8 @@ CPMAddPackage(
         "BUILD_SHARED_LIBS OFF"
 )
 
+add_subdirectory(audio)
+add_subdirectory(core)
 add_subdirectory(ecs)
 add_subdirectory(input)
 add_subdirectory(log)

@@ -1,0 +1,256 @@
+#include "rtype/audio/AudioPlayer.hpp"
+
+#include "rtype/audio/AudioDevice.hpp"
+#include "rtype/core/ResourceCache.hpp"
+
+#include <raylib.h>
+
+#include <algorithm>
+#include <optional>
+#include <stdexcept>
+#include <utility>
+#include <vector>
+
+namespace rtype::audio
+{
+
+namespace
+{
+
+// Number of copies of a sound that can play at the same time
+constexpr std::size_t voicesPerSound = 4;
+
+void requireFile(const std::filesystem::path &file, const char *kind)
+{
+    // Checked even when the audio is not available, so that a missing file is noticed on every computer
+    if (!std::filesystem::is_regular_file(file)) {
+        throw std::runtime_error(std::string("Cannot load ") + kind + " " + file.string() +
+                                 ": file not found");
+    }
+}
+
+// Owns a sound effect and its voices. A default-constructed effect plays nothing: it stands for a sound
+// loaded while the audio is not available. A moved-from effect frees nothing.
+class SoundEffect
+{
+private:
+    // The first voice is the sound itself, which owns the samples; the others are aliases sharing them
+    std::vector<::Sound> _voices;
+    std::size_t _next = 0;
+
+public:
+    SoundEffect() = default;
+    explicit SoundEffect(const std::filesystem::path &file)
+    {
+        const ::Sound source = LoadSound(file.string().c_str());
+        if (!IsSoundValid(source)) {
+            throw std::runtime_error("Cannot load sound " + file.string() + ": unsupported format");
+        }
+        _voices.push_back(source);
+        for (std::size_t voice = 1; voice < voicesPerSound; ++voice) {
+            _voices.push_back(LoadSoundAlias(source));
+        }
+    }
+    ~SoundEffect()
+    {
+        if (_voices.empty()) {
+            return;
+        }
+        for (std::size_t voice = 1; voice < _voices.size(); ++voice) {
+            UnloadSoundAlias(_voices[voice]);
+        }
+        UnloadSound(_voices.front());
+    }
+
+    SoundEffect(const SoundEffect &) = delete;
+    SoundEffect &operator=(const SoundEffect &) = delete;
+    SoundEffect(SoundEffect &&other) noexcept
+        : _voices(std::exchange(other._voices, {})), _next(std::exchange(other._next, 0))
+    {
+    }
+    SoundEffect &operator=(SoundEffect &&) = delete;
+
+    void play(const PlaySettings &settings, float effectsVolume)
+    {
+        if (_voices.empty()) {
+            return;
+        }
+        // A free voice if there is one, otherwise the oldest one is restarted
+        std::size_t chosen = _next;
+        for (std::size_t offset = 0; offset < _voices.size(); ++offset) {
+            const std::size_t voice = (_next + offset) % _voices.size();
+            if (!IsSoundPlaying(_voices[voice])) {
+                chosen = voice;
+                break;
+            }
+        }
+        _next = (chosen + 1) % _voices.size();
+
+        ::Sound &sound = _voices[chosen];
+        SetSoundVolume(sound, std::clamp(settings.volume, 0.0f, 1.0f) * effectsVolume);
+        SetSoundPitch(sound, std::max(settings.pitch, 0.01f));
+        SetSoundPan(sound, std::clamp(settings.pan, -1.0f, 1.0f));
+        PlaySound(sound);
+    }
+};
+
+// Owns a music stream. A default-constructed music plays nothing, like a default SoundEffect.
+class MusicStream
+{
+private:
+    std::optional<::Music> _music;
+
+public:
+    MusicStream() = default;
+    explicit MusicStream(const std::filesystem::path &file) : _music(LoadMusicStream(file.string().c_str()))
+    {
+        if (!IsMusicValid(*_music)) {
+            throw std::runtime_error("Cannot load music " + file.string() + ": unsupported format");
+        }
+    }
+    ~MusicStream()
+    {
+        if (_music) {
+            UnloadMusicStream(*_music);
+        }
+    }
+
+    MusicStream(const MusicStream &) = delete;
+    MusicStream &operator=(const MusicStream &) = delete;
+    MusicStream(MusicStream &&other) noexcept : _music(std::exchange(other._music, std::nullopt)) {}
+    MusicStream &operator=(MusicStream &&) = delete;
+
+    // Nothing when the audio is not available
+    [[nodiscard]] ::Music *get() { return _music ? &*_music : nullptr; }
+};
+
+} // namespace
+
+struct AudioPlayer::Impl {
+    bool available;
+    std::filesystem::path assetsDirectory;
+    core::ResourceCache<SoundEffect, SoundId> sounds;
+    core::ResourceCache<MusicStream, MusicId> musics;
+    std::optional<MusicId> currentMusic;
+    bool paused = false;
+    float musicVolume = 1.0f;
+    float effectsVolume = 1.0f;
+
+    Impl(bool audioAvailable, std::filesystem::path assets)
+        : available(audioAvailable), assetsDirectory(std::move(assets))
+    {
+    }
+
+    ::Music *current() { return currentMusic ? musics.get(*currentMusic).get() : nullptr; }
+};
+
+AudioPlayer::AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory)
+    : _impl(std::make_unique<Impl>(device.isAvailable(), std::move(assetsDirectory)))
+{
+}
+
+AudioPlayer::~AudioPlayer() = default;
+AudioPlayer::AudioPlayer(AudioPlayer &&) noexcept = default;
+AudioPlayer &AudioPlayer::operator=(AudioPlayer &&) noexcept = default;
+
+SoundId AudioPlayer::loadSound(const std::string &path)
+{
+    return _impl->sounds.load(path, [&] {
+        const std::filesystem::path file = _impl->assetsDirectory / path;
+        requireFile(file, "sound");
+        return _impl->available ? SoundEffect(file) : SoundEffect();
+    });
+}
+
+MusicId AudioPlayer::loadMusic(const std::string &path)
+{
+    return _impl->musics.load(path, [&] {
+        const std::filesystem::path file = _impl->assetsDirectory / path;
+        requireFile(file, "music");
+        return _impl->available ? MusicStream(file) : MusicStream();
+    });
+}
+
+void AudioPlayer::play(SoundId sound, const PlaySettings &settings)
+{
+    _impl->sounds.get(sound).play(settings, _impl->effectsVolume);
+}
+
+void AudioPlayer::playMusic(MusicId music, bool loop)
+{
+    stopMusic();
+    _impl->currentMusic = music;
+    _impl->paused = false;
+    if (::Music *stream = _impl->current()) {
+        stream->looping = loop;
+        SetMusicVolume(*stream, _impl->musicVolume);
+        PlayMusicStream(*stream);
+    }
+}
+
+void AudioPlayer::stopMusic()
+{
+    if (::Music *stream = _impl->current()) {
+        StopMusicStream(*stream);
+    }
+    _impl->currentMusic.reset();
+    _impl->paused = false;
+}
+
+void AudioPlayer::pauseMusic()
+{
+    if (::Music *stream = _impl->current()) {
+        PauseMusicStream(*stream);
+    }
+    _impl->paused = _impl->currentMusic.has_value();
+}
+
+void AudioPlayer::resumeMusic()
+{
+    if (::Music *stream = _impl->current()) {
+        ResumeMusicStream(*stream);
+    }
+    _impl->paused = false;
+}
+
+bool AudioPlayer::isMusicPlaying() const
+{
+    if (!_impl->currentMusic || _impl->paused) {
+        return false;
+    }
+    // Without audio, a music "plays" until it is stopped: there is no stream to tell when it ends
+    const ::Music *stream = _impl->current();
+    return stream == nullptr || IsMusicStreamPlaying(*stream);
+}
+
+void AudioPlayer::update()
+{
+    if (::Music *stream = _impl->current(); stream != nullptr && !_impl->paused) {
+        UpdateMusicStream(*stream);
+    }
+}
+
+void AudioPlayer::setMusicVolume(float volume)
+{
+    _impl->musicVolume = std::clamp(volume, 0.0f, 1.0f);
+    if (::Music *stream = _impl->current()) {
+        SetMusicVolume(*stream, _impl->musicVolume);
+    }
+}
+
+float AudioPlayer::musicVolume() const
+{
+    return _impl->musicVolume;
+}
+
+void AudioPlayer::setEffectsVolume(float volume)
+{
+    _impl->effectsVolume = std::clamp(volume, 0.0f, 1.0f);
+}
+
+float AudioPlayer::effectsVolume() const
+{
+    return _impl->effectsVolume;
+}
+
+} // namespace rtype::audio

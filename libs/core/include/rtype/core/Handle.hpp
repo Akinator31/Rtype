@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace rtype::render
+namespace rtype::core
 {
 
 /// Identifier of a loaded resource, cheap to copy and store in components.
@@ -16,4 +16,4 @@ struct Handle {
     friend bool operator==(Handle, Handle) = default;
 };
 
-} // namespace rtype::render
+} // namespace rtype::core

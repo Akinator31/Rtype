@@ -21,6 +21,7 @@
 | **Physical and motor** | Every action can be bound to any key or gamepad input, with several inputs per action. The engine supports it; the options menu is still to be done. | [Input](architecture/input.md#actions) |
 | **Physical and motor** | Gamepad support, with analog sticks and an adjustable dead zone for worn sticks. | [Input](architecture/input.md#bindings) |
 | **Physical and motor** | Controls work on any keyboard layout: keys are physical positions, so WASD is ZQSD on AZERTY. | [Input](architecture/input.md#keys-and-buttons) |
+| **Audio** | Separate volumes for the music and the sound effects, on top of a master volume. The engine supports it; the options menu is still to be done. | [Audio](architecture/audio.md#volumes) |
 | **Visual** | The game keeps its aspect ratio and scales to any window size, without being cropped or stretched. | [Rendering](architecture/rendering.md#logical-resolution) |
 
 ## In this documentation

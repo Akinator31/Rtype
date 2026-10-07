@@ -101,7 +101,8 @@ because a font is rendered to a texture at the size it is loaded with.
 
 Internally, each kind of resource is stored in a `ResourceCache`, a generic container that maps a key (the
 path) to a handle and loads missing resources with a function given by the caller. It does not depend on
-raylib, which is why it is unit tested without a window (`tests/resource_cache.cpp`).
+raylib, which is why it is unit tested without a window (`tests/resource_cache.cpp`). It is part of the core
+library (`libs/core`), with the `Handle` type, so that the [audio library](audio.md) uses it too.
 
 ### Errors
 

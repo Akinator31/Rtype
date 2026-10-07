@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace rtype::render
+namespace rtype::core
 {
 
 /// Loads each resource once and keeps it until the cache is destroyed.
@@ -49,9 +49,13 @@ public:
     /// Returns the resource with this handle. The reference is invalidated by the next call to load().
     /// @throws std::out_of_range if the handle does not come from this cache.
     [[nodiscard]] const Resource &get(Id id) const { return _resources.at(id.index); }
+    /// Returns the resource with this handle, to modify it. The reference is invalidated by the next call to
+    /// load().
+    /// @throws std::out_of_range if the handle does not come from this cache.
+    [[nodiscard]] Resource &get(Id id) { return _resources.at(id.index); }
 
     /// Number of resources loaded.
     [[nodiscard]] std::size_t size() const { return _resources.size(); }
 };
 
-} // namespace rtype::render
+} // namespace rtype::core

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rtype/render/Handle.hpp"
+#include "rtype/core/Handle.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -12,9 +12,9 @@ namespace rtype::render
 class Window;
 
 /// Handle of a texture loaded by the ResourceManager.
-using TextureId = Handle<struct TextureTag>;
+using TextureId = core::Handle<struct TextureTag>;
 /// Handle of a font loaded by the ResourceManager.
-using FontId = Handle<struct FontTag>;
+using FontId = core::Handle<struct FontTag>;
 
 /// Loads the graphics resources of the game (textures, fonts) and frees them when it is destroyed.
 ///
