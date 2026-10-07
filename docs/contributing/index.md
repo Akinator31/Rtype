@@ -30,6 +30,8 @@ networking layer does not depend on the platform.
 - New behaviour comes with tests, following the [testing policy](testing.md).
 - Public headers of the engine are documented with Doxygen comments, see
   [Documenting C++ code](documentation.md#documenting-c-code).
+- Messages are written with a logger (`rtype::log::Logger`), not with `std::cout` or `std::cerr`, see
+  [Logging](../architecture/logging.md).
 
 ## Repository administration
 

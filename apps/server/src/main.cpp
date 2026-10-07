@@ -1,6 +1,12 @@
-#include <iostream>
+#include "rtype/log/Logger.hpp"
+
 int main()
 {
-    std::cout << "Hello, World! (r-type_server)" << std::endl;
+    const rtype::log::Logger logger("server");
+
+    if (const auto problem = rtype::log::configureFromEnvironment()) {
+        logger.warning("{}", *problem);
+    }
+    logger.info("Server started");
     return 0;
 }

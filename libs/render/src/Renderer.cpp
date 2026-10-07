@@ -5,6 +5,7 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace rtype::render
@@ -41,6 +42,15 @@ Vector2 fromRaylib(::Vector2 vector)
 float builtinFontSpacing(float size)
 {
     return size / builtinFontSize;
+}
+
+// Tells whether the corners are in the order raylib draws: counter-clockwise on screen. With the y axis
+// pointing down, it is the order for which this cross product is negative.
+bool isCounterClockwise(Vector2 first, Vector2 second, Vector2 third)
+{
+    const float cross =
+        (second.x - first.x) * (third.y - first.y) - (second.y - first.y) * (third.x - first.x);
+    return cross < 0.0f;
 }
 
 // Owns the off-screen image the game is drawn to, at the game's logical resolution
@@ -114,6 +124,12 @@ Vector2 Renderer::gameSize() const
     return _impl->gameSize;
 }
 
+Vector2 Renderer::windowToGame(Vector2 position) const
+{
+    const Vector2 windowSize{static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
+    return render::windowToGame(position, windowSize, _impl->gameSize);
+}
+
 void Renderer::beginFrame(Color background)
 {
     if (_impl->inFrame) {
@@ -167,6 +183,52 @@ void Renderer::drawRectangle(Rectangle rectangle, Color color)
 {
     _impl->requireFrame();
     DrawRectangleRec(toRaylib(rectangle), toRaylib(color));
+}
+
+void Renderer::drawCircle(Vector2 center, float radius, Color color)
+{
+    _impl->requireFrame();
+    if (radius > 0.0f) {
+        DrawCircleV(toRaylib(center), radius, toRaylib(color));
+    }
+}
+
+void Renderer::drawRectangleOutline(Rectangle rectangle, float thickness, Color color)
+{
+    _impl->requireFrame();
+    if (thickness > 0.0f && rectangle.width > 0.0f && rectangle.height > 0.0f) {
+        // raylib draws the outline inside the rectangle, and fills it if the outline is thicker than half of
+        // it
+        DrawRectangleLinesEx(toRaylib(rectangle), thickness, toRaylib(color));
+    }
+}
+
+void Renderer::drawCircleOutline(Vector2 center, float radius, float thickness, Color color)
+{
+    _impl->requireFrame();
+    if (thickness > 0.0f && radius > 0.0f) {
+        // A ring between the radius and the radius minus the thickness; 0 segments lets raylib pick enough of
+        // them for the circle to look round
+        const float innerRadius = std::max(radius - thickness, 0.0f);
+        DrawRing(toRaylib(center), innerRadius, radius, 0.0f, 360.0f, 0, toRaylib(color));
+    }
+}
+
+void Renderer::drawLine(Vector2 start, Vector2 end, float thickness, Color color)
+{
+    _impl->requireFrame();
+    DrawLineEx(toRaylib(start), toRaylib(end), thickness, toRaylib(color));
+}
+
+void Renderer::drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color color)
+{
+    _impl->requireFrame();
+    // raylib silently skips triangles given clockwise (their back face is culled): put the corners in its
+    // order
+    if (!isCounterClockwise(first, second, third)) {
+        std::swap(second, third);
+    }
+    DrawTriangle(toRaylib(first), toRaylib(second), toRaylib(third), toRaylib(color));
 }
 
 void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color)

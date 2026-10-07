@@ -20,6 +20,14 @@ nav = [
   ] },
   { "Architecture" = [
     "architecture/index.md",
+    "architecture/rendering.md",
+    "architecture/input.md",
+    "architecture/logging.md",
+  ] },
+  { "Guides" = [
+    "guides/index.md",
+    "guides/draw-a-sprite.md",
+    "guides/add-a-player-action.md",
   ] },
   { "Network protocol" = [
     "protocol/index.md",
@@ -31,6 +39,7 @@ nav = [
     "decisions/0003-documentation-tooling.md",
     "decisions/0004-testing-tools.md",
     "decisions/0005-ecs-component-storage.md",
+    "decisions/0006-world-in-ecs-interface-in-ui-layer.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [

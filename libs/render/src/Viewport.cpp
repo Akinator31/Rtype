@@ -16,4 +16,14 @@ Rectangle letterbox(Vector2 windowSize, Vector2 gameSize)
     return {(windowSize.x - width) / 2.0f, (windowSize.y - height) / 2.0f, width, height};
 }
 
+Vector2 windowToGame(Vector2 position, Vector2 windowSize, Vector2 gameSize)
+{
+    const Rectangle area = letterbox(windowSize, gameSize);
+    if (area.width <= 0.0f || area.height <= 0.0f) {
+        return {};
+    }
+    return {(position.x - area.x) * gameSize.x / area.width,
+            (position.y - area.y) * gameSize.y / area.height};
+}
+
 } // namespace rtype::render

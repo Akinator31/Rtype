@@ -53,6 +53,15 @@ public:
     /// Logical resolution of the game, in game units.
     [[nodiscard]] Vector2 gameSize() const;
 
+    /// Converts a position in the window, such as the mouse pointer, into game units, taking into account the
+    /// scaling and the black bars. A position in the black bars is outside of the game: it is negative, or
+    /// larger than gameSize().
+    /// @code
+    /// const MousePosition mouse = devices.mousePosition();
+    /// const Vector2 pointer = renderer.windowToGame({mouse.x, mouse.y});
+    /// @endcode
+    [[nodiscard]] Vector2 windowToGame(Vector2 position) const;
+
     /// Starts a new frame and fills it with the background colour.
     /// @throws std::logic_error if a frame is already started.
     void beginFrame(Color background = colors::Black);
@@ -77,6 +86,38 @@ public:
     /// Draws a filled rectangle.
     /// @throws std::logic_error if no frame is started.
     void drawRectangle(Rectangle rectangle, Color color);
+
+    /// Draws a filled circle.
+    /// @param center Centre of the circle, in game units.
+    /// @param radius Radius, in game units. Nothing is drawn if it is not strictly positive.
+    /// @throws std::logic_error if no frame is started.
+    void drawCircle(Vector2 center, float radius, Color color);
+
+    /// Draws the outline of a rectangle, for instance a hitbox or the frame of a button.
+    /// @param thickness Width of the outline, in game units. It is drawn inside the rectangle, so that the
+    /// outer edge of the outline is the edge of the rectangle. Nothing is drawn if it is not strictly
+    /// positive.
+    /// @throws std::logic_error if no frame is started.
+    void drawRectangleOutline(Rectangle rectangle, float thickness, Color color);
+
+    /// Draws the outline of a circle, for instance a round hitbox.
+    /// @param center Centre of the circle, in game units.
+    /// @param radius Radius, in game units. Nothing is drawn if it is not strictly positive.
+    /// @param thickness Width of the outline, in game units. It is drawn inside the circle, so that the outer
+    /// edge of the outline is the edge of the circle. Nothing is drawn if it is not strictly positive.
+    /// @throws std::logic_error if no frame is started.
+    void drawCircleOutline(Vector2 center, float radius, float thickness, Color color);
+
+    /// Draws a straight line.
+    /// @param start First end of the line, in game units.
+    /// @param end Second end of the line, in game units.
+    /// @param thickness Width of the line, in game units.
+    /// @throws std::logic_error if no frame is started.
+    void drawLine(Vector2 start, Vector2 end, float thickness, Color color);
+
+    /// Draws a filled triangle. The corners can be given in any order.
+    /// @throws std::logic_error if no frame is started.
+    void drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color color);
 
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.

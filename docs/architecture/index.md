@@ -38,37 +38,60 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 
 | Layer | Responsibility | Used by |
 |---|---|---|
-| **Core** | Entities, components, systems, timing, logging | Client, server |
+| **Core** | Entities, components, systems (`libs/ecs`), logging (`libs/log`), timing | Client, server |
 | **Networking** | Sockets, binary serialization, the [protocol](../protocol/index.md) | Client, server |
 | **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
-| **Rendering** | Sprites, star-field, UI, built on raylib | Client |
+| **Rendering** | Window, textures, drawing, built on raylib | Client |
+| **Interface** | Menus, options, HUD: screens and widgets, outside of the ECS | Client |
 | **Audio** | Music and sound effects | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
 
-## Rendering
+## World and interface
 
-The render library (`libs/render`, namespace `rtype::render`) wraps raylib: its public headers contain no
-raylib type, so the rest of the client never depends on raylib directly.
+The client draws two kinds of things, kept apart as decided in
+[ADR 0005](../decisions/0005-world-in-ecs-interface-in-ui-layer.md):
 
-| Class | Role |
-|---|---|
-| `Window` | Opens the window and closes it when destroyed. Only one can exist. |
-| `ResourceManager` | Loads textures and fonts once, and hands out handles (`TextureId`, `FontId`) to refer to them. |
-| `Renderer` | Draws textures, text and shapes between `beginFrame()` and `endFrame()`. |
+- the **world** (ships, Bydos, missiles, star-field, and health bars or names following an entity) is made
+  of ECS entities, drawn by the render system;
+- the **interface** (menus, options, connection screen, HUD fixed on screen) is a light layer of screens and
+  widgets, which does not know the ECS.
 
-The three objects depend on each other: they are created in this order and destroyed in the reverse one,
-which C++ does automatically when they are declared in this order.
-
-```cpp
-const Window window;
-ResourceManager resources(window, applicationDirectory() / "assets");
-Renderer renderer(window, resources);
+```mermaid
+flowchart TB
+    subgraph Frame["One frame of the client"]
+        direction TB
+        World["1. World pass<br/>render system (ECS)"]
+        UI["2. Interface pass<br/>active screen and HUD"]
+    end
+    World --> Renderer["Renderer<br/>(the only one drawing)"]
+    UI --> Renderer
 ```
 
-The game is drawn at a fixed **logical resolution** (1920x1080 by default), whatever the size of the window:
-all positions and sizes are in game units, so the server and the client agree on coordinates. At the end of
-each frame, the image is scaled to fit the window while keeping its aspect ratio, with black bars on the
-sides if needed.
+*Each frame draws the world first, then the interface on top of it; both go through the `Renderer`.*
+
+Four rules keep them from mixing:
+
+1. Only the `Renderer` draws: neither the ECS nor the interface calls raylib.
+2. The world is always drawn first, the interface on top of it.
+3. The interface does not read the ECS: the game code gives it plain values (score, lives, players).
+4. The ECS does not know the interface.
+
+In VR, the same two passes are drawn on the board (world) and on a floating panel (interface).
+
+## Libraries
+
+The programs are built on four libraries. Each one has its own page:
+
+| Library | Role | Page |
+|---|---|---|
+| `libs/render` | Window, textures and fonts, drawing at a fixed logical resolution. Wraps raylib. | [Rendering](rendering.md) |
+| `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
+| `libs/ecs` | Entities, components and systems. Shared with the server, so it never depends on raylib. | — |
+| `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
+
+Their public headers contain no raylib type: raylib is a private dependency of `render` and `input`, and the
+client code only uses our own classes. The server only links the ECS and the log library, which do not
+depend on raylib.
 
 ## Repository layout
 
@@ -78,6 +101,10 @@ apps/       executables, one subdirectory per program
     assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
 libs/       libraries shared by the programs, one subdirectory per library
+  ecs/      entity component system (client and server)
+  input/    keyboard and gamepad input (client)
+  log/      logging (client and server)
+  render/   window, resources and drawing (client)
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
 docs/       this documentation (Zensical)
