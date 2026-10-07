@@ -108,6 +108,18 @@ enum class GamepadButton {
     RightThumb,
 };
 
+/// A mouse button.
+enum class MouseButton {
+    Left,
+    Right,
+    /// The wheel, pressed.
+    Middle,
+    /// Side button of some mice, usually "back" in a browser.
+    Back,
+    /// Side button of some mice, usually "forward" in a browser.
+    Forward,
+};
+
 /// An analog input of a gamepad.
 enum class GamepadAxis {
     /// Left stick, from -1 (left) to 1 (right).

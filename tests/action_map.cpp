@@ -252,3 +252,18 @@ TEST_CASE("A repeat falling exactly on an update is not lost to rounding", "[inp
     actions.update(input, 0.1f);
     REQUIRE(actions.wasRepeated(Action::MoveUp));
 }
+
+TEST_CASE("Mouse buttons can trigger actions", "[input]")
+{
+    ActionMap<Action> actions;
+    actions.bind(Action::Shoot, Binding::mouseButton(MouseButton::Left));
+    FakeInput input;
+
+    input.mouseButtons = {MouseButton::Right};
+    actions.update(input);
+    REQUIRE_FALSE(actions.isActive(Action::Shoot));
+
+    input.mouseButtons = {MouseButton::Left};
+    actions.update(input);
+    REQUIRE(actions.wasPressed(Action::Shoot));
+}

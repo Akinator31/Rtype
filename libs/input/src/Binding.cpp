@@ -6,7 +6,7 @@
 namespace rtype::input
 {
 
-Binding::Binding(std::variant<KeyInput, ButtonInput, AxisInput> input) : _input(std::move(input)) {}
+Binding::Binding(Input input) : _input(std::move(input)) {}
 
 Binding Binding::key(Key key)
 {
@@ -23,6 +23,11 @@ Binding Binding::gamepadAxis(GamepadAxis axis, AxisDirection direction, int game
     return Binding(AxisInput{axis, direction, gamepad});
 }
 
+Binding Binding::mouseButton(MouseButton button)
+{
+    return Binding(MouseInput{button});
+}
+
 float Binding::strength(const InputSource &source, float deadZone) const
 {
     if (const auto *input = std::get_if<KeyInput>(&_input)) {
@@ -30,6 +35,9 @@ float Binding::strength(const InputSource &source, float deadZone) const
     }
     if (const auto *input = std::get_if<ButtonInput>(&_input)) {
         return source.isGamepadButtonDown(input->gamepad, input->button) ? 1.0f : 0.0f;
+    }
+    if (const auto *input = std::get_if<MouseInput>(&_input)) {
+        return source.isMouseButtonDown(input->button) ? 1.0f : 0.0f;
     }
     const auto &input = std::get<AxisInput>(_input);
     const float value = source.gamepadAxis(input.gamepad, input.axis);

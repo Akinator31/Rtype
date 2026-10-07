@@ -33,10 +33,15 @@ private:
         int gamepad;
         friend bool operator==(const AxisInput &, const AxisInput &) = default;
     };
+    struct MouseInput {
+        MouseButton button;
+        friend bool operator==(const MouseInput &, const MouseInput &) = default;
+    };
 
-    std::variant<KeyInput, ButtonInput, AxisInput> _input;
+    using Input = std::variant<KeyInput, ButtonInput, AxisInput, MouseInput>;
+    Input _input;
 
-    explicit Binding(std::variant<KeyInput, ButtonInput, AxisInput> input);
+    explicit Binding(Input input);
 
 public:
     /// A keyboard key.
@@ -47,11 +52,13 @@ public:
     /// One direction of a gamepad stick or trigger. Triggers only have a positive direction.
     /// @param gamepad Index of the gamepad, 0 for the first one.
     [[nodiscard]] static Binding gamepadAxis(GamepadAxis axis, AxisDirection direction, int gamepad = 0);
+    /// A mouse button.
+    [[nodiscard]] static Binding mouseButton(MouseButton button);
 
     /// How strongly the input is held, from 0 (released) to 1 (fully pressed).
     ///
-    /// Keys and buttons are 0 or 1. Axes are 0 inside the dead zone, then grow progressively up to 1, so that
-    /// a stick slightly off-centre does not move anything.
+    /// Keys, gamepad buttons and mouse buttons are 0 or 1. Axes are 0 inside the dead zone, then grow
+    /// progressively up to 1, so that a stick slightly off-centre does not move anything.
     /// @param deadZone Part of the axis range that is ignored, between 0 and 1.
     [[nodiscard]] float strength(const InputSource &source, float deadZone) const;
 

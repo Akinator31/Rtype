@@ -26,6 +26,9 @@ enum class MenuAction {
     Confirm,
     /// Goes back to the previous screen, or closes the menu.
     Back,
+    /// Activates the item under the mouse pointer. Separate from Confirm: a click outside of the items must
+    /// not activate the selected one.
+    Click,
 };
 
 /// Default controls: arrows or WASD (ZQSD on AZERTY), Space and Escape on the keyboard; D-pad or left stick,
@@ -33,8 +36,8 @@ enum class MenuAction {
 [[nodiscard]] input::ActionMap<Action> defaultControls();
 
 /// Default menu controls: arrows, Enter to confirm and Escape to go back on the keyboard; D-pad or left
-/// stick, bottom face button to confirm, right face button or Start to go back on the first gamepad. Keys
-/// that type text are left out, so that they can be used in text fields.
+/// stick, bottom face button to confirm, right face button or Start to go back on the first gamepad; left
+/// button to click on the mouse. Keys that type text are left out, so that they can be used in text fields.
 [[nodiscard]] input::ActionMap<MenuAction> defaultMenuControls();
 
 } // namespace rtype::client

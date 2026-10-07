@@ -80,6 +80,8 @@ input::ActionMap<MenuAction> defaultMenuControls()
     controls.bind(MenuAction::Back, Binding::gamepadButton(GamepadButton::FaceRight));
     controls.bind(MenuAction::Back, Binding::gamepadButton(GamepadButton::Start));
 
+    controls.bind(MenuAction::Click, Binding::mouseButton(input::MouseButton::Left));
+
     return controls;
 }
 
