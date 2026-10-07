@@ -60,18 +60,19 @@ for the triggers. A disconnected gamepad reads as released.
 
 ## Bindings
 
-A `Binding` is created with one of three functions:
+A `Binding` is created with one of four functions:
 
 ```cpp
 Binding::key(Key::Space)
 Binding::gamepadButton(GamepadButton::FaceDown)                     // first gamepad by default
 Binding::gamepadAxis(GamepadAxis::LeftY, AxisDirection::Negative)   // left stick pushed up
+Binding::mouseButton(MouseButton::Left)
 ```
 
 An axis binding only uses **one half** of the axis: the left stick pushed up triggers `MoveUp`, pushed down
 triggers `MoveDown`. Each binding gives a **strength** between 0 and 1:
 
-- a key or a button gives 0 or 1;
+- a key, a gamepad button or a mouse button gives 0 or 1;
 - an axis gives 0 inside the **dead zone**, then grows progressively up to 1.
 
 The dead zone (25% of the range by default, see `ActionMap::setDeadZone()`) ignores sticks that do not come
@@ -178,6 +179,10 @@ same key can then mean something else in a menu: ++escape++ opens the menu in ga
 | `Up`, `Down`, `Left`, `Right` | Arrows | D-pad, left stick |
 | `Confirm` | ++enter++ | Bottom face button |
 | `Back` | ++escape++ | Right face button, Start |
+| `Click` | Left mouse button | — |
+
+`Click` activates the item **under the mouse pointer**. It is not bound to `Confirm`, which activates the
+**selected** item: a click outside of the items must not activate the selected one.
 
 The menu controls only use keys that do not type text: menus can contain [text fields](#text-entry), where
 letters, ++space++ and ++backspace++ edit the text. If ++s++ also moved the selection down, typing a name
@@ -216,6 +221,46 @@ if (length > 1.0f) {
 ```
 
 To add an action, follow [Add a player action](../guides/add-a-player-action.md).
+
+## Mouse
+
+The `InputSource` gives the state of the mouse:
+
+| Function | Gives |
+|---|---|
+| `mousePosition()` | Position of the pointer in the window, in **pixels**. |
+| `isMouseButtonDown(button)` | Whether a button (`Left`, `Right`, `Middle`, `Back`, `Forward`) is held. |
+| `mouseWheel()` | How much the wheel turned since the previous frame, in notches: positive up, negative down. |
+
+Mouse buttons are usually read through actions, with `Binding::mouseButton()`, to get presses, releases and
+repeats like any other input.
+
+### Window pixels and game units
+
+The game is scaled to fit the window and may have black bars around it: a position in window pixels is not a
+position in the game. The `Renderer` converts it, since it knows both sizes:
+
+```cpp
+const MousePosition mouse = devices.mousePosition();
+const Vector2 pointer = renderer.windowToGame({mouse.x, mouse.y});   // in game units, like everything drawn
+```
+
+A pointer in the black bars is outside of the game: its coordinates are negative or larger than the game
+size. The conversion is the reverse of the scaling done at the end of each frame (`letterbox()`), and is unit
+tested (`windowToGame()` in `Viewport.hpp`).
+
+!!! note "Two vector types"
+
+    The input library returns a `MousePosition`, not a `rtype::render::Vector2`: it does not depend on the
+    render library. A small shared math library (`Vector2`, `Rectangle`) used by the ECS, the input and the
+    render libraries would remove this conversion.
+
+### Mouse in menus
+
+In the demo menu, the item under the pointer is selected when the mouse **moves**, and activated with a
+click. Selecting only when the mouse moves matters: a pointer left still over an item would otherwise bring the
+selection back to it every frame, and the keyboard could not choose another item. The areas of the items are
+kept from the drawing of the previous frame to know which one is under the pointer.
 
 ## Text entry
 
@@ -309,8 +354,8 @@ development tools, such as an in-game console or an entity inspector, which do n
 ## Testing
 
 `tests/action_map.cpp` and `tests/text_input.cpp` test the `ActionMap` and the `TextInput` with a
-`FakeInput` (`tests/FakeInput.hpp`), an `InputSource` whose keys, buttons, axes, typed text and clipboard are
-set by the test. No window nor device is needed, so the tests run in the CI:
+`FakeInput` (`tests/FakeInput.hpp`), an `InputSource` whose keys, buttons, axes, mouse, typed text and
+clipboard are set by the test. No window nor device is needed, so the tests run in the CI:
 
 ```cpp
 FakeInput input;
@@ -332,6 +377,6 @@ buttons and gestures.
 - **Text fields are single-line**, without undo, mouse selection, nor scrolling: a text wider than its field
   overflows it. This is enough for a player name or a server address.
 - **Bindings are not saved**: the controls chosen by a player are lost when the game closes.
-- **No mouse support** yet for the menus.
+- **No mouse in text fields**: clicking does not place the cursor, dragging does not select.
 - **The actions are not sent to the server yet**: they will be encoded in the `INPUT` message of the
   [protocol](../protocol/index.md), one bit per action.

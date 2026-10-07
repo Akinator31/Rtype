@@ -112,6 +112,10 @@ The game is drawn at a fixed **logical resolution**, 1920x1080 by default, whate
 Every position and size given to the renderer is in these game units: a ship at `x = 1500` is at the same
 place on every screen, which is what lets the server and all the clients agree on coordinates.
 
+Positions coming from the window, such as the mouse pointer, are in window pixels. `windowToGame()` converts
+them into game units, taking the scaling and the black bars into account (see
+[Mouse](input.md#window-pixels-and-game-units)).
+
 ### A frame
 
 Everything is drawn between `beginFrame()` and `endFrame()`, in order: what is drawn last is on top.
@@ -194,7 +198,5 @@ These details only matter when working inside `libs/render`:
 
 - **No sorting by layer**: the drawing order is the call order. The ECS render system will sort entities by
   layer (background, enemies, players, interface) before drawing them.
-- **No mouse coordinates conversion** yet: because of the black bars, a position in the window has to be
-  converted to game units for menus.
 - **No 3D yet.** 3D models are planned: they will be drawn on the same plane and in the same game units as
   sprites, so that the server and the gameplay stay in 2D.
