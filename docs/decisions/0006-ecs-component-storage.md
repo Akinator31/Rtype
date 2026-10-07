@@ -1,9 +1,9 @@
-# 0005 — ECS component storage
+# 0006 — ECS component storage
 
-| | |
-|---|---|
-| **Status** | Accepted |
-| **Date** | 2026-10-06 |
+|            |            |
+| ---------- | ---------- |
+| **Status** | Accepted   |
+| **Date**   | 2026-10-06 |
 
 ## Context
 
@@ -19,16 +19,16 @@ entities destroyed in the middle of a system update (a missile hits, an entity l
 
 ### Storage of the components of one type
 
-| | Indexed vector | Sparse set | Hash map |
-|---|---|---|---|
-| Structure | `vector<optional<T>>`, index = entity id | Dense array of components + `sparse` array of indices + entity array | `unordered_map<entity, T>` |
-| Access to a component | 1 memory access | 2 memory accesses | Hash + pointer chasing |
-| Iteration | Visits every slot, skips empty ones | Contiguous, only existing components | Scattered nodes, poor locality |
-| Memory | `N × sizeof(optional<T>)`, wasted if the component is rare | Compact if rare, larger than the vector if almost every entity has it | Compact but one allocation per component |
-| Multi-component join | Same index in every cache, trivial | One sequential access + one random access | One lookup per entity |
-| Destroying an entity while iterating | Safe, the slot is reset | Swap-and-pop breaks the forward iteration | Invalidates iterators on rehash |
-| Order of iteration | Entity id order, deterministic | Depends on the add/remove history | Depends on hash and rehash |
-| Code | ~40 lines | ~100 lines | Short |
+|                                      | Indexed vector                                             | Sparse set                                                            | Hash map                                 |
+| ------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------- |
+| Structure                            | `vector<optional<T>>`, index = entity id                   | Dense array of components + `sparse` array of indices + entity array  | `unordered_map<entity, T>`               |
+| Access to a component                | 1 memory access                                            | 2 memory accesses                                                     | Hash + pointer chasing                   |
+| Iteration                            | Visits every slot, skips empty ones                        | Contiguous, only existing components                                  | Scattered nodes, poor locality           |
+| Memory                               | `N × sizeof(optional<T>)`, wasted if the component is rare | Compact if rare, larger than the vector if almost every entity has it | Compact but one allocation per component |
+| Multi-component join                 | Same index in every cache, trivial                         | One sequential access + one random access                             | One lookup per entity                    |
+| Destroying an entity while iterating | Safe, the slot is reset                                    | Swap-and-pop breaks the forward iteration                             | Invalidates iterators on rehash          |
+| Order of iteration                   | Entity id order, deterministic                             | Depends on the add/remove history                                     | Depends on hash and rehash               |
+| Code                                 | ~40 lines                                                  | ~100 lines                                                            | Short                                    |
 
 The sparse set is to be preferred with tens of thousands of entities, components carried by less than
 about 10-20 % of them, large rare components, or many temporary tags. None of these applies yet.

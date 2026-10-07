@@ -38,8 +38,8 @@ nav = [
     "decisions/0002-raylib-graphics-library.md",
     "decisions/0003-documentation-tooling.md",
     "decisions/0004-testing-tools.md",
-    "decisions/0005-ecs-component-storage.md",
-    "decisions/0006-world-in-ecs-interface-in-ui-layer.md",
+    "decisions/0005-world-in-ecs-interface-in-ui-layer.md",
+    "decisions/0006-ecs-component-storage.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
