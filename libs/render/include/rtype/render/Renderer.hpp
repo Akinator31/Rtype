@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/render/ColorFilter.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
@@ -61,6 +62,14 @@ public:
     /// const Vector2 pointer = renderer.windowToGame({mouse.x, mouse.y});
     /// @endcode
     [[nodiscard]] Vector2 windowToGame(Vector2 position) const;
+
+    /// Applies a colour filter to the whole image, interface included, for colour-blind players or players
+    /// with low vision. The filter is applied when the frame is shown, so the game draws with its normal
+    /// colours. If the graphics card cannot run the filter, a warning is logged once and the image is shown
+    /// unfiltered.
+    void setColorFilter(ColorFilter filter);
+    /// The colour filter applied to the image, ColorFilter::None by default.
+    [[nodiscard]] ColorFilter colorFilter() const;
 
     /// Starts a new frame and fills it with the background colour.
     /// @throws std::logic_error if a frame is already started.

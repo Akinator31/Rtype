@@ -1,5 +1,6 @@
 #include "rtype/render/Renderer.hpp"
 
+#include "FilterShader.hpp"
 #include "Resources.hpp"
 #include "rtype/render/Viewport.hpp"
 
@@ -90,6 +91,8 @@ struct Renderer::Impl {
     const core::ResourceCache<detail::Font, FontId> &fonts;
     Vector2 gameSize;
     RenderTarget target;
+    detail::FilterShader filterShader;
+    ColorFilter colorFilter = ColorFilter::None;
     bool inFrame = false;
 
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
@@ -124,6 +127,16 @@ Vector2 Renderer::gameSize() const
     return _impl->gameSize;
 }
 
+void Renderer::setColorFilter(ColorFilter filter)
+{
+    _impl->colorFilter = filter;
+}
+
+ColorFilter Renderer::colorFilter() const
+{
+    return _impl->colorFilter;
+}
+
 Vector2 Renderer::windowToGame(Vector2 position) const
 {
     const Vector2 windowSize{static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
@@ -155,8 +168,13 @@ void Renderer::endFrame()
 
     BeginDrawing();
     ClearBackground(toRaylib(colors::Black));
+    // The colour filter is applied to the whole frame while it is copied to the window
+    const bool filtered = _impl->filterShader.begin(_impl->colorFilter);
     DrawTexturePro(image, source, toRaylib(letterbox(windowSize, _impl->gameSize)), {0.0f, 0.0f}, 0.0f,
                    toRaylib(colors::White));
+    if (filtered) {
+        EndShaderMode();
+    }
     EndDrawing();
 }
 
