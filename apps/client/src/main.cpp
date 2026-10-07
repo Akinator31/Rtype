@@ -44,7 +44,7 @@ void run()
     const FontId font = resources.loadFont("fonts/FiraSans-Black.ttf", static_cast<int>(titleSize));
     const TextureId texture = resources.loadTexture("images/big_mama.png");
     const std::string title = "R-Type";
-    const std::string greeting = rtype::ecs::helloWorld();
+    const std::string greeting = "Hello from the client!";
     const float greetingSize = 48.0f;
 
     // Demo of the controls: the image moves with the movement actions, Shoot counts the shots, Menu opens a

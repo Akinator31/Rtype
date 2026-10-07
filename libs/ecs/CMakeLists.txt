@@ -1,7 +1,8 @@
-# Entity Component System of the engine, shared by the client and the server.
-# It must not depend on raylib nor on the network: the server and the tests use it without a window.
 add_library(rtype_ecs
+    src/Component/ComponentCaches.cpp
+    src/Component/ICache.cpp
     src/Ecs.cpp
+    src/System/System.cpp
 )
 add_library(rtype::ecs ALIAS rtype_ecs)
 target_include_directories(rtype_ecs PUBLIC include)
