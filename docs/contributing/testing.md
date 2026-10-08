@@ -83,7 +83,9 @@ TEST_CASE("A packet shorter than the header is rejected", "[protocol]")
 ```
 
 - Name the test after the expected behaviour, as a sentence.
-- Tag it with its subsystem: `[ecs]`, `[protocol]`, `[network]`, `[game]`, `[platform]`.
+- Tag it with its subsystem, for instance `[ecs]`, `[scenes]`, `[engine]`, `[render]`, `[input]`, `[audio]`,
+  `[log]`, `[platform]`, and later `[protocol]`, `[network]`, `[game]`. Run one subsystem with
+  `./build/bin/rtype_tests "[scenes]"`.
 - Use `SECTION`s to share a setup between related checks.
 
 ## Running the tests
