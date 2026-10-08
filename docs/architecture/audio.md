@@ -89,7 +89,7 @@ A music is too long to be decoded in memory at once: it is read from its file in
 
 All volumes are between 0 and 1, and clamped to this range. Separate music and effects volumes are one of the
 [accessibility](../accessibility.md) features: some players need the effects louder than the music to follow
-the game, others are disturbed by the music. In the demo menu, *Effects volume* is changed with
+the game, others are disturbed by the music. In the options menu, *Effects volume* is changed with
 ++arrow-left++ and ++arrow-right++.
 
 ## Supported formats
