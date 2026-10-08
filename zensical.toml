@@ -28,7 +28,9 @@ nav = [
   ] },
   { "Guides" = [
     "guides/index.md",
+    "guides/write-a-system.md",
     "guides/draw-a-sprite.md",
+    "guides/add-a-menu.md",
     "guides/add-a-player-action.md",
   ] },
   { "Network protocol" = [
