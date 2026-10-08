@@ -27,7 +27,10 @@ public:
     bool enabled = true;
 
     virtual ~System();
-    virtual void update() = 0;
+    /// Runs the system once.
+    /// @param elapsed Time since the previous update, in seconds: systems never read a clock themselves, so
+    /// that tests and the server control time.
+    virtual void update(float elapsed) = 0;
 
     /// Component types used by the system.
     [[nodiscard]] const std::vector<std::type_index> &componentTypes() const;

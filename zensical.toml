@@ -24,10 +24,13 @@ nav = [
     "architecture/input.md",
     "architecture/logging.md",
     "architecture/audio.md",
+    "architecture/scenes-and-interface.md",
   ] },
   { "Guides" = [
     "guides/index.md",
+    "guides/write-a-system.md",
     "guides/draw-a-sprite.md",
+    "guides/add-a-menu.md",
     "guides/add-a-player-action.md",
   ] },
   { "Network protocol" = [
@@ -41,6 +44,7 @@ nav = [
     "decisions/0004-testing-tools.md",
     "decisions/0005-world-in-ecs-interface-in-ui-layer.md",
     "decisions/0006-ecs-component-storage.md",
+    "decisions/0007-client-in-the-ecs.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [

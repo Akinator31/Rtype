@@ -3,7 +3,6 @@
 #include "FakeInput.hpp"
 #include "rtype/input/ActionMap.hpp"
 #include "rtype/input/Binding.hpp"
-#include "rtype/input/InputSource.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

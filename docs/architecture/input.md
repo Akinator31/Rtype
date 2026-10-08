@@ -172,42 +172,11 @@ if (controls.wasReleased(Action::Shoot)) {
 
 ### Menu controls
 
-Menus have their own actions, `MenuAction`, in a separate `ActionMap` defined by `defaultMenuControls()`. The
-same key can then mean something else in a menu: ++escape++ opens the menu in game, and goes back in a menu.
-
-| Menu action | Keyboard | Gamepad (first one) |
-|---|---|---|
-| `Up`, `Down`, `Left`, `Right` | Arrows | D-pad, left stick |
-| `Confirm` | ++enter++ | Bottom face button |
-| `Back` | ++escape++ | Right face button, Start |
-| `Click` | Left mouse button | — |
-
-`Click` activates the item **under the mouse pointer**. It is not bound to `Confirm`, which activates the
-**selected** item: a click outside of the items must not activate the selected one.
-
-The menu controls only use keys that do not type text: menus can contain [text fields](#text-entry), where
-letters, ++space++ and ++backspace++ edit the text. If ++s++ also moved the selection down, typing a name
-containing an "s" would leave the field.
-
-Menu navigation reads `wasRepeated()`, so holding a direction scrolls through the items. The menu map has a
-larger dead zone (0.5) than the game one, so that a stick touched slightly does not skip an item.
-
-Both maps are updated every frame, but only one of them is read, depending on whether a menu was open **at
-the start of the frame**. Otherwise, the ++escape++ press that opens the menu would also close it in the same
-frame.
-
-```cpp
-const bool menuWasOpen = menuOpen;
-controls.update(devices, window.frameTime());
-menuControls.update(devices, window.frameTime());
-
-if (!menuWasOpen && controls.wasPressed(Action::Menu)) {
-    menuOpen = true;
-}
-if (menuWasOpen && menuControls.wasPressed(MenuAction::Back)) {
-    menuOpen = false;
-}
-```
+Menus have their own actions, separate from the game ones: `engine::Navigation`, with their own `ActionMap`
+(see [Navigation](scenes-and-interface.md#navigation)). The same key can then mean something
+else in a menu: ++escape++ opens the pause menu in game, and goes back in a menu. The interface reads the input
+before the game, and the game only reads its actions while its scene receives the input (see
+[Scenes](scenes-and-interface.md#scenes)).
 
 When moving, the client normalises the direction: pushing up and right at the same time must not move faster
 than pushing in one direction.
@@ -258,10 +227,8 @@ tested (`windowToGame()` in `Viewport.hpp`).
 
 ### Mouse in menus
 
-In the demo menu, the item under the pointer is selected when the mouse **moves**, and activated with a
-click. Selecting only when the mouse moves matters: a pointer left still over an item would otherwise bring the
-selection back to it every frame, and the keyboard could not choose another item. The areas of the items are
-kept from the drawing of the previous frame to know which one is under the pointer.
+In menus, the widget under the pointer gets the focus when the mouse moves, and a click activates it. See
+[Navigation](scenes-and-interface.md#navigation).
 
 ## Text entry
 
@@ -347,8 +314,8 @@ correctly (see [Fonts](rendering.md#fonts)).
 Libraries such as [Dear ImGui](https://github.com/ocornut/imgui) or [RmlUi](https://github.com/mikke89/RmlUi)
 provide complete text fields. They also read the input and draw the interface themselves, outside of our
 `Renderer` and `ActionMap`, which would mean adapters for the rendering, the gamepad navigation and the VR
-panel, and would replace the light interface layer chosen in
-[ADR 0005](../decisions/0005-world-in-ecs-interface-in-ui-layer.md). For the few text fields of the game (player
+panel, and would bypass the ECS in which the interface is built
+([ADR 0007](../decisions/0007-client-in-the-ecs.md)). For the few text fields of the game (player
 name, server address), a small class built on our input is simpler. Dear ImGui remains a good candidate for
 development tools, such as an in-game console or an entity inspector, which do not need to look like the game.
 
@@ -373,9 +340,7 @@ buttons and gestures.
 
 ## Limits and next steps
 
-- **The menu is a demo**: it shows the controls (navigation, text field, fullscreen, quit), but the real
-  menus of the game are still to be built in the interface layer. It does not pause the game, which is shared
-  with the other players.
+- **The pause menu does not pause the game**, which is shared with the other players.
 - **Text fields are single-line**, without undo, mouse selection, nor scrolling: a text wider than its field
   overflows it. This is enough for a player name or a server address.
 - **Bindings are not saved**: the controls chosen by a player are lost when the game closes.

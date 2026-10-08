@@ -1,0 +1,112 @@
+#pragma once
+
+#include "rtype/ecs/Component/ComponentCache.hpp"
+#include "rtype/ecs/Component/ComponentCaches.hpp"
+#include "rtype/ecs/Entity/Entity.hpp"
+#include "rtype/ecs/System/System.hpp"
+
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <vector>
+
+namespace rtype::ecs
+{
+
+class Ecs;
+
+/// Identifies an open scene. Ids are never reused. A type of its own, so that a scene and an entity cannot be
+/// confused.
+struct SceneId {
+    std::uint32_t value = 0;
+
+    friend bool operator==(const SceneId &, const SceneId &) = default;
+};
+
+/// Makes an entity part of a scene: it is destroyed when the scene closes. Entities without it are
+/// persistent: they survive every scene change (a star-field shared by the menus and the game, for instance).
+struct SceneMember {
+    SceneId scene;
+};
+
+/// How a scene behaves when other scenes are opened over it.
+struct SceneSettings {
+    /// The scene below stays visible, like a pause menu over the game. Otherwise, it hides what is below.
+    bool overlay = false;
+    /// The scene keeps updating when another scene is over it, like a network game under the pause menu.
+    bool updatesWhenCovered = false;
+    /// Called when the player goes back (Escape) while the scene is at the top. Empty: the scene closes.
+    std::function<void()> onBack{};
+};
+
+/// The stack of open scenes: home screen, game, pause menu over the game...
+///
+/// Every entity of a scene has a SceneMember. Closing a scene destroys its entities in one go, so that
+/// nothing is left behind. Systems ask the scenes what to do with an entity: receivesInput(), updates(),
+/// isVisible().
+///
+/// Register it as the first system: at the start of each update, it records which scene receives the input
+/// for the whole update. Otherwise the Escape press that closes the pause menu would, later in the same
+/// update, reach the game and open the menu again.
+/// @code
+/// Scenes &scenes = ecs.registerSystem<Scenes>(ecs);   // first
+/// const SceneId game = scenes.open({.updatesWhenCovered = true});
+/// const entity_t ship = ecs.createEntity();
+/// ecs.addComponent<SceneMember>(ship, game);
+/// @endcode
+class Scenes : public System
+{
+    struct Entry {
+        SceneId id;
+        SceneSettings settings;
+    };
+
+    Ecs &_ecs;
+    ComponentCache<SceneMember> &_members;
+    std::vector<Entry> _stack;
+    std::uint32_t _nextId = 1;
+    std::optional<SceneId> _inputOwner;
+
+    [[nodiscard]] const Entry *find(SceneId scene) const;
+    void destroyMembers(SceneId scene);
+
+public:
+    Scenes(ComponentCaches &caches, Ecs &ecs);
+
+    /// Records which scene receives the input during this update.
+    void update(float elapsed) override;
+
+    /// Opens a scene over the others and returns its id.
+    SceneId open(SceneSettings settings = {});
+    /// Closes the scene at the top and destroys its entities. Does nothing if no scene is open.
+    void close();
+    /// Closes a scene wherever it is in the stack, and destroys its entities.
+    void close(SceneId scene);
+    /// Closes every scene and destroys their entities. Persistent entities are kept.
+    void clear();
+    /// Goes back from the scene at the top: calls its onBack, or closes it if it has none.
+    void back();
+
+    /// The scene at the top, if any.
+    [[nodiscard]] std::optional<SceneId> top() const;
+    /// Tells whether a scene is open.
+    [[nodiscard]] bool isOpen(SceneId scene) const;
+
+    /// Tells whether a scene receives the input: it was at the top at the start of the update.
+    [[nodiscard]] bool receivesInput(SceneId scene) const;
+    /// Tells whether a scene updates: it is at the top, or it keeps updating when covered.
+    [[nodiscard]] bool updates(SceneId scene) const;
+    /// Tells whether a scene is visible: it is at the top, or only overlays are over it.
+    [[nodiscard]] bool isVisible(SceneId scene) const;
+
+    /// The scene of an entity, or nothing for a persistent entity.
+    [[nodiscard]] std::optional<SceneId> sceneOf(entity_t entity) const;
+    /// Tells whether an entity receives the input: persistent entities never do.
+    [[nodiscard]] bool receivesInput(entity_t entity) const;
+    /// Tells whether an entity updates: persistent entities always do.
+    [[nodiscard]] bool updates(entity_t entity) const;
+    /// Tells whether an entity is visible according to its scene: persistent entities always are.
+    [[nodiscard]] bool isVisible(entity_t entity) const;
+};
+
+} // namespace rtype::ecs

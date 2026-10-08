@@ -15,6 +15,7 @@ CPMAddPackage(
 add_subdirectory(audio)
 add_subdirectory(core)
 add_subdirectory(ecs)
+add_subdirectory(engine)
 add_subdirectory(input)
 add_subdirectory(log)
 add_subdirectory(render)
