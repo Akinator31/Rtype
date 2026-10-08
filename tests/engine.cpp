@@ -4,8 +4,8 @@
 
 #include <stdexcept>
 
-using namespace ecs;
-using namespace engine;
+using namespace rtype::ecs;
+using namespace rtype::engine;
 
 namespace
 {
