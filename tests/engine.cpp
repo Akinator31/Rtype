@@ -27,6 +27,8 @@ using rtype::ecs::entity_t;
 using rtype::ecs::SceneId;
 using rtype::input::Key;
 using rtype::input::MouseButton;
+using namespace rtype::ecs;
+using namespace rtype::engine;
 
 namespace
 {

@@ -13,19 +13,19 @@ const std::string &Event::getName() const
     return _name;
 }
 
-void Event::addSubscriber(ecs::System &system)
+void Event::addSubscriber(rtype::ecs::System &system)
 {
     _subscribers.push_back(&system);
 }
 
-void Event::removeSubscriber(ecs::System &system)
+void Event::removeSubscriber(rtype::ecs::System &system)
 {
     std::erase(_subscribers, &system);
 }
 
 void Event::trigger()
 {
-    for (ecs::System *system : _subscribers) {
+    for (rtype::ecs::System *system : _subscribers) {
         if (system->enabled) {
             system->update();
         }

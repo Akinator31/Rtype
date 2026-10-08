@@ -11,11 +11,11 @@ namespace rtype::engine
 
 class Engine
 {
-    ecs::Ecs _ecs;
+    rtype::ecs::Ecs _ecs;
     std::unordered_map<std::string, Event> _events;
 
 public:
-    [[nodiscard]] ecs::Ecs &getEcs();
+    [[nodiscard]] rtype::ecs::Ecs &getEcs();
 
     /// Creates an event. If it already exists, returns it unchanged. The reference stays valid as
     /// long as the engine lives.
@@ -27,7 +27,7 @@ public:
     [[nodiscard]] bool hasEvent(const std::string &name) const;
 
     /// Subscribes a system to an event. The event must exist (see getEvent()).
-    void subscribeToEvent(const std::string &name, ecs::System &system);
+    void subscribeToEvent(const std::string &name, rtype::ecs::System &system);
 
     /// Triggers an event. Does nothing if it does not exist.
     void triggerEvent(const std::string &name);
