@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rtype/ecs/Ecs.hpp"
-#include "Event/Event.hpp"
+#include "rtype/engine/Event/Event.hpp"
 
 #include <string>
 #include <unordered_map>
