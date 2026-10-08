@@ -42,52 +42,46 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | **Networking** | Sockets, binary serialization, the [protocol](../protocol/index.md) | Client, server |
 | **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
-| **Interface** | Menus, options, HUD: screens and widgets, outside of the ECS | Client |
+| **Interface** | Menus, options and HUD, made of entities like the world (`libs/engine`) | Client |
 | **Audio** | Music and sound effects, built on raylib (`libs/audio`) | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
 
 ## World and interface
 
-The client draws two kinds of things, kept apart as decided in
-[ADR 0005](../decisions/0005-world-in-ecs-interface-in-ui-layer.md):
-
-- the **world** (ships, Bydos, missiles, star-field, and health bars or names following an entity) is made
-  of ECS entities, drawn by the render system;
-- the **interface** (menus, options, connection screen, HUD fixed on screen) is a light layer of screens and
-  widgets, which does not know the ECS.
+Everything the client draws is an entity of the ECS, as decided in
+[ADR 0007](../decisions/0007-client-in-the-ecs.md): the world (ships, Bydos, missiles, star-field), the HUD and
+the menus. Each drawn entity belongs to a **layer**, and the layers are drawn one after the other:
 
 ```mermaid
 flowchart TB
     subgraph Frame["One frame of the client"]
         direction TB
-        World["1. World pass<br/>render system (ECS)"]
-        UI["2. Interface pass<br/>active screen and HUD"]
+        Update["ecs.update(elapsed)<br/>scenes, interface, game, layout"]
+        World["1. World layer<br/>ships, Bydos, star-field"]
+        UI["2. Interface layer<br/>HUD and menus"]
     end
-    World --> Renderer["Renderer<br/>(the only one drawing)"]
-    UI --> Renderer
+    Update --> World --> UI --> Renderer["Renderer<br/>(the only one drawing)"]
 ```
 
-*Each frame draws the world first, then the interface on top of it; both go through the `Renderer`.*
+*Each frame updates the ECS, then draws the world layer and the interface layer on top of it.*
 
-Four rules keep them from mixing:
-
-1. Only the `Renderer` draws: neither the ECS nor the interface calls raylib.
-2. The world is always drawn first, the interface on top of it.
-3. The interface does not read the ECS: the game code gives it plain values (score, lives, players).
-4. The ECS does not know the interface.
-
-In VR, the same two passes are drawn on the board (world) and on a floating panel (interface).
+- Only the `Renderer` draws: the systems never call raylib.
+- The interface layer is always drawn after the world. In VR, the world layer is drawn on the board and the
+  interface layer on a floating panel.
+- Phases of the game (home screen, game, pause menu) are **scenes**: groups of entities opened and closed
+  together. See [Scenes and interface](scenes-and-interface.md).
 
 ## Libraries
 
-The programs are built on six libraries:
+The programs are built on seven libraries:
 
 | Library | Role | Page |
 |---|---|---|
 | `libs/render` | Window, textures and fonts, drawing at a fixed logical resolution. Wraps raylib. | [Rendering](rendering.md) |
 | `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
-| `libs/ecs` | Entities, components and systems. Shared with the server, so it never depends on raylib. | — |
+| `libs/ecs` | Entities, components and systems, with scenes and a hierarchy. Shared with the server, so it never depends on raylib. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
+| `libs/engine` | Client systems on the ECS: drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 
@@ -105,7 +99,8 @@ apps/       executables, one subdirectory per program
 libs/       libraries shared by the programs, one subdirectory per library
   audio/    sound effects and music (client)
   core/     handles and resource caches (all)
-  ecs/      entity component system (client and server)
+  ecs/      entity component system, scenes, hierarchy (client and server)
+  engine/   client systems: drawing, animations, menus (client)
   input/    keyboard and gamepad input (client)
   log/      logging (client and server)
   render/   window, resources and drawing (client)

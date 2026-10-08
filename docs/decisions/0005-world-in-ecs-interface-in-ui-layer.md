@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Superseded by [0007](0007-client-in-the-ecs.md) |
 | **Date** | 2026-10-06 |
 
 ## Context
