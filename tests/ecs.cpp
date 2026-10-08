@@ -25,7 +25,7 @@ public:
     {
     }
 
-    void update() override
+    void update(float /*elapsed*/) override
     {
         for (entity_t e = 0; e < _positions.size(); ++e) {
             if (_positions.has(e) && _velocities.has(e)) {
@@ -43,7 +43,7 @@ class DestroyAll : public System
 public:
     DestroyAll(ComponentCaches &caches, Ecs &ecs) : _positions(use<Position>(caches)), _ecs(ecs) {}
 
-    void update() override
+    void update(float /*elapsed*/) override
     {
         for (entity_t e = 0; e < _positions.size(); ++e) {
             if (_positions.has(e)) {
@@ -102,7 +102,7 @@ TEST_CASE("A system only touches entities with all its components", "[ecs][syste
     ecs.addComponent<Position>(moving, 10);
     ecs.addComponent<Velocity>(moving, 3);
     ecs.addComponent<Position>(still, 10);
-    ecs.update();
+    ecs.update(0.0f);
     REQUIRE(ecs.getComponent<Position>(moving).x == 13);
     REQUIRE(ecs.getComponent<Position>(still).x == 10);
 }
@@ -115,10 +115,10 @@ TEST_CASE("A disabled system is skipped", "[ecs][system]")
     ecs.addComponent<Position>(e, 0);
     ecs.addComponent<Velocity>(e, 1);
     movement.enabled = false;
-    ecs.update();
+    ecs.update(0.0f);
     REQUIRE(ecs.getComponent<Position>(e).x == 0);
     movement.enabled = true;
-    ecs.update();
+    ecs.update(0.0f);
     REQUIRE(ecs.getComponent<Position>(e).x == 1);
 }
 
@@ -130,7 +130,7 @@ TEST_CASE("A system can destroy entities while iterating", "[ecs][system]")
     const entity_t b = ecs.createEntity();
     ecs.addComponent<Position>(a);
     ecs.addComponent<Position>(b);
-    ecs.update();
+    ecs.update(0.0f);
     REQUIRE_FALSE(ecs.isAlive(a));
     REQUIRE_FALSE(ecs.isAlive(b));
 }
