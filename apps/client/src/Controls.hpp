@@ -17,29 +17,8 @@ enum class Action {
     ToggleFullscreen,
 };
 
-/// What the player can do in a menu. Menus have their own actions, separate from the game ones: the same key
-/// can mean something else in a menu, like Escape, which opens the menu in game and goes back in a menu.
-enum class MenuAction {
-    Up,
-    Down,
-    Left,
-    Right,
-    /// Activates the selected item.
-    Confirm,
-    /// Goes back to the previous screen, or closes the menu.
-    Back,
-    /// Activates the item under the mouse pointer. Separate from Confirm: a click outside of the items must
-    /// not activate the selected one.
-    Click,
-};
-
 /// Default controls: arrows or WASD (ZQSD on AZERTY), Space, Escape and F11 on the keyboard; D-pad or left
 /// stick, bottom face button or right trigger, and Start on the first gamepad.
 [[nodiscard]] input::ActionMap<Action> defaultControls();
-
-/// Default menu controls: arrows, Enter to confirm and Escape to go back on the keyboard; D-pad or left
-/// stick, bottom face button to confirm, right face button or Start to go back on the first gamepad; left
-/// button to click on the mouse. Keys that type text are left out, so that they can be used in text fields.
-[[nodiscard]] input::ActionMap<MenuAction> defaultMenuControls();
 
 } // namespace rtype::client
