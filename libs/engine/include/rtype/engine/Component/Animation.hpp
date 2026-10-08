@@ -1,10 +1,5 @@
 #pragma once
 
-#include "rtype/ecs/Component/ComponentCache.hpp"
-#include "rtype/ecs/Component/ComponentCaches.hpp"
-#include "rtype/ecs/System/System.hpp"
-#include "rtype/engine/Components.hpp"
-
 namespace rtype::engine
 {
 
@@ -45,19 +40,6 @@ struct Tween {
     bool pingPong = false;
     /// Time elapsed since the start, in seconds.
     float time = 0.0f;
-};
-
-/// Advances the tweens and writes their value to the Scale or the Opacity of their entity.
-class TweenSystem : public ecs::System
-{
-    ecs::ComponentCache<Tween> &_tweens;
-    ecs::ComponentCache<Scale> &_scales;
-    ecs::ComponentCache<Opacity> &_opacities;
-
-public:
-    explicit TweenSystem(ecs::ComponentCaches &caches);
-
-    void update(float elapsed) override;
 };
 
 } // namespace rtype::engine

@@ -1,10 +1,10 @@
-#include "rtype/engine/MenuBuilder.hpp"
+#include "rtype/engine/Interface/MenuBuilder.hpp"
 
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
-#include "rtype/engine/Components.hpp"
-#include "rtype/engine/Layout.hpp"
-#include "rtype/engine/Widgets.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Layout.hpp"
+#include "rtype/engine/Component/Widget.hpp"
 
 #include <utility>
 

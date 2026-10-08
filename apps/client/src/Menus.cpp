@@ -1,6 +1,6 @@
 #include "Menus.hpp"
 
-#include "rtype/engine/MenuBuilder.hpp"
+#include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/render/ColorFilter.hpp"
 
 #include <string>

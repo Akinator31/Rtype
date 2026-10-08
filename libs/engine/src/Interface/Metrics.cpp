@@ -1,4 +1,4 @@
-#include "rtype/engine/Metrics.hpp"
+#include "rtype/engine/Interface/Metrics.hpp"
 
 #include "rtype/render/Renderer.hpp"
 

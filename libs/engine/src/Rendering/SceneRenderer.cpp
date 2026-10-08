@@ -1,8 +1,8 @@
-#include "rtype/engine/SceneRenderer.hpp"
+#include "rtype/engine/Rendering/SceneRenderer.hpp"
 
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
-#include "rtype/engine/Widgets.hpp"
+#include "rtype/engine/Component/Widget.hpp"
 #include "rtype/render/Renderer.hpp"
 
 #include <algorithm>

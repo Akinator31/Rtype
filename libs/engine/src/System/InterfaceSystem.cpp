@@ -1,4 +1,4 @@
-#include "rtype/engine/InterfaceSystem.hpp"
+#include "rtype/engine/System/InterfaceSystem.hpp"
 
 #include "rtype/ecs/Ecs.hpp"
 

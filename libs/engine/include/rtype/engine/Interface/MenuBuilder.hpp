@@ -2,8 +2,8 @@
 
 #include "rtype/ecs/Entity/Entity.hpp"
 #include "rtype/ecs/Scenes.hpp"
-#include "rtype/engine/Metrics.hpp"
-#include "rtype/engine/Style.hpp"
+#include "rtype/engine/Interface/Metrics.hpp"
+#include "rtype/engine/Interface/Style.hpp"
 
 #include <cstddef>
 #include <functional>
