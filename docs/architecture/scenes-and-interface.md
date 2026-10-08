@@ -4,6 +4,29 @@ Everything the client draws is an entity of the ECS: the world, the HUD and the 
 ([ADR 0007](../decisions/0007-client-in-the-ecs.md)). This page describes the features of the ECS this relies on
 (`libs/ecs`, shared with the server) and the client library built on them (`libs/engine`).
 
+## Where things are
+
+The client library is organised like the ECS, with one file per system:
+
+```
+libs/engine/include/rtype/engine/
+  Component/    the data attached to entities
+    Drawing.hpp     Layer, Drawable, Text, Sprite, Box, Scale, Opacity
+    Animation.hpp   Easing, ease(), Tween
+    Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
+    Layout.hpp      Column, ColumnItem
+  System/       the systems, one per file
+    InterfaceSystem.hpp  WidgetTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp  ColumnLayoutSystem.hpp
+  Interface/    what menus are built with
+    MenuBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
+  Rendering/
+    SceneRenderer.hpp
+  Engine.hpp    includes everything above
+```
+
+The sources in `libs/engine/src/` follow the same folders. Every header compiles on its own: include the
+precise headers you need, or `rtype/engine/Engine.hpp` for everything.
+
 ## The systems and their order
 
 ```cpp

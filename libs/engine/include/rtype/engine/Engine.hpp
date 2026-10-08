@@ -1,0 +1,24 @@
+#pragma once
+
+/// @file
+/// Everything of the client engine in one include, like rtype/ecs/Ecs.hpp for the ECS.
+///
+/// - Component/: the data attached to entities (drawing, animation, widgets, layout).
+/// - System/: the systems working on them, one per file.
+/// - Interface/: what menus are built with (MenuBuilder, navigation controls, style, metrics).
+/// - Rendering/: the SceneRenderer, which draws the entities.
+
+#include "rtype/engine/Component/Animation.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Layout.hpp"
+#include "rtype/engine/Component/Widget.hpp"
+#include "rtype/engine/Interface/MenuBuilder.hpp"
+#include "rtype/engine/Interface/Metrics.hpp"
+#include "rtype/engine/Interface/Navigation.hpp"
+#include "rtype/engine/Interface/Style.hpp"
+#include "rtype/engine/Rendering/SceneRenderer.hpp"
+#include "rtype/engine/System/ColumnLayoutSystem.hpp"
+#include "rtype/engine/System/HitboxSystem.hpp"
+#include "rtype/engine/System/InterfaceSystem.hpp"
+#include "rtype/engine/System/TweenSystem.hpp"
+#include "rtype/engine/System/WidgetTextSystem.hpp"

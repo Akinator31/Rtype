@@ -5,11 +5,12 @@
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/ecs/Scenes.hpp"
 #include "rtype/ecs/System/System.hpp"
-#include "rtype/engine/Metrics.hpp"
-#include "rtype/engine/Navigation.hpp"
-#include "rtype/engine/Style.hpp"
-#include "rtype/engine/Tween.hpp"
-#include "rtype/engine/Widgets.hpp"
+#include "rtype/engine/Component/Animation.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Widget.hpp"
+#include "rtype/engine/Interface/Metrics.hpp"
+#include "rtype/engine/Interface/Navigation.hpp"
+#include "rtype/engine/Interface/Style.hpp"
 #include "rtype/input/InputSource.hpp"
 
 #include <optional>

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "rtype/ecs/Scenes.hpp"
-#include "rtype/engine/Components.hpp"
-#include "rtype/engine/Style.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Interface/Style.hpp"
 
 namespace rtype::ecs
 {

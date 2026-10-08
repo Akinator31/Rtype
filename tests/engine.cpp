@@ -5,16 +5,13 @@
 // and below), with 16 units between widgets. A menu's column is centred at x = 960, y = 604.8: with three
 // widgets, their centres are at y = 500.8, 604.8 and 708.8.
 
+#include "rtype/engine/Engine.hpp"
+#include "rtype/engine/Engine/Engine.hpp"
+
 #include "FakeInput.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/ecs/Scenes.hpp"
-#include "rtype/engine/Engine/Engine.hpp"
-#include "rtype/engine/InterfaceSystem.hpp"
-#include "rtype/engine/Layout.hpp"
-#include "rtype/engine/MenuBuilder.hpp"
-#include "rtype/engine/Tween.hpp"
-#include "rtype/engine/Widgets.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

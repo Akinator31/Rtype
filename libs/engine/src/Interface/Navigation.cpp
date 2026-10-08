@@ -1,4 +1,4 @@
-#include "rtype/engine/Navigation.hpp"
+#include "rtype/engine/Interface/Navigation.hpp"
 
 #include "rtype/input/Binding.hpp"
 
