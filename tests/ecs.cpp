@@ -2,7 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace rtype::ecs;
+using namespace ecs;
 
 namespace
 {
