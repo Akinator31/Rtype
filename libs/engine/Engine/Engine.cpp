@@ -3,7 +3,7 @@
 namespace engine
 {
 
-rtype::ecs::Ecs &Engine::getEcs()
+ecs::Ecs &Engine::getEcs()
 {
     return _ecs;
 }
@@ -23,7 +23,7 @@ bool Engine::hasEvent(const std::string &name) const
     return _events.contains(name);
 }
 
-void Engine::subscribeToEvent(const std::string &name, rtype::ecs::System &system)
+void Engine::subscribeToEvent(const std::string &name, ecs::System &system)
 {
     getEvent(name).addSubscriber(system);
 }

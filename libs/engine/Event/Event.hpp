@@ -12,7 +12,7 @@ namespace engine
 class Event
 {
     std::string _name;
-    std::vector<rtype::ecs::System *> _subscribers;
+    std::vector<ecs::System *> _subscribers;
 
 public:
     explicit Event(std::string name);
@@ -20,8 +20,8 @@ public:
     [[nodiscard]] const std::string &getName() const;
 
     /// The system must outlive the event, or be removed before.
-    void addSubscriber(rtype::ecs::System &system);
-    void removeSubscriber(rtype::ecs::System &system);
+    void addSubscriber(ecs::System &system);
+    void removeSubscriber(ecs::System &system);
 
     /// Updates the enabled subscribers, in subscription order.
     void trigger();

@@ -4,7 +4,7 @@
 
 #include <stdexcept>
 
-using namespace rtype::ecs;
+using namespace ecs;
 using namespace engine;
 
 namespace
