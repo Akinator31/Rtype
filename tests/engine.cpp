@@ -52,8 +52,9 @@ struct World {
     FakeMetrics metrics;
     FakeInput input;
     InterfaceStyle style{.font = {0}};
-    rtype::ecs::Ecs ecs;
-    rtype::engine::Scenes &scenes = ecs.registerSystem<rtype::engine::Scenes>(ecs);
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    rtype::engine::Scenes &scenes = engine.getScenes();
 
     World()
     {
@@ -65,7 +66,7 @@ struct World {
         ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
     }
 
-    void update(float elapsed = 0.0f) { ecs.update(elapsed); }
+    void update(float elapsed = 0.0f) { engine.update(elapsed); }
 
     // A quick key press: held for one frame, then released
     void press(std::set<Key> keys)
@@ -631,4 +632,155 @@ TEST_CASE("Creating an existing event keeps it unchanged", "[engine][event]")
     engine.triggerEvent("stop");
     engine.update(0.1f);
     CHECK_FALSE(counter.enabled);
+}
+
+namespace
+{
+
+// A scene with a single entity, recorded in `entities` each time the scene opens
+void createRecordedScene(Engine &engine, const std::string &name, std::vector<entity_t> &entities,
+                         SceneSettings settings = {})
+{
+    engine.createScene(name, std::move(settings), [&entities](Engine &owner, SceneId scene) {
+        const entity_t entity = owner.getEcs().createEntity();
+        owner.getEcs().addComponent<SceneMember>(entity, scene);
+        entities.push_back(entity);
+    });
+}
+
+} // namespace
+
+TEST_CASE("A scene switch takes effect at the next engine update", "[engine][scenes]")
+{
+    Engine engine;
+    std::vector<entity_t> entities;
+    createRecordedScene(engine, "menu", entities);
+
+    engine.switchScene("menu");
+    CHECK_FALSE(engine.getScenes().top());
+    CHECK(entities.empty());
+
+    engine.update(0.1f);
+    REQUIRE(entities.size() == 1);
+    REQUIRE(engine.getScenes().top());
+    CHECK(engine.getScenes().sceneOf(entities[0]) == engine.getScenes().top());
+}
+
+TEST_CASE("A scene switch closes every open scene and keeps the persistent entities", "[engine][scenes]")
+{
+    Engine engine;
+    std::vector<entity_t> games;
+    std::vector<entity_t> pauses;
+    std::vector<entity_t> menus;
+    createRecordedScene(engine, "game", games);
+    createRecordedScene(engine, "pause", pauses, {.overlay = true});
+    createRecordedScene(engine, "menu", menus);
+    const entity_t stars = engine.getEcs().createEntity();
+
+    engine.switchScene("game");
+    engine.pushScene("pause");
+    engine.update(0.1f);
+    const SceneId game = *engine.getScenes().sceneOf(games[0]);
+    const SceneId pause = *engine.getScenes().sceneOf(pauses[0]);
+    CHECK(engine.getScenes().top() == pause);
+    CHECK(engine.getScenes().isVisible(game));
+
+    engine.switchScene("menu");
+    engine.update(0.1f);
+    CHECK_FALSE(engine.getScenes().isOpen(game));
+    CHECK_FALSE(engine.getScenes().isOpen(pause));
+    // Their ids may be recycled by the menu: what matters is that nothing belongs to them anymore
+    CHECK(engine.getScenes().sceneOf(games[0]) != game);
+    CHECK(engine.getScenes().sceneOf(pauses[0]) != pause);
+    CHECK(engine.getEcs().isAlive(menus[0]));
+    CHECK(engine.getEcs().isAlive(stars));
+}
+
+TEST_CASE("Pushing a scene opens it over the others, popping closes the top one", "[engine][scenes]")
+{
+    Engine engine;
+    std::vector<entity_t> games;
+    std::vector<entity_t> pauses;
+    createRecordedScene(engine, "game", games);
+    createRecordedScene(engine, "pause", pauses);
+
+    engine.switchScene("game");
+    engine.update(0.1f);
+    const SceneId game = *engine.getScenes().top();
+
+    engine.pushScene("pause");
+    engine.update(0.1f);
+    CHECK(engine.getScenes().isOpen(game));
+    CHECK(engine.getScenes().top() != game);
+
+    engine.popScene();
+    engine.update(0.1f);
+    CHECK(engine.getScenes().top() == game);
+    CHECK_FALSE(engine.getEcs().isAlive(pauses[0]));
+    CHECK(engine.getEcs().isAlive(games[0]));
+
+    engine.popScene();
+    engine.popScene();
+    engine.update(0.1f);
+    CHECK_FALSE(engine.getScenes().top());
+}
+
+TEST_CASE("A named scene triggers its events when it opens and closes", "[engine][scenes]")
+{
+    Engine engine;
+    Counter &physics = engine.getEcs().registerSystem<Counter>();
+    physics.enabled = false;
+    engine.createScene("game");
+    engine.createScene("menu");
+    engine.subscribeToEvent("game:open", physics, Reaction::Enable);
+    engine.subscribeToEvent("game:close", physics, Reaction::Disable);
+
+    // The reactions apply in the update that opens the scene
+    engine.switchScene("game");
+    engine.update(0.1f);
+    CHECK(physics.enabled);
+    CHECK(physics.calls == 1);
+
+    engine.switchScene("menu");
+    engine.update(0.1f);
+    CHECK_FALSE(physics.enabled);
+    CHECK(physics.calls == 1);
+}
+
+TEST_CASE("A named scene closed without the engine triggers its close event at the next update",
+          "[engine][scenes]")
+{
+    Engine engine;
+    Counter &physics = engine.getEcs().registerSystem<Counter>();
+    engine.createScene("game");
+    engine.subscribeToEvent("game:close", physics, Reaction::Disable);
+    engine.switchScene("game");
+    engine.update(0.1f);
+
+    // Like a menu button calling Scenes::close()
+    engine.getScenes().close();
+    CHECK(physics.enabled);
+    engine.update(0.1f);
+    CHECK_FALSE(physics.enabled);
+}
+
+TEST_CASE("A scene exists only once created, and is never redefined", "[engine][scenes]")
+{
+    Engine engine;
+    CHECK_FALSE(engine.hasScene("game"));
+    CHECK_THROWS_AS(engine.switchScene("game"), std::out_of_range);
+    CHECK_THROWS_AS(engine.pushScene("game"), std::out_of_range);
+
+    int builds = 0;
+    int otherBuilds = 0;
+    engine.createScene("game", {}, [&builds](Engine & /*engine*/, SceneId /*scene*/) { ++builds; });
+    engine.createScene("game", {}, [&otherBuilds](Engine & /*engine*/, SceneId /*scene*/) { ++otherBuilds; });
+    CHECK(engine.hasScene("game"));
+    CHECK(engine.hasEvent("game:open"));
+    CHECK(engine.hasEvent("game:close"));
+
+    engine.switchScene("game");
+    engine.update(0.1f);
+    CHECK(builds == 1);
+    CHECK(otherBuilds == 0);
 }

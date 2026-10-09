@@ -4,8 +4,9 @@
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
-#include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/engine/Engine.hpp"
+#include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/render/Paths.hpp"
@@ -45,10 +46,9 @@ void run()
     const InterfaceStyle style{.font = font};
     const RendererMetrics metrics(renderer);
 
-    // The systems, in update order: scenes first, then the interface, which reads the input before the game,
-    // then what turns the state into positions and sizes for the drawing
-    rtype::ecs::Ecs ecs;
-    Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    Scenes &scenes = engine.getScenes();
     ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);
     ecs.registerSystem<WidgetTextSystem>();
     ecs.registerSystem<TweenSystem>();
@@ -99,7 +99,7 @@ void run()
             window.setFullscreen(!window.isFullscreen());
         }
 
-        ecs.update(elapsed);
+        engine.update(elapsed);
 
         // The game reads its actions only while its scene receives the input: not while a menu is open, nor
         // during the update where the menu was closed by the same key

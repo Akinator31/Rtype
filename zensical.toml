@@ -46,6 +46,7 @@ nav = [
     "decisions/0006-ecs-component-storage.md",
     "decisions/0007-client-in-the-ecs.md",
     "decisions/0008-events-switch-systems.md",
+    "decisions/0009-named-scenes-in-the-engine.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [

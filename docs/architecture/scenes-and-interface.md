@@ -32,8 +32,9 @@ precise headers you need, or `rtype/engine/Engine.hpp` for everything.
 ## The systems and their order
 
 ```cpp
-Ecs ecs;
-Scenes &scenes = ecs.registerSystem<Scenes>(ecs);                                    // 1. first
+Engine engine;
+Ecs &ecs = engine.getEcs();
+Scenes &scenes = engine.getScenes();                                                 // 1. first, by the engine
 ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);            // 2. the interface
 // 3. the game systems
 ecs.registerSystem<WidgetTextSystem>();                                               // 4. state to drawing
@@ -44,7 +45,7 @@ ecs.registerSystem<TransformSystem>(ecs);                                       
 SceneRenderer sceneRenderer(ecs, scenes, style);                                      // not a system
 
 // Each frame
-ecs.update(window.frameTime());
+engine.update(window.frameTime());
 renderer.beginFrame();
 sceneRenderer.draw(renderer, Layer::World);
 sceneRenderer.draw(renderer, Layer::Interface);
@@ -103,14 +104,16 @@ attach(ecs, force, ship, {64.0f, 0.0f});   // the Force follows the ship, 64 uni
 ## Scenes
 
 A scene groups the entities of a phase of the game: home screen, game, pause menu, options. Every entity of a
-scene has a `SceneMember`; closing the scene destroys them all at once. Entities without it are **persistent**:
+scene has a `SceneMember`; when the scene closes, the `Engine` destroys them all at once, at the start of its
+next update (until then they are neither visible nor updated). Entities without it are **persistent**:
 a star-field shared by the menus and the game survives every scene change.
 
 Scenes are part of the engine (`rtype::engine::Scenes`, `rtype/engine/Scene/Scenes.hpp`), not of the ECS: the
-ECS only stores entities and components, and knows nothing about what a scene is.
+ECS only stores entities and components, and knows nothing about what a scene is. `Scenes` itself only keeps
+the stack and never touches the ECS: destroying the entities of a closed scene is the `Engine`'s job.
 
 ```cpp
-const SceneId game = scenes.open({.updatesWhenCovered = true});
+const SceneId game = engine.getScenes().open({.updatesWhenCovered = true});
 const entity_t ship = ecs.createEntity();
 ecs.addComponent<SceneMember>(ship, game);
 ```
@@ -131,6 +134,27 @@ Systems ask `Scenes` what to do with an entity or a scene: `receivesInput()` (on
     The scene that receives the input is recorded when the update starts, by the `Scenes` system. When Escape
     closes the pause menu, the game does not receive the input until the next update: it does not see the
     same Escape press and does not open the menu again.
+
+### Named scenes
+
+The `Engine` registers `Scenes` first and opens scenes by name ([ADR 0009](../decisions/0009-named-scenes-in-the-engine.md)).
+A scene is declared once, with a function that builds its entities each time it opens:
+
+```cpp
+engine.createScene("game", {.updatesWhenCovered = true}, [](Engine &engine, SceneId scene) {
+    const entity_t ship = engine.getEcs().createEntity();
+    engine.getEcs().addComponent<SceneMember>(ship, scene);
+});
+engine.subscribeToEvent("game:open", physics, Reaction::Enable);
+engine.subscribeToEvent("game:close", physics, Reaction::Disable);
+
+engine.switchScene("game"); // closes every open scene, then opens the game
+engine.pushScene("pause");  // opens the pause menu over the game
+engine.popScene();          // closes the scene at the top
+```
+
+These requests take effect at the start of the next `Engine::update`, then the events `"<name>:open"` and
+`"<name>:close"` of the scenes opened and closed are triggered, and their reactions applied in the same update.
 
 ## Drawing
 

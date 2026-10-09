@@ -2,17 +2,21 @@
 
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <vector>
+
 using namespace rtype::ecs;
 using namespace rtype::engine;
 
-TEST_CASE("Closing a scene destroys its entities and keeps the persistent ones", "[engine][scenes]")
+TEST_CASE("The engine destroys the entities of a closed scene and keeps the persistent ones", "[engine][scenes]")
 {
-    Ecs ecs;
-    Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
+    Engine engine;
+    Ecs &ecs = engine.getEcs();
+    Scenes &scenes = engine.getScenes();
     const SceneId menu = scenes.open();
     const entity_t button = ecs.createEntity();
     ecs.addComponent<SceneMember>(button, menu);
@@ -21,18 +25,35 @@ TEST_CASE("Closing a scene destroys its entities and keeps the persistent ones",
     ecs.addComponent<SceneMember>(label, menu);
     const entity_t stars = ecs.createEntity();
 
+    // Scenes only keeps the stack: the entities stay until the engine's next update, hidden
     scenes.close();
+    REQUIRE_FALSE(scenes.isOpen(menu));
+    REQUIRE(ecs.isAlive(button));
+    REQUIRE_FALSE(scenes.isVisible(button));
+    REQUIRE_FALSE(scenes.updates(button));
 
+    engine.update(0.0f);
     REQUIRE_FALSE(ecs.isAlive(button));
     REQUIRE_FALSE(ecs.isAlive(label));
     REQUIRE(ecs.isAlive(stars));
-    REQUIRE_FALSE(scenes.isOpen(menu));
+}
+
+TEST_CASE("Closed scenes are given once, in closing order", "[engine][scenes]")
+{
+    Ecs ecs;
+    Scenes &scenes = ecs.registerSystem<Scenes>();
+    const SceneId game = scenes.open();
+    const SceneId pause = scenes.open();
+
+    scenes.clear();
+    REQUIRE(scenes.takeClosedScenes() == std::vector<SceneId>{pause, game});
+    REQUIRE(scenes.takeClosedScenes().empty());
 }
 
 TEST_CASE("Only the scene at the top receives the input", "[engine][scenes]")
 {
     Ecs ecs;
-    Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
+    Scenes &scenes = ecs.registerSystem<Scenes>();
     const SceneId game = scenes.open({.updatesWhenCovered = true});
     ecs.update(0.0f);
     REQUIRE(scenes.receivesInput(game));
@@ -49,7 +70,7 @@ TEST_CASE("Only the scene at the top receives the input", "[engine][scenes]")
 TEST_CASE("The scene closed during an update keeps the input until the next one", "[engine][scenes]")
 {
     Ecs ecs;
-    Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
+    Scenes &scenes = ecs.registerSystem<Scenes>();
     const SceneId game = scenes.open();
     scenes.open({.overlay = true});
     ecs.update(0.0f);
@@ -65,7 +86,7 @@ TEST_CASE("The scene closed during an update keeps the input until the next one"
 TEST_CASE("A scene that is not an overlay hides and pauses the ones below", "[engine][scenes]")
 {
     Ecs ecs;
-    Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
+    Scenes &scenes = ecs.registerSystem<Scenes>();
     const SceneId home = scenes.open();
     const SceneId options = scenes.open();
 
@@ -77,7 +98,7 @@ TEST_CASE("A scene that is not an overlay hides and pauses the ones below", "[en
 TEST_CASE("Back calls the scene's action, or closes it", "[engine][scenes]")
 {
     Ecs ecs;
-    Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
+    Scenes &scenes = ecs.registerSystem<Scenes>();
     int backs = 0;
     const SceneId game = scenes.open({.onBack = [&] { ++backs; }});
     const SceneId pause = scenes.open();
@@ -93,7 +114,7 @@ TEST_CASE("Back calls the scene's action, or closes it", "[engine][scenes]")
 TEST_CASE("Persistent entities are visible and update in every scene", "[engine][scenes]")
 {
     Ecs ecs;
-    Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
+    Scenes &scenes = ecs.registerSystem<Scenes>();
     const entity_t stars = ecs.createEntity();
     scenes.open();
 

@@ -1,13 +1,12 @@
 #include "rtype/engine/Scene/Scenes.hpp"
 
-#include "rtype/ecs/Ecs.hpp"
-
 #include <algorithm>
+#include <utility>
 
 namespace rtype::engine
 {
 
-Scenes::Scenes(ecs::ComponentCaches &caches, ecs::Ecs &ecs) : _ecs(ecs), _members(use<SceneMember>(caches)) {}
+Scenes::Scenes(ecs::ComponentCaches &caches) : _members(use<SceneMember>(caches)) {}
 
 void Scenes::update(float /*elapsed*/)
 {
@@ -35,7 +34,7 @@ void Scenes::close(SceneId scene)
         return;
     }
     _stack.erase(entry);
-    destroyMembers(scene);
+    _closed.push_back(scene);
 }
 
 void Scenes::clear()
@@ -59,13 +58,11 @@ void Scenes::back()
     }
 }
 
-void Scenes::destroyMembers(SceneId scene)
+std::vector<SceneId> Scenes::takeClosedScenes()
 {
-    for (ecs::entity_t entity = 0; entity < _members.size(); ++entity) {
-        if (_members.has(entity) && _members.get(entity).scene == scene) {
-            _ecs.destroyEntity(entity);
-        }
-    }
+    std::vector<SceneId> closed = std::move(_closed);
+    _closed.clear();
+    return closed;
 }
 
 const Scenes::Entry *Scenes::find(SceneId scene) const
