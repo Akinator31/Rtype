@@ -27,7 +27,7 @@ void Event::trigger()
 {
     for (rtype::ecs::System *system : _subscribers) {
         if (system->enabled) {
-            system->update();
+            system->update(0.0);
         }
     }
 }

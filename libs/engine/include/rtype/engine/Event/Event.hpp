@@ -23,7 +23,7 @@ public:
     void addSubscriber(rtype::ecs::System &system);
     void removeSubscriber(rtype::ecs::System &system);
 
-    /// Updates the enabled subscribers, in subscription order.
+    /// Updates the enabled subscribers, in subscription order, with an elapsed time of 0.
     void trigger();
 };
 
