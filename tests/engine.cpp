@@ -100,6 +100,21 @@ public:
     void update(float /*elapsed*/) override { ++calls; }
 };
 
+// Triggers an event every time it runs
+class Trigger : public rtype::ecs::System
+{
+    Engine &_engine;
+    std::string _event;
+
+public:
+    Trigger(rtype::ecs::ComponentCaches & /*caches*/, Engine &engine, std::string event)
+        : _engine(engine), _event(std::move(event))
+    {
+    }
+
+    void update(float /*elapsed*/) override { _engine.triggerEvent(_event); }
+};
+
 } // namespace
 
 TEST_CASE("The first widget that can get the focus has it", "[engine][interface]")
@@ -399,23 +414,81 @@ TEST_CASE("A back and forth tween never ends", "[engine][tween]")
     REQUIRE(ecs.hasComponent<Tween>(light));
 }
 
-TEST_CASE("Triggering an event updates its subscribers", "[engine][event]")
+TEST_CASE("A trigger takes effect at the next engine update", "[engine][event]")
 {
     Engine engine;
-    Counter &a = engine.getEcs().registerSystem<Counter>();
-    Counter &b = engine.getEcs().registerSystem<Counter>();
+    Counter &counter = engine.getEcs().registerSystem<Counter>();
+    counter.enabled = false;
+    engine.createEvent("start");
+    engine.subscribeToEvent("start", counter, Reaction::Enable);
 
-    engine.createEvent("collision");
-    engine.subscribeToEvent("collision", a);
-    engine.subscribeToEvent("collision", b);
-    engine.triggerEvent("collision");
-    engine.triggerEvent("collision");
+    engine.triggerEvent("start");
+    CHECK_FALSE(counter.enabled);
+    CHECK(counter.calls == 0);
 
-    CHECK(a.calls == 2);
-    CHECK(b.calls == 2);
+    engine.update(0.1f);
+    CHECK(counter.enabled);
+    CHECK(counter.calls == 1);
+    engine.update(0.1f);
+    CHECK(counter.calls == 2);
 }
 
-TEST_CASE("An event only updates its own subscribers", "[engine][event]")
+TEST_CASE("Permanent reactions enable, disable or toggle their systems", "[engine][event]")
+{
+    Engine engine;
+    Counter &enabled = engine.getEcs().registerSystem<Counter>();
+    Counter &disabled = engine.getEcs().registerSystem<Counter>();
+    Counter &toggled = engine.getEcs().registerSystem<Counter>();
+    enabled.enabled = false;
+    engine.createEvent("switch");
+    engine.subscribeToEvent("switch", enabled, Reaction::Enable);
+    engine.subscribeToEvent("switch", disabled, Reaction::Disable);
+    engine.subscribeToEvent("switch", toggled, Reaction::Toggle);
+
+    engine.triggerEvent("switch");
+    engine.update(0.1f);
+    CHECK(enabled.enabled);
+    CHECK_FALSE(disabled.enabled);
+    CHECK_FALSE(toggled.enabled);
+
+    engine.triggerEvent("switch");
+    engine.update(0.1f);
+    CHECK(enabled.enabled);
+    CHECK_FALSE(disabled.enabled);
+    CHECK(toggled.enabled);
+    CHECK(enabled.calls == 2);
+    CHECK(disabled.calls == 0);
+    CHECK(toggled.calls == 1);
+}
+
+TEST_CASE("Once reactions last for a single update", "[engine][event]")
+{
+    Engine engine;
+    Counter &enabled = engine.getEcs().registerSystem<Counter>();
+    Counter &disabled = engine.getEcs().registerSystem<Counter>();
+    Counter &toggled = engine.getEcs().registerSystem<Counter>();
+    enabled.enabled = false;
+    engine.createEvent("pulse");
+    engine.subscribeToEvent("pulse", enabled, Reaction::Enable, Duration::Once);
+    engine.subscribeToEvent("pulse", disabled, Reaction::Disable, Duration::Once);
+    engine.subscribeToEvent("pulse", toggled, Reaction::Toggle, Duration::Once);
+
+    engine.triggerEvent("pulse");
+    engine.update(0.1f);
+    CHECK(enabled.calls == 1);
+    CHECK(disabled.calls == 0);
+    CHECK(toggled.calls == 0);
+    CHECK_FALSE(enabled.enabled);
+    CHECK(disabled.enabled);
+    CHECK(toggled.enabled);
+
+    engine.update(0.1f);
+    CHECK(enabled.calls == 1);
+    CHECK(disabled.calls == 1);
+    CHECK(toggled.calls == 1);
+}
+
+TEST_CASE("An event only changes its own subscribers", "[engine][event]")
 {
     Engine engine;
     Counter &a = engine.getEcs().registerSystem<Counter>();
@@ -423,29 +496,112 @@ TEST_CASE("An event only updates its own subscribers", "[engine][event]")
 
     engine.createEvent("shoot");
     engine.createEvent("death");
-    engine.subscribeToEvent("shoot", a);
-    engine.subscribeToEvent("death", b);
+    engine.subscribeToEvent("shoot", a, Reaction::Disable);
+    engine.subscribeToEvent("death", b, Reaction::Disable);
     engine.triggerEvent("shoot");
+    engine.update(0.1f);
 
-    CHECK(a.calls == 1);
-    CHECK(b.calls == 0);
+    CHECK_FALSE(a.enabled);
+    CHECK(b.enabled);
 }
 
-TEST_CASE("Disabled and unsubscribed systems are not updated", "[engine][event]")
+TEST_CASE("An unsubscribed system is not changed", "[engine][event]")
 {
     Engine engine;
-    Counter &a = engine.getEcs().registerSystem<Counter>();
-    Counter &b = engine.getEcs().registerSystem<Counter>();
-    Event &event = engine.createEvent("tick");
-    event.addSubscriber(a);
-    event.addSubscriber(b);
+    Counter &counter = engine.getEcs().registerSystem<Counter>();
+    Event &event = engine.createEvent("stop");
+    event.addSubscriber(counter, Reaction::Disable);
+    event.removeSubscriber(counter);
 
-    a.enabled = false;
-    event.removeSubscriber(b);
-    event.trigger();
+    engine.triggerEvent("stop");
+    engine.update(0.1f);
 
-    CHECK(a.calls == 0);
-    CHECK(b.calls == 0);
+    CHECK(counter.enabled);
+    CHECK(event.getSubscriptions().empty());
+}
+
+TEST_CASE("Reactions are applied in the order of the triggers", "[engine][event]")
+{
+    Engine engine;
+    Counter &counter = engine.getEcs().registerSystem<Counter>();
+    engine.createEvent("on");
+    engine.createEvent("off");
+    engine.createEvent("flip");
+    engine.subscribeToEvent("on", counter, Reaction::Enable);
+    engine.subscribeToEvent("off", counter, Reaction::Disable);
+    engine.subscribeToEvent("flip", counter, Reaction::Toggle);
+
+    engine.triggerEvent("on");
+    engine.triggerEvent("off");
+    engine.update(0.1f);
+    CHECK_FALSE(counter.enabled);
+
+    engine.triggerEvent("off");
+    engine.triggerEvent("on");
+    engine.update(0.1f);
+    CHECK(counter.enabled);
+
+    engine.triggerEvent("flip");
+    engine.triggerEvent("flip");
+    engine.update(0.1f);
+    CHECK(counter.enabled);
+}
+
+TEST_CASE("A permanent reaction cancels the restore of a once reaction", "[engine][event]")
+{
+    Engine engine;
+    Counter &counter = engine.getEcs().registerSystem<Counter>();
+    counter.enabled = false;
+    engine.createEvent("pulse");
+    engine.createEvent("start");
+    engine.subscribeToEvent("pulse", counter, Reaction::Enable, Duration::Once);
+    engine.subscribeToEvent("start", counter, Reaction::Enable);
+
+    engine.triggerEvent("pulse");
+    engine.triggerEvent("start");
+    engine.update(0.1f);
+    engine.update(0.1f);
+
+    CHECK(counter.enabled);
+    CHECK(counter.calls == 2);
+}
+
+TEST_CASE("Several once reactions restore the state before the first one", "[engine][event]")
+{
+    Engine engine;
+    Counter &counter = engine.getEcs().registerSystem<Counter>();
+    counter.enabled = false;
+    engine.createEvent("pulse");
+    engine.createEvent("flip");
+    engine.subscribeToEvent("pulse", counter, Reaction::Enable, Duration::Once);
+    engine.subscribeToEvent("flip", counter, Reaction::Toggle, Duration::Once);
+
+    engine.triggerEvent("pulse");
+    engine.triggerEvent("flip");
+    engine.triggerEvent("flip");
+    engine.update(0.1f);
+
+    CHECK(counter.calls == 1);
+    CHECK_FALSE(counter.enabled);
+}
+
+TEST_CASE("A once reaction runs a system registered before the trigger", "[engine][event]")
+{
+    Engine engine;
+    Counter &counter = engine.getEcs().registerSystem<Counter>();
+    counter.enabled = false;
+    Trigger &trigger = engine.getEcs().registerSystem<Trigger>(engine, "shoot");
+    engine.createEvent("shoot");
+    engine.subscribeToEvent("shoot", counter, Reaction::Enable, Duration::Once);
+
+    engine.update(0.1f);
+    CHECK(counter.calls == 0);
+    trigger.enabled = false;
+    engine.update(0.1f);
+    CHECK(counter.calls == 1);
+    engine.update(0.1f);
+    CHECK(counter.calls == 1);
+    CHECK_FALSE(counter.enabled);
 }
 
 TEST_CASE("An event exists only once created", "[engine][event]")
@@ -466,12 +622,13 @@ TEST_CASE("An event exists only once created", "[engine][event]")
 TEST_CASE("Creating an existing event keeps it unchanged", "[engine][event]")
 {
     Engine engine;
-    Counter &a = engine.getEcs().registerSystem<Counter>();
+    Counter &counter = engine.getEcs().registerSystem<Counter>();
 
-    Event &event = engine.createEvent("start");
-    engine.subscribeToEvent("start", a);
+    Event &event = engine.createEvent("stop");
+    engine.subscribeToEvent("stop", counter, Reaction::Disable);
 
-    CHECK(&engine.createEvent("start") == &event);
-    engine.triggerEvent("start");
-    CHECK(a.calls == 1);
+    CHECK(&engine.createEvent("stop") == &event);
+    engine.triggerEvent("stop");
+    engine.update(0.1f);
+    CHECK_FALSE(counter.enabled);
 }

@@ -1,6 +1,5 @@
 #include "rtype/engine/Event/Event.hpp"
 
-#include <algorithm>
 #include <utility>
 
 namespace rtype::engine
@@ -13,23 +12,20 @@ const std::string &Event::getName() const
     return _name;
 }
 
-void Event::addSubscriber(rtype::ecs::System &system)
+void Event::addSubscriber(rtype::ecs::System &system, Reaction reaction, Duration duration)
 {
-    _subscribers.push_back(&system);
+    _subscriptions.push_back(Subscription{.system = &system, .reaction = reaction, .duration = duration});
 }
 
 void Event::removeSubscriber(rtype::ecs::System &system)
 {
-    std::erase(_subscribers, &system);
+    std::erase_if(_subscriptions,
+                  [&system](const Subscription &subscription) { return subscription.system == &system; });
 }
 
-void Event::trigger()
+const std::vector<Subscription> &Event::getSubscriptions() const
 {
-    for (rtype::ecs::System *system : _subscribers) {
-        if (system->enabled) {
-            system->update(0.0);
-        }
-    }
+    return _subscriptions;
 }
 
 } // namespace rtype::engine

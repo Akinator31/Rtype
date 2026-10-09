@@ -8,11 +8,24 @@
 namespace rtype::engine
 {
 
-/// A named event: triggering it updates every system subscribed to it.
+/// What triggering an event does to the `enabled` flag of a subscribed system (ADR 0008).
+enum class Reaction { Enable, Disable, Toggle };
+
+/// How long a reaction lasts: for good, or for the next engine update only.
+enum class Duration { Permanent, Once };
+
+struct Subscription {
+    rtype::ecs::System *system;
+    Reaction reaction;
+    Duration duration;
+};
+
+/// A named event: triggering it (see Engine::triggerEvent()) changes the `enabled` flag of its subscribed
+/// systems at the next engine update. It never runs them itself.
 class Event
 {
     std::string _name;
-    std::vector<rtype::ecs::System *> _subscribers;
+    std::vector<Subscription> _subscriptions;
 
 public:
     explicit Event(std::string name);
@@ -20,11 +33,12 @@ public:
     [[nodiscard]] const std::string &getName() const;
 
     /// The system must outlive the event, or be removed before.
-    void addSubscriber(rtype::ecs::System &system);
+    void addSubscriber(rtype::ecs::System &system, Reaction reaction, Duration duration = Duration::Permanent);
+    /// Removes every subscription of the system.
     void removeSubscriber(rtype::ecs::System &system);
 
-    /// Updates the enabled subscribers, in subscription order, with an elapsed time of 0.
-    void trigger();
+    /// In subscription order.
+    [[nodiscard]] const std::vector<Subscription> &getSubscriptions() const;
 };
 
 } // namespace rtype::engine
