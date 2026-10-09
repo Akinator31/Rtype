@@ -13,6 +13,7 @@ technical and comparative study of the project.
 | [0005](0005-world-in-ecs-interface-in-ui-layer.md) | World in the ECS, interface in a separate layer          | Superseded by [0007](0007-client-in-the-ecs.md) |
 | [0006](0006-ecs-component-storage.md)              | Indexed vectors for the ECS component caches             | Accepted |
 | [0007](0007-client-in-the-ecs.md)                  | The whole client in the ECS, with scenes and a hierarchy | Accepted |
+| [0008](0008-events-switch-systems.md)              | Events switch systems on and off                         | Accepted |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

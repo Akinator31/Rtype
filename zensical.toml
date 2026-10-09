@@ -45,6 +45,7 @@ nav = [
     "decisions/0005-world-in-ecs-interface-in-ui-layer.md",
     "decisions/0006-ecs-component-storage.md",
     "decisions/0007-client-in-the-ecs.md",
+    "decisions/0008-events-switch-systems.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
