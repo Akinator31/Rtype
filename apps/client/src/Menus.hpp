@@ -2,7 +2,7 @@
 
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Ecs.hpp"
-#include "rtype/ecs/Scenes.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/render/Renderer.hpp"
@@ -17,7 +17,7 @@ namespace rtype::client
 /// to them.
 struct MenuTargets {
     ecs::Ecs &ecs;
-    ecs::Scenes &scenes;
+    engine::Scenes &scenes;
     const engine::Metrics &metrics;
     const engine::InterfaceStyle &style;
     render::Window &window;

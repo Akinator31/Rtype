@@ -26,7 +26,7 @@ anyone building the interface.
     void openControlsMenu(const MenuTargets &targets)
     {
         engine::MenuBuilder menu(targets.ecs, targets.scenes, targets.metrics, targets.style, "Controls");
-        const ecs::SceneId scene = menu.scene();
+        const engine::SceneId scene = menu.scene();
 
         menu.label("Choose an action to change its keys");
         menu.button("Shoot", [] { /* ... */ });

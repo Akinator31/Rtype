@@ -17,7 +17,7 @@ void openPauseMenu(const MenuTargets &targets)
     // An overlay: the game stays visible behind, dimmed, and keeps running for the other players
     engine::MenuBuilder pause(targets.ecs, targets.scenes, targets.metrics, targets.style, "Pause",
                               {.overlay = true});
-    const ecs::SceneId scene = pause.scene();
+    const engine::SceneId scene = pause.scene();
     pause.button("Resume", [targets, scene] { targets.scenes.close(scene); });
     pause.button("Options", [targets] { openOptionsMenu(targets); });
     pause.button("Quit", [targets] { targets.window.requestClose(); });
@@ -27,7 +27,7 @@ void openOptionsMenu(const MenuTargets &targets)
 {
     // Not an overlay: the options replace the pause menu on screen instead of being drawn over it
     engine::MenuBuilder options(targets.ecs, targets.scenes, targets.metrics, targets.style, "Options");
-    const ecs::SceneId scene = options.scene();
+    const engine::SceneId scene = options.scene();
 
     options.textField(
         "Name", targets.playerName, [targets](const std::string &text) { targets.playerName = text; }, 16);

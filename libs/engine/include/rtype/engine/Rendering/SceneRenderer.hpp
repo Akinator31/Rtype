@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rtype/ecs/Scenes.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 
@@ -35,12 +35,12 @@ namespace rtype::engine
 class SceneRenderer
 {
     ecs::Ecs &_ecs;
-    ecs::Scenes &_scenes;
+    Scenes &_scenes;
     const InterfaceStyle &_style;
 
 public:
     /// @param ecs, scenes, style They must outlive the renderer.
-    SceneRenderer(ecs::Ecs &ecs, ecs::Scenes &scenes, const InterfaceStyle &style);
+    SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle &style);
 
     /// Draws the entities of one layer.
     void draw(render::Renderer &renderer, Layer layer);

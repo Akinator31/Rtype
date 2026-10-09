@@ -7,6 +7,7 @@
 /// - System/: the systems working on them, one per file.
 /// - Interface/: what menus are built with (MenuBuilder, navigation controls, style, metrics).
 /// - Rendering/: the SceneRenderer, which draws the entities.
+/// - Scene/: the stack of open scenes (home screen, game, pause menu...).
 
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -17,6 +18,7 @@
 #include "rtype/engine/Interface/Navigation.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/Rendering/SceneRenderer.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/engine/System/ColumnLayoutSystem.hpp"
 #include "rtype/engine/System/HitboxSystem.hpp"
 #include "rtype/engine/System/InterfaceSystem.hpp"

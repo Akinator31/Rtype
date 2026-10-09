@@ -3,7 +3,7 @@
 #include "rtype/ecs/Component/ComponentCache.hpp"
 #include "rtype/ecs/Component/ComponentCaches.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
-#include "rtype/ecs/Scenes.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/ecs/System/System.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -39,7 +39,7 @@ namespace rtype::engine
 class InterfaceSystem : public ecs::System
 {
     ecs::Ecs &_ecs;
-    ecs::Scenes &_scenes;
+    Scenes &_scenes;
     input::InputSource &_input;
     const Metrics &_metrics;
     const InterfaceStyle &_style;
@@ -67,7 +67,7 @@ class InterfaceSystem : public ecs::System
 
 public:
     /// @param input, metrics, style They must outlive the system.
-    InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, ecs::Scenes &scenes,
+    InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, Scenes &scenes,
                     input::InputSource &input, const Metrics &metrics, const InterfaceStyle &style,
                     input::ActionMap<Navigation> navigation = defaultNavigationControls());
 

@@ -9,6 +9,7 @@ add_library(rtype_engine
     src/Interface/Metrics.cpp
     src/Interface/Navigation.cpp
     src/Rendering/SceneRenderer.cpp
+    src/Scene/Scenes.cpp
     src/System/ColumnLayoutSystem.cpp
     src/System/HitboxSystem.cpp
     src/System/InterfaceSystem.cpp

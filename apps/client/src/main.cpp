@@ -4,7 +4,7 @@
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
-#include "rtype/ecs/Scenes.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
@@ -29,7 +29,6 @@ void run()
     using rtype::client::Action;
     using rtype::ecs::entity_t;
     using rtype::ecs::Position;
-    using rtype::ecs::SceneMember;
 
     Window window;
     ResourceManager resources(window, applicationDirectory() / "assets");
@@ -49,7 +48,7 @@ void run()
     // The systems, in update order: scenes first, then the interface, which reads the input before the game,
     // then what turns the state into positions and sizes for the drawing
     rtype::ecs::Ecs ecs;
-    rtype::ecs::Scenes &scenes = ecs.registerSystem<rtype::ecs::Scenes>(ecs);
+    Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
     ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);
     ecs.registerSystem<WidgetTextSystem>();
     ecs.registerSystem<TweenSystem>();
@@ -64,7 +63,7 @@ void run()
 
     // Demo of the game scene: the image moves with the movement actions, Shoot counts the shots, Menu opens
     // the pause menu. The game keeps updating under the pause menu: it is shared with the other players.
-    const rtype::ecs::SceneId game = scenes.open({.updatesWhenCovered = true});
+    const SceneId game = scenes.open({.updatesWhenCovered = true});
     const Vector2 gameSize = renderer.gameSize();
     const Vector2 textureSize = renderer.textureSize(texture);
     const float imageSize = 300.0f;

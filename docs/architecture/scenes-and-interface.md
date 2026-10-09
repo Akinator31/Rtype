@@ -21,6 +21,8 @@ libs/engine/include/rtype/engine/
     MenuBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
     SceneRenderer.hpp
+  Scene/
+    Scenes.hpp      SceneId, SceneMember, SceneSettings, Scenes
   Engine.hpp    includes everything above
 ```
 
@@ -103,6 +105,9 @@ attach(ecs, force, ship, {64.0f, 0.0f});   // the Force follows the ship, 64 uni
 A scene groups the entities of a phase of the game: home screen, game, pause menu, options. Every entity of a
 scene has a `SceneMember`; closing the scene destroys them all at once. Entities without it are **persistent**:
 a star-field shared by the menus and the game survives every scene change.
+
+Scenes are part of the engine (`rtype::engine::Scenes`, `rtype/engine/Scene/Scenes.hpp`), not of the ECS: the
+ECS only stores entities and components, and knows nothing about what a scene is.
 
 ```cpp
 const SceneId game = scenes.open({.updatesWhenCovered = true});

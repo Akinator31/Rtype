@@ -1,13 +1,13 @@
-#include "rtype/ecs/Scenes.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 
 #include "rtype/ecs/Ecs.hpp"
 
 #include <algorithm>
 
-namespace rtype::ecs
+namespace rtype::engine
 {
 
-Scenes::Scenes(ComponentCaches &caches, Ecs &ecs) : _ecs(ecs), _members(use<SceneMember>(caches)) {}
+Scenes::Scenes(ecs::ComponentCaches &caches, ecs::Ecs &ecs) : _ecs(ecs), _members(use<SceneMember>(caches)) {}
 
 void Scenes::update(float /*elapsed*/)
 {
@@ -61,7 +61,7 @@ void Scenes::back()
 
 void Scenes::destroyMembers(SceneId scene)
 {
-    for (entity_t entity = 0; entity < _members.size(); ++entity) {
+    for (ecs::entity_t entity = 0; entity < _members.size(); ++entity) {
         if (_members.has(entity) && _members.get(entity).scene == scene) {
             _ecs.destroyEntity(entity);
         }
@@ -109,27 +109,27 @@ bool Scenes::isVisible(SceneId scene) const
     return false;
 }
 
-std::optional<SceneId> Scenes::sceneOf(entity_t entity) const
+std::optional<SceneId> Scenes::sceneOf(ecs::entity_t entity) const
 {
     return _members.has(entity) ? std::optional<SceneId>(_members.get(entity).scene) : std::nullopt;
 }
 
-bool Scenes::receivesInput(entity_t entity) const
+bool Scenes::receivesInput(ecs::entity_t entity) const
 {
     const std::optional<SceneId> scene = sceneOf(entity);
     return scene && receivesInput(*scene);
 }
 
-bool Scenes::updates(entity_t entity) const
+bool Scenes::updates(ecs::entity_t entity) const
 {
     const std::optional<SceneId> scene = sceneOf(entity);
     return !scene || updates(*scene);
 }
 
-bool Scenes::isVisible(entity_t entity) const
+bool Scenes::isVisible(ecs::entity_t entity) const
 {
     const std::optional<SceneId> scene = sceneOf(entity);
     return !scene || isVisible(*scene);
 }
 
-} // namespace rtype::ecs
+} // namespace rtype::engine

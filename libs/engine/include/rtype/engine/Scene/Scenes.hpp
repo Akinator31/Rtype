@@ -12,8 +12,11 @@
 
 namespace rtype::ecs
 {
-
 class Ecs;
+} // namespace rtype::ecs
+
+namespace rtype::engine
+{
 
 /// Identifies an open scene. Ids are never reused. A type of its own, so that a scene and an entity cannot be
 /// confused.
@@ -51,18 +54,18 @@ struct SceneSettings {
 /// @code
 /// Scenes &scenes = ecs.registerSystem<Scenes>(ecs);   // first
 /// const SceneId game = scenes.open({.updatesWhenCovered = true});
-/// const entity_t ship = ecs.createEntity();
+/// const ecs::entity_t ship = ecs.createEntity();
 /// ecs.addComponent<SceneMember>(ship, game);
 /// @endcode
-class Scenes : public System
+class Scenes : public ecs::System
 {
     struct Entry {
         SceneId id;
         SceneSettings settings;
     };
 
-    Ecs &_ecs;
-    ComponentCache<SceneMember> &_members;
+    ecs::Ecs &_ecs;
+    ecs::ComponentCache<SceneMember> &_members;
     std::vector<Entry> _stack;
     std::uint32_t _nextId = 1;
     std::optional<SceneId> _inputOwner;
@@ -71,7 +74,7 @@ class Scenes : public System
     void destroyMembers(SceneId scene);
 
 public:
-    Scenes(ComponentCaches &caches, Ecs &ecs);
+    Scenes(ecs::ComponentCaches &caches, ecs::Ecs &ecs);
 
     /// Records which scene receives the input during this update.
     void update(float elapsed) override;
@@ -100,13 +103,13 @@ public:
     [[nodiscard]] bool isVisible(SceneId scene) const;
 
     /// The scene of an entity, or nothing for a persistent entity.
-    [[nodiscard]] std::optional<SceneId> sceneOf(entity_t entity) const;
+    [[nodiscard]] std::optional<SceneId> sceneOf(ecs::entity_t entity) const;
     /// Tells whether an entity receives the input: persistent entities never do.
-    [[nodiscard]] bool receivesInput(entity_t entity) const;
+    [[nodiscard]] bool receivesInput(ecs::entity_t entity) const;
     /// Tells whether an entity updates: persistent entities always do.
-    [[nodiscard]] bool updates(entity_t entity) const;
+    [[nodiscard]] bool updates(ecs::entity_t entity) const;
     /// Tells whether an entity is visible according to its scene: persistent entities always are.
-    [[nodiscard]] bool isVisible(entity_t entity) const;
+    [[nodiscard]] bool isVisible(ecs::entity_t entity) const;
 };
 
-} // namespace rtype::ecs
+} // namespace rtype::engine

@@ -31,12 +31,12 @@ anyone writing gameplay, on the client or on the server.
     ```cpp
     class MovementSystem : public rtype::ecs::System
     {
-        rtype::ecs::Scenes &_scenes;
+        rtype::engine::Scenes &_scenes;
         rtype::ecs::ComponentCache<rtype::ecs::Position> &_positions;
         rtype::ecs::ComponentCache<Velocity> &_velocities;
 
     public:
-        MovementSystem(rtype::ecs::ComponentCaches &caches, rtype::ecs::Scenes &scenes)
+        MovementSystem(rtype::ecs::ComponentCaches &caches, rtype::engine::Scenes &scenes)
             : _scenes(scenes), _positions(use<rtype::ecs::Position>(caches)), _velocities(use<Velocity>(caches))
         {
         }

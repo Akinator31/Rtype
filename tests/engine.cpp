@@ -11,7 +11,7 @@
 #include "FakeInput.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
-#include "rtype/ecs/Scenes.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -24,7 +24,7 @@
 
 using namespace rtype::engine;
 using rtype::ecs::entity_t;
-using rtype::ecs::SceneId;
+using rtype::engine::SceneId;
 using rtype::input::Key;
 using rtype::input::MouseButton;
 
@@ -53,7 +53,7 @@ struct World {
     FakeInput input;
     InterfaceStyle style{.font = {0}};
     rtype::ecs::Ecs ecs;
-    rtype::ecs::Scenes &scenes = ecs.registerSystem<rtype::ecs::Scenes>(ecs);
+    rtype::engine::Scenes &scenes = ecs.registerSystem<rtype::engine::Scenes>(ecs);
 
     World()
     {
