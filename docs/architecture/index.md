@@ -38,7 +38,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 
 | Layer | Responsibility | Used by |
 |---|---|---|
-| **Core** | Entities, components, systems (`libs/ecs`), logging (`libs/log`), timing | Client, server |
+| **Core** | Entities, components, systems (`libs/ecs`), physics (`libs/physics`), logging (`libs/log`), timing | Client, server |
 | **Networking** | Sockets, binary serialization, the [protocol](../protocol/index.md) | Client, server |
 | **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
@@ -73,7 +73,7 @@ flowchart TB
 
 ## Libraries
 
-The programs are built on seven libraries:
+The programs are built on eight libraries:
 
 | Library | Role | Page |
 |---|---|---|
@@ -81,13 +81,14 @@ The programs are built on seven libraries:
 | `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
 | `libs/ecs` | Entities, components and systems, with a hierarchy. Shared with the server, so it never depends on raylib. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
+| `libs/physics` | Movement and collisions as components and systems on the ECS. Knows no game: each game names its collision layers and reacts to the collisions. Shared with the server. | — |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
-and the client code only uses our own classes. The server only links the ECS, the log library and the core
-library, which do not depend on raylib.
+and the client code only uses our own classes. The server only links the ECS, the physics, the log library and
+the core library, which do not depend on raylib.
 
 ## Repository layout
 
