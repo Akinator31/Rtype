@@ -22,7 +22,7 @@ add_executable(rtype_tests
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
-    rtype_options rtype::audio rtype::ecs rtype::engine rtype::input rtype::log rtype::render
+    rtype_options rtype::audio rtype::ecs rtype::engine rtype::input rtype::log rtype::physics rtype::render
     Catch2::Catch2WithMain)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 
