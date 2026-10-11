@@ -6,11 +6,11 @@
 // widgets, their centres are at y = 500.8, 604.8 and 708.8.
 
 #include "rtype/engine/Engine.hpp"
-#include "rtype/engine/Engine/Engine.hpp"
 
 #include "FakeInput.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 
 #include <catch2/catch_test_macros.hpp>

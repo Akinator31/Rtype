@@ -33,7 +33,8 @@ public:
     [[nodiscard]] const std::string &getName() const;
 
     /// The system must outlive the event, or be removed before.
-    void addSubscriber(rtype::ecs::System &system, Reaction reaction, Duration duration = Duration::Permanent);
+    void addSubscriber(rtype::ecs::System &system, Reaction reaction,
+                       Duration duration = Duration::Permanent);
     /// Removes every subscription of the system.
     void removeSubscriber(rtype::ecs::System &system);
 

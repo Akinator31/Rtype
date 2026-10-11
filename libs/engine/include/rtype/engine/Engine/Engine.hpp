@@ -120,8 +120,9 @@ public:
     void popScene();
 
     /// Runs one frame: destroys the entities of the closed scenes and applies the scene requests (which
-    /// triggers the events of the scenes opened and closed), then the pending reactions, updates the ECS, and gives back their previous state to the systems
-    /// changed by a Duration::Once reaction. A permanent reaction cancels that restore.
+    /// triggers the events of the scenes opened and closed), then the pending reactions, updates the ECS, and
+    /// gives back their previous state to the systems changed by a Duration::Once reaction. A permanent
+    /// reaction cancels that restore.
     /// @param elapsed Time since the previous update, in seconds, given to every system.
     void update(float elapsed);
 };

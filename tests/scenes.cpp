@@ -1,9 +1,10 @@
 // Tests of the scenes: the stack of open scenes, and the entities that belong to them.
 
+#include "rtype/engine/Scene/Scenes.hpp"
+
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
-#include "rtype/engine/Scene/Scenes.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -12,7 +13,8 @@
 using namespace rtype::ecs;
 using namespace rtype::engine;
 
-TEST_CASE("The engine destroys the entities of a closed scene and keeps the persistent ones", "[engine][scenes]")
+TEST_CASE("The engine destroys the entities of a closed scene and keeps the persistent ones",
+          "[engine][scenes]")
 {
     Engine engine;
     Ecs &ecs = engine.getEcs();

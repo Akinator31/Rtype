@@ -39,10 +39,10 @@ struct SceneSettings {
 
 /// The stack of open scenes: home screen, game, pause menu over the game...
 ///
-/// Every entity of a scene has a SceneMember. Scenes only keeps the stack: closing a scene removes it, and the
-/// Engine destroys its entities at the start of its next update (see takeClosedScenes()). Until then, they are
-/// neither visible nor updated. Systems ask the scenes what to do with an entity: receivesInput(), updates(),
-/// isVisible().
+/// Every entity of a scene has a SceneMember. Scenes only keeps the stack: closing a scene removes it, and
+/// the Engine destroys its entities at the start of its next update (see takeClosedScenes()). Until then,
+/// they are neither visible nor updated. Systems ask the scenes what to do with an entity: receivesInput(),
+/// updates(), isVisible().
 ///
 /// The Engine registers it as the first system: at the start of each update, it records which scene receives
 /// the input for the whole update. Otherwise the Escape press that closes the pause menu would, later in the
@@ -85,8 +85,8 @@ public:
     /// Goes back from the scene at the top: calls its onBack, or closes it if it has none.
     void back();
 
-    /// The scenes closed since the previous call, in closing order, whose entities must be destroyed. Called by
-    /// the Engine at the start of its update.
+    /// The scenes closed since the previous call, in closing order, whose entities must be destroyed. Called
+    /// by the Engine at the start of its update.
     [[nodiscard]] std::vector<SceneId> takeClosedScenes();
 
     /// The scene at the top, if any.

@@ -24,8 +24,8 @@ constexpr float columnHeight = 0.56f;
 
 } // namespace
 
-MenuBuilder::MenuBuilder(ecs::Ecs &ecs, Scenes &scenes, const Metrics &metrics,
-                         const InterfaceStyle &style, const std::string &title, SceneSettings settings)
+MenuBuilder::MenuBuilder(ecs::Ecs &ecs, Scenes &scenes, const Metrics &metrics, const InterfaceStyle &style,
+                         const std::string &title, SceneSettings settings)
     : _ecs(ecs), _style(style), _scene(scenes.open(settings)), _column(ecs.createEntity())
 {
     const render::Vector2 game = metrics.gameSize();
