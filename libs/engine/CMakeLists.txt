@@ -1,12 +1,15 @@
-# Client side of the engine: components and systems connecting the ECS to the rendering, the input and the
-# interface (menus as entities, see ADR 0007).
+# Game engine built on the ECS: events, plus the client side connecting the ECS to the rendering, the input and
+# the interface (menus as entities, see ADR 0007).
 add_library(rtype_engine
     src/Component/Animation.cpp
     src/Component/Widget.cpp
+    src/Engine/Engine.cpp
+    src/Event/Event.cpp
     src/Interface/MenuBuilder.cpp
     src/Interface/Metrics.cpp
     src/Interface/Navigation.cpp
     src/Rendering/SceneRenderer.cpp
+    src/Scene/Scenes.cpp
     src/System/ColumnLayoutSystem.cpp
     src/System/HitboxSystem.cpp
     src/System/InterfaceSystem.cpp

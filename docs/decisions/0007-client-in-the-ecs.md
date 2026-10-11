@@ -58,7 +58,7 @@ counter.
 - **Everything the client draws is an entity**: the world, the HUD and the menus. A `Drawable` component gives
   its `Layer` (`World` or `Interface`) and its order. The `SceneRenderer` draws the world layer, then the
   interface layer: the interface stays on top, and the two passes stay separate for VR.
-- **Scenes** (`ecs::Scenes`): every entity of a scene has a `SceneMember`; closing a scene destroys them all.
+- **Scenes** (`engine::Scenes`, in `libs/engine`): every entity of a scene has a `SceneMember`; closing a scene destroys them all.
   Entities without it are persistent. Scenes form a stack: only the scene at the top receives the input, a
   scene can keep updating when covered (the network game under the pause menu), and an overlay keeps the scenes
   below visible.

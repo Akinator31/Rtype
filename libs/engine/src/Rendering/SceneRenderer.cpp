@@ -23,7 +23,7 @@ render::Color faded(render::Color color, float opacity)
 
 } // namespace
 
-SceneRenderer::SceneRenderer(ecs::Ecs &ecs, ecs::Scenes &scenes, const InterfaceStyle &style)
+SceneRenderer::SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle &style)
     : _ecs(ecs), _scenes(scenes), _style(style)
 {
 }

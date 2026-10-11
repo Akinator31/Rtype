@@ -16,7 +16,7 @@ constexpr float unfocusDuration = 0.12f;
 
 } // namespace
 
-InterfaceSystem::InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, ecs::Scenes &scenes,
+InterfaceSystem::InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, Scenes &scenes,
                                  input::InputSource &input, const Metrics &metrics,
                                  const InterfaceStyle &style, input::ActionMap<Navigation> navigation)
     : _ecs(ecs), _scenes(scenes), _input(input), _metrics(metrics), _style(style),

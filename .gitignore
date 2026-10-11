@@ -23,3 +23,6 @@ site/
 
 # Others
 .neocmake.toml
+
+.memory/
+.clangd

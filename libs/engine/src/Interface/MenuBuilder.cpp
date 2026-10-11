@@ -24,28 +24,28 @@ constexpr float columnHeight = 0.56f;
 
 } // namespace
 
-MenuBuilder::MenuBuilder(ecs::Ecs &ecs, ecs::Scenes &scenes, const Metrics &metrics,
-                         const InterfaceStyle &style, const std::string &title, ecs::SceneSettings settings)
+MenuBuilder::MenuBuilder(ecs::Ecs &ecs, Scenes &scenes, const Metrics &metrics, const InterfaceStyle &style,
+                         const std::string &title, SceneSettings settings)
     : _ecs(ecs), _style(style), _scene(scenes.open(settings)), _column(ecs.createEntity())
 {
     const render::Vector2 game = metrics.gameSize();
 
     // A background covering the screen: dims the game behind an overlay, hides it otherwise
     const ecs::entity_t background = ecs.createEntity();
-    ecs.addComponent<ecs::SceneMember>(background, _scene);
+    ecs.addComponent<SceneMember>(background, _scene);
     ecs.addComponent<ecs::Position>(background, game.x / 2.0f, game.y / 2.0f);
     ecs.addComponent<Drawable>(background, Layer::Interface, backgroundOrder);
     ecs.addComponent<Box>(background, game.x, game.y, settings.overlay ? style.dim : style.background, 0.0f);
 
     if (!title.empty()) {
         const ecs::entity_t heading = ecs.createEntity();
-        ecs.addComponent<ecs::SceneMember>(heading, _scene);
+        ecs.addComponent<SceneMember>(heading, _scene);
         ecs.addComponent<ecs::Position>(heading, game.x / 2.0f, game.y * titleHeight);
         ecs.addComponent<Drawable>(heading, Layer::Interface, contentOrder);
         ecs.addComponent<Text>(heading, title, style.font, style.titleSize, style.text);
     }
 
-    ecs.addComponent<ecs::SceneMember>(_column, _scene);
+    ecs.addComponent<SceneMember>(_column, _scene);
     ecs.addComponent<ecs::Position>(_column, game.x / 2.0f, game.y * columnHeight);
     ecs.addComponent<Column>(_column, style.spacing);
 }
@@ -53,7 +53,7 @@ MenuBuilder::MenuBuilder(ecs::Ecs &ecs, ecs::Scenes &scenes, const Metrics &metr
 ecs::entity_t MenuBuilder::widget(const std::string &text, bool focusable)
 {
     const ecs::entity_t entity = _ecs.createEntity();
-    _ecs.addComponent<ecs::SceneMember>(entity, _scene);
+    _ecs.addComponent<SceneMember>(entity, _scene);
     ecs::attach(_ecs, entity, _column);
     _ecs.addComponent<ColumnItem>(entity, _count);
     if (focusable) {

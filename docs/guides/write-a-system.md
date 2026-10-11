@@ -31,12 +31,12 @@ anyone writing gameplay, on the client or on the server.
     ```cpp
     class MovementSystem : public rtype::ecs::System
     {
-        rtype::ecs::Scenes &_scenes;
+        rtype::engine::Scenes &_scenes;
         rtype::ecs::ComponentCache<rtype::ecs::Position> &_positions;
         rtype::ecs::ComponentCache<Velocity> &_velocities;
 
     public:
-        MovementSystem(rtype::ecs::ComponentCaches &caches, rtype::ecs::Scenes &scenes)
+        MovementSystem(rtype::ecs::ComponentCaches &caches, rtype::engine::Scenes &scenes)
             : _scenes(scenes), _positions(use<rtype::ecs::Position>(caches)), _velocities(use<Velocity>(caches))
         {
         }
@@ -83,14 +83,15 @@ anyone writing gameplay, on the client or on the server.
     ecs.addComponent<Velocity>(missile, 1200.0f, 0.0f);
     ```
 
-5. **Test it**, without a window: create an `Ecs`, register the system, run an update with a chosen elapsed
+5. **Test it**, without a window: create an `Engine`, register the system, run an update with a chosen elapsed
    time, and check the result. Add the test to `tests/` (see [Testing](../contributing/testing.md)).
 
     ```cpp
     TEST_CASE("A missile moves at its velocity", "[game]")
     {
-        Ecs ecs;
-        Scenes &scenes = ecs.registerSystem<Scenes>(ecs);
+        Engine engine;
+        Ecs &ecs = engine.getEcs();
+        Scenes &scenes = engine.getScenes();
         ecs.registerSystem<MovementSystem>(scenes);
         const SceneId game = scenes.open();
         const entity_t missile = ecs.createEntity();
@@ -98,7 +99,7 @@ anyone writing gameplay, on the client or on the server.
         ecs.addComponent<Position>(missile, 100.0f, 540.0f);
         ecs.addComponent<Velocity>(missile, 1200.0f, 0.0f);
 
-        ecs.update(0.5f);
+        engine.update(0.5f);
 
         REQUIRE(ecs.getComponent<Position>(missile).x == 700.0f);
     }

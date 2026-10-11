@@ -1,9 +1,9 @@
 #pragma once
 
 #include "rtype/ecs/Entity/Entity.hpp"
-#include "rtype/ecs/Scenes.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
+#include "rtype/engine/Scene/Scenes.hpp"
 
 #include <cstddef>
 #include <functional>
@@ -32,7 +32,7 @@ class MenuBuilder
 {
     ecs::Ecs &_ecs;
     const InterfaceStyle &_style;
-    ecs::SceneId _scene;
+    SceneId _scene;
     ecs::entity_t _column;
     int _count = 0;
 
@@ -41,11 +41,11 @@ class MenuBuilder
 public:
     /// Opens the scene of the menu and creates its background and title.
     /// @param settings Settings of the scene: an overlay keeps the scene below visible, dimmed.
-    MenuBuilder(ecs::Ecs &ecs, ecs::Scenes &scenes, const Metrics &metrics, const InterfaceStyle &style,
-                const std::string &title, ecs::SceneSettings settings = {});
+    MenuBuilder(ecs::Ecs &ecs, Scenes &scenes, const Metrics &metrics, const InterfaceStyle &style,
+                const std::string &title, SceneSettings settings = {});
 
     /// The scene of the menu.
-    [[nodiscard]] ecs::SceneId scene() const { return _scene; }
+    [[nodiscard]] SceneId scene() const { return _scene; }
 
     /// A text that cannot get the focus.
     ecs::entity_t label(const std::string &text);
