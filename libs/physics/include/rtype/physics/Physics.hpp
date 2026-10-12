@@ -11,5 +11,6 @@
 /// - System/: the systems working on them, one per file.
 
 #include "rtype/physics/Component/Motion.hpp"
+#include "rtype/physics/Component/Collider.hpp"
 #include "rtype/physics/System/MovementSystem.hpp"
 #include "rtype/physics/System/PhysicsStep.hpp"

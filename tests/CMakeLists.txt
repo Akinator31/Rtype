@@ -17,6 +17,7 @@ add_executable(rtype_tests
     log.cpp
     paths.cpp
     platform_assumptions.cpp
+    physics_collider.cpp
     physics_movement.cpp
     physics_step.cpp
     resource_cache.cpp
