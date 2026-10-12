@@ -72,6 +72,14 @@ layer matches nothing.
   ECS. The game is played on a plane: `Position` stays `{x, y}` in the ECS, and the systems use `z = 0`. The
   same functions serve later for anything in 3D (picking with a ray, a 3D view) without a rewrite.
 
+`Aabb::halfSize` contains the distances from its center to its faces. A shape stored in a `Collider` has
+its world center at `{Position.x, Position.y, 0} + Collider::offset + shape.center`.
+Intersections and point containment include touching boundaries, including zero-size shapes. A ray
+uses `origin + direction * t` for `t >= 0`; its direction need not be normalized, and a ray starting
+inside a shape hits at `t = 0`. Penetration returns a normal pointing from the first shape toward the
+second and a nonnegative depth; no overlap returns no result. For coplanar AABBs of zero `z` thickness,
+penetration chooses an `x` or `y` axis so the result can resolve a 2D collision.
+
 ### Fixed time step
 
 The physics runs in **fixed steps** (1/60 s by default, set by the game), whatever the frame rate. A single

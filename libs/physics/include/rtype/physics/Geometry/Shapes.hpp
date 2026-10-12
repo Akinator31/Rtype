@@ -19,4 +19,9 @@ struct Sphere {
     float radius = 0.0f;
 };
 
+struct Ray {
+    Vec3 origin;
+    Vec3 direction;
+};
+
 }
