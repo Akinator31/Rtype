@@ -9,3 +9,5 @@
 ///
 /// - Component/: the data attached to entities.
 /// - System/: the systems working on them, one per file.
+
+#include "rtype/physics/Component/Motion.hpp"
