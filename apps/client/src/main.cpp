@@ -9,6 +9,7 @@
 #include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
+#include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -22,6 +23,51 @@
 
 namespace
 {
+
+struct PlayerControlled {};
+
+class PlayerInputSystem : public rtype::ecs::System
+{
+    rtype::ecs::ComponentCache<PlayerControlled> &_players;
+    rtype::ecs::ComponentCache<rtype::physics::Velocity> &_velocities;
+    rtype::engine::Scenes &_scenes;
+    rtype::input::ActionMap<rtype::client::Action> &_controls;
+    float _speed;
+
+public:
+    PlayerInputSystem(rtype::ecs::ComponentCaches &caches, rtype::engine::Scenes &scenes,
+                      rtype::input::ActionMap<rtype::client::Action> &controls, float speed)
+        : _players(use<PlayerControlled>(caches)), _velocities(use<rtype::physics::Velocity>(caches)),
+          _scenes(scenes), _controls(controls), _speed(speed)
+    {
+    }
+
+    void update(float) override
+    {
+        for (rtype::ecs::entity_t entity = 0; entity < _players.size(); ++entity) {
+            if (!_players.has(entity) || !_velocities.has(entity)) {
+                continue;
+            }
+
+            rtype::physics::Velocity &velocity = _velocities.get(entity);
+            if (!_scenes.receivesInput(entity)) {
+                velocity = {};
+                continue;
+            }
+
+            float dx = _controls.strength(rtype::client::Action::MoveRight) -
+                       _controls.strength(rtype::client::Action::MoveLeft);
+            float dy = _controls.strength(rtype::client::Action::MoveDown) -
+                       _controls.strength(rtype::client::Action::MoveUp);
+            const float length = std::hypot(dx, dy);
+            if (length > 1.0f) {
+                dx /= length;
+                dy /= length;
+            }
+            velocity = {dx * _speed, dy * _speed};
+        }
+    }
+};
 
 void run()
 {
@@ -49,11 +95,16 @@ void run()
     Engine engine;
     rtype::ecs::Ecs &ecs = engine.getEcs();
     Scenes &scenes = engine.getScenes();
+    constexpr float speed = 600.0f;
     ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);
     ecs.registerSystem<WidgetTextSystem>();
     ecs.registerSystem<TweenSystem>();
     ecs.registerSystem<HitboxSystem>(metrics, style);
     ecs.registerSystem<ColumnLayoutSystem>(ecs);
+    ecs.registerSystem<PlayerInputSystem>(scenes, controls, speed);
+    ecs.registerSystem<rtype::physics::MovementSystem>([&scenes](entity_t entity) {
+        return scenes.updates(entity);
+    });
     ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
     SceneRenderer sceneRenderer(ecs, scenes, style);
 
@@ -67,11 +118,12 @@ void run()
     const Vector2 gameSize = renderer.gameSize();
     const Vector2 textureSize = renderer.textureSize(texture);
     const float imageSize = 300.0f;
-    const float speed = 600.0f;
-
     const entity_t ship = ecs.createEntity();
     ecs.addComponent<SceneMember>(ship, game);
     ecs.addComponent<Position>(ship, 350.0f, 350.0f);
+    ecs.addComponent<PlayerControlled>(ship);
+    ecs.addComponent<rtype::physics::Velocity>(ship);
+    ecs.addComponent<rtype::physics::MaxSpeed>(ship, speed);
     ecs.addComponent<Drawable>(ship, Layer::World, 1);
     ecs.addComponent<Sprite>(ship, texture, Rectangle{0.0f, 0.0f, textureSize.x, textureSize.y}, imageSize,
                              imageSize);
@@ -110,23 +162,15 @@ void run()
             if (controls.wasPressed(Action::Menu)) {
                 rtype::client::openPauseMenu(menus);
             }
-            float dx = controls.strength(Action::MoveRight) - controls.strength(Action::MoveLeft);
-            float dy = controls.strength(Action::MoveDown) - controls.strength(Action::MoveUp);
-            // Moving diagonally must not be faster than moving straight
-            const float length = std::hypot(dx, dy);
-            if (length > 1.0f) {
-                dx /= length;
-                dy /= length;
-            }
-            Position &position = ecs.getComponent<Position>(ship);
-            const float half = imageSize / 2.0f;
-            position.x = std::clamp(position.x + dx * speed * elapsed, half, gameSize.x - half);
-            position.y = std::clamp(position.y + dy * speed * elapsed, half, gameSize.y - half);
             if (controls.wasPressed(Action::Shoot)) {
                 ++shots;
                 audio.play(shotSound);
             }
         }
+        Position &position = ecs.getComponent<Position>(ship);
+        const float half = imageSize / 2.0f;
+        position.x = std::clamp(position.x, half, gameSize.x - half);
+        position.y = std::clamp(position.y, half, gameSize.y - half);
         ecs.getComponent<Text>(hud).text = playerName + " - shots: " + std::to_string(shots);
 
         renderer.beginFrame(colors::White);

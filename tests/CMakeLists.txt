@@ -17,6 +17,7 @@ add_executable(rtype_tests
     log.cpp
     paths.cpp
     platform_assumptions.cpp
+    physics_movement.cpp
     resource_cache.cpp
     scenes.cpp
     text_input.cpp
