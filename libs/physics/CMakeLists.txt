@@ -2,6 +2,7 @@
 # only, never on raylib nor on the engine, so that the server can use it.
 add_library(rtype_physics
     src/System/MovementSystem.cpp
+    src/System/PhysicsStep.cpp
 )
 add_library(rtype::physics ALIAS rtype_physics)
 target_include_directories(rtype_physics PUBLIC include)

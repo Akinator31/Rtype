@@ -102,10 +102,11 @@ void run()
     ecs.registerSystem<HitboxSystem>(metrics, style);
     ecs.registerSystem<ColumnLayoutSystem>(ecs);
     ecs.registerSystem<PlayerInputSystem>(scenes, controls, speed);
-    ecs.registerSystem<rtype::physics::MovementSystem>([&scenes](entity_t entity) {
+    auto &physics = ecs.registerSystem<rtype::physics::PhysicsStep>();
+    physics.registerSystem<rtype::physics::MovementSystem>([&scenes](entity_t entity) {
         return scenes.updates(entity);
     });
-    ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
+    physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
     SceneRenderer sceneRenderer(ecs, scenes, style);
 
     std::string playerName = "Player";
