@@ -1,6 +1,4 @@
 add_executable(r-type_client
-    src/Controls.cpp
-    src/Menus.cpp
     src/main.cpp
 )
 target_link_libraries(r-type_client PRIVATE
