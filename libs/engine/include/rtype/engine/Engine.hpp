@@ -8,11 +8,14 @@
 /// - Interface/: what menus are built with (MenuBuilder, navigation controls, style, metrics).
 /// - Rendering/: the SceneRenderer, which draws the entities.
 /// - Scene/: the stack of open scenes (home screen, game, pause menu...).
+/// - Control/: the virtual gamepad the keyboard and the real gamepads are mapped onto.
 
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Component/Widget.hpp"
+#include "rtype/engine/Control/Control.hpp"
+#include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Navigation.hpp"

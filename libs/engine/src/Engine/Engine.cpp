@@ -19,6 +19,16 @@ Scenes &Engine::getScenes()
     return _scenes;
 }
 
+Controls &Engine::getControls()
+{
+    return _controls;
+}
+
+void Engine::setInputSource(input::InputSource &source)
+{
+    _inputSource = &source;
+}
+
 Event &Engine::createEvent(const std::string &name)
 {
     return _events.try_emplace(name, name).first->second;
@@ -87,6 +97,9 @@ void Engine::popScene()
 
 void Engine::update(float elapsed)
 {
+    if (_inputSource != nullptr) {
+        _controls.update(*_inputSource, elapsed);
+    }
     applySceneRequests();
     applyPendingReactions();
     _ecs.update(elapsed);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/ecs/Ecs.hpp"
+#include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Event/Event.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 
@@ -12,7 +13,7 @@
 namespace rtype::engine
 {
 
-/// Owns the ECS, the events (ADR 0008) and the scenes (ADR 0009).
+/// Owns the ECS, the events (ADR 0008), the scenes (ADR 0009) and the controls (the virtual gamepad).
 ///
 /// At the start of each update, the engine destroys the entities of the scenes closed since the previous one,
 /// whoever closed them (a scene request, a menu button calling Scenes::close(), Back).
@@ -65,6 +66,8 @@ class Engine
     std::unordered_map<std::string, SceneDefinition> _sceneDefinitions;
     std::vector<SceneRequest> _sceneRequests;
     std::vector<NamedScene> _namedScenes;
+    Controls _controls;
+    input::InputSource *_inputSource = nullptr;
 
     void applySceneRequests();
     void openScene(const std::string &name);
@@ -83,6 +86,11 @@ public:
 
     [[nodiscard]] rtype::ecs::Ecs &getEcs();
     [[nodiscard]] Scenes &getScenes();
+    [[nodiscard]] Controls &getControls();
+
+    /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without
+    /// a source, the controls are never updated and stay released.
+    void setInputSource(input::InputSource &source);
 
     /// Creates an event. If it already exists, returns it unchanged. The reference stays valid as
     /// long as the engine lives.
@@ -119,7 +127,8 @@ public:
     /// At the next update(), closes the scene at the top, if any.
     void popScene();
 
-    /// Runs one frame: destroys the entities of the closed scenes and applies the scene requests (which
+    /// Runs one frame: updates the controls from the input source, if any, so that the whole frame reads the
+    /// same state; destroys the entities of the closed scenes and applies the scene requests (which
     /// triggers the events of the scenes opened and closed), then the pending reactions, updates the ECS, and
     /// gives back their previous state to the systems changed by a Duration::Once reaction. A permanent
     /// reaction cancels that restore.

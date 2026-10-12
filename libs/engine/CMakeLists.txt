@@ -3,6 +3,7 @@
 add_library(rtype_engine
     src/Component/Animation.cpp
     src/Component/Widget.cpp
+    src/Control/Controls.cpp
     src/Engine/Engine.cpp
     src/Event/Event.cpp
     src/Interface/MenuBuilder.cpp
