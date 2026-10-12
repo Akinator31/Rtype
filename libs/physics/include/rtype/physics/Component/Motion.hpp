@@ -17,4 +17,4 @@ struct MaxSpeed {
     float value = 0.0f;
 };
 
-}
+} // namespace rtype::physics

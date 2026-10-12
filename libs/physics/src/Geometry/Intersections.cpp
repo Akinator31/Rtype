@@ -32,8 +32,7 @@ float dot(Vec3 a, Vec3 b)
 
 Vec3 halfSize(const Aabb &box)
 {
-    return {std::max(0.0f, box.halfSize.x), std::max(0.0f, box.halfSize.y),
-            std::max(0.0f, box.halfSize.z)};
+    return {std::max(0.0f, box.halfSize.x), std::max(0.0f, box.halfSize.y), std::max(0.0f, box.halfSize.z)};
 }
 
 float radius(const Sphere &sphere)
@@ -51,8 +50,7 @@ Vec3 closestPoint(const Aabb &box, Vec3 point)
 
 bool planar(const Aabb &box, const Aabb &other)
 {
-    return box.halfSize.z == 0.0f && other.halfSize.z == 0.0f &&
-           box.center.z == other.center.z;
+    return box.halfSize.z == 0.0f && other.halfSize.z == 0.0f && box.center.z == other.center.z;
 }
 
 bool planar(const Aabb &box, const Sphere &sphere)
@@ -60,14 +58,13 @@ bool planar(const Aabb &box, const Sphere &sphere)
     return box.halfSize.z == 0.0f && box.center.z == sphere.center.z;
 }
 
-}
+} // namespace
 
 bool contains(const Aabb &box, Vec3 point)
 {
     const Vec3 half = halfSize(box);
     const Vec3 delta = subtract(point, box.center);
-    return std::abs(delta.x) <= half.x && std::abs(delta.y) <= half.y &&
-           std::abs(delta.z) <= half.z;
+    return std::abs(delta.x) <= half.x && std::abs(delta.y) <= half.y && std::abs(delta.z) <= half.z;
 }
 
 bool contains(const Sphere &sphere, Vec3 point)
@@ -110,10 +107,8 @@ std::optional<RayHit> raycast(const Ray &ray, const Aabb &box)
     const Vec3 half = halfSize(box);
     const float origin[3] = {ray.origin.x, ray.origin.y, ray.origin.z};
     const float direction[3] = {ray.direction.x, ray.direction.y, ray.direction.z};
-    const float minimum[3] = {box.center.x - half.x, box.center.y - half.y,
-                              box.center.z - half.z};
-    const float maximum[3] = {box.center.x + half.x, box.center.y + half.y,
-                              box.center.z + half.z};
+    const float minimum[3] = {box.center.x - half.x, box.center.y - half.y, box.center.z - half.z};
+    const float maximum[3] = {box.center.x + half.x, box.center.y + half.y, box.center.z + half.z};
 
     float entry = 0.0f;
     float exit = std::numeric_limits<float>::infinity();
@@ -126,10 +121,10 @@ std::optional<RayHit> raycast(const Ray &ray, const Aabb &box)
             continue;
         }
 
-        const float near = ((direction[axis] > 0.0f ? minimum[axis] : maximum[axis]) -
-                            origin[axis]) / direction[axis];
-        const float far = ((direction[axis] > 0.0f ? maximum[axis] : minimum[axis]) -
-                           origin[axis]) / direction[axis];
+        const float near =
+            ((direction[axis] > 0.0f ? minimum[axis] : maximum[axis]) - origin[axis]) / direction[axis];
+        const float far =
+            ((direction[axis] > 0.0f ? maximum[axis] : minimum[axis]) - origin[axis]) / direction[axis];
         if (near > entry) {
             entry = near;
             normal = {};
@@ -188,8 +183,7 @@ std::optional<Penetration> penetration(const Aabb &a, const Aabb &b)
     const Vec3 ah = halfSize(a);
     const Vec3 bh = halfSize(b);
     const Vec3 delta = subtract(b.center, a.center);
-    const float overlap[3] = {ah.x + bh.x - std::abs(delta.x),
-                              ah.y + bh.y - std::abs(delta.y),
+    const float overlap[3] = {ah.x + bh.x - std::abs(delta.x), ah.y + bh.y - std::abs(delta.y),
                               ah.z + bh.z - std::abs(delta.z)};
     const float difference[3] = {delta.x, delta.y, delta.z};
     const int dimensions = planar(a, b) ? 2 : 3;
@@ -271,4 +265,4 @@ std::optional<Penetration> penetration(const Sphere &sphere, const Aabb &box)
     return Penetration{scale(result->normal, -1.0f), result->depth};
 }
 
-}
+} // namespace rtype::physics

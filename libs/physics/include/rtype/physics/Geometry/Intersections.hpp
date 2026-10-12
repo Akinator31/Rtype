@@ -34,4 +34,4 @@ struct Penetration {
 [[nodiscard]] std::optional<Penetration> penetration(const Aabb &box, const Sphere &sphere);
 [[nodiscard]] std::optional<Penetration> penetration(const Sphere &sphere, const Aabb &box);
 
-}
+} // namespace rtype::physics

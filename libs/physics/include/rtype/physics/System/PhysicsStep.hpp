@@ -20,8 +20,7 @@ class PhysicsStep : public ecs::System
     std::size_t _maxSteps;
 
 public:
-    explicit PhysicsStep(ecs::ComponentCaches &caches, float step = 1.0f / 60.0f,
-                         std::size_t maxSteps = 8);
+    explicit PhysicsStep(ecs::ComponentCaches &caches, float step = 1.0f / 60.0f, std::size_t maxSteps = 8);
 
     template <typename S, typename... Args>
     S &registerSystem(Args &&...args)
@@ -39,4 +38,4 @@ public:
     [[nodiscard]] float alpha() const;
 };
 
-}
+} // namespace rtype::physics

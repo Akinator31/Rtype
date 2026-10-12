@@ -20,4 +20,4 @@ struct CollisionFilter {
 
 [[nodiscard]] bool canCollide(CollisionFilter a, CollisionFilter b) noexcept;
 
-}
+} // namespace rtype::physics

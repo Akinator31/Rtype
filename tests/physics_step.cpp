@@ -9,9 +9,9 @@
 
 using rtype::ecs::ComponentCaches;
 using rtype::ecs::Ecs;
+using rtype::ecs::entity_t;
 using rtype::ecs::Position;
 using rtype::ecs::System;
-using rtype::ecs::entity_t;
 using rtype::physics::MovementSystem;
 using rtype::physics::PhysicsStep;
 using rtype::physics::Velocity;
@@ -52,7 +52,7 @@ float moveFor(const std::vector<float> &frames, float step = 0.125f, float speed
     return ecs.getComponent<Position>(entity).x;
 }
 
-}
+} // namespace
 
 TEST_CASE("PhysicsStep accumulates partial frames and runs systems in order", "[physics][step]")
 {

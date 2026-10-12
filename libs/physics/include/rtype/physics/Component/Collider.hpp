@@ -13,4 +13,4 @@ struct Collider {
     bool trigger = false;
 };
 
-}
+} // namespace rtype::physics

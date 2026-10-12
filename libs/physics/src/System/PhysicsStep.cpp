@@ -56,4 +56,4 @@ float PhysicsStep::alpha() const
     return static_cast<float>(_accumulator / static_cast<double>(_step));
 }
 
-}
+} // namespace rtype::physics

@@ -15,8 +15,7 @@ TEST_CASE("Collider stores an AABB independently of rendering", "[physics][colli
 {
     Ecs ecs;
     const auto entity = ecs.createEntity();
-    ecs.addComponent<Collider>(entity, Aabb{{}, {2.0f, 3.0f, 0.0f}},
-                               Vec3{1.0f, -2.0f, 0.0f}, true);
+    ecs.addComponent<Collider>(entity, Aabb{{}, {2.0f, 3.0f, 0.0f}}, Vec3{1.0f, -2.0f, 0.0f}, true);
 
     const Collider &collider = ecs.getComponent<Collider>(entity);
     REQUIRE(std::holds_alternative<Aabb>(collider.shape));

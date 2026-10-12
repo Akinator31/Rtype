@@ -3,13 +3,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 using rtype::physics::Aabb;
-using rtype::physics::Ray;
-using rtype::physics::Sphere;
-using rtype::physics::Vec3;
 using rtype::physics::contains;
 using rtype::physics::intersects;
 using rtype::physics::penetration;
+using rtype::physics::Ray;
 using rtype::physics::raycast;
+using rtype::physics::Sphere;
+using rtype::physics::Vec3;
 
 TEST_CASE("AABB intersections include touching and zero-size boxes", "[physics][geometry]")
 {
@@ -121,8 +121,8 @@ TEST_CASE("AABB penetration chooses the shallowest useful axis", "[physics][geom
     REQUIRE(touch);
     CHECK(touch->depth == 0.0f);
     CHECK_FALSE(penetration(box, Aabb{{5.0f, 0.0f, 0.0f}, {2.0f, 2.0f, 0.0f}}));
-    const auto spatial = penetration(Aabb{{}, {2.0f, 2.0f, 2.0f}},
-                                     Aabb{{0.0f, 0.0f, 3.0f}, {2.0f, 2.0f, 2.0f}});
+    const auto spatial =
+        penetration(Aabb{{}, {2.0f, 2.0f, 2.0f}}, Aabb{{0.0f, 0.0f, 3.0f}, {2.0f, 2.0f, 2.0f}});
     REQUIRE(spatial);
     CHECK(spatial->normal.z == 1.0f);
     CHECK(spatial->depth == 1.0f);

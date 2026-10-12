@@ -7,8 +7,7 @@
 namespace rtype::physics
 {
 
-MovementSystem::MovementSystem(ecs::ComponentCaches &caches,
-                               std::function<bool(ecs::entity_t)> shouldUpdate)
+MovementSystem::MovementSystem(ecs::ComponentCaches &caches, std::function<bool(ecs::entity_t)> shouldUpdate)
     : _velocities(use<Velocity>(caches)), _accelerations(use<Acceleration>(caches)),
       _maxSpeeds(use<MaxSpeed>(caches)), _positions(use<ecs::Position>(caches)),
       _localPositions(use<ecs::LocalPosition>(caches)), _parents(use<ecs::Parent>(caches)),
@@ -61,4 +60,4 @@ void MovementSystem::update(float elapsed)
     }
 }
 
-}
+} // namespace rtype::physics

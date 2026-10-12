@@ -103,9 +103,8 @@ void run()
     ecs.registerSystem<ColumnLayoutSystem>(ecs);
     ecs.registerSystem<PlayerInputSystem>(scenes, controls, speed);
     auto &physics = ecs.registerSystem<rtype::physics::PhysicsStep>();
-    physics.registerSystem<rtype::physics::MovementSystem>([&scenes](entity_t entity) {
-        return scenes.updates(entity);
-    });
+    physics.registerSystem<rtype::physics::MovementSystem>(
+        [&scenes](entity_t entity) { return scenes.updates(entity); });
     physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
     SceneRenderer sceneRenderer(ecs, scenes, style);
 

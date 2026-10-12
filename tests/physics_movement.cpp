@@ -6,12 +6,12 @@
 
 #include <initializer_list>
 
+using rtype::ecs::attach;
 using rtype::ecs::Ecs;
+using rtype::ecs::entity_t;
 using rtype::ecs::LocalPosition;
 using rtype::ecs::Position;
 using rtype::ecs::TransformSystem;
-using rtype::ecs::attach;
-using rtype::ecs::entity_t;
 using rtype::physics::Acceleration;
 using rtype::physics::MaxSpeed;
 using rtype::physics::MovementSystem;
@@ -37,7 +37,8 @@ TEST_CASE("Movement uses velocity in game units per second", "[physics][movement
     CHECK(ecs.getComponent<Position>(still).y == 40.0f);
 }
 
-TEST_CASE("Movement integrates acceleration before position and limits speed magnitude", "[physics][movement]")
+TEST_CASE("Movement integrates acceleration before position and limits speed magnitude",
+          "[physics][movement]")
 {
     Ecs ecs;
     ecs.registerSystem<MovementSystem>();

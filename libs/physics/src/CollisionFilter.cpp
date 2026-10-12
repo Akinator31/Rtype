@@ -12,4 +12,4 @@ bool canCollide(CollisionFilter a, CollisionFilter b) noexcept
     return (aMask & bLayer) != 0 && (bMask & aLayer) != 0;
 }
 
-}
+} // namespace rtype::physics

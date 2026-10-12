@@ -24,4 +24,4 @@ struct Ray {
     Vec3 direction;
 };
 
-}
+} // namespace rtype::physics

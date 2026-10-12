@@ -7,10 +7,10 @@
 
 using rtype::ecs::Ecs;
 using rtype::ecs::entity_t;
+using rtype::physics::canCollide;
 using rtype::physics::CollisionFilter;
 using rtype::physics::CollisionLayer;
 using rtype::physics::CollisionMask;
-using rtype::physics::canCollide;
 
 namespace
 {
@@ -23,7 +23,7 @@ CollisionFilter filterFor(Ecs &ecs, entity_t entity)
             masks.has(entity) ? &masks.get(entity) : nullptr};
 }
 
-}
+} // namespace
 
 TEST_CASE("Collision filters require both entities to accept the other layer", "[physics][filter]")
 {
