@@ -1,6 +1,7 @@
 # Physics on the ECS: movement, fixed time step and collisions, as components and systems. Depends on the ECS
 # only, never on raylib nor on the engine, so that the server can use it.
 add_library(rtype_physics
+    src/CollisionFilter.cpp
     src/System/MovementSystem.cpp
     src/System/PhysicsStep.cpp
 )

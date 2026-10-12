@@ -58,6 +58,12 @@ The physics provides **components**, **systems** and pure functions, and knows n
 | `ConfinedToBounds`, `DestroyOutOfBounds` | The zones |
 | `MovementSystem`, `BoundsSystem`, `CollisionSystem` | Its own systems that react to the contacts (damage, pick-ups, score) |
 
+`CollisionLayer` and `CollisionMask` each hold a 32-bit mask. The game assigns meanings to the bits.
+`canCollide(a, b)` accepts a pair only when `a`'s mask includes at least one of `b`'s layer bits
+and `b`'s mask includes at least one of `a`'s layer bits. A missing layer or mask is treated as
+all bits set, so an entity with neither component accepts every layer. An explicit zero mask or
+layer matches nothing.
+
 ### Shapes and geometry
 
 - **Axis-aligned boxes first**, spheres next, behind a `std::variant` in `Collider`. No rotated boxes, no

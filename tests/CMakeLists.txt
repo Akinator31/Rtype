@@ -18,6 +18,7 @@ add_executable(rtype_tests
     paths.cpp
     platform_assumptions.cpp
     physics_collider.cpp
+    physics_collision_filter.cpp
     physics_movement.cpp
     physics_step.cpp
     resource_cache.cpp
