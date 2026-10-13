@@ -85,6 +85,7 @@ The programs are built on eight libraries:
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
+| `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
 and the client code only uses our own classes. The server only links the ECS, the physics, the log library and
@@ -105,6 +106,7 @@ libs/       libraries shared by the programs, one subdirectory per library
   input/    keyboard and gamepad input (client)
   log/      logging (client and server)
   render/   window, resources and drawing (client)
+  shaders/  GLSL shaders, embedded in the binaries at build time (client)
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
 docs/       this documentation (Zensical)
