@@ -3,7 +3,7 @@
 //
 // With the fake measures and the default style, a widget is 88 units high (56 of text and 16 of padding above
 // and below), with 16 units between widgets. A menu's column is centred at x = 960, y = 604.8: with three
-// widgets, their centres are at y = 500.8, 604.8 and 708.8.
+// widgets, their centres are at y = 500.8, 604.8 and 708.8. Buttons are the size of their panel, 476 x 65.
 
 #include "rtype/engine/Engine.hpp"
 
@@ -296,9 +296,9 @@ TEST_CASE("Widgets are stacked in a column, centred", "[engine][layout]")
     world.update();
 
     const auto y = [&](entity_t entity) { return world.ecs.getComponent<rtype::ecs::Position>(entity).y; };
-    REQUIRE(std::abs(y(first) - 500.8f) < 0.01f);
+    REQUIRE(std::abs(y(first) - 523.8f) < 0.01f);
     REQUIRE(std::abs(y(second) - 604.8f) < 0.01f);
-    REQUIRE(std::abs(y(third) - 708.8f) < 0.01f);
+    REQUIRE(std::abs(y(third) - 685.8f) < 0.01f);
     REQUIRE(world.ecs.getComponent<rtype::ecs::Position>(second).x == 960.0f);
 }
 
@@ -390,7 +390,7 @@ TEST_CASE("An anchored button can be focused and pressed", "[engine][interface]"
 
     world.update();
     REQUIRE(world.isFocused(back));
-    CHECK(positionOf(world, back).x == 20.0f + 72.0f);
+    CHECK(positionOf(world, back).x == 20.0f + 238.0f);
 
     world.press({Key::Enter});
     CHECK(pressed == 1);
@@ -468,7 +468,8 @@ TEST_CASE("The focused widget grows with a bounce, then settles", "[engine][twee
 {
     World world;
     MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
-    const entity_t play = menu.button("Play", [] {});
+    bool music = true;
+    const entity_t play = menu.toggle("Music", [&] { return music; }, [&](bool value) { music = value; });
     world.update();
 
     float largest = 0.0f;
@@ -480,6 +481,60 @@ TEST_CASE("The focused widget grows with a bounce, then settles", "[engine][twee
     REQUIRE(largest > world.style.focusScale);
     REQUIRE(std::abs(world.ecs.getComponent<Scale>(play).value - world.style.focusScale) < 1e-4f);
     REQUIRE_FALSE(world.ecs.hasComponent<Tween>(play));
+}
+
+TEST_CASE("A button lights up while the pointer is over it, without growing", "[engine][tween]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
+    const entity_t play = menu.button("Play", [] {});
+    world.update();
+    const auto highlightOf = [&](entity_t entity) { return world.ecs.getComponent<Panel>(entity).highlight; };
+
+    // Focused, but the player uses the mouse and the pointer is elsewhere
+    world.update(world.style.button.fadeDuration);
+    CHECK(highlightOf(play) == 0.0f);
+
+    world.input.mouse = {960.0f, 604.8f};
+    world.update();
+    world.update(0.05f);
+    CHECK(highlightOf(play) > 0.0f);
+    CHECK(highlightOf(play) < 1.0f);
+    world.update(world.style.button.fadeDuration);
+    CHECK(std::abs(highlightOf(play) - 1.0f) < 1e-6f);
+    CHECK(world.ecs.getComponent<Scale>(play).value == 1.0f);
+
+    world.input.mouse = {10.0f, 10.0f};
+    world.update();
+    world.update(world.style.button.fadeDuration);
+    CHECK(std::abs(highlightOf(play)) < 1e-6f);
+}
+
+TEST_CASE("With the keyboard, the focused button lights up", "[engine][tween]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
+    const entity_t play = menu.button("Play", [] {});
+    const entity_t quit = menu.button("Quit", [] {});
+    world.update();
+    const auto highlightOf = [&](entity_t entity) { return world.ecs.getComponent<Panel>(entity).highlight; };
+
+    world.press({Key::Down});
+    world.update(world.style.button.fadeDuration);
+    CHECK(std::abs(highlightOf(play)) < 1e-6f);
+    CHECK(std::abs(highlightOf(quit) - 1.0f) < 1e-6f);
+}
+
+TEST_CASE("A button is the size of its panel", "[engine][interface]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
+    const entity_t play = menu.button("Play", [] {});
+    world.update();
+
+    const Hitbox &box = world.ecs.getComponent<Hitbox>(play);
+    CHECK(box.width == world.style.button.width);
+    CHECK(box.height == world.style.button.height);
 }
 
 TEST_CASE("Easings start at 0 and end at 1", "[engine][tween]")
