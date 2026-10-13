@@ -58,6 +58,32 @@ struct Box {
     float outline = 0.0f;
 };
 
+/// A 3D model, seen through the Camera of the scenes. It is drawn in the World layer, before the 2D entities,
+/// so it is behind them; it needs a Drawable but no Position. Transparent models (clouds, glass) must have a
+/// higher Drawable order than what they cover.
+struct Model {
+    render::ModelId model;
+    /// Where the origin of the model is, in world units.
+    render::Vector3 position;
+    /// Axis the model is turned around, and rotationAngle how much, in degrees.
+    render::Vector3 rotationAxis{0.0f, 1.0f, 0.0f};
+    float rotationAngle = 0.0f;
+    float scale = 1.0f;
+    render::Color tint = render::colors::White;
+};
+
+/// The camera that the 3D models are seen through. The first visible entity with a Camera is used; without
+/// one, no model is drawn. Give it a SceneMember so that each scene has its own point of view.
+struct Camera {
+    render::Camera view;
+};
+
+/// The light of the 3D models. The first visible entity with a Light is used; without one, models get the
+/// default render::Light.
+struct Light {
+    render::Light light;
+};
+
 /// Size factor of what the entity draws, 1 by default. Animated by tweens, for instance to make a button
 /// bounce.
 struct Scale {

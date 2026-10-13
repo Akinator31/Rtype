@@ -34,8 +34,71 @@ void SceneRenderer::draw(render::Renderer &renderer)
     draw(renderer, Layer::Interface);
 }
 
+bool SceneRenderer::isShown(ecs::entity_t entity)
+{
+    return _scenes.isVisible(entity) && !ecs::isHidden(_ecs, entity);
+}
+
+const Camera *SceneRenderer::findCamera()
+{
+    auto &cameras = _ecs.cache<Camera>();
+    for (ecs::entity_t entity = 0; entity < cameras.size(); ++entity) {
+        if (cameras.has(entity) && isShown(entity)) {
+            return &cameras.get(entity);
+        }
+    }
+    return nullptr;
+}
+
+render::Light SceneRenderer::findLight()
+{
+    auto &lights = _ecs.cache<Light>();
+    for (ecs::entity_t entity = 0; entity < lights.size(); ++entity) {
+        if (lights.has(entity) && isShown(entity)) {
+            return lights.get(entity).light;
+        }
+    }
+    return {};
+}
+
+std::vector<ecs::entity_t> SceneRenderer::getModelsInOrder()
+{
+    auto &drawables = _ecs.cache<Drawable>();
+    auto &models = _ecs.cache<Model>();
+
+    std::vector<ecs::entity_t> entities;
+    for (ecs::entity_t entity = 0; entity < models.size(); ++entity) {
+        if (models.has(entity) && drawables.has(entity) && drawables.get(entity).layer == Layer::World &&
+            isShown(entity)) {
+            entities.push_back(entity);
+        }
+    }
+    std::ranges::stable_sort(entities, {}, [&](ecs::entity_t entity) { return drawables.get(entity).order; });
+    return entities;
+}
+
+void SceneRenderer::drawModels(render::Renderer &renderer)
+{
+    const Camera *camera = findCamera();
+    if (camera == nullptr) {
+        return;
+    }
+    const render::Light light = findLight();
+    auto &models = _ecs.cache<Model>();
+
+    for (const ecs::entity_t entity : getModelsInOrder()) {
+        const Model &model = models.get(entity);
+        renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
+                           model.rotationAngle, model.scale, model.tint);
+    }
+}
+
 void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
 {
+    if (layer == Layer::World) {
+        drawModels(renderer);
+    }
+
     auto &drawables = _ecs.cache<Drawable>();
     auto &positions = _ecs.cache<ecs::Position>();
     auto &texts = _ecs.cache<Text>();
