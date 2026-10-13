@@ -6,6 +6,7 @@
 #include "rtype/render/Renderer.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -19,6 +20,56 @@ render::Color faded(render::Color color, float opacity)
 {
     color.a = static_cast<std::uint8_t>(static_cast<float>(color.a) * std::clamp(opacity, 0.0f, 1.0f));
     return color;
+}
+
+render::Color mix(render::Color from, render::Color to, float amount)
+{
+    const auto channel = [amount](std::uint8_t start, std::uint8_t end) {
+        return static_cast<std::uint8_t>(std::lround(
+            static_cast<float>(start) + (static_cast<float>(end) - static_cast<float>(start)) * amount));
+    };
+    return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a)};
+}
+
+PanelLook mix(const PanelLook &from, const PanelLook &to, float amount)
+{
+    return {mix(from.left, to.left, amount), mix(from.right, to.right, amount),
+            mix(from.border, to.border, amount), mix(from.glow, to.glow, amount)};
+}
+
+render::Rectangle grow(render::Rectangle area, float margin)
+{
+    return {area.x - margin, area.y - margin, area.width + 2.0f * margin, area.height + 2.0f * margin};
+}
+
+// A blurred rounded rectangle, for shadows and glows: faint layers from blur / 2 inside the area to blur / 2
+// outside of it. They add up to the colour inside, and fade out across the blur.
+void drawBlurred(render::Renderer &renderer, render::Rectangle area, float radius, float blur,
+                 render::Color color)
+{
+    constexpr int layers = 8;
+    if (color.a == 0) {
+        return;
+    }
+    // Alpha of one layer such that `layers` of them stacked give the alpha of the colour
+    const float coverage = static_cast<float>(color.a) / 255.0f;
+    const float layerCoverage = 1.0f - std::pow(1.0f - coverage, 1.0f / static_cast<float>(layers));
+    render::Color layerColor = color;
+    layerColor.a = static_cast<std::uint8_t>(std::lround(layerCoverage * 255.0f));
+
+    for (int layer = 0; layer < layers; ++layer) {
+        const float margin = blur * ((static_cast<float>(layer) + 0.5f) / static_cast<float>(layers) - 0.5f);
+        const render::Rectangle layerArea = grow(area, margin);
+        if (layerArea.width > 0.0f && layerArea.height > 0.0f) {
+            renderer.drawRoundedRectangle(layerArea, std::max(radius + margin, 0.0f), layerColor, layerColor);
+        }
+    }
+}
+
+render::Rectangle moveDown(render::Rectangle area, float distance)
+{
+    area.y += distance;
+    return area;
 }
 
 } // namespace
@@ -93,6 +144,26 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
     }
 }
 
+void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre,
+                              float scale, float opacity) const
+{
+    const ButtonStyle &style = _style.button;
+    const PanelLook look = mix(style.normal, style.focused, panel.highlight);
+    const float width = panel.width * scale;
+    const float height = panel.height * scale;
+    const render::Rectangle area{centre.x - width / 2.0f, centre.y - height / 2.0f, width, height};
+    const float radius = style.cornerRadius * scale;
+
+    drawBlurred(renderer, moveDown(area, style.shadowOffset * scale), radius, style.shadowBlur * scale,
+                faded(style.shadow, opacity));
+    drawBlurred(renderer, moveDown(area, -style.topLightOffset * scale), radius, style.topLightBlur * scale,
+                faded(style.topLight, opacity));
+    drawBlurred(renderer, area, radius, style.glowSize * scale, faded(look.glow, opacity));
+    renderer.drawRoundedRectangle(area, radius, faded(look.left, opacity), faded(look.right, opacity));
+    renderer.drawRoundedRectangleOutline(area, radius, style.borderThickness * scale,
+                                         faded(look.border, opacity));
+}
+
 void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
 {
     if (layer == Layer::World) {
@@ -104,6 +175,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     auto &texts = _ecs.cache<Text>();
     auto &sprites = _ecs.cache<Sprite>();
     auto &boxes = _ecs.cache<Box>();
+    auto &panels = _ecs.cache<Panel>();
     auto &scales = _ecs.cache<Scale>();
     auto &opacities = _ecs.cache<Opacity>();
     auto &focused = _ecs.cache<Focused>();
@@ -124,6 +196,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         const float scale = scales.has(entity) ? scales.get(entity).value : 1.0f;
         const float opacity = opacities.has(entity) ? opacities.get(entity).value : 1.0f;
         const bool isFocused = focused.has(entity);
+        const bool hasPanel = panels.has(entity);
 
         if (boxes.has(entity)) {
             const Box &box = boxes.get(entity);
@@ -144,7 +217,10 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                                   sprite.height * scale},
                                  0.0f, faded(sprite.tint, opacity));
         }
-        if (isFocused && hitboxes.has(entity)) {
+        if (hasPanel) {
+            drawPanel(renderer, panels.get(entity), {centre.x, centre.y}, scale, opacity);
+        }
+        if (isFocused && !hasPanel && hitboxes.has(entity)) {
             const Hitbox &box = hitboxes.get(entity);
             renderer.drawRectangleOutline(
                 {centre.x - box.width / 2.0f, centre.y - box.height / 2.0f, box.width, box.height},
@@ -173,8 +249,13 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                 renderer.drawRectangle({begin, topLeft.y, offsetOf(selection.end) - begin, measured.y},
                                        faded(_style.selection, opacity));
             }
+            if (hasPanel) {
+                renderer.drawText(text.font, text.text,
+                                  {topLeft.x, topLeft.y + _style.button.textShadowOffset * scale}, size,
+                                  faded(_style.button.textShadow, opacity));
+            }
             renderer.drawText(text.font, text.text, topLeft, size,
-                              faded(isFocused ? _style.focused : text.color, opacity));
+                              faded(isFocused && !hasPanel ? _style.focused : text.color, opacity));
             if (editing) {
                 const float cursor = offsetOf(fields.get(entity).input.cursor());
                 renderer.drawLine({cursor, topLeft.y}, {cursor, topLeft.y + measured.y}, 3.0f,

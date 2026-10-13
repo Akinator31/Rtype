@@ -29,7 +29,8 @@ namespace rtype::engine
 ///   the pointer, the wheel changes its value.
 /// - Back goes back from the scene (Scenes::back()).
 /// - The focused widget bounces to InterfaceStyle::focusScale, and goes back to its size when it loses the
-/// focus.
+/// focus. A widget with a Panel (a button) keeps its size: its panel lights up instead, fading to the focused
+/// look while the pointer is over it, or while it has the focus once the keyboard or a gamepad is used.
 ///
 /// The actions of the widgets run after the update (Ecs::defer()): a button may open a menu, which creates
 /// entities while this system is still going through the widgets.
@@ -45,6 +46,9 @@ class InterfaceSystem : public ecs::System
     const InterfaceStyle &_style;
     input::ActionMap<Navigation> _navigation;
     render::Vector2 _previousMouse{-1.0f, -1.0f};
+    /// Whether the player uses the mouse rather than the keyboard or a gamepad: the panel under the pointer
+    /// lights up, instead of the one that has the focus.
+    bool _pointerMode = true;
 
     ecs::ComponentCache<Focusable> &_focusables;
     ecs::ComponentCache<Focused> &_focused;
@@ -52,6 +56,7 @@ class InterfaceSystem : public ecs::System
     ecs::ComponentCache<ecs::Position> &_positions;
     ecs::ComponentCache<Scale> &_scales;
     ecs::ComponentCache<Tween> &_tweens;
+    ecs::ComponentCache<Panel> &_panels;
     ecs::ComponentCache<Button> &_buttons;
     ecs::ComponentCache<Toggle> &_toggles;
     ecs::ComponentCache<Slider> &_sliders;
@@ -61,6 +66,11 @@ class InterfaceSystem : public ecs::System
     [[nodiscard]] std::vector<ecs::entity_t> widgets();
     [[nodiscard]] bool contains(ecs::entity_t widget, render::Vector2 point) const;
     void setFocus(const std::vector<ecs::entity_t> &widgets, ecs::entity_t widget);
+    void animateFocus(ecs::entity_t widget);
+    void animateUnfocus(ecs::entity_t widget);
+    [[nodiscard]] bool isLit(ecs::entity_t widget, std::optional<ecs::entity_t> hovered) const;
+    void lightPanels(const std::vector<ecs::entity_t> &widgets, std::optional<ecs::entity_t> hovered);
+    void updatePointerMode(bool mouseMoved);
     void activate(ecs::entity_t widget);
     void click(ecs::entity_t widget);
     void adjust(ecs::entity_t widget, int direction);

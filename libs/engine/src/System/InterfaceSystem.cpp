@@ -22,8 +22,9 @@ InterfaceSystem::InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, Sc
     : _ecs(ecs), _scenes(scenes), _input(input), _metrics(metrics), _style(style),
       _navigation(std::move(navigation)), _focusables(use<Focusable>(caches)), _focused(use<Focused>(caches)),
       _hitboxes(use<Hitbox>(caches)), _positions(use<ecs::Position>(caches)), _scales(use<Scale>(caches)),
-      _tweens(use<Tween>(caches)), _buttons(use<Button>(caches)), _toggles(use<Toggle>(caches)),
-      _sliders(use<Slider>(caches)), _choices(use<Choice>(caches)), _fields(use<TextField>(caches))
+      _tweens(use<Tween>(caches)), _panels(use<Panel>(caches)), _buttons(use<Button>(caches)),
+      _toggles(use<Toggle>(caches)), _sliders(use<Slider>(caches)), _choices(use<Choice>(caches)),
+      _fields(use<TextField>(caches))
 {
 }
 
@@ -57,18 +58,22 @@ void InterfaceSystem::setFocus(const std::vector<ecs::entity_t> &widgets, ecs::e
     for (const ecs::entity_t other : widgets) {
         if (other != widget && _focused.has(other)) {
             _focused.erase(other);
-            const float from = _scales.has(other) ? _scales.get(other).value : 1.0f;
-            _tweens.emplace(other, Tween{.target = TweenTarget::Scale,
-                                         .from = from,
-                                         .to = 1.0f,
-                                         .duration = unfocusDuration,
-                                         .easing = Easing::EaseOut});
+            animateUnfocus(other);
         }
     }
     if (_focused.has(widget)) {
         return;
     }
     _focused.emplace(widget);
+    animateFocus(widget);
+}
+
+// Widgets with a Panel keep their size: they light up instead (see lightPanels())
+void InterfaceSystem::animateFocus(ecs::entity_t widget)
+{
+    if (_panels.has(widget)) {
+        return;
+    }
     // A small bounce: grows slightly past the focus scale, then settles on it
     const float from = _scales.has(widget) ? _scales.get(widget).value : 1.0f;
     _tweens.emplace(widget, Tween{.target = TweenTarget::Scale,
@@ -76,6 +81,57 @@ void InterfaceSystem::setFocus(const std::vector<ecs::entity_t> &widgets, ecs::e
                                   .to = _style.focusScale,
                                   .duration = focusDuration,
                                   .easing = Easing::EaseOutBack});
+}
+
+void InterfaceSystem::animateUnfocus(ecs::entity_t widget)
+{
+    if (_panels.has(widget)) {
+        return;
+    }
+    const float from = _scales.has(widget) ? _scales.get(widget).value : 1.0f;
+    _tweens.emplace(widget, Tween{.target = TweenTarget::Scale,
+                                  .from = from,
+                                  .to = 1.0f,
+                                  .duration = unfocusDuration,
+                                  .easing = Easing::EaseOut});
+}
+
+bool InterfaceSystem::isLit(ecs::entity_t widget, std::optional<ecs::entity_t> hovered) const
+{
+    return _pointerMode ? hovered == widget : _focused.has(widget);
+}
+
+void InterfaceSystem::lightPanels(const std::vector<ecs::entity_t> &widgets,
+                                  std::optional<ecs::entity_t> hovered)
+{
+    for (const ecs::entity_t widget : widgets) {
+        if (!_panels.has(widget)) {
+            continue;
+        }
+        const float target = isLit(widget, hovered) ? 1.0f : 0.0f;
+        const bool fading = _tweens.has(widget) && _tweens.get(widget).target == TweenTarget::Highlight;
+        const float heading = fading ? _tweens.get(widget).to : _panels.get(widget).highlight;
+        if (heading != target) {
+            _tweens.emplace(widget, Tween{.target = TweenTarget::Highlight,
+                                          .from = _panels.get(widget).highlight,
+                                          .to = target,
+                                          .duration = _style.button.fadeDuration,
+                                          .easing = Easing::EaseOut});
+        }
+    }
+}
+
+void InterfaceSystem::updatePointerMode(bool mouseMoved)
+{
+    if (mouseMoved) {
+        _pointerMode = true;
+    }
+    for (const Navigation action : {Navigation::Up, Navigation::Down, Navigation::Left, Navigation::Right,
+                                    Navigation::Confirm}) {
+        if (_navigation.wasPressed(action)) {
+            _pointerMode = false;
+        }
+    }
 }
 
 // The actions are copied into the deferred calls: the components may move in memory before the calls run
@@ -154,6 +210,7 @@ void InterfaceSystem::update(float elapsed)
     const std::optional<ecs::entity_t> hovered =
         hoveredIt == list.end() ? std::nullopt : std::optional<ecs::entity_t>(*hoveredIt);
 
+    updatePointerMode(mouseMoved);
     // The pointer only takes the focus when it moves: a still pointer over a widget must not prevent choosing
     // another one with the keyboard
     if (mouseMoved && hovered) {
@@ -195,6 +252,7 @@ void InterfaceSystem::update(float elapsed)
             adjust(*hovered, wheel > 0.0f ? 1 : -1);
         }
     }
+    lightPanels(list, hovered);
     // Characters typed while no text field has the focus are lost, not delayed until a field gets it. raylib
     // already drops them every frame; other input sources may keep them, so they are dropped here too.
     (void)_input.takeTypedText();

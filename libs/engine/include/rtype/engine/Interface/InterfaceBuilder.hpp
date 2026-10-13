@@ -55,8 +55,8 @@ public:
     /// @param source Part of the texture, in texture pixels.
     ecs::entity_t sprite(render::TextureId texture, render::Rectangle source, float width, float height,
                          Anchor anchor);
-    /// A button running an action when confirmed or clicked. The buttons of a builder get the focus in the
-    /// order they are created.
+    /// A button running an action when confirmed or clicked, drawn as a glass Panel (InterfaceStyle::button).
+    /// The buttons of a builder get the focus in the order they are created.
     ecs::entity_t button(const std::string &text, std::function<void()> onPress, Anchor anchor);
 };
 

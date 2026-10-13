@@ -19,7 +19,8 @@ enum class Layer {
 };
 
 /// Makes an entity drawn, in a pass and at an order inside this pass: higher orders are drawn on top. An
-/// entity is drawn with a Position and one of Text, Sprite or Box, which are drawn centred on the position.
+/// entity is drawn with a Position and one of Text, Sprite, Box or Panel, which are drawn centred on the
+/// position.
 struct Drawable {
     Layer layer = Layer::World;
     int order = 0;
@@ -56,6 +57,15 @@ struct Box {
     render::Color color = render::colors::White;
     /// Width of the outline, drawn inside the box, or 0 for a filled box.
     float outline = 0.0f;
+};
+
+/// A rounded glass panel, centred on the position of the entity, behind its text: the frame of a button. It
+/// is drawn with the ButtonStyle of the interface, between its normal and its focused look.
+struct Panel {
+    float width = 0.0f;
+    float height = 0.0f;
+    /// 0 for the normal look, 1 for the focused one, in between while the button fades from one to the other.
+    float highlight = 0.0f;
 };
 
 /// A 3D model, seen through the Camera of the scenes. It is drawn in the World layer, before the 2D entities,

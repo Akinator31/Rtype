@@ -66,7 +66,9 @@ ecs::entity_t InterfaceBuilder::sprite(render::TextureId texture, render::Rectan
 
 ecs::entity_t InterfaceBuilder::button(const std::string &text, std::function<void()> onPress, Anchor anchor)
 {
-    const ecs::entity_t entity = this->text(text, anchor);
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, text, _style.button.font, _style.button.textSize, _style.text);
+    _ecs.addComponent<Panel>(entity, _style.button.width, _style.button.height);
     _ecs.addComponent<Focusable>(entity, _count++);
     _ecs.addComponent<Scale>(entity);
     _ecs.addComponent<Button>(entity, std::move(onPress));

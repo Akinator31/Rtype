@@ -13,7 +13,7 @@ namespace rtype::engine
 {
 
 /// Computes the Hitbox of every widget with a text that can get the focus or is in a Column: the size of its
-/// text plus the padding of the style, times its Scale.
+/// Panel if it has one, else of its text plus the padding of the style, times its Scale.
 class HitboxSystem : public ecs::System
 {
     const Metrics &_metrics;
@@ -21,8 +21,12 @@ class HitboxSystem : public ecs::System
     ecs::ComponentCache<Focusable> &_focusables;
     ecs::ComponentCache<ColumnItem> &_items;
     ecs::ComponentCache<Text> &_texts;
+    ecs::ComponentCache<Panel> &_panels;
     ecs::ComponentCache<Scale> &_scales;
     ecs::ComponentCache<Hitbox> &_hitboxes;
+
+    /// Size of the widget at scale 1.
+    [[nodiscard]] render::Vector2 measure(ecs::entity_t entity) const;
 
 public:
     /// @param metrics, style They must outlive the system.
