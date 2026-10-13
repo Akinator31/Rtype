@@ -48,7 +48,7 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
                    const engine::InterfaceStyle &style, const std::function<void()> &quit)
 {
     createMainMenuCamera(engine.getEcs(), scene);
-    createDesertPlanet(engine.getEcs(), scene, resources);
+    createPlanetSystem(engine.getEcs(), scene, resources);
 
     engine::InterfaceBuilder buttons(engine.getEcs(), scene, style);
     buttons.button("Quit", quit, {engine::AnchorPoint::BottomRight, -screenMargin, -screenMargin});

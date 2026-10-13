@@ -38,9 +38,10 @@ public:
     LightingShader(LightingShader &&) = delete;
     LightingShader &operator=(LightingShader &&) = delete;
 
-    /// Draws a model lit by the light, like DrawModelEx(). Must be called in 3D mode.
+    /// Draws a model lit by the light, like DrawModelEx(), turned first by spinAngle degrees around its own
+    /// vertical axis. Must be called in 3D mode.
     void draw(const Model &model, const Light &light, ::Vector3 position, ::Vector3 rotationAxis,
-              float rotationAngle, float scale, ::Color tint);
+              float rotationAngle, float spinAngle, float scale, ::Color tint);
 };
 
 } // namespace rtype::render::detail

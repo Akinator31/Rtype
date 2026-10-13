@@ -3,6 +3,8 @@
 #include "rtype/log/Logger.hpp"
 #include "rtype/shaders/Lighting.hpp"
 
+#include <raymath.h>
+
 #include <cmath>
 #include <vector>
 
@@ -36,6 +38,15 @@ bool hasNormalMap(const Model &model)
         }
     }
     return false;
+}
+
+// The model turned around its own vertical axis: raylib applies the transform of the model before the
+// rotation given to DrawModelEx()
+Model spin(const Model &model, float angle)
+{
+    Model spun = model;
+    spun.transform = MatrixMultiply(MatrixRotateY(angle * DEG2RAD), model.transform);
+    return spun;
 }
 
 } // namespace
@@ -80,16 +91,16 @@ std::vector<Material> LightingShader::createLitMaterials(const Model &model) con
 }
 
 void LightingShader::draw(const Model &model, const Light &light, ::Vector3 position, ::Vector3 rotationAxis,
-                          float rotationAngle, float scale, ::Color tint)
+                          float rotationAngle, float spinAngle, float scale, ::Color tint)
 {
     const ::Vector3 scales{scale, scale, scale};
     if (!_available) {
-        DrawModelEx(model, position, rotationAxis, rotationAngle, scales, tint);
+        DrawModelEx(spin(model, spinAngle), position, rotationAxis, rotationAngle, scales, tint);
         return;
     }
     setLight(light, hasNormalMap(model));
     std::vector<Material> materials = createLitMaterials(model);
-    Model lit = model;
+    Model lit = spin(model, spinAngle);
     lit.materials = materials.data();
     DrawModelEx(lit, position, rotationAxis, rotationAngle, scales, tint);
 }

@@ -1167,3 +1167,27 @@ TEST_CASE("Beyond the maximum, the oldest toast fades out", "[engine][toast]")
     CHECK_FALSE(world.ecs.hasComponent<Toast>(oldest));
     CHECK(countToasts(world) == style.maxVisible);
 }
+
+TEST_CASE("A spinning model turns at its speed and stays between 0 and 360 degrees", "[engine][spin]")
+{
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<SpinSystem>();
+    const entity_t ring = ecs.createEntity();
+    ecs.addComponent<Model>(ring);
+    ecs.addComponent<Spin>(ring, 90.0f);
+    const entity_t backwards = ecs.createEntity();
+    ecs.addComponent<Model>(backwards);
+    ecs.addComponent<Spin>(backwards, -90.0f);
+    const entity_t still = ecs.createEntity();
+    ecs.addComponent<Model>(still);
+
+    engine.update(1.0f);
+    CHECK(ecs.getComponent<Model>(ring).spinAngle == 90.0f);
+    CHECK(ecs.getComponent<Model>(backwards).spinAngle == 270.0f);
+    CHECK(ecs.getComponent<Model>(still).spinAngle == 0.0f);
+
+    engine.update(3.5f);
+    CHECK(ecs.getComponent<Model>(ring).spinAngle == 45.0f);
+    CHECK(ecs.getComponent<Model>(backwards).spinAngle == 315.0f);
+}

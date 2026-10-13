@@ -8,5 +8,8 @@
 #define RTYPE_FONT_BUTTON "fonts/Inter-SemiBold.ttf"
 
 // Models
-#define RTYPE_MODEL_DESERT_PLANET "models/SC_Desert_export/desert_planet.glb"
-#define RTYPE_MODEL_DESERT_CLOUDS "models/SC_Desert_export/desert_clouds.glb"
+#define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
+#define RTYPE_MODEL_PLANET_DUST "models/SC_PlanetSystem_export/planet_dust.glb"
+#define RTYPE_MODEL_RING_ASTEROIDS_INNER "models/SC_PlanetSystem_export/ring_asteroids_inner.glb"
+#define RTYPE_MODEL_RING_ASTEROIDS_OUTER "models/SC_PlanetSystem_export/ring_asteroids_outer.glb"
+#define RTYPE_MODEL_RING_DUST "models/SC_PlanetSystem_export/ring_dust.glb"

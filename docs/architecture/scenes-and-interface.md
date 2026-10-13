@@ -12,13 +12,13 @@ The client library is organised like the ECS, with one file per system:
 libs/engine/include/rtype/engine/
   Component/    the data attached to entities
     Drawing.hpp     Layer, Drawable, Text, BoundText, Sprite, Box, Scale, Opacity
-    Animation.hpp   Easing, ease(), Tween
+    Animation.hpp   Easing, ease(), Tween, Spin
     Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
     Layout.hpp      Column, ColumnItem, AnchorPoint, Anchor
     Toast.hpp       ToastType, Toast
   System/       the systems, one per file
     InterfaceSystem.hpp  WidgetTextSystem.hpp  BoundTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp
-    ColumnLayoutSystem.hpp  AnchorSystem.hpp  ToastSystem.hpp
+    ColumnLayoutSystem.hpp  AnchorSystem.hpp  ToastSystem.hpp  SpinSystem.hpp
   Interface/    what the interface is built with
     MenuBuilder.hpp  InterfaceBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
@@ -42,6 +42,7 @@ ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);      
 ecs.registerSystem<WidgetTextSystem>();                                               // 4. state to drawing
 ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
+ecs.registerSystem<SpinSystem>();
 ecs.registerSystem<HitboxSystem>(metrics, style);
 ecs.registerSystem<ColumnLayoutSystem>(ecs);
 ecs.registerSystem<AnchorSystem>(metrics);
@@ -62,7 +63,7 @@ renderer.endFrame();
 | 1 | `Scenes` | Records which scene receives the input for the whole update. |
 | 2 | `InterfaceSystem` | Focus and navigation in the menus; reads the input before the game. |
 | 3 | Game systems | Movement, shots, network... They check `scenes.receivesInput()` for their scene. |
-| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem`, `ToastSystem` | Texts of the widgets and bound texts, animations, sizes, layout (columns, then anchors, which need the final sizes), toasts. |
+| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem`, `ToastSystem` | Texts of the widgets and bound texts, animations (tweens, spinning models), sizes, layout (columns, then anchors, which need the final sizes), toasts. |
 | 5 | `TransformSystem` | Positions of the children from their parents. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,

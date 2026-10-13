@@ -150,10 +150,12 @@ public:
     /// @param rotationAxis Axis the model is turned around, and rotationAngle how much, in degrees.
     /// @param scale Size factor of the model.
     /// @param tint Colour multiplied with the model.
+    /// @param spinAngle How much the model is turned around its own vertical axis (y), in degrees, before the
+    /// rotation around rotationAxis: a tilted ring keeps its tilt while it spins.
     /// @throws std::logic_error if no frame is started.
     void drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
                    Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
-                   Color tint = colors::White);
+                   Color tint = colors::White, float spinAngle = 0.0f);
 
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.

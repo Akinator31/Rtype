@@ -80,6 +80,9 @@ struct Model {
     float rotationAngle = 0.0f;
     float scale = 1.0f;
     render::Color tint = render::colors::White;
+    /// How much the model is turned around its own vertical axis, in degrees, before rotationAxis: a ring
+    /// keeps its tilt while it spins. Moved by a Spin.
+    float spinAngle = 0.0f;
 };
 
 /// The camera that the 3D models are seen through. The first visible entity with a Camera is used; without

@@ -44,4 +44,11 @@ struct Tween {
     float time = 0.0f;
 };
 
+/// Turns the Model of the entity around its own vertical axis, forever: a ring of asteroids around a planet.
+/// The SpinSystem moves Model::spinAngle.
+struct Spin {
+    /// In degrees per second; negative turns the other way.
+    float speed = 0.0f;
+};
+
 } // namespace rtype::engine

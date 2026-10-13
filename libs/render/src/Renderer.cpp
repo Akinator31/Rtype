@@ -403,12 +403,12 @@ void Renderer::drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color 
 }
 
 void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
-                         Vector3 rotationAxis, float rotationAngle, float scale, Color tint)
+                         Vector3 rotationAxis, float rotationAngle, float scale, Color tint, float spinAngle)
 {
     _impl->requireFrame();
     BeginMode3D(toRaylib(camera));
     _impl->lightingShader.draw(_impl->models.get(model).get(), light, toRaylib(position),
-                               toRaylib(rotationAxis), rotationAngle, scale, toRaylib(tint));
+                               toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint));
     // EndMode3D() resets the view to window pixels: go back to game units for what is drawn next
     EndMode3D();
     _impl->beginGameView();

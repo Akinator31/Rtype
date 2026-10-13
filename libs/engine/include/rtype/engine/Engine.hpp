@@ -30,6 +30,7 @@
 #include "rtype/engine/System/ColumnLayoutSystem.hpp"
 #include "rtype/engine/System/HitboxSystem.hpp"
 #include "rtype/engine/System/InterfaceSystem.hpp"
+#include "rtype/engine/System/SpinSystem.hpp"
 #include "rtype/engine/System/ToastSystem.hpp"
 #include "rtype/engine/System/TweenSystem.hpp"
 #include "rtype/engine/System/WidgetTextSystem.hpp"

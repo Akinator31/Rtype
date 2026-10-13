@@ -151,7 +151,7 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
     for (const ecs::entity_t entity : getModelsInOrder()) {
         const Model &model = models.get(entity);
         renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
-                           model.rotationAngle, model.scale, model.tint);
+                           model.rotationAngle, model.scale, model.tint, model.spinAngle);
     }
 }
 
