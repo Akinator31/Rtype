@@ -1,3 +1,4 @@
+#include "MainMenu/MainMenu.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -13,21 +14,39 @@
 namespace
 {
 
-constexpr const char *MainMenuScene = "main_menu";
 constexpr const char *GameScene = "game";
 
-/// Declares the scenes of the client. They are empty for now.
-void createScenes(rtype::engine::Engine &engine)
+/// Declares the scenes of the client. The game scene is empty for now.
+void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources)
 {
-    engine.createScene(MainMenuScene);
+    engine.createScene(rtype::client::MainMenuScene, {},
+                       [&resources](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
+                           rtype::client::buildMainMenu(target, scene, resources);
+                       });
     engine.createScene(GameScene, {.updatesWhenCovered = true});
+}
+
+/// Registers the systems of the client, in the order they run each frame, after the scenes.
+void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devices,
+                     const rtype::engine::RendererMetrics &metrics,
+                     const rtype::engine::InterfaceStyle &style)
+{
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<rtype::engine::InterfaceSystem>(ecs, engine.getScenes(), devices, metrics, style);
+    ecs.registerSystem<rtype::engine::WidgetTextSystem>();
+    ecs.registerSystem<rtype::engine::BoundTextSystem>();
+    ecs.registerSystem<rtype::engine::TweenSystem>();
+    ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
+    ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
+    ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
+    ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
 }
 
 void run()
 {
     using namespace rtype::render;
 
-    Window window;
+    Window window({.fullscreen = true});
     ResourceManager resources(window, applicationDirectory() / "assets");
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
@@ -37,24 +56,14 @@ void run()
 
     rtype::engine::Engine engine;
     engine.setInputSource(devices);
-    rtype::ecs::Ecs &ecs = engine.getEcs();
-    rtype::engine::Scenes &scenes = engine.getScenes();
-    ecs.registerSystem<rtype::engine::InterfaceSystem>(ecs, scenes, devices, metrics, style);
-    ecs.registerSystem<rtype::engine::WidgetTextSystem>();
-    ecs.registerSystem<rtype::engine::BoundTextSystem>();
-    ecs.registerSystem<rtype::engine::TweenSystem>();
-    ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
-    ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
-    ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
-    ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
-    rtype::engine::SceneRenderer sceneRenderer(ecs, scenes, style);
+    registerSystems(engine, devices, metrics, style);
+    rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
 
-    createScenes(engine);
-    engine.switchScene(MainMenuScene);
+    createScenes(engine, resources);
+    engine.switchScene(rtype::client::MainMenuScene);
 
     while (!window.shouldClose()) {
         engine.update(window.frameTime());
-
         renderer.beginFrame();
         sceneRenderer.draw(renderer);
         renderer.endFrame();
