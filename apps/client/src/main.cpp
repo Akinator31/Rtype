@@ -1,3 +1,4 @@
+#include "Assets.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
@@ -55,8 +56,8 @@ void run()
     rtype::input::Devices devices(window);
 
     const rtype::engine::InterfaceStyle style{
-        .font = resources.loadFont("fonts/FiraSans-Black.ttf", 160),
-        .button = {.font = resources.loadFont("fonts/Inter-SemiBold.ttf", 96)},
+        .font = resources.loadFont(RTYPE_FONT_TITLE, 160),
+        .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96)},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
 

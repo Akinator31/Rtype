@@ -1,5 +1,7 @@
 #include "MainMenu/Planet.hpp"
 
+#include "Assets.hpp"
+
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
@@ -37,8 +39,8 @@ void createModel(ecs::Ecs &ecs, engine::SceneId scene, render::ModelId model, co
 /// The clouds are transparent: drawn after the planet they cover.
 void createDesertPlanet(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
 {
-    const render::ModelId planet = resources.loadModel("models/SC_Desert_export/desert_planet.glb");
-    const render::ModelId clouds = resources.loadModel("models/SC_Desert_export/desert_clouds.glb");
+    const render::ModelId planet = resources.loadModel(RTYPE_MODEL_DESERT_PLANET);
+    const render::ModelId clouds = resources.loadModel(RTYPE_MODEL_DESERT_CLOUDS);
     createModel(ecs, scene, planet, DesertPlanet, 0);
     createModel(ecs, scene, clouds, DesertPlanet, 1);
 }
