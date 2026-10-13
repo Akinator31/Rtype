@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace rtype::engine
@@ -77,6 +78,16 @@ render::Rectangle moveDown(render::Rectangle area, float distance)
 SceneRenderer::SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle &style)
     : _ecs(ecs), _scenes(scenes), _style(style)
 {
+}
+
+void SceneRenderer::drawConsoleField(render::Renderer &renderer, const Text &text, const TextField &field,
+                                     render::Vector2 topLeft, float size, float opacity) const
+{
+    const std::string prompt = fieldPrefix(field);
+    renderer.drawText(text.font, prompt, topLeft, size, faded(_style.console.prompt, opacity));
+    const float promptWidth = renderer.measureText(text.font, prompt, size).x;
+    renderer.drawText(text.font, field.input.text(), {topLeft.x + promptWidth, topLeft.y}, size,
+                      faded(text.color, opacity));
 }
 
 void SceneRenderer::draw(render::Renderer &renderer)
@@ -220,7 +231,11 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         if (hasPanel) {
             drawPanel(renderer, panels.get(entity), {centre.x, centre.y}, scale, opacity);
         }
-        if (isFocused && !hasPanel && hitboxes.has(entity)) {
+        const bool isConsoleField =
+            fields.has(entity) && fields.get(entity).type == TextFieldType::Console;
+        // A focused widget is framed and drawn in the focused colour, except buttons and console fields
+        const bool showsFocus = isFocused && !hasPanel && !isConsoleField;
+        if (showsFocus && hitboxes.has(entity)) {
             const Hitbox &box = hitboxes.get(entity);
             renderer.drawRectangleOutline(
                 {centre.x - box.width / 2.0f, centre.y - box.height / 2.0f, box.width, box.height},
@@ -254,12 +269,18 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                                   {topLeft.x, topLeft.y + _style.button.textShadowOffset * scale}, size,
                                   faded(_style.button.textShadow, opacity));
             }
-            renderer.drawText(text.font, text.text, topLeft, size,
-                              faded(isFocused && !hasPanel ? _style.focused : text.color, opacity));
+            if (isConsoleField) {
+                drawConsoleField(renderer, text, fields.get(entity), topLeft, size, opacity);
+            } else {
+                renderer.drawText(text.font, text.text, topLeft, size,
+                                  faded(showsFocus ? _style.focused : text.color, opacity));
+            }
             if (editing) {
                 const float cursor = offsetOf(fields.get(entity).input.cursor());
-                renderer.drawLine({cursor, topLeft.y}, {cursor, topLeft.y + measured.y}, 3.0f,
-                                  faded(_style.focused, opacity));
+                const float width = isConsoleField ? _style.console.cursorWidth : 3.0f;
+                const render::Color color = isConsoleField ? _style.console.prompt : _style.focused;
+                renderer.drawLine({cursor, topLeft.y}, {cursor, topLeft.y + measured.y}, width,
+                                  faded(color, opacity));
             }
         }
     }

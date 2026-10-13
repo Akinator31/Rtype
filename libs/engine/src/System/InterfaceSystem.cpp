@@ -68,10 +68,16 @@ void InterfaceSystem::setFocus(const std::vector<ecs::entity_t> &widgets, ecs::e
     animateFocus(widget);
 }
 
-// Widgets with a Panel keep their size: they light up instead (see lightPanels())
+/// Widgets with a Panel light up instead (see lightPanels()); a console field stays still, as a command line.
+bool InterfaceSystem::keepsSize(ecs::entity_t widget) const
+{
+    return _panels.has(widget) ||
+           (_fields.has(widget) && _fields.get(widget).type == TextFieldType::Console);
+}
+
 void InterfaceSystem::animateFocus(ecs::entity_t widget)
 {
-    if (_panels.has(widget)) {
+    if (keepsSize(widget)) {
         return;
     }
     // A small bounce: grows slightly past the focus scale, then settles on it
@@ -85,7 +91,7 @@ void InterfaceSystem::animateFocus(ecs::entity_t widget)
 
 void InterfaceSystem::animateUnfocus(ecs::entity_t widget)
 {
-    if (_panels.has(widget)) {
+    if (keepsSize(widget)) {
         return;
     }
     const float from = _scales.has(widget) ? _scales.get(widget).value : 1.0f;

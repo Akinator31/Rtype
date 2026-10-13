@@ -1,5 +1,8 @@
 add_executable(r-type_client
     src/main.cpp
+    src/Console/Console.cpp
+    src/Console/ConsoleScene.cpp
+    src/Console/ConsoleSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
 )

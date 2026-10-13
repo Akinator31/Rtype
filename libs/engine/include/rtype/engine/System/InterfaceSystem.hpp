@@ -29,8 +29,9 @@ namespace rtype::engine
 ///   the pointer, the wheel changes its value.
 /// - Back goes back from the scene (Scenes::back()).
 /// - The focused widget bounces to InterfaceStyle::focusScale, and goes back to its size when it loses the
-/// focus. A widget with a Panel (a button) keeps its size: its panel lights up instead, fading to the focused
-/// look while the pointer is over it, or while it has the focus once the keyboard or a gamepad is used.
+/// focus. A console text field keeps its size. A widget with a Panel (a button) keeps its size too: its panel
+/// lights up instead, fading to the focused look while the pointer is over it, or while it has the focus once
+/// the keyboard or a gamepad is used.
 ///
 /// The actions of the widgets run after the update (Ecs::defer()): a button may open a menu, which creates
 /// entities while this system is still going through the widgets.
@@ -66,6 +67,7 @@ class InterfaceSystem : public ecs::System
     [[nodiscard]] std::vector<ecs::entity_t> widgets();
     [[nodiscard]] bool contains(ecs::entity_t widget, render::Vector2 point) const;
     void setFocus(const std::vector<ecs::entity_t> &widgets, ecs::entity_t widget);
+    [[nodiscard]] bool keepsSize(ecs::entity_t widget) const;
     void animateFocus(ecs::entity_t widget);
     void animateUnfocus(ecs::entity_t widget);
     [[nodiscard]] bool isLit(ecs::entity_t widget, std::optional<ecs::entity_t> hovered) const;

@@ -24,7 +24,10 @@ std::string widgetLabel(const Choice &choice)
 
 std::string fieldPrefix(const TextField &field)
 {
-    return field.caption + ": ";
+    if (field.caption.empty()) {
+        return {};
+    }
+    return field.caption + (field.type == TextFieldType::Console ? " " : ": ");
 }
 
 std::string widgetLabel(const TextField &field)

@@ -46,6 +46,23 @@ struct ButtonStyle {
     PanelLook focused{{255, 255, 255, 158}, {217, 237, 255, 51}, {255, 255, 255, 242}, {191, 224, 255, 128}};
 };
 
+/// Look of the console: a dark band over the game, its lines, and the command line where commands are typed
+/// (a TextFieldType::Console field).
+struct ConsoleStyle {
+    float textSize = 28.0f;
+    /// The band behind the console.
+    render::Color background{8, 10, 20, 230};
+    /// Line along the bottom edge of the band.
+    render::Color edge{120, 200, 255, 140};
+    /// The lines written in the console.
+    render::Color text{200, 210, 225, 255};
+    /// Behind the command line.
+    render::Color field{255, 255, 255, 16};
+    /// The prompt and the cursor of the command line.
+    render::Color prompt{120, 200, 255, 255};
+    float cursorWidth = 2.0f;
+};
+
 /// Look of the interface: font, sizes and colours, in game units. One style for the whole interface.
 struct InterfaceStyle {
     /// Font of every text of the interface.
@@ -71,6 +88,7 @@ struct InterfaceStyle {
     /// Background of the selected text in a text field.
     render::Color selection{0, 121, 241, 160};
     ButtonStyle button{};
+    ConsoleStyle console{};
 };
 
 } // namespace rtype::engine
