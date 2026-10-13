@@ -9,7 +9,7 @@ namespace rtype::render
 
 // The window is only required to make sure that one is open: graphics resources cannot exist without it
 ResourceManager::ResourceManager(const Window & /*window*/, std::filesystem::path assetsDirectory)
-    : _impl(std::make_unique<Impl>(Impl{std::move(assetsDirectory), {}, {}}))
+    : _impl(std::make_unique<Impl>(Impl{std::move(assetsDirectory), {}, {}, {}}))
 {
 }
 
@@ -27,6 +27,11 @@ FontId ResourceManager::loadFont(const std::string &path, int size)
     // The same file can be loaded at several sizes, each one is a different font
     return _impl->fonts.load(path + '@' + std::to_string(size),
                              [&] { return detail::Font(_impl->assetsDirectory / path, size); });
+}
+
+ModelId ResourceManager::loadModel(const std::string &path)
+{
+    return _impl->models.load(path, [&] { return detail::Model(_impl->assetsDirectory / path); });
 }
 
 } // namespace rtype::render

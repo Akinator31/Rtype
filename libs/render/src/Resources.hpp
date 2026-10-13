@@ -7,6 +7,7 @@
 #include "rtype/render/ResourceManager.hpp"
 
 #include <raylib.h>
+#include <rlgl.h>
 
 #include <filesystem>
 #include <stdexcept>
@@ -100,12 +101,55 @@ public:
     [[nodiscard]] const ::Font &get() const { return _font; }
 };
 
+// Owns a 3D model: its meshes, materials and textures. A moved-from model frees nothing.
+class Model
+{
+private:
+    ::Model _model;
+
+    // Models are mostly seen smaller than their textures: without mipmaps, colours and relief shimmer.
+    // Materials without a texture share raylib's default one, which is left alone.
+    static void smoothTexture(Texture2D &texture)
+    {
+        if (IsTextureValid(texture) && texture.id != rlGetTextureIdDefault()) {
+            GenTextureMipmaps(&texture);
+            SetTextureFilter(texture, TEXTURE_FILTER_TRILINEAR);
+        }
+    }
+
+public:
+    explicit Model(const std::filesystem::path &file) : _model(LoadModel(file.string().c_str()))
+    {
+        if (!IsModelValid(_model)) {
+            throw std::runtime_error("Cannot load model " + file.string());
+        }
+        for (int index = 0; index < _model.materialCount; ++index) {
+            smoothTexture(_model.materials[index].maps[MATERIAL_MAP_ALBEDO].texture);
+            smoothTexture(_model.materials[index].maps[MATERIAL_MAP_NORMAL].texture);
+        }
+    }
+    ~Model()
+    {
+        if (IsModelValid(_model)) {
+            UnloadModel(_model);
+        }
+    }
+
+    Model(const Model &) = delete;
+    Model &operator=(const Model &) = delete;
+    Model(Model &&other) noexcept : _model(std::exchange(other._model, {})) {}
+    Model &operator=(Model &&) = delete;
+
+    [[nodiscard]] const ::Model &get() const { return _model; }
+};
+
 } // namespace detail
 
 struct ResourceManager::Impl {
     std::filesystem::path assetsDirectory;
     core::ResourceCache<detail::Texture, TextureId> textures;
     core::ResourceCache<detail::Font, FontId> fonts;
+    core::ResourceCache<detail::Model, ModelId> models;
 };
 
 } // namespace rtype::render

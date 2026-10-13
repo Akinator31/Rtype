@@ -11,6 +11,25 @@ struct Vector2 {
     float y = 0.0f;
 };
 
+/// A 3D position, size or direction, in world units. The y axis points up.
+struct Vector3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+/// A perspective camera that 3D models are seen through.
+struct Camera {
+    /// Where the camera is.
+    Vector3 position;
+    /// The point it looks at. Looking towards -z, x points right on screen.
+    Vector3 target{0.0f, 0.0f, -1.0f};
+    /// Which direction is up on screen.
+    Vector3 up{0.0f, 1.0f, 0.0f};
+    /// Vertical field of view, in degrees.
+    float fieldOfView = 45.0f;
+};
+
 /// An axis-aligned rectangle: its top-left corner and its size.
 struct Rectangle {
     float x = 0.0f;
@@ -39,5 +58,16 @@ inline constexpr Color Yellow{253, 249, 0, 255};
 inline constexpr Color Gray{130, 130, 130, 255};
 inline constexpr Color Transparent{0, 0, 0, 0};
 } // namespace colors
+
+/// The light of the 3D models: a directional light, such as a sun, plus an ambient light so that the side in
+/// the shadow is not completely black.
+struct Light {
+    /// Direction the light travels in, from the light towards the models. Its length does not matter.
+    Vector3 direction{-1.0f, -1.0f, -1.0f};
+    /// Colour and strength of the directional light.
+    Color color = colors::White;
+    /// Light received everywhere, including in the shadow.
+    Color ambient{20, 20, 26, 255};
+};
 
 } // namespace rtype::render

@@ -1,6 +1,7 @@
 #include "rtype/render/Renderer.hpp"
 
 #include "FilterShader.hpp"
+#include "LightingShader.hpp"
 #include "Resources.hpp"
 #include "rtype/render/Viewport.hpp"
 
@@ -33,6 +34,17 @@ constexpr float builtinFontSize = 10.0f;
 ::Color toRaylib(Color color)
 {
     return {color.r, color.g, color.b, color.a};
+}
+
+::Vector3 toRaylib(Vector3 vector)
+{
+    return {vector.x, vector.y, vector.z};
+}
+
+Camera3D toRaylib(const Camera &camera)
+{
+    return {toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up), camera.fieldOfView,
+            CAMERA_PERSPECTIVE};
 }
 
 Vector2 fromRaylib(::Vector2 vector)
@@ -89,15 +101,18 @@ public:
 struct Renderer::Impl {
     const core::ResourceCache<detail::Texture, TextureId> &textures;
     const core::ResourceCache<detail::Font, FontId> &fonts;
+    const core::ResourceCache<detail::Model, ModelId> &models;
     Vector2 gameSize;
     RenderTarget target;
     detail::FilterShader filterShader;
+    detail::LightingShader lightingShader;
     ColorFilter colorFilter = ColorFilter::None;
     bool inFrame = false;
 
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
-         const core::ResourceCache<detail::Font, FontId> &fontCache, Vector2 size)
-        : textures(textureCache), fonts(fontCache), gameSize(size), target(size)
+         const core::ResourceCache<detail::Font, FontId> &fontCache,
+         const core::ResourceCache<detail::Model, ModelId> &modelCache, Vector2 size)
+        : textures(textureCache), fonts(fontCache), models(modelCache), gameSize(size), target(size)
     {
     }
 
@@ -115,7 +130,8 @@ Renderer::Renderer(const Window & /*window*/, const ResourceManager &resources, 
     if (gameSize.x <= 0.0f || gameSize.y <= 0.0f) {
         throw std::invalid_argument("The game size must be strictly positive");
     }
-    _impl = std::make_unique<Impl>(resources._impl->textures, resources._impl->fonts, gameSize);
+    _impl = std::make_unique<Impl>(resources._impl->textures, resources._impl->fonts,
+                                     resources._impl->models, gameSize);
 }
 
 Renderer::~Renderer() = default;
@@ -247,6 +263,16 @@ void Renderer::drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color 
         std::swap(second, third);
     }
     DrawTriangle(toRaylib(first), toRaylib(second), toRaylib(third), toRaylib(color));
+}
+
+void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
+                         Vector3 rotationAxis, float rotationAngle, float scale, Color tint)
+{
+    _impl->requireFrame();
+    BeginMode3D(toRaylib(camera));
+    _impl->lightingShader.draw(_impl->models.get(model).get(), light, toRaylib(position),
+                               toRaylib(rotationAxis), rotationAngle, scale, toRaylib(tint));
+    EndMode3D();
 }
 
 void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color)
