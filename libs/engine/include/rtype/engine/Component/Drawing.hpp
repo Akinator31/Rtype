@@ -91,8 +91,10 @@ struct Camera {
     render::Camera view;
 };
 
-/// The light of the 3D models. The first visible entity with a Light is used; without one, models get the
-/// default render::Light.
+/// The light of the 3D models. The first visible entity with a Light and without a Model lights the scene;
+/// without one, models get the default render::Light. A Light on the entity of a Model lights only that
+/// model, instead of the light of the scene: a station lit from the front while the planet keeps its night
+/// side.
 struct Light {
     render::Light light;
 };

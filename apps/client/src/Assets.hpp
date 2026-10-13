@@ -13,3 +13,4 @@
 #define RTYPE_MODEL_RING_ASTEROIDS_INNER "models/SC_PlanetSystem_export/ring_asteroids_inner.glb"
 #define RTYPE_MODEL_RING_ASTEROIDS_OUTER "models/SC_PlanetSystem_export/ring_asteroids_outer.glb"
 #define RTYPE_MODEL_RING_DUST "models/SC_PlanetSystem_export/ring_dust.glb"
+#define RTYPE_MODEL_STATION "models/SC_FabStation_export/station_fab.glb"

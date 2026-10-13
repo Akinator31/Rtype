@@ -115,8 +115,9 @@ const Camera *SceneRenderer::findCamera()
 render::Light SceneRenderer::findLight()
 {
     auto &lights = _ecs.cache<Light>();
+    auto &models = _ecs.cache<Model>();
     for (ecs::entity_t entity = 0; entity < lights.size(); ++entity) {
-        if (lights.has(entity) && isShown(entity)) {
+        if (lights.has(entity) && !models.has(entity) && isShown(entity)) {
             return lights.get(entity).light;
         }
     }
@@ -145,11 +146,13 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
     if (camera == nullptr) {
         return;
     }
-    const render::Light light = findLight();
+    const render::Light sceneLight = findLight();
     auto &models = _ecs.cache<Model>();
+    auto &lights = _ecs.cache<Light>();
 
     for (const ecs::entity_t entity : getModelsInOrder()) {
         const Model &model = models.get(entity);
+        const render::Light &light = lights.has(entity) ? lights.get(entity).light : sceneLight;
         renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
                            model.rotationAngle, model.scale, model.tint, model.spinAngle);
     }

@@ -9,6 +9,7 @@ add_executable(r-type_client
     src/Console/ConsoleSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
+    src/MainMenu/Station.cpp
 )
 target_include_directories(r-type_client PRIVATE src)
 target_link_libraries(r-type_client PRIVATE

@@ -48,7 +48,8 @@ class SceneRenderer
     [[nodiscard]] bool isShown(ecs::entity_t entity);
     /// The first shown Camera, or nullptr if there is none.
     [[nodiscard]] const Camera *findCamera();
-    /// The first shown Light, or the default light if there is none.
+    /// The light of the scene: the first shown Light that is not on a Model, or the default light if there is
+    /// none.
     [[nodiscard]] render::Light findLight();
     /// The shown entities with a Model, by Drawable order.
     [[nodiscard]] std::vector<ecs::entity_t> getModelsInOrder();
