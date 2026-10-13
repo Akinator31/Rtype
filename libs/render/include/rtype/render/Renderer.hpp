@@ -109,6 +109,20 @@ public:
     /// @throws std::logic_error if no frame is started.
     void drawRectangleOutline(Rectangle rectangle, float thickness, Color color);
 
+    /// Draws a filled rectangle with rounded corners, coloured with a horizontal gradient: give the same
+    /// colour twice for a plain one.
+    /// @param radius Radius of the corners, in game units, at most half of the smaller side.
+    /// @param left Colour of the left edge, blended into right towards the right edge.
+    /// @throws std::logic_error if no frame is started.
+    void drawRoundedRectangle(Rectangle rectangle, float radius, Color left, Color right);
+
+    /// Draws the outline of a rectangle with rounded corners, for instance the border of a button.
+    /// @param radius Radius of the outer corners, in game units, at most half of the smaller side.
+    /// @param thickness Width of the outline, in game units, drawn inside the rectangle. Nothing is drawn if
+    /// it is not strictly positive.
+    /// @throws std::logic_error if no frame is started.
+    void drawRoundedRectangleOutline(Rectangle rectangle, float radius, float thickness, Color color);
+
     /// Draws the outline of a circle, for instance a round hitbox.
     /// @param center Centre of the circle, in game units.
     /// @param radius Radius, in game units. Nothing is drawn if it is not strictly positive.
@@ -127,6 +141,18 @@ public:
     /// Draws a filled triangle. The corners can be given in any order.
     /// @throws std::logic_error if no frame is started.
     void drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color color);
+
+    /// Draws a 3D model seen through a camera and lit by a light. Models hide each other by depth, whatever
+    /// their drawing order, except transparent ones, which must be drawn after what they cover. What is drawn
+    /// afterwards in 2D is on top of them.
+    /// @param position Where the origin of the model is, in world units.
+    /// @param rotationAxis Axis the model is turned around, and rotationAngle how much, in degrees.
+    /// @param scale Size factor of the model.
+    /// @param tint Colour multiplied with the model.
+    /// @throws std::logic_error if no frame is started.
+    void drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
+                   Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
+                   Color tint = colors::White);
 
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.

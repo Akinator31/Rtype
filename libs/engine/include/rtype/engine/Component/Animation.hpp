@@ -21,6 +21,8 @@ enum class Easing {
 enum class TweenTarget {
     Scale,
     Opacity,
+    /// The highlight of a Panel.
+    Highlight,
 };
 
 /// Animates a value of the entity from `from` to `to` in `duration` seconds. The tween is removed when it

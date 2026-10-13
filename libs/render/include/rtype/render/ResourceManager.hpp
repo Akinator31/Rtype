@@ -15,8 +15,10 @@ class Window;
 using TextureId = core::Handle<struct TextureTag>;
 /// Handle of a font loaded by the ResourceManager.
 using FontId = core::Handle<struct FontTag>;
+/// Handle of a 3D model loaded by the ResourceManager.
+using ModelId = core::Handle<struct ModelTag>;
 
-/// Loads the graphics resources of the game (textures, fonts) and frees them when it is destroyed.
+/// Loads the graphics resources of the game (textures, fonts, 3D models) and frees them when it is destroyed.
 ///
 /// Each file is loaded once: loading the same path again returns the same handle. The game refers to
 /// resources by their handle only, which keeps raylib out of the rest of the code.
@@ -59,6 +61,11 @@ public:
     /// @param size Height of the characters in pixels. Text drawn at this size is the sharpest.
     /// @throws std::runtime_error if the file is missing or is not a supported font.
     [[nodiscard]] FontId loadFont(const std::string &path, int size = 32);
+
+    /// Loads a 3D model file (glTF, OBJ...) with its materials and textures, unless it is already loaded.
+    /// @param path Path of the file, relative to the assets directory, for instance "models/planet.glb".
+    /// @throws std::runtime_error if the file is missing or is not a supported model.
+    [[nodiscard]] ModelId loadModel(const std::string &path);
 };
 
 } // namespace rtype::render

@@ -222,7 +222,10 @@ renderer.setColorFilter(ColorFilter::Deuteranopia);
 The filter is a **shader** (a small program run by the graphics card on every pixel) applied in `endFrame()`,
 when the off-screen image is copied to the window: the game keeps drawing with its normal colours, and the
 filter costs one pass over the image. If the graphics card cannot compile it, a warning is logged and the game
-is shown unfiltered.
+is shown unfiltered. Its GLSL code is in the shaders library (`libs/shaders/glsl/`), next to the lighting shader
+of the 3D models. At build time, each program becomes a generated header holding its code as strings
+(`rtype/shaders/<Program>.hpp`), so the game needs no shader file; the graphics driver compiles them when the
+game starts. If `glslangValidator` is installed, the build also checks their syntax.
 
 **How it works.** Simulation uses the matrices of Machado, Oliveira and Fernandes (2009), applied to linear
 colours (without the sRGB gamma curve). Correction, also called daltonisation, computes the difference

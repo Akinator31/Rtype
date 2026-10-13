@@ -26,7 +26,13 @@ constexpr float columnHeight = 0.56f;
 
 MenuBuilder::MenuBuilder(ecs::Ecs &ecs, Scenes &scenes, const Metrics &metrics, const InterfaceStyle &style,
                          const std::string &title, SceneSettings settings)
-    : _ecs(ecs), _style(style), _scene(scenes.open(settings)), _column(ecs.createEntity())
+    : MenuBuilder(ecs, scenes.open(settings), metrics, style, title, settings.overlay)
+{
+}
+
+MenuBuilder::MenuBuilder(ecs::Ecs &ecs, SceneId scene, const Metrics &metrics, const InterfaceStyle &style,
+                         const std::string &title, bool overlay)
+    : _ecs(ecs), _style(style), _scene(scene), _column(ecs.createEntity())
 {
     const render::Vector2 game = metrics.gameSize();
 
@@ -35,7 +41,7 @@ MenuBuilder::MenuBuilder(ecs::Ecs &ecs, Scenes &scenes, const Metrics &metrics, 
     ecs.addComponent<SceneMember>(background, _scene);
     ecs.addComponent<ecs::Position>(background, game.x / 2.0f, game.y / 2.0f);
     ecs.addComponent<Drawable>(background, Layer::Interface, backgroundOrder);
-    ecs.addComponent<Box>(background, game.x, game.y, settings.overlay ? style.dim : style.background, 0.0f);
+    ecs.addComponent<Box>(background, game.x, game.y, overlay ? style.dim : style.background, 0.0f);
 
     if (!title.empty()) {
         const ecs::entity_t heading = ecs.createEntity();
@@ -74,6 +80,8 @@ ecs::entity_t MenuBuilder::label(const std::string &text)
 ecs::entity_t MenuBuilder::button(const std::string &text, std::function<void()> onPress)
 {
     const ecs::entity_t entity = widget(text, true);
+    _ecs.addComponent<Text>(entity, text, _style.button.font, _style.button.textSize, _style.text);
+    _ecs.addComponent<Panel>(entity, _style.button.width, _style.button.height);
     _ecs.addComponent<Button>(entity, std::move(onPress));
     return entity;
 }

@@ -7,8 +7,26 @@ namespace rtype::engine
 {
 
 TweenSystem::TweenSystem(ecs::ComponentCaches &caches)
-    : _tweens(use<Tween>(caches)), _scales(use<Scale>(caches)), _opacities(use<Opacity>(caches))
+    : _tweens(use<Tween>(caches)), _scales(use<Scale>(caches)), _opacities(use<Opacity>(caches)),
+      _panels(use<Panel>(caches))
 {
+}
+
+void TweenSystem::apply(ecs::entity_t entity, TweenTarget target, float value)
+{
+    switch (target) {
+    case TweenTarget::Scale:
+        _scales.emplace(entity, value);
+        break;
+    case TweenTarget::Opacity:
+        _opacities.emplace(entity, std::clamp(value, 0.0f, 1.0f));
+        break;
+    case TweenTarget::Highlight:
+        if (_panels.has(entity)) {
+            _panels.get(entity).highlight = std::clamp(value, 0.0f, 1.0f);
+        }
+        break;
+    }
 }
 
 void TweenSystem::update(float elapsed)
@@ -32,11 +50,7 @@ void TweenSystem::update(float elapsed)
         }
         const float value = tween.from + (tween.to - tween.from) * ease(tween.easing, progress);
 
-        if (tween.target == TweenTarget::Scale) {
-            _scales.emplace(entity, value);
-        } else {
-            _opacities.emplace(entity, std::clamp(value, 0.0f, 1.0f));
-        }
+        apply(entity, tween.target, value);
         if (finished) {
             _tweens.erase(entity);
         }

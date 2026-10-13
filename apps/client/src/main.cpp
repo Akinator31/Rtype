@@ -1,182 +1,79 @@
-#include "Controls.hpp"
-#include "Menus.hpp"
-#include "rtype/audio/AudioDevice.hpp"
-#include "rtype/audio/AudioPlayer.hpp"
-#include "rtype/ecs/Ecs.hpp"
+#include "Assets.hpp"
+#include "MainMenu/MainMenu.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
-#include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
-#include "rtype/render/Types.hpp"
 #include "rtype/render/Window.hpp"
 
-#include <algorithm>
-#include <cmath>
 #include <exception>
-#include <string>
 
 namespace
 {
 
-struct PlayerControlled {};
+constexpr const char *GameScene = "game";
 
-class PlayerInputSystem : public rtype::ecs::System
+/// Declares the scenes of the client. The game scene is empty for now.
+void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
+                  const rtype::engine::InterfaceStyle &style, rtype::render::Window &window)
 {
-    rtype::ecs::ComponentCache<PlayerControlled> &_players;
-    rtype::ecs::ComponentCache<rtype::physics::Velocity> &_velocities;
-    rtype::engine::Scenes &_scenes;
-    rtype::input::ActionMap<rtype::client::Action> &_controls;
-    float _speed;
+    const auto quit = [&window] { window.requestClose(); };
+    engine.createScene(
+        rtype::client::MainMenuScene, {},
+        [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
+            rtype::client::buildMainMenu(target, scene, resources, style, quit);
+        });
+    engine.createScene(GameScene, {.updatesWhenCovered = true});
+}
 
-public:
-    PlayerInputSystem(rtype::ecs::ComponentCaches &caches, rtype::engine::Scenes &scenes,
-                      rtype::input::ActionMap<rtype::client::Action> &controls, float speed)
-        : _players(use<PlayerControlled>(caches)), _velocities(use<rtype::physics::Velocity>(caches)),
-          _scenes(scenes), _controls(controls), _speed(speed)
-    {
-    }
-
-    void update(float) override
-    {
-        for (rtype::ecs::entity_t entity = 0; entity < _players.size(); ++entity) {
-            if (!_players.has(entity) || !_velocities.has(entity)) {
-                continue;
-            }
-
-            rtype::physics::Velocity &velocity = _velocities.get(entity);
-            if (!_scenes.receivesInput(entity)) {
-                velocity = {};
-                continue;
-            }
-
-            float dx = _controls.strength(rtype::client::Action::MoveRight) -
-                       _controls.strength(rtype::client::Action::MoveLeft);
-            float dy = _controls.strength(rtype::client::Action::MoveDown) -
-                       _controls.strength(rtype::client::Action::MoveUp);
-            const float length = std::hypot(dx, dy);
-            if (length > 1.0f) {
-                dx /= length;
-                dy /= length;
-            }
-            velocity = {dx * _speed, dy * _speed};
-        }
-    }
-};
+/// Registers the systems of the client, in the order they run each frame, after the scenes.
+void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devices,
+                     const rtype::engine::RendererMetrics &metrics,
+                     const rtype::engine::InterfaceStyle &style)
+{
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<rtype::engine::InterfaceSystem>(ecs, engine.getScenes(), devices, metrics, style);
+    ecs.registerSystem<rtype::engine::WidgetTextSystem>();
+    ecs.registerSystem<rtype::engine::BoundTextSystem>();
+    ecs.registerSystem<rtype::engine::TweenSystem>();
+    ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
+    ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
+    ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
+    ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
+}
 
 void run()
 {
     using namespace rtype::render;
-    using namespace rtype::engine;
-    using rtype::client::Action;
-    using rtype::ecs::entity_t;
-    using rtype::ecs::Position;
 
-    Window window;
+    Window window({.fullscreen = true});
     ResourceManager resources(window, applicationDirectory() / "assets");
     Renderer renderer(window, resources);
-    // After the window, so that raylib's messages about the audio output are logged like the others
-    rtype::audio::AudioDevice audioDevice;
-    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets");
-    const rtype::audio::SoundId shotSound = audio.loadSound("sounds/train.mp3");
     rtype::input::Devices devices(window);
-    rtype::input::ActionMap<Action> controls = rtype::client::defaultControls();
 
-    const FontId font = resources.loadFont("fonts/FiraSans-Black.ttf", 160);
-    const TextureId texture = resources.loadTexture("images/big_mama.png");
-    const InterfaceStyle style{.font = font};
-    const RendererMetrics metrics(renderer);
+    const rtype::engine::InterfaceStyle style{
+        .font = resources.loadFont(RTYPE_FONT_TITLE, 160),
+        .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96)},
+    };
+    const rtype::engine::RendererMetrics metrics(renderer);
 
-    Engine engine;
-    rtype::ecs::Ecs &ecs = engine.getEcs();
-    Scenes &scenes = engine.getScenes();
-    constexpr float speed = 600.0f;
-    ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);
-    ecs.registerSystem<WidgetTextSystem>();
-    ecs.registerSystem<TweenSystem>();
-    ecs.registerSystem<HitboxSystem>(metrics, style);
-    ecs.registerSystem<ColumnLayoutSystem>(ecs);
-    ecs.registerSystem<PlayerInputSystem>(scenes, controls, speed);
-    auto &physics = ecs.registerSystem<rtype::physics::PhysicsStep>();
-    physics.registerSystem<rtype::physics::MovementSystem>(
-        [&scenes](entity_t entity) { return scenes.updates(entity); });
-    physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
-    SceneRenderer sceneRenderer(ecs, scenes, style);
+    rtype::engine::Engine engine;
+    engine.setInputSource(devices);
+    registerSystems(engine, devices, metrics, style);
+    rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
 
-    std::string playerName = "Player";
-    const rtype::client::MenuTargets menus{ecs,      scenes, metrics,   style,     window,
-                                           renderer, audio,  shotSound, playerName};
-
-    // Demo of the game scene: the image moves with the movement actions, Shoot counts the shots, Menu opens
-    // the pause menu. The game keeps updating under the pause menu: it is shared with the other players.
-    const SceneId game = scenes.open({.updatesWhenCovered = true});
-    const Vector2 gameSize = renderer.gameSize();
-    const Vector2 textureSize = renderer.textureSize(texture);
-    const float imageSize = 300.0f;
-    const entity_t ship = ecs.createEntity();
-    ecs.addComponent<SceneMember>(ship, game);
-    ecs.addComponent<Position>(ship, 350.0f, 350.0f);
-    ecs.addComponent<PlayerControlled>(ship);
-    ecs.addComponent<rtype::physics::Velocity>(ship);
-    ecs.addComponent<rtype::physics::MaxSpeed>(ship, speed);
-    ecs.addComponent<Drawable>(ship, Layer::World, 1);
-    ecs.addComponent<Sprite>(ship, texture, Rectangle{0.0f, 0.0f, textureSize.x, textureSize.y}, imageSize,
-                             imageSize);
-
-    const entity_t title = ecs.createEntity();
-    ecs.addComponent<SceneMember>(title, game);
-    ecs.addComponent<Position>(title, gameSize.x / 2.0f, gameSize.y / 2.0f);
-    ecs.addComponent<Drawable>(title, Layer::World, 0);
-    ecs.addComponent<Text>(title, "R-Type", font, 160.0f, colors::White);
-
-    // A HUD element: in the interface layer of the game scene
-    const entity_t hud = ecs.createEntity();
-    ecs.addComponent<SceneMember>(hud, game);
-    ecs.addComponent<Position>(hud, 260.0f, 60.0f);
-    ecs.addComponent<Drawable>(hud, Layer::Interface, 0);
-    ecs.addComponent<Text>(hud, "", font, 40.0f, colors::Red);
-    int shots = 0;
+    createScenes(engine, resources, style, window);
+    engine.switchScene(rtype::client::MainMenuScene);
 
     while (!window.shouldClose()) {
-        const float elapsed = window.frameTime();
-        // Keeps the music stream fed, once per frame
-        audio.update();
-        controls.update(devices, elapsed);
-        if (controls.wasPressed(Action::ToggleFullscreen)) {
-            window.setFullscreen(!window.isFullscreen());
-        }
-
-        engine.update(elapsed);
-
-        // The game reads its actions only while its scene receives the input: not while a menu is open, nor
-        // during the update where the menu was closed by the same key
-        const bool playing = scenes.receivesInput(game);
-        // The pointer is only useful in menus: it would hide part of the game
-        window.setCursorVisible(!playing);
-        if (playing) {
-            if (controls.wasPressed(Action::Menu)) {
-                rtype::client::openPauseMenu(menus);
-            }
-            if (controls.wasPressed(Action::Shoot)) {
-                ++shots;
-                audio.play(shotSound);
-            }
-        }
-        Position &position = ecs.getComponent<Position>(ship);
-        const float half = imageSize / 2.0f;
-        position.x = std::clamp(position.x, half, gameSize.x - half);
-        position.y = std::clamp(position.y, half, gameSize.y - half);
-        ecs.getComponent<Text>(hud).text = playerName + " - shots: " + std::to_string(shots);
-
-        renderer.beginFrame(colors::White);
-        sceneRenderer.draw(renderer, Layer::World);
-        sceneRenderer.draw(renderer, Layer::Interface);
-        renderer.drawFps({10.0f, 10.0f});
+        engine.update(window.frameTime());
+        renderer.beginFrame();
+        sceneRenderer.draw(renderer);
         renderer.endFrame();
     }
 }

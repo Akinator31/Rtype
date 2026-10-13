@@ -3,7 +3,7 @@
 //
 // With the fake measures and the default style, a widget is 88 units high (56 of text and 16 of padding above
 // and below), with 16 units between widgets. A menu's column is centred at x = 960, y = 604.8: with three
-// widgets, their centres are at y = 500.8, 604.8 and 708.8.
+// widgets, their centres are at y = 500.8, 604.8 and 708.8. Buttons are the size of their panel, 476 x 65.
 
 #include "rtype/engine/Engine.hpp"
 
@@ -60,9 +60,11 @@ struct World {
     {
         ecs.registerSystem<InterfaceSystem>(ecs, scenes, input, metrics, style);
         ecs.registerSystem<WidgetTextSystem>();
+        ecs.registerSystem<BoundTextSystem>();
         ecs.registerSystem<TweenSystem>();
         ecs.registerSystem<HitboxSystem>(metrics, style);
         ecs.registerSystem<ColumnLayoutSystem>(ecs);
+        ecs.registerSystem<AnchorSystem>(metrics);
         ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
     }
 
@@ -294,10 +296,107 @@ TEST_CASE("Widgets are stacked in a column, centred", "[engine][layout]")
     world.update();
 
     const auto y = [&](entity_t entity) { return world.ecs.getComponent<rtype::ecs::Position>(entity).y; };
-    REQUIRE(std::abs(y(first) - 500.8f) < 0.01f);
+    REQUIRE(std::abs(y(first) - 523.8f) < 0.01f);
     REQUIRE(std::abs(y(second) - 604.8f) < 0.01f);
-    REQUIRE(std::abs(y(third) - 708.8f) < 0.01f);
+    REQUIRE(std::abs(y(third) - 685.8f) < 0.01f);
     REQUIRE(world.ecs.getComponent<rtype::ecs::Position>(second).x == 960.0f);
+}
+
+TEST_CASE("A menu can be built in a named scene", "[engine][interface][scenes]")
+{
+    World world;
+    bool played = false;
+    entity_t play = 0;
+    world.engine.createScene("main_menu", {}, [&](Engine &engine, SceneId scene) {
+        MenuBuilder menu(engine.getEcs(), scene, world.metrics, world.style, "R-Type");
+        play = menu.button("Play", [&played] { played = true; });
+    });
+
+    world.engine.switchScene("main_menu");
+    world.update();
+    REQUIRE(world.isFocused(play));
+    REQUIRE(world.scenes.sceneOf(play) == world.scenes.top());
+
+    world.press({Key::Enter});
+    REQUIRE(played);
+}
+
+namespace
+{
+
+[[nodiscard]] rtype::ecs::Position positionOf(World &world, entity_t entity)
+{
+    return world.ecs.getComponent<rtype::ecs::Position>(entity);
+}
+
+} // namespace
+
+TEST_CASE("An anchored element is placed from its size and the size of the game", "[engine][layout]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t topLeft = ui.text("Life", {AnchorPoint::TopLeft, 20.0f, 10.0f});
+    const entity_t bottomRight = ui.text("Life", {AnchorPoint::BottomRight, -20.0f, -10.0f});
+    const entity_t centre = ui.box(100.0f, 50.0f, rtype::render::colors::Red, {});
+    const entity_t right = ui.box(100.0f, 50.0f, rtype::render::colors::Red, {AnchorPoint::Right});
+
+    world.update();
+
+    CHECK(positionOf(world, topLeft).x == 20.0f + 56.0f);
+    CHECK(positionOf(world, topLeft).y == 10.0f + 28.0f);
+    CHECK(positionOf(world, bottomRight).x == 1920.0f - 20.0f - 56.0f);
+    CHECK(positionOf(world, bottomRight).y == 1080.0f - 10.0f - 28.0f);
+    CHECK(positionOf(world, centre).x == 960.0f);
+    CHECK(positionOf(world, centre).y == 540.0f);
+    CHECK(positionOf(world, right).x == 1920.0f - 50.0f);
+    CHECK(positionOf(world, right).y == 540.0f);
+}
+
+TEST_CASE("An anchored element follows the size of its text", "[engine][layout]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    std::string name = "Bob";
+    const entity_t label = ui.boundText([&name] { return name; }, {AnchorPoint::TopRight});
+
+    world.update();
+    CHECK(positionOf(world, label).x == 1920.0f - 42.0f);
+
+    name = "Bobby";
+    world.update();
+    CHECK(positionOf(world, label).x == 1920.0f - 70.0f);
+}
+
+TEST_CASE("A bound text follows its function", "[engine][interface]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    int score = 0;
+    const entity_t label = ui.boundText([&score] { return "Score: " + std::to_string(score); }, {});
+    CHECK(world.textOf(label) == "Score: 0");
+
+    score = 42;
+    world.update();
+    REQUIRE(world.textOf(label) == "Score: 42");
+}
+
+TEST_CASE("An anchored button can be focused and pressed", "[engine][interface]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    int pressed = 0;
+    const entity_t back =
+        ui.button("Back", [&pressed] { ++pressed; }, {AnchorPoint::BottomLeft, 20.0f, -20.0f});
+    const entity_t next = ui.button("Next", [] {}, {AnchorPoint::BottomRight, -20.0f, -20.0f});
+
+    world.update();
+    REQUIRE(world.isFocused(back));
+    CHECK(positionOf(world, back).x == 20.0f + 238.0f);
+
+    world.press({Key::Enter});
+    CHECK(pressed == 1);
+    world.press({Key::Down});
+    CHECK(world.isFocused(next));
 }
 
 TEST_CASE("The mouse focuses the widget under it, only when it moves", "[engine][interface]")
@@ -370,7 +469,8 @@ TEST_CASE("The focused widget grows with a bounce, then settles", "[engine][twee
 {
     World world;
     MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
-    const entity_t play = menu.button("Play", [] {});
+    bool music = true;
+    const entity_t play = menu.toggle("Music", [&] { return music; }, [&](bool value) { music = value; });
     world.update();
 
     float largest = 0.0f;
@@ -382,6 +482,60 @@ TEST_CASE("The focused widget grows with a bounce, then settles", "[engine][twee
     REQUIRE(largest > world.style.focusScale);
     REQUIRE(std::abs(world.ecs.getComponent<Scale>(play).value - world.style.focusScale) < 1e-4f);
     REQUIRE_FALSE(world.ecs.hasComponent<Tween>(play));
+}
+
+TEST_CASE("A button lights up while the pointer is over it, without growing", "[engine][tween]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
+    const entity_t play = menu.button("Play", [] {});
+    world.update();
+    const auto highlightOf = [&](entity_t entity) { return world.ecs.getComponent<Panel>(entity).highlight; };
+
+    // Focused, but the player uses the mouse and the pointer is elsewhere
+    world.update(world.style.button.fadeDuration);
+    CHECK(highlightOf(play) == 0.0f);
+
+    world.input.mouse = {960.0f, 604.8f};
+    world.update();
+    world.update(0.05f);
+    CHECK(highlightOf(play) > 0.0f);
+    CHECK(highlightOf(play) < 1.0f);
+    world.update(world.style.button.fadeDuration);
+    CHECK(std::abs(highlightOf(play) - 1.0f) < 1e-6f);
+    CHECK(world.ecs.getComponent<Scale>(play).value == 1.0f);
+
+    world.input.mouse = {10.0f, 10.0f};
+    world.update();
+    world.update(world.style.button.fadeDuration);
+    CHECK(std::abs(highlightOf(play)) < 1e-6f);
+}
+
+TEST_CASE("With the keyboard, the focused button lights up", "[engine][tween]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
+    const entity_t play = menu.button("Play", [] {});
+    const entity_t quit = menu.button("Quit", [] {});
+    world.update();
+    const auto highlightOf = [&](entity_t entity) { return world.ecs.getComponent<Panel>(entity).highlight; };
+
+    world.press({Key::Down});
+    world.update(world.style.button.fadeDuration);
+    CHECK(std::abs(highlightOf(play)) < 1e-6f);
+    CHECK(std::abs(highlightOf(quit) - 1.0f) < 1e-6f);
+}
+
+TEST_CASE("A button is the size of its panel", "[engine][interface]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
+    const entity_t play = menu.button("Play", [] {});
+    world.update();
+
+    const Hitbox &box = world.ecs.getComponent<Hitbox>(play);
+    CHECK(box.width == world.style.button.width);
+    CHECK(box.height == world.style.button.height);
 }
 
 TEST_CASE("Easings start at 0 and end at 1", "[engine][tween]")

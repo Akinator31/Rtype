@@ -1,13 +1,20 @@
 #include "rtype/render/Renderer.hpp"
 
 #include "FilterShader.hpp"
+#include "LightingShader.hpp"
 #include "Resources.hpp"
 #include "rtype/render/Viewport.hpp"
 
 #include <raylib.h>
+#include <rlgl.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <numbers>
 #include <stdexcept>
+#include <vector>
 
 namespace rtype::render
 {
@@ -35,6 +42,17 @@ constexpr float builtinFontSize = 10.0f;
     return {color.r, color.g, color.b, color.a};
 }
 
+::Vector3 toRaylib(Vector3 vector)
+{
+    return {vector.x, vector.y, vector.z};
+}
+
+Camera3D toRaylib(const Camera &camera)
+{
+    return {toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up), camera.fieldOfView,
+            CAMERA_PERSPECTIVE};
+}
+
 Vector2 fromRaylib(::Vector2 vector)
 {
     return {vector.x, vector.y};
@@ -52,6 +70,51 @@ bool isCounterClockwise(Vector2 first, Vector2 second, Vector2 third)
     const float cross =
         (second.x - first.x) * (third.y - first.y) - (second.y - first.y) * (third.x - first.x);
     return cross < 0.0f;
+}
+
+// Number of segments of each rounded corner: enough for the corners of a button to look round
+constexpr int cornerSegments = 12;
+
+Color mix(Color from, Color to, float amount)
+{
+    const auto channel = [amount](std::uint8_t start, std::uint8_t end) {
+        return static_cast<std::uint8_t>(std::lround(
+            static_cast<float>(start) + (static_cast<float>(end) - static_cast<float>(start)) * amount));
+    };
+    return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a)};
+}
+
+// Points along the edge of a rounded rectangle, clockwise on screen from the left end of the top-left corner.
+// Every rectangle gets the same number of points, so that two edges can be joined point by point.
+std::vector<Vector2> getRoundedEdge(Rectangle rectangle, float radius)
+{
+    radius = std::clamp(radius, 0.0f, std::min(rectangle.width, rectangle.height) / 2.0f);
+    const float left = rectangle.x + radius;
+    const float top = rectangle.y + radius;
+    const float right = rectangle.x + rectangle.width - radius;
+    const float bottom = rectangle.y + rectangle.height - radius;
+    const std::array<Vector2, 4> centres{{{left, top}, {right, top}, {right, bottom}, {left, bottom}}};
+    const std::array<float, 4> startAngles{std::numbers::pi_v<float>, 1.5f * std::numbers::pi_v<float>, 0.0f,
+                                           0.5f * std::numbers::pi_v<float>};
+
+    std::vector<Vector2> edge;
+    edge.reserve(centres.size() * (cornerSegments + 1));
+    for (std::size_t corner = 0; corner < centres.size(); ++corner) {
+        for (int step = 0; step <= cornerSegments; ++step) {
+            const float angle = startAngles[corner] + 0.5f * std::numbers::pi_v<float> *
+                                                          static_cast<float>(step) /
+                                                          static_cast<float>(cornerSegments);
+            edge.push_back(
+                {centres[corner].x + radius * std::cos(angle), centres[corner].y + radius * std::sin(angle)});
+        }
+    }
+    return edge;
+}
+
+void addVertex(Vector2 position, Color color)
+{
+    rlColor4ub(color.r, color.g, color.b, color.a);
+    rlVertex2f(position.x, position.y);
 }
 
 // Owns the off-screen image the game is drawn to, at the game's logical resolution
@@ -89,15 +152,18 @@ public:
 struct Renderer::Impl {
     const core::ResourceCache<detail::Texture, TextureId> &textures;
     const core::ResourceCache<detail::Font, FontId> &fonts;
+    const core::ResourceCache<detail::Model, ModelId> &models;
     Vector2 gameSize;
     RenderTarget target;
     detail::FilterShader filterShader;
+    detail::LightingShader lightingShader;
     ColorFilter colorFilter = ColorFilter::None;
     bool inFrame = false;
 
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
-         const core::ResourceCache<detail::Font, FontId> &fontCache, Vector2 size)
-        : textures(textureCache), fonts(fontCache), gameSize(size), target(size)
+         const core::ResourceCache<detail::Font, FontId> &fontCache,
+         const core::ResourceCache<detail::Model, ModelId> &modelCache, Vector2 size)
+        : textures(textureCache), fonts(fontCache), models(modelCache), gameSize(size), target(size)
     {
     }
 
@@ -115,7 +181,8 @@ Renderer::Renderer(const Window & /*window*/, const ResourceManager &resources, 
     if (gameSize.x <= 0.0f || gameSize.y <= 0.0f) {
         throw std::invalid_argument("The game size must be strictly positive");
     }
-    _impl = std::make_unique<Impl>(resources._impl->textures, resources._impl->fonts, gameSize);
+    _impl = std::make_unique<Impl>(resources._impl->textures, resources._impl->fonts, resources._impl->models,
+                                   gameSize);
 }
 
 Renderer::~Renderer() = default;
@@ -221,6 +288,54 @@ void Renderer::drawRectangleOutline(Rectangle rectangle, float thickness, Color 
     }
 }
 
+void Renderer::drawRoundedRectangle(Rectangle rectangle, float radius, Color left, Color right)
+{
+    _impl->requireFrame();
+    if (rectangle.width <= 0.0f || rectangle.height <= 0.0f) {
+        return;
+    }
+    const auto colorAt = [&](Vector2 point) {
+        return mix(left, right, (point.x - rectangle.x) / rectangle.width);
+    };
+    const Vector2 centre{rectangle.x + rectangle.width / 2.0f, rectangle.y + rectangle.height / 2.0f};
+    const std::vector<Vector2> edge = getRoundedEdge(rectangle, radius);
+
+    rlBegin(RL_TRIANGLES);
+    for (std::size_t index = 0; index < edge.size(); ++index) {
+        const Vector2 next = edge[(index + 1) % edge.size()];
+        addVertex(centre, colorAt(centre));
+        addVertex(next, colorAt(next));
+        addVertex(edge[index], colorAt(edge[index]));
+    }
+    rlEnd();
+}
+
+void Renderer::drawRoundedRectangleOutline(Rectangle rectangle, float radius, float thickness, Color color)
+{
+    _impl->requireFrame();
+    if (thickness <= 0.0f || rectangle.width <= 0.0f || rectangle.height <= 0.0f) {
+        return;
+    }
+    thickness = std::min(thickness, std::min(rectangle.width, rectangle.height) / 2.0f);
+    const std::vector<Vector2> outer = getRoundedEdge(rectangle, radius);
+    const std::vector<Vector2> inner =
+        getRoundedEdge({rectangle.x + thickness, rectangle.y + thickness, rectangle.width - 2.0f * thickness,
+                        rectangle.height - 2.0f * thickness},
+                       radius - thickness);
+
+    rlBegin(RL_TRIANGLES);
+    for (std::size_t index = 0; index < outer.size(); ++index) {
+        const std::size_t next = (index + 1) % outer.size();
+        addVertex(outer[index], color);
+        addVertex(inner[index], color);
+        addVertex(outer[next], color);
+        addVertex(outer[next], color);
+        addVertex(inner[index], color);
+        addVertex(inner[next], color);
+    }
+    rlEnd();
+}
+
 void Renderer::drawCircleOutline(Vector2 center, float radius, float thickness, Color color)
 {
     _impl->requireFrame();
@@ -247,6 +362,16 @@ void Renderer::drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color 
         std::swap(second, third);
     }
     DrawTriangle(toRaylib(first), toRaylib(second), toRaylib(third), toRaylib(color));
+}
+
+void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
+                         Vector3 rotationAxis, float rotationAngle, float scale, Color tint)
+{
+    _impl->requireFrame();
+    BeginMode3D(toRaylib(camera));
+    _impl->lightingShader.draw(_impl->models.get(model).get(), light, toRaylib(position),
+                               toRaylib(rotationAxis), rotationAngle, scale, toRaylib(tint));
+    EndMode3D();
 }
 
 void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color)
