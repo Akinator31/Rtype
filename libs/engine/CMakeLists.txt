@@ -6,11 +6,14 @@ add_library(rtype_engine
     src/Control/Controls.cpp
     src/Engine/Engine.cpp
     src/Event/Event.cpp
+    src/Interface/InterfaceBuilder.cpp
     src/Interface/MenuBuilder.cpp
     src/Interface/Metrics.cpp
     src/Interface/Navigation.cpp
     src/Rendering/SceneRenderer.cpp
     src/Scene/Scenes.cpp
+    src/System/AnchorSystem.cpp
+    src/System/BoundTextSystem.cpp
     src/System/ColumnLayoutSystem.cpp
     src/System/HitboxSystem.cpp
     src/System/InterfaceSystem.cpp

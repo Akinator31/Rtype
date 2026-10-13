@@ -3,6 +3,7 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <functional>
 #include <string>
 
 /// Client side of the engine: components and systems that connect the ECS to the rendering, the input and the
@@ -30,6 +31,11 @@ struct Text {
     render::FontId font;
     float size = 48.0f;
     render::Color color = render::colors::White;
+};
+
+/// Writes the Text of the entity from a function, every frame: a score, a life count, a ping.
+struct BoundText {
+    std::function<std::string()> get;
 };
 
 /// A texture or a part of it (one frame of a sprite sheet), centred on the position of the entity.

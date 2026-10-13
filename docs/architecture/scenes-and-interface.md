@@ -11,14 +11,15 @@ The client library is organised like the ECS, with one file per system:
 ```
 libs/engine/include/rtype/engine/
   Component/    the data attached to entities
-    Drawing.hpp     Layer, Drawable, Text, Sprite, Box, Scale, Opacity
+    Drawing.hpp     Layer, Drawable, Text, BoundText, Sprite, Box, Scale, Opacity
     Animation.hpp   Easing, ease(), Tween
     Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
-    Layout.hpp      Column, ColumnItem
+    Layout.hpp      Column, ColumnItem, AnchorPoint, Anchor
   System/       the systems, one per file
-    InterfaceSystem.hpp  WidgetTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp  ColumnLayoutSystem.hpp
-  Interface/    what menus are built with
-    MenuBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
+    InterfaceSystem.hpp  WidgetTextSystem.hpp  BoundTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp
+    ColumnLayoutSystem.hpp  AnchorSystem.hpp
+  Interface/    what the interface is built with
+    MenuBuilder.hpp  InterfaceBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
     SceneRenderer.hpp
   Scene/
@@ -38,9 +39,11 @@ Scenes &scenes = engine.getScenes();                                            
 ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);            // 2. the interface
 // 3. the game systems
 ecs.registerSystem<WidgetTextSystem>();                                               // 4. state to drawing
+ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
 ecs.registerSystem<HitboxSystem>(metrics, style);
 ecs.registerSystem<ColumnLayoutSystem>(ecs);
+ecs.registerSystem<AnchorSystem>(metrics);
 ecs.registerSystem<TransformSystem>(ecs);                                             // 5. positions, last
 SceneRenderer sceneRenderer(ecs, scenes, style);                                      // not a system
 
@@ -57,7 +60,7 @@ renderer.endFrame();
 | 1 | `Scenes` | Records which scene receives the input for the whole update. |
 | 2 | `InterfaceSystem` | Focus and navigation in the menus; reads the input before the game. |
 | 3 | Game systems | Movement, shots, network... They check `scenes.receivesInput()` for their scene. |
-| 4 | `WidgetTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem` | Texts of the widgets, animations, sizes, layout. |
+| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Texts of the widgets and bound texts, animations, sizes, layout (columns, then anchors, which need the final sizes). |
 | 5 | `TransformSystem` | Positions of the children from their parents. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
@@ -187,7 +190,7 @@ The focused widget of a menu bounces to `InterfaceStyle::focusScale` with `EaseO
 
 ## Menus
 
-`MenuBuilder` opens a scene and creates a background, a title and widgets stacked in a column:
+`MenuBuilder` creates a background, a title and widgets stacked in a column, in a scene it opens:
 
 ```cpp
 MenuBuilder pause(ecs, scenes, metrics, style, "Pause", {.overlay = true});
@@ -196,8 +199,17 @@ pause.button("Resume", [&scenes, scene] { scenes.close(scene); });
 pause.toggle("Fullscreen", [&] { return window.isFullscreen(); }, [&](bool on) { window.setFullscreen(on); });
 ```
 
+Or in a scene already open, such as a named scene in its build function:
+
+```cpp
+engine.createScene("main_menu", {}, [&](Engine &engine, SceneId scene) {
+    MenuBuilder menu(engine.getEcs(), scene, metrics, style, "R-Type");
+    menu.button("Play", [&engine] { engine.switchScene("game"); });
+    menu.button("Quit", [&window] { window.requestClose(); });
+});
+```
+
 It only creates entities: an icon or an animation can be added to any of them afterwards.
-`apps/client/src/Menus.cpp` builds the pause and options menus and is the model for new menus.
 
 | Widget | Shows | Reacts to |
 |---|---|---|
@@ -210,6 +222,33 @@ It only creates entities: an icon or an animation can be added to any of them af
 
 Values are read and written through functions, not copied: a toggle for fullscreen always shows the real
 setting, even when it is changed by a shortcut key.
+
+### Elements placed anywhere
+
+`InterfaceBuilder` puts elements anywhere on the screen, in a scene already open: a HUD, a version number, a
+button in a corner. It draws no background. Each element gets an `Anchor`: its own point `point` is put on the
+same point of the screen, then moved by the offset (x to the right, y downwards). The `AnchorSystem` computes
+the position every frame from the size of the element: its hitbox at scale 1 for a widget, otherwise its
+text, sprite or box. An anchored entity must not have a `Parent`.
+
+```cpp
+engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, SceneId scene) {
+    InterfaceBuilder hud(engine.getEcs(), scene, style);
+    hud.boundText([&] { return "Score: " + std::to_string(score); }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    hud.text("v0.1", {AnchorPoint::BottomRight, -20.0f, -20.0f});
+    hud.button("Pause", [&engine] { engine.pushScene("pause"); }, {AnchorPoint::TopRight, -20.0f, 20.0f});
+});
+```
+
+| Element | Creates |
+|---|---|
+| `text` | A `Text` with the font, size and colour of the style |
+| `boundText` | A `Text` rewritten every frame from a function by the `BoundTextSystem` (score, lives, ping) |
+| `box` | A filled or outlined `Box` |
+| `sprite` | A `Sprite`: a texture or a part of it |
+| `button` | A focusable `Button`; the buttons of a builder get the focus in the order they are created |
+
+A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
 
 ### Navigation
 

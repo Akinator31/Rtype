@@ -1,3 +1,5 @@
+#include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
@@ -30,8 +32,23 @@ void run()
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
 
+    const rtype::engine::InterfaceStyle style{.font = resources.loadFont("fonts/FiraSans-Black.ttf", 160)};
+    const rtype::engine::RendererMetrics metrics(renderer);
+
     rtype::engine::Engine engine;
     engine.setInputSource(devices);
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    rtype::engine::Scenes &scenes = engine.getScenes();
+    ecs.registerSystem<rtype::engine::InterfaceSystem>(ecs, scenes, devices, metrics, style);
+    ecs.registerSystem<rtype::engine::WidgetTextSystem>();
+    ecs.registerSystem<rtype::engine::BoundTextSystem>();
+    ecs.registerSystem<rtype::engine::TweenSystem>();
+    ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
+    ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
+    ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
+    ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
+    rtype::engine::SceneRenderer sceneRenderer(ecs, scenes, style);
+
     createScenes(engine);
     engine.switchScene(MainMenuScene);
 
@@ -39,6 +56,7 @@ void run()
         engine.update(window.frameTime());
 
         renderer.beginFrame();
+        sceneRenderer.draw(renderer);
         renderer.endFrame();
     }
 }
