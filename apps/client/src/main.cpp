@@ -17,12 +17,15 @@ namespace
 constexpr const char *GameScene = "game";
 
 /// Declares the scenes of the client. The game scene is empty for now.
-void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources)
+void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
+                  const rtype::engine::InterfaceStyle &style, rtype::render::Window &window)
 {
-    engine.createScene(rtype::client::MainMenuScene, {},
-                       [&resources](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
-                           rtype::client::buildMainMenu(target, scene, resources);
-                       });
+    const auto quit = [&window] { window.requestClose(); };
+    engine.createScene(
+        rtype::client::MainMenuScene, {},
+        [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
+            rtype::client::buildMainMenu(target, scene, resources, style, quit);
+        });
     engine.createScene(GameScene, {.updatesWhenCovered = true});
 }
 
@@ -51,7 +54,10 @@ void run()
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
 
-    const rtype::engine::InterfaceStyle style{.font = resources.loadFont("fonts/FiraSans-Black.ttf", 160)};
+    const rtype::engine::InterfaceStyle style{
+        .font = resources.loadFont("fonts/FiraSans-Black.ttf", 160),
+        .button = {.font = resources.loadFont("fonts/Inter-SemiBold.ttf", 96)},
+    };
     const rtype::engine::RendererMetrics metrics(renderer);
 
     rtype::engine::Engine engine;
@@ -59,7 +65,7 @@ void run()
     registerSystems(engine, devices, metrics, style);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
 
-    createScenes(engine, resources);
+    createScenes(engine, resources, style, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
     while (!window.shouldClose()) {
