@@ -71,8 +71,7 @@ void InterfaceSystem::setFocus(const std::vector<ecs::entity_t> &widgets, ecs::e
 /// Widgets with a Panel light up instead (see lightPanels()); a console field stays still, as a command line.
 bool InterfaceSystem::keepsSize(ecs::entity_t widget) const
 {
-    return _panels.has(widget) ||
-           (_fields.has(widget) && _fields.get(widget).type == TextFieldType::Console);
+    return _panels.has(widget) || (_fields.has(widget) && _fields.get(widget).type == TextFieldType::Console);
 }
 
 void InterfaceSystem::animateFocus(ecs::entity_t widget)

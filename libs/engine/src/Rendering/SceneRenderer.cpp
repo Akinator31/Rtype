@@ -231,8 +231,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         if (hasPanel) {
             drawPanel(renderer, panels.get(entity), {centre.x, centre.y}, scale, opacity);
         }
-        const bool isConsoleField =
-            fields.has(entity) && fields.get(entity).type == TextFieldType::Console;
+        const bool isConsoleField = fields.has(entity) && fields.get(entity).type == TextFieldType::Console;
         // A focused widget is framed and drawn in the focused colour, except buttons and console fields
         const bool showsFocus = isFocused && !hasPanel && !isConsoleField;
         if (showsFocus && hitboxes.has(entity)) {

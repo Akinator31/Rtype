@@ -13,8 +13,8 @@ namespace rtype::client
 inline constexpr const char *ConsoleScene = "console";
 
 /// Fills the console scene: a dark band over the top half of the screen, with the newest lines of the console
-/// and, below them, the command line (a TextFieldType::Console field) where commands are typed. Enter runs the
-/// command and empties the field. The colours come from InterfaceStyle::console.
+/// and, below them, the command line (a TextFieldType::Console field) where commands are typed. Enter runs
+/// the command and empties the field. The colours come from InterfaceStyle::console.
 /// @param console, metrics, style They must outlive the scene.
 void buildConsole(engine::Engine &engine, engine::SceneId scene, Console &console,
                   const engine::Metrics &metrics, const engine::InterfaceStyle &style);
