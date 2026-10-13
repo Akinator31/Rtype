@@ -62,13 +62,24 @@ struct Choice {
     std::function<void(std::size_t)> set;
 };
 
-/// A text field, shown as "Caption: content". It is edited while it has the focus, with everything a
-/// TextInput offers (cursor, selection, clipboard); Confirm submits it.
+/// How a text field looks and behaves when it has the focus.
+enum class TextFieldType {
+    /// A widget of a menu, shown as "Caption: content": framed and bigger while it has the focus, like the
+    /// other widgets.
+    Menu,
+    /// A command line, shown as "Caption content", the caption being the prompt: it keeps its size and has no
+    /// frame, its prompt and cursor take the colours of InterfaceStyle::console.
+    Console,
+};
+
+/// A text field, edited while it has the focus, with everything a TextInput offers (cursor, selection,
+/// clipboard); Confirm submits it. Without caption, it shows only its content.
 struct TextField {
     std::string caption;
     input::TextInput input;
     /// Called with the content when the player confirms the field. Can be empty.
     std::function<void(const std::string &)> onSubmit;
+    TextFieldType type = TextFieldType::Menu;
 };
 
 /// Label of a widget that shows a value: "Caption: value".
@@ -76,7 +87,8 @@ struct TextField {
 [[nodiscard]] std::string widgetLabel(const Slider &slider);
 [[nodiscard]] std::string widgetLabel(const Choice &choice);
 [[nodiscard]] std::string widgetLabel(const TextField &field);
-/// Text before the content of a text field: "Caption: ".
+/// Text before the content of a text field: "Caption: " for a menu field, "Caption " for a console field, or
+/// nothing without caption.
 [[nodiscard]] std::string fieldPrefix(const TextField &field);
 
 } // namespace rtype::engine

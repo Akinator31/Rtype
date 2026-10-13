@@ -1,4 +1,8 @@
 #include "Assets.hpp"
+#include "Commands/Commands.hpp"
+#include "Console/Console.hpp"
+#include "Console/ConsoleScene.hpp"
+#include "Console/ConsoleSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
@@ -20,7 +24,8 @@ constexpr const char *GameScene = "game";
 
 /// Declares the scenes of the client. The game scene is empty for now.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
-                  const rtype::engine::InterfaceStyle &style, rtype::render::Window &window)
+                  const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
+                  rtype::client::Console &console, const rtype::engine::RendererMetrics &metrics)
 {
     const auto quit = [&window] { window.requestClose(); };
     engine.createScene(
@@ -29,6 +34,11 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
             rtype::client::buildMainMenu(target, scene, resources, style, quit);
         });
     engine.createScene(GameScene, {.updatesWhenCovered = true});
+    engine.createScene(
+        rtype::client::ConsoleScene, {.overlay = true},
+        [&console, &metrics, &style](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
+            rtype::client::buildConsole(target, scene, console, metrics, style);
+        });
 }
 
 /// Registers the systems of the client, in the order they run each frame, after the scenes.
@@ -37,6 +47,7 @@ void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devic
                      const rtype::engine::InterfaceStyle &style)
 {
     rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<rtype::client::ConsoleSystem>(engine, devices);
     ecs.registerSystem<rtype::engine::InterfaceSystem>(ecs, engine.getScenes(), devices, metrics, style);
     ecs.registerSystem<rtype::engine::WidgetTextSystem>();
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
@@ -62,12 +73,14 @@ void run()
     };
     const rtype::engine::RendererMetrics metrics(renderer);
 
+    rtype::client::Console console;
     rtype::engine::Engine engine;
     engine.setInputSource(devices);
     registerSystems(engine, devices, metrics, style);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
 
-    createScenes(engine, resources, style, window);
+    createScenes(engine, resources, style, window, console, metrics);
+    rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
     while (!window.shouldClose()) {

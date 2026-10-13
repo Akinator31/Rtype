@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -117,15 +118,15 @@ void addVertex(Vector2 position, Color color)
     rlVertex2f(position.x, position.y);
 }
 
-// Owns the off-screen image the game is drawn to, at the game's logical resolution
+// Owns the off-screen image the game is drawn to, at the resolution it is shown at in the window
 class RenderTarget
 {
 private:
     RenderTexture2D _target;
 
 public:
-    explicit RenderTarget(Vector2 size)
-        : _target(LoadRenderTexture(static_cast<int>(size.x), static_cast<int>(size.y)))
+    explicit RenderTarget(Vector2 resolution)
+        : _target(LoadRenderTexture(static_cast<int>(resolution.x), static_cast<int>(resolution.y)))
     {
         if (!IsRenderTextureValid(_target)) {
             throw std::runtime_error("Cannot create the render target");
@@ -145,7 +146,16 @@ public:
     RenderTarget &operator=(RenderTarget &&) = delete;
 
     [[nodiscard]] const RenderTexture2D &get() const { return _target; }
+    [[nodiscard]] Vector2 resolution() const
+    {
+        return {static_cast<float>(_target.texture.width), static_cast<float>(_target.texture.height)};
+    }
 };
+
+Vector2 getWindowSize()
+{
+    return {static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
+}
 
 } // namespace
 
@@ -154,7 +164,7 @@ struct Renderer::Impl {
     const core::ResourceCache<detail::Font, FontId> &fonts;
     const core::ResourceCache<detail::Model, ModelId> &models;
     Vector2 gameSize;
-    RenderTarget target;
+    std::optional<RenderTarget> target;
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
     ColorFilter colorFilter = ColorFilter::None;
@@ -163,8 +173,9 @@ struct Renderer::Impl {
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
          const core::ResourceCache<detail::Font, FontId> &fontCache,
          const core::ResourceCache<detail::Model, ModelId> &modelCache, Vector2 size)
-        : textures(textureCache), fonts(fontCache), models(modelCache), gameSize(size), target(size)
+        : textures(textureCache), fonts(fontCache), models(modelCache), gameSize(size)
     {
+        fitTargetToWindow();
     }
 
     void requireFrame() const
@@ -172,6 +183,31 @@ struct Renderer::Impl {
         if (!inFrame) {
             throw std::logic_error("Drawing outside of a frame: call beginFrame() first");
         }
+    }
+
+    /// Recreates the render target when the area the game fills in the window changed size, so that the image
+    /// is never stretched. A minimised window keeps the previous target.
+    void fitTargetToWindow()
+    {
+        Vector2 resolution = computeRenderResolution(getWindowSize(), gameSize);
+        if (resolution.x < 1.0f || resolution.y < 1.0f) {
+            if (target) {
+                return;
+            }
+            resolution = gameSize;
+        }
+        if (!target || target->resolution().x != resolution.x || target->resolution().y != resolution.y) {
+            target.reset();
+            target.emplace(resolution);
+        }
+    }
+
+    /// Makes the game units cover the render target: positions and sizes stay in game units whatever its
+    /// resolution.
+    void beginGameView() const
+    {
+        const float zoom = target->resolution().x / gameSize.x;
+        BeginMode2D(Camera2D{.offset = {0.0f, 0.0f}, .target = {0.0f, 0.0f}, .rotation = 0.0f, .zoom = zoom});
     }
 };
 
@@ -206,8 +242,7 @@ ColorFilter Renderer::colorFilter() const
 
 Vector2 Renderer::windowToGame(Vector2 position) const
 {
-    const Vector2 windowSize{static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
-    return render::windowToGame(position, windowSize, _impl->gameSize);
+    return render::windowToGame(position, getWindowSize(), _impl->gameSize);
 }
 
 void Renderer::beginFrame(Color background)
@@ -215,8 +250,10 @@ void Renderer::beginFrame(Color background)
     if (_impl->inFrame) {
         throw std::logic_error("A frame is already started: call endFrame() first");
     }
-    BeginTextureMode(_impl->target.get());
+    _impl->fitTargetToWindow();
+    BeginTextureMode(_impl->target->get());
     ClearBackground(toRaylib(background));
+    _impl->beginGameView();
     _impl->inFrame = true;
 }
 
@@ -225,11 +262,12 @@ void Renderer::endFrame()
     if (!_impl->inFrame) {
         throw std::logic_error("No frame to end: call beginFrame() first");
     }
+    EndMode2D();
     EndTextureMode();
     _impl->inFrame = false;
 
-    const Texture2D &image = _impl->target.get().texture;
-    const Vector2 windowSize{static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
+    const Texture2D &image = _impl->target->get().texture;
+    const Vector2 windowSize = getWindowSize();
     // Render textures are stored upside down (OpenGL convention): a negative source height flips them back
     const ::Rectangle source{0.0f, 0.0f, static_cast<float>(image.width), -static_cast<float>(image.height)};
 
@@ -371,7 +409,9 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
     BeginMode3D(toRaylib(camera));
     _impl->lightingShader.draw(_impl->models.get(model).get(), light, toRaylib(position),
                                toRaylib(rotationAxis), rotationAngle, scale, toRaylib(tint));
+    // EndMode3D() resets the view to window pixels: go back to game units for what is drawn next
     EndMode3D();
+    _impl->beginGameView();
 }
 
 void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color)

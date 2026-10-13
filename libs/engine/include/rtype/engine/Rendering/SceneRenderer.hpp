@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 
@@ -55,6 +56,9 @@ class SceneRenderer
     /// Draws a glass panel with its shadows and glow, in the look of its highlight.
     void drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre, float scale,
                    float opacity) const;
+    /// Draws a console text field: its prompt in the prompt colour of the style, then its content.
+    void drawConsoleField(render::Renderer &renderer, const Text &text, const TextField &field,
+                          render::Vector2 topLeft, float size, float opacity) const;
 
 public:
     /// @param ecs, scenes, style They must outlive the renderer.

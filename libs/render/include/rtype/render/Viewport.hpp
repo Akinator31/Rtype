@@ -14,6 +14,13 @@ namespace rtype::render
 /// @return The area in window pixels, or an empty rectangle if one of the sizes is empty.
 [[nodiscard]] Rectangle letterbox(Vector2 windowSize, Vector2 gameSize);
 
+/// Size of the image the game is drawn to, in pixels: the size of the letterbox() area, rounded to whole
+/// pixels. The image is then shown without being stretched, so the game stays sharp on a large screen.
+/// @param windowSize Size of the window, in pixels.
+/// @param gameSize Logical resolution of the game.
+/// @return The size in pixels, or (0, 0) if one of the sizes is empty, such as a minimised window.
+[[nodiscard]] Vector2 computeRenderResolution(Vector2 windowSize, Vector2 gameSize);
+
 /// Converts a position in the window, for instance the mouse pointer, into game units: the reverse of the
 /// scaling done by letterbox().
 ///

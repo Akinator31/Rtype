@@ -118,6 +118,10 @@ public:
 
     [[nodiscard]] bool hasScene(const std::string &name) const;
 
+    /// Tells whether a named scene is open. Requests take effect at the next update(): the scene is not open
+    /// yet right after switchScene() or pushScene(), and still open right after popScene().
+    [[nodiscard]] bool isSceneOpen(const std::string &name) const;
+
     /// At the next update(), closes every open scene, then opens this one. The scene must exist (see
     /// hasScene()), otherwise throws std::out_of_range.
     void switchScene(const std::string &name);

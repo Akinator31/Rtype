@@ -938,3 +938,61 @@ TEST_CASE("A scene exists only once created, and is never redefined", "[engine][
     CHECK(builds == 1);
     CHECK(otherBuilds == 0);
 }
+
+TEST_CASE("A named scene is open from the update that opens it to the update that closes it",
+          "[engine][scenes]")
+{
+    Engine engine;
+    engine.createScene("game");
+    engine.createScene("console", {.overlay = true});
+    engine.switchScene("game");
+    engine.pushScene("console");
+    CHECK_FALSE(engine.isSceneOpen("console"));
+
+    engine.update(0.1f);
+    CHECK(engine.isSceneOpen("game"));
+    CHECK(engine.isSceneOpen("console"));
+
+    engine.popScene();
+    CHECK(engine.isSceneOpen("console"));
+    engine.update(0.1f);
+    CHECK_FALSE(engine.isSceneOpen("console"));
+    CHECK(engine.isSceneOpen("game"));
+    CHECK_FALSE(engine.isSceneOpen("menu"));
+}
+
+TEST_CASE("A text field shows its caption as its type says", "[engine][interface]")
+{
+    TextField field{"", {}, {}};
+    field.input.setText("help");
+    CHECK(fieldPrefix(field).empty());
+    CHECK(widgetLabel(field) == "help");
+
+    field.caption = "Name";
+    CHECK(widgetLabel(field) == "Name: help");
+
+    field.caption = ">";
+    field.type = TextFieldType::Console;
+    CHECK(fieldPrefix(field) == "> ");
+    CHECK(widgetLabel(field) == "> help");
+}
+
+TEST_CASE("A console text field keeps its size when it gets the focus", "[engine][tween]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Console");
+    const entity_t field = menu.textField(">", "", {});
+    world.ecs.getComponent<TextField>(field).type = TextFieldType::Console;
+    world.update();
+
+    for (int frame = 0; frame < 30; ++frame) {
+        world.update(0.016f);
+        CHECK_FALSE(world.ecs.hasComponent<Tween>(field));
+    }
+    REQUIRE(world.isFocused(field));
+    REQUIRE(world.ecs.getComponent<Scale>(field).value == 1.0f);
+
+    world.input.typed = U"help";
+    world.update();
+    REQUIRE(world.textOf(field) == "> help");
+}

@@ -1,5 +1,11 @@
 add_executable(r-type_client
     src/main.cpp
+    src/Commands/Commands.cpp
+    src/Commands/QuitCommand.cpp
+    src/Commands/SceneCommand.cpp
+    src/Console/Console.cpp
+    src/Console/ConsoleScene.cpp
+    src/Console/ConsoleSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
 )
