@@ -385,7 +385,8 @@ TEST_CASE("An anchored button can be focused and pressed", "[engine][interface]"
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
     int pressed = 0;
-    const entity_t back = ui.button("Back", [&pressed] { ++pressed; }, {AnchorPoint::BottomLeft, 20.0f, -20.0f});
+    const entity_t back =
+        ui.button("Back", [&pressed] { ++pressed; }, {AnchorPoint::BottomLeft, 20.0f, -20.0f});
     const entity_t next = ui.button("Next", [] {}, {AnchorPoint::BottomRight, -20.0f, -20.0f});
 
     world.update();

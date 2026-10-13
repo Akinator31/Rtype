@@ -104,8 +104,8 @@ std::vector<Vector2> getRoundedEdge(Rectangle rectangle, float radius)
             const float angle = startAngles[corner] + 0.5f * std::numbers::pi_v<float> *
                                                           static_cast<float>(step) /
                                                           static_cast<float>(cornerSegments);
-            edge.push_back({centres[corner].x + radius * std::cos(angle),
-                            centres[corner].y + radius * std::sin(angle)});
+            edge.push_back(
+                {centres[corner].x + radius * std::cos(angle), centres[corner].y + radius * std::sin(angle)});
         }
     }
     return edge;
@@ -181,8 +181,8 @@ Renderer::Renderer(const Window & /*window*/, const ResourceManager &resources, 
     if (gameSize.x <= 0.0f || gameSize.y <= 0.0f) {
         throw std::invalid_argument("The game size must be strictly positive");
     }
-    _impl = std::make_unique<Impl>(resources._impl->textures, resources._impl->fonts,
-                                     resources._impl->models, gameSize);
+    _impl = std::make_unique<Impl>(resources._impl->textures, resources._impl->fonts, resources._impl->models,
+                                   gameSize);
 }
 
 Renderer::~Renderer() = default;

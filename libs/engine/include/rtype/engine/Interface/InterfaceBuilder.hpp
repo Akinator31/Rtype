@@ -25,8 +25,9 @@ namespace rtype::engine
 /// @code
 /// engine.createScene("game", {}, [&](Engine &engine, SceneId scene) {
 ///     InterfaceBuilder hud(engine.getEcs(), scene, style);
-///     hud.boundText([&] { return "Score: " + std::to_string(score); }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
-///     hud.button("Pause", [&engine] { engine.pushScene("pause"); }, {AnchorPoint::TopRight, -20.0f, 20.0f});
+///     hud.boundText([&] { return "Score: " + std::to_string(score); },
+///     {AnchorPoint::TopLeft, 20.0f, 20.0f}); hud.button("Pause", [&engine] { engine.pushScene("pause"); },
+///     {AnchorPoint::TopRight, -20.0f, 20.0f});
 /// });
 /// @endcode
 class InterfaceBuilder

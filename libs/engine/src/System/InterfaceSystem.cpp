@@ -126,8 +126,8 @@ void InterfaceSystem::updatePointerMode(bool mouseMoved)
     if (mouseMoved) {
         _pointerMode = true;
     }
-    for (const Navigation action : {Navigation::Up, Navigation::Down, Navigation::Left, Navigation::Right,
-                                    Navigation::Confirm}) {
+    for (const Navigation action :
+         {Navigation::Up, Navigation::Down, Navigation::Left, Navigation::Right, Navigation::Confirm}) {
         if (_navigation.wasPressed(action)) {
             _pointerMode = false;
         }

@@ -40,7 +40,8 @@ bool hasNormalMap(const Model &model)
 
 } // namespace
 
-LightingShader::LightingShader() : _shader(LoadShaderFromMemory(shaders::lightingVertex, shaders::lightingFragment))
+LightingShader::LightingShader()
+    : _shader(LoadShaderFromMemory(shaders::lightingVertex, shaders::lightingFragment))
 {
     _lightDirectionLocation = GetShaderLocation(_shader, "lightDirection");
     _lightColorLocation = GetShaderLocation(_shader, "lightColor");

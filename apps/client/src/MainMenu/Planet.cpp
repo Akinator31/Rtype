@@ -1,7 +1,6 @@
 #include "MainMenu/Planet.hpp"
 
 #include "Assets.hpp"
-
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"

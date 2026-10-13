@@ -1,7 +1,8 @@
 // The virtual gamepad of the engine, driven by a fake input source.
 
-#include "FakeInput.hpp"
 #include "rtype/engine/Control/Controls.hpp"
+
+#include "FakeInput.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 
 #include <catch2/catch_approx.hpp>
