@@ -35,13 +35,16 @@ MenuBuilder::MenuBuilder(ecs::Ecs &ecs, SceneId scene, const Metrics &metrics, c
     : _ecs(ecs), _style(style), _scene(scene), _column(ecs.createEntity())
 {
     const render::Vector2 game = metrics.gameSize();
+    const render::Rectangle screen = metrics.visibleArea();
 
     // A background covering the screen: dims the game behind an overlay, hides it otherwise
     const ecs::entity_t background = ecs.createEntity();
     ecs.addComponent<SceneMember>(background, _scene);
-    ecs.addComponent<ecs::Position>(background, game.x / 2.0f, game.y / 2.0f);
+    ecs.addComponent<ecs::Position>(background, screen.x + (screen.width / 2.0f),
+                                    screen.y + (screen.height / 2.0f));
     ecs.addComponent<Drawable>(background, Layer::Interface, backgroundOrder);
-    ecs.addComponent<Box>(background, game.x, game.y, overlay ? style.dim : style.background, 0.0f);
+    ecs.addComponent<Box>(background, screen.width, screen.height, overlay ? style.dim : style.background,
+                          0.0f);
 
     if (!title.empty()) {
         const ecs::entity_t heading = ecs.createEntity();

@@ -26,8 +26,8 @@ const Placement PlanetSystem{{-25.0f, 0.0f, -60.0f}, {0.2f, 1.0f, 0.1f}, 120.0f,
 
 /// Speeds of the rotations, in degrees per second: the planet turns very slowly on itself, its dust a little
 /// faster, as if blown by the wind; the inner ring goes faster than the outer one, like closer orbits.
-constexpr float planetSpeed = 0.4f;
-constexpr float planetDustSpeed = 0.6f;
+constexpr float planetSpeed = 0.8f;
+constexpr float planetDustSpeed = 1.1f;
 constexpr float innerRingSpeed = 2.0f;
 constexpr float outerRingSpeed = 1.2f;
 

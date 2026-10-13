@@ -10,7 +10,7 @@ namespace rtype::input
 /// Position of the mouse pointer in the window, in pixels from its top-left corner.
 ///
 /// These are window pixels, not game units: the Renderer converts them with windowToGame(), since the game is
-/// scaled to fit the window and may have black bars around it.
+/// scaled to fit the window, which may show more than the game area around it.
 struct MousePosition {
     float x = 0.0f;
     float y = 0.0f;

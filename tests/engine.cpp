@@ -42,6 +42,10 @@ public:
         return {0.5f * size * static_cast<float>(text.size()), size};
     }
     [[nodiscard]] rtype::render::Vector2 gameSize() const override { return {1920.0f, 1080.0f}; }
+    [[nodiscard]] rtype::render::Rectangle visibleArea() const override { return screen; }
+
+    // A screen of the shape of the game by default
+    rtype::render::Rectangle screen{0.0f, 0.0f, 1920.0f, 1080.0f};
     [[nodiscard]] rtype::render::Vector2 windowToGame(rtype::render::Vector2 position) const override
     {
         return position;
@@ -352,6 +356,24 @@ TEST_CASE("An anchored element is placed from its size and the size of the game"
     CHECK(positionOf(world, centre).y == 540.0f);
     CHECK(positionOf(world, right).x == 1920.0f - 50.0f);
     CHECK(positionOf(world, right).y == 540.0f);
+}
+
+TEST_CASE("An anchored element follows the edges of a screen of another shape", "[engine][layout]")
+{
+    World world;
+    // A 16:10 screen shows 60 game units more above and below the game
+    world.metrics.screen = {0.0f, -60.0f, 1920.0f, 1200.0f};
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t topLeft = ui.text("Life", {AnchorPoint::TopLeft, 20.0f, 10.0f});
+    const entity_t bottomRight = ui.text("Life", {AnchorPoint::BottomRight, -20.0f, -10.0f});
+    const entity_t centre = ui.box(100.0f, 50.0f, rtype::render::colors::Red, {});
+
+    world.update();
+
+    CHECK(positionOf(world, topLeft).y == -60.0f + 10.0f + 28.0f);
+    CHECK(positionOf(world, bottomRight).y == 1140.0f - 10.0f - 28.0f);
+    CHECK(positionOf(world, centre).x == 960.0f);
+    CHECK(positionOf(world, centre).y == 540.0f);
 }
 
 TEST_CASE("An anchored element follows the size of its text", "[engine][layout]")

@@ -15,6 +15,11 @@ render::Vector2 RendererMetrics::gameSize() const
     return _renderer.gameSize();
 }
 
+render::Rectangle RendererMetrics::visibleArea() const
+{
+    return _renderer.visibleArea();
+}
+
 render::Vector2 RendererMetrics::windowToGame(render::Vector2 position) const
 {
     return _renderer.windowToGame(position);

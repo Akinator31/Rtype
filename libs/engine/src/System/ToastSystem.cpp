@@ -77,8 +77,7 @@ render::Vector2 ToastSystem::computePosition(const Toast &toast, float opacity) 
     const float slide = style.slideDistance * (1.0f - opacity);
     const Anchor anchor{style.corner, style.margin * (1.0f - (2.0f * fraction.x)),
                         (style.margin * (1.0f - (2.0f * fraction.y))) + (direction * (stacked - slide))};
-    const render::Vector2 game = _metrics.gameSize();
-    return computeAnchoredPosition({0.0f, 0.0f, game.x, game.y}, anchor, {toast.width, style.height()});
+    return computeAnchoredPosition(_metrics.visibleArea(), anchor, {toast.width, style.height()});
 }
 
 void ToastSystem::advance(Toast &toast, float target, bool isTooMany, float elapsed) const

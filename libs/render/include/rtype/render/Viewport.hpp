@@ -5,30 +5,26 @@
 namespace rtype::render
 {
 
-/// Area of the window where the game is drawn.
+/// Part of the game shown in the window, in game units.
 ///
-/// The game keeps its aspect ratio whatever the window size: it is scaled to the largest rectangle that fits
-/// in the window, centred, and the remaining space is left as black bars.
+/// The game always shows its whole area, from (0, 0) to gameSize, scaled as much as the window allows. When
+/// the window has another shape, the view extends around that area, on both sides, so that it fills the
+/// window without black bars: a 16:10 screen shows a 1920x1080 game from y = -60 to y = 1140. Game
+/// coordinates stay the same on every screen; only what is around the game area changes.
 /// @param windowSize Size of the window, in pixels.
-/// @param gameSize Logical resolution of the game.
-/// @return The area in window pixels, or an empty rectangle if one of the sizes is empty.
-[[nodiscard]] Rectangle letterbox(Vector2 windowSize, Vector2 gameSize);
-
-/// Size of the image the game is drawn to, in pixels: the size of the letterbox() area, rounded to whole
-/// pixels. The image is then shown without being stretched, so the game stays sharp on a large screen.
-/// @param windowSize Size of the window, in pixels.
-/// @param gameSize Logical resolution of the game.
-/// @return The size in pixels, or (0, 0) if one of the sizes is empty, such as a minimised window.
-[[nodiscard]] Vector2 computeRenderResolution(Vector2 windowSize, Vector2 gameSize);
+/// @param gameSize Size of the game, in game units.
+/// @return The visible area, in game units, or the game area if one of the sizes is empty, such as a
+/// minimised window.
+[[nodiscard]] Rectangle computeVisibleArea(Vector2 windowSize, Vector2 gameSize);
 
 /// Converts a position in the window, for instance the mouse pointer, into game units: the reverse of the
-/// scaling done by letterbox().
+/// scaling of computeVisibleArea().
 ///
-/// A position in the black bars gives coordinates outside of the game, for instance negative ones: check that
-/// they are between 0 and the game size before using them.
+/// A position near the edges of a window that is not of the shape of the game can be outside of the game
+/// area, for instance negative: check that it is between 0 and the game size before using it for gameplay.
 /// @param position Position in the window, in pixels.
 /// @param windowSize Size of the window, in pixels.
-/// @param gameSize Logical resolution of the game.
+/// @param gameSize Size of the game, in game units.
 /// @return The position in game units, or (0, 0) if one of the sizes is empty.
 [[nodiscard]] Vector2 windowToGame(Vector2 position, Vector2 windowSize, Vector2 gameSize);
 

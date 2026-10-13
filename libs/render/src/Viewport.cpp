@@ -1,36 +1,39 @@
 #include "rtype/render/Viewport.hpp"
 
 #include <algorithm>
-#include <cmath>
 
 namespace rtype::render
 {
 
-Rectangle letterbox(Vector2 windowSize, Vector2 gameSize)
+namespace
 {
-    if (windowSize.x <= 0.0f || windowSize.y <= 0.0f || gameSize.x <= 0.0f || gameSize.y <= 0.0f) {
-        return {};
-    }
-    const float scale = std::min(windowSize.x / gameSize.x, windowSize.y / gameSize.y);
-    const float width = gameSize.x * scale;
-    const float height = gameSize.y * scale;
-    return {(windowSize.x - width) / 2.0f, (windowSize.y - height) / 2.0f, width, height};
+
+bool isEmpty(Vector2 size)
+{
+    return size.x <= 0.0f || size.y <= 0.0f;
 }
 
-Vector2 computeRenderResolution(Vector2 windowSize, Vector2 gameSize)
+} // namespace
+
+Rectangle computeVisibleArea(Vector2 windowSize, Vector2 gameSize)
 {
-    const Rectangle area = letterbox(windowSize, gameSize);
-    return {std::round(area.width), std::round(area.height)};
+    if (isEmpty(windowSize) || isEmpty(gameSize)) {
+        return {0.0f, 0.0f, gameSize.x, gameSize.y};
+    }
+    const float scale = std::min(windowSize.x / gameSize.x, windowSize.y / gameSize.y);
+    const float width = windowSize.x / scale;
+    const float height = windowSize.y / scale;
+    return {(gameSize.x - width) / 2.0f, (gameSize.y - height) / 2.0f, width, height};
 }
 
 Vector2 windowToGame(Vector2 position, Vector2 windowSize, Vector2 gameSize)
 {
-    const Rectangle area = letterbox(windowSize, gameSize);
-    if (area.width <= 0.0f || area.height <= 0.0f) {
+    if (isEmpty(windowSize) || isEmpty(gameSize)) {
         return {};
     }
-    return {(position.x - area.x) * gameSize.x / area.width,
-            (position.y - area.y) * gameSize.y / area.height};
+    const Rectangle area = computeVisibleArea(windowSize, gameSize);
+    return {area.x + (position.x * area.width / windowSize.x),
+            area.y + (position.y * area.height / windowSize.y)};
 }
 
 } // namespace rtype::render

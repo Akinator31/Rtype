@@ -31,8 +31,7 @@ std::optional<render::Vector2> AnchorSystem::sizeOf(ecs::entity_t entity) const
 
 void AnchorSystem::update(float /*elapsed*/)
 {
-    const render::Vector2 game = _metrics.gameSize();
-    const render::Rectangle screen{0.0f, 0.0f, game.x, game.y};
+    const render::Rectangle screen = _metrics.visibleArea();
     for (ecs::entity_t entity = 0; entity < _anchors.size(); ++entity) {
         if (!_anchors.has(entity)) {
             continue;

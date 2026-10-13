@@ -14,10 +14,11 @@ class Window;
 
 /// Draws the game: textures, text and shapes.
 ///
-/// The game has a fixed logical resolution (1920x1080 by default), whatever the window size: positions and
-/// sizes are always in game units. The image is drawn at the resolution of the area it fills in the window,
-/// keeping its aspect ratio (see letterbox() and computeRenderResolution()), so it stays sharp on a large
-/// screen.
+/// The game has a fixed size (1920x1080 by default), whatever the window: positions and sizes are always in
+/// game units, the same on every screen. The whole game area is always shown; a window of another shape
+/// shows more around it, on both sides, instead of black bars (see visibleArea() and computeVisibleArea()).
+/// Place the interface relative to the visible area, so that it follows the edges of the screen. The image
+/// is drawn at the resolution of the window, so it stays sharp on a large screen.
 ///
 /// Everything is drawn between beginFrame() and endFrame(), in order: what is drawn last is on top.
 /// @code
@@ -42,7 +43,7 @@ public:
     /// Creates the renderer.
     /// @param window The open window. It must outlive the renderer.
     /// @param resources Where the textures and fonts to draw come from. It must outlive the renderer.
-    /// @param gameSize Logical resolution of the game, in game units.
+    /// @param gameSize Size of the game, in game units.
     /// @throws std::invalid_argument if gameSize is not strictly positive.
     Renderer(const Window &window, const ResourceManager &resources, Vector2 gameSize = {1920.0f, 1080.0f});
     ~Renderer();
@@ -52,12 +53,15 @@ public:
     Renderer(Renderer &&) noexcept;
     Renderer &operator=(Renderer &&) noexcept;
 
-    /// Logical resolution of the game, in game units.
+    /// Size of the game, in game units: the area from (0, 0) that is shown on every screen.
     [[nodiscard]] Vector2 gameSize() const;
+    /// Part of the game shown in the window, in game units, for its current size: the game area, plus what is
+    /// around it when the window has another shape. Its origin can be negative.
+    [[nodiscard]] Rectangle visibleArea() const;
 
-    /// Converts a position in the window, such as the mouse pointer, into game units, taking into account the
-    /// scaling and the black bars. A position in the black bars is outside of the game: it is negative, or
-    /// larger than gameSize().
+    /// Converts a position in the window, such as the mouse pointer, into game units, taking the scaling
+    /// into account. Near the edges of a window of another shape than the game, it can be outside of the game
+    /// area: negative, or larger than gameSize().
     /// @code
     /// const MousePosition mouse = devices.mousePosition();
     /// const Vector2 pointer = renderer.windowToGame({mouse.x, mouse.y});

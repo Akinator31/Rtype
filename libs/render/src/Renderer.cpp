@@ -164,6 +164,7 @@ struct Renderer::Impl {
     const core::ResourceCache<detail::Font, FontId> &fonts;
     const core::ResourceCache<detail::Model, ModelId> &models;
     Vector2 gameSize;
+    Rectangle frameArea;
     std::optional<RenderTarget> target;
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
@@ -173,10 +174,13 @@ struct Renderer::Impl {
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
          const core::ResourceCache<detail::Font, FontId> &fontCache,
          const core::ResourceCache<detail::Model, ModelId> &modelCache, Vector2 size)
-        : textures(textureCache), fonts(fontCache), models(modelCache), gameSize(size)
+        : textures(textureCache), fonts(fontCache), models(modelCache), gameSize(size),
+          frameArea{0.0f, 0.0f, size.x, size.y}
     {
         fitTargetToWindow();
     }
+
+    [[nodiscard]] Rectangle getVisibleArea() const { return computeVisibleArea(getWindowSize(), gameSize); }
 
     void requireFrame() const
     {
@@ -185,11 +189,13 @@ struct Renderer::Impl {
         }
     }
 
-    /// Recreates the render target when the area the game fills in the window changed size, so that the image
-    /// is never stretched. A minimised window keeps the previous target.
+    /// Recreates the render target when the window changed size, so that the image is drawn at the resolution
+    /// of the window and never stretched. A minimised window keeps the previous target.
     void fitTargetToWindow()
     {
-        Vector2 resolution = computeRenderResolution(getWindowSize(), gameSize);
+        frameArea = getVisibleArea();
+        const Vector2 window = getWindowSize();
+        Vector2 resolution{std::round(window.x), std::round(window.y)};
         if (resolution.x < 1.0f || resolution.y < 1.0f) {
             if (target) {
                 return;
@@ -202,12 +208,13 @@ struct Renderer::Impl {
         }
     }
 
-    /// Makes the game units cover the render target: positions and sizes stay in game units whatever its
-    /// resolution.
+    /// Makes the visible area of the game cover the render target: positions and sizes stay in game units
+    /// whatever its resolution.
     void beginGameView() const
     {
-        const float zoom = target->resolution().x / gameSize.x;
-        BeginMode2D(Camera2D{.offset = {0.0f, 0.0f}, .target = {0.0f, 0.0f}, .rotation = 0.0f, .zoom = zoom});
+        const float zoom = target->resolution().x / frameArea.width;
+        BeginMode2D(Camera2D{
+            .offset = {0.0f, 0.0f}, .target = {frameArea.x, frameArea.y}, .rotation = 0.0f, .zoom = zoom});
     }
 };
 
@@ -228,6 +235,11 @@ Renderer &Renderer::operator=(Renderer &&) noexcept = default;
 Vector2 Renderer::gameSize() const
 {
     return _impl->gameSize;
+}
+
+Rectangle Renderer::visibleArea() const
+{
+    return _impl->getVisibleArea();
 }
 
 void Renderer::setColorFilter(ColorFilter filter)
@@ -268,14 +280,14 @@ void Renderer::endFrame()
 
     const Texture2D &image = _impl->target->get().texture;
     const Vector2 windowSize = getWindowSize();
-    // Render textures are stored upside down (OpenGL convention): a negative source height flips them back
     const ::Rectangle source{0.0f, 0.0f, static_cast<float>(image.width), -static_cast<float>(image.height)};
 
     BeginDrawing();
     ClearBackground(toRaylib(colors::Black));
-    // The colour filter is applied to the whole frame while it is copied to the window
+
     const bool filtered = _impl->filterShader.begin(_impl->colorFilter);
-    DrawTexturePro(image, source, toRaylib(letterbox(windowSize, _impl->gameSize)), {0.0f, 0.0f}, 0.0f,
+
+    DrawTexturePro(image, source, {0.0f, 0.0f, windowSize.x, windowSize.y}, {0.0f, 0.0f}, 0.0f,
                    toRaylib(colors::White));
     if (filtered) {
         EndShaderMode();
