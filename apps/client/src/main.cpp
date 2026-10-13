@@ -5,6 +5,7 @@
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
+#include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"

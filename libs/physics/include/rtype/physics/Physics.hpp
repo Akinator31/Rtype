@@ -9,3 +9,10 @@
 ///
 /// - Component/: the data attached to entities.
 /// - System/: the systems working on them, one per file.
+
+#include "rtype/physics/Component/Collider.hpp"
+#include "rtype/physics/Component/CollisionFilter.hpp"
+#include "rtype/physics/Component/Motion.hpp"
+#include "rtype/physics/Geometry/Intersections.hpp"
+#include "rtype/physics/System/MovementSystem.hpp"
+#include "rtype/physics/System/PhysicsStep.hpp"

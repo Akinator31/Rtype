@@ -58,6 +58,12 @@ The physics provides **components**, **systems** and pure functions, and knows n
 | `ConfinedToBounds`, `DestroyOutOfBounds` | The zones |
 | `MovementSystem`, `BoundsSystem`, `CollisionSystem` | Its own systems that react to the contacts (damage, pick-ups, score) |
 
+`CollisionLayer` and `CollisionMask` each hold a 32-bit mask. The game assigns meanings to the bits.
+`canCollide(a, b)` accepts a pair only when `a`'s mask includes at least one of `b`'s layer bits
+and `b`'s mask includes at least one of `a`'s layer bits. A missing layer or mask is treated as
+all bits set, so an entity with neither component accepts every layer. An explicit zero mask or
+layer matches nothing.
+
 ### Shapes and geometry
 
 - **Axis-aligned boxes first**, spheres next, behind a `std::variant` in `Collider`. No rotated boxes, no
@@ -65,6 +71,14 @@ The physics provides **components**, **systems** and pure functions, and knows n
 - **The geometry is written in 3D** (`Vec3`, `Aabb`, `Sphere`, `Ray`), as pure functions independent of the
   ECS. The game is played on a plane: `Position` stays `{x, y}` in the ECS, and the systems use `z = 0`. The
   same functions serve later for anything in 3D (picking with a ray, a 3D view) without a rewrite.
+
+`Aabb::halfSize` contains the distances from its center to its faces. A shape stored in a `Collider` has
+its world center at `{Position.x, Position.y, 0} + Collider::offset + shape.center`.
+Intersections and point containment include touching boundaries, including zero-size shapes. A ray
+uses `origin + direction * t` for `t >= 0`; its direction need not be normalized, and a ray starting
+inside a shape hits at `t = 0`. Penetration returns a normal pointing from the first shape toward the
+second and a nonnegative depth; no overlap returns no result. For coplanar AABBs of zero `z` thickness,
+penetration chooses an `x` or `y` axis so the result can resolve a 2D collision.
 
 ### Fixed time step
 

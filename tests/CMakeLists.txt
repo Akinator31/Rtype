@@ -18,6 +18,11 @@ add_executable(rtype_tests
     log.cpp
     paths.cpp
     platform_assumptions.cpp
+    physics_collider.cpp
+    physics_collision_filter.cpp
+    physics_geometry.cpp
+    physics_movement.cpp
+    physics_step.cpp
     resource_cache.cpp
     scenes.cpp
     shaders.cpp
