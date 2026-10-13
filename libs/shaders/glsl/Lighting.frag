@@ -3,9 +3,10 @@
 // Fragment stage of the lighting of the 3D models. The renderer sets lightDirection (normalised, the
 // direction the light travels in), lightColor and ambientColor (sRGB, 0 to 1) and useNormalMap (0 or 1).
 //
-// Lambert lighting, computed on linear colours (the texture and the light colours are sRGB) so that the
-// shadow fades naturally. The normal map adds the relief, but the shape of the model decides which side is in
-// the dark: otherwise the relief would catch the light on the night side.
+// Lambert lighting, computed on linear colours (the texture and the light colours are sRGB, the vertex
+// colours are already linear, as in glTF) so that the shadow fades naturally. The normal map adds the relief,
+// but the shape of the model decides which side is in the dark: otherwise the relief would catch the light on
+// the night side.
 
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -50,9 +51,10 @@ float computeDiffuse(vec3 surface, vec3 normal)
 
 void main()
 {
-    vec4 texel = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
+    vec4 texel = texture(texture0, fragTexCoord) * colDiffuse;
+    vec3 albedo = toLinear(texel.rgb) * fragColor.rgb;
     vec3 surface = normalize(fragNormal);
     vec3 normal = useNormalMap == 1 ? applyNormalMap(surface) : surface;
     vec3 light = toLinear(ambientColor) + toLinear(lightColor) * computeDiffuse(surface, normal);
-    finalColor = vec4(toSrgb(toLinear(texel.rgb) * light), texel.a);
+    finalColor = vec4(toSrgb(albedo * light), texel.a * fragColor.a);
 }
