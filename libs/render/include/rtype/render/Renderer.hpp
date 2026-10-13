@@ -14,9 +14,10 @@ class Window;
 
 /// Draws the game: textures, text and shapes.
 ///
-/// The game is drawn at a fixed logical resolution (1920x1080 by default), whatever the window size:
-/// positions and sizes are always in game units. At the end of each frame, the image is scaled to fit the
-/// window while keeping its aspect ratio (see letterbox()).
+/// The game has a fixed logical resolution (1920x1080 by default), whatever the window size: positions and
+/// sizes are always in game units. The image is drawn at the resolution of the area it fills in the window,
+/// keeping its aspect ratio (see letterbox() and computeRenderResolution()), so it stays sharp on a large
+/// screen.
 ///
 /// Everything is drawn between beginFrame() and endFrame(), in order: what is drawn last is on top.
 /// @code

@@ -1,6 +1,7 @@
 #include "rtype/render/Viewport.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace rtype::render
 {
@@ -14,6 +15,12 @@ Rectangle letterbox(Vector2 windowSize, Vector2 gameSize)
     const float width = gameSize.x * scale;
     const float height = gameSize.y * scale;
     return {(windowSize.x - width) / 2.0f, (windowSize.y - height) / 2.0f, width, height};
+}
+
+Vector2 computeRenderResolution(Vector2 windowSize, Vector2 gameSize)
+{
+    const Rectangle area = letterbox(windowSize, gameSize);
+    return {std::round(area.width), std::round(area.height)};
 }
 
 Vector2 windowToGame(Vector2 position, Vector2 windowSize, Vector2 gameSize)

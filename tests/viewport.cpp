@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+using rtype::render::computeRenderResolution;
 using rtype::render::letterbox;
 using rtype::render::Rectangle;
 
@@ -94,4 +95,23 @@ TEST_CASE("Converting to game units reverses the letterbox scaling", "[render][v
 TEST_CASE("An empty window gives the origin", "[render][viewport]")
 {
     REQUIRE(samePoint(windowToGame({100.0f, 100.0f}, {0.0f, 0.0f}, {1920.0f, 1080.0f}), {0.0f, 0.0f}));
+}
+
+TEST_CASE("The game is drawn at the resolution of the area it fills", "[render][viewport]")
+{
+    // A 16:10 laptop screen: the image is 3840x2160 pixels, shown with bars, without being stretched
+    const rtype::render::Vector2 resolution = computeRenderResolution({3840.0f, 2400.0f}, {1920.0f, 1080.0f});
+    REQUIRE(resolution.x == 3840.0f);
+    REQUIRE(resolution.y == 2160.0f);
+
+    const rtype::render::Vector2 rounded = computeRenderResolution({1000.0f, 1000.0f}, {1920.0f, 1080.0f});
+    REQUIRE(rounded.x == 1000.0f);
+    REQUIRE(rounded.y == 563.0f);
+}
+
+TEST_CASE("A minimised window has no render resolution", "[render][viewport]")
+{
+    const rtype::render::Vector2 resolution = computeRenderResolution({0.0f, 0.0f}, {1920.0f, 1080.0f});
+    REQUIRE(resolution.x == 0.0f);
+    REQUIRE(resolution.y == 0.0f);
 }
