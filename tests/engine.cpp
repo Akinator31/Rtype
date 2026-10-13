@@ -938,3 +938,25 @@ TEST_CASE("A scene exists only once created, and is never redefined", "[engine][
     CHECK(builds == 1);
     CHECK(otherBuilds == 0);
 }
+
+TEST_CASE("A named scene is open from the update that opens it to the update that closes it",
+          "[engine][scenes]")
+{
+    Engine engine;
+    engine.createScene("game");
+    engine.createScene("console", {.overlay = true});
+    engine.switchScene("game");
+    engine.pushScene("console");
+    CHECK_FALSE(engine.isSceneOpen("console"));
+
+    engine.update(0.1f);
+    CHECK(engine.isSceneOpen("game"));
+    CHECK(engine.isSceneOpen("console"));
+
+    engine.popScene();
+    CHECK(engine.isSceneOpen("console"));
+    engine.update(0.1f);
+    CHECK_FALSE(engine.isSceneOpen("console"));
+    CHECK(engine.isSceneOpen("game"));
+    CHECK_FALSE(engine.isSceneOpen("menu"));
+}

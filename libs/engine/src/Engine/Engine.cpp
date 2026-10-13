@@ -74,6 +74,11 @@ bool Engine::hasScene(const std::string &name) const
     return _sceneDefinitions.contains(name);
 }
 
+bool Engine::isSceneOpen(const std::string &name) const
+{
+    return std::ranges::find(_namedScenes, name, &NamedScene::name) != _namedScenes.end();
+}
+
 void Engine::switchScene(const std::string &name)
 {
     if (!hasScene(name)) {
