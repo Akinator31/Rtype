@@ -109,6 +109,20 @@ public:
     /// @throws std::logic_error if no frame is started.
     void drawRectangleOutline(Rectangle rectangle, float thickness, Color color);
 
+    /// Draws a filled rectangle with rounded corners, coloured with a horizontal gradient: give the same
+    /// colour twice for a plain one.
+    /// @param radius Radius of the corners, in game units, at most half of the smaller side.
+    /// @param left Colour of the left edge, blended into right towards the right edge.
+    /// @throws std::logic_error if no frame is started.
+    void drawRoundedRectangle(Rectangle rectangle, float radius, Color left, Color right);
+
+    /// Draws the outline of a rectangle with rounded corners, for instance the border of a button.
+    /// @param radius Radius of the outer corners, in game units, at most half of the smaller side.
+    /// @param thickness Width of the outline, in game units, drawn inside the rectangle. Nothing is drawn if
+    /// it is not strictly positive.
+    /// @throws std::logic_error if no frame is started.
+    void drawRoundedRectangleOutline(Rectangle rectangle, float radius, float thickness, Color color);
+
     /// Draws the outline of a circle, for instance a round hitbox.
     /// @param center Centre of the circle, in game units.
     /// @param radius Radius, in game units. Nothing is drawn if it is not strictly positive.

@@ -6,9 +6,15 @@
 #include "rtype/render/Viewport.hpp"
 
 #include <raylib.h>
+#include <rlgl.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <numbers>
 #include <stdexcept>
+#include <vector>
 
 namespace rtype::render
 {
@@ -64,6 +70,51 @@ bool isCounterClockwise(Vector2 first, Vector2 second, Vector2 third)
     const float cross =
         (second.x - first.x) * (third.y - first.y) - (second.y - first.y) * (third.x - first.x);
     return cross < 0.0f;
+}
+
+// Number of segments of each rounded corner: enough for the corners of a button to look round
+constexpr int cornerSegments = 12;
+
+Color mix(Color from, Color to, float amount)
+{
+    const auto channel = [amount](std::uint8_t start, std::uint8_t end) {
+        return static_cast<std::uint8_t>(std::lround(
+            static_cast<float>(start) + (static_cast<float>(end) - static_cast<float>(start)) * amount));
+    };
+    return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a)};
+}
+
+// Points along the edge of a rounded rectangle, clockwise on screen from the left end of the top-left corner.
+// Every rectangle gets the same number of points, so that two edges can be joined point by point.
+std::vector<Vector2> getRoundedEdge(Rectangle rectangle, float radius)
+{
+    radius = std::clamp(radius, 0.0f, std::min(rectangle.width, rectangle.height) / 2.0f);
+    const float left = rectangle.x + radius;
+    const float top = rectangle.y + radius;
+    const float right = rectangle.x + rectangle.width - radius;
+    const float bottom = rectangle.y + rectangle.height - radius;
+    const std::array<Vector2, 4> centres{{{left, top}, {right, top}, {right, bottom}, {left, bottom}}};
+    const std::array<float, 4> startAngles{std::numbers::pi_v<float>, 1.5f * std::numbers::pi_v<float>, 0.0f,
+                                           0.5f * std::numbers::pi_v<float>};
+
+    std::vector<Vector2> edge;
+    edge.reserve(centres.size() * (cornerSegments + 1));
+    for (std::size_t corner = 0; corner < centres.size(); ++corner) {
+        for (int step = 0; step <= cornerSegments; ++step) {
+            const float angle = startAngles[corner] + 0.5f * std::numbers::pi_v<float> *
+                                                          static_cast<float>(step) /
+                                                          static_cast<float>(cornerSegments);
+            edge.push_back({centres[corner].x + radius * std::cos(angle),
+                            centres[corner].y + radius * std::sin(angle)});
+        }
+    }
+    return edge;
+}
+
+void addVertex(Vector2 position, Color color)
+{
+    rlColor4ub(color.r, color.g, color.b, color.a);
+    rlVertex2f(position.x, position.y);
 }
 
 // Owns the off-screen image the game is drawn to, at the game's logical resolution
@@ -235,6 +286,54 @@ void Renderer::drawRectangleOutline(Rectangle rectangle, float thickness, Color 
         // it
         DrawRectangleLinesEx(toRaylib(rectangle), thickness, toRaylib(color));
     }
+}
+
+void Renderer::drawRoundedRectangle(Rectangle rectangle, float radius, Color left, Color right)
+{
+    _impl->requireFrame();
+    if (rectangle.width <= 0.0f || rectangle.height <= 0.0f) {
+        return;
+    }
+    const auto colorAt = [&](Vector2 point) {
+        return mix(left, right, (point.x - rectangle.x) / rectangle.width);
+    };
+    const Vector2 centre{rectangle.x + rectangle.width / 2.0f, rectangle.y + rectangle.height / 2.0f};
+    const std::vector<Vector2> edge = getRoundedEdge(rectangle, radius);
+
+    rlBegin(RL_TRIANGLES);
+    for (std::size_t index = 0; index < edge.size(); ++index) {
+        const Vector2 next = edge[(index + 1) % edge.size()];
+        addVertex(centre, colorAt(centre));
+        addVertex(next, colorAt(next));
+        addVertex(edge[index], colorAt(edge[index]));
+    }
+    rlEnd();
+}
+
+void Renderer::drawRoundedRectangleOutline(Rectangle rectangle, float radius, float thickness, Color color)
+{
+    _impl->requireFrame();
+    if (thickness <= 0.0f || rectangle.width <= 0.0f || rectangle.height <= 0.0f) {
+        return;
+    }
+    thickness = std::min(thickness, std::min(rectangle.width, rectangle.height) / 2.0f);
+    const std::vector<Vector2> outer = getRoundedEdge(rectangle, radius);
+    const std::vector<Vector2> inner =
+        getRoundedEdge({rectangle.x + thickness, rectangle.y + thickness, rectangle.width - 2.0f * thickness,
+                        rectangle.height - 2.0f * thickness},
+                       radius - thickness);
+
+    rlBegin(RL_TRIANGLES);
+    for (std::size_t index = 0; index < outer.size(); ++index) {
+        const std::size_t next = (index + 1) % outer.size();
+        addVertex(outer[index], color);
+        addVertex(inner[index], color);
+        addVertex(outer[next], color);
+        addVertex(outer[next], color);
+        addVertex(inner[index], color);
+        addVertex(inner[next], color);
+    }
+    rlEnd();
 }
 
 void Renderer::drawCircleOutline(Vector2 center, float radius, float thickness, Color color)
