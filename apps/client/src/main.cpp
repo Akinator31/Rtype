@@ -1,4 +1,5 @@
 #include "Assets.hpp"
+#include "Commands/Commands.hpp"
 #include "Console/Console.hpp"
 #include "Console/ConsoleScene.hpp"
 #include "Console/ConsoleSystem.hpp"
@@ -79,6 +80,7 @@ void run()
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
 
     createScenes(engine, resources, style, window, console, metrics);
+    rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
     while (!window.shouldClose()) {
