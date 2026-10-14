@@ -12,12 +12,14 @@ namespace rtype::render::detail
 {
 
 /// Owns the lighting shader of the 3D models: a directional light, such as a sun, plus an ambient light,
-/// with the normal map of the material when it has one. If the shader cannot be compiled, a warning is logged
-/// and models are drawn unlit, with the colours of their textures.
+/// with the normal map of the material when it has one, and its emission map, which glows whatever the
+/// light. If the shader cannot be compiled, a warning is logged and models are drawn unlit, with the colours
+/// of their textures.
 class LightingShader
 {
 private:
     Shader _shader{};
+    Texture2D _noEmission{};
     int _lightDirectionLocation = -1;
     int _lightColorLocation = -1;
     int _ambientColorLocation = -1;

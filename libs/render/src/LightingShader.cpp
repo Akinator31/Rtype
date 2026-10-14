@@ -61,11 +61,19 @@ LightingShader::LightingShader()
     _available = IsShaderValid(_shader) && _lightDirectionLocation >= 0;
     if (!_available) {
         log::Logger("render").warning("Cannot compile the lighting shader: 3D models are drawn unlit");
+        return;
     }
+    _shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(_shader, "emissionMap");
+    const Image black = GenImageColor(1, 1, ::Color{0, 0, 0, 255});
+    _noEmission = LoadTextureFromImage(black);
+    UnloadImage(black);
 }
 
 LightingShader::~LightingShader()
 {
+    if (_noEmission.id > 0) {
+        UnloadTexture(_noEmission);
+    }
     UnloadShader(_shader);
 }
 
@@ -86,6 +94,9 @@ std::vector<Material> LightingShader::createLitMaterials(const Model &model) con
     std::vector<Material> materials(model.materials, model.materials + model.materialCount);
     for (Material &material : materials) {
         material.shader = _shader;
+        if (material.maps[MATERIAL_MAP_EMISSION].texture.id == 0) {
+            material.maps[MATERIAL_MAP_EMISSION].texture = _noEmission;
+        }
     }
     return materials;
 }
