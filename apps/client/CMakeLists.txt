@@ -7,8 +7,10 @@ add_executable(r-type_client
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
+    src/MainMenu/FlightSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
+    src/MainMenu/Ships.cpp
     src/MainMenu/Station.cpp
 )
 target_include_directories(r-type_client PRIVATE src)

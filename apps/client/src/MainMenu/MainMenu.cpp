@@ -1,6 +1,7 @@
 #include "MainMenu/MainMenu.hpp"
 
 #include "MainMenu/Planet.hpp"
+#include "MainMenu/Ships.hpp"
 #include "MainMenu/Station.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
@@ -51,6 +52,7 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
     createMainMenuCamera(engine.getEcs(), scene);
     createPlanetSystem(engine.getEcs(), scene, resources);
     createStation(engine.getEcs(), scene, resources);
+    createShips(engine.getEcs(), scene, resources);
 
     engine::InterfaceBuilder buttons(engine.getEcs(), scene, style);
     buttons.button("Quit", quit, {engine::AnchorPoint::BottomRight, -screenMargin, -screenMargin});

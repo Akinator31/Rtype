@@ -3,6 +3,7 @@
 #include "Console/Console.hpp"
 #include "Console/ConsoleScene.hpp"
 #include "Console/ConsoleSystem.hpp"
+#include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
@@ -53,6 +54,8 @@ void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devic
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
     ecs.registerSystem<rtype::engine::TweenSystem>();
     ecs.registerSystem<rtype::engine::SpinSystem>();
+    ecs.registerSystem<rtype::client::FlightSystem>();
+    ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
     ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
     ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
