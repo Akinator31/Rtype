@@ -99,6 +99,15 @@ struct Light {
     render::Light light;
 };
 
+/// A picture that covers the whole screen, behind everything else of the World layer, 3D models included: the
+/// sky of a scene. It is scaled to cover the visible area and cut on the sides that overflow, so it keeps its
+/// proportions on any screen. The first shown entity with a Backdrop is drawn; it needs no Drawable nor
+/// Position.
+struct Backdrop {
+    render::TextureId texture;
+    render::Color tint = render::colors::White;
+};
+
 /// Size factor of what the entity draws, 1 by default. Animated by tweens, for instance to make a button
 /// bounce.
 struct Scale {

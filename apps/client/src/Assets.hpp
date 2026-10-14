@@ -7,6 +7,9 @@
 #define RTYPE_FONT_TITLE "fonts/FiraSans-Black.ttf"
 #define RTYPE_FONT_BUTTON "fonts/Inter-SemiBold.ttf"
 
+// Images
+#define RTYPE_IMAGE_STARFIELD "images/starfield.png"
+
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
 #define RTYPE_MODEL_PLANET_DUST "models/SC_PlanetSystem_export/planet_dust.glb"

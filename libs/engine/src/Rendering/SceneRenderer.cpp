@@ -81,6 +81,16 @@ void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAni
                                   animation.animation, animation.time, amount);
 }
 
+/// The part of a picture that fills an area without being stretched: all of it in one direction, its centre
+/// in the other one.
+render::Rectangle computeCoverSource(render::Vector2 picture, render::Rectangle area)
+{
+    const float scale = std::max(area.width / picture.x, area.height / picture.y);
+    const float width = area.width / scale;
+    const float height = area.height / scale;
+    return {(picture.x - width) / 2.0f, (picture.y - height) / 2.0f, width, height};
+}
+
 render::Rectangle moveDown(render::Rectangle area, float distance)
 {
     area.y += distance;
@@ -152,6 +162,20 @@ std::vector<ecs::entity_t> SceneRenderer::getModelsInOrder()
     }
     std::ranges::stable_sort(entities, {}, [&](ecs::entity_t entity) { return drawables.get(entity).order; });
     return entities;
+}
+
+void SceneRenderer::drawBackdrop(render::Renderer &renderer)
+{
+    auto &backdrops = _ecs.cache<Backdrop>();
+    for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
+        if (backdrops.has(entity) && isShown(entity)) {
+            const Backdrop &backdrop = backdrops.get(entity);
+            const render::Rectangle area = renderer.visibleArea();
+            const render::Rectangle source = computeCoverSource(renderer.textureSize(backdrop.texture), area);
+            renderer.drawTexture(backdrop.texture, source, area, 0.0f, backdrop.tint);
+            return;
+        }
+    }
 }
 
 void SceneRenderer::drawModels(render::Renderer &renderer)
@@ -226,6 +250,7 @@ void SceneRenderer::drawToast(render::Renderer &renderer, const Toast &toast, re
 void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
 {
     if (layer == Layer::World) {
+        drawBackdrop(renderer);
         drawModels(renderer);
     }
 

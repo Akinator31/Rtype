@@ -23,6 +23,7 @@ namespace rtype::engine
 
 /// Draws the entities with the Renderer: those with a Drawable, a Position and a Text, Sprite, Box, Panel or
 /// Toast, and the 3D models (Drawable and Model) seen through the Camera, before the rest of the World layer.
+/// A Backdrop is drawn first, behind the models.
 ///
 /// It is not a system of the Ecs: drawing happens between Renderer::beginFrame() and endFrame(), after the
 /// update, and may happen several times per frame (once per eye in VR). Each layer is drawn separately;
@@ -53,6 +54,8 @@ class SceneRenderer
     [[nodiscard]] render::Light findLight();
     /// The shown entities with a Model, by Drawable order.
     [[nodiscard]] std::vector<ecs::entity_t> getModelsInOrder();
+    /// Draws the first shown Backdrop over the whole visible area.
+    void drawBackdrop(render::Renderer &renderer);
     /// Draws the 3D models, seen through the camera and lit by the light.
     void drawModels(render::Renderer &renderer);
     /// Draws a glass panel with its shadows and glow, in the look of its highlight.

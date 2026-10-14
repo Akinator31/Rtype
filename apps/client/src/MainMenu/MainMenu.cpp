@@ -1,5 +1,7 @@
 #include "MainMenu/MainMenu.hpp"
 
+#include "Assets.hpp"
+
 #include "MainMenu/Planet.hpp"
 #include "MainMenu/Ships.hpp"
 #include "MainMenu/Station.hpp"
@@ -44,12 +46,21 @@ void createMainMenuCamera(ecs::Ecs &ecs, engine::SceneId scene)
     ecs.addComponent<engine::Light>(camera, createMainMenuSun());
 }
 
+/// The starry sky behind the planet: white stars on black, so that the planet and the ships stand out.
+void createMainMenuSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
+{
+    const ecs::entity_t sky = ecs.createEntity();
+    ecs.addComponent<engine::SceneMember>(sky, scene);
+    ecs.addComponent<engine::Backdrop>(sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD));
+}
+
 } // namespace
 
 void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
                    const engine::InterfaceStyle &style, const std::function<void()> &quit)
 {
     createMainMenuCamera(engine.getEcs(), scene);
+    createMainMenuSky(engine.getEcs(), scene, resources);
     createPlanetSystem(engine.getEcs(), scene, resources);
     createStation(engine.getEcs(), scene, resources);
     createShips(engine.getEcs(), scene, resources);
