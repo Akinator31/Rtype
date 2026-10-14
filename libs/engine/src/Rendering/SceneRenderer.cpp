@@ -2,6 +2,7 @@
 
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/render/Renderer.hpp"
 
@@ -65,6 +66,19 @@ void drawBlurred(render::Renderer &renderer, render::Rectangle area, float radiu
             renderer.drawRoundedRectangle(layerArea, std::max(radius + margin, 0.0f), layerColor, layerColor);
         }
     }
+}
+
+// Poses the model at the time of its animation, between the previous and the current one while it fades
+void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
+{
+    if (animation.time >= animation.fadeDuration) {
+        renderer.animateModel(model, animation.animation, animation.time);
+        return;
+    }
+    const float progress = animation.time / animation.fadeDuration;
+    const float amount = progress * progress * (3.0f - (2.0f * progress));
+    renderer.blendModelAnimations(model, animation.previousAnimation, animation.previousTime + animation.time,
+                                  animation.animation, animation.time, amount);
 }
 
 render::Rectangle moveDown(render::Rectangle area, float distance)
@@ -149,10 +163,15 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
     const render::Light sceneLight = findLight();
     auto &models = _ecs.cache<Model>();
     auto &lights = _ecs.cache<Light>();
+    auto &animations = _ecs.cache<ModelAnimation>();
 
     for (const ecs::entity_t entity : getModelsInOrder()) {
         const Model &model = models.get(entity);
         const render::Light &light = lights.has(entity) ? lights.get(entity).light : sceneLight;
+
+        if (animations.has(entity)) {
+            poseModel(renderer, model.model, animations.get(entity));
+        }
         renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
                            model.rotationAngle, model.scale, model.tint, model.spinAngle);
     }

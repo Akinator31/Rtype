@@ -1213,3 +1213,35 @@ TEST_CASE("A spinning model turns at its speed and stays between 0 and 360 degre
     CHECK(ecs.getComponent<Model>(ring).spinAngle == 45.0f);
     CHECK(ecs.getComponent<Model>(backwards).spinAngle == 315.0f);
 }
+
+TEST_CASE("A model animation moves its time by the elapsed time", "[engine][animation]")
+{
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<ModelAnimationSystem>();
+    const entity_t ship = ecs.createEntity();
+    ecs.addComponent<ModelAnimation>(ship, 2);
+    const entity_t restarted = ecs.createEntity();
+    ecs.addComponent<ModelAnimation>(restarted, 0, 1.5f);
+
+    engine.update(0.25f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).animation == 2);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).time == 0.25f);
+    CHECK(ecs.getComponent<ModelAnimation>(restarted).time == 1.75f);
+
+    ecs.getComponent<ModelAnimation>(ship) = {1, 0.0f};
+    engine.update(0.5f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).animation == 1);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).time == 0.5f);
+}
+
+TEST_CASE("Switching a model animation fades from the previous one", "[engine][animation]")
+{
+    ModelAnimation animation{2, 1.5f};
+    switchModelAnimation(animation, 3, 0.75f);
+    CHECK(animation.animation == 3);
+    CHECK(animation.time == 0.0f);
+    CHECK(animation.previousAnimation == 2);
+    CHECK(animation.previousTime == 1.5f);
+    CHECK(animation.fadeDuration == 0.75f);
+}
