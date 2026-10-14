@@ -8,6 +8,7 @@
 #include "rtype/engine/Component/Drawing.hpp"
 
 #include <array>
+#include <vector>
 
 namespace rtype::client
 {
@@ -15,11 +16,16 @@ namespace rtype::client
 namespace
 {
 
-/// The ship model is about 24 units wide: much smaller than the station.
+/// The ship models, made with the same rig: same animations, same orientation, belly at the same height.
+/// There is one more model than ships: a ship that comes back is the one that no other ship flies.
+constexpr std::array shipModelPaths{RTYPE_MODEL_SHIP_EZNO, RTYPE_MODEL_SHIP_SPACESHIP,
+                                    RTYPE_MODEL_SHIP_BATTLESTAR, RTYPE_MODEL_SHIP_DROP_SHIP};
+
+/// The ship models are 15 to 25 units wide: much smaller than the station.
 constexpr float shipScale = 0.07f;
 
-/// The ship model points its nose to +x, its top to +y. A quarter turn around its vertical axis, before its
-/// rotation, points its nose to +z, as the FlightSystem expects.
+/// The ship models point their nose to +x, their top to +y. A quarter turn around its vertical axis, before
+/// its rotation, points the nose of a ship to +z, as the FlightSystem expects.
 constexpr float noseToFront = -90.0f;
 
 /// Where a ship lands, in units of the station model, how long it waits out of the screen before its first
@@ -57,10 +63,21 @@ ShipAnimations findShipAnimations(const render::ResourceManager &resources, rend
             resources.getModelAnimation(model, "MoveUp"), resources.getModelAnimation(model, "MoveDown")};
 }
 
-Flight createFlight(const Dock &dock, const ShipAnimations &animations)
+std::vector<ShipModel> loadShipModels(render::ResourceManager &resources)
+{
+    std::vector<ShipModel> models;
+    for (const char *path : shipModelPaths) {
+        const render::ModelId model = resources.loadModel(path);
+        models.push_back({model, findShipAnimations(resources, model)});
+    }
+    return models;
+}
+
+Flight createFlight(const Dock &dock, const std::vector<ShipModel> &models, const ShipModel &model)
 {
     Flight flight;
-    flight.animations = animations;
+    flight.models = models;
+    flight.animations = model.animations;
     flight.leavesTowardsCamera = dock.leavesTowardsCamera;
     flight.dock = convertStationPointToWorld(dock.point);
     flight.hover = convertStationPointToWorld({dock.point.x, dock.point.y + hoverHeight, dock.point.z});
@@ -74,20 +91,22 @@ Flight createFlight(const Dock &dock, const ShipAnimations &animations)
     return flight;
 }
 
+static_assert(docks.size() <= shipModelPaths.size(), "each ship starts with its own model");
+
 } // namespace
 
 void createShips(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
 {
-    const render::ModelId model = resources.loadModel(RTYPE_MODEL_SHIP);
-    const ShipAnimations animations = findShipAnimations(resources, model);
-    for (const Dock &dock : docks) {
-        const Flight flight = createFlight(dock, animations);
+    const std::vector<ShipModel> models = loadShipModels(resources);
+    for (std::size_t index = 0; index < docks.size(); ++index) {
+        const ShipModel &model = models[index];
+        const Flight flight = createFlight(docks[index], models, model);
         const ecs::entity_t ship = ecs.createEntity();
         ecs.addComponent<engine::SceneMember>(ship, scene);
         ecs.addComponent<engine::Drawable>(ship, engine::Layer::World, 1);
-        ecs.addComponent<engine::Model>(ship, model, flight.to, flight.up, 0.0f, shipScale,
+        ecs.addComponent<engine::Model>(ship, model.model, flight.to, flight.up, 0.0f, shipScale,
                                         render::colors::White, noseToFront);
-        ecs.addComponent<engine::ModelAnimation>(ship, animations.idle);
+        ecs.addComponent<engine::ModelAnimation>(ship, model.animations.idle);
         ecs.addComponent<engine::Light>(ship, createStationLight());
         ecs.addComponent<Flight>(ship, flight);
     }

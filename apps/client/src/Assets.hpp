@@ -14,4 +14,7 @@
 #define RTYPE_MODEL_RING_ASTEROIDS_OUTER "models/SC_PlanetSystem_export/ring_asteroids_outer.glb"
 #define RTYPE_MODEL_RING_DUST "models/SC_PlanetSystem_export/ring_dust.glb"
 #define RTYPE_MODEL_STATION "models/SC_FabStation_export/station_fab.glb"
-#define RTYPE_MODEL_SHIP "models/spaceship_ezno.glb"
+#define RTYPE_MODEL_SHIP_EZNO "models/spaceship_ezno.glb"
+#define RTYPE_MODEL_SHIP_SPACESHIP "models/spaceship.glb"
+#define RTYPE_MODEL_SHIP_BATTLESTAR "models/battlestar_galactica_ship.glb"
+#define RTYPE_MODEL_SHIP_DROP_SHIP "models/drop_ship_v2.glb"

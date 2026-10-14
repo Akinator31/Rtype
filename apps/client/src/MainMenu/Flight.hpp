@@ -1,6 +1,9 @@
 #pragma once
 
+#include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
+
+#include <vector>
 
 namespace rtype::client
 {
@@ -30,10 +33,17 @@ struct ShipAnimations {
     int moveDown = 0;
 };
 
+/// A ship model the menu can fly, with its animations.
+struct ShipModel {
+    render::ModelId model;
+    ShipAnimations animations;
+};
+
 /// A ship of the menu going back and forth between its dock on the station and the space out of the screen.
 /// The FlightSystem moves its Model along the route of the stage: nose forward while it flies, along
 /// `heading` while it goes down, stays and goes up. Each stage plays its animation on the ModelAnimation of
-/// the entity, if it has one.
+/// the entity, if it has one. Each time the ship comes back, it is another of `models`, one that no other
+/// ship flies.
 ///
 /// A route is a curve from `from` to `to`, pulled towards `control`: the ship leaves `from` heading towards
 /// `control`, and reaches `to` coming from it.
@@ -47,6 +57,8 @@ struct Flight {
     render::Vector3 heading;
     /// Where the top of the ship faces while it flies: the top of the station. A unit vector.
     render::Vector3 up;
+    /// The models the ship can be, and the animations of the one it is.
+    std::vector<ShipModel> models;
     ShipAnimations animations;
     /// Whether the ship leaves towards the camera, passing under it, instead of out of the top or right edge
     /// of the screen.

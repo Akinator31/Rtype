@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace rtype::client
 {
@@ -258,6 +259,39 @@ void FlightSystem::startNextStage(Flight &flight)
     }
 }
 
+bool FlightSystem::isFlownByAnotherShip(ecs::entity_t ship, render::ModelId model) const
+{
+    for (ecs::entity_t entity = 0; entity < _flights.size(); ++entity) {
+        if (entity == ship || !_flights.has(entity) || !_models.has(entity)) {
+            continue;
+        }
+        if (_models.get(entity).model == model) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Picks at random one of its models that neither this ship nor another one flies; keeps its model if there
+/// is none.
+void FlightSystem::changeShipModel(ecs::entity_t ship, Flight &flight)
+{
+    engine::Model &model = _models.get(ship);
+    std::vector<ShipModel> freeModels;
+    for (const ShipModel &candidate : flight.models) {
+        if (candidate.model != model.model && !isFlownByAnotherShip(ship, candidate.model)) {
+            freeModels.push_back(candidate);
+        }
+    }
+    if (freeModels.empty()) {
+        return;
+    }
+    std::uniform_int_distribution<std::size_t> pick(0, freeModels.size() - 1);
+    const ShipModel &picked = freeModels[pick(_random)];
+    model.model = picked.model;
+    flight.animations = picked.animations;
+}
+
 void FlightSystem::update(float elapsed)
 {
     for (ecs::entity_t entity = 0; entity < _flights.size(); ++entity) {
@@ -270,6 +304,9 @@ void FlightSystem::update(float elapsed)
         while (flight.time >= flight.duration) {
             flight.time -= flight.duration;
             startNextStage(flight);
+        }
+        if (previousStage == FlightStage::Away && flight.stage != FlightStage::Away) {
+            changeShipModel(entity, flight);
         }
         placeShip(_models.get(entity), flight);
         if (flight.stage != previousStage && _animations.has(entity)) {
