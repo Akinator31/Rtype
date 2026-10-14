@@ -426,6 +426,17 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
     _impl->beginGameView();
 }
 
+void Renderer::animateModel(ModelId model, int animation, float time)
+{
+    _impl->models.get(model).animate(animation, time);
+}
+
+void Renderer::blendModelAnimations(ModelId model, int from, float fromTime, int to, float toTime,
+                                    float amount)
+{
+    _impl->models.get(model).blendAnimations(from, fromTime, to, toTime, amount);
+}
+
 void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color)
 {
     _impl->requireFrame();

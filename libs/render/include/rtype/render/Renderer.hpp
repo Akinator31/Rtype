@@ -161,6 +161,20 @@ public:
                    Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
                    Color tint = colors::White, float spinAngle = 0.0f);
 
+    /// Poses an animated model at a time of one of its animations: the next draws of this model show this
+    /// pose, until it is animated again. Several entities sharing a model each pose it before being drawn.
+    /// Animating a model without animations does nothing.
+    /// @param animation Index of the animation, from ResourceManager::getModelAnimation().
+    /// @param time Time in the animation, in seconds. The animation loops.
+    void animateModel(ModelId model, int animation, float time);
+
+    /// Poses an animated model between two of its animations, like animateModel(): to go smoothly from one to
+    /// the other.
+    /// @param from, to Indexes of the animations, from ResourceManager::getModelAnimation().
+    /// @param fromTime, toTime Time in each animation, in seconds. The animations loop.
+    /// @param amount How far the pose is from the first animation (0) to the second one (1).
+    void blendModelAnimations(ModelId model, int from, float fromTime, int to, float toTime, float amount);
+
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.
     /// @param size Height of the characters, in game units.
