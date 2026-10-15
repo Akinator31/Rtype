@@ -9,6 +9,7 @@ add_library(rtype_engine
     src/Interface/Metrics.cpp
     src/Interface/Navigation.cpp
     src/Rendering/SceneRenderer.cpp
+    src/Rendering/ColliderDebugRenderer.cpp
     src/Scene/Scenes.cpp
     src/System/ColumnLayoutSystem.cpp
     src/System/HitboxSystem.cpp
@@ -19,4 +20,4 @@ add_library(rtype_engine
 add_library(rtype::engine ALIAS rtype_engine)
 target_include_directories(rtype_engine PUBLIC include)
 # Public: the public headers use their types
-target_link_libraries(rtype_engine PUBLIC rtype::ecs rtype::input rtype::render PRIVATE rtype_options)
+target_link_libraries(rtype_engine PUBLIC rtype::ecs rtype::input rtype::render PRIVATE rtype::physics rtype_options)

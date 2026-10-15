@@ -11,6 +11,7 @@ add_executable(rtype_tests
     action_map.cpp
     audio.cpp
     color_filter.cpp
+    collider_debug_renderer.cpp
     ecs.cpp
     ecs_world.cpp
     engine.cpp
