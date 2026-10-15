@@ -108,17 +108,17 @@ void PhysicsStep::update(float elapsed)
 - Each physics system also derives from `rtype::ecs::System` and can be registered alone, for a test or a
   game that does not want a fixed step.
 
-### Contacts as components
+### Collision events
 
-As decided in [ADR 0008](0008-events-switch-systems.md), what a system needs is in components. The
-`CollisionSystem` gives each entity in contact a **`Contacts` component**: the list of the entities it touches,
-with the normal and the depth of each contact. The game's systems go through the entities that have it (a
-damage system goes through the missiles that have `Contacts`).
+`CollisionSystem` exposes the frame's `Collision` events through `collisions()`. Each event contains two
+`EntityRef` values, a normal pointing from the first entity toward the second, and a penetration depth.
+Game systems registered after physics can read the list to apply damage, pickups, or scoring.
 
-`PhysicsStep` clears `Contacts` at the start of each of its updates, once per frame, then fills it across all
-the steps of the frame: a contact found in any step is seen once by the game's systems, which run once per frame,
-and a frame without any step leaves no old contact behind. Entities are never destroyed while a system goes
-through them: destruction goes through `ecs.defer()`.
+`PhysicsStep` clears the list at the start of every frame and collects contacts across its fixed steps.
+The same pair appears once per frame, including when it touches across several steps. A frame without a
+physics step has an empty list. A standalone `CollisionSystem` clears its list on each `update()` call.
+Game systems must use `ecs.defer()` to destroy an entity after reading the events; `EntityRef` remains
+recognizable as stale if an entity is later destroyed or its id reused.
 
 ### Scenes
 
@@ -133,7 +133,7 @@ the server and the tests do.
    the tests to check that the grid finds the same pairs.
 2. **Filtering** with `canCollide()`: both layers must accept each other.
 3. **Narrow phase** with the geometry functions, which also give the normal and the depth.
-4. **Contacts** added to both entities.
+4. **Collision events** added to the system's list.
 5. **Resolution** for two non-trigger colliders when one of them is `Static`: the moving entity is pushed out
    along the axis of least penetration, and its velocity along that axis is cancelled. Triggers are never
    resolved.

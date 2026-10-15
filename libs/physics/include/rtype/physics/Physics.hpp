@@ -14,5 +14,7 @@
 #include "rtype/physics/Component/CollisionFilter.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 #include "rtype/physics/Geometry/Intersections.hpp"
+#include "rtype/physics/Geometry/BroadPhase.hpp"
 #include "rtype/physics/System/MovementSystem.hpp"
+#include "rtype/physics/System/CollisionSystem.hpp"
 #include "rtype/physics/System/PhysicsStep.hpp"
