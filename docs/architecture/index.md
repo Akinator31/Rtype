@@ -32,6 +32,33 @@ flowchart LR
 *Clients send their inputs to the server over UDP; the server simulates the game and sends world updates
 back to every client.*
 
+### Server processes
+
+The server hosts several games at once. The `r-type_server` you start is the **master**: it runs the lobby
+and starts **one process per game** ([ADR 0013](../decisions/0013-one-process-per-game.md)). The client talks
+to the master over TCP until it joins a game, then to the game over UDP
+([ADR 0012](../decisions/0012-tcp-lobby-udp-game.md)). Both are encrypted
+([ADR 0014](../decisions/0014-encryption.md)).
+
+```mermaid
+flowchart LR
+    Client["r-type_client"]
+    subgraph Host["Server host"]
+        Master["Master<br/>r-type_server<br/>lobby"]
+        G1["Game 1<br/>r-type_server --instance"]
+        G2["Game 2<br/>r-type_server --instance"]
+        Master -- "starts, local TCP" --> G1
+        Master -- "starts, local TCP" --> G2
+    end
+    Client -- "TLS over TCP 4242: lobby" --> Master
+    Client -- "encrypted UDP: inputs and world" --> G1
+```
+
+*The client joins a game through the master, then exchanges the game traffic directly with that game's
+process.*
+
+New to networking? Start with [Networking concepts](networking-concepts.md).
+
 ## Layers
 
 The engine is split into decoupled subsystems, shared by the client and the server where it makes sense.
@@ -39,7 +66,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | Layer | Responsibility | Used by |
 |---|---|---|
 | **Core** | Entities, components, systems (`libs/ecs`), physics (`libs/physics`), logging (`libs/log`), timing | Client, server |
-| **Networking** | Sockets, binary serialization, the [protocol](../protocol/index.md) | Client, server |
+| **Networking** | Sockets (Asio), binary serialization, reliability over UDP, encryption, the [protocol](../protocol/index.md) | Client, server |
 | **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
 | **Interface** | Menus, options and HUD, made of entities like the world (`libs/engine`) | Client |

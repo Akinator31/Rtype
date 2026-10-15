@@ -9,7 +9,7 @@
 |---|---|
 | **Status** | Draft |
 | **Version** | 0 |
-| **Transport** | UDP |
+| **Transport** | TCP with TLS 1.3 for the lobby, encrypted UDP for the games ([ADR 0012](../decisions/0012-tcp-lobby-udp-game.md), [ADR 0014](../decisions/0014-encryption.md)) |
 
 ## 1. Introduction
 

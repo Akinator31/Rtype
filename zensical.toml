@@ -20,6 +20,7 @@ nav = [
   ] },
   { "Architecture" = [
     "architecture/index.md",
+    "architecture/networking-concepts.md",
     "architecture/rendering.md",
     "architecture/input.md",
     "architecture/logging.md",
@@ -48,6 +49,10 @@ nav = [
     "decisions/0008-events-switch-systems.md",
     "decisions/0009-named-scenes-in-the-engine.md",
     "decisions/0010-physics-engine.md",
+    "decisions/0011-networking-library.md",
+    "decisions/0012-tcp-lobby-udp-game.md",
+    "decisions/0013-one-process-per-game.md",
+    "decisions/0014-encryption.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
