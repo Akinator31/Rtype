@@ -35,17 +35,27 @@ precise headers you need, or `rtype/engine/Engine.hpp` for everything.
 ```cpp
 Engine engine;
 Ecs &ecs = engine.getEcs();
-Scenes &scenes = engine.getScenes();                                                 // 1. first, by the engine
-ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);            // 2. the interface
-// 3. the game systems
-ecs.registerSystem<WidgetTextSystem>();                                               // 4. state to drawing
+Scenes &scenes = engine.getScenes();
+ecs.registerSystem<ConsoleSystem>(engine, devices);
+ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);
+ecs.registerSystem<WidgetTextSystem>();
 ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
 ecs.registerSystem<HitboxSystem>(metrics, style);
 ecs.registerSystem<ColumnLayoutSystem>(ecs);
 ecs.registerSystem<AnchorSystem>(metrics);
-ecs.registerSystem<TransformSystem>(ecs);                                             // 5. positions, last
-SceneRenderer sceneRenderer(ecs, scenes, style);                                      // not a system
+auto &physics = ecs.registerSystem<PhysicsStep>();
+physics.registerSystem<MovementSystem>([&scenes](entity_t entity) {
+    return scenes.updates(entity);
+});
+physics.registerSystem<BoundsSystem>(ecs, [&scenes](entity_t entity) {
+    return scenes.updates(entity);
+});
+physics.registerSystem<TransformSystem>(ecs);
+auto &collisions = physics.registerSystem<CollisionSystem>(ecs, 64.0f,
+    [&scenes](entity_t entity) { return scenes.updates(entity); });
+ecs.registerSystem<TransformSystem>(ecs);
+SceneRenderer sceneRenderer(ecs, scenes, style);
 
 // Each frame
 engine.update(window.frameTime());
@@ -57,11 +67,20 @@ renderer.endFrame();
 
 | # | System | Role |
 |---|---|---|
-| 1 | `Scenes` | Records which scene receives the input for the whole update. |
-| 2 | `InterfaceSystem` | Focus and navigation in the menus; reads the input before the game. |
-| 3 | Game systems | Movement, shots, network... They check `scenes.receivesInput()` for their scene. |
-| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Texts of the widgets and bound texts, animations, sizes, layout (columns, then anchors, which need the final sizes). |
-| 5 | `TransformSystem` | Positions of the children from their parents. |
+| 1 | `Scenes` | Records which scene receives input for the whole update. |
+| 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation. |
+| 3 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Widget text, animation, hitboxes, and layout. |
+| 4 | Game input and AI systems, when present | Write `Velocity` or `Acceleration` before physics. |
+| 5 | `MovementSystem` in `PhysicsStep` | Updates `Position` or `LocalPosition` at each fixed step. |
+| 6 | `BoundsSystem` in `PhysicsStep` | Constrains movement and schedules out-of-bounds destruction. |
+| 7 | `TransformSystem` in `PhysicsStep` | Computes children's world `Position` before collision detection. |
+| 8 | `CollisionSystem` in `PhysicsStep` | Detects contacts, emits events, and resolves solid contacts. |
+| 9 | `TransformSystem` in the ECS | Keeps interface and menu hierarchy current on frames without a physics step. |
+| 10 | Game collision reaction systems, when present | Read `CollisionSystem::collisions()` and defer entity destruction. |
+
+`PhysicsStep` runs rows 5–8 once per fixed step; the other systems run once per frame. The client currently
+has no gameplay collision reaction system. Such a system is registered after `PhysicsStep` when damage,
+pickups, or other responses are implemented.
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
 and may happen several times per frame (once per eye in VR).

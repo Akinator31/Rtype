@@ -62,6 +62,11 @@ void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devic
     physics.registerSystem<rtype::physics::BoundsSystem>(ecs, [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) {
         return scenes.updates(entity);
     });
+    physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
+    physics.registerSystem<rtype::physics::CollisionSystem>(
+        ecs, 64.0f, [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) {
+            return scenes.updates(entity);
+        });
     ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
 }
 
