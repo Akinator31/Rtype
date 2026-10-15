@@ -8,6 +8,7 @@
 #include "rtype/physics/Component/CollisionFilter.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 #include "rtype/physics/Component/Static.hpp"
+#include "rtype/physics/Component/FastMoving.hpp"
 #include "rtype/physics/Geometry/Shapes.hpp"
 #include "rtype/physics/System/FrameSystem.hpp"
 
@@ -34,6 +35,7 @@ class CollisionSystem : public ecs::System, public FrameSystem
     ecs::ComponentCache<CollisionLayer> &_layers;
     ecs::ComponentCache<CollisionMask> &_masks;
     ecs::ComponentCache<Static> &_statics;
+    ecs::ComponentCache<FastMoving> &_fastMoving;
     ecs::ComponentCache<Velocity> &_velocities;
     ecs::ComponentCache<ecs::Parent> &_parents;
     ecs::ComponentCache<ecs::LocalPosition> &_localPositions;

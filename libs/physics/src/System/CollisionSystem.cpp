@@ -24,6 +24,13 @@ struct Entry {
     Shape shape;
 };
 
+struct SweptHit {
+    Vec3 normal;
+    Vec3 away;
+    float time;
+    ecs::entity_t mobile;
+};
+
 Shape worldShape(const Collider &collider, const ecs::Position &position)
 {
     Shape shape = collider.shape;
@@ -48,6 +55,46 @@ Aabb boundsOf(const Shape &shape)
     }, shape);
 }
 
+Vec3 displacement(ecs::entity_t entity, float elapsed,
+                  const ecs::ComponentCache<Velocity> &velocities,
+                  const ecs::ComponentCache<Static> &statics)
+{
+    if (elapsed <= 0.0f || statics.has(entity) || !velocities.has(entity)) {
+        return {};
+    }
+    const Velocity &velocity = velocities.get(entity);
+    return {velocity.x * elapsed, velocity.y * elapsed, 0.0f};
+}
+
+Aabb sweptBounds(Aabb box, Vec3 movement)
+{
+    box.center.x -= movement.x * 0.5f;
+    box.center.y -= movement.y * 0.5f;
+    box.halfSize.x += std::abs(movement.x) * 0.5f;
+    box.halfSize.y += std::abs(movement.y) * 0.5f;
+    return box;
+}
+
+std::optional<RayHit> sweepAabb(const Aabb &moving, Vec3 movement, const Aabb &target)
+{
+    if (movement.x == 0.0f && movement.y == 0.0f) {
+        return std::nullopt;
+    }
+    Aabb expanded = target;
+    expanded.halfSize.x += std::max(0.0f, moving.halfSize.x);
+    expanded.halfSize.y += std::max(0.0f, moving.halfSize.y);
+    expanded.halfSize.z += std::max(0.0f, moving.halfSize.z);
+    const auto hit = raycast(Ray{moving.center, movement}, expanded);
+    if (!hit || hit->t > 1.0f || hit->t < 0.0f) {
+        return std::nullopt;
+    }
+    if (hit->t == 0.0f && hit->normal.x == 0.0f && hit->normal.y == 0.0f &&
+        hit->normal.z == 0.0f) {
+        return std::nullopt;
+    }
+    return hit;
+}
+
 std::uint64_t pairKey(ecs::entity_t a, ecs::entity_t b)
 {
     return (static_cast<std::uint64_t>(a) << 32) | b;
@@ -59,7 +106,8 @@ CollisionSystem::CollisionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, fl
                                  std::function<bool(ecs::entity_t)> shouldUpdate)
     : _ecs(ecs), _positions(use<ecs::Position>(caches)), _colliders(use<Collider>(caches)),
       _layers(use<CollisionLayer>(caches)), _masks(use<CollisionMask>(caches)),
-      _statics(use<Static>(caches)), _velocities(use<Velocity>(caches)),
+      _statics(use<Static>(caches)), _fastMoving(use<FastMoving>(caches)),
+      _velocities(use<Velocity>(caches)),
       _parents(use<ecs::Parent>(caches)), _localPositions(use<ecs::LocalPosition>(caches)),
       _cellSize(cellSize), _shouldUpdate(std::move(shouldUpdate))
 {
@@ -85,7 +133,7 @@ void CollisionSystem::endFrame()
     _frameActive = false;
 }
 
-void CollisionSystem::update(float)
+void CollisionSystem::update(float elapsed)
 {
     if (!_frameActive) {
         clearCollisions();
@@ -93,18 +141,31 @@ void CollisionSystem::update(float)
 
     std::vector<Entry> entries;
     std::vector<Aabb> bounds;
+    bool hasFastMover = false;
+    for (ecs::entity_t entity = 0; entity < _fastMoving.size(); ++entity) {
+        if (_fastMoving.has(entity) && _colliders.has(entity) && _positions.has(entity) &&
+            _ecs.isAlive(entity) && (!_shouldUpdate || _shouldUpdate(entity))) {
+            hasFastMover = true;
+            break;
+        }
+    }
     for (ecs::entity_t entity = 0; entity < _colliders.size(); ++entity) {
         if (!_colliders.has(entity) || !_positions.has(entity) || !_ecs.isAlive(entity) ||
             (_shouldUpdate && !_shouldUpdate(entity))) {
             continue;
         }
         Shape shape = worldShape(_colliders.get(entity), _positions.get(entity));
-        bounds.push_back(boundsOf(shape));
+        Aabb box = boundsOf(shape);
+        if (hasFastMover && std::holds_alternative<Aabb>(shape)) {
+            box = sweptBounds(box, displacement(entity, elapsed, _velocities, _statics));
+        }
+        bounds.push_back(box);
         entries.push_back({entity, std::move(shape)});
     }
 
     const BroadPhaseResult candidates = broadPhaseGrid(bounds, _cellSize);
     std::vector<std::pair<ecs::entity_t, ecs::entity_t>> solidPairs;
+    std::vector<SweptHit> sweptSolids;
     for (const BroadPhasePair pair : candidates.pairs) {
         const Entry &a = entries[pair.first];
         const Entry &b = entries[pair.second];
@@ -119,21 +180,79 @@ void CollisionSystem::update(float)
         const auto overlap = std::visit([](const auto &first, const auto &second) {
             return penetration(first, second);
         }, a.shape, b.shape);
-        if (!overlap) {
+        std::optional<SweptHit> swept;
+        if (!overlap && std::holds_alternative<Aabb>(a.shape) &&
+            std::holds_alternative<Aabb>(b.shape) &&
+            (_fastMoving.has(a.entity) || _fastMoving.has(b.entity))) {
+            const bool firstMoves = _fastMoving.has(a.entity);
+            const Entry &moving = firstMoves ? a : b;
+            const Entry &target = firstMoves ? b : a;
+            const Vec3 movingDisplacement = displacement(moving.entity, elapsed, _velocities,
+                                                         _statics);
+            const Vec3 targetDisplacement = displacement(target.entity, elapsed, _velocities,
+                                                         _statics);
+            const Vec3 relative{movingDisplacement.x - targetDisplacement.x,
+                                movingDisplacement.y - targetDisplacement.y, 0.0f};
+            Aabb movingStart = std::get<Aabb>(moving.shape);
+            Aabb targetStart = std::get<Aabb>(target.shape);
+            movingStart.center.x -= movingDisplacement.x;
+            movingStart.center.y -= movingDisplacement.y;
+            targetStart.center.x -= targetDisplacement.x;
+            targetStart.center.y -= targetDisplacement.y;
+            if (const auto hit = sweepAabb(movingStart, relative, targetStart)) {
+                const float sign = firstMoves ? -1.0f : 1.0f;
+                swept = SweptHit{{hit->normal.x * sign, hit->normal.y * sign,
+                                  hit->normal.z * sign}, hit->normal, hit->t, moving.entity};
+            }
+        }
+        if (!overlap && !swept) {
             continue;
         }
         if (_seenPairs.insert(pairKey(a.entity, b.entity)).second) {
-            _collisions.push_back({_ecs.ref(a.entity), _ecs.ref(b.entity), overlap->normal,
-                                   overlap->depth});
+            _collisions.push_back({_ecs.ref(a.entity), _ecs.ref(b.entity),
+                                   overlap ? overlap->normal : swept->normal,
+                                   overlap ? overlap->depth : 0.0f});
         }
         if (!_colliders.get(a.entity).trigger && !_colliders.get(b.entity).trigger &&
             (_statics.has(a.entity) != _statics.has(b.entity))) {
-            solidPairs.emplace_back(a.entity, b.entity);
+            if (overlap) {
+                solidPairs.emplace_back(a.entity, b.entity);
+            } else if (swept && !_statics.has(swept->mobile)) {
+                sweptSolids.push_back(*swept);
+            }
         }
     }
 
     for (const auto &[first, second] : solidPairs) {
         resolve(first, second);
+    }
+    std::sort(sweptSolids.begin(), sweptSolids.end(), [](const SweptHit &a, const SweptHit &b) {
+        return a.time < b.time;
+    });
+    std::unordered_set<ecs::entity_t> stopped;
+    for (const SweptHit &hit : sweptSolids) {
+        if (!stopped.insert(hit.mobile).second) {
+            continue;
+        }
+        const Vec3 movement = displacement(hit.mobile, elapsed, _velocities, _statics);
+        ecs::Position &position = _positions.get(hit.mobile);
+        const float x = movement.x * (hit.time - 1.0f);
+        const float y = movement.y * (hit.time - 1.0f);
+        position.x += x;
+        position.y += y;
+        if (_parents.has(hit.mobile) && _localPositions.has(hit.mobile)) {
+            ecs::LocalPosition &local = _localPositions.get(hit.mobile);
+            local.x += x;
+            local.y += y;
+        }
+        if (_velocities.has(hit.mobile)) {
+            Velocity &velocity = _velocities.get(hit.mobile);
+            const float inward = velocity.x * hit.away.x + velocity.y * hit.away.y;
+            if (inward < 0.0f) {
+                velocity.x -= inward * hit.away.x;
+                velocity.y -= inward * hit.away.y;
+            }
+        }
     }
 }
 
