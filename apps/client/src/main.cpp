@@ -109,6 +109,8 @@ void run()
         return scenes.updates(entity);
     });
     physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
+    physics.registerSystem<rtype::physics::CollisionSystem>(ecs, 64.0f,
+        [&scenes](entity_t entity) { return scenes.updates(entity); });
     SceneRenderer sceneRenderer(ecs, scenes, style);
 
     std::string playerName = "Player";
