@@ -9,10 +9,67 @@
 namespace rtype::network
 {
 
+namespace
+{
+
+// Reads four decimal numbers from 0 to 255 separated by dots, without leading zeros. Written by hand because
+// the system parsers differ: Windows accepts "1.2.3.4:80" and ignores the port.
+std::optional<std::array<std::uint8_t, 4>> parseIpv4(std::string_view text)
+{
+    std::array<std::uint8_t, 4> bytes{};
+    std::size_t position = 0;
+    for (std::size_t part = 0; part < bytes.size(); ++part) {
+        if (part > 0) {
+            if (position >= text.size() || text[position] != '.') {
+                return std::nullopt;
+            }
+            ++position;
+        }
+        const std::size_t start = position;
+        unsigned value = 0;
+        while (position < text.size() && text[position] >= '0' && text[position] <= '9' &&
+               position - start < 3) {
+            value = value * 10 + static_cast<unsigned>(text[position] - '0');
+            ++position;
+        }
+        const std::size_t digits = position - start;
+        if (digits == 0 || value > 255 || (digits > 1 && text[start] == '0')) {
+            return std::nullopt;
+        }
+        bytes[part] = static_cast<std::uint8_t>(value);
+    }
+    if (position != text.size()) {
+        return std::nullopt;
+    }
+    return bytes;
+}
+
+// At least two colons, and only hexadecimal digits, colons, and dots for an IPv4 address at the end
+// ("::ffff:1.2.3.4"): refuses what some system parsers accept, such as brackets, a port or a zone ("%eth0")
+bool looksLikeIpv6(std::string_view text)
+{
+    return std::ranges::count(text, ':') >= 2 && std::ranges::all_of(text, [](char c) {
+               return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') ||
+                      c == ':' || c == '.';
+           });
+}
+
+} // namespace
+
 std::optional<Address> Address::parse(std::string_view ip, std::uint16_t port)
 {
+    if (ip.find(':') == std::string_view::npos) {
+        const auto bytes = parseIpv4(ip);
+        if (!bytes) {
+            return std::nullopt;
+        }
+        return ipv4(*bytes, port);
+    }
+    if (!looksLikeIpv6(ip)) {
+        return std::nullopt;
+    }
     std::error_code error;
-    const auto address = asio::ip::make_address(std::string(ip), error);
+    const auto address = asio::ip::make_address_v6(std::string(ip), error);
     if (error) {
         return std::nullopt;
     }

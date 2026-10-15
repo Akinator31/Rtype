@@ -126,6 +126,26 @@ TEST_CASE("Text that is not an IP address is refused", "[network]")
     CHECK_FALSE(Address::parse("300.1.1.1", 80));
     CHECK_FALSE(Address::parse("", 80));
     CHECK_FALSE(Address::parse("1.2.3.4:80", 80));
+    CHECK_FALSE(Address::parse("1.2.3", 80));
+    CHECK_FALSE(Address::parse("1.2.3.4.5", 80));
+    CHECK_FALSE(Address::parse("1.2.3.", 80));
+    CHECK_FALSE(Address::parse("01.2.3.4", 80));
+    CHECK_FALSE(Address::parse("1.2.3.4 ", 80));
+    CHECK_FALSE(Address::parse("+1.2.3.4", 80));
+    CHECK_FALSE(Address::parse("[::1]", 80));
+    CHECK_FALSE(Address::parse("[::1]:80", 80));
+    CHECK_FALSE(Address::parse("fe80::1%1", 80));
+    CHECK_FALSE(Address::parse("1::2::3", 80));
+    CHECK_FALSE(Address::parse(":", 80));
+}
+
+TEST_CASE("The edge values of IPv4 and IPv6 are read", "[network]")
+{
+    CHECK(Address::parse("0.0.0.0", 1) == Address::anyIpv4(1));
+    CHECK(Address::parse("255.255.255.255", 1)->bytes() == std::vector<std::uint8_t>{255, 255, 255, 255});
+    CHECK(Address::parse("::", 1) == Address::anyIpv6(1));
+    CHECK(Address::parse("::ffff:1.2.3.4", 1)->isIpv6());
+    CHECK(Address::parse("2001:DB8::1", 1)->ip() == "2001:db8::1");
 }
 
 TEST_CASE("Addresses compare by family, IP and port", "[network]")
