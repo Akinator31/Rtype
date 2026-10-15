@@ -1,5 +1,6 @@
-# Networking shared by the client and the server: addresses, UDP and TCP sockets, and the event loop that runs
-# them. Asio is a private dependency: the public headers only use our own types (ADR 0011).
+# Networking shared by the client and the server: addresses, UDP and TCP sockets, the event loop that runs
+# them, and the binary serialization of the protocol. Asio is a private dependency: the public headers only use
+# our own types (ADR 0011).
 CPMAddPackage(
     NAME asio
     VERSION 1.38.2
@@ -12,9 +13,12 @@ find_package(Threads REQUIRED)
 add_library(rtype_network
     src/Address.cpp
     src/EventLoop.cpp
+    src/Reader.cpp
     src/TcpConnection.cpp
     src/TcpListener.cpp
+    src/Text.cpp
     src/UdpSocket.cpp
+    src/Writer.cpp
 )
 add_library(rtype::network ALIAS rtype_network)
 target_include_directories(rtype_network PUBLIC include)
