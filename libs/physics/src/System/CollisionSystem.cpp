@@ -59,6 +59,8 @@ CollisionSystem::CollisionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, fl
                                  std::function<bool(ecs::entity_t)> shouldUpdate)
     : _ecs(ecs), _positions(use<ecs::Position>(caches)), _colliders(use<Collider>(caches)),
       _layers(use<CollisionLayer>(caches)), _masks(use<CollisionMask>(caches)),
+      _statics(use<Static>(caches)), _velocities(use<Velocity>(caches)),
+      _parents(use<ecs::Parent>(caches)), _localPositions(use<ecs::LocalPosition>(caches)),
       _cellSize(cellSize), _shouldUpdate(std::move(shouldUpdate))
 {
     if (!std::isfinite(cellSize) || cellSize <= 0.0f) {
@@ -102,6 +104,7 @@ void CollisionSystem::update(float)
     }
 
     const BroadPhaseResult candidates = broadPhaseGrid(bounds, _cellSize);
+    std::vector<std::pair<ecs::entity_t, ecs::entity_t>> solidPairs;
     for (const BroadPhasePair pair : candidates.pairs) {
         const Entry &a = entries[pair.first];
         const Entry &b = entries[pair.second];
@@ -116,11 +119,59 @@ void CollisionSystem::update(float)
         const auto overlap = std::visit([](const auto &first, const auto &second) {
             return penetration(first, second);
         }, a.shape, b.shape);
-        if (!overlap || !_seenPairs.insert(pairKey(a.entity, b.entity)).second) {
+        if (!overlap) {
             continue;
         }
-        _collisions.push_back({_ecs.ref(a.entity), _ecs.ref(b.entity), overlap->normal,
-                               overlap->depth});
+        if (_seenPairs.insert(pairKey(a.entity, b.entity)).second) {
+            _collisions.push_back({_ecs.ref(a.entity), _ecs.ref(b.entity), overlap->normal,
+                                   overlap->depth});
+        }
+        if (!_colliders.get(a.entity).trigger && !_colliders.get(b.entity).trigger &&
+            (_statics.has(a.entity) != _statics.has(b.entity))) {
+            solidPairs.emplace_back(a.entity, b.entity);
+        }
+    }
+
+    for (const auto &[first, second] : solidPairs) {
+        resolve(first, second);
+    }
+}
+
+void CollisionSystem::resolve(ecs::entity_t first, ecs::entity_t second)
+{
+    const bool firstStatic = _statics.has(first);
+    const ecs::entity_t mobile = firstStatic ? second : first;
+    const Shape firstShape = worldShape(_colliders.get(first), _positions.get(first));
+    const Shape secondShape = worldShape(_colliders.get(second), _positions.get(second));
+    const auto overlap = std::visit([](const auto &a, const auto &b) {
+        return penetration(a, b);
+    }, firstShape, secondShape);
+    if (!overlap || overlap->depth <= 0.0f) {
+        return;
+    }
+
+    const float direction = firstStatic ? 1.0f : -1.0f;
+    const float x = overlap->normal.x * direction;
+    const float y = overlap->normal.y * direction;
+    if (x == 0.0f && y == 0.0f) {
+        return;
+    }
+
+    ecs::Position &position = _positions.get(mobile);
+    position.x += x * overlap->depth;
+    position.y += y * overlap->depth;
+    if (_parents.has(mobile) && _localPositions.has(mobile)) {
+        ecs::LocalPosition &local = _localPositions.get(mobile);
+        local.x += x * overlap->depth;
+        local.y += y * overlap->depth;
+    }
+    if (_velocities.has(mobile)) {
+        Velocity &velocity = _velocities.get(mobile);
+        const float inward = velocity.x * x + velocity.y * y;
+        if (inward < 0.0f) {
+            velocity.x -= inward * x;
+            velocity.y -= inward * y;
+        }
     }
 }
 
