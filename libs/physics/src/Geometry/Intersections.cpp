@@ -125,7 +125,7 @@ std::optional<RayHit> raycast(const Ray &ray, const Aabb &box)
             ((direction[axis] > 0.0f ? minimum[axis] : maximum[axis]) - origin[axis]) / direction[axis];
         const float far =
             ((direction[axis] > 0.0f ? maximum[axis] : minimum[axis]) - origin[axis]) / direction[axis];
-        if (near > entry) {
+        if (near >= entry) {
             entry = near;
             normal = {};
             const float sign = direction[axis] > 0.0f ? -1.0f : 1.0f;

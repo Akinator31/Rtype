@@ -24,6 +24,7 @@ add_executable(rtype_tests
     physics_collision.cpp
     physics_collision_filter.cpp
     physics_geometry.cpp
+    physics_fast_moving.cpp
     physics_movement.cpp
     physics_resolution.cpp
     physics_step.cpp

@@ -139,8 +139,12 @@ the server and the tests do.
    resolved. Two mobile colliders and two static colliders produce events without physical separation.
    `MovementSystem` does not move an entity marked `Static`, even if it has a `Velocity`. When a mobile child
    is pushed, its `LocalPosition` and world `Position` are both updated.
-6. **Fast entities** (`FastMoving`) are tested over the volume swept during the step (swept AABB), so that a
-   fast missile does not go through a thin Bydo between two steps. Other entities do not pay for it.
+6. **Fast AABB entities** (`FastMoving`) expand their grid bounds over the displacement of the step. If the
+   shapes do not overlap at the end of the step, a swept AABB test checks their relative movement and emits
+   a contact with zero penetration at the first hit. A fast solid is stopped at the first static obstacle;
+   a trigger only emits an event. Unmarked entities do not run swept narrow-phase tests. The sweep uses
+   `Velocity * elapsed` for the preceding position, so teleports and position corrections need a separate
+   collision check. Spheres continue to use overlap tests only.
 
 ### Zone bounds
 
