@@ -13,6 +13,7 @@
 #include "rtype/physics/Component/Motion.hpp"
 #include "rtype/physics/Component/Collider.hpp"
 #include "rtype/physics/Component/CollisionFilter.hpp"
+#include "rtype/physics/Component/Static.hpp"
 #include "rtype/physics/Geometry/Intersections.hpp"
 #include "rtype/physics/Geometry/BroadPhase.hpp"
 #include "rtype/physics/System/MovementSystem.hpp"

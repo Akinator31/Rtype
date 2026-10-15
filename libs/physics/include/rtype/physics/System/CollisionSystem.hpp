@@ -6,6 +6,8 @@
 #include "rtype/ecs/System/System.hpp"
 #include "rtype/physics/Component/Collider.hpp"
 #include "rtype/physics/Component/CollisionFilter.hpp"
+#include "rtype/physics/Component/Motion.hpp"
+#include "rtype/physics/Component/Static.hpp"
 #include "rtype/physics/Geometry/Shapes.hpp"
 #include "rtype/physics/System/FrameSystem.hpp"
 
@@ -31,6 +33,10 @@ class CollisionSystem : public ecs::System, public FrameSystem
     ecs::ComponentCache<Collider> &_colliders;
     ecs::ComponentCache<CollisionLayer> &_layers;
     ecs::ComponentCache<CollisionMask> &_masks;
+    ecs::ComponentCache<Static> &_statics;
+    ecs::ComponentCache<Velocity> &_velocities;
+    ecs::ComponentCache<ecs::Parent> &_parents;
+    ecs::ComponentCache<ecs::LocalPosition> &_localPositions;
     float _cellSize;
     std::function<bool(ecs::entity_t)> _shouldUpdate;
     std::vector<Collision> _collisions;
@@ -38,6 +44,7 @@ class CollisionSystem : public ecs::System, public FrameSystem
     bool _frameActive = false;
 
     void clearCollisions();
+    void resolve(ecs::entity_t first, ecs::entity_t second);
 
 public:
     CollisionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, float cellSize = 64.0f,

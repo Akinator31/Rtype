@@ -136,7 +136,9 @@ the server and the tests do.
 4. **Collision events** added to the system's list.
 5. **Resolution** for two non-trigger colliders when one of them is `Static`: the moving entity is pushed out
    along the axis of least penetration, and its velocity along that axis is cancelled. Triggers are never
-   resolved.
+   resolved. Two mobile colliders and two static colliders produce events without physical separation.
+   `MovementSystem` does not move an entity marked `Static`, even if it has a `Velocity`. When a mobile child
+   is pushed, its `LocalPosition` and world `Position` are both updated.
 6. **Fast entities** (`FastMoving`) are tested over the volume swept during the step (swept AABB), so that a
    fast missile does not go through a thin Bydo between two steps. Other entities do not pay for it.
 

@@ -23,6 +23,7 @@ add_executable(rtype_tests
     physics_collision_filter.cpp
     physics_geometry.cpp
     physics_movement.cpp
+    physics_resolution.cpp
     physics_step.cpp
     resource_cache.cpp
     scenes.cpp
