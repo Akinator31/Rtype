@@ -21,7 +21,7 @@ libs/engine/include/rtype/engine/
   Interface/    what the interface is built with
     MenuBuilder.hpp  InterfaceBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
-    SceneRenderer.hpp
+    SceneRenderer.hpp  ColliderDebugRenderer.hpp
   Scene/
     Scenes.hpp      SceneId, SceneMember, SceneSettings, Scenes
   Engine.hpp    includes everything above
@@ -179,6 +179,18 @@ These requests take effect at the start of the next `Engine::update`, then the e
 `"<name>:close"` of the scenes opened and closed are triggered, and their reactions applied in the same update.
 
 ## Drawing
+
+### Collider and grid debug overlay
+
+The client can draw visible physics colliders over the world layer. Press **F3** to toggle the overlay, or
+start the client with `RTYPE_DEBUG_COLLIDERS=1` to show it immediately. The overlay draws AABB outlines in
+green, sphere outlines in green, triggers in yellow, and the spatial grid in pale blue. Grid lines use the
+same cell size as `CollisionSystem` and game coordinates, so they stay aligned with the broad phase.
+
+`ColliderDebugRenderer` lives in `libs/engine`, reads ECS `Position` and `Collider`, and skips hidden
+entities or entities in hidden scenes. It draws after the world and before the interface. The physics library
+still has no rendering dependency. The current game scene is empty; collider outlines appear as soon as
+the game creates entities with `Position` and `Collider`.
 
 | Component | Draws |
 |---|---|
