@@ -33,6 +33,7 @@ add_executable(rtype_tests
     physics_step.cpp
     resource_cache.cpp
     scenes.cpp
+    serialization.cpp
     shaders.cpp
     text_input.cpp
     viewport.cpp

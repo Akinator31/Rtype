@@ -14,9 +14,11 @@ New to networking? Read [Networking concepts](networking-concepts.md) first.
 | `UdpSocket` | Sends and receives datagrams |
 | `TcpListener` | Listens on a TCP port and accepts connections |
 | `TcpConnection` | Sends and receives a stream of bytes |
+| `Writer`, `Reader` | Turn the fields of a message into bytes and back, following the protocol |
+| `isValidText()` | Checks a text before sending it as a `str8` |
 
-This library only moves bytes. Splitting a TCP stream into messages, encryption, reliability over UDP and the
-[protocol](../protocol/index.md) messages are built on top of it, in the next steps of the
+Splitting a TCP stream into messages, encryption, reliability over UDP and the
+[protocol](../protocol/index.md) messages are built on top of these classes, in the next steps of the
 "Server & networking" work.
 
 ## The event loop
@@ -158,6 +160,66 @@ at once.
 A listener lets a restarted server listen again at once on its port on Linux. It does not on Windows, where
 the same option would let another program take a port in use.
 
+## Binary serialization
+
+A message is sent as bytes: each field written one after the other, as the
+[protocol conventions](../protocol/index.md#2-conventions) define it: big-endian integers, no padding,
+`str8` texts. `Writer` writes the fields, `Reader` reads them back. To add a message, follow
+[Add a network message](../guides/add-a-network-message.md).
+
+```cpp
+rtype::network::Writer writer;
+writer.writeU8(0x01);        // type: HELLO
+writer.writeU16(1);          // version
+writer.writeString("Pavel"); // name: length on one byte, then the UTF-8 bytes
+connection.send(writer.bytes());
+```
+
+| Type of the specification | Writer | Reader |
+|---|---|---|
+| `u8`, `u16`, `u32`, `u64` | `writeU8()` … `writeU64()` | `readU8()` … `readU64()` |
+| `i16`, `i32` | `writeI16()`, `writeI32()` | `readI16()`, `readI32()` |
+| `bool` | `writeBool()` | `readBool()`: a value other than 0 or 1 is an error |
+| `bytes[N]` | `writeBytes(span)` | `readBytes(n)` (a view into the data) or `readBytes<N>()` (a copy) |
+| `str8` | `writeString(text)` | `readString(min, max)`: length range of the field, text checked |
+
+**Why not `memcpy` a struct?** The compiler adds padding between fields, differently on GCC and MSVC, and an
+x86 processor stores integers little-endian. Writing each field explicitly gives the same bytes everywhere.
+
+### Reading safely
+
+The bytes come from the network: they may be cut, forged or random. `Reader` is built so that a decoder
+cannot go wrong:
+
+- **It never reads past the end.** A field that is not entirely there fails.
+- **The first failure sticks.** After a missing or invalid field, every later read returns 0, `false` or an
+  empty value, and `error()` keeps the first problem. A decoder reads all its fields, then checks once:
+
+    ```cpp
+    rtype::network::Reader reader(payload);
+    const std::uint16_t version = reader.readU16();
+    const std::string name = reader.readString(1, 16);
+    if (!reader.finish()) { // fails if a read failed, or if bytes are left
+        logger.debug("HELLO dropped: {}", toString(reader.error()));
+        return std::nullopt;
+    }
+    ```
+
+- **Texts are checked**: valid UTF-8 (no cut or overlong characters, no surrogates), no ASCII control
+  character, length within the range of the field. A name cannot carry a line break that would forge a line
+  in the logs, nor terminal escape codes.
+- **Decoders refuse values themselves** with `reader.fail()`, for instance a number of players above 4.
+- **Nothing is allocated from an unchecked length.** A `str8` is at most 255 bytes and only built once its
+  bytes are there. For a list, never `reserve(count)` with a count read from the network: loop while
+  `reader.ok()`, and the loop stops at the end of the data even if the count announces 65535 entries.
+- **No side effect**: a reader only reads its bytes. Decoders built on it are pure functions, bytes in and
+  message or error out, which a fuzzer can call millions of times
+  ([testing policy](../contributing/testing.md)).
+
+`Writer` is used with values from our own code: a value the protocol forbids (a `str8` over 255 bytes, a text
+with a control character) is a programming error, and throws an exception. Check a text typed by the player
+with `isValidText()` before sending it.
+
 ## Logs
 
 The library writes with a logger named `network` ([Logging](logging.md)):
@@ -178,6 +240,9 @@ The tests in `tests/network.cpp` (tag `[network]`) run over the loopback, with p
 that they never conflict: datagrams in both directions and from another thread, ports in use, connections,
 large transfers, closing from either side, refused connections and timeouts.
 
+The tests in `tests/serialization.cpp` (same tag) check the round trip of every type, the edge values, every
+rejection case, and the `HELLO` frame given as an example in the specification, byte for byte.
+
 ```sh
 ./build/bin/rtype_tests "[network]"
 ```
@@ -185,7 +250,7 @@ large transfers, closing from either side, refused connections and timeouts.
 ## Limits and next steps
 
 - **No messages yet**: framing, encryption and reliability come next, following the
-  [protocol](../protocol/index.md).
+  [protocol](../protocol/index.md). The fuzzing of the decoders comes with them.
 - **One copy per send**: `send()` copies the data into a new buffer. Enough for now; a pool of buffers can
   replace it if measurements show the cost.
 - **IPv4 or IPv6, not both on one socket**: a socket bound to `Address::anyIpv6()` may or may not accept IPv4

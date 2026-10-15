@@ -34,6 +34,7 @@ nav = [
     "guides/draw-a-sprite.md",
     "guides/add-a-menu.md",
     "guides/add-a-player-action.md",
+    "guides/add-a-network-message.md",
   ] },
   { "Network protocol" = [
     "protocol/index.md",
