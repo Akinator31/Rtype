@@ -15,12 +15,15 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
+#include <cstdlib>
 #include <exception>
+#include <string_view>
 
 namespace
 {
 
 constexpr const char *GameScene = "game";
+constexpr float CollisionCellSize = 64.0f;
 
 /// Declares the scenes of the client. The game scene is empty for now.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
@@ -55,6 +58,15 @@ void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devic
     ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
     ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
+    auto &physics = ecs.registerSystem<rtype::physics::PhysicsStep>();
+    physics.registerSystem<rtype::physics::MovementSystem>(
+        [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
+    physics.registerSystem<rtype::physics::BoundsSystem>(
+        ecs, [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
+    physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
+    physics.registerSystem<rtype::physics::CollisionSystem>(
+        ecs, CollisionCellSize,
+        [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
     ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
 }
 
@@ -78,15 +90,29 @@ void run()
     engine.setInputSource(devices);
     registerSystems(engine, devices, metrics, style);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
+    rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
+                                                               CollisionCellSize);
+    const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
+    bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
+    bool debugKeyWasDown = false;
 
     createScenes(engine, resources, style, window, console, metrics);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
     while (!window.shouldClose()) {
+        const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
+        if (debugKeyDown && !debugKeyWasDown) {
+            showColliderDebug = !showColliderDebug;
+        }
+        debugKeyWasDown = debugKeyDown;
         engine.update(window.frameTime());
         renderer.beginFrame();
-        sceneRenderer.draw(renderer);
+        sceneRenderer.draw(renderer, rtype::engine::Layer::World);
+        if (showColliderDebug) {
+            colliderDebugRenderer.draw(renderer);
+        }
+        sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
         renderer.endFrame();
     }
 }

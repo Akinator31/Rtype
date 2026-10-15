@@ -11,6 +11,7 @@ add_executable(rtype_tests
     action_map.cpp
     audio.cpp
     color_filter.cpp
+    collider_debug_renderer.cpp
     controls.cpp
     ecs.cpp
     ecs_world.cpp
@@ -18,10 +19,16 @@ add_executable(rtype_tests
     log.cpp
     paths.cpp
     platform_assumptions.cpp
+    physics_broad_phase.cpp
+    physics_bounds.cpp
     physics_collider.cpp
+    physics_collision.cpp
     physics_collision_filter.cpp
     physics_geometry.cpp
+    physics_fast_moving.cpp
     physics_movement.cpp
+    physics_order.cpp
+    physics_resolution.cpp
     physics_step.cpp
     resource_cache.cpp
     scenes.cpp

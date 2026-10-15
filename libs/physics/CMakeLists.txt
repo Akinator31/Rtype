@@ -2,7 +2,10 @@
 # only, never on raylib nor on the engine, so that the server can use it.
 add_library(rtype_physics
     src/CollisionFilter.cpp
+    src/Geometry/BroadPhase.cpp
     src/Geometry/Intersections.cpp
+    src/System/BoundsSystem.cpp
+    src/System/CollisionSystem.cpp
     src/System/MovementSystem.cpp
     src/System/PhysicsStep.cpp
 )

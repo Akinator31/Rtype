@@ -108,17 +108,17 @@ void PhysicsStep::update(float elapsed)
 - Each physics system also derives from `rtype::ecs::System` and can be registered alone, for a test or a
   game that does not want a fixed step.
 
-### Contacts as components
+### Collision events
 
-As decided in [ADR 0008](0008-events-switch-systems.md), what a system needs is in components. The
-`CollisionSystem` gives each entity in contact a **`Contacts` component**: the list of the entities it touches,
-with the normal and the depth of each contact. The game's systems go through the entities that have it (a
-damage system goes through the missiles that have `Contacts`).
+`CollisionSystem` exposes the frame's `Collision` events through `collisions()`. Each event contains two
+`EntityRef` values, a normal pointing from the first entity toward the second, and a penetration depth.
+Game systems registered after physics can read the list to apply damage, pickups, or scoring.
 
-`PhysicsStep` clears `Contacts` at the start of each of its updates, once per frame, then fills it across all
-the steps of the frame: a contact found in any step is seen once by the game's systems, which run once per frame,
-and a frame without any step leaves no old contact behind. Entities are never destroyed while a system goes
-through them: destruction goes through `ecs.defer()`.
+`PhysicsStep` clears the list at the start of every frame and collects contacts across its fixed steps.
+The same pair appears once per frame, including when it touches across several steps. A frame without a
+physics step has an empty list. A standalone `CollisionSystem` clears its list on each `update()` call.
+Game systems must use `ecs.defer()` to destroy an entity after reading the events; `EntityRef` remains
+recognizable as stale if an entity is later destroyed or its id reused.
 
 ### Scenes
 
@@ -133,12 +133,32 @@ the server and the tests do.
    the tests to check that the grid finds the same pairs.
 2. **Filtering** with `canCollide()`: both layers must accept each other.
 3. **Narrow phase** with the geometry functions, which also give the normal and the depth.
-4. **Contacts** added to both entities.
+4. **Collision events** added to the system's list.
 5. **Resolution** for two non-trigger colliders when one of them is `Static`: the moving entity is pushed out
    along the axis of least penetration, and its velocity along that axis is cancelled. Triggers are never
-   resolved.
-6. **Fast entities** (`FastMoving`) are tested over the volume swept during the step (swept AABB), so that a
-   fast missile does not go through a thin Bydo between two steps. Other entities do not pay for it.
+   resolved. Two mobile colliders and two static colliders produce events without physical separation.
+   `MovementSystem` does not move an entity marked `Static`, even if it has a `Velocity`. When a mobile child
+   is pushed, its `LocalPosition` and world `Position` are both updated.
+6. **Fast AABB entities** (`FastMoving`) expand their grid bounds over the displacement of the step. If the
+   shapes do not overlap at the end of the step, a swept AABB test checks their relative movement and emits
+   a contact with zero penetration at the first hit. A fast solid is stopped at the first static obstacle;
+   a trigger only emits an event. Unmarked entities do not run swept narrow-phase tests. The sweep uses
+   `Velocity * elapsed` for the preceding position, so teleports and position corrections need a separate
+   collision check. Spheres continue to use overlap tests only.
+
+### Zone bounds
+
+`BoundsSystem` runs after movement and before the hierarchy transform. `ConfinedToBounds` keeps a whole
+collider inside its rectangle and cancels velocity directed out through a blocked edge. An entity without
+a collider is treated as a point. If a collider is too large to fit on one axis, its center is placed at
+the zone midpoint on that axis and its velocity on that axis is cancelled. A `Static` entity is not moved
+by confinement.
+
+`DestroyOutOfBounds` removes an entity through `ecs.defer()` once its entire collider lies beyond the
+rectangle expanded by `margin`. Touching the expanded border is still inside. A child uses its current
+world position from its parent's position and its `LocalPosition`; confinement adjusts its local position
+so the following `TransformSystem` preserves the result. Zones must have finite ordered limits and the
+destruction margin must be finite and nonnegative.
 
 ## Consequences
 
