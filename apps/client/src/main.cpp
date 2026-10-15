@@ -16,7 +16,6 @@
 #include "rtype/render/Types.hpp"
 #include "rtype/render/Window.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <string>
@@ -106,6 +105,9 @@ void run()
     physics.registerSystem<rtype::physics::MovementSystem>([&scenes](entity_t entity) {
         return scenes.updates(entity);
     });
+    physics.registerSystem<rtype::physics::BoundsSystem>(ecs, [&scenes](entity_t entity) {
+        return scenes.updates(entity);
+    });
     physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
     SceneRenderer sceneRenderer(ecs, scenes, style);
 
@@ -119,12 +121,16 @@ void run()
     const Vector2 gameSize = renderer.gameSize();
     const Vector2 textureSize = renderer.textureSize(texture);
     const float imageSize = 300.0f;
+    const float halfImageSize = imageSize / 2.0f;
     const entity_t ship = ecs.createEntity();
     ecs.addComponent<SceneMember>(ship, game);
     ecs.addComponent<Position>(ship, 350.0f, 350.0f);
     ecs.addComponent<PlayerControlled>(ship);
     ecs.addComponent<rtype::physics::Velocity>(ship);
     ecs.addComponent<rtype::physics::MaxSpeed>(ship, speed);
+    ecs.addComponent<rtype::physics::ConfinedToBounds>(
+        ship, Position{halfImageSize, halfImageSize},
+        Position{gameSize.x - halfImageSize, gameSize.y - halfImageSize});
     ecs.addComponent<Drawable>(ship, Layer::World, 1);
     ecs.addComponent<Sprite>(ship, texture, Rectangle{0.0f, 0.0f, textureSize.x, textureSize.y}, imageSize,
                              imageSize);
@@ -168,10 +174,6 @@ void run()
                 audio.play(shotSound);
             }
         }
-        Position &position = ecs.getComponent<Position>(ship);
-        const float half = imageSize / 2.0f;
-        position.x = std::clamp(position.x, half, gameSize.x - half);
-        position.y = std::clamp(position.y, half, gameSize.y - half);
         ecs.getComponent<Text>(hud).text = playerName + " - shots: " + std::to_string(shots);
 
         renderer.beginFrame(colors::White);
