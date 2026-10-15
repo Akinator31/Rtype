@@ -36,6 +36,9 @@ nav = [
   ] },
   { "Network protocol" = [
     "protocol/index.md",
+    "protocol/lobby.md",
+    "protocol/game.md",
+    "protocol/instances.md",
   ] },
   { "Technical decisions" = [
     "decisions/index.md",
