@@ -8,19 +8,16 @@
 #include <vector>
 
 using rtype::physics::Aabb;
-using rtype::physics::BroadPhasePair;
 using rtype::physics::broadPhaseGrid;
 using rtype::physics::broadPhaseNaive;
+using rtype::physics::BroadPhasePair;
 
 TEST_CASE("Spatial grid finds exactly the naive overlapping pairs", "[physics][broadphase]")
 {
     const std::vector<Aabb> bounds{
-        {{0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.0f}},
-        {{1.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.0f}},
-        {{4.0f, 0.0f, 0.0f}, {3.0f, 0.5f, 0.0f}},
-        {{-8.0f, -8.0f, 0.0f}, {0.0f, 0.0f, 0.0f}},
-        {{-8.0f, -8.0f, 0.0f}, {0.0f, 0.0f, 0.0f}},
-        {{0.0f, 0.0f, 2.0f}, {0.5f, 0.5f, 0.0f}},
+        {{0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.0f}},     {{1.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.0f}},
+        {{4.0f, 0.0f, 0.0f}, {3.0f, 0.5f, 0.0f}},     {{-8.0f, -8.0f, 0.0f}, {0.0f, 0.0f, 0.0f}},
+        {{-8.0f, -8.0f, 0.0f}, {0.0f, 0.0f, 0.0f}},   {{0.0f, 0.0f, 2.0f}, {0.5f, 0.5f, 0.0f}},
         {{100.0f, 100.0f, 0.0f}, {1.0f, 1.0f, 0.0f}},
     };
     const auto reference = broadPhaseNaive(bounds);
@@ -40,11 +37,10 @@ TEST_CASE("Spatial grid matches the naive version across a crowded scene", "[phy
     std::vector<Aabb> bounds;
     for (int x = -8; x < 8; ++x) {
         for (int y = -6; y < 6; ++y) {
-            bounds.push_back({{static_cast<float>(x) * 3.0f, static_cast<float>(y) * 3.0f, 0.0f},
-                              {0.75f, 0.75f, 0.0f}});
+            bounds.push_back(
+                {{static_cast<float>(x) * 3.0f, static_cast<float>(y) * 3.0f, 0.0f}, {0.75f, 0.75f, 0.0f}});
             if ((x + y) % 3 == 0) {
-                bounds.push_back({{static_cast<float>(x) * 3.0f + 0.5f,
-                                   static_cast<float>(y) * 3.0f, 0.0f},
+                bounds.push_back({{static_cast<float>(x) * 3.0f + 0.5f, static_cast<float>(y) * 3.0f, 0.0f},
                                   {0.75f, 0.75f, 0.0f}});
             }
         }
@@ -62,8 +58,7 @@ TEST_CASE("Spatial grid reduces tested pairs for separated colliders", "[physics
 {
     std::vector<Aabb> bounds;
     for (int i = 0; i < 400; ++i) {
-        bounds.push_back({{static_cast<float>(i) * 10.0f, 0.0f, 0.0f},
-                          {0.5f, 0.5f, 0.0f}});
+        bounds.push_back({{static_cast<float>(i) * 10.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.0f}});
     }
 
     const auto reference = broadPhaseNaive(bounds);
@@ -91,8 +86,6 @@ TEST_CASE("Spatial grid rejects invalid cell sizes", "[physics][broadphase]")
     const std::vector<Aabb> bounds;
     CHECK_THROWS_AS(broadPhaseGrid(bounds, 0.0f), std::invalid_argument);
     CHECK_THROWS_AS(broadPhaseGrid(bounds, -1.0f), std::invalid_argument);
-    CHECK_THROWS_AS(broadPhaseGrid(bounds, std::numeric_limits<float>::infinity()),
-                    std::invalid_argument);
-    CHECK_THROWS_AS(broadPhaseGrid(bounds, std::numeric_limits<float>::quiet_NaN()),
-                    std::invalid_argument);
+    CHECK_THROWS_AS(broadPhaseGrid(bounds, std::numeric_limits<float>::infinity()), std::invalid_argument);
+    CHECK_THROWS_AS(broadPhaseGrid(bounds, std::numeric_limits<float>::quiet_NaN()), std::invalid_argument);
 }

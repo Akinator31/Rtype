@@ -34,29 +34,32 @@ struct SweptHit {
 Shape worldShape(const Collider &collider, const ecs::Position &position)
 {
     Shape shape = collider.shape;
-    std::visit([&](auto &value) {
-        value.center.x += position.x + collider.offset.x;
-        value.center.y += position.y + collider.offset.y;
-        value.center.z += collider.offset.z;
-    }, shape);
+    std::visit(
+        [&](auto &value) {
+            value.center.x += position.x + collider.offset.x;
+            value.center.y += position.y + collider.offset.y;
+            value.center.z += collider.offset.z;
+        },
+        shape);
     return shape;
 }
 
 Aabb boundsOf(const Shape &shape)
 {
-    return std::visit([](const auto &value) -> Aabb {
-        using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, Aabb>) {
-            return value;
-        } else {
-            const float radius = std::max(0.0f, value.radius);
-            return {value.center, {radius, radius, radius}};
-        }
-    }, shape);
+    return std::visit(
+        [](const auto &value) -> Aabb {
+            using T = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<T, Aabb>) {
+                return value;
+            } else {
+                const float radius = std::max(0.0f, value.radius);
+                return {value.center, {radius, radius, radius}};
+            }
+        },
+        shape);
 }
 
-Vec3 displacement(ecs::entity_t entity, float elapsed,
-                  const ecs::ComponentCache<Velocity> &velocities,
+Vec3 displacement(ecs::entity_t entity, float elapsed, const ecs::ComponentCache<Velocity> &velocities,
                   const ecs::ComponentCache<Static> &statics)
 {
     if (elapsed <= 0.0f || statics.has(entity) || !velocities.has(entity)) {
@@ -88,8 +91,7 @@ std::optional<RayHit> sweepAabb(const Aabb &moving, Vec3 movement, const Aabb &t
     if (!hit || hit->t > 1.0f || hit->t < 0.0f) {
         return std::nullopt;
     }
-    if (hit->t == 0.0f && hit->normal.x == 0.0f && hit->normal.y == 0.0f &&
-        hit->normal.z == 0.0f) {
+    if (hit->t == 0.0f && hit->normal.x == 0.0f && hit->normal.y == 0.0f && hit->normal.z == 0.0f) {
         return std::nullopt;
     }
     return hit;
@@ -100,14 +102,13 @@ std::uint64_t pairKey(ecs::entity_t a, ecs::entity_t b)
     return (static_cast<std::uint64_t>(a) << 32) | b;
 }
 
-}
+} // namespace
 
 CollisionSystem::CollisionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, float cellSize,
                                  std::function<bool(ecs::entity_t)> shouldUpdate)
     : _ecs(ecs), _positions(use<ecs::Position>(caches)), _colliders(use<Collider>(caches)),
-      _layers(use<CollisionLayer>(caches)), _masks(use<CollisionMask>(caches)),
-      _statics(use<Static>(caches)), _fastMoving(use<FastMoving>(caches)),
-      _velocities(use<Velocity>(caches)),
+      _layers(use<CollisionLayer>(caches)), _masks(use<CollisionMask>(caches)), _statics(use<Static>(caches)),
+      _fastMoving(use<FastMoving>(caches)), _velocities(use<Velocity>(caches)),
       _parents(use<ecs::Parent>(caches)), _localPositions(use<ecs::LocalPosition>(caches)),
       _cellSize(cellSize), _shouldUpdate(std::move(shouldUpdate))
 {
@@ -177,20 +178,17 @@ void CollisionSystem::update(float elapsed)
             continue;
         }
 
-        const auto overlap = std::visit([](const auto &first, const auto &second) {
-            return penetration(first, second);
-        }, a.shape, b.shape);
+        const auto overlap =
+            std::visit([](const auto &first, const auto &second) { return penetration(first, second); },
+                       a.shape, b.shape);
         std::optional<SweptHit> swept;
-        if (!overlap && std::holds_alternative<Aabb>(a.shape) &&
-            std::holds_alternative<Aabb>(b.shape) &&
+        if (!overlap && std::holds_alternative<Aabb>(a.shape) && std::holds_alternative<Aabb>(b.shape) &&
             (_fastMoving.has(a.entity) || _fastMoving.has(b.entity))) {
             const bool firstMoves = _fastMoving.has(a.entity);
             const Entry &moving = firstMoves ? a : b;
             const Entry &target = firstMoves ? b : a;
-            const Vec3 movingDisplacement = displacement(moving.entity, elapsed, _velocities,
-                                                         _statics);
-            const Vec3 targetDisplacement = displacement(target.entity, elapsed, _velocities,
-                                                         _statics);
+            const Vec3 movingDisplacement = displacement(moving.entity, elapsed, _velocities, _statics);
+            const Vec3 targetDisplacement = displacement(target.entity, elapsed, _velocities, _statics);
             const Vec3 relative{movingDisplacement.x - targetDisplacement.x,
                                 movingDisplacement.y - targetDisplacement.y, 0.0f};
             Aabb movingStart = std::get<Aabb>(moving.shape);
@@ -201,8 +199,10 @@ void CollisionSystem::update(float elapsed)
             targetStart.center.y -= targetDisplacement.y;
             if (const auto hit = sweepAabb(movingStart, relative, targetStart)) {
                 const float sign = firstMoves ? -1.0f : 1.0f;
-                swept = SweptHit{{hit->normal.x * sign, hit->normal.y * sign,
-                                  hit->normal.z * sign}, hit->normal, hit->t, moving.entity};
+                swept = SweptHit{{hit->normal.x * sign, hit->normal.y * sign, hit->normal.z * sign},
+                                 hit->normal,
+                                 hit->t,
+                                 moving.entity};
             }
         }
         if (!overlap && !swept) {
@@ -226,9 +226,8 @@ void CollisionSystem::update(float elapsed)
     for (const auto &[first, second] : solidPairs) {
         resolve(first, second);
     }
-    std::sort(sweptSolids.begin(), sweptSolids.end(), [](const SweptHit &a, const SweptHit &b) {
-        return a.time < b.time;
-    });
+    std::sort(sweptSolids.begin(), sweptSolids.end(),
+              [](const SweptHit &a, const SweptHit &b) { return a.time < b.time; });
     std::unordered_set<ecs::entity_t> stopped;
     for (const SweptHit &hit : sweptSolids) {
         if (!stopped.insert(hit.mobile).second) {
@@ -262,9 +261,8 @@ void CollisionSystem::resolve(ecs::entity_t first, ecs::entity_t second)
     const ecs::entity_t mobile = firstStatic ? second : first;
     const Shape firstShape = worldShape(_colliders.get(first), _positions.get(first));
     const Shape secondShape = worldShape(_colliders.get(second), _positions.get(second));
-    const auto overlap = std::visit([](const auto &a, const auto &b) {
-        return penetration(a, b);
-    }, firstShape, secondShape);
+    const auto overlap =
+        std::visit([](const auto &a, const auto &b) { return penetration(a, b); }, firstShape, secondShape);
     if (!overlap || overlap->depth <= 0.0f) {
         return;
     }
@@ -299,4 +297,4 @@ const std::vector<Collision> &CollisionSystem::collisions() const
     return _collisions;
 }
 
-}
+} // namespace rtype::physics

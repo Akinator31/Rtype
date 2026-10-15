@@ -16,4 +16,4 @@ struct DestroyOutOfBounds {
     float margin = 0.0f;
 };
 
-}
+} // namespace rtype::physics

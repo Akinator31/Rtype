@@ -23,27 +23,28 @@ struct Footprint {
 
 Footprint footprint(const Collider &collider)
 {
-    return std::visit([&](const auto &shape) -> Footprint {
-        using T = std::decay_t<decltype(shape)>;
-        if constexpr (std::is_same_v<T, Aabb>) {
-            return {collider.offset.x + shape.center.x, collider.offset.y + shape.center.y,
-                    std::max(0.0f, shape.halfSize.x), std::max(0.0f, shape.halfSize.y)};
-        } else {
-            const float radius = std::max(0.0f, shape.radius);
-            return {collider.offset.x + shape.center.x, collider.offset.y + shape.center.y,
-                    radius, radius};
-        }
-    }, collider.shape);
+    return std::visit(
+        [&](const auto &shape) -> Footprint {
+            using T = std::decay_t<decltype(shape)>;
+            if constexpr (std::is_same_v<T, Aabb>) {
+                return {collider.offset.x + shape.center.x, collider.offset.y + shape.center.y,
+                        std::max(0.0f, shape.halfSize.x), std::max(0.0f, shape.halfSize.y)};
+            } else {
+                const float radius = std::max(0.0f, shape.radius);
+                return {collider.offset.x + shape.center.x, collider.offset.y + shape.center.y, radius,
+                        radius};
+            }
+        },
+        collider.shape);
 }
 
 bool validZone(ecs::Position min, ecs::Position max)
 {
-    return std::isfinite(min.x) && std::isfinite(min.y) && std::isfinite(max.x) &&
-           std::isfinite(max.y) && min.x <= max.x && min.y <= max.y;
+    return std::isfinite(min.x) && std::isfinite(min.y) && std::isfinite(max.x) && std::isfinite(max.y) &&
+           min.x <= max.x && min.y <= max.y;
 }
 
-int hierarchyDepth(ecs::Ecs &ecs, ecs::ComponentCache<ecs::Parent> &parents,
-                   ecs::entity_t entity)
+int hierarchyDepth(ecs::Ecs &ecs, ecs::ComponentCache<ecs::Parent> &parents, ecs::entity_t entity)
 {
     int depth = 0;
     while (depth < 64 && parents.has(entity)) {
@@ -77,15 +78,14 @@ bool blocked(float center, float offset, float half, float min, float max, float
     return (center <= lower && velocity < 0.0f) || (center >= upper && velocity > 0.0f);
 }
 
-}
+} // namespace
 
 BoundsSystem::BoundsSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs,
                            std::function<bool(ecs::entity_t)> shouldUpdate)
-    : _ecs(ecs), _positions(use<ecs::Position>(caches)),
-      _localPositions(use<ecs::LocalPosition>(caches)), _parents(use<ecs::Parent>(caches)),
-      _colliders(use<Collider>(caches)), _velocities(use<Velocity>(caches)),
-      _statics(use<Static>(caches)), _confined(use<ConfinedToBounds>(caches)),
-      _destroyOutOfBounds(use<DestroyOutOfBounds>(caches)),
+    : _ecs(ecs), _positions(use<ecs::Position>(caches)), _localPositions(use<ecs::LocalPosition>(caches)),
+      _parents(use<ecs::Parent>(caches)), _colliders(use<Collider>(caches)),
+      _velocities(use<Velocity>(caches)), _statics(use<Static>(caches)),
+      _confined(use<ConfinedToBounds>(caches)), _destroyOutOfBounds(use<DestroyOutOfBounds>(caches)),
       _shouldUpdate(std::move(shouldUpdate))
 {
 }
@@ -105,8 +105,7 @@ ecs::Position BoundsSystem::worldPosition(ecs::entity_t entity, int depth) const
     return {base.x + local.x, base.y + local.y};
 }
 
-void BoundsSystem::setWorldPosition(ecs::entity_t entity, ecs::Position before,
-                                    ecs::Position after)
+void BoundsSystem::setWorldPosition(ecs::entity_t entity, ecs::Position before, ecs::Position after)
 {
     _positions.get(entity) = after;
     if (_parents.has(entity) && _localPositions.has(entity)) {
@@ -134,19 +133,16 @@ void BoundsSystem::update(float)
         }
         const Footprint size = _colliders.has(entity) ? footprint(_colliders.get(entity)) : Footprint{};
         const ecs::Position before = worldPosition(entity);
-        const ecs::Position after{
-            clampCenter(before.x, size.offsetX, size.halfX, zone.min.x, zone.max.x),
-            clampCenter(before.y, size.offsetY, size.halfY, zone.min.y, zone.max.y)};
+        const ecs::Position after{clampCenter(before.x, size.offsetX, size.halfX, zone.min.x, zone.max.x),
+                                  clampCenter(before.y, size.offsetY, size.halfY, zone.min.y, zone.max.y)};
         setWorldPosition(entity, before, after);
 
         if (_velocities.has(entity)) {
             Velocity &velocity = _velocities.get(entity);
-            if (blocked(after.x, size.offsetX, size.halfX, zone.min.x, zone.max.x,
-                        velocity.x)) {
+            if (blocked(after.x, size.offsetX, size.halfX, zone.min.x, zone.max.x, velocity.x)) {
                 velocity.x = 0.0f;
             }
-            if (blocked(after.y, size.offsetY, size.halfY, zone.min.y, zone.max.y,
-                        velocity.y)) {
+            if (blocked(after.y, size.offsetY, size.halfY, zone.min.y, zone.max.y, velocity.y)) {
                 velocity.y = 0.0f;
             }
         }
@@ -158,8 +154,7 @@ void BoundsSystem::update(float)
             continue;
         }
         const DestroyOutOfBounds &zone = _destroyOutOfBounds.get(entity);
-        if (!validZone(zone.min, zone.max) || !std::isfinite(zone.margin) ||
-            zone.margin < 0.0f) {
+        if (!validZone(zone.min, zone.max) || !std::isfinite(zone.margin) || zone.margin < 0.0f) {
             throw std::invalid_argument("DestroyOutOfBounds requires valid limits and margin");
         }
         const Footprint size = _colliders.has(entity) ? footprint(_colliders.get(entity)) : Footprint{};
@@ -180,4 +175,4 @@ void BoundsSystem::update(float)
     }
 }
 
-}
+} // namespace rtype::physics

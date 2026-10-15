@@ -87,7 +87,7 @@ bool manageable(CellRange range)
     return x * y * z <= maximumCells;
 }
 
-}
+} // namespace
 
 BroadPhaseResult broadPhaseNaive(std::span<const Aabb> bounds)
 {
@@ -147,4 +147,4 @@ BroadPhaseResult broadPhaseGrid(std::span<const Aabb> bounds, float cellSize)
     return result;
 }
 
-}
+} // namespace rtype::physics

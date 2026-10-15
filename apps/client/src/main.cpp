@@ -59,17 +59,14 @@ void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devic
     ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
     ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
     auto &physics = ecs.registerSystem<rtype::physics::PhysicsStep>();
-    physics.registerSystem<rtype::physics::MovementSystem>([&scenes = engine.getScenes()](rtype::ecs::entity_t entity) {
-        return scenes.updates(entity);
-    });
-    physics.registerSystem<rtype::physics::BoundsSystem>(ecs, [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) {
-        return scenes.updates(entity);
-    });
+    physics.registerSystem<rtype::physics::MovementSystem>(
+        [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
+    physics.registerSystem<rtype::physics::BoundsSystem>(
+        ecs, [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
     physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
     physics.registerSystem<rtype::physics::CollisionSystem>(
-        ecs, CollisionCellSize, [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) {
-            return scenes.updates(entity);
-        });
+        ecs, CollisionCellSize,
+        [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
     ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
 }
 

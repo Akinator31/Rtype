@@ -25,8 +25,7 @@ TEST_CASE("FastMoving detects a thin target crossed between fixed steps", "[phys
     const auto shot = ecs.createEntity();
     ecs.addComponent<Position>(shot, -5.0f, 0.0f);
     ecs.addComponent<Velocity>(shot, 20.0f, 0.0f);
-    ecs.addComponent<Collider>(shot, Aabb{{}, {0.25f, 0.25f, 0.0f}},
-                               rtype::physics::Vec3{}, true);
+    ecs.addComponent<Collider>(shot, Aabb{{}, {0.25f, 0.25f, 0.0f}}, rtype::physics::Vec3{}, true);
 
     const auto target = ecs.createEntity();
     ecs.addComponent<Position>(target);
@@ -155,8 +154,7 @@ TEST_CASE("FastMoving finds a target that also moved during the step", "[physics
     const auto shot = ecs.createEntity();
     ecs.addComponent<Position>(shot, -5.0f, 0.0f);
     ecs.addComponent<Velocity>(shot, 20.0f, 0.0f);
-    ecs.addComponent<Collider>(shot, Aabb{{}, {0.25f, 0.25f, 0.0f}},
-                               rtype::physics::Vec3{}, true);
+    ecs.addComponent<Collider>(shot, Aabb{{}, {0.25f, 0.25f, 0.0f}}, rtype::physics::Vec3{}, true);
     ecs.addComponent<FastMoving>(shot);
 
     const auto target = ecs.createEntity();
@@ -200,8 +198,7 @@ TEST_CASE("FastMoving detects contact when a step begins at a wall", "[physics][
     const auto shot = ecs.createEntity();
     ecs.addComponent<Position>(shot, -0.5f, 0.0f);
     ecs.addComponent<Velocity>(shot, 10.0f, 0.0f);
-    ecs.addComponent<Collider>(shot, Aabb{{}, {0.25f, 0.25f, 0.0f}},
-                               rtype::physics::Vec3{}, true);
+    ecs.addComponent<Collider>(shot, Aabb{{}, {0.25f, 0.25f, 0.0f}}, rtype::physics::Vec3{}, true);
     ecs.addComponent<FastMoving>(shot);
 
     const auto target = ecs.createEntity();

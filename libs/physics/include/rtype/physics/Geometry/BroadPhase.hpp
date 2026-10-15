@@ -25,4 +25,4 @@ struct BroadPhaseResult {
 [[nodiscard]] BroadPhaseResult broadPhaseNaive(std::span<const Aabb> bounds);
 [[nodiscard]] BroadPhaseResult broadPhaseGrid(std::span<const Aabb> bounds, float cellSize);
 
-}
+} // namespace rtype::physics

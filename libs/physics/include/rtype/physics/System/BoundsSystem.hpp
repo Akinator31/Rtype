@@ -35,4 +35,4 @@ public:
     void update(float elapsed) override;
 };
 
-}
+} // namespace rtype::physics

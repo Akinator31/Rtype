@@ -6,9 +6,9 @@
 #include "rtype/ecs/System/System.hpp"
 #include "rtype/physics/Component/Collider.hpp"
 #include "rtype/physics/Component/CollisionFilter.hpp"
+#include "rtype/physics/Component/FastMoving.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 #include "rtype/physics/Component/Static.hpp"
-#include "rtype/physics/Component/FastMoving.hpp"
 #include "rtype/physics/Geometry/Shapes.hpp"
 #include "rtype/physics/System/FrameSystem.hpp"
 
@@ -59,4 +59,4 @@ public:
     [[nodiscard]] const std::vector<Collision> &collisions() const;
 };
 
-}
+} // namespace rtype::physics

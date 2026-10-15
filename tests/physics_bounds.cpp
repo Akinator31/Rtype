@@ -6,12 +6,12 @@
 
 #include <stdexcept>
 
+using rtype::ecs::attach;
 using rtype::ecs::Ecs;
+using rtype::ecs::entity_t;
 using rtype::ecs::LocalPosition;
 using rtype::ecs::Position;
 using rtype::ecs::TransformSystem;
-using rtype::ecs::attach;
-using rtype::ecs::entity_t;
 using rtype::physics::Aabb;
 using rtype::physics::BoundsSystem;
 using rtype::physics::Collider;
@@ -78,8 +78,7 @@ TEST_CASE("BoundsSystem destroys only after the whole collider leaves the margin
     const entity_t shot = ecs.createEntity();
     ecs.addComponent<Position>(shot, 13.0f, 5.0f);
     ecs.addComponent<Collider>(shot, Sphere{{}, 1.0f});
-    ecs.addComponent<DestroyOutOfBounds>(shot, Position{0.0f, 0.0f},
-                                          Position{10.0f, 10.0f}, 2.0f);
+    ecs.addComponent<DestroyOutOfBounds>(shot, Position{0.0f, 0.0f}, Position{10.0f, 10.0f}, 2.0f);
 
     ecs.update(0.0f);
     CHECK(ecs.isAlive(shot));
@@ -156,8 +155,7 @@ TEST_CASE("BoundsSystem destroys a child using its current world position", "[ph
     ecs.addComponent<Velocity>(parent, 2.0f, 0.0f);
     const entity_t child = ecs.createEntity();
     attach(ecs, child, parent, {11.0f, 0.0f});
-    ecs.addComponent<DestroyOutOfBounds>(child, Position{0.0f, 0.0f},
-                                          Position{10.0f, 10.0f});
+    ecs.addComponent<DestroyOutOfBounds>(child, Position{0.0f, 0.0f}, Position{10.0f, 10.0f});
     const auto reference = ecs.ref(child);
 
     ecs.update(0.5f);
@@ -187,7 +185,6 @@ TEST_CASE("BoundsSystem rejects invalid zones", "[physics][bounds]")
     ecs.registerSystem<BoundsSystem>(ecs);
     const entity_t shot = ecs.createEntity();
     ecs.addComponent<Position>(shot);
-    ecs.addComponent<DestroyOutOfBounds>(shot, Position{10.0f, 0.0f},
-                                          Position{0.0f, 10.0f});
+    ecs.addComponent<DestroyOutOfBounds>(shot, Position{10.0f, 0.0f}, Position{0.0f, 10.0f});
     CHECK_THROWS_AS(ecs.update(0.0f), std::invalid_argument);
 }

@@ -4,13 +4,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+using rtype::ecs::attach;
 using rtype::ecs::ComponentCaches;
 using rtype::ecs::Ecs;
+using rtype::ecs::entity_t;
 using rtype::ecs::Position;
 using rtype::ecs::System;
 using rtype::ecs::TransformSystem;
-using rtype::ecs::attach;
-using rtype::ecs::entity_t;
 using rtype::physics::Aabb;
 using rtype::physics::BoundsSystem;
 using rtype::physics::Collider;
@@ -64,7 +64,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 TEST_CASE("Fixed physics order gives collision readers the child's current world position",
           "[physics][order]")
@@ -74,14 +74,12 @@ TEST_CASE("Fixed physics order gives collision readers the child's current world
     const entity_t parent = ecs.createEntity();
     ecs.addComponent<Position>(parent);
     ecs.addComponent<Velocity>(parent);
-    ecs.addComponent<ConfinedToBounds>(parent, Position{-10.0f, -10.0f},
-                                      Position{1.0f, 10.0f});
+    ecs.addComponent<ConfinedToBounds>(parent, Position{-10.0f, -10.0f}, Position{1.0f, 10.0f});
 
     const entity_t child = ecs.createEntity();
     attach(ecs, child, parent, {1.0f, 0.0f});
     ecs.addComponent<Velocity>(child);
-    ecs.addComponent<Collider>(child, Aabb{{}, {0.25f, 0.25f, 0.0f}},
-                               rtype::physics::Vec3{}, true);
+    ecs.addComponent<Collider>(child, Aabb{{}, {0.25f, 0.25f, 0.0f}}, rtype::physics::Vec3{}, true);
 
     const entity_t target = ecs.createEntity();
     ecs.addComponent<Position>(target, 3.0f, 0.0f);

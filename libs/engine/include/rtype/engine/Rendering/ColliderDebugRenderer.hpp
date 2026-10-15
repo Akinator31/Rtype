@@ -48,4 +48,4 @@ public:
     void draw(render::Renderer &renderer) const;
 };
 
-}
+} // namespace rtype::engine

@@ -11,4 +11,4 @@ public:
     virtual void endFrame() = 0;
 };
 
-}
+} // namespace rtype::physics

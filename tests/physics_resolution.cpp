@@ -4,12 +4,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+using rtype::ecs::attach;
 using rtype::ecs::Ecs;
+using rtype::ecs::entity_t;
 using rtype::ecs::LocalPosition;
 using rtype::ecs::Position;
 using rtype::ecs::TransformSystem;
-using rtype::ecs::attach;
-using rtype::ecs::entity_t;
 using rtype::physics::Aabb;
 using rtype::physics::Acceleration;
 using rtype::physics::Collider;
@@ -122,7 +122,8 @@ TEST_CASE("A static collider pushes an attached child in local coordinates", "[p
     CHECK(ecs.getComponent<LocalPosition>(child).x == -0.5f);
 }
 
-TEST_CASE("Solid resolution repeats on each fixed step even when the event is deduplicated", "[physics][resolution]")
+TEST_CASE("Solid resolution repeats on each fixed step even when the event is deduplicated",
+          "[physics][resolution]")
 {
     Ecs ecs;
     auto &physics = ecs.registerSystem<PhysicsStep>(0.5f, 2);

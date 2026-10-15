@@ -29,14 +29,12 @@ TEST_CASE("Collider debug geometry uses world positions and shape offsets", "[en
     const auto box = ecs.createEntity();
     ecs.addComponent<SceneMember>(box, scene);
     ecs.addComponent<Position>(box, 10.0f, 20.0f);
-    ecs.addComponent<Collider>(box, Aabb{{2.0f, 3.0f, 0.0f}, {4.0f, 5.0f, 0.0f}},
-                               Vec3{6.0f, 7.0f, 0.0f});
+    ecs.addComponent<Collider>(box, Aabb{{2.0f, 3.0f, 0.0f}, {4.0f, 5.0f, 0.0f}}, Vec3{6.0f, 7.0f, 0.0f});
 
     const auto circle = ecs.createEntity();
     ecs.addComponent<SceneMember>(circle, scene);
     ecs.addComponent<Position>(circle, 30.0f, 40.0f);
-    ecs.addComponent<Collider>(circle, Sphere{{1.0f, 2.0f, 0.0f}, 3.0f},
-                               Vec3{4.0f, 5.0f, 0.0f}, true);
+    ecs.addComponent<Collider>(circle, Sphere{{1.0f, 2.0f, 0.0f}, 3.0f}, Vec3{4.0f, 5.0f, 0.0f}, true);
 
     const auto shapes = debug.colliders();
     REQUIRE(shapes.size() == 2);

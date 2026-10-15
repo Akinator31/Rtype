@@ -5,4 +5,4 @@ namespace rtype::physics
 
 struct FastMoving {};
 
-}
+} // namespace rtype::physics

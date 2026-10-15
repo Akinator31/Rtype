@@ -35,22 +35,23 @@ std::vector<DebugCollider> ColliderDebugRenderer::colliders() const
         }
         const physics::Collider &collider = colliderCache.get(entity);
         const ecs::Position &position = positions.get(entity);
-        std::visit([&](const auto &shape) {
-            using Shape = std::decay_t<decltype(shape)>;
-            DebugCollider item;
-            item.entity = entity;
-            item.center = {position.x + collider.offset.x + shape.center.x,
-                           position.y + collider.offset.y + shape.center.y};
-            item.trigger = collider.trigger;
-            if constexpr (std::is_same_v<Shape, physics::Aabb>) {
-                item.halfSize = {std::max(0.0f, shape.halfSize.x),
-                                 std::max(0.0f, shape.halfSize.y)};
-            } else {
-                item.radius = std::max(0.0f, shape.radius);
-                item.circle = true;
-            }
-            result.push_back(item);
-        }, collider.shape);
+        std::visit(
+            [&](const auto &shape) {
+                using Shape = std::decay_t<decltype(shape)>;
+                DebugCollider item;
+                item.entity = entity;
+                item.center = {position.x + collider.offset.x + shape.center.x,
+                               position.y + collider.offset.y + shape.center.y};
+                item.trigger = collider.trigger;
+                if constexpr (std::is_same_v<Shape, physics::Aabb>) {
+                    item.halfSize = {std::max(0.0f, shape.halfSize.x), std::max(0.0f, shape.halfSize.y)};
+                } else {
+                    item.radius = std::max(0.0f, shape.radius);
+                    item.circle = true;
+                }
+                result.push_back(item);
+            },
+            collider.shape);
     }
     return result;
 }
@@ -84,19 +85,17 @@ void ColliderDebugRenderer::draw(render::Renderer &renderer) const
         renderer.drawLine(line.start, line.end, 1.0f, {100, 150, 255, 50});
     }
     for (const DebugCollider &collider : colliders()) {
-        const render::Color color = collider.trigger ? render::Color{255, 210, 40, 220}
-                                                       : render::Color{40, 240, 90, 220};
+        const render::Color color =
+            collider.trigger ? render::Color{255, 210, 40, 220} : render::Color{40, 240, 90, 220};
         if (collider.circle) {
             renderer.drawCircleOutline(collider.center, collider.radius, 2.0f, color);
         } else {
-            renderer.drawRectangleOutline(
-                {collider.center.x - collider.halfSize.x,
-                 collider.center.y - collider.halfSize.y,
-                 collider.halfSize.x * 2.0f,
-                 collider.halfSize.y * 2.0f},
-                2.0f, color);
+            renderer.drawRectangleOutline({collider.center.x - collider.halfSize.x,
+                                           collider.center.y - collider.halfSize.y,
+                                           collider.halfSize.x * 2.0f, collider.halfSize.y * 2.0f},
+                                          2.0f, color);
         }
     }
 }
 
-}
+} // namespace rtype::engine

@@ -7,14 +7,14 @@
 #include <stdexcept>
 #include <vector>
 
+using rtype::ecs::attach;
 using rtype::ecs::ComponentCaches;
 using rtype::ecs::Ecs;
+using rtype::ecs::entity_t;
 using rtype::ecs::EntityRef;
 using rtype::ecs::Position;
 using rtype::ecs::System;
 using rtype::ecs::TransformSystem;
-using rtype::ecs::attach;
-using rtype::ecs::entity_t;
 using rtype::physics::Aabb;
 using rtype::physics::Collider;
 using rtype::physics::CollisionLayer;
@@ -56,7 +56,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 TEST_CASE("CollisionSystem reports AABB contacts with entity references", "[physics][collision]")
 {

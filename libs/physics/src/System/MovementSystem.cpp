@@ -11,8 +11,7 @@ MovementSystem::MovementSystem(ecs::ComponentCaches &caches, std::function<bool(
     : _velocities(use<Velocity>(caches)), _accelerations(use<Acceleration>(caches)),
       _maxSpeeds(use<MaxSpeed>(caches)), _positions(use<ecs::Position>(caches)),
       _localPositions(use<ecs::LocalPosition>(caches)), _parents(use<ecs::Parent>(caches)),
-      _statics(use<Static>(caches)),
-      _shouldUpdate(std::move(shouldUpdate))
+      _statics(use<Static>(caches)), _shouldUpdate(std::move(shouldUpdate))
 {
 }
 
@@ -23,8 +22,7 @@ void MovementSystem::update(float elapsed)
     }
 
     for (ecs::entity_t entity = 0; entity < _velocities.size(); ++entity) {
-        if (!_velocities.has(entity) || _statics.has(entity) ||
-            (_shouldUpdate && !_shouldUpdate(entity))) {
+        if (!_velocities.has(entity) || _statics.has(entity) || (_shouldUpdate && !_shouldUpdate(entity))) {
             continue;
         }
 
