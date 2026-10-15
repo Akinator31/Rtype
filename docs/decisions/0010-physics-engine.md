@@ -142,6 +142,20 @@ the server and the tests do.
 6. **Fast entities** (`FastMoving`) are tested over the volume swept during the step (swept AABB), so that a
    fast missile does not go through a thin Bydo between two steps. Other entities do not pay for it.
 
+### Zone bounds
+
+`BoundsSystem` runs after movement and before the hierarchy transform. `ConfinedToBounds` keeps a whole
+collider inside its rectangle and cancels velocity directed out through a blocked edge. An entity without
+a collider is treated as a point. If a collider is too large to fit on one axis, its center is placed at
+the zone midpoint on that axis and its velocity on that axis is cancelled. A `Static` entity is not moved
+by confinement.
+
+`DestroyOutOfBounds` removes an entity through `ecs.defer()` once its entire collider lies beyond the
+rectangle expanded by `margin`. Touching the expanded border is still inside. A child uses its current
+world position from its parent's position and its `LocalPosition`; confinement adjusts its local position
+so the following `TransformSystem` preserves the result. Zones must have finite ordered limits and the
+destruction margin must be finite and nonnegative.
+
 ## Consequences
 
 - Movement and collisions are ordinary components and systems: no second world, nothing to synchronize when an

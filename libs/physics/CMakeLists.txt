@@ -4,6 +4,7 @@ add_library(rtype_physics
     src/CollisionFilter.cpp
     src/Geometry/BroadPhase.cpp
     src/Geometry/Intersections.cpp
+    src/System/BoundsSystem.cpp
     src/System/CollisionSystem.cpp
     src/System/MovementSystem.cpp
     src/System/PhysicsStep.cpp
