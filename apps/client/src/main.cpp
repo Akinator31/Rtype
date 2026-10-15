@@ -55,6 +55,7 @@ void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devic
     ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
     ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
+    ecs.registerSystem<rtype::engine::ToastSystem>(ecs, metrics, style);
     ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
 }
 

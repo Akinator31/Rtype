@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Toast.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
@@ -20,8 +21,8 @@ class Renderer;
 namespace rtype::engine
 {
 
-/// Draws the entities with the Renderer: those with a Drawable, a Position and a Text, Sprite, Box or Panel,
-/// and the 3D models (Drawable and Model) seen through the Camera, before the rest of the World layer.
+/// Draws the entities with the Renderer: those with a Drawable, a Position and a Text, Sprite, Box, Panel or
+/// Toast, and the 3D models (Drawable and Model) seen through the Camera, before the rest of the World layer.
 ///
 /// It is not a system of the Ecs: drawing happens between Renderer::beginFrame() and endFrame(), after the
 /// update, and may happen several times per frame (once per eye in VR). Each layer is drawn separately;
@@ -55,6 +56,9 @@ class SceneRenderer
     void drawModels(render::Renderer &renderer);
     /// Draws a glass panel with its shadows and glow, in the look of its highlight.
     void drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre, float scale,
+                   float opacity) const;
+    /// Draws a toast in the look of InterfaceStyle::toast: its panel, its accent and its text.
+    void drawToast(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
                    float opacity) const;
     /// Draws a console text field: its prompt in the prompt colour of the style, then its content.
     void drawConsoleField(render::Renderer &renderer, const Text &text, const TextField &field,

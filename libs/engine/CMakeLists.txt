@@ -2,6 +2,7 @@
 # the interface (menus as entities, see ADR 0007).
 add_library(rtype_engine
     src/Component/Animation.cpp
+    src/Component/Layout.cpp
     src/Component/Widget.cpp
     src/Control/Controls.cpp
     src/Engine/Engine.cpp
@@ -17,6 +18,7 @@ add_library(rtype_engine
     src/System/ColumnLayoutSystem.cpp
     src/System/HitboxSystem.cpp
     src/System/InterfaceSystem.cpp
+    src/System/ToastSystem.cpp
     src/System/TweenSystem.cpp
     src/System/WidgetTextSystem.cpp
 )

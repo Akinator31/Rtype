@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rtype/render/Types.hpp"
+
 namespace rtype::engine
 {
 
@@ -37,5 +39,12 @@ struct Anchor {
     float x = 0.0f;
     float y = 0.0f;
 };
+
+/// Where the point is, from 0 (left or top) to 1 (right or bottom), in each direction.
+[[nodiscard]] render::Vector2 getAnchorFraction(AnchorPoint point);
+
+/// Centre of an element of this size placed by the anchor on the screen, as the AnchorSystem places it.
+[[nodiscard]] render::Vector2 computeAnchoredPosition(render::Rectangle screen, const Anchor &anchor,
+                                                      render::Vector2 size);
 
 } // namespace rtype::engine

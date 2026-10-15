@@ -175,6 +175,32 @@ void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, re
                                          faded(look.border, opacity));
 }
 
+void SceneRenderer::drawToast(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
+                              float opacity) const
+{
+    const ToastStyle &style = _style.toast;
+    const float height = style.height();
+    const render::Rectangle area{centre.x - toast.width / 2.0f, centre.y - height / 2.0f, toast.width,
+                                 height};
+    const render::Color background = faded(style.background, opacity);
+
+    drawBlurred(renderer, moveDown(area, style.shadowOffset), style.cornerRadius, style.shadowBlur,
+                faded(style.shadow, opacity));
+    renderer.drawRoundedRectangle(area, style.cornerRadius, background, background);
+    renderer.drawRoundedRectangleOutline(area, style.cornerRadius, style.borderThickness,
+                                         faded(style.border, opacity));
+
+    const render::Color accent = faded(style.getAccent(toast.type), opacity);
+    const render::Rectangle accentArea{area.x + style.padding, area.y + style.padding, style.accentWidth,
+                                       height - (2.0f * style.padding)};
+    renderer.drawRoundedRectangle(accentArea, style.accentWidth / 2.0f, accent, accent);
+
+    const render::Vector2 measured = renderer.measureText(_style.button.font, toast.text, style.textSize);
+    const render::Vector2 topLeft{accentArea.x + style.accentWidth + style.padding,
+                                  centre.y - measured.y / 2.0f};
+    renderer.drawText(_style.button.font, toast.text, topLeft, style.textSize, faded(style.text, opacity));
+}
+
 void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
 {
     if (layer == Layer::World) {
@@ -192,6 +218,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     auto &focused = _ecs.cache<Focused>();
     auto &hitboxes = _ecs.cache<Hitbox>();
     auto &fields = _ecs.cache<TextField>();
+    auto &toasts = _ecs.cache<Toast>();
 
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
@@ -230,6 +257,9 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         }
         if (hasPanel) {
             drawPanel(renderer, panels.get(entity), {centre.x, centre.y}, scale, opacity);
+        }
+        if (toasts.has(entity)) {
+            drawToast(renderer, toasts.get(entity), {centre.x, centre.y}, opacity);
         }
         const bool isConsoleField = fields.has(entity) && fields.get(entity).type == TextFieldType::Console;
         // A focused widget is framed and drawn in the focused colour, except buttons and console fields

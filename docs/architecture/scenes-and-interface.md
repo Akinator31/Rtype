@@ -15,9 +15,10 @@ libs/engine/include/rtype/engine/
     Animation.hpp   Easing, ease(), Tween
     Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
     Layout.hpp      Column, ColumnItem, AnchorPoint, Anchor
+    Toast.hpp       ToastType, Toast
   System/       the systems, one per file
     InterfaceSystem.hpp  WidgetTextSystem.hpp  BoundTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp
-    ColumnLayoutSystem.hpp  AnchorSystem.hpp
+    ColumnLayoutSystem.hpp  AnchorSystem.hpp  ToastSystem.hpp
   Interface/    what the interface is built with
     MenuBuilder.hpp  InterfaceBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
@@ -44,6 +45,7 @@ ecs.registerSystem<TweenSystem>();
 ecs.registerSystem<HitboxSystem>(metrics, style);
 ecs.registerSystem<ColumnLayoutSystem>(ecs);
 ecs.registerSystem<AnchorSystem>(metrics);
+ecs.registerSystem<ToastSystem>(ecs, metrics, style);
 ecs.registerSystem<TransformSystem>(ecs);                                             // 5. positions, last
 SceneRenderer sceneRenderer(ecs, scenes, style);                                      // not a system
 
@@ -60,7 +62,7 @@ renderer.endFrame();
 | 1 | `Scenes` | Records which scene receives the input for the whole update. |
 | 2 | `InterfaceSystem` | Focus and navigation in the menus; reads the input before the game. |
 | 3 | Game systems | Movement, shots, network... They check `scenes.receivesInput()` for their scene. |
-| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Texts of the widgets and bound texts, animations, sizes, layout (columns, then anchors, which need the final sizes). |
+| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem`, `ToastSystem` | Texts of the widgets and bound texts, animations, sizes, layout (columns, then anchors, which need the final sizes), toasts. |
 | 5 | `TransformSystem` | Positions of the children from their parents. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
@@ -249,6 +251,26 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 | `button` | A focusable `Button`; the buttons of a builder get the focus in the order they are created |
 
 A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
+
+### Toasts
+
+A toast is a short message shown in a corner of the screen for a few seconds, over every scene and across
+scene switches. Showing one takes only its text, and optionally its type, which sets the colour of its accent:
+
+```cpp
+engine.showToast("Settings saved");
+engine.showToast("Connection lost", ToastType::Error); // Info, Success, Warning or Error
+```
+
+The toast entity holds only a `Toast` (its text and type). Everything about its look lives in one place,
+`InterfaceStyle::toast` (`ToastStyle`): corner, margin, sizes, colours, accent of each type, durations, slide,
+maximum number shown. The `SceneRenderer` draws it from that style (`drawToast`), and the `ToastSystem` places,
+fades and destroys it. To change how every toast looks, change the style, or `drawToast` for its shape; the
+calls stay the same.
+
+Toasts are stacked from the corner, the newest nearest to it; the others glide to their new place. Beyond
+`maxVisible`, the oldest fade out early. In the client, the console command `toast [info|success|warning|error]
+<text>` shows one.
 
 ### Navigation
 

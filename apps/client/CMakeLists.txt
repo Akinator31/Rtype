@@ -3,6 +3,7 @@ add_executable(r-type_client
     src/Commands/Commands.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
+    src/Commands/ToastCommand.cpp
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
