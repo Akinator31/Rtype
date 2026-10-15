@@ -8,6 +8,7 @@ add_executable(r-type_client
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
     src/MainMenu/FlightSystem.cpp
+    src/MainMenu/IntroSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
     src/MainMenu/Ships.cpp

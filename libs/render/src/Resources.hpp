@@ -29,10 +29,15 @@ private:
     Texture2D _texture;
 
 public:
-    explicit Texture(const std::filesystem::path &file) : _texture(LoadTexture(file.string().c_str()))
+    Texture(const std::filesystem::path &file, TextureFiltering filtering)
+        : _texture(LoadTexture(file.string().c_str()))
     {
         if (!IsTextureValid(_texture)) {
             throw std::runtime_error("Cannot load texture " + file.string());
+        }
+        if (filtering == TextureFiltering::Smooth) {
+            GenTextureMipmaps(&_texture);
+            SetTextureFilter(_texture, TEXTURE_FILTER_TRILINEAR);
         }
     }
     ~Texture()

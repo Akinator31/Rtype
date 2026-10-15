@@ -18,9 +18,11 @@ ResourceManager::~ResourceManager() = default;
 ResourceManager::ResourceManager(ResourceManager &&) noexcept = default;
 ResourceManager &ResourceManager::operator=(ResourceManager &&) noexcept = default;
 
-TextureId ResourceManager::loadTexture(const std::string &path)
+TextureId ResourceManager::loadTexture(const std::string &path, TextureFiltering filtering)
 {
-    return _impl->textures.load(path, [&] { return detail::Texture(_impl->assetsDirectory / path); });
+    const std::string key = filtering == TextureFiltering::Smooth ? path + "@smooth" : path;
+    return _impl->textures.load(key,
+                                [&] { return detail::Texture(_impl->assetsDirectory / path, filtering); });
 }
 
 FontId ResourceManager::loadFont(const std::string &path, int size)
