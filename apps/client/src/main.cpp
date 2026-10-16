@@ -6,6 +6,7 @@
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
+#include "MainMenu/Submenus.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -31,10 +32,11 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
 {
     const auto quit = [&window] { window.requestClose(); };
     engine.createScene(
-        rtype::client::MainMenuScene, {},
+        rtype::client::MainMenuScene, {.updatesWhenCovered = true},
         [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
             rtype::client::buildMainMenu(target, scene, resources, style, quit);
         });
+    rtype::client::createSubmenuScenes(engine, style);
     engine.createScene(GameScene, {.updatesWhenCovered = true});
     engine.createScene(
         rtype::client::ConsoleScene, {.overlay = true},

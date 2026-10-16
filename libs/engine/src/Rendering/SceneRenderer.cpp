@@ -125,6 +125,13 @@ bool SceneRenderer::isShown(ecs::entity_t entity)
     return _scenes.isVisible(entity) && !ecs::isHidden(_ecs, entity);
 }
 
+bool SceneRenderer::isShown(ecs::entity_t entity, Layer layer)
+{
+    const bool isSceneShowing =
+        layer == Layer::Interface ? _scenes.isInterfaceVisible(entity) : _scenes.isVisible(entity);
+    return isSceneShowing && !ecs::isHidden(_ecs, entity);
+}
+
 const Camera *SceneRenderer::findCamera()
 {
     auto &cameras = _ecs.cache<Camera>();
@@ -270,7 +277,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
         if (drawables.has(entity) && drawables.get(entity).layer == layer && positions.has(entity) &&
-            _scenes.isVisible(entity) && !ecs::isHidden(_ecs, entity)) {
+            isShown(entity, layer)) {
             entities.push_back(entity);
         }
     }

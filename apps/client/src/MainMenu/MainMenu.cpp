@@ -2,9 +2,11 @@
 
 #include "Assets.hpp"
 #include "MainMenu/Intro.hpp"
+#include "MainMenu/Layout.hpp"
 #include "MainMenu/Planet.hpp"
 #include "MainMenu/Ships.hpp"
 #include "MainMenu/Station.hpp"
+#include "MainMenu/Submenus.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
@@ -17,8 +19,6 @@ namespace rtype::client
 namespace
 {
 
-// Distance between the buttons and the edges of the screen, as on the left side of the design
-constexpr float screenMargin = 84.0f;
 // Distance between the tops of two buttons, one above the other, as in the design
 constexpr float buttonsSpacing = 103.0f;
 
@@ -88,13 +88,14 @@ void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, const std:
     ecs.addComponent<IntroSlide>(button, entrance, place, delay, engine::Easing::EaseOutBack);
 }
 
-/// The buttons of the menu. Play, Online and Settings do nothing yet.
-void createButtons(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, const std::function<void()> &quit)
+/// The buttons of the menu: Play, Online and Settings open their submenu.
+void createButtons(engine::Engine &engine, engine::InterfaceBuilder &interface,
+                   const std::function<void()> &quit)
 {
-    const std::function<void()> noAction;
-    createButton(ecs, interface, "Play", noAction, 0);
-    createButton(ecs, interface, "Online", noAction, 1);
-    createButton(ecs, interface, "Settings", noAction, 2);
+    ecs::Ecs &ecs = engine.getEcs();
+    createButton(ecs, interface, "Play", [&engine] { engine.pushScene(PlayMenuScene); }, 0);
+    createButton(ecs, interface, "Online", [&engine] { engine.pushScene(OnlineMenuScene); }, 1);
+    createButton(ecs, interface, "Settings", [&engine] { engine.pushScene(SettingsMenuScene); }, 2);
     createButton(ecs, interface, "Quit", quit, 3);
 }
 
@@ -111,7 +112,7 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
     createShips(ecs, scene, resources);
 
     engine::InterfaceBuilder interface(ecs, scene, style);
-    createButtons(ecs, interface, quit);
+    createButtons(engine, interface, quit);
 }
 
 } // namespace rtype::client

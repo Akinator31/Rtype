@@ -106,6 +106,19 @@ bool Scenes::isVisible(SceneId scene) const
     return false;
 }
 
+bool Scenes::isInterfaceVisible(SceneId scene) const
+{
+    for (auto entry = _stack.rbegin(); entry != _stack.rend(); ++entry) {
+        if (entry->id == scene) {
+            return true;
+        }
+        if (!entry->settings.overlay || entry->settings.hidesInterfaceBelow) {
+            return false;
+        }
+    }
+    return false;
+}
+
 std::optional<SceneId> Scenes::sceneOf(ecs::entity_t entity) const
 {
     return _members.has(entity) ? std::optional<SceneId>(_members.get(entity).scene) : std::nullopt;
@@ -127,6 +140,12 @@ bool Scenes::isVisible(ecs::entity_t entity) const
 {
     const std::optional<SceneId> scene = sceneOf(entity);
     return !scene || isVisible(*scene);
+}
+
+bool Scenes::isInterfaceVisible(ecs::entity_t entity) const
+{
+    const std::optional<SceneId> scene = sceneOf(entity);
+    return !scene || isInterfaceVisible(*scene);
 }
 
 } // namespace rtype::engine

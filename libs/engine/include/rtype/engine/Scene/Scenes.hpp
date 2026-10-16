@@ -31,6 +31,9 @@ struct SceneMember {
 struct SceneSettings {
     /// The scene below stays visible, like a pause menu over the game. Otherwise, it hides what is below.
     bool overlay = false;
+    /// With overlay, only the world of the scenes below stays visible, not their interface: a submenu over the
+    /// 3D background of the main menu, without the buttons of the main menu.
+    bool hidesInterfaceBelow = false;
     /// The scene keeps updating when another scene is over it, like a network game under the pause menu.
     bool updatesWhenCovered = false;
     /// Called when the player goes back (Escape) while the scene is at the top. Empty: the scene closes.
@@ -100,6 +103,9 @@ public:
     [[nodiscard]] bool updates(SceneId scene) const;
     /// Tells whether a scene is visible: it is at the top, or only overlays are over it.
     [[nodiscard]] bool isVisible(SceneId scene) const;
+    /// Tells whether the interface of a scene is visible: the scene is visible, and no scene above it hides
+    /// the interface below.
+    [[nodiscard]] bool isInterfaceVisible(SceneId scene) const;
 
     /// The scene of an entity, or nothing for a persistent entity.
     [[nodiscard]] std::optional<SceneId> sceneOf(ecs::entity_t entity) const;
@@ -109,6 +115,9 @@ public:
     [[nodiscard]] bool updates(ecs::entity_t entity) const;
     /// Tells whether an entity is visible according to its scene: persistent entities always are.
     [[nodiscard]] bool isVisible(ecs::entity_t entity) const;
+    /// Tells whether an entity of the interface layer is visible according to its scene: persistent entities
+    /// always are.
+    [[nodiscard]] bool isInterfaceVisible(ecs::entity_t entity) const;
 };
 
 } // namespace rtype::engine

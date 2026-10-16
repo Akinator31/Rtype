@@ -13,6 +13,7 @@ add_executable(r-type_client
     src/MainMenu/Planet.cpp
     src/MainMenu/Ships.cpp
     src/MainMenu/Station.cpp
+    src/MainMenu/Submenus.cpp
 )
 target_include_directories(r-type_client PRIVATE src)
 target_link_libraries(r-type_client PRIVATE

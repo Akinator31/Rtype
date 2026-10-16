@@ -130,11 +130,12 @@ Scenes form a stack:
 | Setting | Effect | Example |
 |---|---|---|
 | `overlay` | The scenes below stay visible | Pause menu over the game |
+| `hidesInterfaceBelow` | With `overlay`, only the world of the scenes below stays visible, not their interface | Submenu over the 3D background of the main menu |
 | `updatesWhenCovered` | The scene keeps updating under others | Network game under the pause menu |
 | `onBack` | Called on Back instead of closing the scene | Game: opens the pause menu |
 
 Systems ask `Scenes` what to do with an entity or a scene: `receivesInput()` (only the scene at the top),
-`updates()`, `isVisible()`.
+`updates()`, `isVisible()`, `isInterfaceVisible()`.
 
 !!! warning "The input owner is set at the start of the update"
 

@@ -29,9 +29,10 @@ namespace rtype::engine
 /// update, and may happen several times per frame (once per eye in VR). Each layer is drawn separately;
 /// within a layer, entities are drawn by Drawable order, then by id.
 ///
-/// Hidden entities (see ecs::isHidden()) and entities of hidden scenes are skipped. The focused widget gets a
-/// frame around its Hitbox and the focused colour, unless it has a Panel, which shows the focus itself; a
-/// focused text field also shows its selection and cursor.
+/// Hidden entities (see ecs::isHidden()) and entities of hidden scenes are skipped, and so are the entities of
+/// the interface layer under a scene that hides the interface below (SceneSettings::hidesInterfaceBelow). The
+/// focused widget gets a frame around its Hitbox and the focused colour, unless it has a Panel, which shows
+/// the focus itself; a focused text field also shows its selection and cursor.
 /// @code
 /// ecs.update(elapsed);
 /// renderer.beginFrame();
@@ -47,6 +48,8 @@ class SceneRenderer
 
     /// Whether the entity is in a visible scene and not hidden.
     [[nodiscard]] bool isShown(ecs::entity_t entity);
+    /// Whether the entity is drawn in this layer: in the interface layer, its scene must show its interface.
+    [[nodiscard]] bool isShown(ecs::entity_t entity, Layer layer);
     /// The first shown Camera, or nullptr if there is none.
     [[nodiscard]] const Camera *findCamera();
     /// The light of the scene: the first shown Light that is not on a Model, or the default light if there is
