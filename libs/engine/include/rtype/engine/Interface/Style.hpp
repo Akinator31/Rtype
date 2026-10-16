@@ -142,6 +142,8 @@ struct InterfaceStyle {
     float frameThickness = 4.0f;
     /// Scale reached by the focused widget, with a small bounce. Buttons keep their size.
     float focusScale = 1.1f;
+    /// Space between the back button and the title of a header (see InterfaceBuilder::header()).
+    float headerSpacing = 24.0f;
 
     render::Color text = render::colors::White;
     /// Text and frame of the focused widget, except buttons.

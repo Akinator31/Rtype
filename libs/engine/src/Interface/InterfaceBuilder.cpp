@@ -89,4 +89,13 @@ ecs::entity_t InterfaceBuilder::backButton(std::function<void()> onPress, Anchor
     return createButton(leftwardsArrow, _style.button.height, std::move(onPress), anchor);
 }
 
+ecs::entity_t InterfaceBuilder::header(const std::string &title, std::function<void()> onBack, Anchor anchor)
+{
+    const ecs::entity_t back = backButton(std::move(onBack), anchor);
+    const float titleX = anchor.x + _style.button.height + _style.headerSpacing;
+    const float titleY = anchor.y + ((_style.button.height - _style.textSize) / 2.0f);
+    text(title, {anchor.point, titleX, titleY});
+    return back;
+}
+
 } // namespace rtype::engine

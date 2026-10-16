@@ -441,6 +441,21 @@ TEST_CASE("A back button is a square button with an arrow", "[engine][interface]
     CHECK(pressed == 1);
 }
 
+TEST_CASE("A header puts the title after the back button", "[engine][interface]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    int pressed = 0;
+    const entity_t back =
+        ui.header("Settings", [&pressed] { ++pressed; }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+
+    world.update();
+    REQUIRE(world.isFocused(back));
+    world.press({Key::Enter});
+    CHECK(pressed == 1);
+    CHECK(world.textOf(back) == "\xE2\x86\x90");
+}
+
 TEST_CASE("The mouse focuses the widget under it, only when it moves", "[engine][interface]")
 {
     World world;

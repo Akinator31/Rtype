@@ -64,6 +64,11 @@ public:
     /// A small square button with a leftwards arrow, to go back to the previous screen: a glass Panel as high
     /// as the other buttons. It gets the focus in the same order as them.
     ecs::entity_t backButton(std::function<void()> onPress, Anchor anchor);
+    /// The top of a secondary screen, such as a submenu: a back button, then the title to its right,
+    /// centred on the same line. The anchor places the back button; the title follows it, so the anchor
+    /// should be on the left side of the screen.
+    /// @return The back button.
+    ecs::entity_t header(const std::string &title, std::function<void()> onBack, Anchor anchor);
 };
 
 } // namespace rtype::engine

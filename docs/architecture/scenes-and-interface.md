@@ -270,6 +270,7 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 | `sprite` | A `Sprite`: a texture or a part of it |
 | `button` | A focusable `Button`; the buttons of a builder get the focus in the order they are created |
 | `backButton` | A small square `Button` with a leftwards arrow (←), as high as the other buttons, to go back |
+| `header` | The top of a secondary screen: a `backButton`, then the title to its right on the same line |
 
 A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
 
