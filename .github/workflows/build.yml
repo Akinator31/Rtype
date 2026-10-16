@@ -23,9 +23,9 @@ jobs:
       matrix:
         include:
           - name: linux
-            os: ubuntu-24.04
+            os: [self-hosted, linux, rtype-cpp]
           - name: windows
-            os: windows-2022
+            os: [self-hosted, windows, rtype-cpp-windows]
 
     env:
       CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
