@@ -67,7 +67,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 |---|---|---|
 | **Core** | Entities, components, systems (`libs/ecs`), physics (`libs/physics`), logging (`libs/log`), timing | Client, server |
 | **Networking** | Sockets (Asio), binary serialization, reliability over UDP, encryption, the [protocol](../protocol/index.md) | Client, server |
-| **Game logic** | Players, Bydos, missiles, waves, collisions | Server |
+| **Game logic** | Players, Bydos, missiles, waves, collisions (`libs/game`, [ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md)) | Server, client offline |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
 | **Interface** | Menus, options and HUD, made of entities like the world (`libs/engine`) | Client |
 | **Audio** | Music and sound effects, built on raylib (`libs/audio`) | Client |
