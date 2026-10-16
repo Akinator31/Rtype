@@ -25,6 +25,10 @@ void PhysicsStep::update(float elapsed)
     const double tolerance = step * 0.00001;
     _accumulator += static_cast<double>(elapsed);
 
+    for (FrameSystem *system : _frameSystems) {
+        system->beginFrame();
+    }
+
     std::size_t steps = 0;
     while (_accumulator + tolerance >= step && steps < _maxSteps) {
         for (auto &system : _systems) {
@@ -38,6 +42,10 @@ void PhysicsStep::update(float elapsed)
 
     if (steps == _maxSteps && _accumulator >= step) {
         _accumulator = std::fmod(_accumulator, step);
+    }
+
+    for (FrameSystem *system : _frameSystems) {
+        system->endFrame();
     }
 }
 

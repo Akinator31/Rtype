@@ -18,12 +18,15 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
+#include <cstdlib>
 #include <exception>
+#include <string_view>
 
 namespace
 {
 
 constexpr const char *GameScene = "game";
+constexpr float CollisionCellSize = 64.0f;
 
 /// Declares the scenes of the client. The game scene is empty for now.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
@@ -87,15 +90,29 @@ void run()
     engine.setInputSource(devices);
     registerSystems(engine, devices, metrics, style);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
+    rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
+                                                               CollisionCellSize);
+    const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
+    bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
+    bool debugKeyWasDown = false;
 
     createScenes(engine, resources, style, window, console, metrics);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
     while (!window.shouldClose()) {
+        const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
+        if (debugKeyDown && !debugKeyWasDown) {
+            showColliderDebug = !showColliderDebug;
+        }
+        debugKeyWasDown = debugKeyDown;
         engine.update(window.frameTime());
         renderer.beginFrame();
-        sceneRenderer.draw(renderer);
+        sceneRenderer.draw(renderer, rtype::engine::Layer::World);
+        if (showColliderDebug) {
+            colliderDebugRenderer.draw(renderer);
+        }
+        sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
         renderer.endFrame();
     }
 }

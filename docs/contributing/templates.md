@@ -59,21 +59,23 @@ How to check that it worked.
 
 ## Protocol message
 
-For a new message in the [protocol specification](../protocol/index.md#5-messages). Add it to the right
-subsection.
+For a new message in the protocol specification: in [Lobby (TCP)](../protocol/lobby.md#5-messages),
+[Game (UDP)](../protocol/game.md#8-messages) or [Master and instances](../protocol/instances.md#4-messages).
+Take the next free type in the range of its direction, and add it to the right subsection. Changing an
+existing message increases the [protocol version](../protocol/index.md#4-versioning).
 
 ```markdown
 ### MESSAGE_NAME (`0xNN`)
 
 | | |
 |---|---|
-| **Direction** | Client → Server / Server → Client |
-| **Reliability** | Unreliable / Acknowledged |
+| **Direction** | Client → Game / Game → Client / Client → Master / ... |
+| **Reliability** | Reliable / Unreliable (UDP messages only) |
 | **Sent when** | Which event triggers it, and how often. |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | | | |
 
-**Receiver behaviour:** what the receiver does, and which values make the message invalid (discarded).
+**Receiver behaviour:** what the receiver does, and which values make the message invalid.
 ```
