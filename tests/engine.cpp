@@ -423,6 +423,24 @@ TEST_CASE("An anchored button can be focused and pressed", "[engine][interface]"
     CHECK(world.isFocused(next));
 }
 
+TEST_CASE("A back button is a square button with an arrow", "[engine][interface]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    int pressed = 0;
+    const entity_t back = ui.backButton([&pressed] { ++pressed; }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+
+    world.update();
+    const auto &panel = world.ecs.getComponent<Panel>(back);
+    CHECK(panel.width == panel.height);
+    CHECK(world.textOf(back) == "\xE2\x86\x90");
+    CHECK(positionOf(world, back).x == 20.0f + (panel.width / 2.0f));
+    REQUIRE(world.isFocused(back));
+
+    world.press({Key::Enter});
+    CHECK(pressed == 1);
+}
+
 TEST_CASE("The mouse focuses the widget under it, only when it moves", "[engine][interface]")
 {
     World world;

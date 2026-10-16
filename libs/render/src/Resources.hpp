@@ -57,8 +57,8 @@ public:
 
 // Characters rendered when a font is loaded: by default, raylib only renders ASCII, and any other character
 // is drawn as '?'. Latin-1 adds the accented letters of most Western European languages, completed with the
-// French "œ" and the euro sign. The soft hyphen is left out: it is never drawn, and some fonts (Inter) do not
-// have it, which makes raylib warn.
+// French "œ", the euro sign and the leftwards arrow of the back buttons. The soft hyphen is left out: it is
+// never drawn, and some fonts (Inter) do not have it, which makes raylib warn.
 inline std::vector<int> fontCharacters()
 {
     constexpr int softHyphen = 0xAD;
@@ -71,7 +71,7 @@ inline std::vector<int> fontCharacters()
             characters.push_back(character);
         }
     }
-    characters.insert(characters.end(), {0x152, 0x153, 0x20AC});
+    characters.insert(characters.end(), {0x152, 0x153, 0x20AC, 0x2190});
     return characters;
 }
 
