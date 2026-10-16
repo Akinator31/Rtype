@@ -29,10 +29,10 @@ namespace rtype::engine
 /// update, and may happen several times per frame (once per eye in VR). Each layer is drawn separately;
 /// within a layer, entities are drawn by Drawable order, then by id.
 ///
-/// Hidden entities (see ecs::isHidden()) and entities of hidden scenes are skipped, and so are the entities of
-/// the interface layer under a scene that hides the interface below (SceneSettings::hidesInterfaceBelow). The
-/// focused widget gets a frame around its Hitbox and the focused colour, unless it has a Panel, which shows
-/// the focus itself; a focused text field also shows its selection and cursor.
+/// Hidden entities (see ecs::isHidden()) and entities of hidden scenes are skipped, and so are the entities
+/// of the interface layer under a scene that hides the interface below (SceneSettings::hidesInterfaceBelow).
+/// The focused widget gets a frame around its Hitbox and the focused colour, unless it has a Panel, which
+/// shows the focus itself; a focused text field also shows its selection and cursor.
 /// @code
 /// ecs.update(elapsed);
 /// renderer.beginFrame();

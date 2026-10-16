@@ -12,8 +12,7 @@ constexpr float fullTurn = 360.0f;
 
 } // namespace
 
-SpinSystem::SpinSystem(ecs::ComponentCaches &caches)
-    : _spins(use<Spin>(caches)), _models(use<Model>(caches))
+SpinSystem::SpinSystem(ecs::ComponentCaches &caches) : _spins(use<Spin>(caches)), _models(use<Model>(caches))
 {
 }
 

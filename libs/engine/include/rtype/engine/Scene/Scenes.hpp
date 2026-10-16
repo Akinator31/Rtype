@@ -31,8 +31,8 @@ struct SceneMember {
 struct SceneSettings {
     /// The scene below stays visible, like a pause menu over the game. Otherwise, it hides what is below.
     bool overlay = false;
-    /// With overlay, only the world of the scenes below stays visible, not their interface: a submenu over the
-    /// 3D background of the main menu, without the buttons of the main menu.
+    /// With overlay, only the world of the scenes below stays visible, not their interface: a submenu over
+    /// the 3D background of the main menu, without the buttons of the main menu.
     bool hidesInterfaceBelow = false;
     /// The scene keeps updating when another scene is over it, like a network game under the pause menu.
     bool updatesWhenCovered = false;

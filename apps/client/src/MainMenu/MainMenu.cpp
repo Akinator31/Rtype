@@ -7,8 +7,8 @@
 #include "MainMenu/Ships.hpp"
 #include "MainMenu/Station.hpp"
 #include "MainMenu/Submenus.hpp"
-#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 
 #include <string>
