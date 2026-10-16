@@ -38,7 +38,7 @@ permissions:
 jobs:
   build:
     name: Build documentation
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, rtype-cpp]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -77,7 +77,7 @@ jobs:
     name: Deploy to GitHub Pages
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, rtype-cpp]
     permissions:
       pages: write
       id-token: write

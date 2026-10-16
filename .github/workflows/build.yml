@@ -23,9 +23,11 @@ jobs:
       matrix:
         include:
           - name: linux
-            os: ubuntu-24.04
+            os: [self-hosted, linux, rtype-cpp]
+            generator: Ninja
           - name: windows
-            os: windows-2022
+            os: [self-hosted, windows, rtype-cpp-windows]
+            generator: Visual Studio 17 2022
 
     env:
       CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
@@ -49,7 +51,9 @@ jobs:
           restore-keys: cpm-${{ runner.os }}-
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DRTYPE_BUILD_TESTS=ON
+        run: >
+          cmake -S . -B build -G "${{ matrix.generator }}"
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DRTYPE_BUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
