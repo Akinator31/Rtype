@@ -19,11 +19,17 @@ namespace
 
 // Distance between the buttons and the edges of the screen, as on the left side of the design
 constexpr float screenMargin = 84.0f;
+// Distance between the tops of two buttons, one above the other, as in the design
+constexpr float buttonsSpacing = 103.0f;
 
-/// The buttons come from this far beyond their place, out of the right edge of the screen, buttonsDelay
-/// seconds after the player presses.
+/// The buttons are in a column in the bottom left corner, Play at the top and Quit at the bottom.
+constexpr int buttonsCount = 4;
+
+/// The buttons come from this far beyond their place, out of the left edge of the screen, buttonsDelay
+/// seconds after the player presses; each button comes buttonsStagger seconds after the one above it.
 constexpr float buttonsEntrance = 800.0f;
 constexpr float buttonsDelay = 0.4f;
+constexpr float buttonsStagger = 0.08f;
 
 /// Camera of the main menu: a narrow field of view, so that the planet on the side of the screen is not
 /// distorted by the perspective.
@@ -67,16 +73,29 @@ void createMainMenuSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceMan
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
 }
 
-/// A button in the bottom right corner, hidden until the player presses, then coming from the right edge.
+/// The button at `row` of the column, counted from the top, hidden until the player presses, then coming
+/// from the left edge.
 void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, const std::string &text,
-                  const std::function<void()> &onPress)
+                  const std::function<void()> &onPress, int row)
 {
-    const render::Vector2 place{-screenMargin, -screenMargin};
-    const render::Vector2 entrance{place.x + buttonsEntrance, place.y};
+    const auto rowsBelow = static_cast<float>(buttonsCount - 1 - row);
+    const render::Vector2 place{screenMargin, -screenMargin - (rowsBelow * buttonsSpacing)};
+    const render::Vector2 entrance{place.x - buttonsEntrance, place.y};
+    const float delay = buttonsDelay + (static_cast<float>(row) * buttonsStagger);
     const ecs::entity_t button =
-        interface.button(text, onPress, {engine::AnchorPoint::BottomRight, entrance.x, entrance.y});
+        interface.button(text, onPress, {engine::AnchorPoint::BottomLeft, entrance.x, entrance.y});
     ecs.addComponent<ecs::Hidden>(button);
-    ecs.addComponent<IntroSlide>(button, entrance, place, buttonsDelay, engine::Easing::EaseOutBack);
+    ecs.addComponent<IntroSlide>(button, entrance, place, delay, engine::Easing::EaseOutBack);
+}
+
+/// The buttons of the menu. Play, Online and Settings do nothing yet.
+void createButtons(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, const std::function<void()> &quit)
+{
+    const std::function<void()> noAction;
+    createButton(ecs, interface, "Play", noAction, 0);
+    createButton(ecs, interface, "Online", noAction, 1);
+    createButton(ecs, interface, "Settings", noAction, 2);
+    createButton(ecs, interface, "Quit", quit, 3);
 }
 
 } // namespace
@@ -92,7 +111,7 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
     createShips(ecs, scene, resources);
 
     engine::InterfaceBuilder interface(ecs, scene, style);
-    createButton(ecs, interface, "Quit", quit);
+    createButtons(ecs, interface, quit);
 }
 
 } // namespace rtype::client
