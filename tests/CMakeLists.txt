@@ -16,6 +16,7 @@ add_executable(rtype_tests
     ecs.cpp
     ecs_world.cpp
     engine.cpp
+    framing.cpp
     log.cpp
     network.cpp
     paths.cpp
