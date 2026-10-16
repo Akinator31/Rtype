@@ -58,6 +58,7 @@ nav = [
     "decisions/0012-tcp-lobby-udp-game.md",
     "decisions/0013-one-process-per-game.md",
     "decisions/0014-encryption.md",
+    "decisions/0015-one-game-scene-local-or-remote-session.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
