@@ -43,13 +43,15 @@ ecs.registerSystem<WidgetTextSystem>();
 ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
 ecs.registerSystem<SpinSystem>();
+ecs.registerSystem<FlightSystem>();
+ecs.registerSystem<IntroSystem>(scenes, devices);
 ecs.registerSystem<ModelAnimationSystem>();
 ecs.registerSystem<HitboxSystem>(metrics, style);
 ecs.registerSystem<ColumnLayoutSystem>(ecs);
 ecs.registerSystem<AnchorSystem>(metrics);
 ecs.registerSystem<ToastSystem>(ecs, metrics, style);
-ecs.registerSystem<TransformSystem>(ecs);                                             // 5. positions, last
-SceneRenderer sceneRenderer(ecs, scenes, style);                                      // not a system
+ecs.registerSystem<TransformSystem>(ecs);
+SceneRenderer sceneRenderer(ecs, scenes, style);
 
 // Each frame
 engine.update(window.frameTime());
@@ -61,25 +63,14 @@ renderer.endFrame();
 
 | # | System | Role |
 |---|---|---|
-| 1 | `Scenes` | Records which scene receives the input for the whole update. |
-| 2 | `InterfaceSystem` | Focus and navigation in the menus; reads the input before the game. |
-| 3 | Game systems | Movement, shots, network... They check `scenes.receivesInput()` for their scene. |
-| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem`, `ModelAnimationSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem`, `ToastSystem` | Texts of the widgets and bound texts, animations (tweens, spinning models, animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`), sizes, layout (columns, then anchors, which need the final sizes), toasts. |
-| 5 | `TransformSystem` | Positions of the children from their parents. |
 | 1 | `Scenes` | Records which scene receives input for the whole update. |
-| 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation. |
-| 3 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Widget text, animation, hitboxes, and layout. |
-| 4 | Game input and AI systems, when present | Write `Velocity` or `Acceleration` before physics. |
-| 5 | `MovementSystem` in `PhysicsStep` | Updates `Position` or `LocalPosition` at each fixed step. |
-| 6 | `BoundsSystem` in `PhysicsStep` | Constrains movement and schedules out-of-bounds destruction. |
-| 7 | `TransformSystem` in `PhysicsStep` | Computes children's world `Position` before collision detection. |
-| 8 | `CollisionSystem` in `PhysicsStep` | Detects contacts, emits events, and resolves solid contacts. |
-| 9 | `TransformSystem` in the ECS | Keeps interface and menu hierarchy current on frames without a physics step. |
-| 10 | Game collision reaction systems, when present | Read `CollisionSystem::collisions()` and defer entity destruction. |
-
-`PhysicsStep` runs rows 5–8 once per fixed step; the other systems run once per frame. The client currently
-has no gameplay collision reaction system. Such a system is registered after `PhysicsStep` when damage,
-pickups, or other responses are implemented.
+| 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation; they read the input before the game. |
+| 3 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem` | Texts of the widgets and bound texts, tweens, spinning models. |
+| 4 | `FlightSystem`, `IntroSystem` | Client systems of the main menu: the ships flying around the station, the intro. |
+| 5 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`. |
+| 6 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
+| 7 | `ToastSystem` | Places, fades and destroys the toasts. |
+| 8 | `TransformSystem` | Positions of the children from their parents, last. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
 and may happen several times per frame (once per eye in VR).
