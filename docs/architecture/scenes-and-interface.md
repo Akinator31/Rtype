@@ -12,12 +12,13 @@ The client library is organised like the ECS, with one file per system:
 libs/engine/include/rtype/engine/
   Component/    the data attached to entities
     Drawing.hpp     Layer, Drawable, Text, BoundText, Sprite, Box, Scale, Opacity
-    Animation.hpp   Easing, ease(), Tween
+    Animation.hpp   Easing, ease(), Tween, Spin, ModelAnimation, switchModelAnimation()
     Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
     Layout.hpp      Column, ColumnItem, AnchorPoint, Anchor
+    Toast.hpp       ToastType, Toast
   System/       the systems, one per file
     InterfaceSystem.hpp  WidgetTextSystem.hpp  BoundTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp
-    ColumnLayoutSystem.hpp  AnchorSystem.hpp
+    ColumnLayoutSystem.hpp  AnchorSystem.hpp  ToastSystem.hpp  SpinSystem.hpp  ModelAnimationSystem.hpp
   Interface/    what the interface is built with
     MenuBuilder.hpp  InterfaceBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
@@ -41,21 +42,14 @@ ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);
 ecs.registerSystem<WidgetTextSystem>();
 ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
+ecs.registerSystem<SpinSystem>();
+ecs.registerSystem<ModelAnimationSystem>();
 ecs.registerSystem<HitboxSystem>(metrics, style);
 ecs.registerSystem<ColumnLayoutSystem>(ecs);
 ecs.registerSystem<AnchorSystem>(metrics);
-auto &physics = ecs.registerSystem<PhysicsStep>();
-physics.registerSystem<MovementSystem>([&scenes](entity_t entity) {
-    return scenes.updates(entity);
-});
-physics.registerSystem<BoundsSystem>(ecs, [&scenes](entity_t entity) {
-    return scenes.updates(entity);
-});
-physics.registerSystem<TransformSystem>(ecs);
-auto &collisions = physics.registerSystem<CollisionSystem>(ecs, 64.0f,
-    [&scenes](entity_t entity) { return scenes.updates(entity); });
-ecs.registerSystem<TransformSystem>(ecs);
-SceneRenderer sceneRenderer(ecs, scenes, style);
+ecs.registerSystem<ToastSystem>(ecs, metrics, style);
+ecs.registerSystem<TransformSystem>(ecs);                                             // 5. positions, last
+SceneRenderer sceneRenderer(ecs, scenes, style);                                      // not a system
 
 // Each frame
 engine.update(window.frameTime());
@@ -67,6 +61,11 @@ renderer.endFrame();
 
 | # | System | Role |
 |---|---|---|
+| 1 | `Scenes` | Records which scene receives the input for the whole update. |
+| 2 | `InterfaceSystem` | Focus and navigation in the menus; reads the input before the game. |
+| 3 | Game systems | Movement, shots, network... They check `scenes.receivesInput()` for their scene. |
+| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem`, `ModelAnimationSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem`, `ToastSystem` | Texts of the widgets and bound texts, animations (tweens, spinning models, animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`), sizes, layout (columns, then anchors, which need the final sizes), toasts. |
+| 5 | `TransformSystem` | Positions of the children from their parents. |
 | 1 | `Scenes` | Records which scene receives input for the whole update. |
 | 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation. |
 | 3 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Widget text, animation, hitboxes, and layout. |
@@ -145,11 +144,12 @@ Scenes form a stack:
 | Setting | Effect | Example |
 |---|---|---|
 | `overlay` | The scenes below stay visible | Pause menu over the game |
+| `hidesInterfaceBelow` | With `overlay`, only the world of the scenes below stays visible, not their interface | Submenu over the 3D background of the main menu |
 | `updatesWhenCovered` | The scene keeps updating under others | Network game under the pause menu |
 | `onBack` | Called on Back instead of closing the scene | Game: opens the pause menu |
 
 Systems ask `Scenes` what to do with an entity or a scene: `receivesInput()` (only the scene at the top),
-`updates()`, `isVisible()`.
+`updates()`, `isVisible()`, `isInterfaceVisible()`.
 
 !!! warning "The input owner is set at the start of the update"
 
@@ -278,8 +278,29 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 | `box` | A filled or outlined `Box` |
 | `sprite` | A `Sprite`: a texture or a part of it |
 | `button` | A focusable `Button`; the buttons of a builder get the focus in the order they are created |
+| `backButton` | A small square `Button` with a leftwards arrow (←), as high as the other buttons, to go back |
 
 A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
+
+### Toasts
+
+A toast is a short message shown in a corner of the screen for a few seconds, over every scene and across
+scene switches. Showing one takes only its text, and optionally its type, which sets the colour of its accent:
+
+```cpp
+engine.showToast("Settings saved");
+engine.showToast("Connection lost", ToastType::Error); // Info, Success, Warning or Error
+```
+
+The toast entity holds only a `Toast` (its text and type). Everything about its look lives in one place,
+`InterfaceStyle::toast` (`ToastStyle`): corner, margin, sizes, colours, accent of each type, durations, slide,
+maximum number shown. The `SceneRenderer` draws it from that style (`drawToast`), and the `ToastSystem` places,
+fades and destroys it. To change how every toast looks, change the style, or `drawToast` for its shape; the
+calls stay the same.
+
+Toasts are stacked from the corner, the newest nearest to it; the others glide to their new place. Beyond
+`maxVisible`, the oldest fade out early. In the client, the console command `toast [info|success|warning|error]
+<text>` shows one.
 
 ### Navigation
 

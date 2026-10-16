@@ -2,6 +2,7 @@
 
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/render/Renderer.hpp"
 
@@ -67,6 +68,29 @@ void drawBlurred(render::Renderer &renderer, render::Rectangle area, float radiu
     }
 }
 
+// Poses the model at the time of its animation, between the previous and the current one while it fades
+void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
+{
+    if (animation.time >= animation.fadeDuration) {
+        renderer.animateModel(model, animation.animation, animation.time);
+        return;
+    }
+    const float progress = animation.time / animation.fadeDuration;
+    const float amount = progress * progress * (3.0f - (2.0f * progress));
+    renderer.blendModelAnimations(model, animation.previousAnimation, animation.previousTime + animation.time,
+                                  animation.animation, animation.time, amount);
+}
+
+/// The part of a picture that fills an area without being stretched: all of it in one direction, its centre
+/// in the other one.
+render::Rectangle computeCoverSource(render::Vector2 picture, render::Rectangle area)
+{
+    const float scale = std::max(area.width / picture.x, area.height / picture.y);
+    const float width = area.width / scale;
+    const float height = area.height / scale;
+    return {(picture.x - width) / 2.0f, (picture.y - height) / 2.0f, width, height};
+}
+
 render::Rectangle moveDown(render::Rectangle area, float distance)
 {
     area.y += distance;
@@ -101,6 +125,13 @@ bool SceneRenderer::isShown(ecs::entity_t entity)
     return _scenes.isVisible(entity) && !ecs::isHidden(_ecs, entity);
 }
 
+bool SceneRenderer::isShown(ecs::entity_t entity, Layer layer)
+{
+    const bool isSceneShowing =
+        layer == Layer::Interface ? _scenes.isInterfaceVisible(entity) : _scenes.isVisible(entity);
+    return isSceneShowing && !ecs::isHidden(_ecs, entity);
+}
+
 const Camera *SceneRenderer::findCamera()
 {
     auto &cameras = _ecs.cache<Camera>();
@@ -115,8 +146,9 @@ const Camera *SceneRenderer::findCamera()
 render::Light SceneRenderer::findLight()
 {
     auto &lights = _ecs.cache<Light>();
+    auto &models = _ecs.cache<Model>();
     for (ecs::entity_t entity = 0; entity < lights.size(); ++entity) {
-        if (lights.has(entity) && isShown(entity)) {
+        if (lights.has(entity) && !models.has(entity) && isShown(entity)) {
             return lights.get(entity).light;
         }
     }
@@ -139,19 +171,40 @@ std::vector<ecs::entity_t> SceneRenderer::getModelsInOrder()
     return entities;
 }
 
+void SceneRenderer::drawBackdrop(render::Renderer &renderer)
+{
+    auto &backdrops = _ecs.cache<Backdrop>();
+    for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
+        if (backdrops.has(entity) && isShown(entity)) {
+            const Backdrop &backdrop = backdrops.get(entity);
+            const render::Rectangle area = renderer.visibleArea();
+            const render::Rectangle source = computeCoverSource(renderer.textureSize(backdrop.texture), area);
+            renderer.drawTexture(backdrop.texture, source, area, 0.0f, backdrop.tint);
+            return;
+        }
+    }
+}
+
 void SceneRenderer::drawModels(render::Renderer &renderer)
 {
     const Camera *camera = findCamera();
     if (camera == nullptr) {
         return;
     }
-    const render::Light light = findLight();
+    const render::Light sceneLight = findLight();
     auto &models = _ecs.cache<Model>();
+    auto &lights = _ecs.cache<Light>();
+    auto &animations = _ecs.cache<ModelAnimation>();
 
     for (const ecs::entity_t entity : getModelsInOrder()) {
         const Model &model = models.get(entity);
+        const render::Light &light = lights.has(entity) ? lights.get(entity).light : sceneLight;
+
+        if (animations.has(entity)) {
+            poseModel(renderer, model.model, animations.get(entity));
+        }
         renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
-                           model.rotationAngle, model.scale, model.tint);
+                           model.rotationAngle, model.scale, model.tint, model.spinAngle);
     }
 }
 
@@ -175,9 +228,36 @@ void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, re
                                          faded(look.border, opacity));
 }
 
+void SceneRenderer::drawToast(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
+                              float opacity) const
+{
+    const ToastStyle &style = _style.toast;
+    const float height = style.height();
+    const render::Rectangle area{centre.x - toast.width / 2.0f, centre.y - height / 2.0f, toast.width,
+                                 height};
+    const render::Color background = faded(style.background, opacity);
+
+    drawBlurred(renderer, moveDown(area, style.shadowOffset), style.cornerRadius, style.shadowBlur,
+                faded(style.shadow, opacity));
+    renderer.drawRoundedRectangle(area, style.cornerRadius, background, background);
+    renderer.drawRoundedRectangleOutline(area, style.cornerRadius, style.borderThickness,
+                                         faded(style.border, opacity));
+
+    const render::Color accent = faded(style.getAccent(toast.type), opacity);
+    const render::Rectangle accentArea{area.x + style.padding, area.y + style.padding, style.accentWidth,
+                                       height - (2.0f * style.padding)};
+    renderer.drawRoundedRectangle(accentArea, style.accentWidth / 2.0f, accent, accent);
+
+    const render::Vector2 measured = renderer.measureText(_style.button.font, toast.text, style.textSize);
+    const render::Vector2 topLeft{accentArea.x + style.accentWidth + style.padding,
+                                  centre.y - measured.y / 2.0f};
+    renderer.drawText(_style.button.font, toast.text, topLeft, style.textSize, faded(style.text, opacity));
+}
+
 void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
 {
     if (layer == Layer::World) {
+        drawBackdrop(renderer);
         drawModels(renderer);
     }
 
@@ -192,11 +272,12 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     auto &focused = _ecs.cache<Focused>();
     auto &hitboxes = _ecs.cache<Hitbox>();
     auto &fields = _ecs.cache<TextField>();
+    auto &toasts = _ecs.cache<Toast>();
 
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
         if (drawables.has(entity) && drawables.get(entity).layer == layer && positions.has(entity) &&
-            _scenes.isVisible(entity) && !ecs::isHidden(_ecs, entity)) {
+            isShown(entity, layer)) {
             entities.push_back(entity);
         }
     }
@@ -230,6 +311,9 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         }
         if (hasPanel) {
             drawPanel(renderer, panels.get(entity), {centre.x, centre.y}, scale, opacity);
+        }
+        if (toasts.has(entity)) {
+            drawToast(renderer, toasts.get(entity), {centre.x, centre.y}, opacity);
         }
         const bool isConsoleField = fields.has(entity) && fields.get(entity).type == TextFieldType::Console;
         // A focused widget is framed and drawn in the focused colour, except buttons and console fields

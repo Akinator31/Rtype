@@ -97,6 +97,20 @@ TEST_CASE("A scene that is not an overlay hides and pauses the ones below", "[en
     REQUIRE(scenes.isVisible(options));
 }
 
+TEST_CASE("An overlay can hide the interface of the scenes below, but not their world", "[engine][scenes]")
+{
+    Ecs ecs;
+    Scenes &scenes = ecs.registerSystem<Scenes>();
+    const SceneId home = scenes.open();
+    const SceneId submenu = scenes.open({.overlay = true, .hidesInterfaceBelow = true});
+    const SceneId console = scenes.open({.overlay = true});
+
+    REQUIRE(scenes.isVisible(home));
+    REQUIRE_FALSE(scenes.isInterfaceVisible(home));
+    REQUIRE(scenes.isInterfaceVisible(submenu));
+    REQUIRE(scenes.isInterfaceVisible(console));
+}
+
 TEST_CASE("Back calls the scene's action, or closes it", "[engine][scenes]")
 {
     Ecs ecs;

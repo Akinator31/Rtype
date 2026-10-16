@@ -14,7 +14,8 @@
 namespace rtype::engine
 {
 
-/// Writes the Position of the entities with an Anchor, every frame, from the size of the game and the size of
+/// Writes the Position of the entities with an Anchor, every frame, from the part of the game shown on the
+/// screen (Metrics::visibleArea(), so that anchored elements follow the edges of any screen) and the size of
 /// the entity: its Hitbox at scale 1 if it has one (a widget, with its padding), otherwise its Text, Sprite
 /// or Box. The size does not include the Scale, so that an entity does not move when it bounces.
 ///

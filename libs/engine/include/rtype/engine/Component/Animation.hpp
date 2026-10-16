@@ -44,4 +44,33 @@ struct Tween {
     float time = 0.0f;
 };
 
+/// Turns the Model of the entity around its own vertical axis, forever: a ring of asteroids around a planet.
+/// The SpinSystem moves Model::spinAngle.
+struct Spin {
+    /// In degrees per second; negative turns the other way.
+    float speed = 0.0f;
+};
+
+/// Plays an animation of the skinned Model of the entity, in a loop: the ModelAnimationSystem moves its time,
+/// the SceneRenderer poses the model before drawing it. Play another one with switchModelAnimation(), which
+/// fades from the previous one, so that the model does not jump from a pose to the other.
+/// @code
+/// const int idle = resources.getModelAnimation(model, "Idle");
+/// ecs.addComponent<ModelAnimation>(ship, idle);
+/// switchModelAnimation(ecs.getComponent<ModelAnimation>(ship), resources.getModelAnimation(model, "Move"));
+/// @endcode
+struct ModelAnimation {
+    int animation = 0;
+    float time = 0.0f;
+    int previousAnimation = 0;
+    float previousTime = 0.0f;
+    float fadeDuration = 0.0f;
+};
+
+/// Plays another animation from its start, fading from the current one for `fadeDuration` seconds.
+inline void switchModelAnimation(ModelAnimation &animation, int next, float fadeDuration = 0.5f)
+{
+    animation = {next, 0.0f, animation.animation, animation.time, fadeDuration};
+}
+
 } // namespace rtype::engine

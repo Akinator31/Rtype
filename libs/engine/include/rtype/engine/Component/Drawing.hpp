@@ -80,6 +80,9 @@ struct Model {
     float rotationAngle = 0.0f;
     float scale = 1.0f;
     render::Color tint = render::colors::White;
+    /// How much the model is turned around its own vertical axis, in degrees, before rotationAxis: a ring
+    /// keeps its tilt while it spins. Moved by a Spin.
+    float spinAngle = 0.0f;
 };
 
 /// The camera that the 3D models are seen through. The first visible entity with a Camera is used; without
@@ -88,10 +91,21 @@ struct Camera {
     render::Camera view;
 };
 
-/// The light of the 3D models. The first visible entity with a Light is used; without one, models get the
-/// default render::Light.
+/// The light of the 3D models. The first visible entity with a Light and without a Model lights the scene;
+/// without one, models get the default render::Light. A Light on the entity of a Model lights only that
+/// model, instead of the light of the scene: a station lit from the front while the planet keeps its night
+/// side.
 struct Light {
     render::Light light;
+};
+
+/// A picture that covers the whole screen, behind everything else of the World layer, 3D models included: the
+/// sky of a scene. It is scaled to cover the visible area and cut on the sides that overflow, so it keeps its
+/// proportions on any screen. The first shown entity with a Backdrop is drawn; it needs no Drawable nor
+/// Position.
+struct Backdrop {
+    render::TextureId texture;
+    render::Color tint = render::colors::White;
 };
 
 /// Size factor of what the entity draws, 1 by default. Animated by tweens, for instance to make a button

@@ -2,6 +2,7 @@
 
 #include "Resources.hpp"
 
+#include <stdexcept>
 #include <utility>
 
 namespace rtype::render
@@ -17,14 +18,15 @@ ResourceManager::~ResourceManager() = default;
 ResourceManager::ResourceManager(ResourceManager &&) noexcept = default;
 ResourceManager &ResourceManager::operator=(ResourceManager &&) noexcept = default;
 
-TextureId ResourceManager::loadTexture(const std::string &path)
+TextureId ResourceManager::loadTexture(const std::string &path, TextureFiltering filtering)
 {
-    return _impl->textures.load(path, [&] { return detail::Texture(_impl->assetsDirectory / path); });
+    const std::string key = filtering == TextureFiltering::Smooth ? path + "@smooth" : path;
+    return _impl->textures.load(key,
+                                [&] { return detail::Texture(_impl->assetsDirectory / path, filtering); });
 }
 
 FontId ResourceManager::loadFont(const std::string &path, int size)
 {
-    // The same file can be loaded at several sizes, each one is a different font
     return _impl->fonts.load(path + '@' + std::to_string(size),
                              [&] { return detail::Font(_impl->assetsDirectory / path, size); });
 }
@@ -32,6 +34,15 @@ FontId ResourceManager::loadFont(const std::string &path, int size)
 ModelId ResourceManager::loadModel(const std::string &path)
 {
     return _impl->models.load(path, [&] { return detail::Model(_impl->assetsDirectory / path); });
+}
+
+int ResourceManager::getModelAnimation(ModelId model, const std::string &name) const
+{
+    const int animation = _impl->models.get(model).findAnimation(name);
+    if (animation < 0) {
+        throw std::out_of_range("No animation named " + name + " in this model");
+    }
+    return animation;
 }
 
 } // namespace rtype::render

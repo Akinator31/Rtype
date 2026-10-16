@@ -207,17 +207,17 @@ repeats like any other input.
 
 ### Window pixels and game units
 
-The game is scaled to fit the window and may have black bars around it: a position in window pixels is not a
-position in the game. The `Renderer` converts it, since it knows both sizes:
+The game is scaled to fit the window, which may show more than the game area around it: a position in window
+pixels is not a position in the game. The `Renderer` converts it, since it knows both sizes:
 
 ```cpp
 const MousePosition mouse = devices.mousePosition();
 const Vector2 pointer = renderer.windowToGame({mouse.x, mouse.y});   // in game units, like everything drawn
 ```
 
-A pointer in the black bars is outside of the game: its coordinates are negative or larger than the game
-size. The conversion is the reverse of the scaling done at the end of each frame (`letterbox()`), and is unit
-tested (`windowToGame()` in `Viewport.hpp`).
+Near the edges of a window of another shape than the game, the pointer can be outside of the game area: its
+coordinates are negative or larger than the game size. The conversion is the reverse of the view set by
+`beginFrame()` (`computeVisibleArea()`), and is unit tested (`windowToGame()` in `Viewport.hpp`).
 
 !!! note "Two vector types"
 

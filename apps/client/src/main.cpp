@@ -3,7 +3,10 @@
 #include "Console/Console.hpp"
 #include "Console/ConsoleScene.hpp"
 #include "Console/ConsoleSystem.hpp"
+#include "MainMenu/FlightSystem.hpp"
+#include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
+#include "MainMenu/Submenus.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -32,10 +35,11 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
 {
     const auto quit = [&window] { window.requestClose(); };
     engine.createScene(
-        rtype::client::MainMenuScene, {},
+        rtype::client::MainMenuScene, {.updatesWhenCovered = true},
         [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
             rtype::client::buildMainMenu(target, scene, resources, style, quit);
         });
+    rtype::client::createSubmenuScenes(engine, style);
     engine.createScene(GameScene, {.updatesWhenCovered = true});
     engine.createScene(
         rtype::client::ConsoleScene, {.overlay = true},
@@ -55,18 +59,14 @@ void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devic
     ecs.registerSystem<rtype::engine::WidgetTextSystem>();
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
     ecs.registerSystem<rtype::engine::TweenSystem>();
+    ecs.registerSystem<rtype::engine::SpinSystem>();
+    ecs.registerSystem<rtype::client::FlightSystem>();
+    ecs.registerSystem<rtype::client::IntroSystem>(engine.getScenes(), devices);
+    ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
     ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
     ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
-    auto &physics = ecs.registerSystem<rtype::physics::PhysicsStep>();
-    physics.registerSystem<rtype::physics::MovementSystem>(
-        [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
-    physics.registerSystem<rtype::physics::BoundsSystem>(
-        ecs, [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
-    physics.registerSystem<rtype::ecs::TransformSystem>(ecs);
-    physics.registerSystem<rtype::physics::CollisionSystem>(
-        ecs, CollisionCellSize,
-        [&scenes = engine.getScenes()](rtype::ecs::entity_t entity) { return scenes.updates(entity); });
+    ecs.registerSystem<rtype::engine::ToastSystem>(ecs, metrics, style);
     ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
 }
 

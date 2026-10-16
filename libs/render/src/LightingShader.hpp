@@ -12,12 +12,14 @@ namespace rtype::render::detail
 {
 
 /// Owns the lighting shader of the 3D models: a directional light, such as a sun, plus an ambient light,
-/// with the normal map of the material when it has one. If the shader cannot be compiled, a warning is logged
-/// and models are drawn unlit, with the colours of their textures.
+/// with the normal map of the material when it has one, and its emission map, which glows whatever the
+/// light. If the shader cannot be compiled, a warning is logged and models are drawn unlit, with the colours
+/// of their textures.
 class LightingShader
 {
 private:
     Shader _shader{};
+    Texture2D _noEmission{};
     int _lightDirectionLocation = -1;
     int _lightColorLocation = -1;
     int _ambientColorLocation = -1;
@@ -38,9 +40,10 @@ public:
     LightingShader(LightingShader &&) = delete;
     LightingShader &operator=(LightingShader &&) = delete;
 
-    /// Draws a model lit by the light, like DrawModelEx(). Must be called in 3D mode.
+    /// Draws a model lit by the light, like DrawModelEx(), turned first by spinAngle degrees around its own
+    /// vertical axis. Must be called in 3D mode.
     void draw(const Model &model, const Light &light, ::Vector3 position, ::Vector3 rotationAxis,
-              float rotationAngle, float scale, ::Color tint);
+              float rotationAngle, float spinAngle, float scale, ::Color tint);
 };
 
 } // namespace rtype::render::detail

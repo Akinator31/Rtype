@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
+#include <cstddef>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -41,6 +42,10 @@ public:
         return {0.5f * size * static_cast<float>(text.size()), size};
     }
     [[nodiscard]] rtype::render::Vector2 gameSize() const override { return {1920.0f, 1080.0f}; }
+    [[nodiscard]] rtype::render::Rectangle visibleArea() const override { return screen; }
+
+    // A screen of the shape of the game by default
+    rtype::render::Rectangle screen{0.0f, 0.0f, 1920.0f, 1080.0f};
     [[nodiscard]] rtype::render::Vector2 windowToGame(rtype::render::Vector2 position) const override
     {
         return position;
@@ -65,6 +70,7 @@ struct World {
         ecs.registerSystem<HitboxSystem>(metrics, style);
         ecs.registerSystem<ColumnLayoutSystem>(ecs);
         ecs.registerSystem<AnchorSystem>(metrics);
+        ecs.registerSystem<ToastSystem>(ecs, metrics, style);
         ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
     }
 
@@ -352,6 +358,24 @@ TEST_CASE("An anchored element is placed from its size and the size of the game"
     CHECK(positionOf(world, right).y == 540.0f);
 }
 
+TEST_CASE("An anchored element follows the edges of a screen of another shape", "[engine][layout]")
+{
+    World world;
+    // A 16:10 screen shows 60 game units more above and below the game
+    world.metrics.screen = {0.0f, -60.0f, 1920.0f, 1200.0f};
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t topLeft = ui.text("Life", {AnchorPoint::TopLeft, 20.0f, 10.0f});
+    const entity_t bottomRight = ui.text("Life", {AnchorPoint::BottomRight, -20.0f, -10.0f});
+    const entity_t centre = ui.box(100.0f, 50.0f, rtype::render::colors::Red, {});
+
+    world.update();
+
+    CHECK(positionOf(world, topLeft).y == -60.0f + 10.0f + 28.0f);
+    CHECK(positionOf(world, bottomRight).y == 1140.0f - 10.0f - 28.0f);
+    CHECK(positionOf(world, centre).x == 960.0f);
+    CHECK(positionOf(world, centre).y == 540.0f);
+}
+
 TEST_CASE("An anchored element follows the size of its text", "[engine][layout]")
 {
     World world;
@@ -397,6 +421,24 @@ TEST_CASE("An anchored button can be focused and pressed", "[engine][interface]"
     CHECK(pressed == 1);
     world.press({Key::Down});
     CHECK(world.isFocused(next));
+}
+
+TEST_CASE("A back button is a square button with an arrow", "[engine][interface]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    int pressed = 0;
+    const entity_t back = ui.backButton([&pressed] { ++pressed; }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+
+    world.update();
+    const auto &panel = world.ecs.getComponent<Panel>(back);
+    CHECK(panel.width == panel.height);
+    CHECK(world.textOf(back) == "\xE2\x86\x90");
+    CHECK(positionOf(world, back).x == 20.0f + (panel.width / 2.0f));
+    REQUIRE(world.isFocused(back));
+
+    world.press({Key::Enter});
+    CHECK(pressed == 1);
 }
 
 TEST_CASE("The mouse focuses the widget under it, only when it moves", "[engine][interface]")
@@ -995,4 +1037,229 @@ TEST_CASE("A console text field keeps its size when it gets the focus", "[engine
     world.input.typed = U"help";
     world.update();
     REQUIRE(world.textOf(field) == "> help");
+}
+
+namespace
+{
+
+// The toasts of the default style are in the top right corner; with the fake measures, a short text fits in
+// their minimum width.
+[[nodiscard]] float opacityOf(World &world, entity_t toast)
+{
+    return world.ecs.getComponent<Opacity>(toast).value;
+}
+
+// Centre of the toast at a place of the stack, 0 being the nearest to the corner, once it is fully shown
+[[nodiscard]] rtype::render::Vector2 toastCentreAt(const ToastStyle &style, float place, float width)
+{
+    const float step = style.height() + style.spacing;
+    return {1920.0f - style.margin - (width / 2.0f), style.margin + (style.height() / 2.0f) + (place * step)};
+}
+
+[[nodiscard]] std::size_t countToasts(World &world)
+{
+    const auto &toasts = world.ecs.cache<Toast>();
+    std::size_t count = 0;
+    for (entity_t entity = 0; entity < toasts.size(); ++entity) {
+        count += toasts.has(entity) ? 1 : 0;
+    }
+    return count;
+}
+
+[[nodiscard]] bool isNear(float value, float expected)
+{
+    return std::abs(value - expected) < 0.01f;
+}
+
+} // namespace
+
+TEST_CASE("Showing a toast creates it with its text and type", "[engine][toast]")
+{
+    World world;
+    const entity_t toast = world.engine.showToast("Connection lost", ToastType::Error);
+    const entity_t info = world.engine.showToast("Saved");
+
+    REQUIRE(world.ecs.hasComponent<Toast>(toast));
+    CHECK(world.ecs.getComponent<Toast>(toast).text == "Connection lost");
+    CHECK(world.ecs.getComponent<Toast>(toast).type == ToastType::Error);
+    CHECK(world.ecs.getComponent<Toast>(info).type == ToastType::Info);
+}
+
+TEST_CASE("A toast fades in, stays, fades out, then disappears", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const entity_t toast = world.engine.showToast("Saved");
+
+    world.update(0.0f);
+    CHECK(isNear(opacityOf(world, toast), 0.0f));
+    world.update(style.fadeDuration / 2.0f);
+    CHECK(isNear(opacityOf(world, toast), 0.5f));
+    world.update(style.fadeDuration / 2.0f);
+    CHECK(isNear(opacityOf(world, toast), 1.0f));
+    world.update(style.duration);
+    CHECK(isNear(opacityOf(world, toast), 1.0f));
+    world.update(style.fadeDuration / 2.0f);
+    CHECK(isNear(opacityOf(world, toast), 0.5f));
+    world.update(style.fadeDuration / 2.0f);
+    CHECK_FALSE(world.ecs.hasComponent<Toast>(toast));
+}
+
+TEST_CASE("A toast stays over every scene, and after a scene switch", "[engine][toast]")
+{
+    World world;
+    world.engine.createScene("menu");
+    world.engine.createScene("game");
+    world.engine.switchScene("menu");
+    world.update();
+    const entity_t toast = world.engine.showToast("Saved");
+
+    world.engine.switchScene("game");
+    world.update(0.1f);
+
+    REQUIRE(world.ecs.hasComponent<Toast>(toast));
+    CHECK(world.scenes.isVisible(toast));
+    CHECK(world.ecs.getComponent<Drawable>(toast).layer == Layer::Interface);
+}
+
+TEST_CASE("Toasts stack from their corner, the newest nearest to it", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const entity_t older = world.engine.showToast("First");
+    const entity_t newer = world.engine.showToast("Second");
+
+    world.update(1.0f);
+
+    const rtype::render::Vector2 nearest = toastCentreAt(style, 0.0f, style.minWidth);
+    const rtype::render::Vector2 below = toastCentreAt(style, 1.0f, style.minWidth);
+    CHECK(isNear(positionOf(world, newer).x, nearest.x));
+    CHECK(isNear(positionOf(world, newer).y, nearest.y));
+    CHECK(isNear(positionOf(world, older).x, below.x));
+    CHECK(isNear(positionOf(world, older).y, below.y));
+}
+
+TEST_CASE("A new toast takes its place at once, the others glide to theirs", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const entity_t older = world.engine.showToast("First");
+    world.update(1.0f);
+
+    world.engine.showToast("Second");
+    world.update(0.01f);
+    const float olderY = positionOf(world, older).y;
+    CHECK(olderY > toastCentreAt(style, 0.0f, style.minWidth).y);
+    CHECK(olderY < toastCentreAt(style, 1.0f, style.minWidth).y);
+
+    world.update(1.0f);
+    CHECK(isNear(positionOf(world, older).y, toastCentreAt(style, 1.0f, style.minWidth).y));
+}
+
+TEST_CASE("Toasts in a bottom corner stack upwards", "[engine][toast]")
+{
+    World world;
+    ToastStyle &style = world.style.toast;
+    style.corner = AnchorPoint::BottomLeft;
+    const entity_t older = world.engine.showToast("First");
+    const entity_t newer = world.engine.showToast("Second");
+
+    world.update(1.0f);
+
+    const float nearestY = 1080.0f - style.margin - (style.height() / 2.0f);
+    CHECK(isNear(positionOf(world, newer).x, style.margin + (style.minWidth / 2.0f)));
+    CHECK(isNear(positionOf(world, newer).y, nearestY));
+    CHECK(isNear(positionOf(world, older).y, nearestY - style.height() - style.spacing));
+}
+
+TEST_CASE("A toast is wide enough for its text", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const std::string text(80, 'x');
+    const entity_t toast = world.engine.showToast(text);
+
+    world.update(1.0f);
+
+    // Padding, accent, padding, text, padding
+    const float textWidth = 0.5f * style.textSize * static_cast<float>(text.size());
+    const float width = (3.0f * style.padding) + style.accentWidth + textWidth;
+    CHECK(isNear(world.ecs.getComponent<Toast>(toast).width, width));
+    CHECK(isNear(positionOf(world, toast).x, toastCentreAt(style, 0.0f, width).x));
+}
+
+TEST_CASE("Beyond the maximum, the oldest toast fades out", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const entity_t oldest = world.engine.showToast("0");
+    world.update(style.fadeDuration);
+    for (std::size_t count = 1; count < style.maxVisible; ++count) {
+        world.engine.showToast(std::to_string(count));
+        world.update(style.fadeDuration);
+    }
+    CHECK(isNear(opacityOf(world, oldest), 1.0f));
+
+    world.engine.showToast("One too many");
+    world.update(style.fadeDuration / 2.0f);
+    CHECK(isNear(opacityOf(world, oldest), 0.5f));
+    world.update(style.fadeDuration / 2.0f);
+    CHECK_FALSE(world.ecs.hasComponent<Toast>(oldest));
+    CHECK(countToasts(world) == style.maxVisible);
+}
+
+TEST_CASE("A spinning model turns at its speed and stays between 0 and 360 degrees", "[engine][spin]")
+{
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<SpinSystem>();
+    const entity_t ring = ecs.createEntity();
+    ecs.addComponent<Model>(ring);
+    ecs.addComponent<Spin>(ring, 90.0f);
+    const entity_t backwards = ecs.createEntity();
+    ecs.addComponent<Model>(backwards);
+    ecs.addComponent<Spin>(backwards, -90.0f);
+    const entity_t still = ecs.createEntity();
+    ecs.addComponent<Model>(still);
+
+    engine.update(1.0f);
+    CHECK(ecs.getComponent<Model>(ring).spinAngle == 90.0f);
+    CHECK(ecs.getComponent<Model>(backwards).spinAngle == 270.0f);
+    CHECK(ecs.getComponent<Model>(still).spinAngle == 0.0f);
+
+    engine.update(3.5f);
+    CHECK(ecs.getComponent<Model>(ring).spinAngle == 45.0f);
+    CHECK(ecs.getComponent<Model>(backwards).spinAngle == 315.0f);
+}
+
+TEST_CASE("A model animation moves its time by the elapsed time", "[engine][animation]")
+{
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<ModelAnimationSystem>();
+    const entity_t ship = ecs.createEntity();
+    ecs.addComponent<ModelAnimation>(ship, 2);
+    const entity_t restarted = ecs.createEntity();
+    ecs.addComponent<ModelAnimation>(restarted, 0, 1.5f);
+
+    engine.update(0.25f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).animation == 2);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).time == 0.25f);
+    CHECK(ecs.getComponent<ModelAnimation>(restarted).time == 1.75f);
+
+    ecs.getComponent<ModelAnimation>(ship) = {1, 0.0f};
+    engine.update(0.5f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).animation == 1);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).time == 0.5f);
+}
+
+TEST_CASE("Switching a model animation fades from the previous one", "[engine][animation]")
+{
+    ModelAnimation animation{2, 1.5f};
+    switchModelAnimation(animation, 3, 0.75f);
+    CHECK(animation.animation == 3);
+    CHECK(animation.time == 0.0f);
+    CHECK(animation.previousAnimation == 2);
+    CHECK(animation.previousTime == 1.5f);
+    CHECK(animation.fadeDuration == 0.75f);
 }

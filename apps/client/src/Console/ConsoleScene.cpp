@@ -82,7 +82,7 @@ void createCommandLine(ecs::Ecs &ecs, engine::InterfaceBuilder &builder, Console
 void buildConsole(engine::Engine &engine, engine::SceneId scene, Console &console,
                   const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
-    const float width = metrics.gameSize().x;
+    const float width = metrics.visibleArea().width;
     engine::InterfaceBuilder builder(engine.getEcs(), scene, style);
     createBackground(builder, width, style.console);
     createLines(engine.getEcs(), builder, console, style);

@@ -18,6 +18,15 @@ using FontId = core::Handle<struct FontTag>;
 /// Handle of a 3D model loaded by the ResourceManager.
 using ModelId = core::Handle<struct ModelTag>;
 
+/// How a texture looks when it is drawn at another size than its own.
+enum class TextureFiltering {
+    /// Each pixel stays a sharp square: pixel art.
+    Sharp,
+    /// Pixels are blended, and the texture keeps its fine details when drawn smaller: pictures, logos, a
+    /// starry sky.
+    Smooth,
+};
+
 /// Loads the graphics resources of the game (textures, fonts, 3D models) and frees them when it is destroyed.
 ///
 /// Each file is loaded once: loading the same path again returns the same handle. The game refers to
@@ -51,10 +60,11 @@ public:
     ResourceManager(ResourceManager &&) noexcept;
     ResourceManager &operator=(ResourceManager &&) noexcept;
 
-    /// Loads an image file (PNG, BMP, QOI...) as a texture, unless it is already loaded.
+    /// Loads an image file (PNG, BMP, QOI...) as a texture, unless it is already loaded with this filtering.
     /// @param path Path of the file, relative to the assets directory, for instance "sprites/player.png".
     /// @throws std::runtime_error if the file is missing or is not a supported image.
-    [[nodiscard]] TextureId loadTexture(const std::string &path);
+    [[nodiscard]] TextureId loadTexture(const std::string &path,
+                                        TextureFiltering filtering = TextureFiltering::Sharp);
 
     /// Loads a font file (TTF, OTF...) at the given size, unless it is already loaded at this size.
     /// @param path Path of the file, relative to the assets directory, for instance "fonts/main.ttf".
@@ -62,10 +72,17 @@ public:
     /// @throws std::runtime_error if the file is missing or is not a supported font.
     [[nodiscard]] FontId loadFont(const std::string &path, int size = 32);
 
-    /// Loads a 3D model file (glTF, OBJ...) with its materials and textures, unless it is already loaded.
+    /// Loads a 3D model file (glTF, OBJ...) with its materials and textures, unless it is already loaded. The
+    /// animations of a model with a skeleton (skinned) are loaded with it: see Renderer::animateModel().
     /// @param path Path of the file, relative to the assets directory, for instance "models/planet.glb".
     /// @throws std::runtime_error if the file is missing or is not a supported model.
     [[nodiscard]] ModelId loadModel(const std::string &path);
+
+    /// Returns the index of an animation of a loaded model, given to Renderer::animateModel().
+    /// @param name Name of the animation in the model file, for instance "Idle".
+    /// @throws std::out_of_range if the model has no animation by this name, or if the handle does not come
+    /// from this manager.
+    [[nodiscard]] int getModelAnimation(ModelId model, const std::string &name) const;
 };
 
 } // namespace rtype::render

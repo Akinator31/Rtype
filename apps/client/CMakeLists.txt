@@ -3,11 +3,17 @@ add_executable(r-type_client
     src/Commands/Commands.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
+    src/Commands/ToastCommand.cpp
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
+    src/MainMenu/FlightSystem.cpp
+    src/MainMenu/IntroSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
+    src/MainMenu/Ships.cpp
+    src/MainMenu/Station.cpp
+    src/MainMenu/Submenus.cpp
 )
 target_include_directories(r-type_client PRIVATE src)
 target_link_libraries(r-type_client PRIVATE

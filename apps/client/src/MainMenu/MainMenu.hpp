@@ -12,8 +12,10 @@ namespace rtype::client
 /// Name of the main menu scene.
 inline constexpr const char *MainMenuScene = "main_menu";
 
-/// Fills the main menu: a desert planet on the left, seen from orbit, behind the menu, and a button in the
-/// bottom right corner to quit the game.
+/// Fills the main menu: a desert planet on the left, seen from orbit, a space station far on the right with
+/// ships landing on it and leaving, and a column of buttons in the bottom left corner: Play, Online and
+/// Settings, which open their submenu (see createSubmenuScenes()), and Quit. The ships need a FlightSystem.
+/// The scene must keep updating when covered, so that the ships keep flying behind the submenus.
 /// @param resources Where the models are loaded from. It must outlive the scene.
 /// @param style Look of the buttons. It must outlive the scene.
 /// @param quit Called when the player presses the quit button.

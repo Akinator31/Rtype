@@ -1,7 +1,11 @@
 #pragma once
 
+#include "rtype/engine/Component/Layout.hpp"
+#include "rtype/engine/Component/Toast.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
+
+#include <cstddef>
 
 namespace rtype::engine
 {
@@ -63,6 +67,67 @@ struct ConsoleStyle {
     float cursorWidth = 2.0f;
 };
 
+/// Look and timing of the toasts (see Engine::showToast()): a dark rounded panel with a coloured accent on
+/// its left, then the text on one line, written with the font of the buttons. Toasts are stacked from a
+/// corner of the screen, the newest nearest to it. Sizes are in game units, durations in seconds.
+struct ToastStyle {
+    /// Corner of the screen the toasts are stacked from, and the distance from its edges.
+    AnchorPoint corner = AnchorPoint::TopRight;
+    float margin = 32.0f;
+    /// A toast is wider when its text needs it.
+    float minWidth = 420.0f;
+    float textSize = 30.0f;
+    /// Space around the accent and the text, inside the panel.
+    float padding = 18.0f;
+    float accentWidth = 6.0f;
+    /// Vertical space between two toasts.
+    float spacing = 12.0f;
+    float cornerRadius = 14.0f;
+    float borderThickness = 1.0f;
+    /// Shadow cast below the panel: its colour, how far below and how blurred.
+    render::Color shadow{0, 0, 0, 110};
+    float shadowOffset = 10.0f;
+    float shadowBlur = 28.0f;
+
+    render::Color background{14, 18, 32, 230};
+    render::Color border{255, 255, 255, 40};
+    render::Color text{230, 236, 245, 255};
+    /// Colours of the accent, one per ToastType.
+    render::Color info{120, 200, 255, 255};
+    render::Color success{110, 220, 140, 255};
+    render::Color warning{255, 196, 80, 255};
+    render::Color error{255, 96, 96, 255};
+
+    /// Time a toast stays fully shown, between its fade in and its fade out.
+    float duration = 3.0f;
+    float fadeDuration = 0.25f;
+    /// How far a toast slides while it fades, from the edge of the screen.
+    float slideDistance = 24.0f;
+    /// How fast the toasts glide to their new place when another one comes or goes: the part of the distance
+    /// left covered per second.
+    float glideSpeed = 12.0f;
+    /// Beyond it, the oldest toasts fade out early.
+    std::size_t maxVisible = 4;
+
+    /// Height of every toast: one line of text and its padding.
+    [[nodiscard]] float height() const { return textSize + (2.0f * padding); }
+
+    [[nodiscard]] render::Color getAccent(ToastType type) const
+    {
+        switch (type) {
+        case ToastType::Info:
+            return info;
+        case ToastType::Success:
+            return success;
+        case ToastType::Warning:
+            return warning;
+        case ToastType::Error:
+            return error;
+        }
+        return info;
+    }
+};
+
 /// Look of the interface: font, sizes and colours, in game units. One style for the whole interface.
 struct InterfaceStyle {
     /// Font of every text of the interface.
@@ -89,6 +154,7 @@ struct InterfaceStyle {
     render::Color selection{0, 121, 241, 160};
     ButtonStyle button{};
     ConsoleStyle console{};
+    ToastStyle toast{};
 };
 
 } // namespace rtype::engine

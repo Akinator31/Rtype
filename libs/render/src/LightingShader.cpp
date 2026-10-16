@@ -3,6 +3,8 @@
 #include "rtype/log/Logger.hpp"
 #include "rtype/shaders/Lighting.hpp"
 
+#include <raymath.h>
+
 #include <cmath>
 #include <vector>
 
@@ -38,6 +40,15 @@ bool hasNormalMap(const Model &model)
     return false;
 }
 
+// The model turned around its own vertical axis: raylib applies the transform of the model before the
+// rotation given to DrawModelEx()
+Model spin(const Model &model, float angle)
+{
+    Model spun = model;
+    spun.transform = MatrixMultiply(MatrixRotateY(angle * DEG2RAD), model.transform);
+    return spun;
+}
+
 } // namespace
 
 LightingShader::LightingShader()
@@ -50,11 +61,19 @@ LightingShader::LightingShader()
     _available = IsShaderValid(_shader) && _lightDirectionLocation >= 0;
     if (!_available) {
         log::Logger("render").warning("Cannot compile the lighting shader: 3D models are drawn unlit");
+        return;
     }
+    _shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(_shader, "emissionMap");
+    const Image black = GenImageColor(1, 1, ::Color{0, 0, 0, 255});
+    _noEmission = LoadTextureFromImage(black);
+    UnloadImage(black);
 }
 
 LightingShader::~LightingShader()
 {
+    if (_noEmission.id > 0) {
+        UnloadTexture(_noEmission);
+    }
     UnloadShader(_shader);
 }
 
@@ -75,21 +94,24 @@ std::vector<Material> LightingShader::createLitMaterials(const Model &model) con
     std::vector<Material> materials(model.materials, model.materials + model.materialCount);
     for (Material &material : materials) {
         material.shader = _shader;
+        if (material.maps[MATERIAL_MAP_EMISSION].texture.id == 0) {
+            material.maps[MATERIAL_MAP_EMISSION].texture = _noEmission;
+        }
     }
     return materials;
 }
 
 void LightingShader::draw(const Model &model, const Light &light, ::Vector3 position, ::Vector3 rotationAxis,
-                          float rotationAngle, float scale, ::Color tint)
+                          float rotationAngle, float spinAngle, float scale, ::Color tint)
 {
     const ::Vector3 scales{scale, scale, scale};
     if (!_available) {
-        DrawModelEx(model, position, rotationAxis, rotationAngle, scales, tint);
+        DrawModelEx(spin(model, spinAngle), position, rotationAxis, rotationAngle, scales, tint);
         return;
     }
     setLight(light, hasNormalMap(model));
     std::vector<Material> materials = createLitMaterials(model);
-    Model lit = model;
+    Model lit = spin(model, spinAngle);
     lit.materials = materials.data();
     DrawModelEx(lit, position, rotationAxis, rotationAngle, scales, tint);
 }

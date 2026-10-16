@@ -38,6 +38,8 @@ class InterfaceBuilder
     int _count = 0;
 
     ecs::entity_t element(Anchor anchor);
+    ecs::entity_t createButton(const std::string &text, float width, std::function<void()> onPress,
+                               Anchor anchor);
 
 public:
     /// @param style It must outlive the builder.
@@ -59,6 +61,9 @@ public:
     /// A button running an action when confirmed or clicked, drawn as a glass Panel (InterfaceStyle::button).
     /// The buttons of a builder get the focus in the order they are created.
     ecs::entity_t button(const std::string &text, std::function<void()> onPress, Anchor anchor);
+    /// A small square button with a leftwards arrow, to go back to the previous screen: a glass Panel as high
+    /// as the other buttons. It gets the focus in the same order as them.
+    ecs::entity_t backButton(std::function<void()> onPress, Anchor anchor);
 };
 
 } // namespace rtype::engine

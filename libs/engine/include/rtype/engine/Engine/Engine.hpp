@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/ecs/Ecs.hpp"
+#include "rtype/engine/Component/Toast.hpp"
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Event/Event.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
@@ -130,6 +131,15 @@ public:
     void pushScene(const std::string &name);
     /// At the next update(), closes the scene at the top, if any.
     void popScene();
+
+    /// Shows a short message in a corner of the screen for a few seconds, over every scene, even after a
+    /// scene switch. Its look and timing come from InterfaceStyle::toast; it needs a ToastSystem.
+    /// @code
+    /// engine.showToast("Settings saved");
+    /// engine.showToast("Connection lost", ToastType::Error);
+    /// @endcode
+    /// @return The entity of the toast, destroyed once it has faded out.
+    ecs::entity_t showToast(const std::string &text, ToastType type = ToastType::Info);
 
     /// Runs one frame: updates the controls from the input source, if any, so that the whole frame reads the
     /// same state; destroys the entities of the closed scenes and applies the scene requests (which

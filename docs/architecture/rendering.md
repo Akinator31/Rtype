@@ -135,13 +135,19 @@ them wherever it is started from. See [Draw a sprite](../guides/draw-a-sprite.md
 
 ### Logical resolution
 
-The game is drawn at a fixed **logical resolution**, 1920x1080 by default, whatever the size of the window.
-Every position and size given to the renderer is in these game units: a ship at `x = 1500` is at the same
-place on every screen, which is what lets the server and all the clients agree on coordinates.
+The game has a fixed size, 1920x1080 game units by default, whatever the size of the window. Every position
+and size given to the renderer is in these game units: a ship at `x = 1500` is at the same place on every
+screen, which is what lets the server and all the clients agree on coordinates.
+
+The whole game area is always shown, scaled as much as the window allows. When the window has another shape
+than the game, the view extends **around** the game area, on both sides, instead of leaving black bars: a
+16:10 screen shows the 1920x1080 game from `y = -60` to `y = 1140`, a 21:9 screen from `x = -320` to
+`x = 2240`. `visibleArea()` gives that part of the game, in game units; the interface is placed relative to
+it (the `AnchorSystem` uses it), so that it follows the edges of any screen, while the gameplay stays in the
+game area.
 
 Positions coming from the window, such as the mouse pointer, are in window pixels. `windowToGame()` converts
-them into game units, taking the scaling and the black bars into account (see
-[Mouse](input.md#window-pixels-and-game-units)).
+them into game units, taking the scaling into account (see [Mouse](input.md#window-pixels-and-game-units)).
 
 ### A frame
 
@@ -155,25 +161,26 @@ renderer.drawText(font, "Score: 42", {20.0f, 20.0f}, 48.0f, colors::White);
 renderer.endFrame();
 ```
 
-The frame is not drawn directly in the window, but in an off-screen image at the logical resolution:
+The frame is not drawn directly in the window, but in an off-screen image of the size of the window:
 
 ```mermaid
 flowchart LR
-    Begin["beginFrame()"] --> Target["Off-screen image<br/>1920x1080"]
+    Begin["beginFrame()"] --> Target["Off-screen image<br/>window resolution"]
     Draw["drawTexture()<br/>drawText()<br/>drawRectangle()"] --> Target
-    Target -- "endFrame(): scaled to fit,<br/>aspect ratio kept" --> Window["Window<br/>(any size)"]
+    Target -- "endFrame(): colour filter,<br/>copied as is" --> Window["Window<br/>(any size)"]
 ```
 
-*Drawing calls write to an off-screen image at the logical resolution; `endFrame()` scales it into the window.*
+*Drawing calls write in game units to an off-screen image at the resolution of the window; `endFrame()`
+copies it into the window.*
 
-1. `beginFrame()` starts drawing into the off-screen image and fills it with the background colour.
-2. The drawing functions write into this image, in game units.
-3. `endFrame()` copies the image into the window, scaled to the largest size that fits while keeping its
-   aspect ratio and centred, then shows it. The remaining space is filled with black bars.
+1. `beginFrame()` recreates the off-screen image if the window changed size, starts drawing into it, fills it
+   with the background colour, and sets a 2D view that maps the visible area onto it.
+2. The drawing functions write into this image, in game units: the view scales them to pixels, so the image
+   stays sharp on a large screen.
+3. `endFrame()` copies the image into the window, through the colour filter, then shows it.
 
-The area used in the window is computed by `letterbox()` (`Viewport.hpp`), a pure function that is unit
-tested (`tests/viewport.cpp`). For instance, on a 2560x1080 screen, the 1920x1080 game is drawn at its
-original size with 320 pixels of black bar on each side.
+The visible area is computed by `computeVisibleArea()` (`Viewport.hpp`), a pure function that is unit tested
+(`tests/viewport.cpp`).
 
 ### Drawing functions
 

@@ -100,6 +100,14 @@ void Engine::popScene()
     _sceneRequests.push_back({SceneChange::Pop, ""});
 }
 
+ecs::entity_t Engine::showToast(const std::string &text, ToastType type)
+{
+    // No SceneMember: the toast outlives the scene that shows it
+    const ecs::entity_t toast = _ecs.createEntity();
+    _ecs.addComponent<Toast>(toast, text, type);
+    return toast;
+}
+
 void Engine::update(float elapsed)
 {
     if (_inputSource != nullptr) {
