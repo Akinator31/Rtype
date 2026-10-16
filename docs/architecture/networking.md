@@ -14,12 +14,14 @@ New to networking? Read [Networking concepts](networking-concepts.md) first.
 | `UdpSocket` | Sends and receives datagrams |
 | `TcpListener` | Listens on a TCP port and accepts connections |
 | `TcpConnection` | Sends and receives a stream of bytes |
+| `FramedConnection` | A TCP connection that sends and receives whole messages (frames) |
+| `FrameDecoder`, `makeFrame()` | Split a TCP stream into frames, and build a frame |
+| `NetworkError` | The errors of the library, as `std::error_code` |
 | `Writer`, `Reader` | Turn the fields of a message into bytes and back, following the protocol |
 | `isValidText()` | Checks a text before sending it as a `str8` |
 
-Splitting a TCP stream into messages, encryption, reliability over UDP and the
-[protocol](../protocol/index.md) messages are built on top of these classes, in the next steps of the
-"Server & networking" work.
+Encryption, reliability over UDP and the [protocol](../protocol/index.md) messages are built on top of these
+classes, in the next steps of the "Server & networking" work.
 
 ## The event loop
 
@@ -160,6 +162,58 @@ at once.
 A listener lets a restarted server listen again at once on its port on Linux. It does not on Windows, where
 the same option would let another program take a port in use.
 
+## TCP framing
+
+A TCP stream has no boundaries, so each message is sent as a **frame**: its size on two bytes, its type on one
+byte, then its payload ([lobby, section 3](../protocol/lobby.md#3-framing)). `FramedConnection` does it on top
+of a `TcpConnection`: the code above it only sees whole messages.
+
+```
+size (u16) | type (u8) | payload (size − 1 bytes)
+00 09        01          00 01 05 50 61 76 65 6C      HELLO, version 1, "Pavel"
+```
+
+```cpp
+rtype::network::FramedConnection client(std::move(connection)); // a TcpConnection, not started yet
+
+client.start(
+    [](std::uint8_t type, std::span<const std::byte> payload) {
+        rtype::network::Reader reader(payload); // one whole message: decode it according to its type
+    },
+    [](std::error_code reason) {
+        if (reason == rtype::network::NetworkError::FrameTooLarge) { /* the peer broke the protocol */ }
+    });
+
+rtype::network::Writer hello;
+hello.writeU16(1);
+hello.writeString("Pavel");
+client.send(0x01, hello.bytes()); // type, then payload: the size is added
+```
+
+- **Whole and in order.** Each call to the frame handler is one frame, as it was sent, whatever the pieces TCP
+  delivered.
+- **Invalid frames close the connection.** A size of 0, or above 16382, is refused as soon as its two bytes
+  arrive, without waiting for the rest. The connection is closed, the close handler receives
+  `NetworkError::EmptyFrame` or `NetworkError::FrameTooLarge`, and a warning is logged. The frames received
+  before it are still handled.
+- **Bounded memory.** The connection keeps at most the frame being received: a peer announcing a frame of
+  16 KiB and sending it slowly holds 16 KiB, never more.
+- **Payloads above `MaxFramePayloadSize`** (16381 bytes) cannot be sent: `send()` throws `std::length_error`.
+- **`close()`** sends the frames already given to `send()`, then closes. It also stops the frames already
+  received from being handled: after `close()`, even from inside the frame handler, no handler is called.
+
+The splitting itself is done by `FrameDecoder`, which works on bytes only, without a socket, so that it can be
+tested and fuzzed alone:
+
+```cpp
+rtype::network::FrameDecoder decoder;
+decoder.feed(bytes);                       // bytes received, in any pieces
+while (const auto frame = decoder.next()) { // each complete frame
+    handle(frame->type, frame->payload);
+}
+if (decoder.failed()) { /* decoder.error(): EmptyFrame or FrameTooLarge */ }
+```
+
 ## Binary serialization
 
 A message is sent as bytes: each field written one after the other, as the
@@ -228,7 +282,7 @@ The library writes with a logger named `network` ([Logging](logging.md)):
 |---|---|
 | `trace` | Every datagram and every piece of a stream received, with its size |
 | `debug` | Sockets opened and closed, connections accepted, opened, closed and lost, datagrams dropped |
-| `warning` | A listener that cannot accept connections (for instance, no file descriptor left) |
+| `warning` | A listener that cannot accept connections (for instance, no file descriptor left), a peer sending an invalid frame |
 
 ```sh
 RTYPE_LOG_LEVEL=debug ./build/bin/r-type_server
@@ -243,15 +297,20 @@ large transfers, closing from either side, refused connections and timeouts.
 The tests in `tests/serialization.cpp` (same tag) check the round trip of every type, the edge values, every
 rejection case, and the `HELLO` frame given as an example in the specification, byte for byte.
 
+The tests in `tests/framing.cpp` (same tag) check the frame decoder with frames cut byte by byte, grouped, or
+cut at random places, the maximum size and the invalid sizes; then framed connections over the loopback: frames
+in both directions, a peer sending an invalid frame, and `close()` from inside the frame handler.
+
 ```sh
 ./build/bin/rtype_tests "[network]"
 ```
 
 ## Limits and next steps
 
-- **No messages yet**: framing, encryption and reliability come next, following the
-  [protocol](../protocol/index.md). The fuzzing of the decoders comes with them.
-- **One copy per send**: `send()` copies the data into a new buffer. Enough for now; a pool of buffers can
-  replace it if measurements show the cost.
+- **No messages yet**: encryption and reliability come next, following the [protocol](../protocol/index.md).
+  The fuzzing of the decoders comes with them.
+- **One copy per send**: `send()` copies the data into a new buffer, unless it is given a `std::vector` it can
+  take (`send(std::move(bytes))`). Enough for now; a pool of buffers can replace it if measurements show the
+  cost.
 - **IPv4 or IPv6, not both on one socket**: a socket bound to `Address::anyIpv6()` may or may not accept IPv4
   depending on the system. The server listens on IPv4 for now.

@@ -219,13 +219,16 @@ void TcpConnection::start(ReceiveHandler onReceive, CloseHandler onClose)
 
 void TcpConnection::send(std::span<const std::byte> bytes)
 {
+    send(std::vector<std::byte>(bytes.begin(), bytes.end()));
+}
+
+void TcpConnection::send(std::vector<std::byte> &&bytes)
+{
     if (!_impl) {
         return;
     }
     asio::post(_impl->socket.get_executor(),
-               [impl = _impl, data = std::vector<std::byte>(bytes.begin(), bytes.end())]() mutable {
-                   impl->send(std::move(data));
-               });
+               [impl = _impl, data = std::move(bytes)]() mutable { impl->send(std::move(data)); });
 }
 
 void TcpConnection::close()

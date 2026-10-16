@@ -9,6 +9,7 @@
 #include <optional>
 #include <span>
 #include <system_error>
+#include <vector>
 
 namespace rtype::network
 {
@@ -85,6 +86,8 @@ public:
 
     /// Sends bytes, after those of the previous calls. The data is copied, so it can be reused at once.
     void send(std::span<const std::byte> bytes);
+    /// Sends bytes already in a buffer of their own, without copying them.
+    void send(std::vector<std::byte> &&bytes);
 
     /// Closes the connection once the bytes already given to send() are sent. The handlers are no longer
     /// called.

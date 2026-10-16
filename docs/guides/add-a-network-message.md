@@ -51,7 +51,7 @@ lobby as the example. It is for anyone who needs the client and the server to ex
     }
     ```
 
-    The type byte and the size of the frame are written by the layer that sends the message, not here.
+    The type byte and the size of the frame are added when the message is sent, not here.
 
 4. **Write `decode()`**: read every field in the same order, refuse the values the specification forbids with
     `reader.fail()`, and end with `reader.finish()`, which also refuses bytes left after the last field.
@@ -121,6 +121,22 @@ lobby as the example. It is for anyone who needs the client and the server to ex
 
 ## Result
 
-`./build/bin/rtype_tests "[network]"` passes, and the specification describes the message. Sending it and
-dispatching the received messages by their type are done by the layer of its protocol: the TCP framing and the
-lobby, then the datagram sessions, in the next steps of the "Server & networking" work.
+`./build/bin/rtype_tests "[network]"` passes, and the specification describes the message.
+
+On TCP, the message is sent as a frame with its type, and received whole
+([TCP framing](../architecture/networking.md#tcp-framing)):
+
+```cpp
+Writer writer;
+encode(CreateGame{.name = "Room", .maxPlayers = 2}, writer);
+connection.send(CreateGame::Type, writer.bytes());
+
+// On the other side, in the frame handler
+if (type == CreateGame::Type) {
+    Reader reader(payload);
+    if (const auto message = decode(reader)) { /* handle it */ }
+}
+```
+
+Dispatching the messages by their type is done by the lobby, and the datagram messages by the sessions, in the
+next steps of the "Server & networking" work.

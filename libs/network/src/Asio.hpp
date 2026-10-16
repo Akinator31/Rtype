@@ -3,7 +3,7 @@
 // Private to libs/network: the only place where Asio is included, and where our types are converted to its
 // types.
 
-#include "rtype/log/Logger.hpp"
+#include "NetworkLogger.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 
@@ -19,9 +19,6 @@ namespace detail
 struct EventLoopAccess {
     static asio::io_context &context(EventLoop &loop);
 };
-
-/// Logger of the network library.
-const rtype::log::Logger &logger();
 
 asio::ip::address toAsio(const Address &address);
 Address fromAsio(const asio::ip::address &address, std::uint16_t port);
