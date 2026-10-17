@@ -147,7 +147,8 @@ marks it.
 - The sender remembers which packets carried each reliable message. When one of them is acknowledged, the
   message is delivered and forgotten.
 - A reliable message not acknowledged after the **resend delay** SHOULD be added to the next datagram. The
-  recommended delay is `max(1.5 × RTT, 100 ms)`, where the RTT is measured from the acknowledgements.
+  recommended delay is `max(1.5 × RTT, 100 ms)`, where the RTT is measured from the acknowledgements, and
+  taken as 100 ms until the first measure.
 - At most **256** reliable messages may wait for an acknowledgement. A sender that would exceed this closes the
   session: the peer no longer answers.
 

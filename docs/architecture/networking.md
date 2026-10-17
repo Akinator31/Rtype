@@ -20,14 +20,16 @@ New to networking? Read [Networking concepts](networking-concepts.md) first.
 | `KeyFingerprint` | The SHA-256 of a public key, which the client pins |
 | `DatagramKey`, `sealDatagram()`, `openDatagram()` | Encrypt a game datagram with a player's key, and check and decrypt it |
 | `ReplayWindow`, `PacketCounter` | Drop the datagrams received twice, and number the ones sent |
+| `MessageChannel` | Acknowledgements, resends and ordering of the messages of one session over UDP |
+| `DatagramBody`, `encodeBody()`, `decodeBody()` | The decrypted body of a datagram: acknowledgements and messages |
 | `FramedConnection` | A TCP or TLS connection that sends and receives whole messages (frames) |
 | `FrameDecoder`, `makeFrame()` | Split a TCP stream into frames, and build a frame |
 | `NetworkError`, `tlsCategory()` | The errors of the library and of TLS, as `std::error_code` |
 | `Writer`, `Reader` | Turn the fields of a message into bytes and back, following the protocol |
 | `isValidText()` | Checks a text before sending it as a `str8` |
 
-Reliability over UDP, the game sessions and the [protocol](../protocol/index.md) messages are built on top of
-these classes, in the next steps of the "Server & networking" work.
+The game sessions and the [protocol](../protocol/index.md) messages are built on top of these classes, in the
+next steps of the "Server & networking" work.
 
 ## The event loop
 
@@ -410,6 +412,109 @@ keeps the last 256: a datagram later than that is useless in a game anyway, and 
 destroyed, and copying it shares the same key. Like TLS, sealing and opening hold the lock of Mbed TLS
 ([Threads](#threads)), so keys can be used from any thread.
 
+## Reliability over UDP
+
+UDP loses, duplicates and reorders datagrams. Most game messages do not mind: a snapshot lost is replaced by
+the next one. Some must arrive, though: an entity destroyed, the end of the game. The `MessageChannel` gives
+each message the choice ([game protocol](../protocol/game.md#6-reliability)):
+
+| | `Delivery::Unreliable` | `Delivery::Reliable` |
+|---|---|---|
+| Sent | Once | Again and again, until the peer acknowledges it |
+| Arrives | Maybe, in any order | Exactly once, in the order it was sent |
+| For | What the next message replaces: snapshots, inputs | What must not be missed: destructions, waves, the end of the game |
+
+### How it works
+
+**Acknowledgements.** Every datagram says which packets were received from the peer: the highest number
+(`Ack`) and 32 bits for the 32 before it (`Ack bits`), taken straight from the `ReplayWindow`. A datagram
+lost now is acknowledged, or not, by any of the next 33: one ack lost costs nothing.
+
+```
+Packets received by B:  … 37 38 __ 40 41          (39 was lost)
+B tells A:               Ack = 41, Ack bits: bit 0 = 1 (40 ✓), bit 1 = 0 (39 ✗), bit 2 = 1 (38 ✓), bit 3 = 1 (37 ✓)
+```
+
+**Resending.** The sender remembers which packet carried each reliable message. When one of them is
+acknowledged, the message is forgotten; when none is after the **resend delay**, `max(1.5 × RTT, 100 ms)`, the
+message goes again in the next datagram, which has a new packet number. A message may be sent several times;
+the receiver keeps the first copy only.
+
+**Ordering.** Each reliable message has an id, 0, 1, 2… (wrapping from 65535 to 0). The receiver delivers id
+`E`, then `E + 1`, and so on: a message that arrives early waits until those before it are there, at most 256
+ahead. An id already delivered is ignored.
+
+```
+Received:     2   0   3   1
+Delivered:    –   0   –   1 2 3
+```
+
+**Round-trip time.** When a packet is acknowledged, the time since it was sent is a sample of the RTT, smoothed
+as `0.9 × rtt + 0.1 × sample`. It sets the resend delay, and it is the ping shown to the player. Until the first
+sample, it is assumed to be 100 ms.
+
+**Failing.** If the peer stops acknowledging, the reliable messages pile up: at 256 waiting, the channel
+**fails** and the session must close. Likewise once every packet number was used.
+
+### Using it
+
+The channel only builds and reads the **bodies** of the datagrams, and is given the time: the session around
+it seals and opens them ([Encrypted datagrams](#encrypted-datagrams)), and owns the socket and the timers.
+
+=== "Sending"
+
+    ```cpp
+    rtype::network::MessageChannel channel;   // one per session
+
+    channel.send(0x80, snapshot, rtype::network::Delivery::Unreliable);
+    channel.send(0x81, destroyed, rtype::network::Delivery::Reliable);
+
+    // Once per tick, or at least once per second (a heartbeat then): as many datagrams as needed
+    const auto now = rtype::network::MessageChannel::Clock::now();
+    do {
+        const auto datagram = channel.next(now);
+        if (!datagram) {
+            return closeSession(); // the channel failed
+        }
+        socket.send(peer, rtype::network::sealDatagram(ownKey, {sessionId, datagram->packetNumber},
+                                                       datagram->body));
+    } while (channel.hasMessagesToSend(now));
+    ```
+
+=== "Receiving"
+
+    ```cpp
+    const auto header = rtype::network::parseDatagramHeader(datagram);
+    if (!header || header->session != sessionId || !channel.accepts(header->packetNumber)) {
+        return;
+    }
+    const auto body = rtype::network::openDatagram(peerKey, datagram);
+    if (!body) {
+        return;
+    }
+    const auto messages = channel.receive(header->packetNumber, *body, now);
+    if (!messages) {
+        return; // malformed body: dropped, and not acknowledged
+    }
+    for (const rtype::network::ReceivedMessage &message : *messages) {
+        handle(message.type, message.payload);
+    }
+    ```
+
+`next()` puts the reliable messages due first, then the unreliable ones in order, as many as fit in 1200
+bytes. A snapshot part that fills a datagram goes in its own: `hasMessagesToSend()` tells when another datagram
+is needed.
+
+| Function | Gives | Refuses or fails |
+|---|---|---|
+| `send(type, payload, delivery)` | Queues the message | A payload above 1151 bytes (unreliable) or 1149 (reliable): `std::length_error`. Returns false if the channel failed |
+| `next(now)` | The packet number and body of the next datagram | `std::nullopt` once failed |
+| `hasMessagesToSend(now)` | Whether another datagram is needed now | — |
+| `accepts(n)`, `receive(n, body, now)` | Whether a packet may be new; the messages to handle | `std::nullopt` for a packet already received or a malformed body |
+| `rtt()`, `resendDelay()`, `pendingReliable()`, `failed()` | The measures, for the logs and the console | — |
+
+`encodeBody()` and `decodeBody()` are the codec of the body alone, for the tests and the fuzzer.
+
 ## Binary serialization
 
 A message is sent as bytes: each field written one after the other, as the
@@ -479,6 +584,8 @@ The library writes with a logger named `network` ([Logging](logging.md)):
 | `trace` | Every datagram and every piece of a stream received, with its size |
 | `trace` (TLS) | Every piece of a TLS stream decrypted, with its size |
 | `trace` (datagrams) | Every encrypted datagram dropped, with the reason: invalid header, or not authentic. Never the keys |
+| `trace` (reliability) | Every malformed body dropped, every reliable message sent again |
+| `debug` (reliability) | A channel that fails, and why; unreliable messages dropped because too many wait to be sent |
 | `debug` | Sockets opened and closed, connections accepted, opened, closed and lost, datagrams dropped, TLS handshakes started and done (with the cipher suite) |
 | `warning` | A listener that cannot accept connections (for instance, no file descriptor left), a peer sending an invalid frame, a TLS connection failing or closed during its handshake |
 | `error` | A TLS server presenting a key other than the pinned one, with its fingerprint |
@@ -512,6 +619,14 @@ changed anywhere makes a datagram invalid, other keys, random bytes, every inval
 replay window (256 and 257 numbers below, jumps, any order, the largest number) and the end of the packet
 numbers.
 
+The tests in `tests/reliability.cpp` (same tag) check the body byte for byte, its round trip, every malformed
+case and random bodies; then a channel alone: acknowledgements, resends after the delay and not before, delivery
+in order whatever the order of the datagrams, ids wrapping from 65535 to 0, large messages in datagrams of their
+own, the RTT, and failing when the peer stops acknowledging. Last, two channels play 10 seconds of a game
+through a **fake network** that loses 30 % of the datagrams, duplicates 10 % and delays them by 20 to 120 ms,
+so that they arrive out of order: every reliable message arrives once and in order, no unreliable message
+arrives twice.
+
 Our client and server were also checked against OpenSSL, by hand (it is not installed on every CI runner):
 
 ```sh
@@ -529,7 +644,7 @@ openssl s_client -connect 127.0.0.1:4433 -tls1_2
 
 ## Limits and next steps
 
-- **No messages yet**: reliability and the game sessions come next, following the
+- **No messages yet**: the game sessions come next, following the
   [protocol](../protocol/index.md). The fuzzing of the decoders comes with them; `parseDatagramHeader()` and
   `openDatagram()` are ready for it.
 - **No handshake timeout in the connection itself**: a peer that opens a connection and never finishes the

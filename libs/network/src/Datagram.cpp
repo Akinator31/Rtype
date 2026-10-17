@@ -263,6 +263,17 @@ void ReplayWindow::mark(std::uint64_t packetNumber)
     _highest = packetNumber;
 }
 
+std::uint32_t ReplayWindow::ackBits() const
+{
+    std::uint32_t bits = 0;
+    for (std::size_t i = 0; i < 32; ++i) {
+        if (_seen.test(i)) {
+            bits |= std::uint32_t{1} << i;
+        }
+    }
+    return bits;
+}
+
 // --- PacketCounter ---
 
 std::optional<std::uint64_t> PacketCounter::next()
