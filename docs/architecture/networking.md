@@ -230,7 +230,8 @@ middle. `TlsConnection` adds it on top of a `TcpConnection`, and works the same 
 The server has a key pair (ECDSA P-256). It keeps the **private key** secret, in a file given to it, and the
 clients know its **public key**. They do not compare the whole key, only its **fingerprint**: the SHA-256 of
 the key, 64 hexadecimal digits, like SSH's `known_hosts`
-([ADR 0014](../decisions/0014-encryption.md#tcp-tls-13-server-key-pinned)).
+([ADR 0014](../decisions/0014-encryption.md#tcp-tls-13-server-key-pinned)). The key pair is made with
+`r-type_keygen`: see [Generate the server keys](../guides/generate-the-server-keys.md).
 
 ```cpp
 // Server: its private key, the --key option

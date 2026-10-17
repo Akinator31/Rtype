@@ -127,6 +127,7 @@ apps/       executables, one subdirectory per program
   client/   graphical client (r-type_client)
     assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
+  keygen/   generates the keys of the server (r-type_keygen)
 libs/       libraries shared by the programs, one subdirectory per library
   audio/    sound effects and music (client)
   core/     handles and resource caches (all)
