@@ -1,6 +1,7 @@
 # Game (UDP)
 
-The datagrams between a client and its game: layout, encryption, reliability and session messages.
+The datagrams between a client and its game: layout, encryption, reliability, session messages and game
+messages.
 Conventions and types are defined in the [overview](index.md#2-conventions). The client receives the UDP
 port, the session id and the keys from the master, in [`GAME_JOINED`](lobby.md#game_joined-0x83).
 
@@ -125,7 +126,8 @@ Each message:
   set make the body malformed, and the whole datagram is dropped.
 - A body with no message is a **heartbeat**: it still carries the acknowledgements.
 - Message types `0x01`–`0x3F` are the session messages of [section 8](#8-messages). Types `0x40`–`0xFF` are the
-  game messages, defined in a later version. A receiver skips a message of an unknown type, using its size.
+  game messages of [section 9](#9-game-messages). A receiver skips a message of an unknown type, using its
+  size.
 
 ## 6. Reliability
 
@@ -289,3 +291,291 @@ message malformed.
 
 **Receiver behaviour:** the client removes the player and tells the local player, for instance "Pavel lost the
 connection" for `TIMED_OUT`. Unknown reasons are treated as `QUIT`.
+
+## 9. Game messages
+
+The messages of the game itself: the inputs of the players and the world they play in. How they were chosen is
+explained in [ADR 0016](../decisions/0016-replication.md). The game is authoritative: a client sends what its
+player does, and draws the world the game sends back.
+
+| Type | Message | Direction | Reliability |
+|---|---|---|---|
+| `0x40` | [`INPUT`](#input-0x40) | Client → Game | Unreliable, sent again in the next datagrams |
+| `0x80` | [`SNAPSHOT`](#snapshot-0x80) | Game → Client | Unreliable, replaced by the next one |
+| `0x81` | [`ENTITIES_DESTROYED`](#entities_destroyed-0x81) | Game → Client | Reliable |
+| `0x82` | [`WAVE_STARTED`](#wave_started-0x82) | Game → Client | Reliable |
+| `0x83` | [`GAME_OVER`](#game_over-0x83) | Game → Client | Reliable |
+
+Types `0x40`–`0x7F` are sent by the client, `0x80`–`0xFF` by the game. The client MUST NOT send game messages
+before `ACCEPTED`, and the game sends them only to connected sessions.
+
+### 9.1 The world
+
+**Game area.** The world is a fixed area of **1920 × 1080 units**, the area the client shows whatever the size
+of its window. The origin is the top left corner, x goes to the right and y downwards. Entities may be outside
+the area, for instance a Bydo arriving from the right.
+
+**Positions and velocities** are fixed-point numbers, in eighths of a unit:
+
+| Value | Type | Meaning | Range |
+|---|---|---|---|
+| Position | `i16` | `value / 8` units | −4096 to 4095.875 |
+| Velocity | `i16` | `value / 8` units per second | −4096 to 4095.875 |
+
+The game MUST keep its entities in the range of the positions, and destroy those that leave it (cause
+`REMOVED`). Example: x = 200.0 is sent as `1600` (`06 40`), y = 540.5 as `4324` (`10 E4`), a velocity of −300
+units per second as `−2400` (`F6 A0`).
+
+**Ticks.** The game simulates the world in **ticks**, 60 per second (the tick rate of
+[`ACCEPTED`](#accepted-0x02)), numbered by a `u32` from the start of the game.
+
+**Entities.** Each entity has an **id**, a `u32` drawn by the game: never 0, and never reused within a game,
+so that a late message about a destroyed entity cannot be mistaken for a new one. Its **kind** says what it is,
+hence what the client draws:
+
+| Kind | Value | Owner | Health |
+|---|---|---|---|
+| `PLAYER_SHIP` | `0x01` | Its player slot | Hit points left |
+| `PLAYER_SHOT` | `0x02` | Slot of the player who fired | 0 |
+| `PLAYER_CHARGED_SHOT` | `0x03` | Slot of the player who fired | 0 |
+| `BYDO_FLYER` | `0x10` | None | Hit points left |
+| `BYDO_SHOOTER` | `0x11` | None | Hit points left |
+| `BYDO_TANK` | `0x12` | None | Hit points left |
+| `BYDO_BOSS` | `0x1F` | None | Hit points left |
+| `BYDO_SHOT` | `0x40` | None | 0 |
+
+- Ranges: `0x01`–`0x0F` players and their shots, `0x10`–`0x3F` Bydos, `0x40`–`0x5F` Bydo shots, `0x60`–`0xFF`
+  reserved for later kinds (power-ups, the Force, obstacles). Kind `0x00` is invalid.
+- The **owner** is a player slot (0 to 3), or `0xFF` for none.
+- A client MUST skip the entities of a kind it does not know: adding a kind does not change the protocol
+  version ([versioning](index.md#4-versioning)).
+
+### 9.2 Inputs
+
+An input is the state of the player's controls during one tick, one byte:
+
+| Bit | Control |
+|---|---|
+| 0 | Up |
+| 1 | Down |
+| 2 | Left |
+| 3 | Right |
+| 4 | Fire (held: the game decides what holding it does, for instance charging a shot) |
+| 5–7 | Reserved: senders set them to 0, receivers ignore them |
+
+Up and down together, or left and right together, cancel each other.
+
+**Client.** Once per tick, the client samples its controls and sends `INPUT` with the inputs of the last
+**8** ticks, newest first: a lost datagram loses no input, since the next ones carry it again. It stamps each
+input with the tick at which it expects the game to receive it, which it SHOULD estimate as:
+
+```
+tick of the latest snapshot received
+  + (time since it was received + RTT) × tick rate
+  + 2                                       margin, so that the input arrives before its tick
+```
+
+**Game.** For each player, the game keeps the inputs received for the ticks to come, at most **60** ticks
+ahead; it ignores inputs for ticks already simulated, and those further ahead. At each tick it applies the
+input of that tick, or, if it has none, the last input it applied: a lost input continues the previous
+movement. After **30** ticks without any input from a player, it applies an empty input (nothing pressed), so
+that a ship whose player lost the connection stops.
+
+### 9.3 Snapshots
+
+**Sending.** Every **2** ticks (30 times per second), after simulating the tick, the game sends each connected
+client a snapshot: the players' scores and lives, and the state of every entity. When the entities do not fit
+in one datagram, the snapshot is split in **parts** (at most 16), each in its own datagram, each with the tick
+and the players. With four players, a part holds up to 69 entities.
+
+**Receiving.** The client keeps the tick `L` of the latest snapshot it applied, and for each part received:
+
+1. A part with a tick lower than `L` is late: it is ignored. Parts with the tick `L` are still applied.
+2. The players replace the scores and lives shown.
+3. Each entity of a known kind is created if its id is unknown, or updated otherwise. An entity missing from
+   a snapshot is **not** destroyed: its part may have been lost.
+4. An entity is destroyed only by [`ENTITIES_DESTROYED`](#entities_destroyed-0x81). The client remembers the
+   ids it destroyed, with the tick of their destruction, and ignores their states in snapshots older than that
+   tick (a reliable message can arrive before an older unreliable one). It can forget an id once `L` reaches
+   that tick.
+
+**Drawing.** The client SHOULD draw the world **100 ms** in the past, interpolating each entity between the two
+snapshots around that time: the movement stays smooth when a snapshot is lost. The velocity lets it
+extrapolate when no newer snapshot is there.
+
+### INPUT (`0x40`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Unreliable, sent once per tick, with the inputs of the last ticks |
+| **Sent when** | Every tick, once connected. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Tick | `u32` | Tick of the first input, the newest |
+| 4 | Count | `u8` | Number of inputs, 1 to 32; 8 is recommended |
+| 5 | Inputs | `bytes[Count]` | The input of `Tick`, then of `Tick − 1`, and so on ([section 9.2](#92-inputs)) |
+
+**Receiver behaviour:** the game keeps the inputs as [section 9.2](#92-inputs) says. A count of 0 or above 32,
+or more inputs than `Tick + 1`, makes the message malformed.
+
+### SNAPSHOT (`0x80`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Unreliable |
+| **Sent when** | Every 2 ticks, in one or more parts ([section 9.3](#93-snapshots)). |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Tick | `u32` | Tick of the world described |
+| 4 | Last input | `u32` | Tick of the last input of this client that the game applied, 0 if none |
+| 8 | Part | `u8` | Number of this part, from 0 |
+| 9 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
+| 10 | Player count | `u8` | 0 to 4 |
+| 11 | Players | | Player count times the fields below |
+| 11 + 6p | Entity count | `u8` | Number of entities in this part |
+| 12 + 6p | Entities | | Entity count times the fields below |
+
+Each player:
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Slot | `u8` | 0 to 3 |
+| 1 | Lives | `u8` | Lives left, 0 once out of the game |
+| 2 | Score | `u32` | |
+
+Each entity, 16 bytes:
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Id | `u32` | Never 0 |
+| 4 | Kind | `u8` | [Section 9.1](#91-the-world), never 0 |
+| 5 | Owner | `u8` | Player slot, or `0xFF` for none |
+| 6 | X | `i16` | Position, eighths of a unit |
+| 8 | Y | `i16` | |
+| 10 | Velocity X | `i16` | Eighths of a unit per second |
+| 12 | Velocity Y | `i16` | |
+| 14 | Health | `u8` | Hit points left, for health bars; 0 for kinds without |
+| 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bits 3–7: reserved, set to 0 and ignored |
+
+**Receiver behaviour:** the client applies the part as [section 9.3](#93-snapshots) says. A part number not below
+the number of parts, a number of parts of 0 or above 16, more than 4 players, a slot above 3 or given twice, an
+entity id or kind of 0, or a size that does not match the counts makes the message malformed.
+
+### ENTITIES_DESTROYED (`0x81`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Reliable |
+| **Sent when** | After a tick in which entities were destroyed: one message for all the entities of that tick. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Tick | `u32` | Tick of the destruction |
+| 4 | Count | `u8` | Number of entities, 1 to 255 |
+| 5 | Entities | | Count times the fields below |
+
+Each entity:
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Id | `u32` | Never 0 |
+| 4 | Cause | `u8` | See below |
+
+| Cause | Value | Meaning |
+|---|---|---|
+| `REMOVED` | 0 | Removed without effect: it left the game area, or its time was over |
+| `KILLED` | 1 | Destroyed in the game: the client draws an explosion |
+
+**Receiver behaviour:** the client removes the entities and remembers their ids
+([section 9.3](#93-snapshots)). Unknown ids are remembered too: their first snapshot may still be on its way.
+Unknown causes are treated as `REMOVED`. A count of 0, an id of 0, or a size that does not match the count
+makes the message malformed.
+
+### WAVE_STARTED (`0x82`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Reliable |
+| **Sent when** | A new wave of Bydos starts, and once to a client that connects during a wave. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Wave | `u16` | Number of the wave, from 1 |
+
+**Receiver behaviour:** the client shows the number, for instance "Wave 3". A wave of 0 makes the message
+malformed.
+
+### GAME_OVER (`0x83`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Reliable |
+| **Sent when** | The game ends. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Outcome | `u8` | See below |
+
+| Outcome | Value | Meaning |
+|---|---|---|
+| `DEFEAT` | 0 | Every player lost all its lives |
+| `VICTORY` | 1 | The players finished the level |
+
+The game stops simulating, waits until every client acknowledged `GAME_OVER` (or 2 seconds at most), then
+closes the sessions with [`DISCONNECT`](#disconnect-0x03) (`GAME_OVER`).
+
+**Receiver behaviour:** the client shows the outcome with the last scores it received. Unknown outcomes are
+treated as `DEFEAT`.
+
+## 10. Example
+
+A client sends its input at tick 1000: up and fire held for the last two ticks, up only the tick before. It has
+received the game's packets up to number 41, all of them. The decrypted body:
+
+```
+00 00 00 00 00 00 00 29   ack: packet 41
+FF FF FF FF               ack bits: the 32 packets before were received
+01                        count: 1 message
+40                        type: INPUT
+00                        flags: unreliable
+00 08                     size: 8 bytes
+00 00 03 E8                 tick: 1000
+03                          count: 3 inputs
+11                          tick 1000: up (bit 0) + fire (bit 4)
+11                          tick 999: up + fire
+01                          tick 998: up
+```
+
+The body is 25 bytes; once sealed ([section 3](#3-encryption)), the datagram is 57 bytes.
+
+The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives and 1500 points, and its ship
+(entity 7) is at (200, 540.5), going up at 300 units per second, invulnerable:
+
+```
+80                        type: SNAPSHOT
+00                        flags: unreliable
+00 22                     size: 34 bytes
+00 00 03 E8                 tick: 1000
+00 00 03 E6                 last input applied: tick 998
+00                          part 0
+01                          of 1 part
+01                          1 player
+00 03 00 00 05 DC             slot 0, 3 lives, score 1500
+01                          1 entity
+00 00 00 07                   id 7
+01                            kind: PLAYER_SHIP
+00                            owner: slot 0
+06 40                         x: 1600 / 8 = 200
+10 E4                         y: 4324 / 8 = 540.5
+00 00                         velocity x: 0
+F6 A0                         velocity y: −2400 / 8 = −300 units per second
+03                            health: 3
+01                            flags: invulnerable
+```

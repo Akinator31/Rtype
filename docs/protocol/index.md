@@ -18,12 +18,12 @@ It is split into four pages:
 |---|---|
 | This page | Conventions, overview, constants, error handling, security |
 | [Lobby (TCP)](lobby.md) | The connection between a client and the master: TLS, framing, lobby messages |
-| [Game (UDP)](game.md) | The datagrams between a client and its game: encryption, reliability, sessions |
+| [Game (UDP)](game.md) | The datagrams between a client and its game: encryption, reliability, sessions, inputs and snapshots |
 | [Master and instances](instances.md) | The local connection between the master and the game processes it starts |
 
-The messages of the game itself (inputs, snapshots, events) are added in a later version of this
-specification. Version 1 defines everything around them: how to reach a game and how to exchange messages
-with it securely and reliably.
+Version 1 defines how to reach a game, how to exchange messages with it securely and reliably, and the
+messages of the game itself: the players' inputs, the snapshots of the world and the events
+([game, section 9](game.md#9-game-messages)).
 
 The words used here are explained in [Networking concepts](../architecture/networking-concepts.md).
 
@@ -119,6 +119,14 @@ The protocol version is a `u16`, currently **1**. It is sent by the client in `H
 | Game heartbeat interval | 1 s | Each side sends a datagram at least this often |
 | Game timeout | 5 s | A session silent for this long is closed |
 | Connect timeout | 5 s | A client without `ACCEPTED` after this long gives up |
+| Tick rate | 60 per second | Steps of the simulation ([game](game.md#91-the-world)) |
+| Game area | 1920 × 1080 units | The world the client shows; positions in eighths of a unit |
+| Snapshot interval | 2 ticks | 30 snapshots per second ([game](game.md#93-snapshots)) |
+| Snapshot parts | 16 at most | Datagrams of one snapshot |
+| Inputs per `INPUT` | 8 (recommended), 32 at most | The inputs of the last ticks, sent again ([game](game.md#92-inputs)) |
+| Input lead | 60 ticks | The game ignores inputs further ahead |
+| Input hold | 30 ticks | Without inputs for this long, the game applies an empty input |
+| Interpolation delay | 100 ms (recommended) | How far in the past the client draws the world |
 | Players per game | 1–4 | |
 
 ## 6. Error handling
@@ -165,6 +173,7 @@ Limits a server MUST enforce, with configurable values:
 | Games at the same time | Size of the game port range |
 | Datagrams per second and per source address, before decryption | 200, the excess is dropped |
 | Reliable messages waiting for an acknowledgement, per session and direction | 256, then the session is closed |
+| Inputs kept per player | 60 ticks ahead, the others are ignored |
 
 What the protocol does not hide: the sizes and timing of the datagrams and frames, and the IP addresses of
 the players.
