@@ -22,14 +22,15 @@ New to networking? Read [Networking concepts](networking-concepts.md) first.
 | `ReplayWindow`, `PacketCounter` | Drop the datagrams received twice, and number the ones sent |
 | `MessageChannel` | Acknowledgements, resends and ordering of the messages of one session over UDP |
 | `DatagramBody`, `encodeBody()`, `decodeBody()` | The decrypted body of a datagram: acknowledgements and messages |
+| `ClientSession`, `SessionHost` | A client's session with its game, and the game's sessions with its players: connecting, heartbeats, timeouts, disconnecting |
 | `FramedConnection` | A TCP or TLS connection that sends and receives whole messages (frames) |
 | `FrameDecoder`, `makeFrame()` | Split a TCP stream into frames, and build a frame |
 | `NetworkError`, `tlsCategory()` | The errors of the library and of TLS, as `std::error_code` |
 | `Writer`, `Reader` | Turn the fields of a message into bytes and back, following the protocol |
 | `isValidText()` | Checks a text before sending it as a `str8` |
 
-The game sessions and the [protocol](../protocol/index.md) messages are built on top of these classes, in the
-next steps of the "Server & networking" work.
+The lobby, the game instances and the [protocol](../protocol/index.md) messages are built on top of these
+classes, in the next steps of the "Server & networking" work.
 
 ## The event loop
 
@@ -515,6 +516,117 @@ is needed.
 
 `encodeBody()` and `decodeBody()` are the codec of the body alone, for the tests and the fuzzer.
 
+## Game sessions
+
+A **session** is the link between one client and its game, over UDP: everything above put together, plus what
+makes it a connection ([game protocol](../protocol/game.md#7-session)). The master gives both sides the same
+session id and keys (`GAME_JOINED` to the client, `ADD_PLAYER` to the game); then:
+
+```mermaid
+sequenceDiagram
+    participant C as ClientSession
+    participant G as SessionHost (game)
+    Note over G: add(session, keys): waits 10 s for its client
+    C->>G: CONNECT (reliable, sent again until acknowledged)
+    Note over G: onConnected(session, address)
+    G->>C: ACCEPTED (made by the game: slot, tick rate, tick)
+    Note over C: onAccepted(payload): State::Connected
+    C-->>G: game messages, at least one datagram per second
+    G-->>C: game messages, at least one datagram per second
+    C->>G: DISCONNECT × 3, or 5 s of silence
+    Note over G: onClosed(session, end)
+```
+
+*A session connects with `CONNECT` and `ACCEPTED`, stays open with heartbeats, and ends with `DISCONNECT` or a
+timeout.*
+
+| | `ClientSession` (client) | `SessionHost` (game) |
+|---|---|---|
+| Sessions | One: the one of `GAME_JOINED` | One per player, added on `ADD_PLAYER` |
+| Sends to | The game's address, through its send function | The address each client sends from, learned from its first authentic datagram |
+| Handlers | `onAccepted`, `onMessage`, `onClose` | `onConnected`, `onMessage`, `onClosed` |
+| Before connecting | `send()` refuses game messages until `ACCEPTED` | Messages before `CONNECT` are ignored |
+| Gives up | No `ACCEPTED` within 5 s: `ConnectTimedOut` (UDP is probably blocked) | No `CONNECT` within 10 s: `ConnectTimedOut` |
+
+Like the channel, the sessions have no socket and no clock: they are given the datagrams received and the time,
+and send through a function. The application owns the `UdpSocket` and calls `update()` regularly:
+
+=== "Client (game loop)"
+
+    ```cpp
+    rtype::network::UdpSocket socket(loop, rtype::network::Address::anyIpv4(0));
+    rtype::network::ClientSession session(joined.sessionId, joined.clientKey, joined.serverKey,
+        [&](std::span<const std::byte> datagram) { socket.send(gameAddress, datagram); });
+
+    socket.startReceiving([&](const rtype::network::Address &from, std::span<const std::byte> datagram) {
+        if (from == gameAddress) { // only the game's datagrams
+            session.receive(datagram, Clock::now());
+        }
+    });
+    session.start(onAccepted, onMessage, onClose, Clock::now());
+
+    // Every frame
+    loop.poll();
+    session.send(InputType, input, rtype::network::Delivery::Unreliable);
+    session.update(Clock::now()); // sends, resends, acknowledgements, heartbeat, timeouts
+    ```
+
+=== "Game (network thread)"
+
+    ```cpp
+    rtype::network::UdpSocket socket(loop, rtype::network::Address::anyIpv4(port));
+    rtype::network::SessionHost host(
+        [&](const rtype::network::Address &to, std::span<const std::byte> datagram) { socket.send(to, datagram); },
+        {
+            .onConnected = [&](std::uint32_t session, const rtype::network::Address &) {
+                host.send(session, rtype::network::session_message::Accepted, accepted,
+                          rtype::network::Delivery::Reliable);
+            },
+            .onMessage = [&](std::uint32_t session, std::uint8_t type, std::span<const std::byte> payload) {},
+            .onClosed = [&](std::uint32_t session, rtype::network::SessionEnd end) {},
+        });
+    socket.startReceiving([&](const rtype::network::Address &from, std::span<const std::byte> datagram) {
+        host.receive(from, datagram, Clock::now());
+    });
+
+    host.add(sessionId, clientKey, serverKey, Clock::now()); // on ADD_PLAYER
+    host.update(Clock::now());                                // every tick
+    ```
+
+The session layer handles `CONNECT`, `ACCEPTED` and `DISCONNECT` itself; every other message (`PLAYER_JOINED`,
+`INPUT`, `SNAPSHOT`…) goes to `onMessage`. The payload of `ACCEPTED` is made by the game and given as is to the
+client's `onAccepted`.
+
+### How a session ends
+
+| `SessionEnd::Cause` | When | `DISCONNECT` sent |
+|---|---|---|
+| `Disconnected` | The peer sent `DISCONNECT`, with its reason (`Quit`, `GameOver`, `Shutdown`, `ProtocolError`) | — |
+| `TimedOut` | Nothing authentic received for **5 s**: the peer crashed or lost the network | No: the peer does not hear anyway |
+| `ConnectTimedOut` | Never connected (5 s for the client, 10 s for the game) | No |
+| `Failed` | The peer stopped acknowledging: 256 reliable messages wait | Yes, `ProtocolError` |
+| — | The application called `close(reason)` | Yes, with the reason; **no handler is called** |
+
+`DISCONNECT` is not reliable: it is sent in **three datagrams in a row**, and one of them is enough. If all
+three are lost, the peer closes after its 5 s timeout.
+
+### What the game protects itself against
+
+`SessionHost::receive()` follows the order of the protocol and drops silently at the first failure, **without
+ever answering**: an answer to a forged datagram could be used to flood someone else.
+
+1. Size and header (`parseDatagramHeader()`).
+2. A known session.
+3. **At most 200 datagrams per second and per source address**, counted before decrypting: a flood costs
+   almost nothing.
+4. The replay window, then the tag, then the body.
+
+**A client whose port changes**, which a home router may do, is followed: an authentic datagram from another
+address with a newer packet number moves the session there. An older one, arriving late, does not.
+
+**Handlers may call the host**, including `close()` of the session they are called for: the messages that
+follow in the same datagram are then dropped.
+
 ## Binary serialization
 
 A message is sent as bytes: each field written one after the other, as the
@@ -586,6 +698,8 @@ The library writes with a logger named `network` ([Logging](logging.md)):
 | `trace` (datagrams) | Every encrypted datagram dropped, with the reason: invalid header, or not authentic. Never the keys |
 | `trace` (reliability) | Every malformed body dropped, every reliable message sent again |
 | `debug` (reliability) | A channel that fails, and why; unreliable messages dropped because too many wait to be sent |
+| `trace` (sessions) | Every datagram of an unknown session dropped |
+| `debug` (sessions) | Sessions added, connecting, accepted, connected, moved to another address, closed and ended (with the cause), source addresses over 200 datagrams per second |
 | `debug` | Sockets opened and closed, connections accepted, opened, closed and lost, datagrams dropped, TLS handshakes started and done (with the cipher suite) |
 | `warning` | A listener that cannot accept connections (for instance, no file descriptor left), a peer sending an invalid frame, a TLS connection failing or closed during its handshake |
 | `error` | A TLS server presenting a key other than the pinned one, with its fingerprint |
@@ -627,6 +741,13 @@ through a **fake network** that loses 30 % of the datagrams, duplicates 10 % and
 so that they arrive out of order: every reliable message arrives once and in order, no unreliable message
 arrives twice.
 
+The tests in `tests/session.cpp` (same tag) run a `ClientSession` and a `SessionHost` through a fake network in
+memory, with the time given by the test: connecting, `CONNECT` sent again, both connect timeouts, heartbeats
+over 20 s of silence, the 5 s timeout on both sides, 30 % loss, `DISCONNECT` both ways and with two copies out of
+three lost, a game that stops acknowledging, a handler that closes its session, replayed, forged and unknown
+datagrams that get no answer, a client whose port changes, a late datagram from another address, and the limit
+of 200 datagrams per second. A last test runs a session over real UDP sockets on the loopback.
+
 Our client and server were also checked against OpenSSL, by hand (it is not installed on every CI runner):
 
 ```sh
@@ -644,7 +765,7 @@ openssl s_client -connect 127.0.0.1:4433 -tls1_2
 
 ## Limits and next steps
 
-- **No messages yet**: the game sessions come next, following the
+- **No R-Type messages yet**: the lobby and the game instances come next, following the
   [protocol](../protocol/index.md). The fuzzing of the decoders comes with them; `parseDatagramHeader()` and
   `openDatagram()` are ready for it.
 - **No handshake timeout in the connection itself**: a peer that opens a connection and never finishes the

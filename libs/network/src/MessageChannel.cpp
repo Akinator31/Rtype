@@ -101,6 +101,7 @@ std::optional<OutgoingDatagram> MessageChannel::next(Clock::time_point now)
     }
 
     std::vector<std::byte> bytes = encodeBody(body);
+    _ackOwed = false;
     _sent.push_back(std::move(sent));
     if (_sent.size() > MaxSentPackets) {
         _sent.pop_front();
@@ -113,13 +114,28 @@ bool MessageChannel::hasMessagesToSend(Clock::time_point now) const
     if (_failed) {
         return false;
     }
-    if (!_unreliable.empty()) {
+    if (_ackOwed || !_unreliable.empty()) {
         return true;
     }
     const Clock::duration delay = resendDelay();
     return std::ranges::any_of(_pending, [&](const PendingMessage &message) {
         return !message.lastSent || now - *message.lastSent >= delay;
     });
+}
+
+std::optional<OutgoingDatagram> MessageChannel::farewell(std::uint8_t type,
+                                                         std::span<const std::byte> payload)
+{
+    if (payload.size() > MaxUnreliablePayloadSize) {
+        throw std::length_error(std::format("an unreliable message holds at most {} bytes, not {}",
+                                            MaxUnreliablePayloadSize, payload.size()));
+    }
+    const std::optional<std::uint64_t> number = _packets.next();
+    if (!number) {
+        return std::nullopt;
+    }
+    const DatagramBody body{_window.highest(), _window.ackBits(), {{type, false, 0, payload}}};
+    return OutgoingDatagram{*number, encodeBody(body)};
 }
 
 bool MessageChannel::accepts(std::uint64_t packetNumber) const
@@ -143,6 +159,7 @@ MessageChannel::receive(std::uint64_t packetNumber, std::span<const std::byte> b
 
     std::vector<ReceivedMessage> delivered;
     for (const BodyMessage &message : decoded->messages) {
+        _ackOwed = _ackOwed || message.reliable;
         deliver(message, delivered);
     }
     return delivered;

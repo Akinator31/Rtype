@@ -122,6 +122,8 @@ private:
     std::map<std::uint16_t, ReceivedMessage> _buffered;
 
     std::optional<Clock::duration> _rtt;
+    /// A reliable message was received since the last datagram sent: the peer waits for its acknowledgement.
+    bool _ackOwed = false;
     bool _failed = false;
 
     void acknowledge(std::uint64_t ack, std::uint32_t ackBits, Clock::time_point now);
@@ -143,8 +145,17 @@ public:
     /// @return Nothing if the channel failed.
     [[nodiscard]] std::optional<OutgoingDatagram> next(Clock::time_point now);
 
-    /// Tells whether messages are waiting for next(): queued, or due for a resend.
+    /// Tells whether a datagram should be sent now: messages are queued or due for a resend, or a reliable
+    /// message was received since the last datagram, and the peer waits for its acknowledgement.
     [[nodiscard]] bool hasMessagesToSend(Clock::time_point now) const;
+
+    /// Builds a datagram that only holds the acknowledgements and this unreliable message, even if the
+    /// channel failed: the last words of a session that closes, such as `DISCONNECT`. The queued messages
+    /// stay queued.
+    /// @return Nothing once every packet number was used.
+    /// @throws std::length_error if the payload is larger than MaxUnreliablePayloadSize.
+    [[nodiscard]] std::optional<OutgoingDatagram> farewell(std::uint8_t type,
+                                                           std::span<const std::byte> payload);
 
     /// Tells whether a datagram with this packet number may be new, before decrypting it.
     [[nodiscard]] bool accepts(std::uint64_t packetNumber) const;
@@ -157,6 +168,8 @@ public:
     [[nodiscard]] std::optional<std::vector<ReceivedMessage>>
     receive(std::uint64_t packetNumber, std::span<const std::byte> body, Clock::time_point now);
 
+    /// The highest packet number received from the peer, 0 if none.
+    [[nodiscard]] std::uint64_t highestReceived() const { return _window.highest(); }
     /// The smoothed round-trip time, once a packet was acknowledged: the ping shown to the player.
     [[nodiscard]] std::optional<Clock::duration> rtt() const { return _rtt; }
     /// How long a reliable message waits for an acknowledgement before being sent again:

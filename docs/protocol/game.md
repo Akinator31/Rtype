@@ -194,7 +194,8 @@ or a timeout.*
    if it has nothing else to send. The client MUST NOT send game messages before `ACCEPTED`; the game ignores
    them.
 3. **Closing.** A side that closes the session sends `DISCONNECT` in three consecutive datagrams, then forgets
-   the session. A side that receives no valid datagram for **5 seconds** closes the session.
+   the session. A side that receives no valid datagram for **5 seconds** closes the session; it MAY skip
+   `DISCONNECT` then, since the peer is probably gone.
 
 If the client gets no `ACCEPTED` within 5 seconds, it gives up and tells the player that the game cannot be
 reached: a firewall probably blocks UDP. It sends `LEAVE_GAME` to the master.

@@ -38,6 +38,7 @@ add_executable(rtype_tests
     resource_cache.cpp
     scenes.cpp
     serialization.cpp
+    session.cpp
     shaders.cpp
     text_input.cpp
     tls.cpp
