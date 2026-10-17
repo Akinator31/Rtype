@@ -36,6 +36,7 @@ add_library(rtype_network
     src/FramedConnection.cpp
     src/MessageChannel.cpp
     src/Reader.cpp
+    src/Session.cpp
     src/TcpConnection.cpp
     src/TcpListener.cpp
     src/Text.cpp
