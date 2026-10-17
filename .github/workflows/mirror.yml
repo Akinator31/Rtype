@@ -7,7 +7,7 @@ on:
 jobs:
   check_workflow_conditions:
     name: Check if the workflow respect correct conditions
-    runs-on: [self-hosted, linux, rtype-cpp]
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Check if MIRROR_URL exist
@@ -29,7 +29,7 @@ jobs:
     name: Push to a mirror repository
     if: ${{ github.ref_name == 'main' }}
     needs: [check_workflow_conditions]
-    runs-on: [self-hosted, linux, rtype-cpp]
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
