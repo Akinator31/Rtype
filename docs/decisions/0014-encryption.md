@@ -134,7 +134,7 @@ link gets TLS too, in a new record.
 |---|---|
 | Server | Private key file, given with `--key`. `*.key` files are ignored by git. |
 | Client | Server public key next to the executable. Changing server means changing this file. |
-| Development | A script generates a local key pair, documented in a guide. |
+| Development | A tool, `r-type_keygen`, generates a local key pair: see [Generate the server keys](../guides/generate-the-server-keys.md). |
 | Standalone instance (debug builds only) | A fixed test key, so that tests and fuzzing can talk to a game without a master. |
 
 ### What this does not protect

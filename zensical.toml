@@ -35,6 +35,7 @@ nav = [
     "guides/add-a-menu.md",
     "guides/add-a-player-action.md",
     "guides/add-a-network-message.md",
+    "guides/generate-the-server-keys.md",
   ] },
   { "Network protocol" = [
     "protocol/index.md",

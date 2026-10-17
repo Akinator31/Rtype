@@ -18,6 +18,9 @@ CMakeUserPresets.json
 .DS_Store
 Thumbs.db
 
+# Private keys of the server (docs/guides/generate-the-server-keys.md)
+*.key
+
 # Documentation output
 site/
 
