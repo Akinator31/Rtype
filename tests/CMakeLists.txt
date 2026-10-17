@@ -17,6 +17,7 @@ add_executable(rtype_tests
     ecs_world.cpp
     engine.cpp
     framing.cpp
+    keygen.cpp
     log.cpp
     network.cpp
     paths.cpp
@@ -42,8 +43,9 @@ add_executable(rtype_tests
 )
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::ecs rtype::engine rtype::input rtype::log rtype::network rtype::physics rtype::render
-    rtype::shaders Catch2::Catch2WithMain)
+    rtype::shaders r-type_keygen_core Catch2::Catch2WithMain)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 
 # Smoke tests: the binaries start and exit cleanly
 add_test(NAME smoke.server_starts COMMAND r-type_server)
+add_test(NAME smoke.keygen_help COMMAND r-type_keygen --help)
