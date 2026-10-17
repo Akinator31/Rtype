@@ -60,6 +60,7 @@ nav = [
     "decisions/0013-one-process-per-game.md",
     "decisions/0014-encryption.md",
     "decisions/0015-one-game-scene-local-or-remote-session.md",
+    "decisions/0016-replication.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
