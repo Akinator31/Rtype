@@ -363,3 +363,22 @@ TEST_CASE("Packet numbers stop instead of going back to 0", "[network]")
     CHECK_FALSE(counter.next());
     CHECK_FALSE(counter.next());
 }
+
+TEST_CASE("A replay window gives the acknowledgement bits of the 32 numbers before the highest", "[network]")
+{
+    ReplayWindow window;
+    CHECK(window.ackBits() == 0);
+
+    // 37, 38, 40 and 41 received, 39 lost
+    for (const std::uint64_t number : {37, 38, 40, 41}) {
+        window.mark(number);
+    }
+    CHECK(window.highest() == 41);
+    CHECK(window.ackBits() == 0b1101);
+
+    // Only the 32 before count
+    window.mark(41 + 33);
+    CHECK(window.ackBits() == 0);
+    window.mark(41 + 34);
+    CHECK(window.ackBits() == 0b1);
+}
