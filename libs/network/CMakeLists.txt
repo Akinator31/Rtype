@@ -28,6 +28,7 @@ find_package(Threads REQUIRED)
 
 add_library(rtype_network
     src/Address.cpp
+    src/Datagram.cpp
     src/Errors.cpp
     src/EventLoop.cpp
     src/Frame.cpp
