@@ -117,9 +117,17 @@ struct TlsConnection::Impl : std::enable_shared_from_this<Impl> {
 
     void tcpClosed(std::error_code reason)
     {
-        if (!reason && !session.secured()) {
+        // The peer closing its socket before reading what was sent to it resets the connection instead of
+        // ending it normally (always on Windows, where the ClientHello is often still unread)
+        const bool closedByPeer =
+            !reason || reason == asio::error::connection_reset || reason == asio::error::connection_aborted;
+        if (closedByPeer && !session.secured()) {
+            if (reason) {
+                logger().warning("TLS {} closed during the handshake: {}", tcp->remote, reason.message());
+            } else {
+                logger().warning("TLS {} closed during the handshake", tcp->remote);
+            }
             reason = NetworkError::HandshakeInterrupted;
-            logger().warning("TLS {} closed during the handshake", tcp->remote);
         }
         end(reason);
     }

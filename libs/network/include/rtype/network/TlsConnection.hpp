@@ -34,7 +34,8 @@ namespace rtype::network
 /// The bytes given to send() before its end wait for it, and are sent encrypted once it is done. If it fails,
 /// the close handler receives the reason:
 /// - NetworkError::UntrustedServer, on the client: the server does not have the pinned key;
-/// - NetworkError::HandshakeInterrupted: the TCP connection ended during the handshake;
+/// - NetworkError::HandshakeInterrupted: the TCP connection ended during the handshake, closed or reset by the
+///   peer;
 /// - an error of tlsCategory(): the peer does not speak TLS 1.3, or sent an invalid message.
 ///
 /// Every function can be called from any thread. The handlers are called on the loop's thread.
