@@ -16,6 +16,7 @@ namespace rtype::network
 
 class EventLoop;
 class TcpListener;
+class TlsConnection;
 
 /// A TCP connection: a stream of bytes in both directions, complete and in order.
 ///
@@ -53,6 +54,8 @@ public:
 
 private:
     friend class TcpListener;
+    /// Takes over the state of the connection, to run it on the loop's thread without posting twice
+    friend class TlsConnection;
 
     std::shared_ptr<Impl> _impl;
     Address _localAddress;
