@@ -424,6 +424,45 @@ TEST_CASE("Messages too large for a datagram are refused, and large ones go in d
     CHECK(messages == 3);
 }
 
+TEST_CASE("A reliable message received is acknowledged by the next datagram, without waiting", "[network]")
+{
+    MessageChannel a;
+    MessageChannel b;
+    const Clock::time_point now{};
+
+    a.send(UnreliableType, bytesOf("snapshot"), Delivery::Unreliable);
+    (void)transfer(a, b, now);
+    CHECK_FALSE(b.hasMessagesToSend(now));
+
+    a.send(ReliableType, bytesOf("destroyed"), Delivery::Reliable);
+    (void)transfer(a, b, now);
+    CHECK(b.hasMessagesToSend(now));
+    (void)transfer(b, a, now);
+    CHECK_FALSE(b.hasMessagesToSend(now));
+    CHECK(a.pendingReliable() == 0);
+}
+
+TEST_CASE("Last words are sent even by a failed channel, and leave the queue alone", "[network]")
+{
+    MessageChannel a;
+    MessageChannel b;
+    const Clock::time_point now{};
+    for (std::size_t i = 0; i <= MessageChannel::MaxPendingReliable; ++i) {
+        (void)a.send(ReliableType, numbered(0), Delivery::Reliable);
+    }
+    REQUIRE(a.failed());
+
+    const auto farewell = a.farewell(0x03, bytesOf("bye"));
+
+    REQUIRE(farewell);
+    const auto received = b.receive(farewell->packetNumber, farewell->body, now);
+    REQUIRE(received);
+    CHECK(*received == std::vector<ReceivedMessage>{{0x03, bytesOf("bye")}});
+    CHECK(a.pendingReliable() == MessageChannel::MaxPendingReliable);
+    CHECK_THROWS_AS(a.farewell(0x03, std::vector<std::byte>(MaxUnreliablePayloadSize + 1)),
+                    std::length_error);
+}
+
 TEST_CASE("A malformed body does not count as received", "[network]")
 {
     MessageChannel a;
