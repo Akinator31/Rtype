@@ -21,6 +21,7 @@ technical and comparative study of the project.
 | [0013](0013-one-process-per-game.md)               | One process per game                                     | Accepted |
 | [0014](0014-encryption.md)                         | Encryption of the client/server traffic                  | Accepted |
 | [0015](0015-one-game-scene-local-or-remote-session.md) | One game scene, fed by a local or a remote session | Accepted |
+| [0016](0016-replication.md) | Full snapshots, explicit destructions and redundant inputs | Proposed |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.
