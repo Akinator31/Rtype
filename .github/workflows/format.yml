@@ -32,7 +32,7 @@ env:
 jobs:
   clang-format:
     name: clang-format
-    runs-on: [self-hosted, linux, rtype-cpp]
+    runs-on: ubuntu-24.04
     steps:
       # Commits pushed with this token trigger the other workflows, unlike the default GITHUB_TOKEN
       - name: Generate format bot token

@@ -2,8 +2,9 @@
 
 The network library (`libs/network`, namespace `rtype::network`) opens sockets and moves bytes between the
 client and the server. It is shared by both programs and, like the ECS, does not depend on raylib. It is built
-on [Asio](https://think-async.com/Asio/) ([ADR 0011](../decisions/0011-networking-library.md)), which never
-appears in its headers.
+on [Asio](https://think-async.com/Asio/) ([ADR 0011](../decisions/0011-networking-library.md)) and encrypts
+with [Mbed TLS](https://www.trustedfirmware.org/projects/mbed-tls/)
+([ADR 0014](../decisions/0014-encryption.md)). Neither appears in its headers.
 
 New to networking? Read [Networking concepts](networking-concepts.md) first.
 
@@ -14,14 +15,17 @@ New to networking? Read [Networking concepts](networking-concepts.md) first.
 | `UdpSocket` | Sends and receives datagrams |
 | `TcpListener` | Listens on a TCP port and accepts connections |
 | `TcpConnection` | Sends and receives a stream of bytes |
-| `FramedConnection` | A TCP connection that sends and receives whole messages (frames) |
+| `TlsConnection` | A TCP connection encrypted with TLS 1.3, on which the client is sure to talk to our server |
+| `ServerIdentity` | The private key of the server, and the certificate it presents |
+| `KeyFingerprint` | The SHA-256 of a public key, which the client pins |
+| `FramedConnection` | A TCP or TLS connection that sends and receives whole messages (frames) |
 | `FrameDecoder`, `makeFrame()` | Split a TCP stream into frames, and build a frame |
-| `NetworkError` | The errors of the library, as `std::error_code` |
+| `NetworkError`, `tlsCategory()` | The errors of the library and of TLS, as `std::error_code` |
 | `Writer`, `Reader` | Turn the fields of a message into bytes and back, following the protocol |
 | `isValidText()` | Checks a text before sending it as a `str8` |
 
-Encryption, reliability over UDP and the [protocol](../protocol/index.md) messages are built on top of these
-classes, in the next steps of the "Server & networking" work.
+The encryption of the datagrams, reliability over UDP and the [protocol](../protocol/index.md) messages are
+built on top of these classes, in the next steps of the "Server & networking" work.
 
 ## The event loop
 
@@ -214,6 +218,113 @@ while (const auto frame = decoder.next()) { // each complete frame
 if (decoder.failed()) { /* decoder.error(): EmptyFrame or FrameTooLarge */ }
 ```
 
+## TLS
+
+The lobby connection is encrypted with **TLS 1.3** ([lobby, section 2](../protocol/lobby.md#2-tls)): nobody on
+the path can read or change the bytes, and the client is sure to talk to our server, not to someone in the
+middle. `TlsConnection` adds it on top of a `TcpConnection`, and works the same way: `start()`, `send()`,
+`close()`, a receive handler and a close handler.
+
+### Keys
+
+The server has a key pair (ECDSA P-256). It keeps the **private key** secret, in a file given to it, and the
+clients know its **public key**. They do not compare the whole key, only its **fingerprint**: the SHA-256 of
+the key, 64 hexadecimal digits, like SSH's `known_hosts`
+([ADR 0014](../decisions/0014-encryption.md#tcp-tls-13-server-key-pinned)).
+
+```cpp
+// Server: its private key, the --key option
+const auto identity = rtype::network::ServerIdentity::load("server.key");
+logger.info("Server key {}", identity.fingerprint().toHex());
+
+// Client: the fingerprint of the server's public key, shipped next to the executable...
+const auto pinned = rtype::network::KeyFingerprint::loadPublicKey("server.pub");
+// ... or written in a configuration, as 64 hexadecimal digits
+const std::optional<rtype::network::KeyFingerprint> fromText = rtype::network::KeyFingerprint::parse(text);
+```
+
+| Function | Gives | Throws |
+|---|---|---|
+| `ServerIdentity::load(path)`, `fromPrivateKey(pem)` | The identity of the server, from an ECDSA P-256 private key in PEM | `std::system_error` (file), `std::invalid_argument` (not such a key) |
+| `ServerIdentity::generate()` | A new key pair, for the tests and the key generation tool | — |
+| `identity.privateKeyPem()`, `publicKeyPem()`, `fingerprint()` | The keys in PEM, to write them to files, and the fingerprint | — |
+| `KeyFingerprint::loadPublicKey(path)`, `ofPublicKey(pem)` | The fingerprint of a public key in PEM | `std::system_error` (file), `std::invalid_argument` (not a key) |
+| `KeyFingerprint::parse(hex)`, `toHex()` | The fingerprint from and to 64 hexadecimal digits | — (`parse` returns `std::nullopt`) |
+
+The fingerprint is the one OpenSSL computes, so it can be checked by hand:
+
+```sh
+openssl pkey -pubin -in server.pub -outform DER | sha256sum
+```
+
+The certificate a TLS server must present is made from the private key when the identity is created: it is
+self-signed, and the client only looks at the key it holds. No certificate authority, domain name or expiry
+date is involved.
+
+### Connecting
+
+Each side wraps its TCP connection, not started yet, then starts it:
+
+=== "Client"
+
+    ```cpp
+    rtype::network::TcpConnection::connect(loop, server,
+        [&](std::error_code error, std::optional<rtype::network::TcpConnection> connection) {
+            if (error) { /* server unreachable */ return; }
+            lobby.emplace(rtype::network::FramedConnection(
+                rtype::network::TlsConnection::client(std::move(*connection), pinned)));
+            lobby->start(onFrame, onClose);
+            lobby->send(0x01, hello.bytes()); // waits for the end of the handshake
+        });
+    ```
+
+=== "Server"
+
+    ```cpp
+    listener.startAccepting([&](rtype::network::TcpConnection connection) {
+        auto client = std::make_unique<rtype::network::FramedConnection>(
+            rtype::network::TlsConnection::server(std::move(connection), identity));
+        client->start(onFrame, onClose);
+        clients.push_back(std::move(client));
+    });
+    ```
+
+`FramedConnection` takes a `TlsConnection` as well as a `TcpConnection`: the frames are then encrypted, and the
+code above does not change.
+
+- **The handshake starts with `start()`.** Both sides agree on keys, and the server proves it holds the private
+  key of its certificate. It takes one round trip, a few milliseconds on a local network.
+- **Bytes sent before its end wait for it**, then leave encrypted. The client can send `HELLO` at once.
+- **The client checks the key.** If the server presents another key, the handshake fails, an error is logged
+  with the fingerprint presented, and the close handler receives `NetworkError::UntrustedServer`. Nothing the
+  client sent is ever delivered to that server.
+- **TLS 1.3 only**, with the algorithms of the specification: `TLS_CHACHA20_POLY1305_SHA256` (preferred) or
+  `TLS_AES_128_GCM_SHA256`, key exchange with `x25519` or `secp256r1`, signatures with
+  `ecdsa_secp256r1_sha256`. A peer offering only TLS 1.2 is refused. No session ticket, no resumption.
+- **Everything received is authenticated.** A changed byte, a record from someone else, or a peer that does
+  not speak TLS ends the connection with an error of `tlsCategory()`, whose `message()` comes from Mbed TLS.
+- **`close()`** sends the bytes already given to `send()`, tells the peer that the connection ends (a TLS
+  `close_notify`), then closes. Called during the handshake, it waits for its end if bytes are waiting to be
+  sent. The peer's close handler is called without error.
+
+The close handler of a TLS connection, or of a framed connection over TLS, can receive:
+
+| Reason | Meaning |
+|---|---|
+| No error | The peer closed the connection |
+| `NetworkError::UntrustedServer` | Client: the server does not have the pinned key. Tell the player the server is not the expected one. |
+| `NetworkError::HandshakeInterrupted` | The TCP connection ended during the handshake: closed, or reset, by the peer |
+| `reason.category() == tlsCategory()` | The TLS layer refused something: wrong version, invalid record, alert from the peer… |
+| `NetworkError::EmptyFrame`, `FrameTooLarge` | Framed connections: the peer sent an invalid frame |
+| A system error | The connection was lost |
+
+### Threads
+
+Mbed TLS is built without its own locks. Every call into it, from any connection or identity, holds one lock of
+the library, so identities can be loaded and connections used from any thread. A handshake holds it for about a
+millisecond: negligible at the scale of a lobby, and a reason to enable the locks of Mbed TLS
+(`MBEDTLS_THREADING_C`) if measurements ever show waiting.
+
 ## Binary serialization
 
 A message is sent as bytes: each field written one after the other, as the
@@ -281,8 +392,10 @@ The library writes with a logger named `network` ([Logging](logging.md)):
 | Level | Messages |
 |---|---|
 | `trace` | Every datagram and every piece of a stream received, with its size |
-| `debug` | Sockets opened and closed, connections accepted, opened, closed and lost, datagrams dropped |
-| `warning` | A listener that cannot accept connections (for instance, no file descriptor left), a peer sending an invalid frame |
+| `trace` (TLS) | Every piece of a TLS stream decrypted, with its size |
+| `debug` | Sockets opened and closed, connections accepted, opened, closed and lost, datagrams dropped, TLS handshakes started and done (with the cipher suite) |
+| `warning` | A listener that cannot accept connections (for instance, no file descriptor left), a peer sending an invalid frame, a TLS connection failing or closed during its handshake |
+| `error` | A TLS server presenting a key other than the pinned one, with its fingerprint |
 
 ```sh
 RTYPE_LOG_LEVEL=debug ./build/bin/r-type_server
@@ -301,14 +414,35 @@ The tests in `tests/framing.cpp` (same tag) check the frame decoder with frames 
 cut at random places, the maximum size and the invalid sizes; then framed connections over the loopback: frames
 in both directions, a peer sending an invalid frame, and `close()` from inside the frame handler.
 
+The tests in `tests/tls.cpp` (same tag) check the fingerprints against the one OpenSSL computes, the identities
+(generated, saved and read back, refused keys, files), then TLS connections over the loopback: large transfers
+in both directions, bytes sent before the handshake, a server with another key, a relay in the middle that
+reads nothing and whose changed byte is detected, peers that do not speak TLS, closing, frames over TLS, and
+Mbed TLS used from two threads at once.
+
+Our client and server were also checked against OpenSSL, by hand (it is not installed on every CI runner):
+
+```sh
+# Our client against an OpenSSL server holding the test key of tests/tls.cpp
+openssl req -new -x509 -key test.key -out test.crt -subj "/CN=test"
+openssl s_server -accept 4433 -key test.key -cert test.crt -tls1_3 -www
+# OpenSSL's client against our server: TLS 1.3 accepted, TLS 1.2 refused
+openssl s_client -connect 127.0.0.1:4433 -tls1_3
+openssl s_client -connect 127.0.0.1:4433 -tls1_2
+```
+
 ```sh
 ./build/bin/rtype_tests "[network]"
 ```
 
 ## Limits and next steps
 
-- **No messages yet**: encryption and reliability come next, following the [protocol](../protocol/index.md).
-  The fuzzing of the decoders comes with them.
+- **No messages yet**: the encryption of the datagrams and reliability come next, following the
+  [protocol](../protocol/index.md). The fuzzing of the decoders comes with them.
+- **No handshake timeout in the connection itself**: a peer that opens a connection and never finishes the
+  handshake keeps it open. The server closes such connections with the limits of the
+  [protocol](../protocol/index.md) (10 s for the handshake), in the lobby step.
+- **One lock for all of Mbed TLS**, see [Threads](#threads).
 - **One copy per send**: `send()` copies the data into a new buffer, unless it is given a `std::vector` it can
   take (`send(std::move(bytes))`). Enough for now; a pool of buffers can replace it if measurements show the
   cost.

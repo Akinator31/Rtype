@@ -10,7 +10,7 @@ permissions:
 jobs:
   check-version:
     name: Check version
-    runs-on: [self-hosted, linux, rtype-cpp]
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -39,7 +39,7 @@ jobs:
   release:
     name: Publish release
     needs: build
-    runs-on: [self-hosted, linux, rtype-cpp]
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

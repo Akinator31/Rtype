@@ -2,6 +2,7 @@
 
 #include "rtype/network/Address.hpp"
 #include "rtype/network/TcpConnection.hpp"
+#include "rtype/network/TlsConnection.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -13,7 +14,8 @@ namespace rtype::network
 {
 
 /// A TCP connection that exchanges frames instead of bytes: each message arrives whole, with its type, in the
-/// order it was sent (docs/protocol/lobby.md, section 3).
+/// order it was sent (docs/protocol/lobby.md, section 3). The connection is a TcpConnection, or a
+/// TlsConnection to encrypt the frames: both work the same way.
 ///
 /// @code
 /// rtype::network::FramedConnection server(std::move(connection));
@@ -34,12 +36,13 @@ public:
     /// call.
     using FrameHandler = std::function<void(std::uint8_t type, std::span<const std::byte> payload)>;
     /// Called once when the connection ends without close() being called: closed by the peer (no error),
-    /// lost (the system error), or closed because the peer sent an invalid frame (a NetworkError).
+    /// lost (the system error), closed because the peer sent an invalid frame (a NetworkError), or ended by
+    /// the TLS layer (see TlsConnection).
     using CloseHandler = TcpConnection::CloseHandler;
 
 private:
     struct State;
-    /// Holds the TCP connection: shared with its handlers, which outlive a FramedConnection moved or
+    /// Holds the connection: shared with its handlers, which outlive a FramedConnection moved or
     /// destroyed
     std::shared_ptr<State> _state;
     Address _localAddress;
@@ -48,6 +51,8 @@ private:
 public:
     /// Takes a connection that has not been started yet.
     explicit FramedConnection(TcpConnection connection);
+    /// Takes an encrypted connection that has not been started yet. Its handshake starts with start().
+    explicit FramedConnection(TlsConnection connection);
     /// Closes the connection, as close() does.
     ~FramedConnection();
 

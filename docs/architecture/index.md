@@ -108,7 +108,7 @@ The programs are built on ten libraries:
 | `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
 | `libs/ecs` | Entities, components and systems, with a hierarchy. Shared with the server, so it never depends on raylib. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
-| `libs/network` | Addresses, UDP and TCP sockets, and the event loop that runs them. Wraps Asio. Shared with the server. | [Networking](networking.md) |
+| `libs/network` | Addresses, UDP and TCP sockets, the event loop that runs them, TCP framing, TLS and the binary serialization. Wraps Asio and Mbed TLS. Shared with the server. | [Networking](networking.md) |
 | `libs/physics` | Movement and collisions as components and systems on the ECS. Knows no game: each game names its collision layers and reacts to the collisions. Shared with the server. | — |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
@@ -117,8 +117,8 @@ The programs are built on ten libraries:
 
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
-raylib: the ECS, the physics, the log, the core and the network libraries. Likewise, Asio is a private
-dependency of `network`.
+raylib: the ECS, the physics, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
+private dependencies of `network`.
 
 ## Repository layout
 

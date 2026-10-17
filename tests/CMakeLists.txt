@@ -37,6 +37,7 @@ add_executable(rtype_tests
     serialization.cpp
     shaders.cpp
     text_input.cpp
+    tls.cpp
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE

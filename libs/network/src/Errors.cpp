@@ -20,6 +20,10 @@ public:
             return "empty frame";
         case NetworkError::FrameTooLarge:
             return "frame larger than the maximum";
+        case NetworkError::UntrustedServer:
+            return "the server key is not the pinned one";
+        case NetworkError::HandshakeInterrupted:
+            return "connection closed during the TLS handshake";
         }
         return "unknown network error";
     }
