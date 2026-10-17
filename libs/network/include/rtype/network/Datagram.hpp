@@ -133,8 +133,12 @@ public:
     /// Remembers that a datagram with this number was accepted. Does nothing if accepts() refuses it.
     void mark(std::uint64_t packetNumber);
 
-    /// The highest number accepted, 0 if none.
+    /// The highest number accepted, 0 if none: the `Ack` field of the datagrams sent back.
     [[nodiscard]] std::uint64_t highest() const { return _highest; }
+
+    /// Which of the 32 numbers before the highest one were accepted: bit i set for `highest() - 1 - i`. The
+    /// `Ack bits` field of the datagrams sent back.
+    [[nodiscard]] std::uint32_t ackBits() const;
 };
 
 /// The packet numbers of the datagrams one side sends: 1, 2, 3... so that a number is never used twice with
