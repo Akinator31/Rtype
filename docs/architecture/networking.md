@@ -18,14 +18,16 @@ New to networking? Read [Networking concepts](networking-concepts.md) first.
 | `TlsConnection` | A TCP connection encrypted with TLS 1.3, on which the client is sure to talk to our server |
 | `ServerIdentity` | The private key of the server, and the certificate it presents |
 | `KeyFingerprint` | The SHA-256 of a public key, which the client pins |
+| `DatagramKey`, `sealDatagram()`, `openDatagram()` | Encrypt a game datagram with a player's key, and check and decrypt it |
+| `ReplayWindow`, `PacketCounter` | Drop the datagrams received twice, and number the ones sent |
 | `FramedConnection` | A TCP or TLS connection that sends and receives whole messages (frames) |
 | `FrameDecoder`, `makeFrame()` | Split a TCP stream into frames, and build a frame |
 | `NetworkError`, `tlsCategory()` | The errors of the library and of TLS, as `std::error_code` |
 | `Writer`, `Reader` | Turn the fields of a message into bytes and back, following the protocol |
 | `isValidText()` | Checks a text before sending it as a `str8` |
 
-The encryption of the datagrams, reliability over UDP and the [protocol](../protocol/index.md) messages are
-built on top of these classes, in the next steps of the "Server & networking" work.
+Reliability over UDP, the game sessions and the [protocol](../protocol/index.md) messages are built on top of
+these classes, in the next steps of the "Server & networking" work.
 
 ## The event loop
 
@@ -326,6 +328,88 @@ the library, so identities can be loaded and connections used from any thread. A
 millisecond: negligible at the scale of a lobby, and a reason to enable the locks of Mbed TLS
 (`MBEDTLS_THREADING_C`) if measurements ever show waiting.
 
+## Encrypted datagrams
+
+Every datagram of a game is encrypted and authenticated ([game protocol](../protocol/game.md#2-datagram-layout),
+[ADR 0014](../decisions/0014-encryption.md)). UDP has no connection and no handshake, so TLS cannot be used:
+the master draws two keys per player, sends them to the client over TLS (`GAME_JOINED`) and to the game, and
+each side encrypts what it sends with its own key.
+
+```
+ 0      2   3   4             8                       16                      16 + n         32 + n
+ ┌──────┬───┬───┬─────────────┬───────────────────────┬───────────────────────┬──────────────┐
+ │ "RT" │ 1 │ 0 │ session id  │ packet number         │ body, encrypted       │ tag          │
+ └──────┴───┴───┴─────────────┴───────────────────────┴───────────────────────┴──────────────┘
+  header: in clear, but covered by the tag              ChaCha20                 Poly1305
+```
+
+- The **header** stays in clear, so that the receiver knows the session, hence the key, before decrypting.
+  The tag covers it as well: changing the session id or the packet number makes the datagram invalid.
+- The **body** is encrypted with **ChaCha20-Poly1305** (RFC 8439). The nonce, a number that must never be
+  used twice with the same key, is the packet number: that is why `PacketCounter` never gives a number twice,
+  and stops instead of going back to 0.
+- The **tag** (16 bytes) proves that the datagram was made with the key and not changed on the way. Without
+  the key, nobody can make a datagram that opens, nor change a byte of one, which also proves who sent it:
+  only the player who received the key over TLS.
+
+These functions only take bytes and give bytes, with no socket, like the frame decoder: the sessions of the
+next steps call them.
+
+=== "Sending"
+
+    ```cpp
+    // Once per session: the key of this side, and its packet numbers
+    rtype::network::DatagramKey ownKey(keyBytes);   // 32 bytes from GAME_JOINED
+    rtype::network::PacketCounter packets;
+
+    // For every datagram
+    const std::optional<std::uint64_t> number = packets.next();
+    if (!number) {
+        // Every packet number was used (2^64 - 1 datagrams): the session must close
+    }
+    socket.send(peer, rtype::network::sealDatagram(ownKey, {sessionId, *number}, body));
+    ```
+
+=== "Receiving"
+
+    ```cpp
+    // Once per session: the key of the peer, and the numbers already received
+    rtype::network::DatagramKey peerKey(peerKeyBytes);
+    rtype::network::ReplayWindow window;
+
+    // For every datagram, in this order, dropping it silently at the first failure
+    const auto header = rtype::network::parseDatagramHeader(datagram); // size, magic, version...
+    if (!header || header->session != sessionId) {
+        return;
+    }
+    if (!window.accepts(header->packetNumber)) {
+        return; // received already: duplicated by the network, or replayed by an attacker
+    }
+    const auto body = rtype::network::openDatagram(peerKey, datagram);
+    if (!body) {
+        return; // forged, or changed on the way
+    }
+    window.mark(header->packetNumber); // only now: a forged datagram must not move the window
+    handle(*body);
+    ```
+
+| Function | Gives | Refuses |
+|---|---|---|
+| `DatagramKey(bytes)`, `DatagramKey::generate()`, `key.bytes()` | A key from its 32 bytes or drawn at random, and its bytes to send them over TLS | — |
+| `parseDatagramHeader(datagram)` | The session and the packet number, not authenticated yet | Size outside 32–1200 bytes, wrong magic, version or reserved byte, session or number 0 (`std::nullopt`) |
+| `sealDatagram(key, header, body)` | The datagram, `body.size() + 32` bytes | A body above 1168 bytes (`std::length_error`), a session or number 0 (`std::invalid_argument`) |
+| `openDatagram(key, datagram)` | The body | An invalid header, another key, any byte changed (`std::nullopt`) |
+| `window.accepts(n)`, `window.mark(n)` | Whether `n` may be new, and remembering it | 0, a number received already, more than 256 below the highest one |
+| `packets.next()` | 1, 2, 3… | After `2^64 - 1` (`std::nullopt`) |
+
+**Why a replay window.** An attacker can record a valid datagram and send it again later: it still opens,
+since it was made with the key. The window remembers the numbers received, and drops the second copy. It only
+keeps the last 256: a datagram later than that is useless in a game anyway, and the window stays 40 bytes.
+
+**Keys are secret.** A `DatagramKey` is never logged, its bytes are erased from memory when its last copy is
+destroyed, and copying it shares the same key. Like TLS, sealing and opening hold the lock of Mbed TLS
+([Threads](#threads)), so keys can be used from any thread.
+
 ## Binary serialization
 
 A message is sent as bytes: each field written one after the other, as the
@@ -394,6 +478,7 @@ The library writes with a logger named `network` ([Logging](logging.md)):
 |---|---|
 | `trace` | Every datagram and every piece of a stream received, with its size |
 | `trace` (TLS) | Every piece of a TLS stream decrypted, with its size |
+| `trace` (datagrams) | Every encrypted datagram dropped, with the reason: invalid header, or not authentic. Never the keys |
 | `debug` | Sockets opened and closed, connections accepted, opened, closed and lost, datagrams dropped, TLS handshakes started and done (with the cipher suite) |
 | `warning` | A listener that cannot accept connections (for instance, no file descriptor left), a peer sending an invalid frame, a TLS connection failing or closed during its handshake |
 | `error` | A TLS server presenting a key other than the pinned one, with its fingerprint |
@@ -421,6 +506,12 @@ in both directions, bytes sent before the handshake, a server with another key, 
 reads nothing and whose changed byte is detected, peers that do not speak TLS, closing, frames over TLS, and
 Mbed TLS used from two threads at once.
 
+The tests in `tests/datagram.cpp` (same tag) check two datagrams byte for byte against another implementation
+of RFC 8439 (Python's `cryptography` package), the round trip of bodies from 0 to 1168 bytes, that every bit
+changed anywhere makes a datagram invalid, other keys, random bytes, every invalid header, the edges of the
+replay window (256 and 257 numbers below, jumps, any order, the largest number) and the end of the packet
+numbers.
+
 Our client and server were also checked against OpenSSL, by hand (it is not installed on every CI runner):
 
 ```sh
@@ -438,8 +529,9 @@ openssl s_client -connect 127.0.0.1:4433 -tls1_2
 
 ## Limits and next steps
 
-- **No messages yet**: the encryption of the datagrams and reliability come next, following the
-  [protocol](../protocol/index.md). The fuzzing of the decoders comes with them.
+- **No messages yet**: reliability and the game sessions come next, following the
+  [protocol](../protocol/index.md). The fuzzing of the decoders comes with them; `parseDatagramHeader()` and
+  `openDatagram()` are ready for it.
 - **No handshake timeout in the connection itself**: a peer that opens a connection and never finishes the
   handshake keeps it open. The server closes such connections with the limits of the
   [protocol](../protocol/index.md) (10 s for the handshake), in the lobby step.
