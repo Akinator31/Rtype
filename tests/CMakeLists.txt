@@ -13,6 +13,7 @@ add_executable(rtype_tests
     color_filter.cpp
     collider_debug_renderer.cpp
     controls.cpp
+    datagram.cpp
     ecs.cpp
     ecs_world.cpp
     engine.cpp
