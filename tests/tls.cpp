@@ -481,6 +481,25 @@ TEST_CASE("A connection closed during the handshake reports HandshakeInterrupted
     CHECK(*side.closed == NetworkError::HandshakeInterrupted);
 }
 
+TEST_CASE("A connection reset during the handshake reports HandshakeInterrupted", "[network]")
+{
+    EventLoop loop;
+    TcpListener listener(loop, Address::loopbackIpv4(0));
+    TcpPair tcp;
+    connectPair(loop, listener, tcp);
+    TlsConnection client =
+        TlsConnection::client(std::move(*tcp.client), ServerIdentity::generate().fingerprint());
+    Side side;
+
+    client.start(side.onReceive(), side.onClose());
+    // The server closes with the ClientHello still unread: the system resets the connection
+    pollUntil(loop, [] { return false; }, std::chrono::milliseconds(100));
+    tcp.server->close();
+
+    REQUIRE(pollUntil(loop, [&] { return side.closed.has_value(); }));
+    CHECK(*side.closed == NetworkError::HandshakeInterrupted);
+}
+
 TEST_CASE("Frames go both ways over TLS", "[network]")
 {
     EventLoop loop;
