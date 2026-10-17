@@ -313,7 +313,7 @@ The close handler of a TLS connection, or of a framed connection over TLS, can r
 |---|---|
 | No error | The peer closed the connection |
 | `NetworkError::UntrustedServer` | Client: the server does not have the pinned key. Tell the player the server is not the expected one. |
-| `NetworkError::HandshakeInterrupted` | The TCP connection ended during the handshake |
+| `NetworkError::HandshakeInterrupted` | The TCP connection ended during the handshake: closed, or reset, by the peer |
 | `reason.category() == tlsCategory()` | The TLS layer refused something: wrong version, invalid record, alert from the peer… |
 | `NetworkError::EmptyFrame`, `FrameTooLarge` | Framed connections: the peer sent an invalid frame |
 | A system error | The connection was lost |
