@@ -1,0 +1,727 @@
+// Tests of the instance mode of r-type_server: the messages between the master and its instances, the
+// simulation thread, the link to the master, and whole instances run on a thread of the test, with a fake
+// master over TCP and real clients over UDP (docs/protocol/instances.md, docs/architecture/server.md).
+
+#include "Common/InstanceMessages.hpp"
+#include "Common/Options.hpp"
+#include "Common/Secret.hpp"
+#include "Instance/GameThread.hpp"
+#include "Instance/Instance.hpp"
+#include "Instance/MasterLink.hpp"
+#include "rtype/game/Messages.hpp"
+#include "rtype/game/Standalone.hpp"
+#include "rtype/network/Address.hpp"
+#include "rtype/network/Datagram.hpp"
+#include "rtype/network/EventLoop.hpp"
+#include "rtype/network/FramedConnection.hpp"
+#include "rtype/network/Session.hpp"
+#include "rtype/network/TcpConnection.hpp"
+#include "rtype/network/TcpListener.hpp"
+#include "rtype/network/UdpSocket.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <chrono>
+#include <csignal>
+#include <cstdint>
+#include <functional>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <random>
+#include <span>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+using namespace rtype::server;
+using namespace std::chrono_literals;
+using rtype::network::Address;
+using rtype::network::ClientSession;
+using rtype::network::DatagramKey;
+using rtype::network::Delivery;
+using rtype::network::DisconnectReason;
+using rtype::network::EventLoop;
+using rtype::network::FramedConnection;
+using rtype::network::SessionEnd;
+using rtype::network::TcpConnection;
+using rtype::network::TcpListener;
+using rtype::network::UdpSocket;
+using Clock = std::chrono::steady_clock;
+using Bytes = std::vector<std::byte>;
+
+namespace
+{
+
+/// Long enough for any machine of the CI, short enough for a test that fails.
+constexpr auto Patience = 10s;
+
+Bytes copy(std::span<const std::byte> bytes)
+{
+    return {bytes.begin(), bytes.end()};
+}
+
+Secret testSecret()
+{
+    Secret secret{};
+    for (std::size_t i = 0; i < secret.size(); ++i) {
+        secret[i] = static_cast<std::byte>(i * 7);
+    }
+    return secret;
+}
+
+std::array<std::byte, 32> key(int value)
+{
+    std::array<std::byte, 32> bytes{};
+    bytes.fill(static_cast<std::byte>(value));
+    return bytes;
+}
+
+AddPlayerMessage player(std::uint32_t playerId, std::uint32_t session, std::string name)
+{
+    return {playerId, session, key(static_cast<int>(session)), key(static_cast<int>(session) + 100),
+            std::move(name)};
+}
+
+/// Polls the loop of the test until the condition holds, or Patience.
+bool waitUntil(EventLoop &loop, const std::function<bool()> &condition,
+               const std::function<void()> &eachTurn = {})
+{
+    const auto deadline = Clock::now() + Patience;
+    while (!condition()) {
+        if (Clock::now() > deadline) {
+            return false;
+        }
+        loop.poll();
+        if (eachTurn) {
+            eachTurn();
+        }
+        std::this_thread::sleep_for(1ms);
+    }
+    return true;
+}
+
+/// The master side of the local connection, in the test.
+struct FakeMaster {
+    TcpListener listener;
+    std::optional<FramedConnection> connection;
+    std::vector<std::pair<std::uint8_t, Bytes>> received;
+    bool closed = false;
+
+    explicit FakeMaster(EventLoop &loop) : listener(loop, Address::loopbackIpv4(0))
+    {
+        listener.startAccepting([this](TcpConnection accepted) {
+            connection.emplace(std::move(accepted));
+            connection->start(
+                [this](std::uint8_t type, std::span<const std::byte> payload) {
+                    received.emplace_back(type, copy(payload));
+                },
+                [this](std::error_code) { closed = true; });
+        });
+    }
+
+    [[nodiscard]] std::uint16_t port() const { return listener.localAddress().port(); }
+
+    template <typename Message>
+    void send(std::uint8_t type, const Message &message)
+    {
+        connection->send(type, encode(message));
+    }
+
+    /// The first message of this type received, taken out.
+    std::optional<Bytes> take(std::uint8_t type)
+    {
+        const auto found = std::ranges::find(received, type, &std::pair<std::uint8_t, Bytes>::first);
+        if (found == received.end()) {
+            return std::nullopt;
+        }
+        Bytes payload = std::move(found->second);
+        received.erase(found);
+        return payload;
+    }
+
+    [[nodiscard]] bool has(std::uint8_t type) const
+    {
+        return std::ranges::find(received, type, &std::pair<std::uint8_t, Bytes>::first) != received.end();
+    }
+};
+
+/// A client of the game, over UDP on the loopback, with the loop of the test.
+struct TestClient {
+    UdpSocket socket;
+    Address game;
+    ClientSession session;
+    std::optional<rtype::game::AcceptedMessage> accepted;
+    std::vector<std::pair<std::uint8_t, Bytes>> messages;
+    std::optional<SessionEnd> end;
+
+    TestClient(EventLoop &loop, std::uint16_t port, std::uint32_t sessionId,
+               const std::array<std::byte, 32> &clientKey, const std::array<std::byte, 32> &serverKey)
+        : socket(loop, Address::loopbackIpv4(0)), game(Address::loopbackIpv4(port)),
+          session(sessionId, DatagramKey(clientKey), DatagramKey(serverKey),
+                  [this](std::span<const std::byte> datagram) { socket.send(game, datagram); })
+    {
+        socket.startReceiving([this](const Address &from, std::span<const std::byte> datagram) {
+            if (from == game) {
+                session.receive(datagram, Clock::now());
+            }
+        });
+        session.start(
+            [this](std::span<const std::byte> payload) { accepted = rtype::game::decodeAccepted(payload); },
+            [this](std::uint8_t type, std::span<const std::byte> payload) {
+                messages.emplace_back(type, copy(payload));
+            },
+            [this](SessionEnd ended) { end = ended; }, Clock::now());
+    }
+
+    TestClient(EventLoop &loop, std::uint16_t port, const AddPlayerMessage &added)
+        : TestClient(loop, port, added.sessionId, added.clientKey, added.serverKey)
+    {
+    }
+
+    void update() { session.update(Clock::now()); }
+
+    void sendInput(std::uint32_t tick, rtype::game::PlayerInput input)
+    {
+        session.send(rtype::game::message_type::Input,
+                     rtype::game::encode(rtype::game::InputMessage{tick, {input}}), Delivery::Unreliable);
+    }
+
+    [[nodiscard]] std::vector<rtype::game::PlayerJoinedMessage> joined() const
+    {
+        std::vector<rtype::game::PlayerJoinedMessage> players;
+        for (const auto &[type, payload] : messages) {
+            if (type == rtype::game::message_type::PlayerJoined) {
+                players.push_back(*rtype::game::decodePlayerJoined(payload));
+            }
+        }
+        return players;
+    }
+
+    [[nodiscard]] std::vector<rtype::game::PlayerLeftMessage> left() const
+    {
+        std::vector<rtype::game::PlayerLeftMessage> players;
+        for (const auto &[type, payload] : messages) {
+            if (type == rtype::game::message_type::PlayerLeft) {
+                players.push_back(*rtype::game::decodePlayerLeft(payload));
+            }
+        }
+        return players;
+    }
+
+    /// The latest snapshot part received.
+    [[nodiscard]] std::optional<rtype::game::SnapshotPart> lastSnapshot() const
+    {
+        for (auto message = messages.rbegin(); message != messages.rend(); ++message) {
+            if (message->first == rtype::game::message_type::Snapshot) {
+                return rtype::game::decodeSnapshotPart(message->second);
+            }
+        }
+        return std::nullopt;
+    }
+};
+
+/// The ship of a slot in a snapshot part.
+std::optional<rtype::game::EntityState> shipOf(const rtype::game::SnapshotPart &part, std::uint8_t slot)
+{
+    for (const rtype::game::EntityState &entity : part.entities) {
+        if (entity.kind == rtype::game::EntityKind::PlayerShip && entity.owner == slot) {
+            return entity;
+        }
+    }
+    return std::nullopt;
+}
+
+/// An instance run by runInstance() on a thread of its own, as r-type_server --instance would.
+struct RunningInstance {
+    std::istringstream input;
+    std::future<int> exit;
+
+    RunningInstance(InstanceOptions options, const std::string &standardInput) : input(standardInput)
+    {
+        exit = std::async(std::launch::async, [this, options] { return runInstance(options, input); });
+    }
+
+    /// Its exit code, once it has exited while the loop of the test runs.
+    std::optional<int> waitForExit(EventLoop &loop)
+    {
+        if (!waitUntil(loop, [&] { return exit.wait_for(0s) == std::future_status::ready; })) {
+            return std::nullopt;
+        }
+        return exit.get();
+    }
+};
+
+/// A whole instance with its fake master. The master leaves at the end, so that an instance never outlives
+/// its test, even one that fails.
+struct InstanceFixture {
+    EventLoop loop;
+    FakeMaster master{loop};
+    std::optional<RunningInstance> instance;
+    std::uint16_t udpPort = 0;
+
+    void start(std::uint32_t id = 7)
+    {
+        instance.emplace(InstanceOptions{.id = id, .udpPort = 0, .masterPort = master.port()},
+                         formatSecret(testSecret()) + "\n");
+    }
+
+    /// Up to READY: the instance presented itself, was configured, and opened its port.
+    void configure(ConfigureMessage game = {"Test game", 4})
+    {
+        REQUIRE(waitUntil(loop, [&] { return master.has(instance_message::InstanceHello); }));
+        master.send(instance_message::Configure, game);
+        REQUIRE(waitUntil(loop, [&] { return master.has(instance_message::Ready); }));
+        udpPort = decodeReady(*master.take(instance_message::Ready))->udpPort;
+        REQUIRE(udpPort != 0);
+    }
+
+    ~InstanceFixture()
+    {
+        if (instance && instance->exit.valid()) {
+            master.connection.reset();
+            master.listener.close();
+            (void)instance->waitForExit(loop);
+        }
+    }
+};
+
+} // namespace
+
+// --- The messages between the master and its instances ---
+
+TEST_CASE("The messages of the instances survive a round trip", "[instance]")
+{
+    const InstanceHelloMessage hello{1, 7, testSecret()};
+    CHECK(decodeInstanceHello(encode(hello)) == hello);
+    CHECK(encode(hello).size() == 38);
+    CHECK(decodeReady(encode(ReadyMessage{4251})) == ReadyMessage{4251});
+    CHECK(decodePlayerConnected(encode(PlayerConnectedMessage{42})) == PlayerConnectedMessage{42});
+    const PlayerDisconnectedMessage disconnected{42, PlayerDisconnectedReason::TimedOut};
+    CHECK(decodePlayerDisconnected(encode(disconnected)) == disconnected);
+    const GameOverReport report{{{1, 1500}, {2, 0}, {3, 0xFFFFFFFF}, {4, 7}}};
+    CHECK(decodeGameOverReport(encode(report)) == report);
+    CHECK(decodeGameOverReport(encode(GameOverReport{})) == GameOverReport{});
+    const ConfigureMessage configure{"Bydo hunters", 3};
+    CHECK(decodeConfigure(encode(configure)) == configure);
+    const AddPlayerMessage added = player(42, 5, "Alice");
+    CHECK(decodeAddPlayer(encode(added)) == added);
+    CHECK(encode(added).size() == 72 + 1 + 5);
+    const RemovePlayerMessage removed{42, RemovePlayerReason::LobbyClosed};
+    CHECK(decodeRemovePlayer(encode(removed)) == removed);
+    CHECK(decodeShutdown(encode(ShutdownMessage{ShutdownReason::MasterStopping})) ==
+          ShutdownMessage{ShutdownReason::MasterStopping});
+}
+
+TEST_CASE("The messages of the instances are written field by field", "[instance]")
+{
+    const auto bytes = [](std::initializer_list<int> values) {
+        Bytes result;
+        for (const int value : values) {
+            result.push_back(static_cast<std::byte>(value));
+        }
+        return result;
+    };
+    CHECK(encode(ReadyMessage{4251}) == bytes({0x10, 0x9B}));
+    CHECK(encode(PlayerDisconnectedMessage{42, PlayerDisconnectedReason::TimedOut}) ==
+          bytes({0, 0, 0, 0x2A, 1}));
+    CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2}));
+    CHECK(encode(GameOverReport{{{1, 1500}}}) == bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC}));
+    CHECK(encode(ShutdownMessage{ShutdownReason::Empty}) == bytes({0}));
+}
+
+TEST_CASE("The messages of the instances refuse what the protocol forbids", "[instance]")
+{
+    const auto bytes = [](std::initializer_list<int> values) {
+        Bytes result;
+        for (const int value : values) {
+            result.push_back(static_cast<std::byte>(value));
+        }
+        return result;
+    };
+    CHECK_THROWS_AS(encode(InstanceHelloMessage{1, 0, {}}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ConfigureMessage{"", 2}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ConfigureMessage{std::string(33, 'a'), 2}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ConfigureMessage{"Game", 0}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ConfigureMessage{"Game", 5}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(player(1, 0, "Bob")), std::invalid_argument);
+    CHECK_THROWS_AS(encode(player(1, 2, "")), std::invalid_argument);
+    CHECK_THROWS_AS(encode(GameOverReport{std::vector<PlayerScore>(5)}), std::invalid_argument);
+
+    Bytes hello = encode(InstanceHelloMessage{1, 7, {}});
+    hello[2] = hello[3] = hello[4] = hello[5] = std::byte{0};
+    CHECK_FALSE(decodeInstanceHello(hello));                       // id 0
+    CHECK_FALSE(decodePlayerDisconnected(bytes({0, 0, 0, 1, 2}))); // reason 2
+    CHECK_FALSE(decodeRemovePlayer(bytes({0, 0, 0, 1, 2})));       // reason 2
+    CHECK_FALSE(decodeShutdown(bytes({2})));                       // reason 2
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 0})));              // no player
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 5})));              // 5 players
+    CHECK_FALSE(decodeConfigure(bytes({0, 2})));                   // no name
+    CHECK_FALSE(decodeGameOverReport(bytes({5})));                 // 5 scores
+    CHECK_FALSE(decodeGameOverReport(bytes({1, 0, 0, 0, 1})));     // cut
+    Bytes added = encode(player(1, 2, "Bob"));
+    added[4] = added[5] = added[6] = added[7] = std::byte{0};
+    CHECK_FALSE(decodeAddPlayer(added)); // session 0
+
+    // Cut, or one byte more
+    const std::vector<std::pair<Bytes, std::function<bool(std::span<const std::byte>)>>> messages = {
+        {encode(InstanceHelloMessage{1, 7, {}}), [](auto p) { return decodeInstanceHello(p).has_value(); }},
+        {encode(ReadyMessage{1}), [](auto p) { return decodeReady(p).has_value(); }},
+        {encode(PlayerConnectedMessage{1}), [](auto p) { return decodePlayerConnected(p).has_value(); }},
+        {encode(PlayerDisconnectedMessage{1, {}}),
+         [](auto p) { return decodePlayerDisconnected(p).has_value(); }},
+        {encode(ConfigureMessage{"G", 1}), [](auto p) { return decodeConfigure(p).has_value(); }},
+        {encode(player(1, 2, "Bob")), [](auto p) { return decodeAddPlayer(p).has_value(); }},
+        {encode(RemovePlayerMessage{1, {}}), [](auto p) { return decodeRemovePlayer(p).has_value(); }},
+        {encode(ShutdownMessage{}), [](auto p) { return decodeShutdown(p).has_value(); }},
+    };
+    for (const auto &[payload, decodes] : messages) {
+        CHECK(decodes(payload));
+        for (std::size_t size = 0; size < payload.size(); ++size) {
+            CHECK_FALSE(decodes(std::span(payload).first(size)));
+        }
+        Bytes longer = payload;
+        longer.push_back(std::byte{0});
+        CHECK_FALSE(decodes(longer));
+    }
+}
+
+TEST_CASE("Random bytes never crash the decoders of the instances", "[instance]")
+{
+    std::mt19937 random(13);
+    std::uniform_int_distribution<int> size(0, 120);
+    std::uniform_int_distribution<int> byte(0, 255);
+    for (int i = 0; i < 20000; ++i) {
+        Bytes payload(static_cast<std::size_t>(size(random)));
+        for (std::byte &value : payload) {
+            value = static_cast<std::byte>(byte(random));
+        }
+        (void)decodeInstanceHello(payload);
+        (void)decodeReady(payload);
+        (void)decodePlayerConnected(payload);
+        (void)decodePlayerDisconnected(payload);
+        (void)decodeGameOverReport(payload);
+        (void)decodeConfigure(payload);
+        (void)decodeAddPlayer(payload);
+        (void)decodeRemovePlayer(payload);
+        (void)decodeShutdown(payload);
+    }
+    SUCCEED();
+}
+
+// --- The simulation thread ---
+
+TEST_CASE("The game thread steps 60 times per second and applies its commands", "[instance]")
+{
+    std::mutex mutex;
+    std::vector<TickResult> results;
+    GameThread game({}, [&](TickResult result) {
+        const std::scoped_lock lock(mutex);
+        results.push_back(std::move(result));
+    });
+    game.addPlayer(1);
+    game.setInput(1, rtype::game::PlayerInput{rtype::game::PlayerInput::Right}, 5);
+    // Older than the one before: datagrams out of order
+    game.setInput(1, rtype::game::PlayerInput{rtype::game::PlayerInput::Left}, 4);
+    const auto start = Clock::now();
+    game.start();
+    std::this_thread::sleep_for(500ms);
+    game.stop();
+    const auto elapsed = std::chrono::duration<double>(Clock::now() - start).count();
+
+    const std::scoped_lock lock(mutex);
+    REQUIRE(!results.empty());
+    // About 60 ticks per second: generous bounds for a loaded machine
+    CHECK(static_cast<double>(results.size()) <= elapsed * 60.0 + 2.0);
+    CHECK(static_cast<double>(results.size()) >= elapsed * 60.0 * 0.5);
+    CHECK(results.back().snapshot.tick == results.size());
+    CHECK(game.tick() == results.size());
+
+    const TickResult &last = results.back();
+    CHECK(last.lastInputs[1] == 5);
+    REQUIRE(last.snapshot.players.size() == 1);
+    const auto ship = std::ranges::find(last.snapshot.entities, rtype::game::EntityKind::PlayerShip,
+                                        &rtype::game::EntityState::kind);
+    REQUIRE(ship != last.snapshot.entities.end());
+    // Right was applied, Left was not
+    CHECK(ship->velocityX > 0.0f);
+
+    // Nothing after stop()
+    const std::size_t count = results.size();
+    std::this_thread::sleep_for(50ms);
+    CHECK(results.size() == count);
+}
+
+// --- The link to the master ---
+
+TEST_CASE("The link presents the instance, then gives the configuration and the players", "[instance]")
+{
+    EventLoop loop;
+    FakeMaster master(loop);
+    std::optional<ConfigureMessage> configured;
+    std::vector<AddPlayerMessage> added;
+    std::optional<std::string> failure;
+    MasterLink link(loop, master.port(), {.id = 7, .secret = testSecret()},
+                    {.onConfigure = [&](const ConfigureMessage &game) { configured = game; },
+                     .onAddPlayer = [&](const AddPlayerMessage &p) { added.push_back(p); },
+                     .onRemovePlayer = {},
+                     .onShutdown = {},
+                     .onFailed = [&](const std::string &reason) { failure = reason; }});
+
+    REQUIRE(waitUntil(loop, [&] { return master.has(instance_message::InstanceHello); }));
+    CHECK(decodeInstanceHello(*master.take(instance_message::InstanceHello)) ==
+          InstanceHelloMessage{InstanceProtocolVersion, 7, testSecret()});
+
+    master.send(instance_message::Configure, ConfigureMessage{"Game", 2});
+    master.send(instance_message::AddPlayer, player(42, 5, "Alice"));
+    REQUIRE(waitUntil(loop, [&] { return !added.empty(); }));
+    CHECK(configured == ConfigureMessage{"Game", 2});
+    CHECK(added[0] == player(42, 5, "Alice"));
+
+    link.sendReady(4251);
+    link.sendPlayerDisconnected(42, PlayerDisconnectedReason::TimedOut);
+    REQUIRE(waitUntil(loop, [&] { return master.has(instance_message::PlayerDisconnected); }));
+    CHECK(decodeReady(*master.take(instance_message::Ready)) == ReadyMessage{4251});
+    CHECK(decodePlayerDisconnected(*master.take(instance_message::PlayerDisconnected)) ==
+          PlayerDisconnectedMessage{42, PlayerDisconnectedReason::TimedOut});
+    CHECK_FALSE(failure);
+}
+
+TEST_CASE("The link fails on what the protocol does not expect", "[instance]")
+{
+    EventLoop loop;
+    FakeMaster master(loop);
+    std::optional<std::string> failure;
+    const auto link = [&](std::chrono::milliseconds timeout = MasterLink::ConfigureTimeout) {
+        return std::make_unique<MasterLink>(
+            loop, master.port(), InstanceHelloMessage{.id = 7, .secret = {}},
+            MasterLink::Handlers{.onConfigure = {},
+                                 .onAddPlayer = {},
+                                 .onRemovePlayer = {},
+                                 .onShutdown = {},
+                                 .onFailed = [&](const std::string &reason) { failure = reason; }},
+            timeout);
+    };
+    const auto connect = [&](std::chrono::milliseconds timeout = MasterLink::ConfigureTimeout) {
+        failure.reset();
+        master.connection.reset();
+        master.received.clear();
+        auto created = link(timeout);
+        REQUIRE(waitUntil(loop, [&] { return master.has(instance_message::InstanceHello); }));
+        return created;
+    };
+
+    SECTION("A player before CONFIGURE")
+    {
+        const auto created = connect();
+        master.send(instance_message::AddPlayer, player(1, 2, "Bob"));
+        REQUIRE(waitUntil(loop, [&] { return failure.has_value(); }));
+        CHECK(failure->find("before CONFIGURE") != std::string::npos);
+        // The link closed the connection
+        CHECK(waitUntil(loop, [&] { return master.closed; }));
+    }
+    SECTION("CONFIGURE twice")
+    {
+        const auto created = connect();
+        master.send(instance_message::Configure, ConfigureMessage{"Game", 2});
+        master.send(instance_message::Configure, ConfigureMessage{"Game", 2});
+        REQUIRE(waitUntil(loop, [&] { return failure.has_value(); }));
+    }
+    SECTION("A malformed message")
+    {
+        const auto created = connect();
+        master.send(instance_message::Configure, ConfigureMessage{"Game", 2});
+        master.connection->send(instance_message::AddPlayer, Bytes(3));
+        REQUIRE(waitUntil(loop, [&] { return failure.has_value(); }));
+        CHECK(failure->find("malformed") != std::string::npos);
+    }
+    SECTION("No CONFIGURE in time")
+    {
+        const auto created = connect(200ms);
+        REQUIRE(waitUntil(loop, [&] { return failure.has_value(); }));
+        CHECK(failure->find("in time") != std::string::npos);
+    }
+    SECTION("The master closes the connection")
+    {
+        const auto created = connect();
+        master.connection.reset();
+        REQUIRE(waitUntil(loop, [&] { return failure.has_value(); }));
+    }
+    SECTION("No master")
+    {
+        const std::uint16_t port = master.port();
+        master.listener.close();
+        loop.poll();
+        MasterLink orphan(loop, port, {.id = 7, .secret = {}},
+                          {.onConfigure = {},
+                           .onAddPlayer = {},
+                           .onRemovePlayer = {},
+                           .onShutdown = {},
+                           .onFailed = [&](const std::string &reason) { failure = reason; }});
+        REQUIRE(waitUntil(loop, [&] { return failure.has_value(); }));
+        CHECK(failure->find("cannot connect") != std::string::npos);
+    }
+}
+
+// --- Whole instances ---
+
+TEST_CASE("An instance runs a game for the players the master gives it", "[instance]")
+{
+    InstanceFixture fixture;
+    fixture.start();
+    fixture.configure();
+    EventLoop &loop = fixture.loop;
+    FakeMaster &master = fixture.master;
+
+    const AddPlayerMessage alice = player(42, 5, "Alice");
+    master.send(instance_message::AddPlayer, alice);
+    loop.poll();
+    std::this_thread::sleep_for(20ms);
+    TestClient aliceClient(loop, fixture.udpPort, alice);
+    const auto updateClients = [&] { aliceClient.update(); };
+
+    // Connected: ACCEPTED with its slot, and its own PLAYER_JOINED
+    REQUIRE(waitUntil(loop, [&] { return aliceClient.accepted.has_value(); }, updateClients));
+    CHECK(aliceClient.accepted->slot == 0);
+    CHECK(aliceClient.accepted->tickRate == 60);
+    REQUIRE(waitUntil(loop, [&] { return master.has(instance_message::PlayerConnected); }, updateClients));
+    CHECK(decodePlayerConnected(*master.take(instance_message::PlayerConnected)) ==
+          PlayerConnectedMessage{42});
+    REQUIRE(waitUntil(loop, [&] { return !aliceClient.joined().empty(); }, updateClients));
+    CHECK(aliceClient.joined()[0] == rtype::game::PlayerJoinedMessage{0, 42, "Alice"});
+
+    // Snapshots with its ship, which moves with its input
+    REQUIRE(waitUntil(
+        loop, [&] { return aliceClient.lastSnapshot() && shipOf(*aliceClient.lastSnapshot(), 0); },
+        updateClients));
+    const float start = shipOf(*aliceClient.lastSnapshot(), 0)->x;
+    CHECK(aliceClient.lastSnapshot()->players.size() == 1);
+    aliceClient.sendInput(100, rtype::game::PlayerInput{rtype::game::PlayerInput::Right});
+    REQUIRE(waitUntil(
+        loop,
+        [&] {
+            const auto snapshot = aliceClient.lastSnapshot();
+            return snapshot && snapshot->lastInput == 100 && shipOf(*snapshot, 0)->x > start + 50.0f;
+        },
+        [&] {
+            aliceClient.update();
+            aliceClient.sendInput(100, rtype::game::PlayerInput{rtype::game::PlayerInput::Right});
+        }));
+
+    // A second player: both know each other
+    const AddPlayerMessage bob = player(43, 6, "Bob");
+    master.send(instance_message::AddPlayer, bob);
+    loop.poll();
+    std::this_thread::sleep_for(20ms);
+    TestClient bobClient(loop, fixture.udpPort, bob);
+    const auto updateBoth = [&] {
+        aliceClient.update();
+        bobClient.update();
+    };
+    REQUIRE(waitUntil(loop, [&] { return bobClient.joined().size() == 2; }, updateBoth));
+    CHECK(bobClient.accepted->slot == 1);
+    REQUIRE(waitUntil(loop, [&] { return aliceClient.joined().size() == 2; }, updateBoth));
+    CHECK(aliceClient.joined()[1] == rtype::game::PlayerJoinedMessage{1, 43, "Bob"});
+
+    // The master removes Bob: Bob is disconnected, Alice is told, the master is not told back
+    master.send(instance_message::RemovePlayer, RemovePlayerMessage{43, RemovePlayerReason::LobbyClosed});
+    REQUIRE(waitUntil(
+        loop, [&] { return bobClient.end.has_value() && !aliceClient.left().empty(); }, updateBoth));
+    CHECK(bobClient.end->cause == SessionEnd::Cause::Disconnected);
+    CHECK(bobClient.end->reason == DisconnectReason::Quit);
+    CHECK(aliceClient.left()[0] == rtype::game::PlayerLeftMessage{1, rtype::game::LeaveReason::LobbyClosed});
+
+    // Alice quits: the master is told
+    aliceClient.session.close(DisconnectReason::Quit);
+    REQUIRE(waitUntil(loop, [&] { return master.has(instance_message::PlayerDisconnected); }));
+    CHECK(decodePlayerDisconnected(*master.take(instance_message::PlayerDisconnected)) ==
+          PlayerDisconnectedMessage{42, PlayerDisconnectedReason::Quit});
+    CHECK_FALSE(master.has(instance_message::PlayerDisconnected));
+
+    // SHUTDOWN: the instance exits with 0
+    master.send(instance_message::Shutdown, ShutdownMessage{ShutdownReason::Empty});
+    CHECK(fixture.instance->waitForExit(loop) == Success);
+}
+
+TEST_CASE("An instance whose master goes away disconnects its players and fails", "[instance]")
+{
+    InstanceFixture fixture;
+    fixture.start();
+    fixture.configure();
+    const AddPlayerMessage alice = player(42, 5, "Alice");
+    fixture.master.send(instance_message::AddPlayer, alice);
+    fixture.loop.poll();
+    std::this_thread::sleep_for(20ms);
+    TestClient client(fixture.loop, fixture.udpPort, alice);
+    REQUIRE(waitUntil(fixture.loop, [&] { return client.accepted.has_value(); }, [&] { client.update(); }));
+
+    fixture.master.connection.reset();
+
+    REQUIRE(waitUntil(fixture.loop, [&] { return client.end.has_value(); }, [&] { client.update(); }));
+    CHECK(client.end->reason == DisconnectReason::Shutdown);
+    CHECK(fixture.instance->waitForExit(fixture.loop) == Failure);
+}
+
+TEST_CASE("An instance refuses more players than its game takes", "[instance]")
+{
+    InstanceFixture fixture;
+    fixture.start();
+    fixture.configure({"Solo", 1});
+
+    fixture.master.send(instance_message::AddPlayer, player(1, 1, "Alice"));
+    fixture.master.send(instance_message::AddPlayer, player(2, 2, "Bob"));
+
+    CHECK(fixture.instance->waitForExit(fixture.loop) == Failure);
+    CHECK(waitUntil(fixture.loop, [&] { return fixture.master.closed; }));
+}
+
+TEST_CASE("An instance whose UDP port is taken fails", "[instance]")
+{
+    EventLoop other;
+    const UdpSocket taken(other, Address::anyIpv4(0));
+    InstanceFixture fixture;
+    fixture.instance.emplace(
+        InstanceOptions{.id = 7, .udpPort = taken.localAddress().port(), .masterPort = fixture.master.port()},
+        formatSecret(testSecret()) + "\n");
+    REQUIRE(waitUntil(fixture.loop, [&] { return fixture.master.has(instance_message::InstanceHello); }));
+
+    fixture.master.send(instance_message::Configure, ConfigureMessage{"Game", 2});
+
+    CHECK(fixture.instance->waitForExit(fixture.loop) == Failure);
+    CHECK_FALSE(fixture.master.has(instance_message::Ready));
+}
+
+TEST_CASE("A standalone instance takes clients with the public keys, until stopped", "[instance]")
+{
+    if (!standaloneAvailable()) {
+        SKIP("The standalone mode only exists in debug builds");
+    }
+    EventLoop loop;
+    // A free port, given back to the system just before
+    std::uint16_t port = 0;
+    {
+        const UdpSocket probe(loop, Address::anyIpv4(0));
+        port = probe.localAddress().port();
+    }
+    loop.poll();
+    RunningInstance instance(InstanceOptions{.id = 1, .udpPort = port, .masterPort = 0, .standalone = true},
+                             "");
+    std::this_thread::sleep_for(100ms);
+
+    TestClient client(loop, port, rtype::game::standalone::sessionId(2),
+                      rtype::game::standalone::clientKey(2), rtype::game::standalone::serverKey(2));
+    REQUIRE(waitUntil(loop, [&] { return client.accepted.has_value(); }, [&] { client.update(); }));
+    REQUIRE(waitUntil(loop, [&] { return !client.joined().empty(); }, [&] { client.update(); }));
+    CHECK(client.joined()[0].name == "Player 3");
+
+    // Ctrl+C: its clients are told, and it exits with 0
+    std::raise(SIGINT);
+    REQUIRE(waitUntil(loop, [&] { return client.end.has_value(); }, [&] { client.update(); }));
+    CHECK(client.end->reason == DisconnectReason::Shutdown);
+    CHECK(instance.waitForExit(loop) == Success);
+}

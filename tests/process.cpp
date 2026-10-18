@@ -5,6 +5,9 @@
 
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
+#include "rtype/network/Address.hpp"
+#include "rtype/network/EventLoop.hpp"
+#include "rtype/network/TcpListener.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -249,8 +252,18 @@ TEST_CASE("An instance started with its secret runs until asked to stop, then ex
 {
     Secret secret{};
     secret[0] = std::byte{0x2a};
-    const std::vector<std::string> arguments = {"--instance",    "--id", "7",           "--udp-port", "4299",
-                                                "--master-port", "4242", "--log-level", "warning"};
+    // A master that never answers: the instance connects, presents itself, and waits for CONFIGURE
+    rtype::network::EventLoop loop;
+    const rtype::network::TcpListener master(loop, rtype::network::Address::loopbackIpv4(0));
+    const std::vector<std::string> arguments = {"--instance",
+                                                "--id",
+                                                "7",
+                                                "--udp-port",
+                                                "4299",
+                                                "--master-port",
+                                                std::to_string(master.localAddress().port()),
+                                                "--log-level",
+                                                "warning"};
     Process instance(Server, arguments, {.input = formatSecret(secret) + "\n", .stopGrace = Patience});
 
     // Still running: it waits for its game. Its stop signals are set by then

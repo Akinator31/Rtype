@@ -41,6 +41,7 @@ add_executable(rtype_tests
     resource_cache.cpp
     scenes.cpp
     serialization.cpp
+    server_instance.cpp
     server_lifecycle.cpp
     server_options.cpp
     session.cpp
