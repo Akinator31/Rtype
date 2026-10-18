@@ -39,6 +39,7 @@ Ecs &ecs = engine.getEcs();
 Scenes &scenes = engine.getScenes();
 ecs.registerSystem<ConsoleSystem>(engine, devices);
 ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);
+ecs.registerSystem<GameSessionSystem>(ecs, scenes, engine.getControls());
 ecs.registerSystem<WidgetTextSystem>();
 ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
@@ -65,12 +66,13 @@ renderer.endFrame();
 |---|---|---|
 | 1 | `Scenes` | Records which scene receives input for the whole update. |
 | 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation; they read the input before the game. |
-| 3 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem` | Texts of the widgets and bound texts, tweens, spinning models. |
-| 4 | `FlightSystem`, `IntroSystem` | Client systems of the main menu: the ships flying around the station, the intro. |
-| 5 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`. |
-| 6 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
-| 7 | `ToastSystem` | Places, fades and destroys the toasts. |
-| 8 | `TransformSystem` | Positions of the children from their parents, last. |
+| 3 | `GameSessionSystem` | The game: the input of the player to its session, the snapshots to the entities of the game scene ([A game in the client](client-game.md)). |
+| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem` | Texts of the widgets and bound texts, tweens, spinning models. |
+| 5 | `FlightSystem`, `IntroSystem` | Client systems of the main menu: the ships flying around the station, the intro. |
+| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`. |
+| 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
+| 8 | `ToastSystem` | Places, fades and destroys the toasts. |
+| 9 | `TransformSystem` | Positions of the children from their parents, last. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
 and may happen several times per frame (once per eye in VR).
@@ -301,7 +303,7 @@ Toasts are stacked from the corner, the newest nearest to it; the others glide t
 | `Up`, `Down` | Arrows | D-pad, left stick | Moves the focus, skipping labels, around at the ends |
 | `Left`, `Right` | Arrows | D-pad, left stick | Changes the value of the focused widget |
 | `Confirm` | ++enter++ | Bottom face button | Activates the focused widget |
-| `Back` | ++escape++ | Right face button, Start | Goes back from the scene |
+| `Back` | ++escape++ | Right face button, Start | Goes back from the scene, even one without widgets: Escape in the game opens its pause menu |
 | `Click` | Left mouse button | — | Activates the widget under the pointer |
 
 - Only keys that do not type text are used, so that letters, ++space++ and ++backspace++ edit text fields.

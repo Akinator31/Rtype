@@ -202,6 +202,10 @@ void InterfaceSystem::update(float elapsed)
 
     const std::vector<ecs::entity_t> list = widgets();
     if (list.empty()) {
+        // A scene without widgets, such as the game, still goes back: its pause menu, for instance
+        if (_navigation.wasPressed(Navigation::Back)) {
+            _ecs.defer([this] { _scenes.back(); });
+        }
         return;
     }
     const auto focusedIt =
