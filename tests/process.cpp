@@ -103,8 +103,8 @@ TEST_CASE("A process receives its arguments unchanged, without a shell", "[proce
     const TempDirectory directory("arguments");
     const std::filesystem::path file = directory.path / "arguments.txt";
     // What the quoting of the command line of Windows gets wrong when done by hand
-    const std::vector<std::string> arguments = {"two words", "\"quoted\"", "back\\slash\\",
-                                                "",          "$HOME",      "a;b|c"};
+    const std::vector<std::string> arguments = {"two words",      "\"quoted\"", "back\\slash\\",
+                                                "quoted\\ and\\", "$HOME",      "a;b|c"};
     std::vector<std::string> command = {"arguments", file.string()};
     command.insert(command.end(), arguments.begin(), arguments.end());
 
@@ -131,6 +131,13 @@ TEST_CASE("Without input, the standard input is closed at once", "[process]")
     CHECK(process.wait(Patience) == 3);
 }
 
+TEST_CASE("An empty argument is refused, since Windows would lose it", "[process]")
+{
+    const std::vector<std::string> arguments = {"exit", "", "0"};
+
+    CHECK_THROWS_AS(Process(Child, arguments), std::invalid_argument);
+}
+
 TEST_CASE("A program that does not exist cannot be started", "[process]")
 {
     const std::vector<std::string> none;
@@ -142,7 +149,11 @@ TEST_CASE("A program that does not exist cannot be started", "[process]")
 
 TEST_CASE("A process that runs has no exit code, until it is asked to stop", "[process]")
 {
-    Process process = child({"sleep"});
+    const TempDirectory directory("terminate");
+    const std::filesystem::path ready = directory.path / "ready";
+    Process process = child({"sleep", ready.string()});
+    // On Windows, a program that has only just started does not receive Ctrl+Break yet
+    REQUIRE(waitForFile(ready));
 
     CHECK_FALSE(process.exitCode());
     CHECK_FALSE(process.wait(50ms));
@@ -179,7 +190,10 @@ TEST_CASE("stop() asks first, and kills a process still running after the grace"
 
 TEST_CASE("stop() does not wait for the grace when the process stops when asked", "[process]")
 {
-    Process process = child({"sleep"}, {.input = {}, .stopGrace = Patience});
+    const TempDirectory directory("stop");
+    const std::filesystem::path ready = directory.path / "ready";
+    Process process = child({"sleep", ready.string()}, {.input = {}, .stopGrace = Patience});
+    REQUIRE(waitForFile(ready));
     const auto start = std::chrono::steady_clock::now();
 
     CHECK(process.stop() == Process::Terminated);
