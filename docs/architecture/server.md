@@ -14,6 +14,7 @@ apps/server/src/
   main.cpp                 reads the environment, then calls run()
   Server.cpp               run(): the options, then the master or an instance
   Common/                  what both modes share
+    InstanceMessages.cpp   the messages between the master and its instances
     Options.cpp            the command line of both modes, the exit codes
     Lifecycle.cpp          runUntilStopped(): the event loop and the stop signals
     Secret.cpp             the secret the master gives to its instances
@@ -21,13 +22,16 @@ apps/server/src/
     Master.cpp             runMaster()
     Process.cpp            Process: starts a program and stops it, on Linux and Windows
   Instance/                an instance: one game
-    Instance.cpp           runInstance()
+    Instance.cpp           runInstance(): the life of the instance, with or without a master
+    MasterLink.cpp         the connection to the master
+    GameHost.cpp           the network side of the game: UDP, sessions, players, game messages
+    GameThread.cpp         the simulation thread, at 60 ticks per second
 ```
 
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
-(`tests/server_options.cpp`, `tests/server_lifecycle.cpp`, `tests/process.cpp`). Includes are written from `src/`, like in the client:
+(`tests/server_options.cpp`, `tests/server_lifecycle.cpp`, `tests/process.cpp`, `tests/server_instance.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
-supervision of the instances in `Master/`, the game loop in `Instance/`, the messages between them in `Common/`.
+supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
 ## Starting
 
@@ -85,9 +89,9 @@ instance reads it before anything else (`readSecret()`), and stops with code 1 w
 the master that the process connecting is the one it started; it is never an argument, since every user of the
 machine can read the arguments of a process (`ps`).
 
-**Standalone mode.** `r-type_server --instance --standalone --udp-port 4242` runs a game without a master, with a
-fixed test key, for the tests, the measures and the fuzzing. It only exists in **debug builds**
-(`RTYPE_STANDALONE_INSTANCE`): a released server refuses it.
+**Standalone mode.** `r-type_server --instance --standalone --udp-port 4242` runs a game without a master, with
+public test keys, for development, the tests, the measures and the fuzzing. It only exists in **debug builds**
+(`RTYPE_STANDALONE_INSTANCE`): a released server refuses it. See [below](#standalone-mode).
 
 ### Common options
 
@@ -99,6 +103,105 @@ fixed test key, for the tests, the measures and the fuzzing. It only exists in *
 
 The options of one mode are refused in the other (`--key` with `--instance`, `--id` without it), as are unknown
 options: a typo never goes unnoticed.
+
+## An instance at work
+
+### With its master
+
+```mermaid
+sequenceDiagram
+    participant M as Master
+    participant I as Instance
+    participant C as Client
+    Note over I: reads the secret
+    I->>M: INSTANCE_HELLO (id, secret), on 127.0.0.1
+    M->>I: CONFIGURE (name, max players)
+    Note over I: opens its UDP port, starts the game thread
+    I->>M: READY (UDP port)
+    M->>I: ADD_PLAYER (player, session, keys, name)
+    C->>I: CONNECT
+    I->>C: ACCEPTED (slot, 60, tick), PLAYER_JOINED
+    I->>M: PLAYER_CONNECTED
+    loop every tick
+        C->>I: INPUT
+        I->>C: SNAPSHOT (every 2 ticks), ENTITIES_DESTROYED
+    end
+    M->>I: SHUTDOWN
+    I->>C: DISCONNECT (SHUTDOWN)
+    Note over I: exits with 0
+```
+
+*The instance presents itself, is configured, opens its port, then runs the game for the players the master
+gives it.*
+
+`MasterLink` holds the connection to the master ([instances protocol](../protocol/instances.md)). The master and
+its instances come from the same build, so anything outside the protocol is a failure: no `CONFIGURE` within 10
+seconds, a player before `CONFIGURE`, `CONFIGURE` twice, a frame that does not decode. A failure, like the
+master closing the connection, stops the game with exit code 1: an instance never runs without its master.
+
+### Two threads
+
+```mermaid
+flowchart LR
+    subgraph Net["network thread (main): the event loop"]
+        Link["MasterLink<br/>TCP to the master"]
+        Host["GameHost<br/>UDP, SessionHost, players"]
+    end
+    subgraph Sim["game thread"]
+        Game["GameThread<br/>Simulation, 60 ticks/s"]
+    end
+    Link --> Host
+    Host -- "commands: add, remove, input" --> Game
+    Game -- "loop.post(): each tick, the snapshot" --> Host
+```
+
+*They share nothing but the commands, under a mutex, and the results, handed through `loop.post()`
+([ADR 0013](../decisions/0013-one-process-per-game.md)).*
+
+- **`GameThread`** owns the `Simulation` of `libs/game` and steps it every 1/60 s, whatever the network does.
+  Behind by more than 250 ms (a machine that slept, a debugger), it goes on from now instead of running fast.
+  The commands of the network thread apply at the start of the next tick.
+- **`GameHost`** is the game seen from the network ([game protocol](../protocol/game.md)):
+  - a player added gets the lowest free slot, and its ship when its client connects;
+  - on `CONNECT`, the client receives `ACCEPTED`, then `PLAYER_JOINED` for each player connected, itself
+    included; the others receive its `PLAYER_JOINED`;
+  - the newest input of each `INPUT` goes to the game, unless an input stamped later was already applied;
+  - every 2 ticks, each client receives the snapshot in parts, with its last input; every tick, the entities
+    destroyed;
+  - a session that closes takes the ship away; the others receive `PLAYER_LEFT`, and the master
+    `PLAYER_DISCONNECTED`, unless it removed the player itself (`REMOVE_PLAYER`).
+- Its `SessionHost` is updated at 60 Hz by a `Timer` of the loop, not by the game thread: the heartbeats and
+  resends go on even if the game stalls.
+
+### Stopping an instance
+
+| What happens | The clients | Exit code |
+|---|---|---|
+| `SHUTDOWN` from the master | `DISCONNECT (SHUTDOWN)` | 0 |
+| Ctrl+C, `SIGTERM` (or `Process::stop()` from the master) | `DISCONNECT (SHUTDOWN)` | 0 |
+| The master closes the connection, or breaks the protocol | `DISCONNECT (SHUTDOWN)` | 1 |
+| The UDP port cannot be opened | — | 1 |
+| A player added to a full game, or twice | `DISCONNECT (SHUTDOWN)` | 1 |
+| The simulation throws | `DISCONNECT (SHUTDOWN)` | 1 |
+
+In each case the game thread stops first, then the sessions and the link close, and the loop stops 100 ms later,
+once the last datagrams are sent.
+
+### Standalone mode
+
+Without a master, nobody gives the clients a session and its keys: in standalone mode they are fixed, in
+`rtype/game/Standalone.hpp`, so that a client in development can join.
+
+| Slot | Session | Client key | Server key |
+|---|---|---|---|
+| 0 to 3 | `standalone::sessionId(slot)`: 1 to 4 | `standalone::clientKey(slot)`: every byte `0x10 + slot` | `standalone::serverKey(slot)`: every byte `0x20 + slot` |
+
+The four sessions wait for their clients; a session that closes, or never connects within 10 seconds, is given
+again, so that a client can always join. These keys are public: a released server refuses the standalone mode.
+
+```sh
+./build/bin/r-type_server --instance --standalone --udp-port 4242 --log-level debug
+```
 
 ## Stopping
 
@@ -119,9 +222,9 @@ stateDiagram-v2
 
 *The first signal starts a proper stop; a second one, or the grace period, cuts it.*
 
-1. **The first signal** calls `shutdown`, which ends the work properly and calls `loop.stop()` once done. For
-   now the master closes its port; later it sends `SHUTDOWN` to its instances and waits for them, and an
-   instance sends `DISCONNECT (SHUTDOWN)` to its players.
+1. **The first signal** calls `shutdown`, which ends the work properly and calls `loop.stop()` once done. An
+   instance sends `DISCONNECT (SHUTDOWN)` to its players. For now the master closes its port; with the lobby,
+   it will send `SHUTDOWN` to its instances and wait for them.
 2. **A second signal** stops at once: the person who pressed Ctrl+C twice does not want to wait.
 3. **After 10 seconds** (`GracePeriod`) without the loop stopped, the server stops at once too: a stop that
    hangs never blocks a restart.
@@ -204,8 +307,14 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   the tests wait for the file it creates once ready, since Windows drops a Ctrl+Break sent too early. The tests check the
   exit codes, arguments with spaces, quotes and backslashes, an empty argument refused, the input then its end, a program that does not
   exist, `terminate()`, `kill()`, `stop()` killing a program that ignores it, the destructor and the moves.
-  They also start `r-type_server --instance` itself: with its secret it runs until asked to stop, then exits
-  with 0; without it, it exits with 1.
+  They also start `r-type_server --instance` itself: with its secret and a master that never answers, it runs
+  until asked to stop, then exits with 0; without it, it exits with 1.
+- `tests/server_instance.cpp` (tag `[instance]`): the messages between the master and its instances (round
+  trips, bytes, every malformed case, random bytes), the game thread (its rate, its commands, inputs out of
+  order, nothing after `stop()`), every failure of `MasterLink`, and whole instances run by `runInstance()` on
+  a thread of the test, with a fake master over TCP and real clients over UDP: two players who join, see each
+  other and move, one removed by the master, one who quits, then `SHUTDOWN`; the master going away; a full
+  game; a UDP port taken; and the standalone mode with its public keys, stopped by Ctrl+C.
 - The smoke tests of CTest run `r-type_server --help`, refuse an unknown argument, and run `--check` with a key
   made by `r-type_keygen` for the occasion.
 
@@ -213,7 +322,10 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 
 - **No lobby yet**: the master opens its port but does not accept the clients; the lobby comes with
   `server: master and lobby`.
-- **No game yet**: an instance reads its secret, then waits; the connection to the master, its UDP port and its
-  game come with `server: instance mode`.
+- **The replication is simple**: an input applies as soon as it arrives, and only the newest of each `INPUT`;
+  the inputs stamped for later ticks, their redundancy, and the empty input after 30 ticks without any
+  ([game protocol, 9.2](../protocol/game.md#92-inputs)) come with `server: replication`.
+- **No end of game yet**: the rules have no Bydos nor lives yet, so `GAME_OVER` is never sent; it comes with
+  `server: gameplay`.
 - **No configuration file**: everything is on the command line, which suits a service (systemd, Docker). A file
   can come if the options multiply.
