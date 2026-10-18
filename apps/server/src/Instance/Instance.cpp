@@ -1,52 +1,232 @@
 #include "Instance/Instance.hpp"
 
+#include "Common/InstanceMessages.hpp"
 #include "Common/Lifecycle.hpp"
 #include "Common/Secret.hpp"
+#include "Instance/GameHost.hpp"
+#include "Instance/GameThread.hpp"
+#include "Instance/MasterLink.hpp"
+#include "rtype/game/Standalone.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
-#include "rtype/network/UdpSocket.hpp"
+#include "rtype/network/Session.hpp"
+#include "rtype/network/Timer.hpp"
 
+#include <chrono>
+#include <format>
 #include <optional>
+#include <string>
 #include <system_error>
 
 namespace rtype::server
 {
 
-int runInstance(const InstanceOptions &options, std::istream &input)
+namespace
 {
-    const rtype::log::Logger logger("instance");
-    rtype::network::EventLoop loop;
-    std::optional<rtype::network::UdpSocket> socket;
 
-    if (options.standalone) {
-        logger.warning("Standalone game {}: no master, a fixed test key. For development only", options.id);
+using rtype::network::DisconnectReason;
+
+/// How long the last datagrams and frames have to leave before the loop stops.
+constexpr std::chrono::milliseconds Linger{100};
+
+const rtype::log::Logger &logger()
+{
+    static const rtype::log::Logger instance("instance");
+    return instance;
+}
+
+/// The player of a slot in standalone mode, with the public keys of rtype/game/Standalone.hpp.
+AddPlayerMessage standalonePlayer(std::uint8_t slot)
+{
+    return {
+        .playerId = static_cast<std::uint32_t>(slot) + 1,
+        .sessionId = rtype::game::standalone::sessionId(slot),
+        .clientKey = rtype::game::standalone::clientKey(slot),
+        .serverKey = rtype::game::standalone::serverKey(slot),
+        .name = std::format("Player {}", slot + 1),
+    };
+}
+
+/// One game: its simulation thread, its network side, and its link to the master. Lives on the network
+/// thread, the one that runs the loop.
+class Instance
+{
+    const InstanceOptions &_options;
+    rtype::network::EventLoop &_loop;
+    GameThread _game;
+    std::optional<GameHost> _host;
+    std::optional<MasterLink> _link;
+    rtype::network::Timer _linger;
+    int _exitCode = Success;
+    bool _stopping = false;
+
+    /// Opens the UDP port and starts the simulation.
+    bool openGame(std::uint8_t maxPlayers, GameHost::Handlers handlers)
+    {
         try {
-            socket.emplace(loop, rtype::network::Address::anyIpv4(options.udpPort));
+            _host.emplace(_loop, rtype::network::Address::anyIpv4(_options.udpPort), maxPlayers, _game,
+                          std::move(handlers));
         } catch (const std::system_error &error) {
-            logger.error("Cannot open UDP port {}: {}", options.udpPort, error.code().message());
-            return Failure;
+            logger().error("Cannot open UDP port {}: {}", _options.udpPort, error.code().message());
+            return false;
         }
-        logger.info("Game {} on UDP {}", options.id, socket->localAddress());
-    } else {
-        logger.debug("Instance {} waiting for its secret on the standard input", options.id);
-        if (!readSecret(input)) {
-            logger.error("Instance {}: no secret on the standard input. An instance is started by the master",
-                         options.id);
-            return Failure;
-        }
-        // The connection to the master and the UDP port come with the instance mode
-        logger.info("Instance {} started (UDP {}, master on 127.0.0.1:{})", options.id, options.udpPort,
-                    options.masterPort);
+        _game.start();
+        logger().info("Game {} on UDP {}, {} players at most", _options.id, _host->localAddress(),
+                      maxPlayers);
+        return true;
     }
 
-    const bool clean = runUntilStopped(loop, [&] {
-        if (socket) {
-            socket->close();
+    void configure(const ConfigureMessage &game)
+    {
+        logger().info("Configured as \"{}\"", game.name);
+        const bool opened =
+            openGame(game.maxPlayers,
+                     {
+                         .onConnected = [this](std::uint32_t player) { _link->sendPlayerConnected(player); },
+                         .onDisconnected =
+                             [this](std::uint32_t player, PlayerDisconnectedReason reason) {
+                                 _link->sendPlayerDisconnected(player, reason);
+                             },
+                     });
+        if (!opened) {
+            stop(Failure, DisconnectReason::Shutdown);
+            return;
         }
-        loop.stop();
-    });
-    logger.info("Instance {} stopped", options.id);
-    return clean ? Success : Failure;
+        _link->sendReady(_host->localAddress().port());
+    }
+
+public:
+    Instance(const InstanceOptions &options, rtype::network::EventLoop &loop)
+        : _options(options), _loop(loop),
+          _game(
+              {},
+              // Each tick, from the game thread to the network thread
+              [this](TickResult result) {
+                  _loop.post([this, result = std::move(result)] {
+                      if (_host && !_stopping) {
+                          _host->publish(result);
+                      }
+                  });
+              },
+              [this] { _loop.post([this] { stop(Failure, DisconnectReason::Shutdown); }); }),
+          _linger(loop)
+    {
+    }
+
+    ~Instance() { _game.stop(); }
+
+    Instance(const Instance &) = delete;
+    Instance &operator=(const Instance &) = delete;
+
+    [[nodiscard]] int exitCode() const { return _exitCode; }
+
+    /// A game without a master: four sessions with the public keys, given again each time one closes.
+    bool startStandalone()
+    {
+        const bool opened =
+            openGame(MaxInstancePlayers,
+                     {
+                         .onConnected = {},
+                         .onDisconnected =
+                             [this](std::uint32_t player, PlayerDisconnectedReason) {
+                                 _host->addPlayer(standalonePlayer(static_cast<std::uint8_t>(player - 1)));
+                             },
+                     });
+        if (!opened) {
+            return false;
+        }
+        for (std::uint8_t slot = 0; slot < MaxInstancePlayers; ++slot) {
+            _host->addPlayer(standalonePlayer(slot));
+        }
+        return true;
+    }
+
+    /// Connects to the master, which configures the game, then gives its players.
+    void startWithMaster(const Secret &secret)
+    {
+        _link.emplace(_loop, _options.masterPort, InstanceHelloMessage{.id = _options.id, .secret = secret},
+                      MasterLink::Handlers{
+                          .onConfigure = [this](const ConfigureMessage &game) { configure(game); },
+                          .onAddPlayer =
+                              [this](const AddPlayerMessage &player) {
+                                  if (!_host->addPlayer(player)) {
+                                      logger().error("The master added player {} to a full game, or twice",
+                                                     player.playerId);
+                                      stop(Failure, DisconnectReason::Shutdown);
+                                  }
+                              },
+                          .onRemovePlayer =
+                              [this](const RemovePlayerMessage &player) {
+                                  if (!_host->removePlayer(player.playerId, player.reason)) {
+                                      logger().debug("Player {} removed by the master was already gone",
+                                                     player.playerId);
+                                  }
+                              },
+                          .onShutdown =
+                              [this](const ShutdownMessage &shutdown) {
+                                  logger().info("Shut down by the master: {}",
+                                                shutdown.reason == ShutdownReason::Empty
+                                                    ? "no player left"
+                                                    : "the master stops");
+                                  stop(Success, DisconnectReason::Shutdown);
+                              },
+                          .onFailed =
+                              [this](const std::string &reason) {
+                                  logger().error("Instance {}: {}", _options.id, reason);
+                                  stop(Failure, DisconnectReason::Shutdown);
+                              },
+                      });
+        logger().info("Instance {} started: connecting to the master on 127.0.0.1:{}", _options.id,
+                      _options.masterPort);
+    }
+
+    /// Ends the game: the clients receive `DISCONNECT`, the link closes, and the loop stops once the last
+    /// datagrams are sent.
+    void stop(int exitCode, DisconnectReason reason)
+    {
+        if (_stopping) {
+            return;
+        }
+        _stopping = true;
+        _exitCode = exitCode;
+        _game.stop();
+        if (_host) {
+            _host->closeAll(reason);
+        }
+        if (_link) {
+            _link->close();
+        }
+        _linger.start(Linger, [this] { _loop.stop(); });
+    }
+};
+
+} // namespace
+
+int runInstance(const InstanceOptions &options, std::istream &input)
+{
+    rtype::network::EventLoop loop;
+    Instance instance(options, loop);
+
+    if (options.standalone) {
+        logger().warning("Standalone game {}: no master, public test keys. For development only", options.id);
+        if (!instance.startStandalone()) {
+            return Failure;
+        }
+    } else {
+        logger().debug("Instance {} waiting for its secret on the standard input", options.id);
+        const std::optional<Secret> secret = readSecret(input);
+        if (!secret) {
+            logger().error(
+                "Instance {}: no secret on the standard input. An instance is started by the master",
+                options.id);
+            return Failure;
+        }
+        instance.startWithMaster(*secret);
+    }
+
+    const bool clean = runUntilStopped(loop, [&] { instance.stop(Success, DisconnectReason::Shutdown); });
+    logger().info("Instance {} stopped", options.id);
+    return clean ? instance.exitCode() : Failure;
 }
 
 } // namespace rtype::server
