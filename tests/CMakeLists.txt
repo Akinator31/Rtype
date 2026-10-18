@@ -38,17 +38,30 @@ add_executable(rtype_tests
     resource_cache.cpp
     scenes.cpp
     serialization.cpp
+    server_lifecycle.cpp
+    server_options.cpp
     session.cpp
     shaders.cpp
     text_input.cpp
+    timer.cpp
     tls.cpp
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::ecs rtype::engine rtype::input rtype::log rtype::network rtype::physics rtype::render
-    rtype::shaders r-type_keygen_core Catch2::Catch2WithMain)
+    rtype::shaders r-type_keygen_core r-type_server_core
+    Catch2::Catch2WithMain)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 
 # Smoke tests: the binaries start and exit cleanly
-add_test(NAME smoke.server_starts COMMAND r-type_server)
+add_test(NAME smoke.server_help COMMAND r-type_server --help)
+add_test(NAME smoke.server_invalid_arguments COMMAND r-type_server --unknown)
+set_tests_properties(smoke.server_invalid_arguments PROPERTIES WILL_FAIL TRUE)
+# The server only starts with a key: one is made for the check
+add_test(NAME smoke.server_keys
+    COMMAND r-type_keygen --out ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys --force)
+set_tests_properties(smoke.server_keys PROPERTIES FIXTURES_SETUP server_keys)
+add_test(NAME smoke.server_check
+    COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key)
+set_tests_properties(smoke.server_check PROPERTIES FIXTURES_REQUIRED server_keys)
 add_test(NAME smoke.keygen_help COMMAND r-type_keygen --help)
