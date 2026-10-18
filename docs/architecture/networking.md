@@ -22,6 +22,7 @@ New to networking? Read [Networking concepts](networking-concepts.md) first.
 | `ReplayWindow`, `PacketCounter` | Drop the datagrams received twice, and number the ones sent |
 | `MessageChannel` | Acknowledgements, resends and ordering of the messages of one session over UDP |
 | `DatagramBody`, `encodeBody()`, `decodeBody()` | The decrypted body of a datagram: acknowledgements and messages |
+| `Timer`, `StopSignals` | Call a function after a delay or every interval, and when the program is asked to stop |
 | `ClientSession`, `SessionHost` | A client's session with its game, and the game's sessions with its players: connecting, heartbeats, timeouts, disconnecting |
 | `FramedConnection` | A TCP or TLS connection that sends and receives whole messages (frames) |
 | `FrameDecoder`, `makeFrame()` | Split a TCP stream into frames, and build a frame |
@@ -84,6 +85,27 @@ data they touch must be protected if another thread reads it.
 including from inside one of its handlers: data that arrives afterwards is ignored.
 
 **Exceptions.** An exception thrown by a handler leaves `run()` or `poll()`, which can be called again.
+
+### Timers and stop signals
+
+Two helpers call a function on the loop's thread, like the handlers of the sockets:
+
+```cpp
+rtype::network::Timer tick(loop);
+tick.startRepeating(std::chrono::milliseconds(16), [&] { host.update(Clock::now()); }); // every tick
+
+rtype::network::Timer timeout(loop);
+timeout.start(std::chrono::seconds(10), [&] { connection.close(); }); // once
+timeout.cancel();                                                     // or not at all
+
+rtype::network::StopSignals signals(loop, [&](const char *signal) { /* Ctrl+C, SIGTERM... */ });
+```
+
+- A `Timer` started again forgets what it was doing; cancelled or destroyed on the loop's thread, it never calls
+  its handler, even if it was already due. A repeating timer that falls behind skips the calls it missed rather
+  than making them in a burst.
+- `StopSignals` catches Ctrl+C (`SIGINT`), `SIGTERM`, and on Windows `SIGBREAK`, while it exists: the program no
+  longer ends at once, the handler decides. The [server](server.md#stopping) uses it to stop properly.
 
 ## Addresses
 
@@ -747,6 +769,9 @@ over 20 s of silence, the 5 s timeout on both sides, 30 % loss, `DISCONNECT` bot
 three lost, a game that stops acknowledging, a handler that closes its session, replayed, forged and unknown
 datagrams that get no answer, a client whose port changes, a late datagram from another address, and the limit
 of 200 datagrams per second. A last test runs a session over real UDP sockets on the loopback.
+
+The tests in `tests/timer.cpp` (same tag) check timers once and repeating, cancelled and destroyed when already
+due, started again and from another thread, and the stop signals, raised in the test process itself.
 
 Our client and server were also checked against OpenSSL, by hand (it is not installed on every CI runner):
 

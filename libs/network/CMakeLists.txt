@@ -39,6 +39,7 @@ add_library(rtype_network
     src/Session.cpp
     src/TcpConnection.cpp
     src/TcpListener.cpp
+    src/Timer.cpp
     src/Text.cpp
     src/Tls.cpp
     src/TlsConnection.cpp

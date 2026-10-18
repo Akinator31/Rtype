@@ -57,6 +57,8 @@ flowchart LR
 *The client joins a game through the master, then exchanges the game traffic directly with that game's
 process.*
 
+How the server starts, what it is given and how it stops: [Server](server.md).
+
 New to networking? Start with [Networking concepts](networking-concepts.md).
 
 ## Layers

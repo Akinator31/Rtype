@@ -1,12 +1,15 @@
+#include "Server.hpp"
 #include "rtype/log/Logger.hpp"
 
-int main()
-{
-    const rtype::log::Logger logger("server");
+#include <iostream>
+#include <string_view>
+#include <vector>
 
+int main(int argc, char **argv)
+{
     if (const auto problem = rtype::log::configureFromEnvironment()) {
-        logger.warning("{}", *problem);
+        rtype::log::Logger("server").warning("{}", *problem);
     }
-    logger.info("Server started");
-    return 0;
+    const std::vector<std::string_view> arguments(argv + 1, argv + argc);
+    return rtype::server::run(arguments, std::cout, std::cin);
 }
