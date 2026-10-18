@@ -60,6 +60,7 @@ public:
 
     /// Starts a program with its arguments, which it receives unchanged (spaces, quotes...): there is no
     /// shell.
+    /// @throws std::invalid_argument if an argument is empty: the command line of Windows would lose it.
     /// @throws std::system_error if it cannot start: not found, not executable.
     Process(const std::filesystem::path &program, std::span<const std::string> arguments,
             Options options = {});
@@ -85,7 +86,8 @@ public:
     std::optional<int> wait(std::chrono::milliseconds timeout);
 
     /// Asks it to stop: SIGTERM on Linux, Ctrl+Break on Windows. A server ends its work first (ADR 0013), so
-    /// wait for it with exitCode() or wait(). Does nothing once it has exited.
+    /// wait for it with exitCode() or wait(). Does nothing once it has exited. On Windows, a program that has
+    /// only just started may not receive it yet: stop() kills it after the grace.
     /// @throws std::system_error if the request cannot be sent.
     void terminate();
 

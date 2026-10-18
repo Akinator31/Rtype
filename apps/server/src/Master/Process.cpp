@@ -8,6 +8,7 @@
 #include <climits>
 #include <cstdint>
 #include <new>
+#include <stdexcept>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -93,8 +94,14 @@ void Process::Destroy::operator()(reproc_t *process) const
 
 Process::Process(const std::filesystem::path &program, std::span<const std::string> arguments,
                  Options options)
-    : _process(reproc_new()), _stopGrace(options.stopGrace)
+    : _stopGrace(options.stopGrace)
 {
+    // reproc only quotes the arguments of the command line of Windows that contain a space or a quote: an
+    // empty one would vanish there, and the program would receive the others shifted
+    if (std::ranges::any_of(arguments, &std::string::empty)) {
+        throw std::invalid_argument("An argument of a process cannot be empty");
+    }
+    _process.reset(reproc_new());
     if (!_process) {
         throw std::bad_alloc();
     }
