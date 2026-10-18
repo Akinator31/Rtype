@@ -3,6 +3,7 @@
 // docs/architecture/server.md).
 
 #include "Common/Options.hpp"
+#include "GameServers.hpp"
 #include "LobbyClient.hpp"
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
@@ -34,18 +35,6 @@
 #include <utility>
 #include <vector>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#else
-#include <signal.h>
-#endif
-
 using namespace rtype::server;
 using namespace rtype::lobby;
 using namespace std::chrono_literals;
@@ -58,6 +47,9 @@ using rtype::network::ServerIdentity;
 using rtype::network::SessionEnd;
 using rtype::network::TcpListener;
 using rtype::network::UdpSocket;
+using testing::freePorts;
+using testing::instances;
+using testing::killProcess;
 using testing::LobbyClient;
 using testing::waitUntil;
 using Clock = std::chrono::steady_clock;
@@ -65,53 +57,6 @@ using Bytes = std::vector<std::byte>;
 
 namespace
 {
-
-/// `count` consecutive UDP ports free now, for the games of a test.
-std::uint16_t freePorts(std::uint16_t count)
-{
-    EventLoop loop;
-    std::mt19937 random(std::random_device{}());
-    std::uniform_int_distribution<int> base(20000, 60000);
-    for (int attempt = 0; attempt < 100; ++attempt) {
-        const auto first = static_cast<std::uint16_t>(base(random));
-        try {
-            std::vector<UdpSocket> sockets;
-            for (std::uint16_t i = 0; i < count; ++i) {
-                sockets.emplace_back(loop, Address::anyIpv4(static_cast<std::uint16_t>(first + i)));
-            }
-            return first;
-        } catch (const std::system_error &) {
-            continue;
-        }
-    }
-    FAIL("No free UDP ports");
-    return 0;
-}
-
-GamesSettings instances(std::uint16_t ports = 4)
-{
-    const std::uint16_t first = freePorts(ports);
-    return {
-        .executable = RTYPE_TEST_SERVER,
-        .leadingArguments = {},
-        .trailingArguments = {"--log-level", "warning"},
-        .firstPort = first,
-        .lastPort = static_cast<std::uint16_t>(first + ports - 1),
-    };
-}
-
-/// Stops a process at once, as a crash would.
-void killProcess(int pid)
-{
-#ifdef _WIN32
-    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, static_cast<DWORD>(pid));
-    REQUIRE(process != nullptr);
-    TerminateProcess(process, 9);
-    CloseHandle(process);
-#else
-    REQUIRE(::kill(pid, SIGKILL) == 0);
-#endif
-}
 
 /// A client of a game, over UDP, with the keys of its GAME_JOINED.
 struct GameClient {
