@@ -142,7 +142,6 @@ commands:
             cp "${files[@]}" packages/
             ls -l packages
       - store_artifacts:
-          name: Upload artifact
           path: packages
           destination: r-type-<< parameters.platform >>
       # Read by the release job
@@ -496,22 +495,42 @@ jobs:
               --verify-tag \
               $prerelease
 
+# Conditions written as logic statements: a pipeline value missing from the event (such as the tag of a branch
+# pipeline) is then an empty string, whereas an expression compares it as null and never matches ""
 workflows:
+  # Branch pipelines only: the branch is empty on tag pipelines
   build:
-    when: pipeline.event.name != "pull_request" and pipeline.git.tag == "" and pipeline.git.branch != "gh-pages"
+    when:
+      and:
+        - not:
+            equal: [pull_request, << pipeline.event.name >>]
+        - not:
+            equal: ["", << pipeline.git.branch >>]
+        - not:
+            equal: [gh-pages, << pipeline.git.branch >>]
     jobs:
       - build-linux
       - build-windows
 
   format:
-    when: pipeline.git.tag == "" and pipeline.git.branch != "gh-pages"
+    when:
+      and:
+        - not:
+            equal: ["", << pipeline.git.branch >>]
+        - not:
+            equal: [gh-pages, << pipeline.git.branch >>]
     jobs:
       # Not cancelled: a run that just pushed a fix must still be able to post its comment
       - format:
           serial-group: rtype/format/<< pipeline.git.branch >>
 
   docs:
-    when: pipeline.git.tag == "" and pipeline.git.branch != "gh-pages"
+    when:
+      and:
+        - not:
+            equal: ["", << pipeline.git.branch >>]
+        - not:
+            equal: [gh-pages, << pipeline.git.branch >>]
     jobs:
       - docs-build:
           serial-group: rtype/docs/<< pipeline.git.branch >>
@@ -522,7 +541,10 @@ workflows:
           serial-group: rtype/pages
 
   mirror:
-    when: pipeline.event.name == "push" and pipeline.git.branch == "main"
+    when:
+      and:
+        - equal: [push, << pipeline.event.name >>]
+        - equal: [main, << pipeline.git.branch >>]
     jobs:
       - mirror-check
       - mirror-push:
@@ -530,7 +552,10 @@ workflows:
             - mirror-check
 
   release:
-    when: pipeline.git.tag starts-with "v"
+    when:
+      matches:
+        pattern: "^v.*"
+        value: << pipeline.git.tag >>
     jobs:
       - check-version:
           filters: pipeline.git.tag starts-with "v"
