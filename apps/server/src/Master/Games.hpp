@@ -1,0 +1,168 @@
+#pragma once
+
+#include "Common/InstanceMessages.hpp"
+#include "Common/Secret.hpp"
+#include "Master/Process.hpp"
+#include "rtype/lobby/Messages.hpp"
+#include "rtype/network/EventLoop.hpp"
+#include "rtype/network/FramedConnection.hpp"
+#include "rtype/network/TcpListener.hpp"
+#include "rtype/network/Timer.hpp"
+
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <set>
+#include <span>
+#include <string>
+#include <variant>
+#include <vector>
+
+namespace rtype::server
+{
+
+/// How the master runs its games.
+struct GamesSettings {
+    /// The program of the instances: the master itself (currentExecutable()), or another one in the tests.
+    std::filesystem::path executable;
+    /// Given before the arguments of the instance: for a program of the tests.
+    std::vector<std::string> leadingArguments;
+    /// Given after them, such as `--log-level debug`.
+    std::vector<std::string> trailingArguments;
+    /// The UDP ports of the games, one per game: their number is the most games at once.
+    std::uint16_t firstPort = 4243;
+    std::uint16_t lastPort = 4299;
+    /// From the start of an instance to its READY (docs/protocol/instances.md, section 3).
+    std::chrono::milliseconds startTimeout{std::chrono::seconds(10)};
+    /// From SHUTDOWN or GAME_OVER to the exit of an instance, before it is killed.
+    std::chrono::milliseconds stopTimeout{std::chrono::seconds(5)};
+};
+
+/// A player of the lobby, as the games know it.
+struct LobbyPlayer {
+    std::uint32_t id = 0;
+    std::string name;
+};
+
+/// The games of the master (ADR 0013): one instance per game, started with Process, connected back on a local
+/// listener, and watched until it exits (docs/protocol/instances.md). On the thread of the loop, used by the
+/// lobby.
+///
+/// @code
+/// rtype::server::Games games(loop, {.executable = rtype::server::currentExecutable()});
+/// games.create({playerId, "Pavel"}, {"Bydo hunters", 4}, [&](rtype::server::Games::JoinResult result) {
+///     // GAME_JOINED, or the error to answer
+/// });
+/// @endcode
+///
+/// - **Creating** takes a free UDP port, draws a secret, starts the instance and waits for its READY: only
+///   then is the creator added and answered. No port: SERVER_FULL. No READY in time, or an instance that
+///   cannot start: GAME_START_FAILED, and the instance is killed.
+/// - **Joining** adds a player to a game that is ready: it gets a session and its keys, given to the instance
+///   (ADD_PLAYER) before the player (GAME_JOINED).
+/// - **A game without players** is shut down (SHUTDOWN (EMPTY)).
+/// - **An instance that dies**, or closes its connection, without GAME_OVER has crashed: its players are told
+///   (LEFT_GAME (GAME_CRASHED)). A game over is told too (LEFT_GAME (GAME_OVER)).
+/// - **Its port is freed** once the process has exited, killed if it does not within the stop timeout.
+class Games
+{
+public:
+    using JoinResult = std::variant<rtype::lobby::GameJoinedMessage, rtype::lobby::ErrorCode>;
+    using JoinCallback = std::function<void(JoinResult result)>;
+    /// A player is no longer in its game without having asked: with the LEFT_GAME to send, or nothing when
+    /// it closed its session itself (`PLAYER_DISCONNECTED (QUIT)`).
+    using LeftHandler = std::function<void(std::uint32_t playerId,
+                                           std::optional<rtype::lobby::LeftGameMessage> notification)>;
+
+    /// How often the processes are checked.
+    static constexpr std::chrono::milliseconds SupervisionInterval{50};
+    /// How long an instance has to present itself once connected.
+    static constexpr std::chrono::seconds HelloTimeout{10};
+
+private:
+    struct Game;
+    struct InstanceConnection;
+
+    rtype::network::EventLoop &_loop;
+    GamesSettings _settings;
+    LeftHandler _onLeft;
+    rtype::network::TcpListener _listener;
+    rtype::network::Timer _supervision;
+    std::map<std::uint32_t, std::unique_ptr<Game>> _games;
+    std::map<std::uint64_t, std::unique_ptr<InstanceConnection>> _connections;
+    /// The game of each player, creators waiting for theirs included.
+    std::map<std::uint32_t, std::uint32_t> _playerGames;
+    std::set<std::uint16_t> _freePorts;
+    std::uint32_t _lastGameId = 0;
+    std::uint64_t _lastConnection = 0;
+    bool _stopping = false;
+    std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
+
+    [[nodiscard]] Game *find(std::uint32_t gameId) const;
+    void acceptInstance(rtype::network::TcpConnection connection);
+    void instanceFrame(std::uint64_t connection, std::uint8_t type, std::span<const std::byte> payload);
+    void instanceClosed(std::uint64_t connection);
+    void presented(std::uint64_t connection, std::span<const std::byte> payload);
+    void ready(Game &game, std::span<const std::byte> payload);
+    void playerDisconnected(Game &game, std::span<const std::byte> payload);
+    void gameOver(Game &game, std::span<const std::byte> payload);
+    rtype::lobby::GameJoinedMessage addPlayer(Game &game, const LobbyPlayer &player);
+    void removed(Game &game, std::uint32_t playerId);
+    /// Sends SHUTDOWN, then waits for the exit.
+    void shutDown(Game &game, ShutdownReason reason);
+    /// The game failed or crashed: its players are told, its instance killed.
+    void fail(Game &game, const std::string &reason);
+    void closeConnection(Game &game);
+    void send(Game &game, std::uint8_t type, std::span<const std::byte> payload);
+    void supervise();
+    void closeInstanceConnection(std::uint64_t id);
+
+public:
+    /// Listens for the instances on 127.0.0.1, on a port of the system.
+    /// @throws std::system_error if it cannot listen.
+    /// @throws std::invalid_argument if the port range is empty.
+    Games(rtype::network::EventLoop &loop, GamesSettings settings);
+    ~Games();
+
+    Games(const Games &) = delete;
+    Games &operator=(const Games &) = delete;
+
+    /// Where the instances are told to connect.
+    [[nodiscard]] std::uint16_t instancePort() const { return _listener.localAddress().port(); }
+
+    /// Called when a player leaves its game without asking.
+    void setLeftHandler(LeftHandler handler) { _onLeft = std::move(handler); }
+
+    /// The games ready to be joined, sorted by id: for GAME_LIST.
+    [[nodiscard]] std::vector<rtype::lobby::GameInfo> list() const;
+
+    /// CREATE_GAME: answered once the instance is ready, or failed.
+    void create(const LobbyPlayer &player, const rtype::lobby::CreateGameMessage &game, JoinCallback done);
+    /// JOIN_GAME.
+    [[nodiscard]] JoinResult join(const LobbyPlayer &player, std::uint32_t gameId);
+    /// LEAVE_GAME: the player leaves its game, which it is told by its instance.
+    /// @return The game it left, or nothing if it was in none.
+    std::optional<std::uint32_t> leave(std::uint32_t playerId);
+    /// The lobby connection of a player closed: it leaves its game, and a game it was creating has no
+    /// creator any more.
+    void lobbyClosed(std::uint32_t playerId);
+
+    /// The master stops: every game is shut down (SHUTDOWN (MASTER_STOPPING)).
+    void shutdown();
+    /// No instance runs any more.
+    [[nodiscard]] bool empty() const { return _games.empty(); }
+    /// Games, running or ending.
+    [[nodiscard]] std::size_t count() const { return _games.size(); }
+
+    /// The process id of the instance of a game, for the tests and the logs.
+    [[nodiscard]] std::optional<int> processId(std::uint32_t gameId) const;
+};
+
+/// Compares two secrets in constant time: the time taken tells nothing about where they differ.
+[[nodiscard]] bool sameSecret(const Secret &first, const Secret &second);
+
+} // namespace rtype::server

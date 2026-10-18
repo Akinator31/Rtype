@@ -7,8 +7,11 @@
 #include "rtype/network/Timer.hpp"
 #include "rtype/network/TlsConnection.hpp"
 
+#include <deque>
 #include <format>
 #include <utility>
+#include <variant>
+#include <vector>
 
 namespace rtype::server
 {
@@ -45,6 +48,12 @@ struct Lobby::Client {
     State state = State::Handshake;
     std::uint32_t playerId = 0;
     std::string name;
+    /// The game the player is in.
+    std::optional<std::uint32_t> gameId;
+    /// A CREATE_GAME waits for its game.
+    bool busy = false;
+    /// The requests received meanwhile.
+    std::deque<std::pair<std::uint8_t, std::vector<std::byte>>> waiting;
     bool closed = false;
 
     Client(std::uint64_t id, rtype::network::EventLoop &loop, rtype::network::TlsConnection tls)
@@ -59,15 +68,21 @@ struct Lobby::Client {
 };
 
 Lobby::Lobby(rtype::network::EventLoop &loop, rtype::network::TcpListener listener,
-             rtype::network::ServerIdentity identity, LobbyLimits limits)
-    : _loop(loop), _listener(std::move(listener)), _identity(std::move(identity)), _limits(limits)
+             rtype::network::ServerIdentity identity, Games &games, LobbyLimits limits)
+    : _loop(loop), _listener(std::move(listener)), _identity(std::move(identity)), _games(games),
+      _limits(limits)
 {
+    _games.setLeftHandler(
+        [this](std::uint32_t playerId, const std::optional<rtype::lobby::LeftGameMessage> &left) {
+            this->left(playerId, left);
+        });
     _listener.startAccepting(
         [this](rtype::network::TcpConnection connection) { accept(std::move(connection)); });
 }
 
 Lobby::~Lobby()
 {
+    _games.setLeftHandler({});
     close();
 }
 
@@ -155,13 +170,49 @@ void Lobby::received(std::uint64_t id, std::uint8_t type, std::span<const std::b
         return;
     }
     Client &client = *found->second;
-    const bool welcomed = client.state == Client::State::Welcomed;
-    if (welcomed) {
+    if (client.state == Client::State::Welcomed) {
         // Any frame shows the client is alive
         client.timeout.start(_limits.idleTimeout, [this, id] { disconnect(id, "silent for too long"); });
     }
+    if (client.busy) {
+        // A CREATE_GAME waits for its game: the requests after it wait for its answer
+        if (client.waiting.size() >= _limits.maxWaitingRequests) {
+            disconnect(id, "too many requests waiting");
+            return;
+        }
+        client.waiting.emplace_back(type, std::vector<std::byte>(payload.begin(), payload.end()));
+        return;
+    }
+    handle(client, type, payload);
+}
+
+void Lobby::drain(std::uint64_t id)
+{
+    for (;;) {
+        const auto found = _clients.find(id);
+        if (found == _clients.end() || found->second->closed || found->second->busy ||
+            found->second->waiting.empty()) {
+            return;
+        }
+        Client &client = *found->second;
+        const auto [type, payload] = std::move(client.waiting.front());
+        client.waiting.pop_front();
+        handle(client, type, payload);
+    }
+}
+
+void Lobby::handle(Client &client, std::uint8_t type, std::span<const std::byte> payload)
+{
+    const bool welcomed = client.state == Client::State::Welcomed;
     const auto malformed = [&] { fail(client, type, ErrorCode::Malformed); };
     const auto error = [&](ErrorCode code) { fail(client, type, code); };
+    // For the requests that need HELLO: the state is checked first, the payload after
+    const auto notWelcomed = [&] {
+        if (!welcomed) {
+            error(ErrorCode::HelloRequired);
+        }
+        return !welcomed;
+    };
 
     switch (type) {
     case message_type::Hello:
@@ -179,53 +230,119 @@ void Lobby::received(std::uint64_t id, std::uint8_t type, std::span<const std::b
         }
         return;
     case message_type::ListGames:
+        if (notWelcomed()) {
+            return;
+        }
+        if (!rtype::lobby::decodeEmpty(payload)) {
+            malformed();
+        } else {
+            reply(client, message_type::GameList,
+                  rtype::lobby::encode(rtype::lobby::GameListMessage{_games.list()}));
+        }
+        return;
     case message_type::CreateGame:
+        if (notWelcomed()) {
+            return;
+        }
+        if (client.gameId) {
+            error(ErrorCode::AlreadyInGame);
+        } else {
+            createGame(client, payload);
+        }
+        return;
     case message_type::JoinGame:
+        if (notWelcomed()) {
+            return;
+        }
+        if (client.gameId) {
+            error(ErrorCode::AlreadyInGame);
+        } else if (const auto join = rtype::lobby::decodeJoinGame(payload); !join) {
+            malformed();
+        } else {
+            joined(client, type, _games.join({client.playerId, client.name}, join->gameId));
+        }
+        return;
     case message_type::LeaveGame:
-        break;
+        if (notWelcomed()) {
+            return;
+        }
+        if (!client.gameId) {
+            error(ErrorCode::NotInGame);
+        } else if (!rtype::lobby::decodeEmpty(payload)) {
+            malformed();
+        } else {
+            const std::uint32_t gameId = _games.leave(client.playerId).value_or(*client.gameId);
+            client.gameId.reset();
+            logger().info("{} left game {}", client.describe(), gameId);
+            reply(client, message_type::LeftGame,
+                  rtype::lobby::encode(
+                      rtype::lobby::LeftGameMessage{gameId, rtype::lobby::LeftGameReason::Requested}));
+        }
+        return;
     default:
         error(ErrorCode::UnknownMessage);
         return;
     }
+}
 
-    if (!welcomed) {
-        error(ErrorCode::HelloRequired);
+void Lobby::createGame(Client &client, std::span<const std::byte> payload)
+{
+    const std::optional<rtype::lobby::CreateGameMessage> game = rtype::lobby::decodeCreateGame(payload);
+    if (!game) {
+        fail(client, message_type::CreateGame, ErrorCode::Malformed);
         return;
     }
-    switch (type) {
-    case message_type::ListGames:
-        if (!rtype::lobby::decodeEmpty(payload)) {
-            malformed();
-        } else {
-            reply(client, message_type::GameList, rtype::lobby::encode(rtype::lobby::GameListMessage{}));
-        }
+    if (!rtype::lobby::isValidGameName(game->name)) {
+        fail(client, message_type::CreateGame, ErrorCode::InvalidName);
         return;
-    case message_type::CreateGame:
-        if (const auto game = rtype::lobby::decodeCreateGame(payload); !game) {
-            malformed();
-        } else if (!rtype::lobby::isValidGameName(game->name)) {
-            error(ErrorCode::InvalidName);
-        } else {
-            // The instances come with `server: games`
-            error(ErrorCode::GameStartFailed);
-        }
+    }
+    client.busy = true;
+    const std::uint64_t id = client.id;
+    const std::uint32_t playerId = client.playerId;
+    _games.create({playerId, client.name}, *game,
+                  [this, id, playerId, alive = std::weak_ptr<bool>(_alive)](const Games::JoinResult &result) {
+                      if (alive.expired()) {
+                          return;
+                      }
+                      const auto found = _clients.find(id);
+                      if (found == _clients.end() || found->second->closed) {
+                          // Gone while its game started: it leaves it at once
+                          if (std::holds_alternative<rtype::lobby::GameJoinedMessage>(result)) {
+                              _games.lobbyClosed(playerId);
+                          }
+                          return;
+                      }
+                      Client &creator = *found->second;
+                      creator.busy = false;
+                      joined(creator, message_type::CreateGame, result);
+                      drain(id);
+                  });
+}
+
+void Lobby::joined(Client &client, std::uint8_t request, const Games::JoinResult &result)
+{
+    if (const auto *game = std::get_if<rtype::lobby::GameJoinedMessage>(&result)) {
+        client.gameId = game->gameId;
+        reply(client, message_type::GameJoined, rtype::lobby::encode(*game));
         return;
-    case message_type::JoinGame:
-        if (!rtype::lobby::decodeJoinGame(payload)) {
-            malformed();
-        } else {
-            error(ErrorCode::GameNotFound);
-        }
+    }
+    fail(client, request, std::get<ErrorCode>(result));
+}
+
+void Lobby::left(std::uint32_t playerId, const std::optional<rtype::lobby::LeftGameMessage> &notification)
+{
+    const auto player = _players.find(playerId);
+    if (player == _players.end()) {
         return;
-    case message_type::LeaveGame:
-        if (!rtype::lobby::decodeEmpty(payload)) {
-            malformed();
-        } else {
-            error(ErrorCode::NotInGame);
-        }
+    }
+    const auto found = _clients.find(player->second);
+    if (found == _clients.end() || found->second->closed) {
         return;
-    default:
-        return;
+    }
+    Client &client = *found->second;
+    client.gameId.reset();
+    if (notification) {
+        reply(client, message_type::LeftGame, rtype::lobby::encode(*notification));
     }
 }
 
@@ -249,6 +366,7 @@ void Lobby::hello(Client &client, std::span<const std::byte> payload)
     // Never 0, never given twice: 4 billion players before it would wrap
     client.playerId = ++_lastPlayerId;
     client.name = hello->name;
+    _players[client.playerId] = client.id;
     client.state = Client::State::Welcomed;
     const std::uint64_t id = client.id;
     client.timeout.start(_limits.idleTimeout, [this, id] { disconnect(id, "silent for too long"); });
@@ -282,6 +400,11 @@ void Lobby::forget(std::uint64_t id)
     client.closed = true;
     client.timeout.cancel();
     --_open;
+    if (client.state == Client::State::Welcomed) {
+        _players.erase(client.playerId);
+        // Out of its game, or of the game it was creating
+        _games.lobbyClosed(client.playerId);
+    }
     const rtype::network::Address ip = client.address.withPort(0);
     if (--_perAddress[ip] == 0) {
         _perAddress.erase(ip);
