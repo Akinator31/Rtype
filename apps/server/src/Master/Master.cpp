@@ -1,11 +1,14 @@
 #include "Master/Master.hpp"
 
 #include "Common/Lifecycle.hpp"
+#include "Master/Lobby.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/TcpListener.hpp"
+#include "rtype/network/Timer.hpp"
 #include "rtype/network/Tls.hpp"
 
+#include <chrono>
 #include <optional>
 #include <stdexcept>
 #include <system_error>
@@ -49,10 +52,13 @@ int runMaster(const MasterOptions &options)
         return Success;
     }
 
+    Lobby lobby(loop, std::move(*listener), *identity);
+    // How long the last frames have to leave before the loop stops
+    rtype::network::Timer linger(loop);
     logger.info("Master started: Ctrl+C to stop");
     const bool clean = runUntilStopped(loop, [&] {
-        listener->close();
-        loop.stop();
+        lobby.close();
+        linger.start(std::chrono::milliseconds(100), [&] { loop.stop(); });
     });
     logger.info("Master stopped");
     return clean ? Success : Failure;
