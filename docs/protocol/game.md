@@ -473,7 +473,7 @@ entity id or kind of 0, or a size that does not match the counts makes the messa
 |---|---|
 | **Direction** | Game → Client |
 | **Reliability** | Reliable |
-| **Sent when** | After a tick in which entities were destroyed: one message for all the entities of that tick. |
+| **Sent when** | After a tick in which entities were destroyed: one message for all the entities of that tick, or several with the same tick when they do not fit in one datagram (228 entities at most per message). |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
