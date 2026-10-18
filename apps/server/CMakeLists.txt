@@ -2,6 +2,23 @@
 #   Common/    what both modes share: the command line, the lifecycle, the secret of the instances
 #   Master/    the master: the lobby, and the instances it starts
 #   Instance/  an instance: one game
+
+# reproc starts the instances and stops them, on Linux and Windows (ADR 0013). A private dependency, behind
+# Master/Process.hpp
+CPMAddPackage(
+    NAME reproc
+    VERSION 14.2.8
+    URL https://github.com/DaanDeMeyer/reproc/archive/refs/tags/14.2.8.tar.gz
+    URL_HASH SHA256=27c3b452bfc419a2deda23969aa10c77909c4ff9e71c549eb65d09ae6aa7aa32
+    SYSTEM YES
+    EXCLUDE_FROM_ALL YES
+    OPTIONS
+        "REPROC++ OFF"
+        "REPROC_INSTALL OFF"
+        "REPROC_TEST OFF"
+        "REPROC_EXAMPLES OFF"
+)
+
 add_library(r-type_server_core STATIC
     src/Server.cpp
     src/Common/Lifecycle.cpp
@@ -9,9 +26,10 @@ add_library(r-type_server_core STATIC
     src/Common/Secret.cpp
     src/Instance/Instance.cpp
     src/Master/Master.cpp
+    src/Master/Process.cpp
 )
 target_include_directories(r-type_server_core PUBLIC src)
-target_link_libraries(r-type_server_core PUBLIC rtype::log rtype::network PRIVATE rtype_options)
+target_link_libraries(r-type_server_core PUBLIC rtype::log rtype::network PRIVATE rtype_options reproc)
 target_compile_definitions(r-type_server_core PRIVATE
     RTYPE_VERSION="${PROJECT_VERSION}"
     # A game without a master, with a fixed test key: never in the released binaries (ADR 0013)
