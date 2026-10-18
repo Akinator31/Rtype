@@ -24,6 +24,7 @@ add_executable(rtype_tests
     network.cpp
     paths.cpp
     platform_assumptions.cpp
+    process.cpp
     physics_broad_phase.cpp
     physics_bounds.cpp
     physics_collider.cpp
@@ -52,6 +53,13 @@ target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::log rtype::network rtype::physics rtype::render
     rtype::shaders r-type_keygen_core r-type_server_core
     Catch2::Catch2WithMain)
+# The programs the tests of Process start: a helper that does what its arguments say, and the server itself
+add_executable(rtype_test_child helpers/process_child.cpp)
+target_link_libraries(rtype_test_child PRIVATE rtype_options)
+add_dependencies(rtype_tests rtype_test_child r-type_server)
+target_compile_definitions(rtype_tests PRIVATE
+    RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
+    RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>")
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 
 # Smoke tests: the binaries start and exit cleanly

@@ -92,9 +92,13 @@ commands:
         type: string
     steps:
       - checkout
+      # Only the dependency declarations and CPM itself: hashing every CMakeLists.txt saved a new cache (counted
+      # in the storage of the plan) each time a source file was added
       - run:
           name: Compute the dependency cache key
-          command: git ls-files -s -- cmake '*CMakeLists.txt' > .cpm-cache-key
+          command: |
+            git grep -h -A8 'CPMAddPackage' -- '*CMakeLists.txt' 'cmake/*.cmake' ':!cmake/CPM.cmake' > .cpm-cache-key
+            git hash-object cmake/CPM.cmake >> .cpm-cache-key
       - restore_cache:
           name: Restore dependency cache
           keys:
@@ -126,11 +130,17 @@ commands:
           command: |
             [ -d "/c/Program Files/CMake/bin" ] && export PATH="/c/Program Files/CMake/bin:$PATH"
             cpack -C $BUILD_TYPE
-      - save_cache:
-          name: Save dependency cache
-          key: cpm-<< parameters.platform >>-{{ checksum ".cpm-cache-key" }}
-          paths:
-            - .cpm-cache
+      # Saved from main only (the retention of the free plan is fixed): branches restore the cache of main through
+      # the fallback key, and a branch adding a dependency downloads it until it is merged
+      - when:
+          condition:
+            equal: [main, << pipeline.git.branch >>]
+          steps:
+            - save_cache:
+                name: Save dependency cache
+                key: cpm-<< parameters.platform >>-{{ checksum ".cpm-cache-key" }}
+                paths:
+                  - .cpm-cache
       - run:
           name: Collect packages
           command: |
