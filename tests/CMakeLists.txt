@@ -18,6 +18,7 @@ add_executable(rtype_tests
     ecs_world.cpp
     engine.cpp
     framing.cpp
+    game_messages.cpp
     game_simulation.cpp
     keygen.cpp
     log.cpp
