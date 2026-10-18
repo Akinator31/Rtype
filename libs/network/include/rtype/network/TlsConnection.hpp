@@ -5,6 +5,7 @@
 #include "rtype/network/Tls.hpp"
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <span>
 #include <system_error>
@@ -49,6 +50,9 @@ public:
     /// Called once when the connection ends without close() being called: closed by the peer (no error),
     /// lost (the system error), or ended by the TLS layer (a NetworkError, or an error of tlsCategory()).
     using CloseHandler = TcpConnection::CloseHandler;
+    /// Called once when the handshake ends and the connection is secured, on the loop's thread, before the
+    /// first bytes received are given: a server can then give the client a delay to speak.
+    using SecuredHandler = std::function<void()>;
 
     struct Impl;
 
@@ -81,7 +85,8 @@ public:
 
     /// Starts the handshake, then receiving: the receive handler is called with the bytes as they arrive, and
     /// the close handler when the connection ends. Call it once.
-    void start(ReceiveHandler onReceive, CloseHandler onClose);
+    /// @param onSecured Called once the handshake has ended, if it does.
+    void start(ReceiveHandler onReceive, CloseHandler onClose, SecuredHandler onSecured = {});
 
     /// Sends bytes, after those of the previous calls. The data is copied, so it can be reused at once.
     void send(std::span<const std::byte> bytes);

@@ -21,6 +21,7 @@ add_executable(rtype_tests
     game_messages.cpp
     game_simulation.cpp
     keygen.cpp
+    lobby_messages.cpp
     log.cpp
     network.cpp
     paths.cpp
@@ -43,6 +44,7 @@ add_executable(rtype_tests
     serialization.cpp
     server_instance.cpp
     server_lifecycle.cpp
+    server_lobby.cpp
     server_options.cpp
     session.cpp
     shaders.cpp
@@ -52,7 +54,7 @@ add_executable(rtype_tests
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
-    rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::log rtype::network rtype::physics rtype::render
+    rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::log rtype::network rtype::physics rtype::render
     rtype::shaders r-type_keygen_core r-type_server_core
     Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself

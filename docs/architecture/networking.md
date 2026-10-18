@@ -323,6 +323,9 @@ code above does not change.
 - **The handshake starts with `start()`.** Both sides agree on keys, and the server proves it holds the private
   key of its certificate. It takes one round trip, a few milliseconds on a local network.
 - **Bytes sent before its end wait for it**, then leave encrypted. The client can send `HELLO` at once.
+- **Its end can be known**: `start()` takes a third handler, optional, called once when the handshake has
+  ended, before the first bytes received. The lobby uses it to time the handshake and `HELLO` apart
+  (`start(onFrame, onClose, onSecured)` on a `FramedConnection` over TLS; never called over plain TCP).
 - **The client checks the key.** If the server presents another key, the handshake fails, an error is logged
   with the fingerprint presented, and the close handler receives `NetworkError::UntrustedServer`. Nothing the
   client sent is ever delivered to that server.
@@ -746,7 +749,8 @@ in both directions, a peer sending an invalid frame, and `close()` from inside t
 The tests in `tests/tls.cpp` (same tag) check the fingerprints against the one OpenSSL computes, the identities
 (generated, saved and read back, refused keys, files), then TLS connections over the loopback: large transfers
 in both directions, bytes sent before the handshake, a server with another key, a relay in the middle that
-reads nothing and whose changed byte is detected, peers that do not speak TLS, closing, frames over TLS, and
+reads nothing and whose changed byte is detected, peers that do not speak TLS, closing, frames over TLS, the end of the handshake reported once and never
+for a failed one, and
 Mbed TLS used from two threads at once.
 
 The tests in `tests/datagram.cpp` (same tag) check two datagrams byte for byte against another implementation

@@ -108,7 +108,7 @@ FramedConnection &FramedConnection::operator=(FramedConnection &&other) noexcept
     return *this;
 }
 
-void FramedConnection::start(FrameHandler onFrame, CloseHandler onClose)
+void FramedConnection::start(FrameHandler onFrame, CloseHandler onClose, SecuredHandler onSecured)
 {
     if (!_state) {
         return;
@@ -116,21 +116,25 @@ void FramedConnection::start(FrameHandler onFrame, CloseHandler onClose)
     _state->onFrame = std::move(onFrame);
     _state->onClose = std::move(onClose);
     const std::weak_ptr<State> weak = _state;
-    std::visit(
-        [&weak](auto &stream) {
-            stream.start(
-                [weak](std::span<const std::byte> bytes) {
-                    if (const auto state = weak.lock(); state && !state->closed) {
-                        state->receive(bytes);
-                    }
-                },
-                [weak](std::error_code reason) {
-                    if (const auto state = weak.lock()) {
-                        state->end(reason);
-                    }
-                });
-        },
-        _state->connection);
+    const auto onReceive = [weak](std::span<const std::byte> bytes) {
+        if (const auto state = weak.lock(); state && !state->closed) {
+            state->receive(bytes);
+        }
+    };
+    const auto onEnd = [weak](std::error_code reason) {
+        if (const auto state = weak.lock()) {
+            state->end(reason);
+        }
+    };
+    if (auto *tls = std::get_if<TlsConnection>(&_state->connection)) {
+        tls->start(onReceive, onEnd, [weak, onSecured = std::move(onSecured)] {
+            if (const auto state = weak.lock(); state && !state->closed && onSecured) {
+                onSecured();
+            }
+        });
+    } else {
+        std::get<TcpConnection>(_state->connection).start(onReceive, onEnd);
+    }
 }
 
 void FramedConnection::send(std::uint8_t type, std::span<const std::byte> payload)

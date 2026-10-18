@@ -102,7 +102,7 @@ flowchart TB
 
 ## Libraries
 
-The programs are built on eleven libraries:
+The programs are built on twelve libraries:
 
 | Library | Role | Page |
 |---|---|---|
@@ -113,6 +113,7 @@ The programs are built on eleven libraries:
 | `libs/network` | Addresses, UDP and TCP sockets, the event loop that runs them, TCP framing, TLS and the binary serialization. Wraps Asio and Mbed TLS. Shared with the server. | [Networking](networking.md) |
 | `libs/physics` | Movement and collisions as components and systems on the ECS. Knows no game: each game names its collision layers and reacts to the collisions. Shared with the server. | — |
 | `libs/game` | The rules of the R-Type: a `Simulation` that takes the inputs of the players and steps the world one tick at a time. Shared by the server and the client offline; no raylib, no network. | [Game](game.md) |
+| `libs/lobby` | The messages of the lobby protocol, between a client and the master: hello, list, create and join games. Shared by the client and the server. | [Server](server.md#the-lobby) |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
@@ -120,7 +121,7 @@ The programs are built on eleven libraries:
 
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
-raylib: the ECS, the physics, the game, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
+raylib: the ECS, the physics, the game, the lobby, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
 private dependencies of `network`, and reproc, which starts the instances of the server, a private dependency of
 `r-type_server`.
 
@@ -139,6 +140,7 @@ libs/       libraries shared by the programs, one subdirectory per library
   engine/   client systems: drawing, animations, menus (client)
   game/     rules of the R-Type, the Simulation (server and client offline)
   input/    keyboard and gamepad input (client)
+  lobby/    messages between a client and the master (client and server)
   log/      logging (client and server)
   network/  addresses, sockets and event loop (client and server)
   render/   window, resources and drawing (client)
