@@ -69,7 +69,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 |---|---|---|
 | **Core** | Entities, components, systems (`libs/ecs`), physics (`libs/physics`), logging (`libs/log`), timing | Client, server |
 | **Networking** | Sockets (Asio), binary serialization, reliability over UDP, encryption, the [protocol](../protocol/index.md) | Client, server |
-| **Game logic** | Players, Bydos, missiles, waves, collisions (`libs/game`, [ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md)) | Server, client offline |
+| **Game logic** | Players, Bydos, missiles, waves, collisions (`libs/game`, [ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md), [Game](game.md)) | Server, client offline |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
 | **Interface** | Menus, options and HUD, made of entities like the world (`libs/engine`) | Client |
 | **Audio** | Music and sound effects, built on raylib (`libs/audio`) | Client |
@@ -102,7 +102,7 @@ flowchart TB
 
 ## Libraries
 
-The programs are built on ten libraries:
+The programs are built on eleven libraries:
 
 | Library | Role | Page |
 |---|---|---|
@@ -112,6 +112,7 @@ The programs are built on ten libraries:
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
 | `libs/network` | Addresses, UDP and TCP sockets, the event loop that runs them, TCP framing, TLS and the binary serialization. Wraps Asio and Mbed TLS. Shared with the server. | [Networking](networking.md) |
 | `libs/physics` | Movement and collisions as components and systems on the ECS. Knows no game: each game names its collision layers and reacts to the collisions. Shared with the server. | — |
+| `libs/game` | The rules of the R-Type: a `Simulation` that takes the inputs of the players and steps the world one tick at a time. Shared by the server and the client offline; no raylib, no network. | [Game](game.md) |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
@@ -119,7 +120,7 @@ The programs are built on ten libraries:
 
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
-raylib: the ECS, the physics, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
+raylib: the ECS, the physics, the game, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
 private dependencies of `network`.
 
 ## Repository layout
@@ -135,6 +136,7 @@ libs/       libraries shared by the programs, one subdirectory per library
   core/     handles and resource caches (all)
   ecs/      entity component system, scenes, hierarchy (client and server)
   engine/   client systems: drawing, animations, menus (client)
+  game/     rules of the R-Type, the Simulation (server and client offline)
   input/    keyboard and gamepad input (client)
   log/      logging (client and server)
   network/  addresses, sockets and event loop (client and server)
