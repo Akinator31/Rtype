@@ -18,6 +18,7 @@ add_executable(rtype_tests
     ecs_world.cpp
     engine.cpp
     framing.cpp
+    game_simulation.cpp
     keygen.cpp
     log.cpp
     network.cpp
@@ -48,7 +49,7 @@ add_executable(rtype_tests
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
-    rtype_options rtype::audio rtype::ecs rtype::engine rtype::input rtype::log rtype::network rtype::physics rtype::render
+    rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::log rtype::network rtype::physics rtype::render
     rtype::shaders r-type_keygen_core r-type_server_core
     Catch2::Catch2WithMain)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
