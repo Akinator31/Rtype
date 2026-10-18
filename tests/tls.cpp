@@ -530,6 +530,67 @@ TEST_CASE("Frames go both ways over TLS", "[network]")
     CHECK(clientPayload == payloadOf(1000));
 }
 
+TEST_CASE("Both sides learn once that the handshake ended, before the first bytes", "[network]")
+{
+    EventLoop loop;
+    TcpListener listener(loop, Address::loopbackIpv4(0));
+    const ServerIdentity identity = ServerIdentity::generate();
+    TlsPair pair = makeTlsPair(loop, listener, identity, identity.fingerprint());
+    std::vector<std::string> serverEvents;
+    int clientSecured = 0;
+
+    pair.server->start([&](std::span<const std::byte>) { serverEvents.emplace_back("bytes"); },
+                       [](std::error_code) {}, [&] { serverEvents.emplace_back("secured"); });
+    pair.client->start([](std::span<const std::byte>) {}, [](std::error_code) {}, [&] { ++clientSecured; });
+    // Sent before the end of the handshake: it arrives with the last message of the client
+    pair.client->send(bytesOf("hello"));
+
+    REQUIRE(pollUntil(loop, [&] { return serverEvents.size() >= 2 && clientSecured == 1; }));
+    CHECK(serverEvents.front() == "secured");
+    CHECK(std::ranges::count(serverEvents, "secured") == 1);
+    pair.client->send(bytesOf("again"));
+    REQUIRE(pollUntil(loop, [&] { return serverEvents.size() >= 3; }));
+    CHECK(std::ranges::count(serverEvents, "secured") == 1);
+    CHECK(clientSecured == 1);
+}
+
+TEST_CASE("A handshake that fails is never reported as secured", "[network]")
+{
+    EventLoop loop;
+    TcpListener listener(loop, Address::loopbackIpv4(0));
+    const ServerIdentity identity = ServerIdentity::generate();
+    const ServerIdentity impostor = ServerIdentity::generate();
+    TlsPair pair = makeTlsPair(loop, listener, impostor, identity.fingerprint());
+    Side server;
+    Side client;
+    int secured = 0;
+
+    pair.server->start(server.onReceive(), server.onClose(), [&] { ++secured; });
+    pair.client->start(client.onReceive(), client.onClose(), [&] { ++secured; });
+
+    REQUIRE(pollUntil(loop, [&] { return client.closed && server.closed; }));
+    CHECK(secured == 0);
+}
+
+TEST_CASE("A framed connection over TLS reports the end of its handshake before its first frame", "[network]")
+{
+    EventLoop loop;
+    TcpListener listener(loop, Address::loopbackIpv4(0));
+    const ServerIdentity identity = ServerIdentity::generate();
+    TlsPair pair = makeTlsPair(loop, listener, identity, identity.fingerprint());
+    FramedConnection server(std::move(*pair.server));
+    FramedConnection client(std::move(*pair.client));
+    std::vector<std::string> events;
+
+    server.start([&](std::uint8_t, std::span<const std::byte>) { events.emplace_back("frame"); },
+                 [](std::error_code) {}, [&] { events.emplace_back("secured"); });
+    client.start([](std::uint8_t, std::span<const std::byte>) {}, [](std::error_code) {});
+    client.send(0x01, payloadOf(10));
+
+    REQUIRE(pollUntil(loop, [&] { return events.size() == 2; }));
+    CHECK(events == std::vector<std::string>{"secured", "frame"});
+}
+
 TEST_CASE("Identities and connections can be used from several threads", "[network]")
 {
     EventLoop loop;
