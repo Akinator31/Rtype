@@ -4,7 +4,7 @@
 //   exit <code>                    exits with this code
 //   input <line>                   exits with 0 if the standard input is this line then its end, 3 otherwise
 //   arguments <file> <args>...     writes its arguments to the file, one per line, and exits with 0
-//   sleep [file]                   creates the file if given, to say it is ready, and waits until stopped
+//   sleep [file] [anything]...     creates the file if given, to say it is ready, and waits until stopped
 //   stubborn <file>                ignores the requests to stop, creates the file to say so, and waits
 //
 // It never waits more than a minute: a test that fails leaves no program behind for long.
@@ -66,8 +66,9 @@ int main(int argc, char **argv)
         }
         return file ? 0 : Mismatch;
     }
-    if (mode == "sleep" && (argc == 2 || argc == 3)) {
-        if (argc == 3) {
+    // Arguments after the file are ignored: it can stand for a program given more
+    if (mode == "sleep") {
+        if (argc >= 3 && argv[2][0] != '-') {
             std::ofstream(argv[2]) << "ready\n";
         }
         return sleepAWhile();

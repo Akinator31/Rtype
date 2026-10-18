@@ -44,6 +44,7 @@ add_executable(rtype_tests
     serialization.cpp
     server_instance.cpp
     server_lifecycle.cpp
+    server_games.cpp
     server_lobby.cpp
     server_options.cpp
     session.cpp
@@ -64,6 +65,8 @@ add_dependencies(rtype_tests rtype_test_child r-type_server)
 target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
     RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>")
+# The helpers the tests share
+target_include_directories(rtype_tests PRIVATE helpers)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 
 # Smoke tests: the binaries start and exit cleanly
