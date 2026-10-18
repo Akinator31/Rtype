@@ -154,7 +154,9 @@ instance.stop();     // asks it to stop, waits stopGrace, kills it if it still r
   (`/proc/self/exe` on Linux, `GetModuleFileNameW()` on Windows): `argv[0]` can be relative or a name found in
   the `PATH`, and the instance must be the same build as its master.
 - **The arguments arrive unchanged**: there is no shell, so a space, a quote or a `;` is just a character.
-  reproc does the quoting of the command line of Windows, where a backslash before a quote is a trap.
+  reproc does the quoting of the command line of Windows, where a backslash before a quote is a trap. An
+  **empty argument is refused** (`std::invalid_argument`): reproc does not quote it, so Windows would lose it
+  and shift the others.
 - **The secret goes through the standard input**, written before the program starts (`input`), which is then
   closed. Nothing can be written later: writing to an instance that has already died would raise `SIGPIPE`
   and stop the master.
@@ -162,7 +164,8 @@ instance.stop();     // asks it to stop, waits stopGrace, kills it if it still r
 - **Stopping** comes in two steps. `terminate()` asks: `SIGTERM` on Linux, Ctrl+Break on Windows, which
   `runUntilStopped()` of the instance receives like Ctrl+C, so that it can tell its players. `kill()` stops at
   once. `stop()` does both: it asks, waits `stopGrace`, then kills. On Windows, Ctrl+Break needs a console:
-  without one, `stop()` kills at once.
+  without one, `stop()` kills at once. A program that has only just started does not receive it yet either:
+  `stop()` then kills it after `stopGrace`.
 - **No program left behind**: destroying a `Process` that still runs calls `stop()`, even when an exception
   goes through the master.
 
@@ -197,8 +200,9 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   properly.
 - `tests/process.cpp` (tag `[process]`): real programs started and stopped. A helper,
   `tests/helpers/process_child.cpp`, does what its arguments say: exits with a code, checks its standard input
-  and its end, writes its arguments to a file, waits, or ignores the requests to stop. The tests check the
-  exit codes, arguments with spaces, quotes and backslashes, the input then its end, a program that does not
+  and its end, writes its arguments to a file, waits, or ignores the requests to stop. Before a request to stop,
+  the tests wait for the file it creates once ready, since Windows drops a Ctrl+Break sent too early. The tests check the
+  exit codes, arguments with spaces, quotes and backslashes, an empty argument refused, the input then its end, a program that does not
   exist, `terminate()`, `kill()`, `stop()` killing a program that ignores it, the destructor and the moves.
   They also start `r-type_server --instance` itself: with its secret it runs until asked to stop, then exits
   with 0; without it, it exits with 1.
