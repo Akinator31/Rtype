@@ -104,6 +104,7 @@ commands:
           name: Configure
           command: |
             [ -d "/c/Program Files/CMake/bin" ] && export PATH="/c/Program Files/CMake/bin:$PATH"
+            [ -f ~/msvc-env.sh ] && . ~/msvc-env.sh
             root=$(command -v cygpath > /dev/null && cygpath -m "$PWD" || echo "$PWD")
             cmake -S . -B build -G "<< parameters.generator >>" \
               -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DRTYPE_BUILD_TESTS=ON \
@@ -112,6 +113,7 @@ commands:
           name: Build
           command: |
             [ -d "/c/Program Files/CMake/bin" ] && export PATH="/c/Program Files/CMake/bin:$PATH"
+            [ -f ~/msvc-env.sh ] && . ~/msvc-env.sh
             cmake --build build --config $BUILD_TYPE --parallel
       - run:
           name: Test
@@ -141,14 +143,17 @@ commands:
             mkdir -p packages
             cp "${files[@]}" packages/
             ls -l packages
-      - store_artifacts:
-          path: packages
-          destination: r-type-<< parameters.platform >>
-      # Read by the release job
-      - persist_to_workspace:
-          root: .
-          paths:
-            - packages
+      # No CircleCI artifacts: they count towards the storage of the plan and cannot be deleted before their
+      # retention ends. The packages are only kept for the release job, which reads them from the workspace
+      - when:
+          condition:
+            not:
+              equal: ["", << pipeline.git.tag >>]
+          steps:
+            - persist_to_workspace:
+                root: .
+                paths:
+                  - packages
 
 jobs:
   build-linux:
@@ -173,15 +178,54 @@ jobs:
       BUILD_TYPE: Release
     steps:
       - run:
-          name: Install CMake if missing
+          name: Install CMake and Ninja if missing
           command: |
             [ -d "/c/Program Files/CMake/bin" ] && export PATH="/c/Program Files/CMake/bin:$PATH"
             if ! command -v cmake > /dev/null; then
               choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y --no-progress
             fi
+            if ! command -v ninja > /dev/null; then
+              choco install ninja -y --no-progress
+            fi
+      # Ninja (for its [n/total] progress, as on Linux) needs the MSVC environment that vcvars64.bat sets up in cmd:
+      # it is saved to ~/msvc-env.sh, which the configure and build steps load
+      - run:
+          name: Load the MSVC environment
+          command: |
+            set -o pipefail
+            shopt -s nullglob
+            # Any edition of Visual Studio 2022, else wherever vswhere finds the C++ tools
+            vcvars=("/c/Program Files/Microsoft Visual Studio/2022/"*/VC/Auxiliary/Build/vcvars64.bat
+              "/c/Program Files (x86)/Microsoft Visual Studio/2022/"*/VC/Auxiliary/Build/vcvars64.bat)
+            if [ ${#vcvars[@]} -eq 0 ]; then
+              vs=$("/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' \
+                -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | tr -d '\r')
+              [ -n "$vs" ] && vcvars=("$(cygpath -u "$vs")/VC/Auxiliary/Build/vcvars64.bat")
+            fi
+            if [ ${#vcvars[@]} -eq 0 ] || [ ! -f "${vcvars[0]}" ]; then
+              echo "vcvars64.bat not found: are the Visual Studio C++ tools installed?"
+              exit 1
+            fi
+            echo "Using ${vcvars[0]}"
+            printf '@call "%s" > nul || exit /b 1\r\n@set\r\n' "$(cygpath -w "${vcvars[0]}")" > ~/vcvars-env.bat
+            cmd.exe //c "$(cygpath -w ~/vcvars-env.bat)" | tr -d '\r' > ~/vcvars-env.txt
+            rm ~/vcvars-env.bat
+            : > ~/msvc-env.sh
+            while IFS='=' read -r name value; do
+              case "$name" in
+                # cmd spells it Path
+                Path|PATH) name=PATH value=$(cygpath -u -p "$value") ;;
+                INCLUDE|LIB|LIBPATH|VSINSTALLDIR|VCINSTALLDIR|VCToolsInstallDir|WindowsSdkDir|WindowsSDKVersion|UCRTVersion|UniversalCRTSdkDir) ;;
+                *) continue ;;
+              esac
+              printf 'export %s=%q\n' "$name" "$value" >> ~/msvc-env.sh
+            done < ~/vcvars-env.txt
+            rm ~/vcvars-env.txt
+            . ~/msvc-env.sh
+            command -v cl
       - cmake-build:
           platform: windows
-          generator: Visual Studio 17 2022
+          generator: Ninja
 
   # On pull requests, unformatted C++ code is fixed automatically: the format bot (a GitHub App, see
   # docs/contributing/repository-setup.md) commits the result to the branch and comments on the pull request.
@@ -342,10 +386,15 @@ jobs:
       - run:
           name: Build API reference (Doxygen)
           command: doxygen doxygen/Doxyfile
-      - persist_to_workspace:
-          root: .
-          paths:
-            - site
+      # Read by docs-deploy, which only runs on main
+      - when:
+          condition:
+            equal: [main, << pipeline.git.branch >>]
+          steps:
+            - persist_to_workspace:
+                root: .
+                paths:
+                  - site
 
   # GitHub Pages must serve the gh-pages branch (Settings > Pages > Source: Deploy from a branch)
   docs-deploy:
