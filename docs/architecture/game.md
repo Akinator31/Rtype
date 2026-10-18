@@ -6,7 +6,9 @@ run the games online, and by the client offline, in its `LocalSession`
 ([ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md)): the rules are written once, and a
 Bydo behaves the same offline and online.
 
-It depends on the ECS, the physics and the log only: no window, no sound, no network.
+The `Simulation` depends on the ECS, the physics and the log only: no window, no sound, no network. The
+[messages](#messages) of the game protocol are written with the serialization of `libs/network` (`Writer`,
+`Reader`), a private dependency: the rules never see it.
 
 ## A game in three calls
 
@@ -129,12 +131,94 @@ Inside a system, create and destroy entities through `ecs.defer()`: changing the
 through the caches is not safe. `destroyEntity(ecs, context, entity, cause)` destroys an entity and records it
 for the snapshot.
 
+## Messages
+
+`Messages.hpp` turns the messages of a game session into payloads and back, as the
+[game protocol](../protocol/game.md#9-game-messages) says. The sessions of `libs/network` (`ClientSession`,
+`SessionHost`) carry them with their type (`message_type::Snapshot`...); the server and the client share this
+one implementation.
+
+| Message | Type | Direction | Struct |
+|---|---|---|---|
+| `ACCEPTED` | `0x02` | Game → Client | `AcceptedMessage`: slot, tick rate, tick |
+| `PLAYER_JOINED` | `0x04` | Game → Client | `PlayerJoinedMessage`: slot, player id, name |
+| `PLAYER_LEFT` | `0x05` | Game → Client | `PlayerLeftMessage`: slot, reason |
+| `INPUT` | `0x40` | Client → Game | `InputMessage`: tick, inputs newest first |
+| `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, part, players, entities |
+| `ENTITIES_DESTROYED` | `0x81` | Game → Client | `EntitiesDestroyedMessage`: tick, ids and causes |
+| `WAVE_STARTED` | `0x82` | Game → Client | `WaveStartedMessage` |
+| `GAME_OVER` | `0x83` | Game → Client | `GameOverMessage` |
+
+```cpp
+// Game, once per client, every 2 ticks
+for (const rtype::game::SnapshotPart &part : rtype::game::splitSnapshot(simulation.snapshot(), lastInput)) {
+    host.send(session, rtype::game::message_type::Snapshot, rtype::game::encode(part),
+              rtype::network::Delivery::Unreliable);
+}
+for (const auto &message : rtype::game::destroyedMessages(simulation.snapshot())) {
+    host.send(session, rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
+              rtype::network::Delivery::Reliable);
+}
+
+// Client, in the message handler of its ClientSession
+if (type == rtype::game::message_type::Snapshot) {
+    if (const auto part = rtype::game::decodeSnapshotPart(payload)) {
+        world.apply(*part);
+    }
+}
+```
+
+- **`encode()`** has one overload per message. A value the protocol forbids (a slot above 3, no input, an id
+  of 0, a part that does not fit in a datagram) is a bug of the sender: it throws.
+- **`decode...()`** never throws: it gives nothing for every case the protocol calls malformed, and for bytes
+  left after the last field, and the receiver drops the message. Unknown reasons, causes and outcomes are read
+  as the protocol says (`Quit`, `Removed`, `Defeat`), and reserved bits are dropped. The decoders are pure, with
+  no state: they can be fuzzed.
+- **Positions and velocities** are floats in the structs, and eighths of a unit on the network: rounded to the
+  nearest eighth, and kept within what an `i16` holds (−4096 to 4095.875).
+- **`splitSnapshot()`** cuts a `Snapshot` in parts that fit in a datagram, each with the tick and the players:
+  69 entities per part with four players (`maxEntitiesPerPart()`), 16 parts at most. **`destroyedMessages()`**
+  does the same for the destroyed entities: 228 per message.
+- **Unknown kinds** are decoded, so that a newer game can add some: `isKnown()` tells the client to skip them.
+
+### The world of a client
+
+`RemoteWorld` keeps the world as a client knows it from those messages, with the rules of the
+[protocol](../protocol/game.md#93-snapshots): snapshots can be lost, late or out of order, and destructions
+are reliable.
+
+```cpp
+rtype::game::RemoteWorld world;
+world.apply(part);                                // a SNAPSHOT part
+for (const auto &removed : world.apply(message)) { // an ENTITIES_DESTROYED
+    // removed.last: where it was, for an explosion when removed.cause is Killed
+}
+for (const auto &[id, entity] : world.entities()) { /* draw it */ }
+```
+
+| What arrives | What the world does |
+|---|---|
+| A part older than the latest applied | Ignored (`apply()` gives false); the other parts of the latest tick still apply |
+| An entity in a part | Created, or updated |
+| An entity missing from a part | Kept: its part may have been lost |
+| `ENTITIES_DESTROYED` | The entities are removed and given back with their last state; their ids are remembered until the snapshots reach the tick of their destruction, so that an older part cannot bring them back |
+| A kind it does not know | Skipped |
+
+It keeps the latest state only; drawing 100 ms in the past and interpolating between snapshots come on top of
+it, in the client. Like the Simulation, it has no clock and no network.
+
 ## Tests
 
 The tests in `tests/game_simulation.cpp` (tag `[game]`) step simulations and check their snapshots: the
 inputs, the players added and removed, the movement and its speed in diagonal, the walls, the shots and their
 interval, shots removed once out of the area with ids never given again, the same game twice with the same
 inputs, and an hour of random inputs with four players keeping every entity in the range of the protocol.
+
+The tests in `tests/game_messages.cpp` (tags `[messages]` and `[world]`) check the bytes of the example of the
+specification, the round trip of every message, the rounding and the limits of positions, every malformed
+case, the encoders refusing forbidden values, random bytes that never crash a decoder, the splitting of
+snapshots and destructions into datagrams, the rules of `RemoteWorld`, and a whole game of four players sent
+through the messages, where the client ends with the world of the game.
 
 ```sh
 ./build/bin/rtype_tests "[game]"
