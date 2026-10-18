@@ -3,6 +3,9 @@
 #include "Console/Console.hpp"
 #include "Console/ConsoleScene.hpp"
 #include "Console/ConsoleSystem.hpp"
+#include "Game/GameScenes.hpp"
+#include "Game/GameSessionSystem.hpp"
+#include "Game/LocalSession.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
@@ -20,18 +23,19 @@
 
 #include <cstdlib>
 #include <exception>
+#include <memory>
 #include <string_view>
 
 namespace
 {
 
-constexpr const char *GameScene = "game";
 constexpr float CollisionCellSize = 64.0f;
 
-/// Declares the scenes of the client. The game scene is empty for now.
+/// Declares the scenes of the client, but those of a game, which GameScenes declares.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
                   const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
-                  rtype::client::Console &console, const rtype::engine::RendererMetrics &metrics)
+                  rtype::client::Console &console, const rtype::engine::RendererMetrics &metrics,
+                  rtype::client::GameScenes &games)
 {
     const auto quit = [&window] { window.requestClose(); };
     engine.createScene(
@@ -39,8 +43,8 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
         [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
             rtype::client::buildMainMenu(target, scene, resources, style, quit);
         });
-    rtype::client::createSubmenuScenes(engine, style);
-    engine.createScene(GameScene, {.updatesWhenCovered = true});
+    rtype::client::createSubmenuScenes(
+        engine, style, [&games] { games.play(std::make_unique<rtype::client::LocalSession>()); });
     engine.createScene(
         rtype::client::ConsoleScene, {.overlay = true},
         [&console, &metrics, &style](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
@@ -49,13 +53,18 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
 }
 
 /// Registers the systems of the client, in the order they run each frame, after the scenes.
-void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devices,
-                     const rtype::engine::RendererMetrics &metrics,
-                     const rtype::engine::InterfaceStyle &style)
+/// @return The system that plays the games.
+rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
+                                                  rtype::input::Devices &devices,
+                                                  const rtype::engine::RendererMetrics &metrics,
+                                                  const rtype::engine::InterfaceStyle &style)
 {
     rtype::ecs::Ecs &ecs = engine.getEcs();
     ecs.registerSystem<rtype::client::ConsoleSystem>(engine, devices);
     ecs.registerSystem<rtype::engine::InterfaceSystem>(ecs, engine.getScenes(), devices, metrics, style);
+    // After the menus, which read the input first: Escape opens the pause menu before the game reads it
+    auto &sessions =
+        ecs.registerSystem<rtype::client::GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
     ecs.registerSystem<rtype::engine::WidgetTextSystem>();
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
     ecs.registerSystem<rtype::engine::TweenSystem>();
@@ -68,6 +77,7 @@ void registerSystems(rtype::engine::Engine &engine, rtype::input::Devices &devic
     ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
     ecs.registerSystem<rtype::engine::ToastSystem>(ecs, metrics, style);
     ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
+    return sessions;
 }
 
 void run()
@@ -88,7 +98,8 @@ void run()
     rtype::client::Console console;
     rtype::engine::Engine engine;
     engine.setInputSource(devices);
-    registerSystems(engine, devices, metrics, style);
+    rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, metrics, style);
+    rtype::client::GameScenes games(engine, resources, metrics, style, sessions);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
     rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
                                                                CollisionCellSize);
@@ -96,7 +107,7 @@ void run()
     bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
     bool debugKeyWasDown = false;
 
-    createScenes(engine, resources, style, window, console, metrics);
+    createScenes(engine, resources, style, window, console, metrics, games);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
