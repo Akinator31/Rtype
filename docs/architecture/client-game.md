@@ -14,6 +14,7 @@ opens the pause menu.
 apps/client/src/Game/
   GameSession.hpp        what the scene knows of a game: inputs in, snapshots out
   LocalSession.cpp       a game offline: the Simulation, stepped 60 times per second
+  RemoteSession.cpp      a game online: the UDP session with the instance (The client online)
   GameSessionSystem.cpp  controls → PlayerInput → session; snapshots → entities of the scene
   GameScenes.cpp         the game scene, its HUD, and the pause menu
 ```
@@ -57,10 +58,12 @@ the input. When the game scene closes, the engine destroys its entities and the 
 | Scene | What it holds |
 |---|---|
 | `game` | The starry sky, the world of the session, and the HUD: one line per player, in its colour, with its lives and score. Escape opens the pause menu. |
-| `pause` | Over the game, dimmed: **Resume**, or **Main menu**, which ends the game. Offline, the game stops while it is open. |
+| `pause` | Over the game, dimmed: **Resume**, or **Leave the game**. Offline, the game stops while it is open. |
 
-`GameScenes::play(session)` starts a game with a session: the game scene replaces every scene. "Solo" plays a
-`LocalSession`; `client: networking` will play a `RemoteSession` the same way.
+`GameScenes::play(session, onEnd)` starts a game with a session: the game scene replaces every scene. "Solo"
+plays a `LocalSession`, and goes back to the main menu when it ends; the lobby plays a `RemoteSession`, and
+goes back to its list ([The client online](client-online.md)). The game ends when the player leaves it from the
+pause menu, or when its session is over (`isOver()`): game over, or the game lost online.
 
 ## What it looks like
 

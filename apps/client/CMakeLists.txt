@@ -2,6 +2,7 @@
 #   Commands/, Console/  the console and its commands
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
 #   MainMenu/            the home screen and its submenus
+#   Online/              playing online: the lobby of a server, and its scenes
 add_library(r-type_client_core STATIC
     src/Commands/Commands.cpp
     src/Commands/QuitCommand.cpp
@@ -13,6 +14,7 @@ add_library(r-type_client_core STATIC
     src/Game/GameScenes.cpp
     src/Game/GameSessionSystem.cpp
     src/Game/LocalSession.cpp
+    src/Game/RemoteSession.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
     src/MainMenu/MainMenu.cpp
@@ -20,10 +22,13 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Ships.cpp
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
+    src/Online/LobbyClient.cpp
+    src/Online/OnlineScenes.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
-    PUBLIC rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::log rtype::physics rtype::render
+    PUBLIC rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::log rtype::network
+           rtype::physics rtype::render
     PRIVATE rtype_options)
 
 add_executable(r-type_client

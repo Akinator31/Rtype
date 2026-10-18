@@ -47,7 +47,6 @@ void createSubmenuScenes(engine::Engine &engine, const engine::InterfaceStyle &s
                          std::function<void()> playSolo)
 {
     createSubmenuScene(engine, style, PlayMenuScene, "Play", {{"Solo", std::move(playSolo)}});
-    createSubmenuScene(engine, style, OnlineMenuScene, "Online");
     createSubmenuScene(engine, style, SettingsMenuScene, "Settings");
 }
 

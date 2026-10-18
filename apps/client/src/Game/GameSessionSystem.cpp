@@ -75,17 +75,20 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::SceneMember>(caches);
 }
 
-void GameSessionSystem::start(std::unique_ptr<GameSession> session, engine::SceneId scene)
+void GameSessionSystem::start(std::unique_ptr<GameSession> session, engine::SceneId scene,
+                              std::function<void()> onOver)
 {
     stop();
     _session = std::move(session);
     _scene = scene;
+    _onOver = std::move(onOver);
 }
 
 void GameSessionSystem::stop()
 {
     _session.reset();
     _scene.reset();
+    _onOver = nullptr;
     _entities.clear();
     _players.clear();
     _tick = 0;
@@ -119,6 +122,11 @@ void GameSessionSystem::update(float elapsed)
     _session->update(elapsed);
     for (const game::Snapshot &snapshot : _session->takeSnapshots()) {
         apply(snapshot);
+    }
+    if (_session->isOver() && _onOver) {
+        // Once: it usually switches scenes, at the next update
+        const std::function<void()> onOver = std::exchange(_onOver, nullptr);
+        onOver();
     }
 }
 

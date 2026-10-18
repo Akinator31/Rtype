@@ -35,17 +35,29 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                            build(scene, resources, style);
                        });
     engine.createScene(PauseScene, {.overlay = true},
-                       [&metrics, &style](engine::Engine &target, engine::SceneId scene) {
+                       [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
                            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style, "Pause", true);
                            menu.button("Resume", [&target] { target.popScene(); });
-                           menu.button("Main menu", [&target] { target.switchScene(MainMenuScene); });
+                           menu.button("Leave the game", [this] { end(); });
                        });
 }
 
-void GameScenes::play(std::unique_ptr<GameSession> session)
+void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd)
 {
     _next = std::move(session);
+    _nextEnd = std::move(onEnd);
     _engine.switchScene(GameScene);
+}
+
+void GameScenes::end()
+{
+    _sessions.stop();
+    const std::function<void()> onEnd = std::exchange(_onEnd, nullptr);
+    if (onEnd) {
+        onEnd();
+    } else {
+        _engine.switchScene(MainMenuScene);
+    }
 }
 
 void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources,
@@ -76,7 +88,8 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
         ecs.getComponent<engine::Text>(line).color = playerColor(slot);
     }
 
-    _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene);
+    _onEnd = std::exchange(_nextEnd, nullptr);
+    _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
 }
 
 } // namespace rtype::client

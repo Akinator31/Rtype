@@ -10,6 +10,7 @@
 #include "rtype/game/Snapshot.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -61,6 +62,7 @@ class GameSessionSystem : public ecs::System
     engine::Controls &_controls;
     std::unique_ptr<GameSession> _session;
     std::optional<engine::SceneId> _scene;
+    std::function<void()> _onOver;
     /// The entity of the scene of each entity of the game, by id.
     std::unordered_map<std::uint32_t, ecs::EntityRef> _entities;
     std::vector<game::PlayerState> _players;
@@ -73,7 +75,9 @@ public:
                       engine::Controls &controls);
 
     /// Plays a session in a scene, open, instead of the previous one.
-    void start(std::unique_ptr<GameSession> session, engine::SceneId scene);
+    /// @param onOver Called once when the session is over: a game over, or the game lost online.
+    void start(std::unique_ptr<GameSession> session, engine::SceneId scene,
+               std::function<void()> onOver = {});
     /// Stops the session. Its entities stay until their scene closes.
     void stop();
 
