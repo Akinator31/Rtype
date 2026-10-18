@@ -19,6 +19,7 @@ struct TlsConnection::Impl : std::enable_shared_from_this<Impl> {
     detail::TlsSession session;
     ReceiveHandler onReceive;
     CloseHandler onClose;
+    SecuredHandler onSecured;
     /// close() was called, or the connection ended: no handler is called any more. Set from any thread.
     std::atomic<bool> closed = false;
     /// start() was called on the loop's thread.
@@ -70,6 +71,12 @@ struct TlsConnection::Impl : std::enable_shared_from_this<Impl> {
         flush();
         if (!wasSecured && session.secured()) {
             logger().debug("TLS {} secured with {}", tcp->remote, session.cipherSuite());
+            if (!closed && onSecured) {
+                // Once: the session stays secured
+                const SecuredHandler handler = std::move(onSecured);
+                onSecured = nullptr;
+                handler();
+            }
         }
         if (closing) {
             // close() was waiting for the handshake to send the bytes given before it: they are sent now
@@ -217,14 +224,16 @@ TlsConnection &TlsConnection::operator=(TlsConnection &&other) noexcept
     return *this;
 }
 
-void TlsConnection::start(ReceiveHandler onReceive, CloseHandler onClose)
+void TlsConnection::start(ReceiveHandler onReceive, CloseHandler onClose, SecuredHandler onSecured)
 {
     if (!_impl) {
         return;
     }
-    _impl->post([impl = _impl, onReceive = std::move(onReceive), onClose = std::move(onClose)]() mutable {
+    _impl->post([impl = _impl, onReceive = std::move(onReceive), onClose = std::move(onClose),
+                 onSecured = std::move(onSecured)]() mutable {
         impl->onReceive = std::move(onReceive);
         impl->onClose = std::move(onClose);
+        impl->onSecured = std::move(onSecured);
         impl->start();
     });
 }

@@ -39,6 +39,8 @@ public:
     /// lost (the system error), closed because the peer sent an invalid frame (a NetworkError), or ended by
     /// the TLS layer (see TlsConnection).
     using CloseHandler = TcpConnection::CloseHandler;
+    /// Called once the TLS handshake has ended (see TlsConnection::SecuredHandler).
+    using SecuredHandler = TlsConnection::SecuredHandler;
 
 private:
     struct State;
@@ -68,7 +70,9 @@ public:
 
     /// Starts receiving: the frame handler is called for each whole frame, and the close handler when the
     /// connection ends. Call it once.
-    void start(FrameHandler onFrame, CloseHandler onClose);
+    /// @param onSecured For an encrypted connection, called once its handshake has ended, before its first
+    /// frame. Never called for a plain TCP connection, which has no handshake.
+    void start(FrameHandler onFrame, CloseHandler onClose, SecuredHandler onSecured = {});
 
     /// Sends a frame, after those of the previous calls.
     /// @throws std::length_error if the payload is larger than MaxFramePayloadSize.
