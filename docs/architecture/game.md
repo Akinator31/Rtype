@@ -2,7 +2,7 @@
 
 The game library (`libs/game`, namespace `rtype::game`) holds the **rules of the R-Type**: the players, their
 ships and shots, and later the Bydos, the waves and the collisions. It is used by the server instances, which
-run the games online, and by the client offline, in its `LocalSession`
+run the games online, and by the client offline, in its `LocalSession` ([A game in the client](client-game.md))
 ([ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md)): the rules are written once, and a
 Bydo behaves the same offline and online.
 

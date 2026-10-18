@@ -189,6 +189,19 @@ TEST_CASE("Back closes the menu, and the game does not see the key", "[engine][i
     REQUIRE(world.scenes.receivesInput(game));
 }
 
+TEST_CASE("Back works in a scene without widgets, such as the game", "[engine][interface]")
+{
+    World world;
+    int pauses = 0;
+    // Only a HUD, nothing to focus: Escape must still reach the scene
+    world.scenes.open({.updatesWhenCovered = true, .onBack = [&] { ++pauses; }});
+    world.update();
+
+    world.press({Key::Escape});
+
+    REQUIRE(pauses == 1);
+}
+
 TEST_CASE("A button can open another menu", "[engine][interface]")
 {
     World world;
