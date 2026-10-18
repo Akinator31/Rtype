@@ -37,8 +37,8 @@ another server, or an attacker between them, is refused
 
     The tool does not replace keys that already exist: see [Replacing the keys](#replacing-the-keys).
 
-2. **Keep `server.key` on the server**, which loads it with its `--key` option (added with the command line of
-   the server). On Linux, the file is only readable by the user who made it (`rw-------`): run the server as
+2. **Keep `server.key` on the server**, which loads it with its `--key` option
+   ([Run a server](run-a-server.md)). On Linux, the file is only readable by the user who made it (`rw-------`): run the server as
    that user. On Windows, the file gets the access rights of its directory, so put it in a directory only the
    server's account can read.
 
