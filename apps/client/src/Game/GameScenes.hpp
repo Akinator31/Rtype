@@ -7,6 +7,7 @@
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
+#include <functional>
 #include <memory>
 
 namespace rtype::client
@@ -21,8 +22,10 @@ inline constexpr const char *PauseScene = "pause";
 ///
 /// - The game scene shows the starry sky, the world of the session, and a HUD with the lives and score of
 ///   each player, in its colour.
-/// - Escape (or Start on a gamepad) opens the pause menu: Resume, or back to the main menu. Offline, the game
-///   stops while it is open.
+/// - Escape (or Start on a gamepad) opens the pause menu: Resume, or Leave the game. Offline, the game stops
+///   while it is open.
+/// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
+///   back to the main menu by default.
 ///
 /// @code
 /// auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
@@ -33,8 +36,14 @@ class GameScenes
 {
     engine::Engine &_engine;
     GameSessionSystem &_sessions;
-    /// The session of the next game scene opened.
+    /// The session of the next game scene opened, and what to do when it ends.
     std::unique_ptr<GameSession> _next;
+    std::function<void()> _nextEnd;
+    /// What to do when the game played ends.
+    std::function<void()> _onEnd;
+
+    /// The game ends: once.
+    void end();
 
     void build(engine::SceneId scene, render::ResourceManager &resources,
                const engine::InterfaceStyle &style);
@@ -48,7 +57,9 @@ public:
     GameScenes &operator=(const GameScenes &) = delete;
 
     /// Starts a game with this session: the game scene replaces every scene at the next update of the engine.
-    void play(std::unique_ptr<GameSession> session);
+    /// @param onEnd Called once when the player leaves the game or its session is over. Empty: back to the
+    /// main menu.
+    void play(std::unique_ptr<GameSession> session, std::function<void()> onEnd = {});
 };
 
 } // namespace rtype::client

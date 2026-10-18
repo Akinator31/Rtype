@@ -10,11 +10,13 @@
 #include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
+#include "Online/OnlineScenes.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
+#include "rtype/network/EventLoop.hpp"
 #include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
 #include "rtype/render/Renderer.hpp"
@@ -96,10 +98,14 @@ void run()
     const rtype::engine::RendererMetrics metrics(renderer);
 
     rtype::client::Console console;
+    // The network of the client, polled by the game loop: it outlives everything that uses it
+    rtype::network::EventLoop network;
     rtype::engine::Engine engine;
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, metrics, style);
     rtype::client::GameScenes games(engine, resources, metrics, style, sessions);
+    rtype::client::OnlineScenes online(engine, network, games, metrics, style,
+                                       applicationDirectory() / "server.pub");
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
     rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
                                                                CollisionCellSize);
@@ -117,6 +123,7 @@ void run()
             showColliderDebug = !showColliderDebug;
         }
         debugKeyWasDown = debugKeyDown;
+        network.poll();
         engine.update(window.frameTime());
         renderer.beginFrame();
         sceneRenderer.draw(renderer, rtype::engine::Layer::World);
