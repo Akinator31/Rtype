@@ -121,7 +121,8 @@ The programs are built on eleven libraries:
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
 raylib: the ECS, the physics, the game, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
-private dependencies of `network`.
+private dependencies of `network`, and reproc, which starts the instances of the server, a private dependency of
+`r-type_server`.
 
 ## Repository layout
 

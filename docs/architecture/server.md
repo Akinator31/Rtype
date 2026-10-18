@@ -19,12 +19,13 @@ apps/server/src/
     Secret.cpp             the secret the master gives to its instances
   Master/                  the master: the lobby, and the instances it starts
     Master.cpp             runMaster()
+    Process.cpp            Process: starts a program and stops it, on Linux and Windows
   Instance/                an instance: one game
     Instance.cpp           runInstance()
 ```
 
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
-(`tests/server_options.cpp`, `tests/server_lifecycle.cpp`). Includes are written from `src/`, like in the client:
+(`tests/server_options.cpp`, `tests/server_lifecycle.cpp`, `tests/process.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game loop in `Instance/`, the messages between them in `Common/`.
 
@@ -134,6 +135,47 @@ Under the hood, `StopSignals` (`libs/network`) receives the signals on the loop'
 the grace period ([Networking](networking.md#timers-and-stop-signals)). A signal handler of the C library could
 only set a flag: here the shutdown is ordinary code, which may close sockets and log.
 
+## Processes
+
+The master starts its instances with `Process` (`Master/Process.hpp`), which wraps
+[reproc](https://github.com/DaanDeMeyer/reproc) ([ADR 0013](../decisions/0013-one-process-per-game.md)). It is
+the only part of the server that knows the processes of the system, on Linux and Windows.
+
+```cpp
+const std::vector<std::string> arguments = {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000"};
+rtype::server::Process instance(rtype::server::currentExecutable(), arguments,
+                                {.input = formatSecret(secret) + "\n", .stopGrace = std::chrono::seconds(5)});
+
+instance.exitCode(); // its exit code once it has exited, nothing while it runs: never waits
+instance.stop();     // asks it to stop, waits stopGrace, kills it if it still runs
+```
+
+- **Its own executable.** `currentExecutable()` asks the system for the path of the program running
+  (`/proc/self/exe` on Linux, `GetModuleFileNameW()` on Windows): `argv[0]` can be relative or a name found in
+  the `PATH`, and the instance must be the same build as its master.
+- **The arguments arrive unchanged**: there is no shell, so a space, a quote or a `;` is just a character.
+  reproc does the quoting of the command line of Windows, where a backslash before a quote is a trap.
+- **The secret goes through the standard input**, written before the program starts (`input`), which is then
+  closed. Nothing can be written later: writing to an instance that has already died would raise `SIGPIPE`
+  and stop the master.
+- **Its output is the master's**: the logs of the instances go to the same terminal, or the same journal.
+- **Stopping** comes in two steps. `terminate()` asks: `SIGTERM` on Linux, Ctrl+Break on Windows, which
+  `runUntilStopped()` of the instance receives like Ctrl+C, so that it can tell its players. `kill()` stops at
+  once. `stop()` does both: it asks, waits `stopGrace`, then kills. On Windows, Ctrl+Break needs a console:
+  without one, `stop()` kills at once.
+- **No program left behind**: destroying a `Process` that still runs calls `stop()`, even when an exception
+  goes through the master.
+
+| Exit code | Meaning |
+|---|---|
+| `0`, `1`, `2` | The [exit codes](#exit-codes) of `r-type_server` |
+| `Process::Terminated` (143) | Stopped by `terminate()` without handling it: 128 + `SIGTERM`, as a shell shows it |
+| `Process::Killed` (137) | Stopped by `kill()`: 128 + `SIGKILL`, the same value on Windows |
+
+`exitCode()` never blocks, so the master can check its instances from a `Timer` of its event loop; `wait()` and
+`stop()` block, for the tests and the end of the master. The supervision of the instances itself comes with the
+lobby.
+
 ## Exit codes
 
 | Code | When |
@@ -153,6 +195,13 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 - `tests/server_lifecycle.cpp` (tag `[server]`): `SIGINT` and `SIGTERM`, sent to the test process itself, call
   the shutdown once; a second signal and the grace period force the stop; a server whose work ends stops
   properly.
+- `tests/process.cpp` (tag `[process]`): real programs started and stopped. A helper,
+  `tests/helpers/process_child.cpp`, does what its arguments say: exits with a code, checks its standard input
+  and its end, writes its arguments to a file, waits, or ignores the requests to stop. The tests check the
+  exit codes, arguments with spaces, quotes and backslashes, the input then its end, a program that does not
+  exist, `terminate()`, `kill()`, `stop()` killing a program that ignores it, the destructor and the moves.
+  They also start `r-type_server --instance` itself: with its secret it runs until asked to stop, then exits
+  with 0; without it, it exits with 1.
 - The smoke tests of CTest run `r-type_server --help`, refuse an unknown argument, and run `--check` with a key
   made by `r-type_keygen` for the occasion.
 
