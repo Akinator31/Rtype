@@ -20,6 +20,7 @@ apps/server/src/
     Secret.cpp             the secret the master gives to its instances
   Master/                  the master: the lobby, and the instances it starts
     Master.cpp             runMaster()
+    Lobby.cpp              the lobby: the TLS connections of the clients and their requests
     Process.cpp            Process: starts a program and stops it, on Linux and Windows
   Instance/                an instance: one game
     Instance.cpp           runInstance(): the life of the instance, with or without a master
@@ -29,7 +30,8 @@ apps/server/src/
 ```
 
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
-(`tests/server_options.cpp`, `tests/server_lifecycle.cpp`, `tests/process.cpp`, `tests/server_instance.cpp`). Includes are written from `src/`, like in the client:
+(`tests/server_options.cpp`, `tests/server_lifecycle.cpp`, `tests/process.cpp`, `tests/server_instance.cpp`,
+`tests/server_lobby.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -103,6 +105,60 @@ public test keys, for development, the tests, the measures and the fuzzing. It o
 
 The options of one mode are refused in the other (`--key` with `--instance`, `--id` without it), as are unknown
 options: a typo never goes unnoticed.
+
+## The lobby
+
+The master accepts the clients on its TCP port, over TLS with its key, and answers their requests
+([lobby protocol](../protocol/lobby.md)). `Lobby` (`Master/Lobby.hpp`) runs on the thread of the loop; the
+messages are those of `libs/lobby` (`rtype/lobby/Messages.hpp`), which the client uses too.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Handshake: TCP accepted, within the limits
+    Handshake --> Unwelcomed: TLS secured
+    Unwelcomed --> Lobby: HELLO / WELCOME
+    Handshake --> [*]: 10 s
+    Unwelcomed --> [*]: no HELLO in 10 s
+    Lobby --> [*]: closed, or 30 s without a frame
+```
+
+*Each connection is timed in each state; the client keeps it open with PING.*
+
+| Request | Before `HELLO` | In the lobby |
+|---|---|---|
+| `HELLO` | `WELCOME` with a new player id; `INVALID_NAME`; `UNSUPPORTED_VERSION`, then closed | `ALREADY_WELCOMED` |
+| `PING` | `PONG` | `PONG` |
+| `LIST_GAMES` | `HELLO_REQUIRED` | `GAME_LIST`, empty for now |
+| `CREATE_GAME` | `HELLO_REQUIRED` | `INVALID_NAME`, or `GAME_START_FAILED` for now |
+| `JOIN_GAME` | `HELLO_REQUIRED` | `GAME_NOT_FOUND` for now |
+| `LEAVE_GAME` | `HELLO_REQUIRED` | `NOT_IN_GAME` |
+| Any other type | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` |
+| A malformed payload | `MALFORMED`, then closed | `MALFORMED`, then closed |
+
+- **One reply per request, in order**: the requests of a connection are handled one after the other, so a
+  client can send several without waiting.
+- **The state comes first**: a second `HELLO` is `ALREADY_WELCOMED` whatever it holds, a `LIST_GAMES` before
+  `HELLO` is `HELLO_REQUIRED` whatever its payload.
+- **A player id** is given by `HELLO`: never 0, never given twice by a master. Names do not have to be unique.
+- **The games come with `server: games`**: until then no game exists, hence the replies "for now" above.
+
+**Limits** (`LobbyLimits`, the defaults of the [protocol](../protocol/index.md)):
+
+| Limit | Default | When reached |
+|---|---|---|
+| Connections | 256 | The next ones are closed at once, before any TLS work |
+| Connections per IP address | 8 | Same |
+| TLS handshake | 10 s | Closed |
+| `HELLO` after the handshake | 10 s | Closed: `PING` does not count |
+| Silence of a welcomed client | 30 s | Closed: any frame counts, `PING` is sent after 10 s of silence |
+
+On Ctrl+C or `SIGTERM`, the lobby stops accepting and closes every connection with a TLS `close_notify`, then
+the loop stops 100 ms later. The logs show the players:
+
+```
+INFO  lobby    Pavel (1) joined the lobby from 192.168.1.20:51234
+INFO  lobby    Pavel (1) left the lobby
+```
 
 ## An instance at work
 
@@ -223,8 +279,8 @@ stateDiagram-v2
 *The first signal starts a proper stop; a second one, or the grace period, cuts it.*
 
 1. **The first signal** calls `shutdown`, which ends the work properly and calls `loop.stop()` once done. An
-   instance sends `DISCONNECT (SHUTDOWN)` to its players. For now the master closes its port; with the lobby,
-   it will send `SHUTDOWN` to its instances and wait for them.
+   instance sends `DISCONNECT (SHUTDOWN)` to its players. The master closes the lobby, which disconnects its
+   clients; with the games, it will also send `SHUTDOWN` to its instances and wait for them.
 2. **A second signal** stops at once: the person who pressed Ctrl+C twice does not want to wait.
 3. **After 10 seconds** (`GracePeriod`) without the loop stopped, the server stops at once too: a stop that
    hangs never blocks a restart.
@@ -315,13 +371,22 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   a thread of the test, with a fake master over TCP and real clients over UDP: two players who join, see each
   other and move, one removed by the master, one who quits, then `SHUTDOWN`; the master going away; a full
   game; a UDP port taken; and the standalone mode with its public keys, stopped by Ctrl+C.
+- `tests/lobby_messages.cpp` (tag `[lobby]`): the `HELLO` frame of the specification, the bytes of the other
+  messages, round trips, the names checked apart, every malformed case, and random bytes.
+- `tests/server_lobby.cpp` (tag `[lobby]`): a `Lobby` on the loopback and real TLS clients pinning its key.
+  `HELLO`, `LIST_GAMES` and `PING`; requests sent without waiting answered in order; the answers of each
+  state; invalid names, another version, malformed requests; the limits per address and in all, a place
+  freed taken again; the handshake, `HELLO` and silence timeouts, `PING` keeping a client; and closing the
+  lobby.
 - The smoke tests of CTest run `r-type_server --help`, refuse an unknown argument, and run `--check` with a key
   made by `r-type_keygen` for the occasion.
 
 ## Limits and next steps
 
-- **No lobby yet**: the master opens its port but does not accept the clients; the lobby comes with
-  `server: master and lobby`.
+- **No game in the lobby yet**: creating and joining games, starting the instances and watching them come with
+  `server: games`.
+- **The limits of the lobby are not options yet**: `LobbyLimits` has the defaults of the protocol; options can
+  come when a host needs others.
 - **The replication is simple**: an input applies as soon as it arrives, and only the newest of each `INPUT`;
   the inputs stamped for later ticks, their redundancy, and the empty input after 30 ticks without any
   ([game protocol, 9.2](../protocol/game.md#92-inputs)) come with `server: replication`.
