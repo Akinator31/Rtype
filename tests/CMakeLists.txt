@@ -10,6 +10,7 @@ include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
 add_executable(rtype_tests
     action_map.cpp
     audio.cpp
+    client_game.cpp
     color_filter.cpp
     collider_debug_renderer.cpp
     controls.cpp
@@ -56,7 +57,7 @@ add_executable(rtype_tests
 )
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::log rtype::network rtype::physics rtype::render
-    rtype::shaders r-type_keygen_core r-type_server_core
+    rtype::shaders r-type_client_core r-type_keygen_core r-type_server_core
     Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
 add_executable(rtype_test_child helpers/process_child.cpp)
