@@ -1,7 +1,10 @@
 #include "Master/Master.hpp"
 
 #include "Common/Lifecycle.hpp"
+#include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
+#include "Master/Process.hpp"
+#include "rtype/log/Log.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/TcpListener.hpp"
@@ -11,10 +14,35 @@
 #include <chrono>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <system_error>
+#include <vector>
 
 namespace rtype::server
 {
+
+namespace
+{
+
+/// The level of the logs of the master, for its instances: they log like it.
+std::string levelArgument()
+{
+    switch (rtype::log::level()) {
+    case rtype::log::Level::Trace:
+        return "trace";
+    case rtype::log::Level::Debug:
+        return "debug";
+    case rtype::log::Level::Info:
+        return "info";
+    case rtype::log::Level::Warning:
+        return "warning";
+    case rtype::log::Level::Error:
+        return "error";
+    }
+    return "info";
+}
+
+} // namespace
 
 int runMaster(const MasterOptions &options)
 {
@@ -43,22 +71,41 @@ int runMaster(const MasterOptions &options)
         return Failure;
     }
 
-    const unsigned games = options.lastGamePort - options.firstGamePort + 1U;
+    const unsigned maxGames = options.lastGamePort - options.firstGamePort + 1U;
     logger.info("Lobby on TCP {}, games on UDP {}-{} ({} at most)", listener->localAddress(),
-                options.firstGamePort, options.lastGamePort, games);
+                options.firstGamePort, options.lastGamePort, maxGames);
     logger.info("Server key {}", identity->fingerprint().toHex());
     if (options.check) {
         logger.info("Check passed: the server can start");
         return Success;
     }
 
-    Lobby lobby(loop, std::move(*listener), *identity);
-    // How long the last frames have to leave before the loop stops
-    rtype::network::Timer linger(loop);
+    std::optional<Games> games;
+    try {
+        games.emplace(loop, GamesSettings{
+                                .executable = currentExecutable(),
+                                .leadingArguments = {},
+                                .trailingArguments = {"--log-level", levelArgument()},
+                                .firstPort = options.firstGamePort,
+                                .lastPort = options.lastGamePort,
+                            });
+    } catch (const std::system_error &error) {
+        logger.error("Cannot prepare the games: {}", error.what());
+        return Failure;
+    }
+    Lobby lobby(loop, std::move(*listener), *identity, *games);
+    // Until every instance has exited, then the time for the last frames to leave
+    rtype::network::Timer stopping(loop);
     logger.info("Master started: Ctrl+C to stop");
     const bool clean = runUntilStopped(loop, [&] {
         lobby.close();
-        linger.start(std::chrono::milliseconds(100), [&] { loop.stop(); });
+        games->shutdown();
+        stopping.startRepeating(std::chrono::milliseconds(100), [&] {
+            if (games->empty()) {
+                stopping.cancel();
+                loop.stop();
+            }
+        });
     });
     logger.info("Master stopped");
     return clean ? Success : Failure;

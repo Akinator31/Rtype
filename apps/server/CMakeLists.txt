@@ -29,6 +29,7 @@ add_library(r-type_server_core STATIC
     src/Instance/GameThread.cpp
     src/Instance/Instance.cpp
     src/Instance/MasterLink.cpp
+    src/Master/Games.cpp
     src/Master/Lobby.cpp
     src/Master/Master.cpp
     src/Master/Process.cpp

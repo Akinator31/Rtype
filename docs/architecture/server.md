@@ -21,6 +21,7 @@ apps/server/src/
   Master/                  the master: the lobby, and the instances it starts
     Master.cpp             runMaster()
     Lobby.cpp              the lobby: the TLS connections of the clients and their requests
+    Games.cpp              the games: one instance each, started, connected back, watched
     Process.cpp            Process: starts a program and stops it, on Linux and Windows
   Instance/                an instance: one game
     Instance.cpp           runInstance(): the life of the instance, with or without a master
@@ -31,7 +32,7 @@ apps/server/src/
 
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
 (`tests/server_options.cpp`, `tests/server_lifecycle.cpp`, `tests/process.cpp`, `tests/server_instance.cpp`,
-`tests/server_lobby.cpp`). Includes are written from `src/`, like in the client:
+`tests/server_lobby.cpp`, `tests/server_games.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -117,30 +118,36 @@ stateDiagram-v2
     [*] --> Handshake: TCP accepted, within the limits
     Handshake --> Unwelcomed: TLS secured
     Unwelcomed --> Lobby: HELLO / WELCOME
+    Lobby --> InGame: CREATE_GAME or JOIN_GAME / GAME_JOINED
+    InGame --> Lobby: LEAVE_GAME / LEFT_GAME, or LEFT_GAME (game over, crash, timeout)
     Handshake --> [*]: 10 s
     Unwelcomed --> [*]: no HELLO in 10 s
     Lobby --> [*]: closed, or 30 s without a frame
+    InGame --> [*]: closed, or 30 s without a frame
 ```
 
 *Each connection is timed in each state; the client keeps it open with PING.*
 
-| Request | Before `HELLO` | In the lobby |
-|---|---|---|
-| `HELLO` | `WELCOME` with a new player id; `INVALID_NAME`; `UNSUPPORTED_VERSION`, then closed | `ALREADY_WELCOMED` |
-| `PING` | `PONG` | `PONG` |
-| `LIST_GAMES` | `HELLO_REQUIRED` | `GAME_LIST`, empty for now |
-| `CREATE_GAME` | `HELLO_REQUIRED` | `INVALID_NAME`, or `GAME_START_FAILED` for now |
-| `JOIN_GAME` | `HELLO_REQUIRED` | `GAME_NOT_FOUND` for now |
-| `LEAVE_GAME` | `HELLO_REQUIRED` | `NOT_IN_GAME` |
-| Any other type | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` |
-| A malformed payload | `MALFORMED`, then closed | `MALFORMED`, then closed |
+| Request | Before `HELLO` | In the lobby | In a game |
+|---|---|---|---|
+| `HELLO` | `WELCOME` with a new player id; `INVALID_NAME`; `UNSUPPORTED_VERSION`, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
+| `PING` | `PONG` | `PONG` | `PONG` |
+| `LIST_GAMES` | `HELLO_REQUIRED` | `GAME_LIST` | `GAME_LIST` |
+| `CREATE_GAME` | `HELLO_REQUIRED` | `GAME_JOINED` once the game is ready; `INVALID_NAME`, `SERVER_FULL`, `GAME_START_FAILED` | `ALREADY_IN_GAME` |
+| `JOIN_GAME` | `HELLO_REQUIRED` | `GAME_JOINED`; `GAME_NOT_FOUND`, `GAME_FULL` | `ALREADY_IN_GAME` |
+| `LEAVE_GAME` | `HELLO_REQUIRED` | `NOT_IN_GAME` | `LEFT_GAME (REQUESTED)` |
+| Any other type | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` |
+| A malformed payload | `MALFORMED`, then closed | `MALFORMED`, then closed | `MALFORMED`, then closed |
 
 - **One reply per request, in order**: the requests of a connection are handled one after the other, so a
-  client can send several without waiting.
+  client can send several without waiting. `CREATE_GAME` is answered once its game is ready, up to 10 seconds
+  later: the requests sent meanwhile wait for its answer (32 at most, then the client is disconnected).
 - **The state comes first**: a second `HELLO` is `ALREADY_WELCOMED` whatever it holds, a `LIST_GAMES` before
   `HELLO` is `HELLO_REQUIRED` whatever its payload.
 - **A player id** is given by `HELLO`: never 0, never given twice by a master. Names do not have to be unique.
-- **The games come with `server: games`**: until then no game exists, hence the replies "for now" above.
+- **Leaving without asking**: a game over, a crash or a client that timed out send `LEFT_GAME` with their
+  reason, and the player is back in the lobby. A client that closed its UDP session itself (`QUIT`) is back in
+  the lobby without a message: it knows. A lobby connection that closes takes its player out of its game.
 
 **Limits** (`LobbyLimits`, the defaults of the [protocol](../protocol/index.md)):
 
@@ -158,6 +165,59 @@ the loop stops 100 ms later. The logs show the players:
 ```
 INFO  lobby    Pavel (1) joined the lobby from 192.168.1.20:51234
 INFO  lobby    Pavel (1) left the lobby
+```
+
+## The games
+
+`Games` (`Master/Games.hpp`) runs the games of the master, one instance each
+([ADR 0013](../decisions/0013-one-process-per-game.md), [instances protocol](../protocol/instances.md)).
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Master
+    participant I as Instance
+    C->>M: CREATE_GAME (name, max players)
+    Note over M: takes a free UDP port, draws a secret
+    M->>I: starts r-type_server --instance, secret on its standard input
+    I->>M: INSTANCE_HELLO (id, secret), on 127.0.0.1
+    M->>I: CONFIGURE
+    I->>M: READY (UDP port)
+    M->>I: ADD_PLAYER (player, session, keys)
+    M->>C: GAME_JOINED (game, UDP port, session, keys)
+    C->>I: CONNECT, then the game
+```
+
+*The creator is answered once the instance is ready; a player who joins later is added at once.*
+
+- **Its own executable**: the master starts `currentExecutable()` with `--instance --id --udp-port
+  --master-port`, and the `--log-level` it runs with: the instances log like it.
+- **The instances connect back** to a listener of the master on `127.0.0.1`, on a port of the system. An
+  instance has 10 seconds to present itself; an unknown id closes its connection, a wrong secret (compared in
+  constant time, `sameSecret()`) also kills the instance it pretends to be.
+- **A session per player**: an id unique in its game, and two keys drawn by the master, given to the instance
+  (`ADD_PLAYER`) before the player (`GAME_JOINED`), so that the game knows the session when the client
+  connects.
+- **One UDP port per game**, from `--game-ports`: none free is `SERVER_FULL`. A port is given back once the
+  process has exited.
+
+| What happens | The players | The instance |
+|---|---|---|
+| The last player leaves, or its lobby connection closes | — | `SHUTDOWN (EMPTY)` |
+| No `INSTANCE_HELLO` or no `READY` within 10 s, or the program cannot start | `ERROR (GAME_START_FAILED)` | Killed |
+| `GAME_OVER` | `LEFT_GAME (GAME_OVER)` | Exits on its own |
+| It exits, or closes its connection, without `GAME_OVER` | `LEFT_GAME (GAME_CRASHED)` | Killed if still there |
+| `PLAYER_DISCONNECTED (TIMED_OUT)` | `LEFT_GAME (TIMED_OUT)` | — |
+| The master stops | Their UDP sessions get `DISCONNECT (SHUTDOWN)` | `SHUTDOWN (MASTER_STOPPING)` |
+
+The processes are checked every 50 ms (`exitCode()` never blocks). An instance that does not exit within 5
+seconds of `SHUTDOWN` or `GAME_OVER` is killed. On Ctrl+C, the master closes its lobby, shuts every game down,
+and stops once every instance has exited:
+
+```
+INFO  games    Pavel creates game 1 "Bydo hunters" for 4 players: instance 48213 on UDP 4243
+INFO  games    game 1 "Bydo hunters" ready on UDP 4243
+INFO  games    Pavel (1) joins game 1 "Bydo hunters" (1/4)
 ```
 
 ## An instance at work
@@ -378,13 +438,17 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   state; invalid names, another version, malformed requests; the limits per address and in all, a place
   freed taken again; the handshake, `HELLO` and silence timeouts, `PING` keeping a client; and closing the
   lobby.
+- `tests/server_games.cpp` (tag `[games]`): real instances of `r-type_server` started by `Games`, real lobby
+  clients over TLS and game clients over UDP. A game created, listed, joined, full, left, and shut down with
+  its last player; the requests after `CREATE_GAME` answered in order; `SERVER_FULL`; an instance that cannot
+  start, exits at once or never gets ready, and its port given back; an impostor with an unknown id or a wrong
+  secret; a crash reported as `GAME_CRASHED`; a silent client reported as `TIMED_OUT`; the master stopping its
+  games; and the real binary run as a master, which starts the instance of a game created by a client.
 - The smoke tests of CTest run `r-type_server --help`, refuse an unknown argument, and run `--check` with a key
   made by `r-type_keygen` for the occasion.
 
 ## Limits and next steps
 
-- **No game in the lobby yet**: creating and joining games, starting the instances and watching them come with
-  `server: games`.
 - **The limits of the lobby are not options yet**: `LobbyLimits` has the defaults of the protocol; options can
   come when a host needs others.
 - **The replication is simple**: an input applies as soon as it arrives, and only the newest of each `INPUT`;

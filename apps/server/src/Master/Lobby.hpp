@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Master/Games.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
@@ -31,25 +32,30 @@ struct LobbyLimits {
     std::chrono::milliseconds helloTimeout{std::chrono::seconds(10)};
     /// Without any frame from a welcomed client: it sends PING after 10 seconds of silence.
     std::chrono::milliseconds idleTimeout{std::chrono::seconds(30)};
+    /// Requests sent while CREATE_GAME waits for its game, kept to be answered in order. Beyond, the client
+    /// floods: it is disconnected.
+    std::size_t maxWaitingRequests = 32;
 };
 
 /// The lobby of the master: the TLS connections of the clients, and the requests they send
 /// (docs/protocol/lobby.md), on the thread of the loop.
 ///
 /// @code
-/// rtype::server::Lobby lobby(loop, std::move(listener), identity);
+/// rtype::server::Lobby lobby(loop, std::move(listener), identity, games);
 /// // ...
 /// lobby.close(); // Ctrl+C: the clients are disconnected
 /// @endcode
 ///
 /// - Each connection goes through the states of the protocol: TLS handshake (10 s), then HELLO (10 s), then
-///   the lobby, closed after 30 s of silence. Each state accepts its own requests; the others get the ERROR
-///   the protocol gives (HELLO_REQUIRED, ALREADY_WELCOMED, NOT_IN_GAME, UNKNOWN_MESSAGE).
-/// - Every request gets exactly one reply, in order. A malformed one gets ERROR (MALFORMED), then the
-///   connection is closed, as after ERROR (UNSUPPORTED_VERSION).
+///   the lobby and the games, closed after 30 s of silence. Each state accepts its own requests; the others
+///   get the ERROR the protocol gives (HELLO_REQUIRED, ALREADY_WELCOMED, ALREADY_IN_GAME, NOT_IN_GAME,
+///   UNKNOWN_MESSAGE).
+/// - Every request gets exactly one reply, in order: the requests that follow a CREATE_GAME wait for its
+///   game. A malformed one gets ERROR (MALFORMED), then the connection is closed, as after ERROR
+///   (UNSUPPORTED_VERSION).
 /// - HELLO gives the player an id, never 0 and never given twice by this master.
-/// - For now no game exists: LIST_GAMES gets an empty list, JOIN_GAME GAME_NOT_FOUND, CREATE_GAME
-///   GAME_START_FAILED. The games come with `server: games`.
+/// - The games are those of Games: LIST_GAMES, CREATE_GAME, JOIN_GAME and LEAVE_GAME go to it, and a player
+///   who leaves its game without asking (game over, crash, timeout) is told with LEFT_GAME.
 class Lobby
 {
     struct Client;
@@ -57,8 +63,11 @@ class Lobby
     rtype::network::EventLoop &_loop;
     rtype::network::TcpListener _listener;
     rtype::network::ServerIdentity _identity;
+    Games &_games;
     LobbyLimits _limits;
     std::map<std::uint64_t, std::unique_ptr<Client>> _clients;
+    /// The connection of each welcomed player.
+    std::map<std::uint32_t, std::uint64_t> _players;
     /// Connections by IP address, the port set to 0.
     std::unordered_map<rtype::network::Address, std::size_t> _perAddress;
     /// Connections not closed: those waiting to be destroyed do not count.
@@ -72,7 +81,15 @@ class Lobby
     void accept(rtype::network::TcpConnection connection);
     void secured(std::uint64_t id);
     void received(std::uint64_t id, std::uint8_t type, std::span<const std::byte> payload);
+    /// Answers one request.
+    void handle(Client &client, std::uint8_t type, std::span<const std::byte> payload);
+    /// Answers the requests that waited for a CREATE_GAME.
+    void drain(std::uint64_t id);
     void hello(Client &client, std::span<const std::byte> payload);
+    void createGame(Client &client, std::span<const std::byte> payload);
+    void joined(Client &client, std::uint8_t request, const Games::JoinResult &result);
+    /// A player left its game without asking.
+    void left(std::uint32_t playerId, const std::optional<rtype::lobby::LeftGameMessage> &notification);
     void reply(Client &client, std::uint8_t type, std::span<const std::byte> payload = {});
     void fail(Client &client, std::uint8_t request, rtype::lobby::ErrorCode code);
     /// Closes a connection, after what was sent to it, and forgets it.
@@ -81,9 +98,10 @@ class Lobby
     void forget(std::uint64_t id);
 
 public:
-    /// Accepts the clients on this listener, and proves to them it is the server with this identity.
+    /// Accepts the clients on this listener, and proves to them it is the server with this identity. The
+    /// games must outlive the lobby.
     Lobby(rtype::network::EventLoop &loop, rtype::network::TcpListener listener,
-          rtype::network::ServerIdentity identity, LobbyLimits limits = {});
+          rtype::network::ServerIdentity identity, Games &games, LobbyLimits limits = {});
     ~Lobby();
 
     Lobby(const Lobby &) = delete;

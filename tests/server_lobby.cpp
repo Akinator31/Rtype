@@ -1,6 +1,8 @@
 // Tests of the lobby of the master: real TLS clients, pinning the key of the server, that say hello, list the
 // games, ping, break the rules, and hit the limits (docs/protocol/lobby.md, docs/architecture/server.md).
 
+#include "LobbyClient.hpp"
+#include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/Address.hpp"
@@ -38,91 +40,24 @@ using rtype::network::TcpListener;
 using rtype::network::TlsConnection;
 using Clock = std::chrono::steady_clock;
 using Bytes = std::vector<std::byte>;
+using testing::LobbyClient;
+using testing::runFor;
+using testing::waitUntil;
 
 namespace
 {
-
-constexpr auto Patience = 10s;
-
-bool waitUntil(EventLoop &loop, const std::function<bool()> &condition,
-               std::chrono::milliseconds limit = Patience)
-{
-    const auto deadline = Clock::now() + limit;
-    while (!condition()) {
-        if (Clock::now() > deadline) {
-            return false;
-        }
-        loop.poll();
-        std::this_thread::sleep_for(1ms);
-    }
-    return true;
-}
-
-/// Lets the loop run for a while, for what must not happen.
-void runFor(EventLoop &loop, std::chrono::milliseconds duration)
-{
-    (void)waitUntil(loop, [] { return false; }, duration);
-}
-
-/// A client of the lobby: TCP, then TLS pinning the key of the server, then frames.
-struct LobbyClient {
-    std::optional<FramedConnection> connection;
-    std::vector<std::pair<std::uint8_t, Bytes>> received;
-    std::optional<std::error_code> closed;
-    bool secured = false;
-
-    LobbyClient(EventLoop &loop, const Address &server, const KeyFingerprint &pinned)
-    {
-        TcpConnection::connect(
-            loop, server, [this, pinned](std::error_code error, std::optional<TcpConnection> tcp) {
-                if (error || !tcp) {
-                    closed = error;
-                    return;
-                }
-                connection.emplace(TlsConnection::client(std::move(*tcp), pinned));
-                connection->start(
-                    [this](std::uint8_t type, std::span<const std::byte> payload) {
-                        received.emplace_back(type, Bytes(payload.begin(), payload.end()));
-                    },
-                    [this](std::error_code reason) { closed = reason; }, [this] { secured = true; });
-            });
-    }
-
-    void send(std::uint8_t type, std::span<const std::byte> payload = {}) { connection->send(type, payload); }
-
-    void hello(const std::string &name)
-    {
-        send(message_type::Hello, encode(HelloMessage{ProtocolVersion, name}));
-    }
-
-    /// The reply number `index`, once received.
-    std::optional<std::pair<std::uint8_t, Bytes>> reply(EventLoop &loop, std::size_t index = 0)
-    {
-        if (!waitUntil(loop, [&] { return received.size() > index; })) {
-            return std::nullopt;
-        }
-        return received[index];
-    }
-
-    /// The error of reply number `index`, if it is one.
-    std::optional<ErrorMessage> error(EventLoop &loop, std::size_t index = 0)
-    {
-        const auto answer = reply(loop, index);
-        if (!answer || answer->first != message_type::Error) {
-            return std::nullopt;
-        }
-        return decodeError(answer->second);
-    }
-};
 
 /// A lobby on the loopback, and its clients.
 struct LobbyFixture {
     EventLoop loop;
     ServerIdentity identity = ServerIdentity::generate();
+    /// No game is created here: tests/server_games.cpp creates them
+    Games games{
+        loop, GamesSettings{.executable = RTYPE_TEST_CHILD, .leadingArguments = {}, .trailingArguments = {}}};
     Lobby lobby;
 
     explicit LobbyFixture(LobbyLimits limits = {})
-        : lobby(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, limits)
+        : lobby(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games, limits)
     {
     }
 
@@ -228,21 +163,17 @@ TEST_CASE("In the lobby, each request gets the answer of its state", "[lobby]")
     client->hello("Pavel");
     client->send(message_type::LeaveGame);
     client->send(message_type::JoinGame, encode(JoinGameMessage{7}));
-    client->send(message_type::CreateGame, encode(CreateGameMessage{"Bydo hunters", 4}));
     client->send(0x42);
     client->send(message_type::Welcome, encode(WelcomeMessage{1}));
 
     CHECK(client->error(fixture.loop, 1) == ErrorMessage{message_type::Hello, ErrorCode::AlreadyWelcomed});
     CHECK(client->error(fixture.loop, 2) == ErrorMessage{message_type::LeaveGame, ErrorCode::NotInGame});
     CHECK(client->error(fixture.loop, 3) == ErrorMessage{message_type::JoinGame, ErrorCode::GameNotFound});
-    // No game can start before `server: games`
-    CHECK(client->error(fixture.loop, 4) ==
-          ErrorMessage{message_type::CreateGame, ErrorCode::GameStartFailed});
-    CHECK(client->error(fixture.loop, 5) == ErrorMessage{0x42, ErrorCode::UnknownMessage});
-    CHECK(client->error(fixture.loop, 6) == ErrorMessage{message_type::Welcome, ErrorCode::UnknownMessage});
+    CHECK(client->error(fixture.loop, 4) == ErrorMessage{0x42, ErrorCode::UnknownMessage});
+    CHECK(client->error(fixture.loop, 5) == ErrorMessage{message_type::Welcome, ErrorCode::UnknownMessage});
     // Still open
     client->send(message_type::Ping);
-    REQUIRE(client->reply(fixture.loop, 7));
+    REQUIRE(client->reply(fixture.loop, 6));
     CHECK_FALSE(client->closed);
 }
 
@@ -299,13 +230,13 @@ TEST_CASE("A malformed request gets MALFORMED, and the connection is closed", "[
     }
     SECTION("The other requests, once welcomed")
     {
-        // A second HELLO is ALREADY_WELCOMED, whatever it holds: the state is checked first
+        // A second HELLO is ALREADY_WELCOMED and a LEAVE_GAME out of a game NOT_IN_GAME, whatever they hold:
+        // the state is checked first
         const std::vector<std::pair<std::uint8_t, Bytes>> requests = {
             {message_type::Ping, Bytes{std::byte{0}}},
             {message_type::ListGames, Bytes{std::byte{0}}},
             {message_type::CreateGame, Bytes{std::byte{1}, std::byte{'A'}, std::byte{5}}},
             {message_type::JoinGame, Bytes{std::byte{1}}},
-            {message_type::LeaveGame, Bytes{std::byte{0}}},
         };
         for (const auto &[type, payload] : requests) {
             INFO("request " << static_cast<int>(type));

@@ -70,4 +70,8 @@ and exits with code 1:
 | `... is not a key of the server` | The file is not an ECDSA P-256 private key: give `server.key`, not `server.pub` |
 | `Cannot listen on 0.0.0.0:4242: Address already in use` | Another server runs on that port: stop it, or choose another with `--port` |
 
+Once it runs, the games it starts show in its logs. Players who create a game and get `GAME_START_FAILED` point
+to its instances: `Cannot open UDP port` means another program uses the game ports, choose others with
+`--game-ports`.
+
 Every option is listed by `r-type_server --help` and in [Server](../architecture/server.md).
