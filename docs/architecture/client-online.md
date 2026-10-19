@@ -15,6 +15,7 @@ apps/client/src/
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn 100 ms in the past, between the snapshots around that time
+    Prediction.cpp     the ship of the player, moved at once by its inputs, then reconciled with the game
 ```
 
 The client has one `EventLoop` for its network, polled by the game loop once per frame before the engine
@@ -123,6 +124,34 @@ target.
 `Interpolation` is pure, without a clock nor a network: the `RemoteSession` gives it each world received
 (`receive()`), the destructions (`destroyed()`) and the time of each frame (`advance()`), and draws `view()`.
 
+## Prediction
+
+The interpolation draws the world 100 ms in the past, on top of the round trip: fine for the others, whose
+keys the player does not see, but the ship of the player itself would answer late. `Prediction` moves it at
+once instead, and the game stays the one that decides:
+
+1. **Each input sent** moves the predicted ship by one tick, with `game::moveShip()`, the movement of the game
+   itself: speed, diagonals, walls. The inputs are kept with their tick.
+2. **Each snapshot** says where the game had the ship at its tick, every input up to that tick applied. The
+   prediction starts again from there and replays the inputs sent for the later ticks (**reconciliation**).
+   When nothing was lost, it lands exactly where it was: no correction at all.
+3. **A wrong guess** (an input lost without its copies, something the game saw first) moves the prediction:
+   the ship is not teleported, the gap is drawn and fades out in a few frames. A gap of more than 120 units
+   (the ship came back elsewhere) is applied at once.
+4. **Without a ship** (destroyed, waiting to come back), nothing is predicted: the game decides.
+
+```
+inputs sent:   12  13  14  15  16   ◄── applied at once: the ship is drawn there
+snapshot of 13 from the game ──► start from its position, replay 14, 15, 16 ──► the same place, if nothing was lost
+```
+
+`game::moveShip()` (`libs/game/include/rtype/game/ShipMovement.hpp`) is shared with the systems of the game,
+and a test checks that both give the same position to the bit, over a minute of random inputs against the walls.
+A rule that changes how a ship moves must change there, or every snapshot would correct the prediction.
+
+Only the movement of the ship is predicted: its shots, the hits and its destruction are drawn as the game sends
+them, through the interpolation.
+
 ## Tests
 
 `tests/client_online.cpp` (tag `[online]`) runs the client against a real master in the same process: the
@@ -142,14 +171,23 @@ with snapshots on time, irregular or lost; extrapolation then waiting without sn
 disappearing when the drawn tick reaches them; a server clock running faster; a pause; and the drawn tick
 never going back.
 
+`tests/client_prediction.cpp` (tag `[prediction]`) plays the client against the real rules, a `Simulation` with
+the `InputBuffer` of the server, the inputs and the snapshots delayed: never corrected when nothing is lost, nor
+when an `INPUT` is lost (the next ones carry its inputs); the ship answering before the game; the game ending
+where the prediction was; the walls; without redundancy, a lost input corrected smoothly; no ship, then back
+elsewhere; a correction too large applied at once; and the ticks skipped when stamping.
+
 ```sh
 ./build/bin/rtype_tests "[online]"
 ./build/bin/rtype_tests "[interpolation]"
+./build/bin/rtype_tests "[prediction]"
 ```
 
 ## Limits and next steps
 
-- **No prediction**: the ship of the player moves when the game says so, a round trip after the key is pressed,
-  plus the 100 ms of the interpolation. Predicting it, with the rules of `libs/game`, is the next step.
+- **The shots are not predicted**: they leave a round trip and 100 ms after Fire is pressed. Predicting them
+  means drawing a shot before the game creates it, then matching it with the one it sends.
+- **The player sees the others 100 ms in the past** and its own ship in the present: a Bydo shot can seem to
+  miss and still hit, as in every game that predicts.
 - **The names of the players** are known (`RemoteSession::names()`) but not shown in the HUD yet.
 - **One server at a time**, typed by hand: no list of servers, no address remembered.
