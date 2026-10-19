@@ -97,8 +97,8 @@ drawn is what collides:
 
 ## Limits and next steps
 
-- **No interpolation**: the entities move 60 times per second, the rate of the simulation. Online, snapshots
-  come 30 times per second: drawing 100 ms in the past between two snapshots comes with the network.
+- **No interpolation offline**: the entities move 60 times per second, the rate of the simulation; online,
+  they are interpolated between the snapshots ([The client online](client-online.md#interpolation)).
 - **Boxes instead of sprites**, and no explosion when an entity is destroyed: the snapshots already say which
   ones were killed (`DestroyCause::Killed`).
 - **No end of game**: the rules have no lives to lose yet (`server: gameplay`).
