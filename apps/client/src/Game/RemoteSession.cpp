@@ -104,16 +104,19 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
     switch (type) {
     case game::message_type::Snapshot:
         if (const auto part = game::decodeSnapshotPart(payload); part && _world.apply(*part)) {
-            _changed = true;
+            _interpolation.receive(_world.tick(), _world.entities(), _world.players());
             _snapshotReceived = Clock::now();
         }
         return;
     case game::message_type::EntitiesDestroyed:
         if (const auto destroyed = game::decodeEntitiesDestroyed(payload)) {
+            // Drawn until the drawn tick reaches its destruction, 100 ms after the message arrives
+            for (const game::DestroyedEntity &entity : destroyed->entities) {
+                _interpolation.destroyed(entity.id, destroyed->tick);
+            }
             for (const game::RemovedEntity &removed : _world.apply(*destroyed)) {
                 _destroyed.push_back({removed.last.id, removed.cause});
             }
-            _changed = true;
         }
         return;
     case game::message_type::PlayerJoined:
@@ -162,6 +165,7 @@ void RemoteSession::sendInput()
 void RemoteSession::update(float elapsed)
 {
     _session.update(Clock::now());
+    _interpolation.advance(elapsed);
     if (!_accepted || _over) {
         return;
     }
@@ -180,17 +184,11 @@ void RemoteSession::update(float elapsed)
 
 std::vector<game::Snapshot> RemoteSession::takeSnapshots()
 {
-    if (!_changed) {
+    if (!_interpolation.drawnTick()) {
         return {};
     }
-    _changed = false;
-    game::Snapshot snapshot;
-    snapshot.tick = _world.tick();
-    snapshot.players = _world.players();
-    snapshot.entities.reserve(_world.entities().size());
-    for (const auto &[id, entity] : _world.entities()) {
-        snapshot.entities.push_back(entity);
-    }
+    // Each frame: the world drawn moves at the frame rate
+    game::Snapshot snapshot = _interpolation.view();
     snapshot.destroyed = std::exchange(_destroyed, {});
     return {std::move(snapshot)};
 }

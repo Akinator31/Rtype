@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Game/GameSession.hpp"
+#include "Game/Interpolation.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/RemoteWorld.hpp"
 #include "rtype/lobby/Messages.hpp"
@@ -30,8 +31,9 @@ namespace rtype::client
 /// - **Inputs**: once per tick (60 per second), it sends INPUT with the inputs of the last 8 ticks, newest
 ///   first, so that a lost datagram loses no input. Each one is stamped with the tick the game should apply
 ///   it at, estimated from the latest snapshot and the round-trip time (section 9.2).
-/// - **Snapshots**: the parts received and the destructions go into a RemoteWorld; takeSnapshots() gives the
-///   whole world it holds, once per change.
+/// - **Snapshots**: the parts received and the destructions go into a RemoteWorld, and each world received
+///   into an Interpolation; takeSnapshots() gives, each frame, the world drawn 100 ms in the past, between
+///   the two snapshots around that time: the entities move at the frame rate, not 30 times per second.
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why.
 ///
 /// The loop must be polled, by the game loop of the client.
@@ -48,6 +50,7 @@ private:
     network::Address _game;
     network::ClientSession _session;
     game::RemoteWorld _world;
+    Interpolation _interpolation;
     std::optional<game::AcceptedMessage> _accepted;
     std::map<std::uint8_t, std::string> _names;
 
@@ -59,7 +62,6 @@ private:
     double _pending = 0.0;
     Clock::time_point _snapshotReceived;
 
-    bool _changed = false;
     std::vector<game::DestroyedEntity> _destroyed;
     bool _over = false;
     std::string _endReason;
@@ -94,8 +96,10 @@ public:
     [[nodiscard]] const std::string &endReason() const { return _endReason; }
     /// The names of the players, by slot.
     [[nodiscard]] const std::map<std::uint8_t, std::string> &names() const { return _names; }
-    /// The world as received, for the tests.
+    /// The world as received, the newest, for the tests.
     [[nodiscard]] const game::RemoteWorld &world() const { return _world; }
+    /// The world as drawn, for the tests.
+    [[nodiscard]] const Interpolation &interpolation() const { return _interpolation; }
     /// The tick stamped on the newest input sent.
     [[nodiscard]] std::uint32_t inputTick() const { return _inputTick; }
 };
