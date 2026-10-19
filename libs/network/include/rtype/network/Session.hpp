@@ -284,6 +284,9 @@ public:
     [[nodiscard]] std::optional<Address> address(std::uint32_t session) const;
     /// The round-trip time to the client of a session, once measured.
     [[nodiscard]] std::optional<Clock::duration> rtt(std::uint32_t session) const;
+    /// Reliable messages sent to the client of a session and not acknowledged yet, 0 for an unknown session:
+    /// a game that ends waits for its last messages to arrive.
+    [[nodiscard]] std::size_t pendingReliable(std::uint32_t session) const;
     /// Number of sessions, connected or not.
     [[nodiscard]] std::size_t size() const { return _sessions.size(); }
 };

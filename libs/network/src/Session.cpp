@@ -459,6 +459,12 @@ std::optional<SessionHost::Clock::duration> SessionHost::rtt(std::uint32_t sessi
     return found->second->channel.rtt();
 }
 
+std::size_t SessionHost::pendingReliable(std::uint32_t session) const
+{
+    const auto found = _sessions.find(session);
+    return found == _sessions.end() ? 0 : found->second->channel.pendingReliable();
+}
+
 bool SessionHost::withinRate(const Address &from, Clock::time_point now)
 {
     RateCounter &counter = _rates[from];
