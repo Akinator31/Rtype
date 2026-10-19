@@ -43,8 +43,9 @@ class CombatSystem : public ecs::System
     [[nodiscard]] bool overlap(ecs::entity_t first, ecs::entity_t second) const;
     void hitEnemies(const Targets &targets, std::unordered_set<ecs::entity_t> &spent);
     void hitShips(const Targets &targets, std::unordered_set<ecs::entity_t> &spent);
-    [[nodiscard]] std::optional<ecs::entity_t> findDanger(ecs::entity_t ship, const Targets &targets,
-                                                          const std::unordered_set<ecs::entity_t> &spent) const;
+    [[nodiscard]] std::optional<ecs::entity_t>
+    findDanger(ecs::entity_t ship, const Targets &targets,
+               const std::unordered_set<ecs::entity_t> &spent) const;
     void damageEnemy(ecs::entity_t enemy, ecs::entity_t shot);
     void loseShip(ecs::entity_t ship);
     void destroyLater(ecs::entity_t entity, DestroyCause cause);

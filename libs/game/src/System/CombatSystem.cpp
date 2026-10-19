@@ -21,9 +21,9 @@ physics::Vec3 halfSizeOf(const physics::Collider &collider)
 
 CombatSystem::CombatSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context)
     : _ecs(ecs), _context(context), _kinds(use<Kind>(caches)), _positions(use<ecs::Position>(caches)),
-      _colliders(use<physics::Collider>(caches)), _healths(use<Health>(caches)),
-      _owners(use<Owner>(caches)), _invulnerables(use<Invulnerable>(caches)),
-      _playerShips(use<PlayerShip>(caches)), _enemies(use<Enemy>(caches))
+      _colliders(use<physics::Collider>(caches)), _healths(use<Health>(caches)), _owners(use<Owner>(caches)),
+      _invulnerables(use<Invulnerable>(caches)), _playerShips(use<PlayerShip>(caches)),
+      _enemies(use<Enemy>(caches))
 {
 }
 
@@ -191,8 +191,8 @@ void CombatSystem::endGameWhenDefeated()
 {
     const auto &players = _context.players;
     const bool anyone = std::ranges::any_of(players, [](const PlayerSlot &player) { return player.present; });
-    const bool someoneLeft =
-        std::ranges::any_of(players, [](const PlayerSlot &player) { return player.present && player.lives > 0; });
+    const bool someoneLeft = std::ranges::any_of(
+        players, [](const PlayerSlot &player) { return player.present && player.lives > 0; });
     if (anyone && !someoneLeft && !_over) {
         _over = true;
         _context.gameOver = GameOutcome::Defeat;

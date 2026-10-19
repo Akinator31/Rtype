@@ -67,7 +67,8 @@ ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context)
     const float y = static_cast<float>(context.randomBetween(minY, maxY));
     const ecs::entity_t enemy =
         spawnVisible(ecs, context, EntityKind::BydoShooter, NoOwner, GameWidth + rules.enemyHalfWidth, y);
-    ecs.addComponent<Enemy>(enemy, context.randomBetween(rules.enemyMinFireInterval, rules.enemyMaxFireInterval));
+    ecs.addComponent<Enemy>(enemy,
+                            context.randomBetween(rules.enemyMinFireInterval, rules.enemyMaxFireInterval));
     ecs.addComponent<Health>(enemy, rules.enemyHealth);
     ecs.addComponent<physics::Velocity>(enemy, -rules.enemySpeed, 0.0f);
     ecs.addComponent<physics::Collider>(enemy, box(rules.enemyHalfWidth, rules.enemyHalfHeight));

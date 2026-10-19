@@ -408,8 +408,8 @@ void place(Simulation &simulation, EntityKind kind, std::uint8_t owner, float x,
     ecs.addComponent<Owner>(entity, owner);
     ecs.addComponent<rtype::ecs::Position>(entity, x, y);
     ecs.addComponent<Health>(entity, std::uint8_t{1});
-    ecs.addComponent<rtype::physics::Collider>(
-        entity, rtype::physics::Aabb{{}, {10.0f, 10.0f, 0.0f}}, rtype::physics::Vec3{}, false);
+    ecs.addComponent<rtype::physics::Collider>(entity, rtype::physics::Aabb{{}, {10.0f, 10.0f, 0.0f}},
+                                               rtype::physics::Vec3{}, false);
     if (kind == EntityKind::BydoShooter) {
         ecs.addComponent<Enemy>(entity, 100000U);
     }
