@@ -284,6 +284,13 @@ TEST_CASE("Two clients play the same game online, each moving its own ship", "[o
     game::PlayerInput right;
     right.set(game::PlayerInput::Right, true);
     bobSession.setInput(right);
+    // Predicted: Bob's ship moves on his screen at the next input sent, before the game has it
+    REQUIRE(bobSession.prediction().predicted());
+    const float predictedStart = bobSession.prediction().predicted()->x;
+    const float gameStart = shipOf(bobSession.world(), 1)->x;
+    REQUIRE(play(master.loop, {&bobSession},
+                 [&] { return bobSession.prediction().predicted()->x > predictedStart; }));
+    CHECK(shipOf(bobSession.world(), 1)->x == gameStart);
     REQUIRE(play(master.loop, both, [&] {
         return shipOf(aliceSession.world(), 1)->x > bobStart + 100.0f &&
                shipOf(bobSession.world(), 1)->x > bobStart + 100.0f;
