@@ -103,7 +103,7 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 | Rule | Where | Numbers (`Rules`) |
 |---|---|---|
 | A ship appears on the left, one height per slot | `spawnPlayerShip()` | — |
-| It moves with the input, as fast in diagonal | `PlayerControlSystem` | `shipSpeed` 600 units/s |
+| It moves with the input, as fast in diagonal | `PlayerControlSystem`, with `shipVelocity()` (`ShipMovement.hpp`, shared with the prediction of the client) | `shipSpeed` 600 units/s |
 | It stays entirely in the 1920 × 1080 area | `physics::BoundsSystem`, `ConfinedToBounds` | `shipHalfWidth`, `shipHalfHeight` |
 | Fire held shoots from its nose | `PlayerControlSystem`, `spawnPlayerShot()` | `fireInterval` 10 ticks (6 per second), `shotSpeed` 1500 units/s |
 | What leaves the area is removed | `AreaSystem`, `LeavesArea` | `areaMargin` 128 units |

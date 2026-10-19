@@ -13,6 +13,7 @@ add_executable(rtype_tests
     client_game.cpp
     client_interpolation.cpp
     client_online.cpp
+    client_prediction.cpp
     color_filter.cpp
     collider_debug_renderer.cpp
     controls.cpp

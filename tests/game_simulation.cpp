@@ -535,3 +535,46 @@ TEST_CASE("The game is lost once every player is out of lives, and it is told on
     simulation.step();
     CHECK(!simulation.snapshot().gameOver);
 }
+
+// --- The movement shared with the client ---
+
+TEST_CASE("moveShip() moves a ship exactly as the game does, to the bit", "[game]")
+{
+    // No Bydo: nothing but the inputs moves the ship
+    Rules rules;
+    rules.maxEnemies = 0;
+    Simulation simulation(rules);
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState start = *shipOf(simulation.snapshot(), 0);
+    rtype::ecs::Position predicted{start.x, start.y};
+    std::mt19937 random(3);
+    std::uniform_int_distribution<int> buttons(0, 0x0F);
+
+    // Long enough to hit every wall many times
+    for (int tick = 0; tick < 3600; ++tick) {
+        const PlayerInput input{static_cast<std::uint8_t>(buttons(random))};
+        simulation.setInput(0, input);
+        simulation.step();
+        predicted = moveShip(predicted, input, rules);
+
+        const std::optional<EntityState> ship = shipOf(simulation.snapshot(), 0);
+        REQUIRE(ship);
+        REQUIRE(ship->x == predicted.x);
+        REQUIRE(ship->y == predicted.y);
+    }
+}
+
+TEST_CASE("A ship goes at the speed of the rules, as fast in diagonal, and stays in the area", "[game]")
+{
+    const Rules rules;
+    CHECK(shipVelocity(PlayerInput{PlayerInput::Right}, rules).x == rules.shipSpeed);
+    CHECK(shipVelocity(PlayerInput{PlayerInput::Up | PlayerInput::Down}, rules).y == 0.0f);
+    const auto diagonal = shipVelocity(PlayerInput{PlayerInput::Down | PlayerInput::Left}, rules);
+    CHECK(std::hypot(diagonal.x, diagonal.y) == Approx(rules.shipSpeed));
+
+    const rtype::ecs::Position corner =
+        moveShip({5.0f, 5.0f}, PlayerInput{PlayerInput::Up | PlayerInput::Left}, rules);
+    CHECK(corner.x == rules.shipHalfWidth);
+    CHECK(corner.y == rules.shipHalfHeight);
+}
