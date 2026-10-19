@@ -106,6 +106,7 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
         if (const auto part = game::decodeSnapshotPart(payload); part && _world.apply(*part)) {
             _interpolation.receive(_world.tick(), _world.entities(), _world.players());
             _snapshotReceived = Clock::now();
+            reconcile(*part);
         }
         return;
     case game::message_type::EntitiesDestroyed:
@@ -113,6 +114,11 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
             // Drawn until the drawn tick reaches its destruction, 100 ms after the message arrives
             for (const game::DestroyedEntity &entity : destroyed->entities) {
                 _interpolation.destroyed(entity.id, destroyed->tick);
+                if (entity.id == _shipId) {
+                    // The ship of the player is no more: nothing to predict until it comes back
+                    _prediction.reconcile(std::nullopt, destroyed->tick);
+                    _shipId = 0;
+                }
             }
             for (const game::RemovedEntity &removed : _world.apply(*destroyed)) {
                 _destroyed.push_back({removed.last.id, removed.cause});
@@ -141,6 +147,26 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
     }
 }
 
+void RemoteSession::reconcile(const game::SnapshotPart &part)
+{
+    if (!_accepted) {
+        return;
+    }
+    for (const game::EntityState &entity : part.entities) {
+        if (entity.kind == game::EntityKind::PlayerShip && entity.owner == _accepted->slot) {
+            _shipId = entity.id;
+            _prediction.reconcile(ecs::Position{entity.x, entity.y}, part.tick);
+            return;
+        }
+    }
+    // Missing from a snapshot in one part: the ship is not there. From a part among others, it may be in
+    // another one
+    if (part.parts == 1) {
+        _prediction.reconcile(std::nullopt, part.tick);
+        _shipId = 0;
+    }
+}
+
 std::uint32_t RemoteSession::estimateTick() const
 {
     // The tick of the latest snapshot, plus the time since it came, plus the way back to the game
@@ -154,6 +180,8 @@ void RemoteSession::sendInput()
 {
     // Never back in time: the game ignores an input older than the last one
     _inputTick = std::max(_inputTick + 1, estimateTick());
+    // The ship of the player moves at once, as the game will move it at that tick
+    _prediction.apply(_inputTick, _input);
     _history.push_front(_input);
     while (_history.size() > InputHistory || _history.size() > std::size_t{_inputTick} + 1) {
         _history.pop_back();
@@ -166,6 +194,7 @@ void RemoteSession::update(float elapsed)
 {
     _session.update(Clock::now());
     _interpolation.advance(elapsed);
+    _prediction.advance(elapsed);
     if (!_accepted || _over) {
         return;
     }
@@ -189,6 +218,15 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
     }
     // Each frame: the world drawn moves at the frame rate
     game::Snapshot snapshot = _interpolation.view();
+    // The ship of the player where it is predicted, the rest where the interpolation draws it
+    if (const std::optional<ecs::Position> predicted = _prediction.position()) {
+        for (game::EntityState &entity : snapshot.entities) {
+            if (entity.kind == game::EntityKind::PlayerShip && entity.owner == localSlot()) {
+                entity.x = predicted->x;
+                entity.y = predicted->y;
+            }
+        }
+    }
     snapshot.destroyed = std::exchange(_destroyed, {});
     return {std::move(snapshot)};
 }

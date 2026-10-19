@@ -2,6 +2,7 @@
 
 #include "Game/GameSession.hpp"
 #include "Game/Interpolation.hpp"
+#include "Game/Prediction.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/RemoteWorld.hpp"
 #include "rtype/lobby/Messages.hpp"
@@ -34,6 +35,9 @@ namespace rtype::client
 /// - **Snapshots**: the parts received and the destructions go into a RemoteWorld, and each world received
 ///   into an Interpolation; takeSnapshots() gives, each frame, the world drawn 100 ms in the past, between
 ///   the two snapshots around that time: the entities move at the frame rate, not 30 times per second.
+/// - **The ship of the player** is predicted: each input moves it at once, and each snapshot that has it
+///   reconciles the prediction with the game (Prediction). It is drawn where it is predicted, the rest where
+///   the interpolation draws it.
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why.
 ///
 /// The loop must be polled, by the game loop of the client.
@@ -51,7 +55,10 @@ private:
     network::ClientSession _session;
     game::RemoteWorld _world;
     Interpolation _interpolation;
+    Prediction _prediction;
     std::optional<game::AcceptedMessage> _accepted;
+    /// The id of the ship of the player, 0 while it has none.
+    std::uint32_t _shipId = 0;
     std::map<std::uint8_t, std::string> _names;
 
     game::PlayerInput _input;
@@ -67,6 +74,8 @@ private:
     std::string _endReason;
 
     void received(std::uint8_t type, std::span<const std::byte> payload);
+    /// Corrects the prediction with a part of a snapshot that has the ship of the player.
+    void reconcile(const game::SnapshotPart &part);
     void sendInput();
     [[nodiscard]] std::uint32_t estimateTick() const;
 
@@ -100,6 +109,8 @@ public:
     [[nodiscard]] const game::RemoteWorld &world() const { return _world; }
     /// The world as drawn, for the tests.
     [[nodiscard]] const Interpolation &interpolation() const { return _interpolation; }
+    /// The prediction of the ship of the player, for the tests.
+    [[nodiscard]] const Prediction &prediction() const { return _prediction; }
     /// The tick stamped on the newest input sent.
     [[nodiscard]] std::uint32_t inputTick() const { return _inputTick; }
 };
