@@ -20,6 +20,7 @@ nav = [
   ] },
   { "Architecture" = [
     "architecture/index.md",
+    "architecture/ecs.md",
     "architecture/networking-concepts.md",
     "architecture/rendering.md",
     "architecture/input.md",

@@ -3,12 +3,18 @@
 This guide adds a component and a system to the ECS: a `Velocity` that moves entities every frame. It is for
 anyone writing gameplay, on the client or on the server.
 
+!!! note
+
+    The physics already provides these, `rtype::physics::Velocity` and `MovementSystem`: use them in the game.
+    The guide writes simpler ones to show how a system is built.
+
 ## Prerequisites
 
 - The project builds: see [Build](../getting-started/build.md).
 - You know the vocabulary: an **entity** is only an id, a **component** is plain data attached to an entity, a
-  **system** runs the logic on the entities that have the components it needs. How components are stored is
-  explained in [ADR 0006](../decisions/0006-ecs-component-storage.md).
+  **system** runs the logic on the entities that have the components it needs. The whole API is described in
+  [ECS](../architecture/ecs.md), and how components are stored in
+  [ADR 0006](../decisions/0006-ecs-component-storage.md).
 
 ## Steps
 
@@ -110,7 +116,7 @@ anyone writing gameplay, on the client or on the server.
 | Situation | Do |
 |---|---|
 | A component points to another entity (target, owner) | Store an `EntityRef` (`ecs.ref(entity)`) and check it with `ecs.isAlive(reference)` before using it: ids are reused. |
-| An entity is attached to another one (the Force to the ship) | Use the [hierarchy](../architecture/scenes-and-interface.md#hierarchy): `attach()`, then move it with its `LocalPosition`. |
+| An entity is attached to another one (the Force to the ship) | Use the [hierarchy](../architecture/ecs.md#hierarchy): `attach()`, then move it with its `LocalPosition`. |
 | The system creates or destroys entities, or adds components of a type it goes through | Wrap the change in `ecs.defer(...)`: it runs after the systems, when no cache is being read. Destroying is safe while iterating, creating is not. |
 | The system needs data shared by every entity (score, wave number) | Give it to the constructor by reference, like the `Scenes` above, rather than a global. |
 

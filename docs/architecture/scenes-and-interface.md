@@ -1,8 +1,8 @@
 # Scenes and interface
 
 Everything the client draws is an entity of the ECS: the world, the HUD and the menus
-([ADR 0007](../decisions/0007-client-in-the-ecs.md)). This page describes the features of the ECS this relies on
-(`libs/ecs`, shared with the server) and the client library built on them (`libs/engine`).
+([ADR 0007](../decisions/0007-client-in-the-ecs.md)). This page describes the client library built on the
+[ECS](ecs.md) (`libs/engine`): scenes, drawing, animations and menus.
 
 ## Where things are
 
@@ -79,41 +79,10 @@ and may happen several times per frame (once per eye in VR).
 
 ## ECS features
 
-### Elapsed time
-
-Systems receive the time elapsed since the previous update: `update(float elapsed)`. They never read a clock,
-so that tests and the server control time.
-
-### Entity references
-
-Entity ids are reused once an entity is destroyed. An `EntityRef` (`ecs.ref(entity)`) adds a generation: once
-the entity is destroyed, `ecs.isAlive(reference)` is false, even if its id was given to a new entity. Keep
-`EntityRef`, not `entity_t`, in a component that points to another entity.
-
-### Deferred actions
-
-`ecs.defer(action)` runs an action after the systems of the update. A system going through the entities must not
-create or destroy entities of the types it iterates: the caches could be reallocated under it. A button that
-opens a menu, for instance, has its action deferred.
-
-## Hierarchy
-
-| Component | Meaning |
-|---|---|
-| `Position` | Position in the world, in game units. Computed for entities with a parent. |
-| `Parent` | The entity is attached to another one (`EntityRef`). |
-| `LocalPosition` | Position relative to the parent. |
-| `Hidden` | Hides the entity and its children, without destroying them. |
-
-```cpp
-attach(ecs, force, ship, {64.0f, 0.0f});   // the Force follows the ship, 64 units in front of it
-```
-
-- **Following**: the `TransformSystem` sets `Position = position of the parent + LocalPosition`, parents first.
-- **Hiding**: `isHidden(ecs, entity)` is true if the entity or one of its ancestors has `Hidden`. A closed
-  dropdown hides its options this way.
-- **Destroying**: `ecs.destroyEntity(boss)` also destroys its turrets, recursively. A child never outlives its
-  parent with a dangling reference.
+The interface relies on features of the ECS described in [ECS](ecs.md): the elapsed time given to systems,
+[entity references](ecs.md#entity-references) (`EntityRef`), [deferred actions](ecs.md#deferred-actions) (a
+button that opens a menu has its action deferred) and the [hierarchy](ecs.md#hierarchy) (`attach()`,
+`isHidden()`): the widgets of a menu are attached to its column, and nothing hidden is drawn or focused.
 
 ## Scenes
 
@@ -314,6 +283,6 @@ Toasts are stacked from the corner, the newest nearest to it; the others glide t
 
 ## Testing
 
-`tests/ecs_world.cpp` tests the ECS features: elapsed time, references, deferred actions, hierarchy and
-scenes. `tests/engine.cpp` builds menus with `MenuBuilder` and drives them with the `FakeInput` and fake text
+The ECS has its own tests (see [ECS](ecs.md#testing)). `tests/scenes.cpp` tests the scenes, and
+`tests/engine.cpp` builds menus with `MenuBuilder` and drives them with the `FakeInput` and fake text
 measures, without a window: focus, every widget, layout, mouse, scenes, and the bounce of the focused widget.

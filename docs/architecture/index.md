@@ -108,7 +108,7 @@ The programs are built on twelve libraries:
 |---|---|---|
 | `libs/render` | Window, textures and fonts, drawing at a fixed logical resolution. Wraps raylib. | [Rendering](rendering.md) |
 | `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
-| `libs/ecs` | Entities, components and systems, with a hierarchy. Shared with the server, so it never depends on raylib. | [Scenes and interface](scenes-and-interface.md) |
+| `libs/ecs` | Entities, components and systems, with a hierarchy. Shared with the server, so it never depends on raylib. | [ECS](ecs.md) |
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
 | `libs/network` | Addresses, UDP and TCP sockets, the event loop that runs them, TCP framing, TLS and the binary serialization. Wraps Asio and Mbed TLS. Shared with the server. | [Networking](networking.md) |
 | `libs/physics` | Movement and collisions as components and systems on the ECS. Knows no game: each game names its collision layers and reacts to the collisions. Shared with the server. | — |
@@ -136,7 +136,7 @@ apps/       executables, one subdirectory per program
 libs/       libraries shared by the programs, one subdirectory per library
   audio/    sound effects and music (client)
   core/     handles and resource caches (all)
-  ecs/      entity component system, scenes, hierarchy (client and server)
+  ecs/      entity component system, hierarchy (client and server)
   engine/   client systems: drawing, animations, menus (client)
   game/     rules of the R-Type, the Simulation (server and client offline)
   input/    keyboard and gamepad input (client)
