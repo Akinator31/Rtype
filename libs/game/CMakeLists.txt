@@ -7,6 +7,7 @@ add_library(rtype_game
     src/Messages.cpp
     src/PlayerInput.cpp
     src/RemoteWorld.cpp
+    src/ShipMovement.cpp
     src/Simulation.cpp
     src/System/AreaSystem.cpp
     src/System/CombatSystem.cpp

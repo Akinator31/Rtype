@@ -1,8 +1,7 @@
 #include "rtype/game/System/PlayerControlSystem.hpp"
 
 #include "rtype/game/Entities.hpp"
-
-#include <cmath>
+#include "rtype/game/ShipMovement.hpp"
 
 namespace rtype::game
 {
@@ -16,8 +15,6 @@ PlayerControlSystem::PlayerControlSystem(ecs::ComponentCaches &caches, ecs::Ecs 
 void PlayerControlSystem::update(float)
 {
     const Rules &rules = _context.rules;
-    // A diagonal is as fast as a straight line
-    const float diagonal = 1.0f / std::sqrt(2.0f);
 
     for (ecs::entity_t entity = 0; entity < _ships.size(); ++entity) {
         if (!_ships.has(entity) || !_velocities.has(entity) || !_positions.has(entity) ||
@@ -27,10 +24,8 @@ void PlayerControlSystem::update(float)
         PlayerShip &ship = _ships.get(entity);
         const PlayerInput input = _context.players[ship.slot].input;
 
-        const PlayerInput::Direction direction = input.direction();
-        const float scale = direction.x != 0 && direction.y != 0 ? diagonal : 1.0f;
-        _velocities.get(entity) = {static_cast<float>(direction.x) * rules.shipSpeed * scale,
-                                   static_cast<float>(direction.y) * rules.shipSpeed * scale};
+        // The same velocity as the prediction of the client (ShipMovement.hpp)
+        _velocities.get(entity) = shipVelocity(input, rules);
 
         if (ship.fireCooldown > 0) {
             --ship.fireCooldown;

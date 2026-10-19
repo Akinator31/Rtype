@@ -7,6 +7,7 @@
 /// - PlayerInput.hpp, Snapshot.hpp: what goes in (the controls of a player) and out (the world).
 /// - Messages.hpp, RemoteWorld.hpp: the messages of the game protocol, and the world a client rebuilds.
 /// - Standalone.hpp: the public sessions of a game without a master, for development.
+/// - ShipMovement.hpp: how a ship moves, shared with the prediction of the client.
 /// - Rules.hpp, Constants.hpp: the numbers of the gameplay and of the game area.
 /// - Component/, System/, Entities.hpp, GameContext.hpp: the rules themselves, to add gameplay.
 
@@ -18,6 +19,7 @@
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/RemoteWorld.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/ShipMovement.hpp"
 #include "rtype/game/Simulation.hpp"
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/game/Standalone.hpp"
