@@ -33,9 +33,12 @@ namespace rtype::server
 /// - A player gets the lowest free slot when added, and its ship when its client connects.
 /// - On `CONNECT`, the client receives `ACCEPTED` (its slot, the tick rate, the tick), then `PLAYER_JOINED`
 ///   for each player connected, itself included; the others receive its `PLAYER_JOINED`.
-/// - The newest input of each `INPUT` goes to the game.
-/// - Every 2 ticks, each client receives the snapshot in parts; every tick, the destroyed entities.
+/// - The inputs of each `INPUT` go to the game, which applies each one at its tick.
+/// - Every 2 ticks, each client receives the snapshot in parts; every tick, the destroyed entities. They
+///   leave at once, not at the next update of the sessions: no delay, no jitter.
 /// - A session that closes takes the ship away, and the others receive `PLAYER_LEFT`.
+/// - The game over is sent to every client (`GAME_OVER`), then told to the instance with the scores; nothing
+///   is published after it.
 class GameHost
 {
 public:
@@ -45,6 +48,8 @@ public:
         /// The session of a player closed on the side of the game, or never connected
         /// (`PLAYER_DISCONNECTED`). Not called for removePlayer() and closeAll().
         std::function<void(std::uint32_t playerId, PlayerDisconnectedReason reason)> onDisconnected;
+        /// The game is over, with the score of each player (`GAME_OVER` for the master). Once.
+        std::function<void(const GameOverReport &report)> onGameOver;
     };
 
     /// Snapshots are sent once every this many ticks: 30 per second (docs/protocol/game.md, section 9.3).
@@ -66,6 +71,9 @@ private:
     rtype::network::Timer _updates;
     /// By session id.
     std::map<std::uint32_t, Player> _players;
+    bool _over = false;
+
+    void gameOver(const TickResult &result);
 
     [[nodiscard]] std::optional<std::uint8_t> freeSlot() const;
     void connected(std::uint32_t session, const rtype::network::Address &from);
@@ -105,6 +113,11 @@ public:
 
     /// Number of players added, connected or not.
     [[nodiscard]] std::size_t playerCount() const { return _players.size(); }
+
+    /// Every client acknowledged every reliable message sent to it: `GAME_OVER`, at the end of a game.
+    [[nodiscard]] bool acknowledged() const;
+    /// The game is over.
+    [[nodiscard]] bool over() const { return _over; }
 };
 
 } // namespace rtype::server

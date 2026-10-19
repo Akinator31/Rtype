@@ -121,13 +121,13 @@ void GameHost::received(std::uint32_t session, std::uint8_t type, std::span<cons
         logger().debug("Message {:#04x} of session {} ignored: not one a client sends", type, session);
         return;
     }
-    const std::optional<rtype::game::InputMessage> input = rtype::game::decodeInput(payload);
+    std::optional<rtype::game::InputMessage> input = rtype::game::decodeInput(payload);
     if (!input) {
         logger().debug("Malformed INPUT of session {} dropped", session);
         return;
     }
-    // The newest input; the ones of the ticks before come with the replication
-    _game.setInput(found->second.slot, input->inputs.front(), input->tick);
+    // Each one applied at its tick: the older ones are those a lost datagram did not bring
+    _game.receiveInputs(found->second.slot, input->tick, std::move(input->inputs));
 }
 
 void GameHost::leave(std::uint32_t session, rtype::game::LeaveReason reason)
@@ -193,24 +193,60 @@ void GameHost::sendToConnected(std::uint8_t type, std::span<const std::byte> pay
 
 void GameHost::publish(const TickResult &result)
 {
+    if (_over) {
+        return;
+    }
     const rtype::game::Snapshot &snapshot = result.snapshot;
     for (const rtype::game::EntitiesDestroyedMessage &message : rtype::game::destroyedMessages(snapshot)) {
         sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
                         Delivery::Reliable);
     }
-    if (snapshot.tick % SnapshotInterval != 0) {
-        return;
+    // The last snapshot goes with the game over, whatever its tick: the final scores
+    if (snapshot.tick % SnapshotInterval == 0 || snapshot.gameOver) {
+        for (const auto &[session, player] : _players) {
+            if (!player.connected) {
+                continue;
+            }
+            for (const rtype::game::SnapshotPart &part :
+                 rtype::game::splitSnapshot(snapshot, result.lastInputs[player.slot])) {
+                _sessions.send(session, rtype::game::message_type::Snapshot, rtype::game::encode(part),
+                               Delivery::Unreliable);
+            }
+        }
     }
+    if (snapshot.gameOver) {
+        gameOver(result);
+    }
+    // Sent now: waiting for the next update of the sessions would add up to a tick of delay, never the same
+    _sessions.update(Clock::now());
+}
+
+void GameHost::gameOver(const TickResult &result)
+{
+    _over = true;
+    const rtype::game::GameOutcome outcome = *result.snapshot.gameOver;
+    logger().info("Game over: {}", outcome == rtype::game::GameOutcome::Victory ? "victory" : "defeat");
+    sendToConnected(rtype::game::message_type::GameOver,
+                    rtype::game::encode(rtype::game::GameOverMessage{outcome}), Delivery::Reliable);
+
+    GameOverReport report;
     for (const auto &[session, player] : _players) {
-        if (!player.connected) {
-            continue;
-        }
-        for (const rtype::game::SnapshotPart &part :
-             rtype::game::splitSnapshot(snapshot, result.lastInputs[player.slot])) {
-            _sessions.send(session, rtype::game::message_type::Snapshot, rtype::game::encode(part),
-                           Delivery::Unreliable);
+        const auto state =
+            std::ranges::find(result.snapshot.players, player.slot, &rtype::game::PlayerState::slot);
+        if (player.connected && state != result.snapshot.players.end()) {
+            report.scores.push_back({player.playerId, state->score});
         }
     }
+    if (_handlers.onGameOver) {
+        _handlers.onGameOver(report);
+    }
+}
+
+bool GameHost::acknowledged() const
+{
+    return std::ranges::all_of(_players, [this](const auto &entry) {
+        return !entry.second.connected || _sessions.pendingReliable(entry.first) == 0;
+    });
 }
 
 void GameHost::closeAll(DisconnectReason reason)

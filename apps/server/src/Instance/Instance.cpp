@@ -28,6 +28,11 @@ using rtype::network::DisconnectReason;
 
 /// How long the last datagrams and frames have to leave before the loop stops.
 constexpr std::chrono::milliseconds Linger{100};
+/// After the game over, how long the clients have to acknowledge GAME_OVER (docs/protocol/game.md,
+/// GAME_OVER).
+constexpr std::chrono::seconds GameOverWait{2};
+/// How often the acknowledgements are checked meanwhile.
+constexpr std::chrono::milliseconds GameOverCheck{50};
 
 const rtype::log::Logger &logger()
 {
@@ -57,6 +62,7 @@ class Instance
     std::optional<GameHost> _host;
     std::optional<MasterLink> _link;
     rtype::network::Timer _linger;
+    rtype::network::Timer _gameOverWait;
     int _exitCode = Success;
     bool _stopping = false;
 
@@ -76,6 +82,24 @@ class Instance
         return true;
     }
 
+    /// The game is over: the simulation stops, the clients have a moment to acknowledge GAME_OVER, then the
+    /// master gets the scores, the sessions close with DISCONNECT (GAME_OVER), and the instance exits with 0.
+    void gameOver(const GameOverReport &report)
+    {
+        _game.stop();
+        const auto deadline = std::chrono::steady_clock::now() + GameOverWait;
+        _gameOverWait.startRepeating(GameOverCheck, [this, report, deadline] {
+            if (!_host->acknowledged() && std::chrono::steady_clock::now() < deadline) {
+                return;
+            }
+            _gameOverWait.cancel();
+            if (_link) {
+                _link->sendGameOver(report);
+            }
+            stop(Success, DisconnectReason::GameOver);
+        });
+    }
+
     void configure(const ConfigureMessage &game)
     {
         logger().info("Configured as \"{}\"", game.name);
@@ -87,6 +111,7 @@ class Instance
                              [this](std::uint32_t player, PlayerDisconnectedReason reason) {
                                  _link->sendPlayerDisconnected(player, reason);
                              },
+                         .onGameOver = [this](const GameOverReport &report) { gameOver(report); },
                      });
         if (!opened) {
             stop(Failure, DisconnectReason::Shutdown);
@@ -109,7 +134,7 @@ public:
                   });
               },
               [this] { _loop.post([this] { stop(Failure, DisconnectReason::Shutdown); }); }),
-          _linger(loop)
+          _linger(loop), _gameOverWait(loop)
     {
     }
 
@@ -123,15 +148,18 @@ public:
     /// A game without a master: four sessions with the public keys, given again each time one closes.
     bool startStandalone()
     {
-        const bool opened =
-            openGame(MaxInstancePlayers,
-                     {
-                         .onConnected = {},
-                         .onDisconnected =
-                             [this](std::uint32_t player, PlayerDisconnectedReason) {
-                                 _host->addPlayer(standalonePlayer(static_cast<std::uint8_t>(player - 1)));
-                             },
-                     });
+        const bool opened = openGame(
+            MaxInstancePlayers,
+            {
+                .onConnected = {},
+                .onDisconnected =
+                    [this](std::uint32_t player, PlayerDisconnectedReason) {
+                        if (!_host->over()) {
+                            _host->addPlayer(standalonePlayer(static_cast<std::uint8_t>(player - 1)));
+                        }
+                    },
+                .onGameOver = [this](const GameOverReport &report) { gameOver(report); },
+            });
         if (!opened) {
             return false;
         }
@@ -189,6 +217,7 @@ public:
         }
         _stopping = true;
         _exitCode = exitCode;
+        _gameOverWait.cancel();
         _game.stop();
         if (_host) {
             _host->closeAll(reason);
