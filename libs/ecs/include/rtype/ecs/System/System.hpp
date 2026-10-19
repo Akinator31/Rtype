@@ -9,6 +9,8 @@
 namespace rtype::ecs
 {
 
+/// Logic run on the entities that have some components. A system gets its caches with use() in its
+/// constructor, then goes through the entity ids in update(). Built and owned by Ecs::registerSystem().
 class System
 {
     std::vector<std::type_index> _componentTypes;
@@ -24,6 +26,7 @@ protected:
     }
 
 public:
+    /// A disabled system is skipped by Ecs::update().
     bool enabled = true;
 
     virtual ~System();

@@ -12,7 +12,7 @@ namespace rtype::ecs
 {
 
 /// One ComponentCache per component type.
-/// The lookup by type is done once (systems keep the pointer it returns), never per entity.
+/// The lookup by type is done once (systems keep the reference it returns), never per entity.
 class ComponentCaches
 {
     std::unordered_map<std::type_index, std::unique_ptr<ICache>> _caches;
