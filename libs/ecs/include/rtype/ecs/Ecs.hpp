@@ -13,6 +13,7 @@
 namespace rtype::ecs
 {
 
+/// The world: its entities, their components, and the systems that run on them.
 class Ecs
 {
     std::vector<bool> _alive;
@@ -38,12 +39,15 @@ public:
     /// reused.
     [[nodiscard]] bool isAlive(EntityRef entity) const;
 
+    /// Builds a T from `args` for the entity, replacing the one it already has.
+    /// May reallocate the cache of T: references to components of this type are invalidated.
     template <typename T, typename... Args>
     T &addComponent(entity_t entity, Args &&...args)
     {
         return _componentCaches.cache<T>().emplace(entity, std::forward<Args>(args)...);
     }
 
+    /// Does nothing if the entity has no T.
     template <typename T>
     void removeComponent(entity_t entity)
     {
