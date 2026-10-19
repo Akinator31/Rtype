@@ -38,6 +38,17 @@ struct PlayerShip {
     std::uint32_t fireCooldown = 0;
 };
 
+/// Cannot be hit for some ticks: a ship that just appeared.
+struct Invulnerable {
+    std::uint32_t ticks = 0;
+};
+
+/// A Bydo that flies to the left and shoots at random.
+struct Enemy {
+    /// Ticks before its next shot.
+    std::uint32_t fireCooldown = 0;
+};
+
 /// Removed (DestroyCause::Removed) once entirely outside the game area, by more than Rules::areaMargin:
 /// shots, Bydos that flew past.
 struct LeavesArea {

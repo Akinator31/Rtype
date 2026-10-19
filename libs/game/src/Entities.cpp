@@ -58,6 +58,34 @@ ecs::entity_t spawnPlayerShot(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
     return shot;
 }
 
+ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context)
+{
+    const Rules &rules = context.rules;
+    // Entirely inside the area vertically, just outside on the right: it comes in
+    const auto minY = static_cast<std::uint32_t>(rules.enemyHalfHeight);
+    const auto maxY = static_cast<std::uint32_t>(GameHeight - rules.enemyHalfHeight);
+    const float y = static_cast<float>(context.randomBetween(minY, maxY));
+    const ecs::entity_t enemy =
+        spawnVisible(ecs, context, EntityKind::BydoShooter, NoOwner, GameWidth + rules.enemyHalfWidth, y);
+    ecs.addComponent<Enemy>(enemy,
+                            context.randomBetween(rules.enemyMinFireInterval, rules.enemyMaxFireInterval));
+    ecs.addComponent<Health>(enemy, rules.enemyHealth);
+    ecs.addComponent<physics::Velocity>(enemy, -rules.enemySpeed, 0.0f);
+    ecs.addComponent<physics::Collider>(enemy, box(rules.enemyHalfWidth, rules.enemyHalfHeight));
+    ecs.addComponent<LeavesArea>(enemy, rules.enemyHalfWidth, rules.enemyHalfHeight);
+    return enemy;
+}
+
+ecs::entity_t spawnEnemyShot(ecs::Ecs &ecs, GameContext &context, float x, float y)
+{
+    const Rules &rules = context.rules;
+    const ecs::entity_t shot = spawnVisible(ecs, context, EntityKind::BydoShot, NoOwner, x, y);
+    ecs.addComponent<physics::Velocity>(shot, -rules.enemyShotSpeed, 0.0f);
+    ecs.addComponent<physics::Collider>(shot, box(rules.enemyShotHalfWidth, rules.enemyShotHalfHeight));
+    ecs.addComponent<LeavesArea>(shot, rules.enemyShotHalfWidth, rules.enemyShotHalfHeight);
+    return shot;
+}
+
 std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot)
 {
     ecs::ComponentCache<PlayerShip> &ships = ecs.cache<PlayerShip>();

@@ -31,6 +31,7 @@ void LocalSession::update(float elapsed)
         _simulation.setInput(localSlot(), _input);
         _simulation.step();
         _snapshots.push_back(_simulation.snapshot());
+        _over = _over || _simulation.snapshot().gameOver.has_value();
         _pending -= Tick;
         ++steps;
     }

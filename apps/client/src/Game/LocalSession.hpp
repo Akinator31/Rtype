@@ -28,6 +28,7 @@ private:
     /// Game time not stepped yet, in seconds. A double: a float would drift after an hour of 1/60 s.
     double _pending = 0.0;
     bool _paused = false;
+    bool _over = false;
     std::vector<game::Snapshot> _snapshots;
 
 public:
@@ -38,8 +39,7 @@ public:
     void update(float elapsed) override;
     [[nodiscard]] std::vector<game::Snapshot> takeSnapshots() override;
     void setPaused(bool paused) override { _paused = paused; }
-    /// Never yet: the rules have no end of game.
-    [[nodiscard]] bool isOver() const override { return false; }
+    [[nodiscard]] bool isOver() const override { return _over; }
 
     /// The simulation, for the tests.
     [[nodiscard]] const game::Simulation &simulation() const { return _simulation; }

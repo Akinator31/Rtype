@@ -62,13 +62,13 @@ struct Client {
     rtype::engine::SceneId scene;
     LocalSession *session = nullptr;
 
-    Client()
+    explicit Client(rtype::game::Rules rules = {})
         : sessions(engine.getEcs().registerSystem<GameSessionSystem>(engine.getEcs(), engine.getScenes(),
                                                                      engine.getControls()))
     {
         engine.setInputSource(input);
         scene = scenes.open({.updatesWhenCovered = true});
-        auto created = std::make_unique<LocalSession>();
+        auto created = std::make_unique<LocalSession>(rules);
         session = created.get();
         sessions.start(std::move(created), scene);
     }
@@ -220,7 +220,9 @@ TEST_CASE("The world of the session is drawn in the scene, and follows it", "[cl
 
 TEST_CASE("Shots appear when fired, and their entities go when they leave the game", "[client]")
 {
-    Client client;
+    rtype::game::Rules rules;
+    rules.maxEnemies = 0;
+    Client client(rules);
 
     client.input.keys = {Key::Space};
     client.run(30);

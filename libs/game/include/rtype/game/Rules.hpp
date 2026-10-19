@@ -27,6 +27,36 @@ struct Rules {
     /// Ticks between two shots while Fire is held: 10 is 6 shots per second.
     std::uint32_t fireInterval = 10;
 
+    /// Ticks between two Bydos appearing, while there are fewer than maxEnemies.
+    std::uint32_t enemySpawnInterval = 90;
+    /// Most Bydos alive at the same time.
+    std::uint32_t maxEnemies = 5;
+    /// Speed of a Bydo, to the left.
+    float enemySpeed = 150.0f;
+    /// Half the size of a Bydo.
+    float enemyHalfWidth = 40.0f;
+    float enemyHalfHeight = 28.0f;
+    /// Hit points of a Bydo.
+    std::uint8_t enemyHealth = 1;
+    /// A Bydo shoots after a random number of ticks between these two, 60 to 180 is every 1 to 3 seconds.
+    std::uint32_t enemyMinFireInterval = 60;
+    std::uint32_t enemyMaxFireInterval = 180;
+    /// Speed of a shot of a Bydo, to the left.
+    float enemyShotSpeed = 500.0f;
+    /// Half the size of a shot of a Bydo.
+    float enemyShotHalfWidth = 10.0f;
+    float enemyShotHalfHeight = 10.0f;
+    /// Points for the player whose shot destroys a Bydo.
+    std::uint32_t enemyScore = 100;
+
+    /// Ticks between the loss of a ship and the next one, if the player has lives left.
+    std::uint32_t respawnDelay = 90;
+    /// Ticks a new ship cannot be hit.
+    std::uint32_t invulnerableTicks = 120;
+
+    /// Seed of the random numbers of a game: the same seed and the same inputs give the same game.
+    std::uint32_t seed = 1;
+
     /// How far outside the game area an entity that leaves it is removed, in game units.
     float areaMargin = 128.0f;
 };

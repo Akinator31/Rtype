@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <random>
 #include <vector>
 
 namespace rtype::game
@@ -20,6 +21,8 @@ struct PlayerSlot {
     PlayerInput input;
     std::uint8_t lives = 0;
     std::uint32_t score = 0;
+    /// Ticks left before its next ship appears, 0 when it has one or no lives left.
+    std::uint32_t respawnIn = 0;
 };
 
 /// What the systems of the game share besides the components: the rules, the tick, the players and their
@@ -36,11 +39,23 @@ struct GameContext {
     std::optional<std::uint16_t> waveStarted;
     std::optional<GameOutcome> gameOver;
 
+    /// A number from `first` to `last` included. Same result on every platform, unlike the distributions of
+    /// the standard library, so that a game replays the same everywhere.
+    [[nodiscard]] std::uint32_t randomBetween(std::uint32_t first, std::uint32_t last)
+    {
+        return first + static_cast<std::uint32_t>(_random() % (last - first + 1));
+    }
+
     /// A new NetworkId: 1, 2, 3... never twice in a game.
     [[nodiscard]] std::uint32_t newId() { return _nextId++; }
 
 private:
     std::uint32_t _nextId = 1;
+    std::mt19937 _random{1};
+
+public:
+    /// Restarts the random numbers from the seed of the rules.
+    void seedRandom() { _random.seed(rules.seed); }
 };
 
 } // namespace rtype::game
