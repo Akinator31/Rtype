@@ -37,11 +37,11 @@ struct TickResult {
 /// });
 /// game.start();
 /// game.addPlayer(0);                     // from the network thread
-/// game.setInput(0, input, inputTick);
+/// game.receiveInputs(0, message.tick, message.inputs);
 /// @endcode
 ///
-/// The commands are applied at the start of the next tick, in their order. For now an input applies at once
-/// and stays until the next one; the inputs stamped for later ticks come with the replication.
+/// The commands are applied at the start of the next tick, in their order. Each input is kept until the tick
+/// its client stamped it with, then applied (InputBuffer): a tick without one repeats the last.
 class GameThread
 {
 public:
@@ -64,12 +64,12 @@ private:
     struct RemovePlayer {
         std::uint8_t slot;
     };
-    struct SetInput {
+    struct ReceiveInputs {
         std::uint8_t slot;
-        rtype::game::PlayerInput input;
         std::uint32_t tick;
+        std::vector<rtype::game::PlayerInput> inputs;
     };
-    using Command = std::variant<AddPlayer, RemovePlayer, SetInput>;
+    using Command = std::variant<AddPlayer, RemovePlayer, ReceiveInputs>;
 
     rtype::game::Rules _rules;
     PublishFunction _publish;
@@ -102,9 +102,9 @@ public:
     void addPlayer(std::uint8_t slot);
     /// Removes the ship of a player, from any thread.
     void removePlayer(std::uint8_t slot);
-    /// The input of a player, stamped by its client with `tick`, from any thread. An input older than the
-    /// last one applied for this slot is ignored: datagrams can arrive out of order.
-    void setInput(std::uint8_t slot, rtype::game::PlayerInput input, std::uint32_t tick);
+    /// The inputs of an INPUT of a player, from any thread: the input of `tick`, then of `tick - 1`, and so
+    /// on. Each one is applied at its tick (InputBuffer, docs/protocol/game.md, section 9.2).
+    void receiveInputs(std::uint8_t slot, std::uint32_t tick, std::vector<rtype::game::PlayerInput> inputs);
 
     /// The last tick simulated, from any thread: for `ACCEPTED`.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }

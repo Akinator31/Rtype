@@ -276,23 +276,47 @@ flowchart LR
 
 - **`GameThread`** owns the `Simulation` of `libs/game` and steps it every 1/60 s, whatever the network does.
   Behind by more than 250 ms (a machine that slept, a debugger), it goes on from now instead of running fast.
-  The commands of the network thread apply at the start of the next tick.
+  The commands of the network thread apply at the start of the next tick. The inputs of each player wait in an
+  `InputBuffer` for the tick they are stamped with ([below](#inputs)), and the result of each tick goes back with
+  the tick of the last input applied for each player.
 - **`GameHost`** is the game seen from the network ([game protocol](../protocol/game.md)):
   - a player added gets the lowest free slot, and its ship when its client connects;
   - on `CONNECT`, the client receives `ACCEPTED`, then `PLAYER_JOINED` for each player connected, itself
     included; the others receive its `PLAYER_JOINED`;
-  - the newest input of each `INPUT` goes to the game, unless an input stamped later was already applied;
+  - the inputs of each `INPUT` go to the game, which applies each one at its tick;
   - every 2 ticks, each client receives the snapshot in parts, with its last input; every tick, the entities
-    destroyed;
+    destroyed. They leave as soon as the tick is published, not at the next update of the sessions: up to a
+    tick of delay less, and no jitter from it;
+  - the game over goes to every client (`GAME_OVER`, with the last snapshot), then to the instance with the
+    score of each player; nothing is published after it;
   - a session that closes takes the ship away; the others receive `PLAYER_LEFT`, and the master
     `PLAYER_DISCONNECTED`, unless it removed the player itself (`REMOVE_PLAYER`).
 - Its `SessionHost` is updated at 60 Hz by a `Timer` of the loop, not by the game thread: the heartbeats and
   resends go on even if the game stalls.
 
+### Inputs
+
+A client sends, once per tick, an `INPUT` with its last 8 inputs, each stamped with the tick at which the game
+should apply it ([game protocol, 9.2](../protocol/game.md#92-inputs)). The game thread keeps them in one
+`InputBuffer` per player:
+
+| What happens | What the game does |
+|---|---|
+| An input for a tick to come, at most 60 ahead | Kept until its tick, then applied |
+| An input for a tick already simulated, or more than 60 ahead | Ignored |
+| The same tick received again (the next `INPUT` carries it too) | The first one is kept |
+| A tick without its input: its datagram was lost or late | The last input is applied again: the movement goes on |
+| 30 ticks without any input | An empty input: the ship of a player who lost the connection stops |
+
+The 8 inputs of each `INPUT` are what makes a lost datagram harmless: the next one brings the missing ticks again.
+The client stamps its inputs a little ahead of the game, from the round-trip time it measures
+([The client online](client-online.md)), so that they arrive before their tick.
+
 ### Stopping an instance
 
 | What happens | The clients | Exit code |
 |---|---|---|
+| The game is over | `GAME_OVER`, then `DISCONNECT (GAME_OVER)` once acknowledged, 2 s at most; the master gets the scores | 0 |
 | `SHUTDOWN` from the master | `DISCONNECT (SHUTDOWN)` | 0 |
 | Ctrl+C, `SIGTERM` (or `Process::stop()` from the master) | `DISCONNECT (SHUTDOWN)` | 0 |
 | The master closes the connection, or breaks the protocol | `DISCONNECT (SHUTDOWN)` | 1 |
@@ -425,9 +449,13 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   exist, `terminate()`, `kill()`, `stop()` killing a program that ignores it, the destructor and the moves.
   They also start `r-type_server --instance` itself: with its secret and a master that never answers, it runs
   until asked to stop, then exits with 0; without it, it exits with 1.
+- `tests/server_replication.cpp` (tag `[replication]`): the `InputBuffer`: an input applied at its tick, the
+  last one repeated then emptied after a silence, the ticks of a lost datagram filled by the next one, inputs
+  too late, too far ahead or received twice ignored.
 - `tests/server_instance.cpp` (tag `[instance]`): the messages between the master and its instances (round
-  trips, bytes, every malformed case, random bytes), the game thread (its rate, its commands, inputs out of
-  order, nothing after `stop()`), every failure of `MasterLink`, and whole instances run by `runInstance()` on
+  trips, bytes, every malformed case, random bytes), the game thread (its rate, each input applied at its
+  tick, whatever their order, nothing after `stop()`), the game over of `GameHost` (sent, reported with the
+  scores, acknowledged, nothing after), every failure of `MasterLink`, and whole instances run by `runInstance()` on
   a thread of the test, with a fake master over TCP and real clients over UDP: two players who join, see each
   other and move, one removed by the master, one who quits, then `SHUTDOWN`; the master going away; a full
   game; a UDP port taken; and the standalone mode with its public keys, stopped by Ctrl+C.
@@ -451,10 +479,9 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 
 - **The limits of the lobby are not options yet**: `LobbyLimits` has the defaults of the protocol; options can
   come when a host needs others.
-- **The replication is simple**: an input applies as soon as it arrives, and only the newest of each `INPUT`;
-  the inputs stamped for later ticks, their redundancy, and the empty input after 30 ticks without any
-  ([game protocol, 9.2](../protocol/game.md#92-inputs)) come with `server: replication`.
-- **No end of game yet**: the rules have no Bydos nor lives yet, so `GAME_OVER` is never sent; it comes with
-  `server: gameplay`.
+- **No waves yet**: the rules spawn Bydos without numbered waves, so `WAVE_STARTED` is never sent.
+- **The client draws the latest snapshot**: drawing in the past between two snapshots (interpolation) and
+  predicting the ship of the player come on the side of the client, and make the game online as smooth as
+  offline.
 - **No configuration file**: everything is on the command line, which suits a service (systemd, Docker). A file
   can come if the options multiply.

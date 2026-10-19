@@ -1,5 +1,6 @@
 #include "Instance/GameThread.hpp"
 
+#include "Instance/InputBuffer.hpp"
 #include "rtype/game/Simulation.hpp"
 #include "rtype/log/Logger.hpp"
 
@@ -68,9 +69,10 @@ void GameThread::removePlayer(std::uint8_t slot)
     push(RemovePlayer{slot});
 }
 
-void GameThread::setInput(std::uint8_t slot, rtype::game::PlayerInput input, std::uint32_t tick)
+void GameThread::receiveInputs(std::uint8_t slot, std::uint32_t tick,
+                               std::vector<rtype::game::PlayerInput> inputs)
 {
-    push(SetInput{slot, input, tick});
+    push(ReceiveInputs{slot, tick, std::move(inputs)});
 }
 
 void GameThread::run()
@@ -79,7 +81,7 @@ void GameThread::run()
 
     try {
         rtype::game::Simulation simulation(_rules);
-        std::array<std::uint32_t, rtype::game::MaxPlayers> lastInputs{};
+        std::array<InputBuffer, rtype::game::MaxPlayers> buffers{};
         std::vector<Command> commands;
         Clock::time_point next = Clock::now();
 
@@ -98,14 +100,19 @@ void GameThread::run()
                                [&](const AddPlayer &add) {
                                    if (!simulation.hasPlayer(add.slot)) {
                                        simulation.addPlayer(add.slot);
-                                       lastInputs[add.slot] = 0;
+                                       buffers[add.slot].reset();
                                    }
                                },
-                               [&](const RemovePlayer &remove) { simulation.removePlayer(remove.slot); },
-                               [&](const SetInput &set) {
-                                   if (set.slot < lastInputs.size() && set.tick >= lastInputs[set.slot]) {
-                                       simulation.setInput(set.slot, set.input);
-                                       lastInputs[set.slot] = set.tick;
+                               [&](const RemovePlayer &remove) {
+                                   simulation.removePlayer(remove.slot);
+                                   if (remove.slot < buffers.size()) {
+                                       buffers[remove.slot].reset();
+                                   }
+                               },
+                               [&](const ReceiveInputs &received) {
+                                   if (received.slot < buffers.size()) {
+                                       buffers[received.slot].receive(received.tick, received.inputs,
+                                                                      simulation.tick());
                                    }
                                },
                            },
@@ -113,9 +120,20 @@ void GameThread::run()
             }
             commands.clear();
 
+            // The input of each player for the tick about to be simulated
+            const std::uint32_t tick = simulation.tick() + 1;
+            TickResult result;
+            for (std::uint8_t slot = 0; slot < buffers.size(); ++slot) {
+                if (simulation.hasPlayer(slot)) {
+                    simulation.setInput(slot, buffers[slot].take(tick));
+                }
+                result.lastInputs[slot] = buffers[slot].lastApplied();
+            }
+
             simulation.step();
             _tick = simulation.tick();
-            _publish(TickResult{simulation.snapshot(), lastInputs});
+            result.snapshot = simulation.snapshot();
+            _publish(std::move(result));
 
             next += TickInterval;
             const Clock::time_point now = Clock::now();

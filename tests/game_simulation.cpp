@@ -476,12 +476,30 @@ TEST_CASE("A shot of a Bydo destroys a ship, which comes back invulnerable after
     REQUIRE(back);
     CHECK((back->flags & EntityState::Invulnerable) != 0);
 
-    // Invulnerable: a shot on it does nothing, and the flag ends
+    // Invulnerable: a shot on it does nothing. The shot has no velocity: it stays on the ship
     place(simulation, EntityKind::BydoShot, NoOwner, back->x, back->y, 1001);
     simulation.step();
-    CHECK(shipOf(simulation.snapshot(), 0));
-    run(simulation, static_cast<int>(rules.invulnerableTicks));
-    CHECK((shipOf(simulation.snapshot(), 0)->flags & EntityState::Invulnerable) == 0);
+    REQUIRE(shipOf(simulation.snapshot(), 0));
+
+    // The ship stays, invulnerable, then the flag ends within invulnerableTicks ticks of its return
+    const auto invulnerable = [&] {
+        const std::optional<EntityState> current = shipOf(simulation.snapshot(), 0);
+        return current && (current->flags & EntityState::Invulnerable) != 0;
+    };
+    std::uint32_t ticks = 1;
+    while (invulnerable() && ticks <= rules.invulnerableTicks) {
+        simulation.step();
+        ++ticks;
+    }
+    CHECK(ticks <= rules.invulnerableTicks);
+    const std::optional<EntityState> vulnerable = shipOf(simulation.snapshot(), 0);
+    REQUIRE(vulnerable);
+    CHECK((vulnerable->flags & EntityState::Invulnerable) == 0);
+
+    // Then the shot still on it hits it
+    simulation.step();
+    CHECK(wasDestroyed(simulation.snapshot(), vulnerable->id, DestroyCause::Killed));
+    CHECK(simulation.snapshot().players[0].lives == rules.lives - 2);
 }
 
 TEST_CASE("A Bydo that hits a ship is destroyed with it", "[game]")

@@ -49,6 +49,7 @@ add_executable(rtype_tests
     server_games.cpp
     server_lobby.cpp
     server_options.cpp
+    server_replication.cpp
     session.cpp
     shaders.cpp
     text_input.cpp
