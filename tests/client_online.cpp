@@ -268,11 +268,15 @@ TEST_CASE("Two clients play the same game online, each moving its own ship", "[o
     CHECK(bobSession.localSlot() == 1);
     CHECK(aliceSession.names().at(1) == "Bob");
 
-    // takeSnapshots gives the whole world once per change
-    const std::vector<game::Snapshot> snapshots = aliceSession.takeSnapshots();
-    REQUIRE(snapshots.size() == 1);
-    CHECK(snapshots[0].entities.size() == aliceSession.world().entities().size());
-    CHECK(aliceSession.takeSnapshots().empty());
+    // takeSnapshots gives, at every frame, the world drawn 100 ms in the past: both ships once it gets there
+    REQUIRE(
+        play(master.loop, both, [&] { return aliceSession.interpolation().view().entities.size() >= 2; }));
+    for (int frame = 0; frame < 3; ++frame) {
+        const std::vector<game::Snapshot> drawn = aliceSession.takeSnapshots();
+        REQUIRE(drawn.size() == 1);
+        CHECK(drawn[0].entities.size() >= 2);
+        CHECK(drawn[0].tick < aliceSession.world().tick());
+    }
 
     // Bob holds Right: his ship moves, on both screens, Alice's does not
     const float bobStart = shipOf(aliceSession.world(), 1)->x;
