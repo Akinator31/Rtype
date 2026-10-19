@@ -5,6 +5,7 @@
 #include "Common/InstanceMessages.hpp"
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
+#include "Instance/GameHost.hpp"
 #include "Instance/GameThread.hpp"
 #include "Instance/Instance.hpp"
 #include "Instance/MasterLink.hpp"
@@ -88,11 +89,11 @@ AddPlayerMessage player(std::uint32_t playerId, std::uint32_t session, std::stri
             std::move(name)};
 }
 
-/// Polls the loop of the test until the condition holds, or Patience.
+/// Polls the loop of the test until the condition holds, or `limit`.
 bool waitUntil(EventLoop &loop, const std::function<bool()> &condition,
-               const std::function<void()> &eachTurn = {})
+               const std::function<void()> &eachTurn = {}, std::chrono::milliseconds limit = Patience)
 {
-    const auto deadline = Clock::now() + Patience;
+    const auto deadline = Clock::now() + limit;
     while (!condition()) {
         if (Clock::now() > deadline) {
             return false;
@@ -416,7 +417,7 @@ TEST_CASE("Random bytes never crash the decoders of the instances", "[instance]"
 
 // --- The simulation thread ---
 
-TEST_CASE("The game thread steps 60 times per second and applies its commands", "[instance]")
+TEST_CASE("The game thread steps 60 times per second and applies each input at its tick", "[instance]")
 {
     std::mutex mutex;
     std::vector<TickResult> results;
@@ -424,10 +425,13 @@ TEST_CASE("The game thread steps 60 times per second and applies its commands", 
         const std::scoped_lock lock(mutex);
         results.push_back(std::move(result));
     });
+    const rtype::game::PlayerInput left{rtype::game::PlayerInput::Left};
+    const rtype::game::PlayerInput right{rtype::game::PlayerInput::Right};
     game.addPlayer(1);
-    game.setInput(1, rtype::game::PlayerInput{rtype::game::PlayerInput::Right}, 5);
-    // Older than the one before: datagrams out of order
-    game.setInput(1, rtype::game::PlayerInput{rtype::game::PlayerInput::Left}, 4);
+    // Right for the ticks 6, 5, 4, then Left for 3, 2, 1: each one at its tick, whatever the order they come
+    // in
+    game.receiveInputs(1, 6, {right, right, right});
+    game.receiveInputs(1, 3, {left, left, left});
     const auto start = Clock::now();
     game.start();
     std::this_thread::sleep_for(500ms);
@@ -435,21 +439,27 @@ TEST_CASE("The game thread steps 60 times per second and applies its commands", 
     const auto elapsed = std::chrono::duration<double>(Clock::now() - start).count();
 
     const std::scoped_lock lock(mutex);
-    REQUIRE(!results.empty());
+    REQUIRE(results.size() >= 6);
     // About 60 ticks per second: generous bounds for a loaded machine
     CHECK(static_cast<double>(results.size()) <= elapsed * 60.0 + 2.0);
     CHECK(static_cast<double>(results.size()) >= elapsed * 60.0 * 0.5);
     CHECK(results.back().snapshot.tick == results.size());
     CHECK(game.tick() == results.size());
 
-    const TickResult &last = results.back();
-    CHECK(last.lastInputs[1] == 5);
-    REQUIRE(last.snapshot.players.size() == 1);
-    const auto ship = std::ranges::find(last.snapshot.entities, rtype::game::EntityKind::PlayerShip,
-                                        &rtype::game::EntityState::kind);
-    REQUIRE(ship != last.snapshot.entities.end());
-    // Right was applied, Left was not
-    CHECK(ship->velocityX > 0.0f);
+    const auto velocityAt = [&](std::size_t tick) {
+        const rtype::game::Snapshot &snapshot = results[tick - 1].snapshot;
+        const auto ship = std::ranges::find(snapshot.entities, rtype::game::EntityKind::PlayerShip,
+                                            &rtype::game::EntityState::kind);
+        REQUIRE(ship != snapshot.entities.end());
+        return ship->velocityX;
+    };
+    CHECK(velocityAt(1) < 0.0f);
+    CHECK(velocityAt(3) < 0.0f);
+    CHECK(velocityAt(4) > 0.0f);
+    CHECK(velocityAt(6) > 0.0f);
+    // The tick of the last input applied, for the snapshots of its client
+    CHECK(results[2].lastInputs[1] == 3);
+    CHECK(results[5].lastInputs[1] == 6);
 
     // Nothing after stop()
     const std::size_t count = results.size();
@@ -570,6 +580,48 @@ TEST_CASE("The link fails on what the protocol does not expect", "[instance]")
 
 // --- Whole instances ---
 
+TEST_CASE("A game over is sent to the clients, reported with the scores, and nothing follows", "[instance]")
+{
+    EventLoop loop;
+    GameThread game({}, [](TickResult) {});
+    std::optional<GameOverReport> report;
+    GameHost host(loop, Address::loopbackIpv4(0), 4, game,
+                  {.onConnected = {}, .onDisconnected = {}, .onGameOver = [&](const GameOverReport &scores) {
+                       report = scores;
+                   }});
+    const AddPlayerMessage alice = player(42, 5, "Alice");
+    REQUIRE(host.addPlayer(alice));
+    TestClient client(loop, host.localAddress().port(), alice);
+    REQUIRE(waitUntil(loop, [&] { return client.accepted.has_value(); }, [&] { client.update(); }));
+
+    TickResult last;
+    last.snapshot.tick = 7;
+    last.snapshot.players = {{0, 0, 1234}};
+    last.snapshot.gameOver = rtype::game::GameOutcome::Defeat;
+    host.publish(last);
+
+    const auto received = [&](std::uint8_t type) {
+        return std::ranges::count(client.messages, type, &std::pair<std::uint8_t, Bytes>::first);
+    };
+    REQUIRE(waitUntil(
+        loop, [&] { return received(rtype::game::message_type::GameOver) == 1; }, [&] { client.update(); }));
+    CHECK(host.over());
+    REQUIRE(report);
+    CHECK(report->scores == std::vector<PlayerScore>{{42, 1234}});
+    // The last snapshot went with it, whatever its tick: the final scores
+    CHECK(received(rtype::game::message_type::Snapshot) == 1);
+    // The client acknowledges it: the instance can end
+    CHECK(waitUntil(loop, [&] { return host.acknowledged(); }, [&] { client.update(); }));
+
+    // Nothing is published after the game over
+    last.snapshot.tick = 8;
+    last.snapshot.gameOver.reset();
+    host.publish(last);
+    (void)waitUntil(loop, [] { return false; }, [&] { client.update(); }, 100ms);
+    CHECK(received(rtype::game::message_type::Snapshot) == 1);
+    CHECK(received(rtype::game::message_type::GameOver) == 1);
+}
+
 TEST_CASE("An instance runs a game for the players the master gives it", "[instance]")
 {
     InstanceFixture fixture;
@@ -601,16 +653,24 @@ TEST_CASE("An instance runs a game for the players the master gives it", "[insta
         updateClients));
     const float start = shipOf(*aliceClient.lastSnapshot(), 0)->x;
     CHECK(aliceClient.lastSnapshot()->players.size() == 1);
-    aliceClient.sendInput(100, rtype::game::PlayerInput{rtype::game::PlayerInput::Right});
+    // Like a real client: one INPUT per tick, stamped a few ticks ahead of the latest snapshot. Faster, the
+    // game would cut it, as any client sending more than 200 datagrams per second
+    std::uint32_t stamped = 0;
+    auto nextInput = Clock::now();
     REQUIRE(waitUntil(
         loop,
         [&] {
             const auto snapshot = aliceClient.lastSnapshot();
-            return snapshot && snapshot->lastInput == 100 && shipOf(*snapshot, 0)->x > start + 50.0f;
+            return snapshot && stamped != 0 && snapshot->lastInput >= stamped - 30 &&
+                   shipOf(*snapshot, 0)->x > start + 50.0f;
         },
         [&] {
             aliceClient.update();
-            aliceClient.sendInput(100, rtype::game::PlayerInput{rtype::game::PlayerInput::Right});
+            if (Clock::now() >= nextInput) {
+                nextInput += std::chrono::nanoseconds(std::chrono::seconds(1)) / 60;
+                stamped = std::max(stamped + 1, aliceClient.lastSnapshot()->tick + 5);
+                aliceClient.sendInput(stamped, rtype::game::PlayerInput{rtype::game::PlayerInput::Right});
+            }
         }));
 
     // A second player: both know each other
