@@ -13,6 +13,7 @@ add_library(r-type_client_core STATIC
     src/Console/ConsoleSystem.cpp
     src/Game/GameScenes.cpp
     src/Game/GameSessionSystem.cpp
+    src/Game/Interpolation.cpp
     src/Game/LocalSession.cpp
     src/Game/RemoteSession.cpp
     src/MainMenu/FlightSystem.cpp

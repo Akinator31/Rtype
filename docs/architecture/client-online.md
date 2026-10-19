@@ -14,6 +14,7 @@ apps/client/src/
     OnlineScenes.cpp   the Online menu and the list of the games
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
+    Interpolation.cpp  the world drawn 100 ms in the past, between the snapshots around that time
 ```
 
 The client has one `EventLoop` for its network, polled by the game loop once per frame before the engine
@@ -87,10 +88,40 @@ lobby.joinGame(id, [&](const rtype::client::LobbyClient::JoinResult &result) { /
   [game protocol](../protocol/game.md#92-inputs)): the tick of the latest snapshot, plus the time since it came,
   plus the round-trip time measured by the session, plus 2 ticks of margin. It never goes back: the game
   ignores an input older than the last one.
-- **`takeSnapshots()`** gives the whole world of the `RemoteWorld`, once per change, with the entities destroyed
-  since the previous call: the `GameSessionSystem` draws it as it draws the offline world.
+- **`takeSnapshots()`** gives, at every frame, the world of the [interpolation](#interpolation): the
+  `GameSessionSystem` draws it as it draws the offline world, and the entities move at the frame rate.
 - **Pausing** does nothing online: the game goes on, and the input sent under the pause menu is empty.
 - **Leaving** sends `DISCONNECT` to the game, when the session is destroyed.
+
+## Interpolation
+
+The snapshots come 30 times per second, some late, some lost; the client draws 60, 144 times per second. Drawing
+the newest snapshot moves the entities in jumps: still for 33 ms, then 20 units at once. `Interpolation` draws
+the world **100 ms in the past** instead, between the two snapshots around that time
+([game protocol, 9.3](../protocol/game.md#93-snapshots)):
+
+```
+snapshots received:   tick 40 ──────────── tick 42 ──────────── tick 44 (newest)
+                                   ▲
+                       drawn tick 41.3 = newest − 6 ticks (100 ms): 65 % of the way from 40 to 42
+```
+
+| What happens | What is drawn |
+|---|---|
+| Snapshots on time | Each entity between its positions in the two snapshots around the drawn tick |
+| A snapshot lost | The same, between the snapshots that arrived: 4 ticks apart instead of 2 |
+| No snapshot for a while | Each entity goes on with its velocity for 250 ms at most, then waits |
+| An entity created | It appears when the drawn tick reaches its first snapshot |
+| An entity destroyed | It disappears when the drawn tick reaches its destruction, not when `ENTITIES_DESTROYED` arrives 100 ms earlier |
+
+**The drawn tick** advances with the time of the frames, 60 ticks per second, and is nudged towards its target
+(newest tick − 6): a little faster when it falls behind, a little slower when it gets ahead, never backwards.
+The jitter of the snapshots and the drift between the clocks of the client and of the server are absorbed
+without a jump; after a pause of more than half a second (a window dragged, a debugger), it jumps to its
+target.
+
+`Interpolation` is pure, without a clock nor a network: the `RemoteSession` gives it each world received
+(`receive()`), the destructions (`destroyed()`) and the time of each frame (`advance()`), and draws `view()`.
 
 ## Tests
 
@@ -101,18 +132,24 @@ lobby.joinGame(id, [&](const rtype::client::LobbyClient::JoinResult &result) { /
 - two clients welcomed, a game created, listed and joined, an error given to its request, a player who leaves;
 - a server without the pinned key refused, a server unreachable, a name refused before connecting;
 - two clients playing the same game, each moving its own ship and seeing the other's, with the names of the
-  players, the world given once per change, and inputs stamped ahead of the world;
+  players, the world drawn at every frame behind the newest one, and inputs stamped ahead of the world;
 - a game that crashes reported to its player, who can create another one, and a game that stops ending the
   session of its player.
 
+`tests/client_interpolation.cpp` (tag `[interpolation]`) plays a server sending 30 snapshots per second to a
+client drawing 144 frames per second: the world drawn 100 ms behind, an entity moving a little at every frame,
+with snapshots on time, irregular or lost; extrapolation then waiting without snapshots; entities appearing and
+disappearing when the drawn tick reaches them; a server clock running faster; a pause; and the drawn tick
+never going back.
+
 ```sh
 ./build/bin/rtype_tests "[online]"
+./build/bin/rtype_tests "[interpolation]"
 ```
 
 ## Limits and next steps
 
-- **No interpolation yet**: online, the entities move 30 times per second, at the rate of the snapshots.
-  Drawing 100 ms in the past between two snapshots is the next step for a smooth game.
-- **No prediction**: the ship of the player moves when the game says so, a round trip after the key is pressed.
+- **No prediction**: the ship of the player moves when the game says so, a round trip after the key is pressed,
+  plus the 100 ms of the interpolation. Predicting it, with the rules of `libs/game`, is the next step.
 - **The names of the players** are known (`RemoteSession::names()`) but not shown in the HUD yet.
 - **One server at a time**, typed by hand: no list of servers, no address remembered.

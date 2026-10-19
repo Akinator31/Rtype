@@ -11,6 +11,7 @@ add_executable(rtype_tests
     action_map.cpp
     audio.cpp
     client_game.cpp
+    client_interpolation.cpp
     client_online.cpp
     color_filter.cpp
     collider_debug_renderer.cpp
