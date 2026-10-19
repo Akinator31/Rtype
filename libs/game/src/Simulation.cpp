@@ -4,6 +4,8 @@
 #include "rtype/game/Component/Components.hpp"
 #include "rtype/game/Entities.hpp"
 #include "rtype/game/System/AreaSystem.hpp"
+#include "rtype/game/System/CombatSystem.hpp"
+#include "rtype/game/System/EnemySystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/physics/Component/Motion.hpp"
@@ -32,10 +34,13 @@ const rtype::log::Logger &logger()
 Simulation::Simulation(Rules rules)
 {
     _context.rules = rules;
-    // The order of a tick: the inputs, the movement, the walls, then what left the area
+    _context.seedRandom();
+    // The order of a tick: the inputs, the Bydos, the movement, the walls, the hits, then what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
+    _ecs.registerSystem<EnemySystem>(_ecs, _context);
     _ecs.registerSystem<physics::MovementSystem>();
     _ecs.registerSystem<physics::BoundsSystem>(_ecs);
+    _ecs.registerSystem<CombatSystem>(_ecs, _context);
     _ecs.registerSystem<AreaSystem>(_ecs, _context);
 }
 
@@ -108,6 +113,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<physics::Velocity> &velocities = _ecs.cache<physics::Velocity>();
     ecs::ComponentCache<Owner> &owners = _ecs.cache<Owner>();
     ecs::ComponentCache<Health> &healths = _ecs.cache<Health>();
+    ecs::ComponentCache<Invulnerable> &invulnerables = _ecs.cache<Invulnerable>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -123,6 +129,9 @@ void Simulation::buildSnapshot()
             state.velocityY = velocities.get(entity).y;
         }
         state.health = healths.has(entity) ? healths.get(entity).points : 0;
+        if (invulnerables.has(entity) && invulnerables.get(entity).ticks > 0) {
+            state.flags |= EntityState::Invulnerable;
+        }
         snapshot.entities.push_back(state);
     }
     // By id, whatever the reuse of the ids of the ECS: the same game always gives the same snapshot

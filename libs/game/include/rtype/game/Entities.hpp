@@ -18,6 +18,12 @@ ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
 /// A shot of a player, going right from a position.
 ecs::entity_t spawnPlayerShot(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot, float x, float y);
 
+/// A Bydo entering the game area from the right, at a random height.
+ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context);
+
+/// A shot of a Bydo, going left from a position.
+ecs::entity_t spawnEnemyShot(ecs::Ecs &ecs, GameContext &context, float x, float y);
+
 /// The ship of a player, if it has one.
 [[nodiscard]] std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot);
 

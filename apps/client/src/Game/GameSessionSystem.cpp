@@ -47,8 +47,16 @@ EntityLook lookOf(const game::EntityState &entity)
         return {{DefaultRules.shotHalfWidth * 2.0f, DefaultRules.shotHalfHeight * 2.0f,
                  playerColor(entity.owner)},
                 ShotOrder};
+    case game::EntityKind::BydoShooter:
+        return {{DefaultRules.enemyHalfWidth * 2.0f, DefaultRules.enemyHalfHeight * 2.0f,
+                 render::Color{171, 71, 188, 255}},
+                ShipOrder};
+    case game::EntityKind::BydoShot:
+        return {{DefaultRules.enemyShotHalfWidth * 2.0f, DefaultRules.enemyShotHalfHeight * 2.0f,
+                 render::Color{255, 112, 67, 255}},
+                ShotOrder};
     default:
-        // The Bydos and their shots come with the gameplay: a box until they have a look
+        // The other kinds come with the gameplay: a box until they have a look
         return {{48.0f, 48.0f, render::colors::Gray}, ShipOrder};
     }
 }
