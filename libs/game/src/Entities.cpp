@@ -83,6 +83,26 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
     return projectile;
 }
 
+void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const std::string &weaponId)
+{
+    const WeaponDefinition &weapon = context.weapons.getDefinition(weaponId);
+    ecs.addComponent<Armed>(ship, weaponId, 0U, weapon.magazineSize, 0U);
+}
+
+ecs::entity_t spawnWeaponShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
+                              std::uint8_t owner, float x, float y)
+{
+    const WeaponDefinition &weapon = context.weapons.getDefinition(weaponId);
+    const Rules &rules = context.rules;
+    const float noseX = x + rules.shipHalfWidth + rules.shotHalfWidth;
+    const ecs::entity_t shot =
+        spawnProjectile(ecs, context, weapon.projectile, owner, noseX, y, weapon.projectileSpeed, 0.0f);
+    Projectile &projectile = ecs.getComponent<Projectile>(shot);
+    projectile.category = weapon.mechanic;
+    projectile.range = weapon.range;
+    return shot;
+}
+
 std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot)
 {
     ecs::ComponentCache<PlayerShip> &ships = ecs.cache<PlayerShip>();

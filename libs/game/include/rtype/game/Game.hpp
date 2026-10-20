@@ -31,3 +31,4 @@
 #include "rtype/game/System/CombatSystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
+#include "rtype/game/System/WeaponSystem.hpp"

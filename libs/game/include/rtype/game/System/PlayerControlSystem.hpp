@@ -11,12 +11,13 @@ namespace rtype::game
 
 /// Turns the input of each player into the movement of its ship, and makes it shoot while Fire is held, every
 /// Rules::fireInterval ticks. The shots are created after the systems of the tick, so they move from the next
-/// one.
+/// one. A ship with a weapon (Armed) is left to the WeaponSystem.
 class PlayerControlSystem : public ecs::System
 {
     ecs::Ecs &_ecs;
     GameContext &_context;
     ecs::ComponentCache<PlayerShip> &_ships;
+    ecs::ComponentCache<Armed> &_weapons;
     ecs::ComponentCache<physics::Velocity> &_velocities;
     ecs::ComponentCache<ecs::Position> &_positions;
 

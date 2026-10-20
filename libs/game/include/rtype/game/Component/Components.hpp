@@ -38,6 +38,22 @@ struct Projectile {
     physics::Velocity launch;
     /// Ticks since it was fired.
     std::uint32_t age = 0;
+    /// Distance after which it vanishes, 0 for no limit (ProjectileSystem).
+    float range = 0.0f;
+    /// Distance flown since it was fired.
+    float travelled = 0.0f;
+};
+
+/// A ship with a weapon, from the WeaponRegistry of the GameContext: its state, run by the WeaponSystem.
+struct Armed {
+    /// Id of the WeaponDefinition.
+    std::string weapon;
+    /// Ticks before it can fire again.
+    std::uint32_t cooldown = 0;
+    /// Shots left in the magazine (unused when the magazine is infinite).
+    std::uint32_t ammo = 0;
+    /// Ticks before the magazine is full again, 0 when it is not reloading.
+    std::uint32_t reloadLeft = 0;
 };
 
 /// Hit points left.

@@ -114,7 +114,7 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 The Bydos, the waves and the score come later. Nothing makes a Bydo shot yet: the hit is there for the
 [projectiles](#projectiles) to use.
 
-A tick runs the systems in this order: `PlayerControlSystem` (inputs), `ProjectileSystem` (the velocity of the
+A tick runs the systems in this order: `PlayerControlSystem` (inputs), `WeaponSystem` (the weapons), `ProjectileSystem` (the velocity of the
 projectiles), `physics::MovementSystem` (movement),
 `physics::BoundsSystem` (the walls), `CombatSystem` (the hits, the lives), `AreaSystem` (what left), then the
 snapshot is taken.
@@ -224,6 +224,57 @@ spawnProjectile(ecs, context, "pulse", slot, x, y, 1500.0f, 0.0f); // from a sys
 
 [ADR 0018](../decisions/0018-lua-game-config.md) plans to load the definitions from Lua files; the registry is
 what the loader will fill.
+
+## Weapons
+
+A kind of weapon is **data** too, a `WeaponDefinition`, kept by id in a `WeaponRegistry`
+(`GameContext::weapons`). Durations are in ticks, distances in game units.
+
+| Field | Type | What it is |
+|---|---|---|
+| `projectile` | `std::string` | The ammunition: the id of a `ProjectileDefinition` |
+| `mechanic` | `ProjectileCategory` | The firing mechanic: how its projectiles move (replaces the category of the projectile) |
+| `projectileSpeed` | `float` | Speed the projectiles leave with, to the right |
+| `fireInterval` | ticks | Between two shots while Fire is held (not 0) |
+| `range` | `float` | Distance a projectile flies before it vanishes, 0 for no limit |
+| `magazineSize` | shots | Ammunition capacity, `InfiniteAmmo` (0) for a weapon that never runs out |
+| `reloadTicks` | ticks | Reload time of an empty magazine |
+
+```mermaid
+flowchart LR
+    Proj["ProjectileDefinition<br/>id · model · category · collider"] -- "projectile (id)" --> Def
+    Cat["ProjectileCategory"] -- "mechanic" --> Def
+    Def["WeaponDefinition<br/>id · projectile · mechanic · projectileSpeed<br/>fireInterval · range · magazineSize · reloadTicks"]
+    Def -- "addDefinition()" --> Reg["WeaponRegistry<br/>GameContext::weapons"]
+    Reg -- "equipWeapon()" --> Armed["Armed on the ship<br/>weapon · cooldown · ammo · reloadLeft"]
+    Armed -- "WeaponSystem, Fire held" --> Shot["spawnWeaponShot()"]
+    Reg -- "getDefinition(id)" --> Shot
+    Proj -- "spawnProjectile()" --> Shot
+    Shot --> Ent["Projectile entity<br/>category = mechanic · range · travelled"]
+    Ent -- "ProjectileSystem: travelled ≥ range" --> Gone["removed (DestroyCause::Removed)"]
+```
+
+The state of the magazine, run by the `WeaponSystem` at each tick (with `magazineSize` not `InfiniteAmmo`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> Ready: equipWeapon() (full magazine)
+    Ready --> Cooldown: Fire held, one round spent<br/>cooldown = fireInterval
+    Cooldown --> Ready: cooldown reaches 0
+    Ready --> Reloading: last round spent<br/>reloadLeft = reloadTicks
+    Reloading --> Ready: reloadLeft reaches 0<br/>ammo = magazineSize
+```
+
+```cpp
+simulation.context().weapons.addDefinition({"blaster", "pulse", ProjectileCategory::Laser, 1000.0f, 5, 600.0f, 8, 90});
+equipWeapon(ecs, context, ship, "blaster"); // gives the ship an Armed component
+```
+
+- `WeaponSystem` runs each `Armed` ship: it counts the cooldown down, spends a round per shot, reloads on its
+  own when the magazine is empty (no shot meanwhile) and fires through `spawnWeaponShot()` (deferred).
+- A ship **without** `Armed` keeps the default shots of `PlayerControlSystem` (`Rules::fireInterval`).
+- The range is checked by `ProjectileSystem` on the distance flown (`Projectile::travelled`); a projectile past
+  it is removed with `DestroyCause::Removed`.
 
 ## Adding gameplay
 

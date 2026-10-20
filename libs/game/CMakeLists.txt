@@ -15,6 +15,8 @@ add_library(rtype_game
     src/System/CombatSystem.cpp
     src/System/PlayerControlSystem.cpp
     src/System/ProjectileSystem.cpp
+    src/System/WeaponSystem.cpp
+    src/Weapon/WeaponRegistry.cpp
 )
 add_library(rtype::game ALIAS rtype_game)
 target_include_directories(rtype_game PUBLIC include)

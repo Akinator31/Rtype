@@ -552,3 +552,130 @@ TEST_CASE("A missile in the game speeds up", "[game]")
     run(simulation, 20);
     CHECK(simulation.snapshot().entities.at(0).velocityX > first);
 }
+
+// --- Weapons ---
+
+namespace
+{
+
+/// A weapon firing "pulse" every 5 ticks, a magazine of 3 shots, reloaded in 20 ticks.
+WeaponDefinition blaster()
+{
+    return {"blaster", "pulse", ProjectileCategory::Laser, 1000.0f, 5, 0.0f, 3, 20};
+}
+
+/// Gives the weapon to the player 0, who holds Fire.
+void arm(Simulation &simulation, const WeaponDefinition &weapon)
+{
+    simulation.context().projectiles.addDefinition(pulse());
+    simulation.context().weapons.addDefinition(weapon);
+    simulation.addPlayer(0);
+    equipWeapon(simulation.ecs(), simulation.context(), *findPlayerShip(simulation.ecs(), 0), weapon.id);
+    simulation.setInput(0, held(PlayerInput::Fire));
+}
+
+} // namespace
+
+TEST_CASE("A weapon registry gives back the weapons, and refuses doubles, unknown ids and no fire interval",
+          "[game]")
+{
+    WeaponRegistry registry;
+    registry.addDefinition(blaster());
+
+    CHECK(registry.hasDefinition("blaster"));
+    CHECK(registry.getDefinition("blaster").magazineSize == 3);
+    CHECK_THROWS_AS(registry.addDefinition(blaster()), std::invalid_argument);
+    CHECK_THROWS_AS(registry.addDefinition({}), std::invalid_argument);
+    WeaponDefinition still = blaster();
+    still.id = "still";
+    still.fireInterval = 0;
+    CHECK_THROWS_AS(registry.addDefinition(still), std::invalid_argument);
+    CHECK_THROWS_AS(registry.getDefinition("nope"), std::out_of_range);
+}
+
+TEST_CASE("equipWeapon() and spawnWeaponShot() refuse an unknown weapon", "[game]")
+{
+    Simulation simulation;
+    simulation.addPlayer(0);
+    const auto ship = *findPlayerShip(simulation.ecs(), 0);
+    CHECK_THROWS_AS(equipWeapon(simulation.ecs(), simulation.context(), ship, "nope"), std::out_of_range);
+    CHECK_THROWS_AS(spawnWeaponShot(simulation.ecs(), simulation.context(), "nope", 0, 0.0f, 0.0f),
+                    std::out_of_range);
+}
+
+TEST_CASE("An armed ship fires at the rate, the speed and the mechanic of its weapon", "[game]")
+{
+    WeaponDefinition weapon = blaster();
+    weapon.magazineSize = 0;
+    Simulation simulation;
+    arm(simulation, weapon);
+
+    simulation.step();
+    const std::vector<EntityState> first = shotsOf(simulation.snapshot());
+    REQUIRE(first.size() == 1);
+    CHECK(first[0].velocityX == Approx(1000.0f));
+
+    run(simulation, 4);
+    CHECK(shotsOf(simulation.snapshot()).size() == 1);
+    simulation.step();
+    CHECK(shotsOf(simulation.snapshot()).size() == 2);
+
+    auto &projectiles = simulation.ecs().cache<Projectile>();
+    for (rtype::ecs::entity_t entity = 0; entity < projectiles.size(); ++entity) {
+        if (projectiles.has(entity)) {
+            CHECK(projectiles.get(entity).category == ProjectileCategory::Laser);
+        }
+    }
+}
+
+TEST_CASE("A weapon empties its magazine, reloads, then fires again", "[game]")
+{
+    Simulation simulation;
+    arm(simulation, blaster());
+
+    // 3 shots, 5 ticks apart: ticks 1, 6 and 11
+    run(simulation, 11);
+    CHECK(shotsOf(simulation.snapshot()).size() == 3);
+    const auto ship = *findPlayerShip(simulation.ecs(), 0);
+    CHECK(simulation.ecs().getComponent<Armed>(ship).ammo == 0);
+
+    // Reloading: nothing is fired for reloadTicks
+    run(simulation, 19);
+    CHECK(shotsOf(simulation.snapshot()).size() == 3);
+    simulation.step();
+    CHECK(shotsOf(simulation.snapshot()).size() == 4);
+    CHECK(simulation.ecs().getComponent<Armed>(ship).ammo == 2);
+}
+
+TEST_CASE("A weapon with InfiniteAmmo never runs dry nor reloads", "[game]")
+{
+    WeaponDefinition weapon = blaster();
+    weapon.magazineSize = InfiniteAmmo;
+    Simulation simulation;
+    arm(simulation, weapon);
+
+    // 20 shots, well over any magazine, with a reload time that would show
+    run(simulation, 5 * 20);
+    const auto ship = *findPlayerShip(simulation.ecs(), 0);
+    CHECK(simulation.ecs().getComponent<Armed>(ship).reloadLeft == 0);
+    CHECK(simulation.snapshot().entities.size() > 3);
+}
+
+TEST_CASE("A projectile vanishes once it has flown the range of its weapon", "[game]")
+{
+    WeaponDefinition weapon = blaster();
+    weapon.magazineSize = 0;
+    weapon.range = 100.0f;
+    Simulation simulation;
+    arm(simulation, weapon);
+    simulation.step();
+    simulation.setInput(0, {});
+    const std::uint32_t id = shotsOf(simulation.snapshot())[0].id;
+
+    // 1000 units per second: 100 units take 6 ticks
+    run(simulation, 4);
+    CHECK(shotsOf(simulation.snapshot()).size() == 1);
+    run(simulation, 3);
+    CHECK(shotsOf(simulation.snapshot()).empty());
+    static_cast<void>(id);
+}
