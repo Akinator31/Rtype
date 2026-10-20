@@ -36,8 +36,8 @@ Simulation::Simulation(Rules rules)
 {
     _context.rules = rules;
     _context.seedRandom();
-    // The order of a tick: the inputs, the weapons, the projectiles, the movement, the walls, the hits, then what left the
-    // area
+    // The order of a tick: the inputs, the weapons, the projectiles, the movement, the walls, the hits, then
+    // what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
     _ecs.registerSystem<WeaponSystem>(_ecs, _context);
     _ecs.registerSystem<ProjectileSystem>(_ecs, _context);

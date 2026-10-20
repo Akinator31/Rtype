@@ -9,7 +9,8 @@ namespace rtype::game
 {
 
 ProjectileSystem::ProjectileSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context)
-    : _ecs(ecs), _context(context), _projectiles(use<Projectile>(caches)), _velocities(use<physics::Velocity>(caches))
+    : _ecs(ecs), _context(context), _projectiles(use<Projectile>(caches)),
+      _velocities(use<physics::Velocity>(caches))
 {
 }
 
