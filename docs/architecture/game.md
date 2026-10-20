@@ -114,7 +114,8 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 The Bydos, the waves and the score come later. Nothing makes a Bydo shot yet: the hit is there for the
 [projectiles](#projectiles) to use.
 
-A tick runs the systems in this order: `PlayerControlSystem` (inputs), `physics::MovementSystem` (movement),
+A tick runs the systems in this order: `PlayerControlSystem` (inputs), `ProjectileSystem` (the velocity of the
+projectiles), `physics::MovementSystem` (movement),
 `physics::BoundsSystem` (the walls), `CombatSystem` (the hits, the lives), `AreaSystem` (what left), then the
 snapshot is taken.
 
@@ -202,8 +203,18 @@ simulation.context().projectiles.addDefinition(
 spawnProjectile(ecs, context, "pulse", slot, x, y, 1500.0f, 0.0f); // from a system, through Ecs::defer()
 ```
 
+- **The behavior of a category is in functions** (`Projectile/ProjectileBehavior.hpp`), since a C++ `enum class`
+  has no methods: one `switch` per question, so a new category is a new case in each.
+
+  | Function | Answers | Bullet | Missile | Laser | Plasma |
+  |---|---|---|---|---|---|
+  | `getProjectileVelocity(category, launch, age, rules)` | How it moves, each tick (`ProjectileSystem`) | Straight | Speeds up (`missileBoostPerTick`, `missileMaxBoost`) | Straight | Zigzags (`plasmaZigzagSpeed`, `plasmaZigzagInterval`) |
+  | `getProjectileSounds(category)` | The paths of its sounds: `spawn`, `move`, `vanish` (left the area), `impact` (hit). All empty: no sound file yet | | | | |
+
+  The sounds are paths: the game has no audio, the client plays them. Nothing sends the events (spawn, vanish,
+  impact) to the client yet, like the model, they wait for a decision on the protocol.
 - **The velocity is not in the definition**: the caller gives it at each shot, so that a weapon decides how
-  fast its projectile goes. `spawnProjectile()` throws `std::out_of_range` for an unknown id.
+  fast its projectile goes; it is kept as `Projectile::launch`, and the category moves the projectile from it. `spawnProjectile()` throws `std::out_of_range` for an unknown id.
 - **The registry is an `std::unordered_map`**, only looked up by id, never iterated: this does not break the
   [determinism](#who-calls-step) above. Iterating it in the rules would.
 - **The clients see an `EntityKind` only**: a projectile with an owner is a `PlayerShot`, without one a

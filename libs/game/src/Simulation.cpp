@@ -6,6 +6,7 @@
 #include "rtype/game/System/AreaSystem.hpp"
 #include "rtype/game/System/CombatSystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
+#include "rtype/game/System/ProjectileSystem.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 #include "rtype/physics/System/BoundsSystem.hpp"
@@ -34,8 +35,9 @@ Simulation::Simulation(Rules rules)
 {
     _context.rules = rules;
     _context.seedRandom();
-    // The order of a tick: the inputs, the movement, the walls, the hits, then what left the area
+    // The order of a tick: the inputs, the projectiles, the movement, the walls, the hits, then what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
+    _ecs.registerSystem<ProjectileSystem>(_context);
     _ecs.registerSystem<physics::MovementSystem>();
     _ecs.registerSystem<physics::BoundsSystem>(_ecs);
     _ecs.registerSystem<CombatSystem>(_ecs, _context);

@@ -27,6 +27,13 @@ struct Rules {
     /// Ticks between two shots while Fire is held: 10 is 6 shots per second.
     std::uint32_t fireInterval = 10;
 
+    /// A missile speeds up by this fraction of its launch speed per tick, up to missileMaxBoost times it.
+    float missileBoostPerTick = 0.02f;
+    float missileMaxBoost = 3.0f;
+    /// A plasma projectile goes up then down at this vertical speed, switching every plasmaZigzagInterval ticks.
+    float plasmaZigzagSpeed = 200.0f;
+    std::uint32_t plasmaZigzagInterval = 20;
+
     /// Ticks between the loss of a ship and the next one, if the player has lives left.
     std::uint32_t respawnDelay = 90;
     /// Ticks a new ship cannot be hit.

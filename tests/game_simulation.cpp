@@ -511,3 +511,42 @@ TEST_CASE("spawnProjectile() makes a projectile with its model, category and col
     run(simulation, 30 * TickRate);
     CHECK(simulation.snapshot().entities.empty());
 }
+
+TEST_CASE("Each category moves its projectiles its own way", "[game]")
+{
+    const Rules rules;
+    const rtype::physics::Velocity launch{1000.0f, 0.0f};
+
+    const auto bullet = getProjectileVelocity(ProjectileCategory::Bullet, launch, 50, rules);
+    CHECK(bullet.x == Approx(1000.0f));
+    CHECK(bullet.y == Approx(0.0f));
+
+    CHECK(getProjectileVelocity(ProjectileCategory::Laser, launch, 50, rules).x == Approx(1000.0f));
+
+    const float early = getProjectileVelocity(ProjectileCategory::Missile, launch, 5, rules).x;
+    const float late = getProjectileVelocity(ProjectileCategory::Missile, launch, 10000, rules).x;
+    CHECK(early > 1000.0f);
+    CHECK(late == Approx(1000.0f * rules.missileMaxBoost));
+
+    const auto up = getProjectileVelocity(ProjectileCategory::Plasma, launch, 0, rules);
+    const auto down = getProjectileVelocity(ProjectileCategory::Plasma, launch, rules.plasmaZigzagInterval, rules);
+    CHECK(up.y == Approx(-rules.plasmaZigzagSpeed));
+    CHECK(down.y == Approx(rules.plasmaZigzagSpeed));
+    CHECK(up.x == Approx(1000.0f));
+}
+
+TEST_CASE("A missile in the game speeds up", "[game]")
+{
+    Simulation simulation{Rules{}};
+    GameContext &context = simulation.context();
+    ProjectileDefinition missile = pulse();
+    missile.id = "missile";
+    missile.category = ProjectileCategory::Missile;
+    context.projectiles.addDefinition(missile);
+    spawnProjectile(simulation.ecs(), context, "missile", 0, 500.0f, 300.0f, 100.0f, 0.0f);
+
+    run(simulation, 1);
+    const float first = simulation.snapshot().entities.at(0).velocityX;
+    run(simulation, 20);
+    CHECK(simulation.snapshot().entities.at(0).velocityX > first);
+}

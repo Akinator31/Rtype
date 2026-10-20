@@ -74,7 +74,8 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
     // The clients draw only the kinds they know: a projectile is a player shot or a Bydo shot for now
     const EntityKind kind = owner < MaxPlayers ? EntityKind::PlayerShot : EntityKind::BydoShot;
     const ecs::entity_t projectile = spawnVisible(ecs, context, kind, owner, x, y);
-    ecs.addComponent<Projectile>(projectile, definition.category, definition.model);
+    ecs.addComponent<Projectile>(projectile, definition.category, definition.model,
+                                 physics::Velocity{velocityX, velocityY}, 0U);
     ecs.addComponent<physics::Velocity>(projectile, velocityX, velocityY);
     ecs.addComponent<physics::Collider>(projectile, definition.collider);
     const physics::Vec3 half = halfSizeOf(definition.collider);

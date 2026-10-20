@@ -17,6 +17,7 @@
 #include "rtype/game/GameContext.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/PlayerInput.hpp"
+#include "rtype/game/Projectile/ProjectileBehavior.hpp"
 #include "rtype/game/Projectile/ProjectileCategory.hpp"
 #include "rtype/game/Projectile/ProjectileDefinition.hpp"
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
@@ -29,3 +30,4 @@
 #include "rtype/game/System/AreaSystem.hpp"
 #include "rtype/game/System/CombatSystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
+#include "rtype/game/System/ProjectileSystem.hpp"

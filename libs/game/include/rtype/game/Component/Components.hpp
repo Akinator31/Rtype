@@ -2,6 +2,7 @@
 
 #include "rtype/game/Projectile/ProjectileCategory.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/physics/Component/Motion.hpp"
 
 #include <cstdint>
 #include <string>
@@ -33,6 +34,10 @@ struct Projectile {
     ProjectileCategory category = ProjectileCategory::Bullet;
     /// Path of the 3D model.
     std::string model;
+    /// The velocity it was fired with: the category moves it from this one (ProjectileSystem).
+    physics::Velocity launch;
+    /// Ticks since it was fired.
+    std::uint32_t age = 0;
 };
 
 /// Hit points left.
