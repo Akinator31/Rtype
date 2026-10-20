@@ -102,7 +102,7 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
 {
     const auto quit = [&window] { window.requestClose(); };
     engine.createScene(
-        rtype::client::MainMenuScene, {.updatesWhenCovered = true},
+        rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
         [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
             rtype::client::buildMainMenu(target, scene, resources, style, quit);
         });
