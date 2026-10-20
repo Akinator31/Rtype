@@ -3,6 +3,8 @@
 // Private to the render library: the raylib resources behind the handles of the ResourceManager, shared
 // between the ResourceManager, which loads them, and the Renderer, which draws them.
 
+#include "rtype/core/AsyncResourceRequests.hpp"
+#include "rtype/core/AssetFile.hpp"
 #include "rtype/core/ResourceCache.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
@@ -22,6 +24,32 @@ namespace rtype::render
 namespace detail
 {
 
+class PreparedTexture
+{
+    Image _image{};
+
+public:
+    PreparedTexture(const std::filesystem::path &file)
+    {
+        const std::vector<unsigned char> bytes = core::readAssetFile(file);
+        _image = LoadImageFromMemory(file.extension().string().c_str(), bytes.data(),
+                                     static_cast<int>(bytes.size()));
+        if (!IsImageValid(_image)) {
+            if (_image.data != nullptr) {
+                UnloadImage(_image);
+            }
+            throw std::runtime_error("Cannot load texture " + file.string());
+        }
+    }
+
+    ~PreparedTexture() { UnloadImage(_image); }
+    PreparedTexture(const PreparedTexture &) = delete;
+    PreparedTexture &operator=(const PreparedTexture &) = delete;
+    PreparedTexture(PreparedTexture &&other) noexcept : _image(std::exchange(other._image, {})) {}
+
+    [[nodiscard]] Image image() const { return _image; }
+};
+
 // Owns a texture in graphics memory. A moved-from texture is empty and frees nothing.
 class Texture
 {
@@ -29,6 +57,17 @@ private:
     Texture2D _texture;
 
 public:
+    Texture(Image image, TextureFiltering filtering) : _texture(LoadTextureFromImage(image))
+    {
+        if (!IsTextureValid(_texture)) {
+            throw std::runtime_error("Cannot create texture");
+        }
+        if (filtering == TextureFiltering::Smooth) {
+            GenTextureMipmaps(&_texture);
+            SetTextureFilter(_texture, TEXTURE_FILTER_TRILINEAR);
+        }
+    }
+
     Texture(const std::filesystem::path &file, TextureFiltering filtering)
         : _texture(LoadTexture(file.string().c_str()))
     {
@@ -75,6 +114,68 @@ inline std::vector<int> fontCharacters()
     return characters;
 }
 
+class PreparedFont
+{
+    ::Font _font{};
+    Image _atlas{};
+
+    void reset()
+    {
+        UnloadFontData(_font.glyphs, _font.glyphCount);
+        if (_font.recs != nullptr) {
+            MemFree(_font.recs);
+        }
+        UnloadImage(_atlas);
+    }
+
+public:
+    PreparedFont(const std::filesystem::path &file, int size)
+    {
+        try {
+            const std::vector<unsigned char> bytes = core::readAssetFile(file);
+            const std::vector<int> characters = fontCharacters();
+            _font.baseSize = size;
+            _font.glyphPadding = 4;
+            _font.glyphs = LoadFontData(bytes.data(), static_cast<int>(bytes.size()), size,
+                                       characters.data(), static_cast<int>(characters.size()),
+                                       FONT_DEFAULT, &_font.glyphCount);
+            if (_font.glyphs == nullptr || _font.glyphCount == 0) {
+                throw std::runtime_error("Cannot load font " + file.string());
+            }
+            _atlas = GenImageFontAtlas(_font.glyphs, &_font.recs, _font.glyphCount, size,
+                                       _font.glyphPadding, 0);
+            if (!IsImageValid(_atlas) || _font.recs == nullptr) {
+                throw std::runtime_error("Cannot build font atlas " + file.string());
+            }
+            for (int index = 0; index < _font.glyphCount; ++index) {
+                UnloadImage(_font.glyphs[index].image);
+                _font.glyphs[index].image = ImageFromImage(_atlas, _font.recs[index]);
+            }
+        } catch (...) {
+            reset();
+            throw;
+        }
+    }
+
+    ~PreparedFont() { reset(); }
+
+    PreparedFont(const PreparedFont &) = delete;
+    PreparedFont &operator=(const PreparedFont &) = delete;
+    PreparedFont(PreparedFont &&other) noexcept
+        : _font(std::exchange(other._font, {})), _atlas(std::exchange(other._atlas, {})) {}
+
+    [[nodiscard]] ::Font upload()
+    {
+        ::Texture2D texture = LoadTextureFromImage(_atlas);
+        if (!IsTextureValid(texture)) {
+            throw std::runtime_error("Cannot upload font texture");
+        }
+        SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
+        _font.texture = texture;
+        return std::exchange(_font, {});
+    }
+};
+
 // Owns a font: its glyphs in memory and its texture in graphics memory. A moved-from font frees nothing.
 class Font
 {
@@ -97,6 +198,7 @@ public:
         // Fonts are often drawn at another size than the one they were loaded at: smooth the scaling
         SetTextureFilter(_font.texture, TEXTURE_FILTER_BILINEAR);
     }
+    explicit Font(PreparedFont prepared) : _font(prepared.upload()) {}
     ~Font()
     {
         if (IsFontValid(_font)) {
@@ -233,6 +335,11 @@ struct ResourceManager::Impl {
     core::ResourceCache<detail::Texture, TextureId> textures;
     core::ResourceCache<detail::Font, FontId> fonts;
     core::ResourceCache<detail::Model, ModelId> models;
+    core::AsyncResourceRequests<TextureId> pendingTextures;
+    core::AsyncResourceRequests<FontId> pendingFonts;
+    core::AsyncResourceRequests<ModelId> pendingModels;
+
+    explicit Impl(std::filesystem::path directory) : assetsDirectory(std::move(directory)) {}
 };
 
 } // namespace rtype::render

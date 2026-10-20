@@ -3,6 +3,7 @@
 #include "rtype/core/Handle.hpp"
 
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <string>
 
@@ -76,6 +77,10 @@ public:
     /// @param path Path of the file, relative to the assets directory, for instance "music/stage1.ogg".
     /// @throws std::runtime_error if the file is missing or is not a supported music.
     [[nodiscard]] MusicId loadMusic(const std::string &path);
+
+    [[nodiscard]] std::shared_future<SoundId> loadSoundAsync(const std::string &path);
+    [[nodiscard]] std::shared_future<MusicId> loadMusicAsync(const std::string &path);
+    void finishPendingLoads();
 
     /// Plays a sound effect from its start. If all its voices are busy, the oldest one is restarted.
     void play(SoundId sound, const PlaySettings &settings = {});

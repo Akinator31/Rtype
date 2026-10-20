@@ -9,6 +9,7 @@ include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
 # Unit tests: one executable, each TEST_CASE is registered as a separate CTest test
 add_executable(rtype_tests
     action_map.cpp
+    async_resources.cpp
     audio.cpp
     client_game.cpp
     client_online.cpp

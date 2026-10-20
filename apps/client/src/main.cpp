@@ -24,14 +24,69 @@
 #include "rtype/render/Window.hpp"
 
 #include <cstdlib>
+#include <array>
+#include <chrono>
 #include <exception>
+#include <future>
 #include <memory>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace
 {
 
 constexpr float CollisionCellSize = 64.0f;
+
+bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &renderer,
+                   rtype::render::ResourceManager &resources)
+{
+    using namespace rtype::render;
+    const auto title = resources.loadFontAsync(RTYPE_FONT_TITLE, 160);
+    const auto button = resources.loadFontAsync(RTYPE_FONT_BUTTON, 96);
+    const auto sky = resources.loadTextureAsync(RTYPE_IMAGE_STARFIELD, TextureFiltering::Smooth);
+    constexpr std::array modelPaths{
+        RTYPE_MODEL_PLANET, RTYPE_MODEL_PLANET_DUST, RTYPE_MODEL_RING_ASTEROIDS_INNER,
+        RTYPE_MODEL_RING_ASTEROIDS_OUTER, RTYPE_MODEL_RING_DUST, RTYPE_MODEL_STATION,
+        RTYPE_MODEL_SHIP_EZNO, RTYPE_MODEL_SHIP_SPACESHIP, RTYPE_MODEL_SHIP_BATTLESTAR,
+        RTYPE_MODEL_SHIP_DROP_SHIP,
+    };
+    std::vector<std::shared_future<ModelId>> models;
+    for (const char *path : modelPaths) {
+        models.push_back(resources.loadModelAsync(path));
+    }
+
+    const auto ready = [](const auto &future) {
+        return future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+    };
+    while (!window.shouldClose()) {
+        resources.finishPendingLoads();
+        std::size_t completed = static_cast<std::size_t>(ready(title)) +
+                                static_cast<std::size_t>(ready(button)) +
+                                static_cast<std::size_t>(ready(sky));
+        for (const auto &model : models) {
+            completed += static_cast<std::size_t>(ready(model));
+        }
+        if (completed == models.size() + 3) {
+            break;
+        }
+        renderer.beginFrame();
+        renderer.drawText("Loading assets " + std::to_string(completed) + "/" +
+                              std::to_string(models.size() + 3),
+                          {80.0f, 90.0f}, 40.0f, colors::White);
+        renderer.endFrame();
+    }
+    if (window.shouldClose()) {
+        return false;
+    }
+    title.get();
+    button.get();
+    sky.get();
+    for (const auto &model : models) {
+        model.get();
+    }
+    return true;
+}
 
 /// Declares the scenes of the client, but those of a game, which GameScenes declares.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
@@ -90,6 +145,10 @@ void run()
     ResourceManager resources(window, applicationDirectory() / "assets");
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
+
+    if (!preloadAssets(window, renderer, resources)) {
+        return;
+    }
 
     const rtype::engine::InterfaceStyle style{
         .font = resources.loadFont(RTYPE_FONT_TITLE, 160),

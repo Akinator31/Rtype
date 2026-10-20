@@ -3,6 +3,7 @@
 #include "rtype/core/Handle.hpp"
 
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <string>
 
@@ -77,6 +78,13 @@ public:
     /// @param path Path of the file, relative to the assets directory, for instance "models/planet.glb".
     /// @throws std::runtime_error if the file is missing or is not a supported model.
     [[nodiscard]] ModelId loadModel(const std::string &path);
+
+    [[nodiscard]] std::shared_future<TextureId> loadTextureAsync(
+        const std::string &path, TextureFiltering filtering = TextureFiltering::Sharp);
+    [[nodiscard]] std::shared_future<FontId> loadFontAsync(const std::string &path, int size = 32);
+    [[nodiscard]] std::shared_future<ModelId> loadModelAsync(const std::string &path);
+
+    void finishPendingLoads();
 
     /// Returns the index of an animation of a loaded model, given to Renderer::animateModel().
     /// @param name Name of the animation in the model file, for instance "Idle".
