@@ -1,8 +1,11 @@
 #pragma once
 
+#include "rtype/game/Projectile/ProjectileCategory.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/physics/Component/Motion.hpp"
 
 #include <cstdint>
+#include <string>
 
 /// The components of the game. The position, the velocity and the collider are those of the ECS and of the
 /// physics (rtype::ecs::Position, rtype::physics::Velocity, rtype::physics::Collider): the position is the
@@ -26,6 +29,17 @@ struct Owner {
     std::uint8_t slot = 0;
 };
 
+/// A projectile, as made from its ProjectileDefinition: what the client needs to draw it.
+struct Projectile {
+    ProjectileCategory category = ProjectileCategory::Bullet;
+    /// Path of the 3D model.
+    std::string model;
+    /// The velocity it was fired with: the category moves it from this one (ProjectileSystem).
+    physics::Velocity launch;
+    /// Ticks since it was fired.
+    std::uint32_t age = 0;
+};
+
 /// Hit points left.
 struct Health {
     std::uint8_t points = 0;
@@ -43,14 +57,8 @@ struct Invulnerable {
     std::uint32_t ticks = 0;
 };
 
-/// A Bydo that flies to the left and shoots at random.
-struct Enemy {
-    /// Ticks before its next shot.
-    std::uint32_t fireCooldown = 0;
-};
-
 /// Removed (DestroyCause::Removed) once entirely outside the game area, by more than Rules::areaMargin:
-/// shots, Bydos that flew past.
+/// shots that flew past.
 struct LeavesArea {
     /// Half the size of the entity, so that it is removed once out of sight.
     float halfWidth = 0.0f;

@@ -20,6 +20,15 @@ physics::Collider box(float halfWidth, float halfHeight)
     return {physics::Aabb{{}, {halfWidth, halfHeight, 0.0f}}, {}, false};
 }
 
+physics::Vec3 halfSizeOf(const physics::Collider &collider)
+{
+    if (const auto *box = std::get_if<physics::Aabb>(&collider.shape)) {
+        return box->halfSize;
+    }
+    const float radius = std::get<physics::Sphere>(collider.shape).radius;
+    return {radius, radius, radius};
+}
+
 ecs::entity_t spawnVisible(ecs::Ecs &ecs, GameContext &context, EntityKind kind, std::uint8_t owner, float x,
                            float y)
 {
@@ -58,32 +67,20 @@ ecs::entity_t spawnPlayerShot(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
     return shot;
 }
 
-ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context)
+ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::string &id, std::uint8_t owner,
+                              float x, float y, float velocityX, float velocityY)
 {
-    const Rules &rules = context.rules;
-    // Entirely inside the area vertically, just outside on the right: it comes in
-    const auto minY = static_cast<std::uint32_t>(rules.enemyHalfHeight);
-    const auto maxY = static_cast<std::uint32_t>(GameHeight - rules.enemyHalfHeight);
-    const float y = static_cast<float>(context.randomBetween(minY, maxY));
-    const ecs::entity_t enemy =
-        spawnVisible(ecs, context, EntityKind::BydoShooter, NoOwner, GameWidth + rules.enemyHalfWidth, y);
-    ecs.addComponent<Enemy>(enemy,
-                            context.randomBetween(rules.enemyMinFireInterval, rules.enemyMaxFireInterval));
-    ecs.addComponent<Health>(enemy, rules.enemyHealth);
-    ecs.addComponent<physics::Velocity>(enemy, -rules.enemySpeed, 0.0f);
-    ecs.addComponent<physics::Collider>(enemy, box(rules.enemyHalfWidth, rules.enemyHalfHeight));
-    ecs.addComponent<LeavesArea>(enemy, rules.enemyHalfWidth, rules.enemyHalfHeight);
-    return enemy;
-}
-
-ecs::entity_t spawnEnemyShot(ecs::Ecs &ecs, GameContext &context, float x, float y)
-{
-    const Rules &rules = context.rules;
-    const ecs::entity_t shot = spawnVisible(ecs, context, EntityKind::BydoShot, NoOwner, x, y);
-    ecs.addComponent<physics::Velocity>(shot, -rules.enemyShotSpeed, 0.0f);
-    ecs.addComponent<physics::Collider>(shot, box(rules.enemyShotHalfWidth, rules.enemyShotHalfHeight));
-    ecs.addComponent<LeavesArea>(shot, rules.enemyShotHalfWidth, rules.enemyShotHalfHeight);
-    return shot;
+    const ProjectileDefinition &definition = context.projectiles.getDefinition(id);
+    // The clients draw only the kinds they know: a projectile is a player shot or a Bydo shot for now
+    const EntityKind kind = owner < MaxPlayers ? EntityKind::PlayerShot : EntityKind::BydoShot;
+    const ecs::entity_t projectile = spawnVisible(ecs, context, kind, owner, x, y);
+    ecs.addComponent<Projectile>(projectile, definition.category, definition.model,
+                                 physics::Velocity{velocityX, velocityY}, 0U);
+    ecs.addComponent<physics::Velocity>(projectile, velocityX, velocityY);
+    ecs.addComponent<physics::Collider>(projectile, definition.collider);
+    const physics::Vec3 half = halfSizeOf(definition.collider);
+    ecs.addComponent<LeavesArea>(projectile, half.x, half.y);
+    return projectile;
 }
 
 std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot)

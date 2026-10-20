@@ -76,6 +76,9 @@ public:
 
     /// The ECS of the game, for the tests and the debugging tools.
     [[nodiscard]] ecs::Ecs &ecs() { return _ecs; }
+
+    /// What the systems share, to register the projectiles of the game and for the tests.
+    [[nodiscard]] GameContext &context() { return _context; }
 };
 
 } // namespace rtype::game

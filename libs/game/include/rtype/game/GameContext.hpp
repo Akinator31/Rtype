@@ -2,6 +2,7 @@
 
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/PlayerInput.hpp"
+#include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Snapshot.hpp"
 
@@ -30,6 +31,7 @@ struct PlayerSlot {
 /// to each system when it is made.
 struct GameContext {
     Rules rules;
+    ProjectileRegistry projectiles;
     /// The tick being simulated, from 1.
     std::uint32_t tick = 0;
     std::array<PlayerSlot, MaxPlayers> players{};

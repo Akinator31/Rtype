@@ -6,13 +6,15 @@ add_library(rtype_game
     src/Entities.cpp
     src/Messages.cpp
     src/PlayerInput.cpp
+    src/Projectile/ProjectileBehavior.cpp
+    src/Projectile/ProjectileRegistry.cpp
     src/RemoteWorld.cpp
     src/ShipMovement.cpp
     src/Simulation.cpp
     src/System/AreaSystem.cpp
     src/System/CombatSystem.cpp
-    src/System/EnemySystem.cpp
     src/System/PlayerControlSystem.cpp
+    src/System/ProjectileSystem.cpp
 )
 add_library(rtype::game ALIAS rtype_game)
 target_include_directories(rtype_game PUBLIC include)

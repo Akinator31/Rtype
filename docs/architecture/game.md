@@ -1,7 +1,7 @@
 # Game
 
 The game library (`libs/game`, namespace `rtype::game`) holds the **rules of the R-Type**: the players, their
-ships and shots, and later the Bydos, the waves and the collisions. It is used by the server instances, which
+ships and projectiles, and later the Bydos and the waves. It is used by the server instances, which
 run the games online, and by the client offline, in its `LocalSession` ([A game in the client](client-game.md))
 ([ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md)): the rules are written once, and a
 Bydo behaves the same offline and online.
@@ -108,11 +108,122 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 | Fire held shoots from its nose | `PlayerControlSystem`, `spawnPlayerShot()` | `fireInterval` 10 ticks (6 per second), `shotSpeed` 1500 units/s |
 | What leaves the area is removed | `AreaSystem`, `LeavesArea` | `areaMargin` 128 units |
 | A player who leaves takes its ship away | `Simulation::removePlayer()` | — |
+| A Bydo shot that touches a ship destroys it, the player loses a life and gets a new ship, invulnerable for a while | `CombatSystem` | `respawnDelay` 90 ticks, `invulnerableTicks` 120 |
+| Every player out of lives ends the game (defeat) | `CombatSystem` | `lives` 3 |
 
-The Bydos, the collisions, the damage, the lives and the score come with `server: gameplay`.
+The Bydos, the waves and the score come later. Nothing makes a Bydo shot yet: the hit is there for the
+[projectiles](#projectiles) to use.
 
-A tick runs the systems in this order: `PlayerControlSystem` (inputs), `physics::MovementSystem` (movement),
-`physics::BoundsSystem` (the walls), `AreaSystem` (what left), then the snapshot is taken.
+A tick runs the systems in this order: `PlayerControlSystem` (inputs), `ProjectileSystem` (the velocity of the
+projectiles), `physics::MovementSystem` (movement),
+`physics::BoundsSystem` (the walls), `CombatSystem` (the hits, the lives), `AreaSystem` (what left), then the
+snapshot is taken.
+
+## Projectiles
+
+A kind of projectile is **data**, a `ProjectileDefinition`, so that a new one is added without writing a
+system. A `ProjectileRegistry` keeps the definitions by id, and `spawnProjectile()` makes an entity from one.
+
+```mermaid
+flowchart LR
+    Cat["ProjectileCategory"] --> Def["ProjectileDefinition<br/>id · model · category · collider"]
+    Def -- "addDefinition()" --> Reg["ProjectileRegistry<br/>GameContext::projectiles"]
+    Reg -- "getDefinition(id)" --> Spawn["spawnProjectile()"]
+    Spawn --> Ent["entity: Projectile · Velocity · Collider<br/>LeavesArea · NetworkId · Kind · Owner · Position"]
+```
+
+The life of a projectile, from the shot to its disappearance:
+
+```mermaid
+sequenceDiagram
+    participant Sys as A system (PlayerControlSystem...)
+    participant Reg as ProjectileRegistry
+    participant Ecs as ECS
+    participant Tick as Systems of the tick
+    participant Cli as Client
+
+    Sys->>Ecs: defer(spawnProjectile(id, owner, position, velocity))
+    Note over Sys,Ecs: after the systems of the tick, so the caches are not grown while read
+    Ecs->>Reg: getDefinition(id)
+    Reg-->>Ecs: model, category, collider
+    Ecs->>Ecs: new entity (Projectile, Velocity, Collider, LeavesArea, NetworkId, Kind, Owner, Position)
+    loop every tick
+        Tick->>Ecs: MovementSystem moves it
+        Tick->>Ecs: CombatSystem tests the hits
+    end
+    Tick->>Ecs: AreaSystem removes it once out of the area (DestroyCause::Removed)
+    Ecs-->>Cli: Snapshot: its Kind, position and velocity; then `destroyed`
+```
+
+The data of a definition and where each one ends up:
+
+```mermaid
+classDiagram
+    class ProjectileCategory {
+        <<enum class>>
+        Bullet
+        Missile
+        Laser
+        Plasma
+    }
+    class ProjectileDefinition {
+        string id
+        string model
+        ProjectileCategory category
+        Collider collider
+    }
+    class ProjectileRegistry {
+        addDefinition(definition)
+        hasDefinition(id)
+        getDefinition(id)
+    }
+    class Projectile {
+        <<component>>
+        ProjectileCategory category
+        string model
+    }
+    ProjectileDefinition --> ProjectileCategory
+    ProjectileRegistry "1" o-- "*" ProjectileDefinition
+    ProjectileDefinition ..> Projectile : category and model copied
+    ProjectileDefinition ..> Collider : collider copied to the entity
+```
+
+| Attribute | Type | Role |
+|---|---|---|
+| `id` | `std::string` | Unique name in the registry, how the systems and the configuration files designate it |
+| `model` | `std::string` | Path of the 3D model. The game only carries it: it has no raylib, the client loads it |
+| `category` | `ProjectileCategory` | `Bullet`, `Missile`, `Laser`, `Plasma`: what the rules that depend on the behavior key on |
+| `collider` | `physics::Collider` | The shape that hits what it meets, centred on the projectile |
+
+```cpp
+simulation.context().projectiles.addDefinition(
+    {"pulse", "models/pulse.glb", ProjectileCategory::Plasma,
+     physics::Collider{physics::Aabb{{}, {8.0f, 4.0f, 0.0f}}, {}, false}});
+
+spawnProjectile(ecs, context, "pulse", slot, x, y, 1500.0f, 0.0f); // from a system, through Ecs::defer()
+```
+
+- **The behavior of a category is in functions** (`Projectile/ProjectileBehavior.hpp`), since a C++ `enum class`
+  has no methods: one `switch` per question, so a new category is a new case in each.
+
+  | Function | Answers | Bullet | Missile | Laser | Plasma |
+  |---|---|---|---|---|---|
+  | `getProjectileVelocity(category, launch, age, rules)` | How it moves, each tick (`ProjectileSystem`) | Straight | Speeds up (`missileBoostPerTick`, `missileMaxBoost`) | Straight | Zigzags (`plasmaZigzagSpeed`, `plasmaZigzagInterval`) |
+  | `getProjectileSounds(category)` | The paths of its sounds: `spawn`, `move`, `vanish` (left the area), `impact` (hit). All empty: no sound file yet | | | | |
+
+  The sounds are paths: the game has no audio, the client plays them. Nothing sends the events (spawn, vanish,
+  impact) to the client yet, like the model, they wait for a decision on the protocol.
+- **The velocity is not in the definition**: the caller gives it at each shot, so that a weapon decides how
+  fast its projectile goes; it is kept as `Projectile::launch`, and the category moves the projectile from it. `spawnProjectile()` throws `std::out_of_range` for an unknown id.
+- **The registry is an `std::unordered_map`**, only looked up by id, never iterated: this does not break the
+  [determinism](#who-calls-step) above. Iterating it in the rules would.
+- **The clients see an `EntityKind` only**: a projectile with an owner is a `PlayerShot`, without one a
+  `BydoShot`. The model and the category are not in the snapshot yet, so the client cannot draw them: it needs
+  a decision on the [protocol](../protocol/game.md#91-the-world).
+- `spawnPlayerShot()` does not use this system yet.
+
+[ADR 0018](../decisions/0018-lua-game-config.md) plans to load the definitions from Lua files; the registry is
+what the loader will fill.
 
 ## Adding gameplay
 

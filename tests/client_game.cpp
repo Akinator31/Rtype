@@ -221,7 +221,6 @@ TEST_CASE("The world of the session is drawn in the scene, and follows it", "[cl
 TEST_CASE("Shots appear when fired, and their entities go when they leave the game", "[client]")
 {
     rtype::game::Rules rules;
-    rules.maxEnemies = 0;
     Client client(rules);
 
     client.input.keys = {Key::Space};

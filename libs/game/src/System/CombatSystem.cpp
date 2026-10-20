@@ -21,9 +21,8 @@ physics::Vec3 halfSizeOf(const physics::Collider &collider)
 
 CombatSystem::CombatSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context)
     : _ecs(ecs), _context(context), _kinds(use<Kind>(caches)), _positions(use<ecs::Position>(caches)),
-      _colliders(use<physics::Collider>(caches)), _healths(use<Health>(caches)), _owners(use<Owner>(caches)),
-      _invulnerables(use<Invulnerable>(caches)), _playerShips(use<PlayerShip>(caches)),
-      _enemies(use<Enemy>(caches))
+      _colliders(use<physics::Collider>(caches)), _healths(use<Health>(caches)),
+      _invulnerables(use<Invulnerable>(caches)), _playerShips(use<PlayerShip>(caches))
 {
 }
 
@@ -32,7 +31,6 @@ void CombatSystem::update(float)
     const Targets targets = gatherTargets();
     // Hit once per tick: what a shot or a ship hit is not hit again before it is destroyed
     std::unordered_set<ecs::entity_t> spent;
-    hitEnemies(targets, spent);
     hitShips(targets, spent);
     tickInvulnerability(targets);
     respawnShips();
@@ -48,16 +46,8 @@ CombatSystem::Targets CombatSystem::gatherTargets()
             continue;
         }
         switch (_kinds.get(entity).value) {
-        case EntityKind::PlayerShot:
-            targets.playerShots.push_back(entity);
-            break;
         case EntityKind::BydoShot:
-            targets.enemyShots.push_back(entity);
-            break;
-        case EntityKind::BydoShooter:
-            if (_enemies.has(entity)) {
-                targets.enemies.push_back(entity);
-            }
+            targets.dangers.push_back(entity);
             break;
         case EntityKind::PlayerShip:
             if (_playerShips.has(entity)) {
@@ -80,37 +70,6 @@ bool CombatSystem::overlap(ecs::entity_t first, ecs::entity_t second) const
     return std::abs(a.x - b.x) < sizeA.x + sizeB.x && std::abs(a.y - b.y) < sizeA.y + sizeB.y;
 }
 
-void CombatSystem::hitEnemies(const Targets &targets, std::unordered_set<ecs::entity_t> &spent)
-{
-    for (const ecs::entity_t shot : targets.playerShots) {
-        for (const ecs::entity_t enemy : targets.enemies) {
-            if (spent.contains(shot) || spent.contains(enemy) || !overlap(shot, enemy)) {
-                continue;
-            }
-            spent.insert(shot);
-            destroyLater(shot, DestroyCause::Removed);
-            damageEnemy(enemy, shot);
-            if (_healths.get(enemy).points == 0) {
-                spent.insert(enemy);
-            }
-        }
-    }
-}
-
-void CombatSystem::damageEnemy(ecs::entity_t enemy, ecs::entity_t shot)
-{
-    Health &health = _healths.get(enemy);
-    health.points = static_cast<std::uint8_t>(health.points > 0 ? health.points - 1 : 0);
-    if (health.points > 0) {
-        return;
-    }
-    destroyLater(enemy, DestroyCause::Killed);
-    const std::uint8_t slot = _owners.has(shot) ? _owners.get(shot).slot : NoOwner;
-    if (slot < MaxPlayers) {
-        _context.players[slot].score += _context.rules.enemyScore;
-    }
-}
-
 void CombatSystem::hitShips(const Targets &targets, std::unordered_set<ecs::entity_t> &spent)
 {
     for (const ecs::entity_t ship : targets.ships) {
@@ -122,8 +81,7 @@ void CombatSystem::hitShips(const Targets &targets, std::unordered_set<ecs::enti
             continue;
         }
         spent.insert(*danger);
-        destroyLater(*danger, _kinds.get(*danger).value == EntityKind::BydoShot ? DestroyCause::Removed
-                                                                                : DestroyCause::Killed);
+        destroyLater(*danger, DestroyCause::Removed);
         loseShip(ship);
     }
 }
@@ -131,11 +89,9 @@ void CombatSystem::hitShips(const Targets &targets, std::unordered_set<ecs::enti
 std::optional<ecs::entity_t> CombatSystem::findDanger(ecs::entity_t ship, const Targets &targets,
                                                       const std::unordered_set<ecs::entity_t> &spent) const
 {
-    for (const auto *dangers : {&targets.enemyShots, &targets.enemies}) {
-        for (const ecs::entity_t danger : *dangers) {
-            if (!spent.contains(danger) && overlap(ship, danger)) {
-                return danger;
-            }
+    for (const ecs::entity_t danger : targets.dangers) {
+        if (!spent.contains(danger) && overlap(ship, danger)) {
+            return danger;
         }
     }
     return std::nullopt;
