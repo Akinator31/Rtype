@@ -24,4 +24,4 @@ public:
     }
 };
 
-}
+} // namespace rtype::engine

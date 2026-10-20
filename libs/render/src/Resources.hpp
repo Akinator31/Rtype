@@ -3,9 +3,9 @@
 // Private to the render library: the raylib resources behind the handles of the ResourceManager, shared
 // between the ResourceManager, which loads them, and the Renderer, which draws them.
 
+#include "PreparedAssets.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
-#include "PreparedAssets.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
 #include <raylib.h>
@@ -235,7 +235,9 @@ struct ResourceManager::Impl {
     Impl(std::filesystem::path directory, std::shared_ptr<core::BackgroundLoader> worker)
         : assetsDirectory(std::move(directory)),
           loader(worker ? std::move(worker) : std::make_shared<core::BackgroundLoader>()),
-          pendingTextures(loader), pendingFonts(loader), pendingModels(loader) {}
+          pendingTextures(loader), pendingFonts(loader), pendingModels(loader)
+    {
+    }
 };
 
 } // namespace rtype::render

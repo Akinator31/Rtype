@@ -27,8 +27,7 @@ class AsyncResourceRequests
 
 public:
     AsyncResourceRequests() : _loader(std::make_shared<BackgroundLoader>()) {}
-    explicit AsyncResourceRequests(std::shared_ptr<BackgroundLoader> loader)
-        : _loader(std::move(loader))
+    explicit AsyncResourceRequests(std::shared_ptr<BackgroundLoader> loader) : _loader(std::move(loader))
     {
         if (!_loader) {
             throw std::invalid_argument("Asset loader is null");
@@ -44,8 +43,8 @@ public:
         if (const auto found = _requests.find(key); found != _requests.end()) {
             return found->second;
         }
-        auto prepared = std::make_shared<std::future<std::invoke_result_t<Prepare>>>(
-            _loader->submit(std::move(prepare)));
+        auto prepared =
+            std::make_shared<std::future<std::invoke_result_t<Prepare>>>(_loader->submit(std::move(prepare)));
         auto result = std::make_shared<std::promise<Id>>();
         std::shared_future<Id> shared = result->get_future().share();
         _pending.emplace_back([this, key, prepared, result, finish = std::move(finish)]() mutable {

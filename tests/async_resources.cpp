@@ -113,14 +113,20 @@ TEST_CASE("The engine shares one worker across asset categories", "[assets][asyn
     rtype::core::AsyncResourceRequests<Id> sounds(worker);
     std::thread::id textureThread;
     std::thread::id soundThread;
-    const auto texture = textures.request("texture", [&] {
-        textureThread = std::this_thread::get_id();
-        return 1;
-    }, [](int value) { return Id{static_cast<std::uint32_t>(value)}; });
-    const auto sound = sounds.request("sound", [&] {
-        soundThread = std::this_thread::get_id();
-        return 2;
-    }, [](int value) { return Id{static_cast<std::uint32_t>(value)}; });
+    const auto texture = textures.request(
+        "texture",
+        [&] {
+            textureThread = std::this_thread::get_id();
+            return 1;
+        },
+        [](int value) { return Id{static_cast<std::uint32_t>(value)}; });
+    const auto sound = sounds.request(
+        "sound",
+        [&] {
+            soundThread = std::this_thread::get_id();
+            return 2;
+        },
+        [](int value) { return Id{static_cast<std::uint32_t>(value)}; });
 
     REQUIRE(finishWithin(textures, texture));
     REQUIRE(finishWithin(sounds, sound));

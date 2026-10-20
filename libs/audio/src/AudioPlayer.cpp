@@ -199,8 +199,7 @@ struct AudioPlayer::Impl {
     float musicVolume = 1.0f;
     float effectsVolume = 1.0f;
 
-    Impl(bool audioAvailable, std::filesystem::path assets,
-         std::shared_ptr<core::BackgroundLoader> worker)
+    Impl(bool audioAvailable, std::filesystem::path assets, std::shared_ptr<core::BackgroundLoader> worker)
         : available(audioAvailable), assetsDirectory(std::move(assets)),
           loader(worker ? std::move(worker) : std::make_shared<core::BackgroundLoader>()),
           pendingSounds(loader), pendingMusics(loader)
@@ -212,8 +211,7 @@ struct AudioPlayer::Impl {
 
 AudioPlayer::AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory,
                          std::shared_ptr<core::BackgroundLoader> loader)
-    : _impl(std::make_unique<Impl>(device.isAvailable(), std::move(assetsDirectory),
-                                   std::move(loader)))
+    : _impl(std::make_unique<Impl>(device.isAvailable(), std::move(assetsDirectory), std::move(loader)))
 {
 }
 
