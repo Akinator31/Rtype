@@ -28,4 +28,4 @@ inline std::vector<unsigned char> readAssetFile(const std::filesystem::path &pat
     return bytes;
 }
 
-}
+} // namespace rtype::core

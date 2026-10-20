@@ -3,8 +3,8 @@
 // Private to the render library: the raylib resources behind the handles of the ResourceManager, shared
 // between the ResourceManager, which loads them, and the Renderer, which draws them.
 
-#include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/AssetFile.hpp"
+#include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
@@ -136,14 +136,13 @@ public:
             const std::vector<int> characters = fontCharacters();
             _font.baseSize = size;
             _font.glyphPadding = 4;
-            _font.glyphs = LoadFontData(bytes.data(), static_cast<int>(bytes.size()), size,
-                                       characters.data(), static_cast<int>(characters.size()),
-                                       FONT_DEFAULT, &_font.glyphCount);
+            _font.glyphs = LoadFontData(bytes.data(), static_cast<int>(bytes.size()), size, characters.data(),
+                                        static_cast<int>(characters.size()), FONT_DEFAULT, &_font.glyphCount);
             if (_font.glyphs == nullptr || _font.glyphCount == 0) {
                 throw std::runtime_error("Cannot load font " + file.string());
             }
-            _atlas = GenImageFontAtlas(_font.glyphs, &_font.recs, _font.glyphCount, size,
-                                       _font.glyphPadding, 0);
+            _atlas =
+                GenImageFontAtlas(_font.glyphs, &_font.recs, _font.glyphCount, size, _font.glyphPadding, 0);
             if (!IsImageValid(_atlas) || _font.recs == nullptr) {
                 throw std::runtime_error("Cannot build font atlas " + file.string());
             }
@@ -162,7 +161,9 @@ public:
     PreparedFont(const PreparedFont &) = delete;
     PreparedFont &operator=(const PreparedFont &) = delete;
     PreparedFont(PreparedFont &&other) noexcept
-        : _font(std::exchange(other._font, {})), _atlas(std::exchange(other._atlas, {})) {}
+        : _font(std::exchange(other._font, {})), _atlas(std::exchange(other._atlas, {}))
+    {
+    }
 
     [[nodiscard]] ::Font upload()
     {

@@ -1,8 +1,8 @@
 #include "rtype/audio/AudioPlayer.hpp"
 
 #include "rtype/audio/AudioDevice.hpp"
-#include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/AssetFile.hpp"
+#include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
 
 #include <raylib.h>
@@ -167,7 +167,9 @@ public:
     MusicStream(const MusicStream &) = delete;
     MusicStream &operator=(const MusicStream &) = delete;
     MusicStream(MusicStream &&other) noexcept
-        : _bytes(std::move(other._bytes)), _music(std::exchange(other._music, std::nullopt)) {}
+        : _bytes(std::move(other._bytes)), _music(std::exchange(other._music, std::nullopt))
+    {
+    }
     MusicStream &operator=(MusicStream &&) = delete;
 
     // Nothing when the audio is not available
@@ -227,29 +229,31 @@ std::shared_future<SoundId> AudioPlayer::loadSoundAsync(const std::string &path)
 {
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
-    return impl->pendingSounds.request(path, [file, available = impl->available] {
-        if (!available) {
-            core::readAssetFile(file);
-            return std::optional<PreparedSound>{};
-        }
-        return std::optional<PreparedSound>(std::in_place, file);
-    }, [impl, path](std::optional<PreparedSound> prepared) {
-        return impl->sounds.load(path, [&] {
-            return prepared ? SoundEffect(prepared->wave()) : SoundEffect();
+    return impl->pendingSounds.request(
+        path,
+        [file, available = impl->available] {
+            if (!available) {
+                core::readAssetFile(file);
+                return std::optional<PreparedSound>{};
+            }
+            return std::optional<PreparedSound>(std::in_place, file);
+        },
+        [impl, path](std::optional<PreparedSound> prepared) {
+            return impl->sounds.load(
+                path, [&] { return prepared ? SoundEffect(prepared->wave()) : SoundEffect(); });
         });
-    });
 }
 
 std::shared_future<MusicId> AudioPlayer::loadMusicAsync(const std::string &path)
 {
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
-    return impl->pendingMusics.request(path, [file] { return core::readAssetFile(file); },
-                                       [impl, path, file](std::vector<unsigned char> bytes) {
-        return impl->musics.load(path, [&] {
-            return impl->available ? MusicStream(file, std::move(bytes)) : MusicStream();
+    return impl->pendingMusics.request(
+        path, [file] { return core::readAssetFile(file); },
+        [impl, path, file](std::vector<unsigned char> bytes) {
+            return impl->musics.load(
+                path, [&] { return impl->available ? MusicStream(file, std::move(bytes)) : MusicStream(); });
         });
-    });
 }
 
 void AudioPlayer::finishPendingLoads()

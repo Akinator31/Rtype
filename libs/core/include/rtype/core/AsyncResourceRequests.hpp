@@ -36,8 +36,8 @@ public:
         if (const auto found = _requests.find(key); found != _requests.end()) {
             return found->second;
         }
-        auto prepared = std::make_shared<std::future<std::invoke_result_t<Prepare>>>(
-            _loader.submit(std::move(prepare)));
+        auto prepared =
+            std::make_shared<std::future<std::invoke_result_t<Prepare>>>(_loader.submit(std::move(prepare)));
         auto result = std::make_shared<std::promise<Id>>();
         std::shared_future<Id> shared = result->get_future().share();
         _pending.emplace_back([this, key, prepared, result, finish = std::move(finish)]() mutable {
@@ -68,4 +68,4 @@ public:
     }
 };
 
-}
+} // namespace rtype::core

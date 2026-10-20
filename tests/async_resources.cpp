@@ -29,7 +29,7 @@ bool finishWithin(rtype::core::AsyncResourceRequests<Id> &requests, const Future
     return future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
 }
 
-}
+} // namespace
 
 TEST_CASE("Assets prepare on a worker and finish on the requesting thread", "[assets][async]")
 {
@@ -40,15 +40,18 @@ TEST_CASE("Assets prepare on a worker and finish on the requesting thread", "[as
     std::atomic<int> prepared = 0;
     std::atomic<int> finished = 0;
 
-    const auto first = requests.request("ship", [&] {
-        worker = std::this_thread::get_id();
-        ++prepared;
-        return 42;
-    }, [&](int value) {
-        finisher = std::this_thread::get_id();
-        ++finished;
-        return Id{static_cast<std::uint32_t>(value)};
-    });
+    const auto first = requests.request(
+        "ship",
+        [&] {
+            worker = std::this_thread::get_id();
+            ++prepared;
+            return 42;
+        },
+        [&](int value) {
+            finisher = std::this_thread::get_id();
+            ++finished;
+            return Id{static_cast<std::uint32_t>(value)};
+        });
     const auto second = requests.request("ship", [] { return 99; }, [](int) { return Id{99}; });
 
     REQUIRE(finishWithin(requests, first));
@@ -63,15 +66,13 @@ TEST_CASE("Assets prepare on a worker and finish on the requesting thread", "[as
 TEST_CASE("A failed asset request reports its error and can be retried", "[assets][async]")
 {
     rtype::core::AsyncResourceRequests<Id> requests;
-    const auto failed = requests.request("missing", []() -> int {
-        throw std::runtime_error("missing");
-    }, [](int) { return Id{0}; });
+    const auto failed = requests.request(
+        "missing", []() -> int { throw std::runtime_error("missing"); }, [](int) { return Id{0}; });
     REQUIRE(finishWithin(requests, failed));
     CHECK_THROWS_AS(failed.get(), std::runtime_error);
 
-    const auto retry = requests.request("missing", [] { return 7; }, [](int value) {
-        return Id{static_cast<std::uint32_t>(value)};
-    });
+    const auto retry = requests.request(
+        "missing", [] { return 7; }, [](int value) { return Id{static_cast<std::uint32_t>(value)}; });
     REQUIRE(finishWithin(requests, retry));
     CHECK(retry.get() == Id{7});
 }

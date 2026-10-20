@@ -2,8 +2,8 @@
 
 #include <condition_variable>
 #include <deque>
-#include <future>
 #include <functional>
+#include <future>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -72,4 +72,4 @@ public:
     }
 };
 
-}
+} // namespace rtype::core

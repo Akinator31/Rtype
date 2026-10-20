@@ -23,9 +23,9 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
-#include <cstdlib>
 #include <array>
 #include <chrono>
+#include <cstdlib>
 #include <exception>
 #include <future>
 #include <memory>
@@ -46,9 +46,15 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     const auto button = resources.loadFontAsync(RTYPE_FONT_BUTTON, 96);
     const auto sky = resources.loadTextureAsync(RTYPE_IMAGE_STARFIELD, TextureFiltering::Smooth);
     constexpr std::array modelPaths{
-        RTYPE_MODEL_PLANET, RTYPE_MODEL_PLANET_DUST, RTYPE_MODEL_RING_ASTEROIDS_INNER,
-        RTYPE_MODEL_RING_ASTEROIDS_OUTER, RTYPE_MODEL_RING_DUST, RTYPE_MODEL_STATION,
-        RTYPE_MODEL_SHIP_EZNO, RTYPE_MODEL_SHIP_SPACESHIP, RTYPE_MODEL_SHIP_BATTLESTAR,
+        RTYPE_MODEL_PLANET,
+        RTYPE_MODEL_PLANET_DUST,
+        RTYPE_MODEL_RING_ASTEROIDS_INNER,
+        RTYPE_MODEL_RING_ASTEROIDS_OUTER,
+        RTYPE_MODEL_RING_DUST,
+        RTYPE_MODEL_STATION,
+        RTYPE_MODEL_SHIP_EZNO,
+        RTYPE_MODEL_SHIP_SPACESHIP,
+        RTYPE_MODEL_SHIP_BATTLESTAR,
         RTYPE_MODEL_SHIP_DROP_SHIP,
     };
     std::vector<std::shared_future<ModelId>> models;

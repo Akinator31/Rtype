@@ -37,15 +37,16 @@ ModelId ResourceManager::loadModel(const std::string &path)
 }
 
 std::shared_future<TextureId> ResourceManager::loadTextureAsync(const std::string &path,
-                                                                 TextureFiltering filtering)
+                                                                TextureFiltering filtering)
 {
     const std::filesystem::path file = _impl->assetsDirectory / path;
     const std::string key = filtering == TextureFiltering::Smooth ? path + "@smooth" : path;
     Impl *impl = _impl.get();
-    return impl->pendingTextures.request(key, [file] { return detail::PreparedTexture(file); },
-                                         [impl, key, filtering](detail::PreparedTexture prepared) {
-        return impl->textures.load(key, [&] { return detail::Texture(prepared.image(), filtering); });
-    });
+    return impl->pendingTextures.request(
+        key, [file] { return detail::PreparedTexture(file); },
+        [impl, key, filtering](detail::PreparedTexture prepared) {
+            return impl->textures.load(key, [&] { return detail::Texture(prepared.image(), filtering); });
+        });
 }
 
 std::shared_future<FontId> ResourceManager::loadFontAsync(const std::string &path, int size)
@@ -53,20 +54,22 @@ std::shared_future<FontId> ResourceManager::loadFontAsync(const std::string &pat
     const std::filesystem::path file = _impl->assetsDirectory / path;
     const std::string key = path + '@' + std::to_string(size);
     Impl *impl = _impl.get();
-    return impl->pendingFonts.request(key, [file, size] { return detail::PreparedFont(file, size); },
-                                      [impl, key](detail::PreparedFont prepared) {
-        return impl->fonts.load(key, [&] { return detail::Font(std::move(prepared)); });
-    });
+    return impl->pendingFonts.request(
+        key, [file, size] { return detail::PreparedFont(file, size); },
+        [impl, key](detail::PreparedFont prepared) {
+            return impl->fonts.load(key, [&] { return detail::Font(std::move(prepared)); });
+        });
 }
 
 std::shared_future<ModelId> ResourceManager::loadModelAsync(const std::string &path)
 {
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
-    return impl->pendingModels.request(path, [file] { return core::readAssetFile(file).size(); },
-                                       [impl, file, path](std::size_t) {
-        return impl->models.load(path, [&] { return detail::Model(file); });
-    });
+    return impl->pendingModels.request(
+        path, [file] { return core::readAssetFile(file).size(); },
+        [impl, file, path](std::size_t) {
+            return impl->models.load(path, [&] { return detail::Model(file); });
+        });
 }
 
 void ResourceManager::finishPendingLoads()
