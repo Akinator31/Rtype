@@ -462,3 +462,52 @@ TEST_CASE("A ship goes at the speed of the rules, as fast in diagonal, and stays
     CHECK(corner.x == rules.shipHalfWidth);
     CHECK(corner.y == rules.shipHalfHeight);
 }
+
+// --- Projectiles ---
+
+namespace
+{
+
+ProjectileDefinition pulse()
+{
+    return {"pulse", "models/pulse.glb", ProjectileCategory::Plasma,
+            rtype::physics::Collider{rtype::physics::Aabb{{}, {8.0f, 4.0f, 0.0f}}, {}, false}};
+}
+
+} // namespace
+
+TEST_CASE("A registry gives back the projectiles it was given, and refuses doubles and unknown ids", "[game]")
+{
+    ProjectileRegistry registry;
+    registry.addDefinition(pulse());
+
+    CHECK(registry.hasDefinition("pulse"));
+    CHECK(registry.getDefinition("pulse").category == ProjectileCategory::Plasma);
+    CHECK(registry.getDefinition("pulse").model == "models/pulse.glb");
+    CHECK_THROWS_AS(registry.addDefinition(pulse()), std::invalid_argument);
+    CHECK_THROWS_AS(registry.addDefinition({}), std::invalid_argument);
+    CHECK_THROWS_AS(registry.getDefinition("nope"), std::out_of_range);
+}
+
+TEST_CASE("spawnProjectile() makes a projectile with its model, category and collider, which flies and leaves",
+          "[game]")
+{
+    Simulation simulation{Rules{}};
+    GameContext &context = simulation.context();
+    context.projectiles.addDefinition(pulse());
+
+    const rtype::ecs::entity_t entity = spawnProjectile(simulation.ecs(), context, "pulse", 0, 500.0f, 300.0f,
+                                                        100.0f, 0.0f);
+
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    CHECK(ecs.getComponent<Projectile>(entity).category == ProjectileCategory::Plasma);
+    CHECK(ecs.getComponent<Projectile>(entity).model == "models/pulse.glb");
+    CHECK(ecs.getComponent<Kind>(entity).value == EntityKind::PlayerShot);
+    CHECK(ecs.hasComponent<rtype::physics::Collider>(entity));
+    CHECK_THROWS_AS(spawnProjectile(ecs, context, "nope", 0, 0.0f, 0.0f, 0.0f, 0.0f), std::out_of_range);
+
+    simulation.step();
+    CHECK(simulation.snapshot().entities.size() == 1);
+    run(simulation, 30 * TickRate);
+    CHECK(simulation.snapshot().entities.empty());
+}

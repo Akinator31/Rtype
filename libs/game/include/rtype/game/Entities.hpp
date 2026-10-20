@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 
 /// How the entities of the game are made and destroyed: every new kind of entity gets its function here, so
 /// that the systems and the tests make them the same way.
@@ -17,6 +18,12 @@ ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
 
 /// A shot of a player, going right from a position.
 ecs::entity_t spawnPlayerShot(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot, float x, float y);
+
+/// A projectile of a registered kind, from a position, with a velocity (game units per second). It belongs to
+/// a player if `owner` is a slot, to nobody if it is NoOwner. It is removed once out of the game area.
+/// Throws std::out_of_range if `id` is not in context.projectiles.
+ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::string &id, std::uint8_t owner,
+                              float x, float y, float velocityX, float velocityY);
 
 /// The ship of a player, if it has one.
 [[nodiscard]] std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot);

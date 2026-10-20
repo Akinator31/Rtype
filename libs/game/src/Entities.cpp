@@ -20,6 +20,15 @@ physics::Collider box(float halfWidth, float halfHeight)
     return {physics::Aabb{{}, {halfWidth, halfHeight, 0.0f}}, {}, false};
 }
 
+physics::Vec3 halfSizeOf(const physics::Collider &collider)
+{
+    if (const auto *box = std::get_if<physics::Aabb>(&collider.shape)) {
+        return box->halfSize;
+    }
+    const float radius = std::get<physics::Sphere>(collider.shape).radius;
+    return {radius, radius, radius};
+}
+
 ecs::entity_t spawnVisible(ecs::Ecs &ecs, GameContext &context, EntityKind kind, std::uint8_t owner, float x,
                            float y)
 {
@@ -56,6 +65,21 @@ ecs::entity_t spawnPlayerShot(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
     ecs.addComponent<physics::Collider>(shot, box(rules.shotHalfWidth, rules.shotHalfHeight));
     ecs.addComponent<LeavesArea>(shot, rules.shotHalfWidth, rules.shotHalfHeight);
     return shot;
+}
+
+ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::string &id, std::uint8_t owner,
+                              float x, float y, float velocityX, float velocityY)
+{
+    const ProjectileDefinition &definition = context.projectiles.getDefinition(id);
+    // The clients draw only the kinds they know: a projectile is a player shot or a Bydo shot for now
+    const EntityKind kind = owner < MaxPlayers ? EntityKind::PlayerShot : EntityKind::BydoShot;
+    const ecs::entity_t projectile = spawnVisible(ecs, context, kind, owner, x, y);
+    ecs.addComponent<Projectile>(projectile, definition.category, definition.model);
+    ecs.addComponent<physics::Velocity>(projectile, velocityX, velocityY);
+    ecs.addComponent<physics::Collider>(projectile, definition.collider);
+    const physics::Vec3 half = halfSizeOf(definition.collider);
+    ecs.addComponent<LeavesArea>(projectile, half.x, half.y);
+    return projectile;
 }
 
 std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot)

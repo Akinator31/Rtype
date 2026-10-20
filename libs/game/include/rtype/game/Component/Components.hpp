@@ -1,8 +1,10 @@
 #pragma once
 
+#include "rtype/game/Projectile/ProjectileCategory.hpp"
 #include "rtype/game/Snapshot.hpp"
 
 #include <cstdint>
+#include <string>
 
 /// The components of the game. The position, the velocity and the collider are those of the ECS and of the
 /// physics (rtype::ecs::Position, rtype::physics::Velocity, rtype::physics::Collider): the position is the
@@ -24,6 +26,13 @@ struct Kind {
 /// The player the entity belongs to: its ship, its shots.
 struct Owner {
     std::uint8_t slot = 0;
+};
+
+/// A projectile, as made from its ProjectileDefinition: what the client needs to draw it.
+struct Projectile {
+    ProjectileCategory category = ProjectileCategory::Bullet;
+    /// Path of the 3D model.
+    std::string model;
 };
 
 /// Hit points left.
