@@ -69,6 +69,7 @@ nav = [
     "decisions/0015-one-game-scene-local-or-remote-session.md",
     "decisions/0016-replication.md",
     "decisions/0017-asset-loading-threads.md",
+    "decisions/0018-lua-game-config.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
