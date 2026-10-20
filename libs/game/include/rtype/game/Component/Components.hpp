@@ -43,14 +43,8 @@ struct Invulnerable {
     std::uint32_t ticks = 0;
 };
 
-/// A Bydo that flies to the left and shoots at random.
-struct Enemy {
-    /// Ticks before its next shot.
-    std::uint32_t fireCooldown = 0;
-};
-
 /// Removed (DestroyCause::Removed) once entirely outside the game area, by more than Rules::areaMargin:
-/// shots, Bydos that flew past.
+/// shots that flew past.
 struct LeavesArea {
     /// Half the size of the entity, so that it is removed once out of sight.
     float halfWidth = 0.0f;

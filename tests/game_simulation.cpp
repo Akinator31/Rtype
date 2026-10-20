@@ -333,70 +333,6 @@ TEST_CASE("Every entity stays where the protocol can encode it, and ids are uniq
 namespace
 {
 
-std::size_t countOf(const Snapshot &snapshot, EntityKind kind)
-{
-    return static_cast<std::size_t>(std::ranges::count(snapshot.entities, kind, &EntityState::kind));
-}
-
-} // namespace
-
-TEST_CASE("Bydos appear from the right, up to the maximum of the rules, and shoot to the left", "[game]")
-{
-    Rules rules;
-    rules.maxEnemies = 3;
-    Simulation simulation(rules);
-
-    std::size_t mostEnemies = 0;
-    bool shotLeft = false;
-    for (int tick = 0; tick < 20 * TickRate; ++tick) {
-        simulation.step();
-        const Snapshot &snapshot = simulation.snapshot();
-        mostEnemies = std::max(mostEnemies, countOf(snapshot, EntityKind::BydoShooter));
-        for (const EntityState &entity : snapshot.entities) {
-            if (entity.kind == EntityKind::BydoShot) {
-                shotLeft = shotLeft || entity.velocityX < 0.0f;
-            }
-        }
-    }
-    CHECK(mostEnemies == 3);
-    CHECK(shotLeft);
-}
-
-TEST_CASE("No Bydo appears when the rules allow none", "[game]")
-{
-    Rules rules;
-    rules.maxEnemies = 0;
-    Simulation simulation(rules);
-    run(simulation, 10 * TickRate);
-    CHECK(countOf(simulation.snapshot(), EntityKind::BydoShooter) == 0);
-}
-
-TEST_CASE("The Bydos shoot at the same ticks for the same seed, and differently for another", "[game]")
-{
-    const auto shotTicks = [](std::uint32_t seed) {
-        Rules rules;
-        rules.seed = seed;
-        Simulation simulation(rules);
-        std::vector<std::uint32_t> ticks;
-        std::size_t before = 0;
-        for (int tick = 0; tick < 15 * TickRate; ++tick) {
-            simulation.step();
-            const std::size_t shots = countOf(simulation.snapshot(), EntityKind::BydoShot);
-            if (shots > before) {
-                ticks.push_back(simulation.tick());
-            }
-            before = shots;
-        }
-        return ticks;
-    };
-    CHECK(!shotTicks(1).empty());
-    CHECK(shotTicks(1) == shotTicks(1));
-    CHECK(shotTicks(1) != shotTicks(2));
-}
-
-namespace
-{
-
 /// An entity put in the world by hand, without velocity: it stays where it is.
 void place(Simulation &simulation, EntityKind kind, std::uint8_t owner, float x, float y,
            std::uint32_t networkId)
@@ -410,9 +346,6 @@ void place(Simulation &simulation, EntityKind kind, std::uint8_t owner, float x,
     ecs.addComponent<Health>(entity, std::uint8_t{1});
     ecs.addComponent<rtype::physics::Collider>(entity, rtype::physics::Aabb{{}, {10.0f, 10.0f, 0.0f}},
                                                rtype::physics::Vec3{}, false);
-    if (kind == EntityKind::BydoShooter) {
-        ecs.addComponent<Enemy>(entity, 100000U);
-    }
 }
 
 bool wasDestroyed(const Snapshot &snapshot, std::uint32_t id, DestroyCause cause)
@@ -420,44 +353,11 @@ bool wasDestroyed(const Snapshot &snapshot, std::uint32_t id, DestroyCause cause
     return std::ranges::find(snapshot.destroyed, DestroyedEntity{id, cause}) != snapshot.destroyed.end();
 }
 
-Rules calm()
-{
-    Rules rules;
-    rules.maxEnemies = 0;
-    return rules;
-}
-
 } // namespace
-
-TEST_CASE("A shot of a player destroys a Bydo and gives its score to the player", "[game]")
-{
-    Simulation simulation(calm());
-    simulation.addPlayer(0);
-    place(simulation, EntityKind::BydoShooter, NoOwner, 900.0f, 300.0f, 1000);
-    place(simulation, EntityKind::PlayerShot, 0, 900.0f, 300.0f, 1001);
-
-    simulation.step();
-
-    const Snapshot &snapshot = simulation.snapshot();
-    CHECK(wasDestroyed(snapshot, 1000, DestroyCause::Killed));
-    CHECK(wasDestroyed(snapshot, 1001, DestroyCause::Removed));
-    CHECK(snapshot.players[0].score == calm().enemyScore);
-}
-
-TEST_CASE("A shot that misses a Bydo changes nothing", "[game]")
-{
-    Simulation simulation(calm());
-    place(simulation, EntityKind::BydoShooter, NoOwner, 900.0f, 300.0f, 1000);
-    place(simulation, EntityKind::PlayerShot, 0, 900.0f, 500.0f, 1001);
-
-    simulation.step();
-
-    CHECK(simulation.snapshot().destroyed.empty());
-}
 
 TEST_CASE("A shot of a Bydo destroys a ship, which comes back invulnerable after a delay", "[game]")
 {
-    const Rules rules = calm();
+    const Rules rules;
     Simulation simulation(rules);
     simulation.addPlayer(0);
     simulation.step();
@@ -502,23 +402,9 @@ TEST_CASE("A shot of a Bydo destroys a ship, which comes back invulnerable after
     CHECK(simulation.snapshot().players[0].lives == rules.lives - 2);
 }
 
-TEST_CASE("A Bydo that hits a ship is destroyed with it", "[game]")
-{
-    Simulation simulation(calm());
-    simulation.addPlayer(0);
-    simulation.step();
-    const EntityState ship = *shipOf(simulation.snapshot(), 0);
-    place(simulation, EntityKind::BydoShooter, NoOwner, ship.x, ship.y, 1000);
-
-    simulation.step();
-
-    CHECK(wasDestroyed(simulation.snapshot(), ship.id, DestroyCause::Killed));
-    CHECK(wasDestroyed(simulation.snapshot(), 1000, DestroyCause::Killed));
-}
-
 TEST_CASE("The game is lost once every player is out of lives, and it is told once", "[game]")
 {
-    Rules rules = calm();
+    Rules rules;
     rules.lives = 1;
     Simulation simulation(rules);
     simulation.addPlayer(0);
@@ -540,9 +426,7 @@ TEST_CASE("The game is lost once every player is out of lives, and it is told on
 
 TEST_CASE("moveShip() moves a ship exactly as the game does, to the bit", "[game]")
 {
-    // No Bydo: nothing but the inputs moves the ship
     Rules rules;
-    rules.maxEnemies = 0;
     Simulation simulation(rules);
     simulation.addPlayer(0);
     simulation.step();

@@ -11,7 +11,6 @@ add_library(rtype_game
     src/Simulation.cpp
     src/System/AreaSystem.cpp
     src/System/CombatSystem.cpp
-    src/System/EnemySystem.cpp
     src/System/PlayerControlSystem.cpp
 )
 add_library(rtype::game ALIAS rtype_game)

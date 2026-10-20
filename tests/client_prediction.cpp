@@ -27,13 +27,6 @@ namespace
 
 constexpr double Tick = 1.0 / 60.0;
 
-rtype::game::Rules calm()
-{
-    rtype::game::Rules rules;
-    rules.maxEnemies = 0;
-    return rules;
-}
-
 std::optional<rtype::ecs::Position> shipOf(const rtype::game::Snapshot &snapshot)
 {
     for (const rtype::game::EntityState &entity : snapshot.entities) {
@@ -52,9 +45,9 @@ float distance(rtype::ecs::Position first, rtype::ecs::Position second)
 /// A game and its client, one tick at a time: the client stamps its inputs `lead` ticks ahead, they reach the
 /// game `up` ticks later, and the snapshots, every 2 ticks, reach the client `down` ticks later.
 struct Match {
-    rtype::game::Simulation simulation{calm()};
+    rtype::game::Simulation simulation{rtype::game::Rules{}};
     rtype::server::InputBuffer buffer;
-    Prediction prediction{calm()};
+    Prediction prediction{rtype::game::Rules{}};
 
     std::uint32_t lead = 4;
     std::uint32_t up = 2;
@@ -235,7 +228,7 @@ TEST_CASE("The walls are predicted as the game has them", "[prediction]")
         match.tick(corner);
     }
 
-    const rtype::game::Rules rules = calm();
+    const rtype::game::Rules rules {};
     CHECK(match.prediction.position()->x == rules.shipHalfWidth);
     CHECK(match.prediction.position()->y == rules.shipHalfHeight);
     for (const float correction : match.corrections) {
@@ -246,7 +239,7 @@ TEST_CASE("The walls are predicted as the game has them", "[prediction]")
 TEST_CASE("Without a ship, nothing is predicted; when it comes back, it is where the game puts it",
           "[prediction]")
 {
-    Prediction prediction(calm());
+    Prediction prediction(rtype::game::Rules{});
     prediction.reconcile(rtype::ecs::Position{200.0f, 300.0f}, 10);
     REQUIRE(prediction.position());
 
@@ -264,7 +257,7 @@ TEST_CASE("Without a ship, nothing is predicted; when it comes back, it is where
 
 TEST_CASE("A correction too large is applied at once", "[prediction]")
 {
-    Prediction prediction(calm());
+    Prediction prediction(rtype::game::Rules{});
     prediction.reconcile(rtype::ecs::Position{200.0f, 300.0f}, 10);
 
     prediction.reconcile(rtype::ecs::Position{200.0f + Prediction::MaxSmoothed * 2.0f, 300.0f}, 12);
@@ -274,7 +267,7 @@ TEST_CASE("A correction too large is applied at once", "[prediction]")
 
 TEST_CASE("A tick skipped when stamping repeats the previous input, as the game does", "[prediction]")
 {
-    const rtype::game::Rules rules = calm();
+    const rtype::game::Rules rules {};
     Prediction prediction(rules);
     prediction.reconcile(rtype::ecs::Position{500.0f, 500.0f}, 10);
     PlayerInput right;
