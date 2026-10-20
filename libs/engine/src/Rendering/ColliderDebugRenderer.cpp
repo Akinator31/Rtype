@@ -4,7 +4,7 @@
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/physics/Component/Collider.hpp"
-#include "rtype/render/Renderer.hpp"
+#include "rtype/render/RenderContext.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -79,7 +79,7 @@ std::vector<DebugGridLine> ColliderDebugRenderer::gridLines(render::Vector2 game
     return result;
 }
 
-void ColliderDebugRenderer::draw(render::Renderer &renderer) const
+void ColliderDebugRenderer::draw(render::RenderContext &renderer) const
 {
     for (const DebugGridLine &line : gridLines(renderer.gameSize())) {
         renderer.drawLine(line.start, line.end, 1.0f, {100, 150, 255, 50});

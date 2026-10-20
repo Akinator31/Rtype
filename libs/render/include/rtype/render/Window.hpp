@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 
 namespace rtype::render
@@ -28,7 +29,7 @@ struct WindowSettings {
 class Window
 {
 private:
-    bool _closeRequested = false;
+    std::atomic<bool> _closeRequested = false;
 
 public:
     /// Opens the window.

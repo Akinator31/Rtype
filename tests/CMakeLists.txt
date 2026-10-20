@@ -45,6 +45,7 @@ add_executable(rtype_tests
     physics_step.cpp
     reliability.cpp
     resource_cache.cpp
+    render_thread.cpp
     scenes.cpp
     serialization.cpp
     server_instance.cpp

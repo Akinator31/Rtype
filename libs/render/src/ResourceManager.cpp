@@ -3,6 +3,7 @@
 #include "Resources.hpp"
 
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 namespace rtype::render
@@ -22,19 +23,32 @@ ResourceManager &ResourceManager::operator=(ResourceManager &&) noexcept = defau
 TextureId ResourceManager::loadTexture(const std::string &path, TextureFiltering filtering)
 {
     const std::string key = filtering == TextureFiltering::Smooth ? path + "@smooth" : path;
-    return _impl->textures.load(key,
-                                [&] { return detail::Texture(_impl->assetsDirectory / path, filtering); });
+    return _impl->textures.load(key, [&] {
+        if (std::this_thread::get_id() != _impl->ownerThread) {
+            throw std::logic_error("Load uncached textures on the render thread or use loadTextureAsync");
+        }
+        return detail::Texture(_impl->assetsDirectory / path, filtering);
+    });
 }
 
 FontId ResourceManager::loadFont(const std::string &path, int size)
 {
-    return _impl->fonts.load(path + '@' + std::to_string(size),
-                             [&] { return detail::Font(_impl->assetsDirectory / path, size); });
+    return _impl->fonts.load(path + '@' + std::to_string(size), [&] {
+        if (std::this_thread::get_id() != _impl->ownerThread) {
+            throw std::logic_error("Load uncached fonts on the render thread or use loadFontAsync");
+        }
+        return detail::Font(_impl->assetsDirectory / path, size);
+    });
 }
 
 ModelId ResourceManager::loadModel(const std::string &path)
 {
-    return _impl->models.load(path, [&] { return detail::Model(_impl->assetsDirectory / path); });
+    return _impl->models.load(path, [&] {
+        if (std::this_thread::get_id() != _impl->ownerThread) {
+            throw std::logic_error("Load uncached models on the render thread or use loadModelAsync");
+        }
+        return detail::Model(_impl->assetsDirectory / path);
+    });
 }
 
 std::shared_future<TextureId> ResourceManager::loadTextureAsync(const std::string &path,
@@ -75,6 +89,9 @@ std::shared_future<ModelId> ResourceManager::loadModelAsync(const std::string &p
 
 void ResourceManager::finishPendingLoads()
 {
+    if (std::this_thread::get_id() != _impl->ownerThread) {
+        throw std::logic_error("Finish render resources on their owning thread");
+    }
     _impl->pendingTextures.pump();
     _impl->pendingFonts.pump();
     _impl->pendingModels.pump();

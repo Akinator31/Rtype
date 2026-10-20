@@ -12,7 +12,7 @@ class Ecs;
 
 namespace rtype::render
 {
-class Renderer;
+class RenderContext;
 }
 
 namespace rtype::engine
@@ -45,7 +45,7 @@ public:
 
     [[nodiscard]] std::vector<DebugCollider> colliders() const;
     [[nodiscard]] std::vector<DebugGridLine> gridLines(render::Vector2 gameSize) const;
-    void draw(render::Renderer &renderer) const;
+    void draw(render::RenderContext &renderer) const;
 };
 
 } // namespace rtype::engine

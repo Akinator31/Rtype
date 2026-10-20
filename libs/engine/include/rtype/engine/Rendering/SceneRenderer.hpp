@@ -15,7 +15,7 @@ class Ecs;
 
 namespace rtype::render
 {
-class Renderer;
+class RenderContext;
 } // namespace rtype::render
 
 namespace rtype::engine
@@ -58,17 +58,17 @@ class SceneRenderer
     /// The shown entities with a Model, by Drawable order.
     [[nodiscard]] std::vector<ecs::entity_t> getModelsInOrder();
     /// Draws the first shown Backdrop over the whole visible area.
-    void drawBackdrop(render::Renderer &renderer);
+    void drawBackdrop(render::RenderContext &renderer);
     /// Draws the 3D models, seen through the camera and lit by the light.
-    void drawModels(render::Renderer &renderer);
+    void drawModels(render::RenderContext &renderer);
     /// Draws a glass panel with its shadows and glow, in the look of its highlight.
-    void drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre, float scale,
+    void drawPanel(render::RenderContext &renderer, const Panel &panel, render::Vector2 centre, float scale,
                    float opacity) const;
     /// Draws a toast in the look of InterfaceStyle::toast: its panel, its accent and its text.
-    void drawToast(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
+    void drawToast(render::RenderContext &renderer, const Toast &toast, render::Vector2 centre,
                    float opacity) const;
     /// Draws a console text field: its prompt in the prompt colour of the style, then its content.
-    void drawConsoleField(render::Renderer &renderer, const Text &text, const TextField &field,
+    void drawConsoleField(render::RenderContext &renderer, const Text &text, const TextField &field,
                           render::Vector2 topLeft, float size, float opacity) const;
 
 public:
@@ -76,9 +76,9 @@ public:
     SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle &style);
 
     /// Draws the entities of one layer.
-    void draw(render::Renderer &renderer, Layer layer);
+    void draw(render::RenderContext &renderer, Layer layer);
     /// Draws the world, then the interface on top of it.
-    void draw(render::Renderer &renderer);
+    void draw(render::RenderContext &renderer);
 };
 
 } // namespace rtype::engine

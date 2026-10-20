@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/render/ColorFilter.hpp"
+#include "rtype/render/RenderContext.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
@@ -33,7 +34,7 @@ class Window;
 ///     renderer.endFrame();
 /// }
 /// @endcode
-class Renderer
+class Renderer : public RenderContext
 {
 private:
     struct Impl;

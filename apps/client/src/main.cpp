@@ -11,6 +11,7 @@
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "ThreadedInput.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -19,11 +20,13 @@
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
+#include "rtype/render/RenderCommands.hpp"
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <exception>
@@ -31,6 +34,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace
@@ -118,7 +122,7 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
 /// Registers the systems of the client, in the order they run each frame, after the scenes.
 /// @return The system that plays the games.
 rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
-                                                  rtype::input::Devices &devices,
+                                                  rtype::input::InputSource &devices,
                                                   const rtype::engine::RendererMetrics &metrics,
                                                   const rtype::engine::InterfaceStyle &style)
 {
@@ -161,42 +165,99 @@ void run()
         .font = resources.loadFont(RTYPE_FONT_TITLE, 160),
         .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96)},
     };
-    const rtype::engine::RendererMetrics metrics(renderer);
-
-    rtype::client::Console console;
-    // The network of the client, polled by the game loop: it outlives everything that uses it
-    rtype::network::EventLoop network;
-    engine.setInputSource(devices);
-    rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, metrics, style);
-    rtype::client::GameScenes games(engine, resources, metrics, style, sessions);
-    rtype::client::OnlineScenes online(engine, network, games, metrics, style,
-                                       applicationDirectory() / "server.pub");
-    rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
-    rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
-                                                               CollisionCellSize);
+    rtype::render::RenderQueries queries;
+    rtype::render::RenderFrames frames;
+    rtype::client::InputMailbox inputs;
+    std::atomic<bool> stopping = false;
+    std::exception_ptr logicFailure;
     const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
-    bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
-    bool debugKeyWasDown = false;
+    const bool initialColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
 
-    createScenes(engine, resources, style, window, console, metrics, games);
-    rtype::client::registerClientCommands(console, engine, window);
-    engine.switchScene(rtype::client::MainMenuScene);
+    std::thread logic([&] {
+        try {
+            rtype::render::CommandRecorder recorder(renderer, queries);
+            const rtype::engine::RendererMetrics metrics(recorder);
+            rtype::client::SnapshotInput input([&](const std::string &text) {
+                queries.run([&devices, text] { devices.setClipboardText(text); });
+            });
+            rtype::client::Console console;
+            rtype::network::EventLoop network;
+            engine.setInputSource(input);
+            rtype::client::GameSessionSystem &sessions = registerSystems(engine, input, metrics, style);
+            rtype::client::GameScenes games(engine, resources, metrics, style, sessions);
+            rtype::client::OnlineScenes online(engine, network, games, metrics, style,
+                                               applicationDirectory() / "server.pub");
+            rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
+            rtype::engine::ColliderDebugRenderer colliderDebugRenderer(
+                engine.getEcs(), engine.getScenes(), CollisionCellSize);
+            createScenes(engine, resources, style, window, console, metrics, games);
+            rtype::client::registerClientCommands(console, engine, window);
+            engine.switchScene(rtype::client::MainMenuScene);
+            bool showColliderDebug = initialColliderDebug;
+            bool debugKeyWasDown = false;
 
-    while (!window.shouldClose()) {
-        const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
-        if (debugKeyDown && !debugKeyWasDown) {
-            showColliderDebug = !showColliderDebug;
+            while (auto next = inputs.take()) {
+                const float elapsed = next->elapsed;
+                input.update(std::move(*next));
+                const bool debugKeyDown = input.isKeyDown(rtype::input::Key::F3);
+                if (debugKeyDown && !debugKeyWasDown) {
+                    showColliderDebug = !showColliderDebug;
+                }
+                debugKeyWasDown = debugKeyDown;
+                network.poll();
+                engine.update(elapsed);
+                sceneRenderer.draw(recorder, rtype::engine::Layer::World);
+                if (showColliderDebug) {
+                    colliderDebugRenderer.draw(recorder);
+                }
+                sceneRenderer.draw(recorder, rtype::engine::Layer::Interface);
+                frames.publish(recorder.take());
+            }
+        } catch (...) {
+            if (!stopping.load()) {
+                logicFailure = std::current_exception();
+                window.requestClose();
+            }
         }
-        debugKeyWasDown = debugKeyDown;
-        network.poll();
-        engine.update(window.frameTime());
-        renderer.beginFrame();
-        sceneRenderer.draw(renderer, rtype::engine::Layer::World);
-        if (showColliderDebug) {
-            colliderDebugRenderer.draw(renderer);
+    });
+
+    rtype::render::RenderCommands current;
+    std::exception_ptr renderFailure;
+    try {
+        while (!window.shouldClose()) {
+            const auto queryDeadline = std::chrono::steady_clock::now() +
+                                       std::chrono::milliseconds(4);
+            do {
+                resources.finishPendingLoads();
+                queries.drain();
+                if (auto next = frames.take()) {
+                    current = std::move(*next);
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            } while (std::chrono::steady_clock::now() < queryDeadline && !window.shouldClose());
+            if (window.shouldClose()) {
+                break;
+            }
+            renderer.beginFrame();
+            for (const auto &command : current) {
+                command(renderer);
+            }
+            renderer.endFrame();
+            inputs.publish(rtype::client::InputFrame::capture(devices, window.frameTime()));
         }
-        sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
-        renderer.endFrame();
+    } catch (...) {
+        renderFailure = std::current_exception();
+    }
+    stopping = true;
+    inputs.stop();
+    queries.stop();
+    logic.join();
+    if (renderFailure) {
+        std::rethrow_exception(renderFailure);
+    }
+    if (logicFailure) {
+        std::rethrow_exception(logicFailure);
     }
 }
 

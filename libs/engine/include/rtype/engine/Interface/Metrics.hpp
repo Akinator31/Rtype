@@ -7,7 +7,7 @@
 
 namespace rtype::render
 {
-class Renderer;
+class RenderContext;
 } // namespace rtype::render
 
 namespace rtype::engine
@@ -39,11 +39,11 @@ public:
 class RendererMetrics : public Metrics
 {
 private:
-    const render::Renderer &_renderer;
+    const render::RenderContext &_renderer;
 
 public:
     /// @param renderer It must outlive the metrics.
-    explicit RendererMetrics(const render::Renderer &renderer) : _renderer(renderer) {}
+    explicit RendererMetrics(const render::RenderContext &renderer) : _renderer(renderer) {}
 
     [[nodiscard]] render::Vector2 measureText(render::FontId font, const std::string &text,
                                               float size) const override;

@@ -4,7 +4,7 @@
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Widget.hpp"
-#include "rtype/render/Renderer.hpp"
+#include "rtype/render/RenderContext.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -46,7 +46,7 @@ render::Rectangle grow(render::Rectangle area, float margin)
 
 // A blurred rounded rectangle, for shadows and glows: faint layers from blur / 2 inside the area to blur / 2
 // outside of it. They add up to the colour inside, and fade out across the blur.
-void drawBlurred(render::Renderer &renderer, render::Rectangle area, float radius, float blur,
+void drawBlurred(render::RenderContext &renderer, render::Rectangle area, float radius, float blur,
                  render::Color color)
 {
     constexpr int layers = 8;
@@ -69,7 +69,7 @@ void drawBlurred(render::Renderer &renderer, render::Rectangle area, float radiu
 }
 
 // Poses the model at the time of its animation, between the previous and the current one while it fades
-void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
+void poseModel(render::RenderContext &renderer, render::ModelId model, const ModelAnimation &animation)
 {
     if (animation.time >= animation.fadeDuration) {
         renderer.animateModel(model, animation.animation, animation.time);
@@ -104,7 +104,7 @@ SceneRenderer::SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle
 {
 }
 
-void SceneRenderer::drawConsoleField(render::Renderer &renderer, const Text &text, const TextField &field,
+void SceneRenderer::drawConsoleField(render::RenderContext &renderer, const Text &text, const TextField &field,
                                      render::Vector2 topLeft, float size, float opacity) const
 {
     const std::string prompt = fieldPrefix(field);
@@ -114,7 +114,7 @@ void SceneRenderer::drawConsoleField(render::Renderer &renderer, const Text &tex
                       faded(text.color, opacity));
 }
 
-void SceneRenderer::draw(render::Renderer &renderer)
+void SceneRenderer::draw(render::RenderContext &renderer)
 {
     draw(renderer, Layer::World);
     draw(renderer, Layer::Interface);
@@ -171,7 +171,7 @@ std::vector<ecs::entity_t> SceneRenderer::getModelsInOrder()
     return entities;
 }
 
-void SceneRenderer::drawBackdrop(render::Renderer &renderer)
+void SceneRenderer::drawBackdrop(render::RenderContext &renderer)
 {
     auto &backdrops = _ecs.cache<Backdrop>();
     for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
@@ -185,7 +185,7 @@ void SceneRenderer::drawBackdrop(render::Renderer &renderer)
     }
 }
 
-void SceneRenderer::drawModels(render::Renderer &renderer)
+void SceneRenderer::drawModels(render::RenderContext &renderer)
 {
     const Camera *camera = findCamera();
     if (camera == nullptr) {
@@ -208,7 +208,7 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
     }
 }
 
-void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre,
+void SceneRenderer::drawPanel(render::RenderContext &renderer, const Panel &panel, render::Vector2 centre,
                               float scale, float opacity) const
 {
     const ButtonStyle &style = _style.button;
@@ -228,7 +228,7 @@ void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, re
                                          faded(look.border, opacity));
 }
 
-void SceneRenderer::drawToast(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
+void SceneRenderer::drawToast(render::RenderContext &renderer, const Toast &toast, render::Vector2 centre,
                               float opacity) const
 {
     const ToastStyle &style = _style.toast;
@@ -254,7 +254,7 @@ void SceneRenderer::drawToast(render::Renderer &renderer, const Toast &toast, re
     renderer.drawText(_style.button.font, toast.text, topLeft, style.textSize, faded(style.text, opacity));
 }
 
-void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
+void SceneRenderer::draw(render::RenderContext &renderer, Layer layer)
 {
     if (layer == Layer::World) {
         drawBackdrop(renderer);

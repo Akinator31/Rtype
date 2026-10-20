@@ -24,6 +24,7 @@ technical and comparative study of the project.
 | [0016](0016-replication.md) | Full snapshots, explicit destructions and redundant inputs | Proposed |
 | [0017](0017-asset-loading-threads.md) | Asset preparation on a background thread | Accepted |
 | [0018](0018-lua-game-config.md) | Lua for the configuration of enemies and weapons | Accepted |
+| [0019](0019-render-thread.md) | Render thread and frame hand-off | Accepted |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

@@ -97,6 +97,8 @@ const FontId font = resources.loadFont("fonts/FiraSans-Black.ttf", 48);
 
 For nonblocking loading, call `loadTextureAsync()`, `loadFontAsync()` or `loadModelAsync()` and keep the returned `std::shared_future`. Call `finishPendingLoads()` once per frame on the render thread. Check `future.wait_for(std::chrono::seconds(0))` before calling `get()`; draw a placeholder while it is pending. A failure is reported by `get()` as an exception. Requests for the same asset and options share one future. Pass `engine.assetLoading().queue()` to the manager constructor to share the engine's worker with audio. The client's startup displays a loading screen while its menu assets are prepared. See [ADR 0017](../decisions/0017-asset-loading-threads.md) for the thread boundaries and the model-loading limitation.
 
+In the client, the main thread owns the window and replays the newest complete list of draw commands. The logic thread updates the ECS and records these commands through `CommandRecorder`; it never sends entity or component references to the renderer. Input moves in the opposite direction as a copied state snapshot. Measurements needed for layout are evaluated on the render thread. See [ADR 0019](../decisions/0019-render-thread.md).
+
 Loading the same path again returns the same handle without reading the file again: fifty enemies sharing
 one sprite share one texture in graphics memory. Fonts are identified by their path **and** their size,
 because a font is rendered to a texture at the size it is loaded with.

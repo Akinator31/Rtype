@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -225,6 +226,7 @@ public:
 struct ResourceManager::Impl {
     std::filesystem::path assetsDirectory;
     std::shared_ptr<core::BackgroundLoader> loader;
+    std::thread::id ownerThread = std::this_thread::get_id();
     core::ResourceCache<detail::Texture, TextureId> textures;
     core::ResourceCache<detail::Font, FontId> fonts;
     core::ResourceCache<detail::Model, ModelId> models;
