@@ -25,6 +25,17 @@ ecs::entity_t spawnPlayerShot(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
 ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::string &id, std::uint8_t owner,
                               float x, float y, float velocityX, float velocityY);
 
+/// Gives a weapon of context.weapons to a ship, with a full magazine (it replaces the one it had). From then
+/// on the WeaponSystem makes it fire instead of the default shots. Throws std::out_of_range if `weaponId` is
+/// not in context.weapons.
+void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const std::string &weaponId);
+
+/// A shot of a weapon: its projectile, fired to the right at the speed of the weapon, with the firing
+/// mechanic and the range of the weapon. `x` and `y` are the position of the ship, the shot appears at its
+/// nose. Throws std::out_of_range if the weapon or its projectile is unknown.
+ecs::entity_t spawnWeaponShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
+                              std::uint8_t owner, float x, float y);
+
 /// The ship of a player, if it has one.
 [[nodiscard]] std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot);
 

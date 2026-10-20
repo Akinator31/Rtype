@@ -5,6 +5,7 @@
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/game/Weapon/WeaponRegistry.hpp"
 
 #include <array>
 #include <cstdint>
@@ -32,6 +33,7 @@ struct PlayerSlot {
 struct GameContext {
     Rules rules;
     ProjectileRegistry projectiles;
+    WeaponRegistry weapons;
     /// The tick being simulated, from 1.
     std::uint32_t tick = 0;
     std::array<PlayerSlot, MaxPlayers> players{};

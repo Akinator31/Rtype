@@ -7,7 +7,7 @@ namespace rtype::game
 {
 
 PlayerControlSystem::PlayerControlSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context)
-    : _ecs(ecs), _context(context), _ships(use<PlayerShip>(caches)),
+    : _ecs(ecs), _context(context), _ships(use<PlayerShip>(caches)), _weapons(use<Armed>(caches)),
       _velocities(use<physics::Velocity>(caches)), _positions(use<ecs::Position>(caches))
 {
 }
@@ -27,6 +27,9 @@ void PlayerControlSystem::update(float)
         // The same velocity as the prediction of the client (ShipMovement.hpp)
         _velocities.get(entity) = shipVelocity(input, rules);
 
+        if (_weapons.has(entity)) {
+            continue;
+        }
         if (ship.fireCooldown > 0) {
             --ship.fireCooldown;
         }
