@@ -56,6 +56,8 @@ AudioDevice device({.enabled = false});   // tests, servers, or a "no sound" opt
 Each file is loaded once: loading the same path again returns the same handle (`SoundId`, `MusicId`), like
 textures in the render library. Both use the same `ResourceCache`, from the [core library](index.md#libraries).
 
+`loadSoundAsync()` and `loadMusicAsync()` return shared futures. Call `finishPendingLoads()` on the audio owner's thread each frame, then use the handle once its future is ready. Sound files are decoded on a worker; audio buffers are created on the owner thread. Pass `engine.assetLoading().queue()` to the player constructor to share the engine's worker with rendering. See [ADR 0017](../decisions/0017-asset-loading-threads.md).
+
 ### Playing a sound several times at once
 
 With raylib, playing a sound that is already playing restarts it: fast shots would cut each other. Each sound

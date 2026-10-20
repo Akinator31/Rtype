@@ -1,6 +1,8 @@
 #include "rtype/audio/AudioPlayer.hpp"
 
 #include "rtype/audio/AudioDevice.hpp"
+#include "rtype/core/AssetFile.hpp"
+#include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
 
 #include <raylib.h>
@@ -16,6 +18,40 @@ namespace rtype::audio
 
 namespace
 {
+
+class PreparedSound
+{
+    Wave _wave{};
+
+public:
+    explicit PreparedSound(const std::filesystem::path &file)
+    {
+        const std::vector<unsigned char> bytes = core::readAssetFile(file);
+        _wave = LoadWaveFromMemory(file.extension().string().c_str(), bytes.data(),
+                                   static_cast<int>(bytes.size()));
+        if (!IsWaveValid(_wave)) {
+            if (_wave.data != nullptr) {
+                UnloadWave(_wave);
+            }
+            throw std::runtime_error("Cannot load sound " + file.string() + ": unsupported format");
+        }
+    }
+
+    ~PreparedSound() { UnloadWave(_wave); }
+    PreparedSound(const PreparedSound &) = delete;
+    PreparedSound &operator=(const PreparedSound &) = delete;
+    PreparedSound(PreparedSound &&other) noexcept : _wave(std::exchange(other._wave, {})) {}
+    PreparedSound &operator=(PreparedSound &&other) noexcept
+    {
+        if (this != &other) {
+            UnloadWave(_wave);
+            _wave = std::exchange(other._wave, {});
+        }
+        return *this;
+    }
+
+    [[nodiscard]] Wave wave() const { return _wave; }
+};
 
 // Number of copies of a sound that can play at the same time
 constexpr std::size_t voicesPerSound = 4;
@@ -45,6 +81,17 @@ public:
         const ::Sound source = LoadSound(file.string().c_str());
         if (!IsSoundValid(source)) {
             throw std::runtime_error("Cannot load sound " + file.string() + ": unsupported format");
+        }
+        _voices.push_back(source);
+        for (std::size_t voice = 1; voice < voicesPerSound; ++voice) {
+            _voices.push_back(LoadSoundAlias(source));
+        }
+    }
+    explicit SoundEffect(Wave wave)
+    {
+        const ::Sound source = LoadSoundFromWave(wave);
+        if (!IsSoundValid(source)) {
+            throw std::runtime_error("Cannot create sound");
         }
         _voices.push_back(source);
         for (std::size_t voice = 1; voice < voicesPerSound; ++voice) {
@@ -98,11 +145,21 @@ public:
 class MusicStream
 {
 private:
+    std::vector<unsigned char> _bytes;
     std::optional<::Music> _music;
 
 public:
     MusicStream() = default;
     explicit MusicStream(const std::filesystem::path &file) : _music(LoadMusicStream(file.string().c_str()))
+    {
+        if (!IsMusicValid(*_music)) {
+            throw std::runtime_error("Cannot load music " + file.string() + ": unsupported format");
+        }
+    }
+    MusicStream(const std::filesystem::path &file, std::vector<unsigned char> bytes)
+        : _bytes(std::move(bytes)),
+          _music(LoadMusicStreamFromMemory(file.extension().string().c_str(), _bytes.data(),
+                                           static_cast<int>(_bytes.size())))
     {
         if (!IsMusicValid(*_music)) {
             throw std::runtime_error("Cannot load music " + file.string() + ": unsupported format");
@@ -117,7 +174,10 @@ public:
 
     MusicStream(const MusicStream &) = delete;
     MusicStream &operator=(const MusicStream &) = delete;
-    MusicStream(MusicStream &&other) noexcept : _music(std::exchange(other._music, std::nullopt)) {}
+    MusicStream(MusicStream &&other) noexcept
+        : _bytes(std::move(other._bytes)), _music(std::exchange(other._music, std::nullopt))
+    {
+    }
     MusicStream &operator=(MusicStream &&) = delete;
 
     // Nothing when the audio is not available
@@ -129,23 +189,29 @@ public:
 struct AudioPlayer::Impl {
     bool available;
     std::filesystem::path assetsDirectory;
+    std::shared_ptr<core::BackgroundLoader> loader;
     core::ResourceCache<SoundEffect, SoundId> sounds;
     core::ResourceCache<MusicStream, MusicId> musics;
+    core::AsyncResourceRequests<SoundId> pendingSounds;
+    core::AsyncResourceRequests<MusicId> pendingMusics;
     std::optional<MusicId> currentMusic;
     bool paused = false;
     float musicVolume = 1.0f;
     float effectsVolume = 1.0f;
 
-    Impl(bool audioAvailable, std::filesystem::path assets)
-        : available(audioAvailable), assetsDirectory(std::move(assets))
+    Impl(bool audioAvailable, std::filesystem::path assets, std::shared_ptr<core::BackgroundLoader> worker)
+        : available(audioAvailable), assetsDirectory(std::move(assets)),
+          loader(worker ? std::move(worker) : std::make_shared<core::BackgroundLoader>()),
+          pendingSounds(loader), pendingMusics(loader)
     {
     }
 
     ::Music *current() { return currentMusic ? musics.get(*currentMusic).get() : nullptr; }
 };
 
-AudioPlayer::AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory)
-    : _impl(std::make_unique<Impl>(device.isAvailable(), std::move(assetsDirectory)))
+AudioPlayer::AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory,
+                         std::shared_ptr<core::BackgroundLoader> loader)
+    : _impl(std::make_unique<Impl>(device.isAvailable(), std::move(assetsDirectory), std::move(loader)))
 {
 }
 
@@ -169,6 +235,43 @@ MusicId AudioPlayer::loadMusic(const std::string &path)
         requireFile(file, "music");
         return _impl->available ? MusicStream(file) : MusicStream();
     });
+}
+
+std::shared_future<SoundId> AudioPlayer::loadSoundAsync(const std::string &path)
+{
+    const std::filesystem::path file = _impl->assetsDirectory / path;
+    Impl *impl = _impl.get();
+    return impl->pendingSounds.request(
+        path,
+        [file, available = impl->available] {
+            if (!available) {
+                core::readAssetFile(file);
+                return std::optional<PreparedSound>{};
+            }
+            return std::optional<PreparedSound>(std::in_place, file);
+        },
+        [impl, path](std::optional<PreparedSound> prepared) {
+            return impl->sounds.load(
+                path, [&] { return prepared ? SoundEffect(prepared->wave()) : SoundEffect(); });
+        });
+}
+
+std::shared_future<MusicId> AudioPlayer::loadMusicAsync(const std::string &path)
+{
+    const std::filesystem::path file = _impl->assetsDirectory / path;
+    Impl *impl = _impl.get();
+    return impl->pendingMusics.request(
+        path, [file] { return core::readAssetFile(file); },
+        [impl, path, file](std::vector<unsigned char> bytes) {
+            return impl->musics.load(
+                path, [&] { return impl->available ? MusicStream(file, std::move(bytes)) : MusicStream(); });
+        });
+}
+
+void AudioPlayer::finishPendingLoads()
+{
+    _impl->pendingSounds.pump();
+    _impl->pendingMusics.pump();
 }
 
 void AudioPlayer::play(SoundId sound, const PlaySettings &settings)

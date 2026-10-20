@@ -1,10 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 namespace rtype::core
 {
@@ -14,13 +15,14 @@ namespace rtype::core
 /// Resources are identified by a key, usually their file path: loading a key again returns the handle of
 /// the resource already loaded. Handles stay valid for as long as the cache exists. The cache does not know
 /// how to load a resource, the caller provides the loader, so it works with any kind of resource.
-/// @tparam Resource Type of the stored resources. It frees what it holds in its destructor and can be moved.
+/// @tparam Resource Type of the stored resources. It frees what it holds in its destructor.
 /// @tparam Id Handle type returned for this kind of resource.
 template <typename Resource, typename Id>
 class ResourceCache
 {
 private:
-    std::vector<Resource> _resources;
+    mutable std::mutex _mutex;
+    std::deque<Resource> _resources;
     std::unordered_map<std::string, Id> _ids;
 
 public:
@@ -32,6 +34,7 @@ public:
     template <typename Loader>
     Id load(const std::string &key, Loader &&loader)
     {
+        std::lock_guard lock(_mutex);
         if (const auto it = _ids.find(key); it != _ids.end()) {
             return it->second;
         }
@@ -46,16 +49,27 @@ public:
         return id;
     }
 
-    /// Returns the resource with this handle. The reference is invalidated by the next call to load().
+    /// Returns the resource with this handle. The reference stays valid until the cache is destroyed.
     /// @throws std::out_of_range if the handle does not come from this cache.
-    [[nodiscard]] const Resource &get(Id id) const { return _resources.at(id.index); }
-    /// Returns the resource with this handle, to modify it. The reference is invalidated by the next call to
-    /// load().
+    [[nodiscard]] const Resource &get(Id id) const
+    {
+        std::lock_guard lock(_mutex);
+        return _resources.at(id.index);
+    }
+    /// Returns the resource with this handle, to modify it.
     /// @throws std::out_of_range if the handle does not come from this cache.
-    [[nodiscard]] Resource &get(Id id) { return _resources.at(id.index); }
+    [[nodiscard]] Resource &get(Id id)
+    {
+        std::lock_guard lock(_mutex);
+        return _resources.at(id.index);
+    }
 
     /// Number of resources loaded.
-    [[nodiscard]] std::size_t size() const { return _resources.size(); }
+    [[nodiscard]] std::size_t size() const
+    {
+        std::lock_guard lock(_mutex);
+        return _resources.size();
+    }
 };
 
 } // namespace rtype::core

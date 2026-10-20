@@ -3,6 +3,8 @@
 // Private to the render library: the raylib resources behind the handles of the ResourceManager, shared
 // between the ResourceManager, which loads them, and the Renderer, which draws them.
 
+#include "PreparedAssets.hpp"
+#include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
@@ -29,6 +31,17 @@ private:
     Texture2D _texture;
 
 public:
+    Texture(Image image, TextureFiltering filtering) : _texture(LoadTextureFromImage(image))
+    {
+        if (!IsTextureValid(_texture)) {
+            throw std::runtime_error("Cannot create texture");
+        }
+        if (filtering == TextureFiltering::Smooth) {
+            GenTextureMipmaps(&_texture);
+            SetTextureFilter(_texture, TEXTURE_FILTER_TRILINEAR);
+        }
+    }
+
     Texture(const std::filesystem::path &file, TextureFiltering filtering)
         : _texture(LoadTexture(file.string().c_str()))
     {
@@ -55,26 +68,6 @@ public:
     [[nodiscard]] const Texture2D &get() const { return _texture; }
 };
 
-// Characters rendered when a font is loaded: by default, raylib only renders ASCII, and any other character
-// is drawn as '?'. Latin-1 adds the accented letters of most Western European languages, completed with the
-// French "œ", the euro sign and the leftwards arrow of the back buttons. The soft hyphen is left out: it is
-// never drawn, and some fonts (Inter) do not have it, which makes raylib warn.
-inline std::vector<int> fontCharacters()
-{
-    constexpr int softHyphen = 0xAD;
-    std::vector<int> characters;
-    for (int character = 0x20; character <= 0x7E; ++character) {
-        characters.push_back(character);
-    }
-    for (int character = 0xA0; character <= 0xFF; ++character) {
-        if (character != softHyphen) {
-            characters.push_back(character);
-        }
-    }
-    characters.insert(characters.end(), {0x152, 0x153, 0x20AC, 0x2190});
-    return characters;
-}
-
 // Owns a font: its glyphs in memory and its texture in graphics memory. A moved-from font frees nothing.
 class Font
 {
@@ -97,6 +90,7 @@ public:
         // Fonts are often drawn at another size than the one they were loaded at: smooth the scaling
         SetTextureFilter(_font.texture, TEXTURE_FILTER_BILINEAR);
     }
+    explicit Font(PreparedFont prepared) : _font(prepared.upload()) {}
     ~Font()
     {
         if (IsFontValid(_font)) {
@@ -230,9 +224,20 @@ public:
 
 struct ResourceManager::Impl {
     std::filesystem::path assetsDirectory;
+    std::shared_ptr<core::BackgroundLoader> loader;
     core::ResourceCache<detail::Texture, TextureId> textures;
     core::ResourceCache<detail::Font, FontId> fonts;
     core::ResourceCache<detail::Model, ModelId> models;
+    core::AsyncResourceRequests<TextureId> pendingTextures;
+    core::AsyncResourceRequests<FontId> pendingFonts;
+    core::AsyncResourceRequests<ModelId> pendingModels;
+
+    Impl(std::filesystem::path directory, std::shared_ptr<core::BackgroundLoader> worker)
+        : assetsDirectory(std::move(directory)),
+          loader(worker ? std::move(worker) : std::make_shared<core::BackgroundLoader>()),
+          pendingTextures(loader), pendingFonts(loader), pendingModels(loader)
+    {
+    }
 };
 
 } // namespace rtype::render

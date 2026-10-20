@@ -6,9 +6,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <stdexcept>
+#include <thread>
 
 using namespace rtype::audio;
 
@@ -109,4 +112,44 @@ TEST_CASE("Without audio, the music state follows the calls", "[audio]")
 
     player.stopMusic();
     REQUIRE_FALSE(player.isMusicPlaying());
+}
+
+TEST_CASE("Audio assets load asynchronously and share cached handles", "[audio][assets]")
+{
+    const FakeAssets assets;
+    const AudioDevice device({.enabled = false});
+    AudioPlayer player(device, assets.directory());
+
+    const auto sound = player.loadSoundAsync("sounds/shot.wav");
+    const auto sameSound = player.loadSoundAsync("sounds/shot.wav");
+    const auto music = player.loadMusicAsync("sounds/music.ogg");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while ((sound.wait_for(std::chrono::seconds(0)) != std::future_status::ready ||
+            music.wait_for(std::chrono::seconds(0)) != std::future_status::ready) &&
+           std::chrono::steady_clock::now() < deadline) {
+        player.finishPendingLoads();
+        std::this_thread::yield();
+    }
+
+    REQUIRE(sound.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+    REQUIRE(music.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+    CHECK(sound.get() == sameSound.get());
+    CHECK(sound.get() == player.loadSound("sounds/shot.wav"));
+    CHECK(music.get() == player.loadMusic("sounds/music.ogg"));
+}
+
+TEST_CASE("An asynchronous audio load reports a missing file", "[audio][assets]")
+{
+    const FakeAssets assets;
+    const AudioDevice device({.enabled = false});
+    AudioPlayer player(device, assets.directory());
+    const auto missing = player.loadMusicAsync("sounds/missing.ogg");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (missing.wait_for(std::chrono::seconds(0)) != std::future_status::ready &&
+           std::chrono::steady_clock::now() < deadline) {
+        player.finishPendingLoads();
+        std::this_thread::yield();
+    }
+    REQUIRE(missing.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+    CHECK_THROWS_AS(missing.get(), std::runtime_error);
 }
