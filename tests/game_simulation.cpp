@@ -489,15 +489,16 @@ TEST_CASE("A registry gives back the projectiles it was given, and refuses doubl
     CHECK_THROWS_AS(registry.getDefinition("nope"), std::out_of_range);
 }
 
-TEST_CASE("spawnProjectile() makes a projectile with its model, category and collider, which flies and leaves",
-          "[game]")
+TEST_CASE(
+    "spawnProjectile() makes a projectile with its model, category and collider, which flies and leaves",
+    "[game]")
 {
     Simulation simulation{Rules{}};
     GameContext &context = simulation.context();
     context.projectiles.addDefinition(pulse());
 
-    const rtype::ecs::entity_t entity = spawnProjectile(simulation.ecs(), context, "pulse", 0, 500.0f, 300.0f,
-                                                        100.0f, 0.0f);
+    const rtype::ecs::entity_t entity =
+        spawnProjectile(simulation.ecs(), context, "pulse", 0, 500.0f, 300.0f, 100.0f, 0.0f);
 
     rtype::ecs::Ecs &ecs = simulation.ecs();
     CHECK(ecs.getComponent<Projectile>(entity).category == ProjectileCategory::Plasma);
@@ -529,7 +530,8 @@ TEST_CASE("Each category moves its projectiles its own way", "[game]")
     CHECK(late == Approx(1000.0f * rules.missileMaxBoost));
 
     const auto up = getProjectileVelocity(ProjectileCategory::Plasma, launch, 0, rules);
-    const auto down = getProjectileVelocity(ProjectileCategory::Plasma, launch, rules.plasmaZigzagInterval, rules);
+    const auto down =
+        getProjectileVelocity(ProjectileCategory::Plasma, launch, rules.plasmaZigzagInterval, rules);
     CHECK(up.y == Approx(-rules.plasmaZigzagSpeed));
     CHECK(down.y == Approx(rules.plasmaZigzagSpeed));
     CHECK(up.x == Approx(1000.0f));

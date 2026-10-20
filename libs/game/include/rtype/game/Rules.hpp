@@ -30,7 +30,8 @@ struct Rules {
     /// A missile speeds up by this fraction of its launch speed per tick, up to missileMaxBoost times it.
     float missileBoostPerTick = 0.02f;
     float missileMaxBoost = 3.0f;
-    /// A plasma projectile goes up then down at this vertical speed, switching every plasmaZigzagInterval ticks.
+    /// A plasma projectile goes up then down at this vertical speed, switching every plasmaZigzagInterval
+    /// ticks.
     float plasmaZigzagSpeed = 200.0f;
     std::uint32_t plasmaZigzagInterval = 20;
 

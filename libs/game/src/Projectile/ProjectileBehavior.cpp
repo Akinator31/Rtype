@@ -10,8 +10,8 @@ physics::Velocity getProjectileVelocity(ProjectileCategory category, const physi
 {
     switch (category) {
     case ProjectileCategory::Missile: {
-        const float boost = std::min(1.0f + rules.missileBoostPerTick * static_cast<float>(age),
-                                     rules.missileMaxBoost);
+        const float boost =
+            std::min(1.0f + rules.missileBoostPerTick * static_cast<float>(age), rules.missileMaxBoost);
         return {launch.x * boost, launch.y * boost};
     }
     case ProjectileCategory::Plasma: {

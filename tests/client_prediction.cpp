@@ -228,7 +228,7 @@ TEST_CASE("The walls are predicted as the game has them", "[prediction]")
         match.tick(corner);
     }
 
-    const rtype::game::Rules rules {};
+    const rtype::game::Rules rules{};
     CHECK(match.prediction.position()->x == rules.shipHalfWidth);
     CHECK(match.prediction.position()->y == rules.shipHalfHeight);
     for (const float correction : match.corrections) {
@@ -267,7 +267,7 @@ TEST_CASE("A correction too large is applied at once", "[prediction]")
 
 TEST_CASE("A tick skipped when stamping repeats the previous input, as the game does", "[prediction]")
 {
-    const rtype::game::Rules rules {};
+    const rtype::game::Rules rules{};
     Prediction prediction(rules);
     prediction.reconcile(rtype::ecs::Position{500.0f, 500.0f}, 10);
     PlayerInput right;

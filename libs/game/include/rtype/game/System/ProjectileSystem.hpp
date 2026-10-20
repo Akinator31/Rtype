@@ -8,8 +8,8 @@
 namespace rtype::game
 {
 
-/// Ages each projectile by one tick and sets its velocity from its category (getProjectileVelocity()). It runs
-/// before the physics::MovementSystem, which moves the projectile with that velocity.
+/// Ages each projectile by one tick and sets its velocity from its category (getProjectileVelocity()). It
+/// runs before the physics::MovementSystem, which moves the projectile with that velocity.
 class ProjectileSystem : public ecs::System
 {
     GameContext &_context;
