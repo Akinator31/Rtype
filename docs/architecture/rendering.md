@@ -95,7 +95,7 @@ const FontId font = resources.loadFont("fonts/FiraSans-Black.ttf", 48);
 
 ### Each file is loaded once
 
-For nonblocking loading, call `loadTextureAsync()`, `loadFontAsync()` or `loadModelAsync()` and keep the returned `std::shared_future`. Call `finishPendingLoads()` once per frame on the render thread. Check `future.wait_for(std::chrono::seconds(0))` before calling `get()`; draw a placeholder while it is pending. A failure is reported by `get()` as an exception. Requests for the same asset and options share one future. The client's startup displays a loading screen while its menu assets are prepared. See [ADR 0017](../decisions/0017-asset-loading-threads.md) for the thread boundaries and the model-loading limitation.
+For nonblocking loading, call `loadTextureAsync()`, `loadFontAsync()` or `loadModelAsync()` and keep the returned `std::shared_future`. Call `finishPendingLoads()` once per frame on the render thread. Check `future.wait_for(std::chrono::seconds(0))` before calling `get()`; draw a placeholder while it is pending. A failure is reported by `get()` as an exception. Requests for the same asset and options share one future. Pass `engine.assetLoading().queue()` to the manager constructor to share the engine's worker with audio. The client's startup displays a loading screen while its menu assets are prepared. See [ADR 0017](../decisions/0017-asset-loading-threads.md) for the thread boundaries and the model-loading limitation.
 
 Loading the same path again returns the same handle without reading the file again: fifty enemies sharing
 one sprite share one texture in graphics memory. Fonts are identified by their path **and** their size,

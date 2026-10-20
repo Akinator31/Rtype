@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/ecs/Ecs.hpp"
+#include "rtype/engine/AssetLoadingService.hpp"
 #include "rtype/engine/Component/Toast.hpp"
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Event/Event.hpp"
@@ -69,6 +70,7 @@ class Engine
     std::vector<NamedScene> _namedScenes;
     Controls _controls;
     input::InputSource *_inputSource = nullptr;
+    AssetLoadingService _assetLoading;
 
     void applySceneRequests();
     void openScene(const std::string &name);
@@ -88,6 +90,7 @@ public:
     [[nodiscard]] rtype::ecs::Ecs &getEcs();
     [[nodiscard]] Scenes &getScenes();
     [[nodiscard]] Controls &getControls();
+    [[nodiscard]] AssetLoadingService &assetLoading() { return _assetLoading; }
 
     /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without
     /// a source, the controls are never updated and stay released.

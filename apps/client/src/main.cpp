@@ -148,7 +148,8 @@ void run()
     using namespace rtype::render;
 
     Window window({.fullscreen = true});
-    ResourceManager resources(window, applicationDirectory() / "assets");
+    rtype::engine::Engine engine;
+    ResourceManager resources(window, applicationDirectory() / "assets", engine.assetLoading().queue());
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
 
@@ -165,7 +166,6 @@ void run()
     rtype::client::Console console;
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
-    rtype::engine::Engine engine;
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, metrics, style);
     rtype::client::GameScenes games(engine, resources, metrics, style, sessions);

@@ -7,6 +7,11 @@
 #include <memory>
 #include <string>
 
+namespace rtype::core
+{
+class BackgroundLoader;
+}
+
 namespace rtype::render
 {
 
@@ -53,7 +58,8 @@ public:
     /// Creates an empty manager.
     /// @param window The open window. It must outlive the manager.
     /// @param assetsDirectory Directory that the paths given to the load functions are relative to.
-    ResourceManager(const Window &window, std::filesystem::path assetsDirectory);
+    ResourceManager(const Window &window, std::filesystem::path assetsDirectory,
+                    std::shared_ptr<core::BackgroundLoader> loader = {});
     ~ResourceManager();
 
     ResourceManager(const ResourceManager &) = delete;

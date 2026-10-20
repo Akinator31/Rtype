@@ -7,6 +7,11 @@
 #include <memory>
 #include <string>
 
+namespace rtype::core
+{
+class BackgroundLoader;
+}
+
 namespace rtype::audio
 {
 
@@ -61,7 +66,8 @@ public:
     /// Creates a player, with nothing loaded.
     /// @param device The audio output. It must outlive the player.
     /// @param assetsDirectory Directory that the paths given to the load functions are relative to.
-    AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory);
+    AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory,
+                std::shared_ptr<core::BackgroundLoader> loader = {});
     ~AudioPlayer();
 
     AudioPlayer(const AudioPlayer &) = delete;

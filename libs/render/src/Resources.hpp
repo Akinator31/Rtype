@@ -3,9 +3,9 @@
 // Private to the render library: the raylib resources behind the handles of the ResourceManager, shared
 // between the ResourceManager, which loads them, and the Renderer, which draws them.
 
-#include "rtype/core/AssetFile.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
+#include "PreparedAssets.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
 #include <raylib.h>
@@ -23,32 +23,6 @@ namespace rtype::render
 
 namespace detail
 {
-
-class PreparedTexture
-{
-    Image _image{};
-
-public:
-    PreparedTexture(const std::filesystem::path &file)
-    {
-        const std::vector<unsigned char> bytes = core::readAssetFile(file);
-        _image = LoadImageFromMemory(file.extension().string().c_str(), bytes.data(),
-                                     static_cast<int>(bytes.size()));
-        if (!IsImageValid(_image)) {
-            if (_image.data != nullptr) {
-                UnloadImage(_image);
-            }
-            throw std::runtime_error("Cannot load texture " + file.string());
-        }
-    }
-
-    ~PreparedTexture() { UnloadImage(_image); }
-    PreparedTexture(const PreparedTexture &) = delete;
-    PreparedTexture &operator=(const PreparedTexture &) = delete;
-    PreparedTexture(PreparedTexture &&other) noexcept : _image(std::exchange(other._image, {})) {}
-
-    [[nodiscard]] Image image() const { return _image; }
-};
 
 // Owns a texture in graphics memory. A moved-from texture is empty and frees nothing.
 class Texture
@@ -92,89 +66,6 @@ public:
     Texture &operator=(Texture &&) = delete;
 
     [[nodiscard]] const Texture2D &get() const { return _texture; }
-};
-
-// Characters rendered when a font is loaded: by default, raylib only renders ASCII, and any other character
-// is drawn as '?'. Latin-1 adds the accented letters of most Western European languages, completed with the
-// French "œ", the euro sign and the leftwards arrow of the back buttons. The soft hyphen is left out: it is
-// never drawn, and some fonts (Inter) do not have it, which makes raylib warn.
-inline std::vector<int> fontCharacters()
-{
-    constexpr int softHyphen = 0xAD;
-    std::vector<int> characters;
-    for (int character = 0x20; character <= 0x7E; ++character) {
-        characters.push_back(character);
-    }
-    for (int character = 0xA0; character <= 0xFF; ++character) {
-        if (character != softHyphen) {
-            characters.push_back(character);
-        }
-    }
-    characters.insert(characters.end(), {0x152, 0x153, 0x20AC, 0x2190});
-    return characters;
-}
-
-class PreparedFont
-{
-    ::Font _font{};
-    Image _atlas{};
-
-    void reset()
-    {
-        UnloadFontData(_font.glyphs, _font.glyphCount);
-        if (_font.recs != nullptr) {
-            MemFree(_font.recs);
-        }
-        UnloadImage(_atlas);
-    }
-
-public:
-    PreparedFont(const std::filesystem::path &file, int size)
-    {
-        try {
-            const std::vector<unsigned char> bytes = core::readAssetFile(file);
-            const std::vector<int> characters = fontCharacters();
-            _font.baseSize = size;
-            _font.glyphPadding = 4;
-            _font.glyphs = LoadFontData(bytes.data(), static_cast<int>(bytes.size()), size, characters.data(),
-                                        static_cast<int>(characters.size()), FONT_DEFAULT, &_font.glyphCount);
-            if (_font.glyphs == nullptr || _font.glyphCount == 0) {
-                throw std::runtime_error("Cannot load font " + file.string());
-            }
-            _atlas =
-                GenImageFontAtlas(_font.glyphs, &_font.recs, _font.glyphCount, size, _font.glyphPadding, 0);
-            if (!IsImageValid(_atlas) || _font.recs == nullptr) {
-                throw std::runtime_error("Cannot build font atlas " + file.string());
-            }
-            for (int index = 0; index < _font.glyphCount; ++index) {
-                UnloadImage(_font.glyphs[index].image);
-                _font.glyphs[index].image = ImageFromImage(_atlas, _font.recs[index]);
-            }
-        } catch (...) {
-            reset();
-            throw;
-        }
-    }
-
-    ~PreparedFont() { reset(); }
-
-    PreparedFont(const PreparedFont &) = delete;
-    PreparedFont &operator=(const PreparedFont &) = delete;
-    PreparedFont(PreparedFont &&other) noexcept
-        : _font(std::exchange(other._font, {})), _atlas(std::exchange(other._atlas, {}))
-    {
-    }
-
-    [[nodiscard]] ::Font upload()
-    {
-        ::Texture2D texture = LoadTextureFromImage(_atlas);
-        if (!IsTextureValid(texture)) {
-            throw std::runtime_error("Cannot upload font texture");
-        }
-        SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
-        _font.texture = texture;
-        return std::exchange(_font, {});
-    }
 };
 
 // Owns a font: its glyphs in memory and its texture in graphics memory. A moved-from font frees nothing.
@@ -333,6 +224,7 @@ public:
 
 struct ResourceManager::Impl {
     std::filesystem::path assetsDirectory;
+    std::shared_ptr<core::BackgroundLoader> loader;
     core::ResourceCache<detail::Texture, TextureId> textures;
     core::ResourceCache<detail::Font, FontId> fonts;
     core::ResourceCache<detail::Model, ModelId> models;
@@ -340,7 +232,10 @@ struct ResourceManager::Impl {
     core::AsyncResourceRequests<FontId> pendingFonts;
     core::AsyncResourceRequests<ModelId> pendingModels;
 
-    explicit Impl(std::filesystem::path directory) : assetsDirectory(std::move(directory)) {}
+    Impl(std::filesystem::path directory, std::shared_ptr<core::BackgroundLoader> worker)
+        : assetsDirectory(std::move(directory)),
+          loader(worker ? std::move(worker) : std::make_shared<core::BackgroundLoader>()),
+          pendingTextures(loader), pendingFonts(loader), pendingModels(loader) {}
 };
 
 } // namespace rtype::render

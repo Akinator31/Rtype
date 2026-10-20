@@ -12,6 +12,7 @@
 /// - Control/: the virtual gamepad the keyboard and the real gamepads are mapped onto.
 
 #include "rtype/engine/Component/Animation.hpp"
+#include "rtype/engine/AssetLoadingService.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Component/Toast.hpp"

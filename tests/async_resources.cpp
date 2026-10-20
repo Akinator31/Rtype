@@ -1,6 +1,7 @@
 #include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/Handle.hpp"
 #include "rtype/core/ResourceCache.hpp"
+#include "rtype/engine/Engine/Engine.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -100,4 +101,31 @@ TEST_CASE("Concurrent cache requests for one asset share one stable handle", "[a
         CHECK(id == ids.front());
         CHECK(cache.get(id) == "ship");
     }
+}
+
+TEST_CASE("The engine shares one worker across asset categories", "[assets][async]")
+{
+    rtype::engine::Engine engine;
+    auto worker = engine.assetLoading().queue();
+    REQUIRE(worker == engine.assetLoading().queue());
+
+    rtype::core::AsyncResourceRequests<Id> textures(worker);
+    rtype::core::AsyncResourceRequests<Id> sounds(worker);
+    std::thread::id textureThread;
+    std::thread::id soundThread;
+    const auto texture = textures.request("texture", [&] {
+        textureThread = std::this_thread::get_id();
+        return 1;
+    }, [](int value) { return Id{static_cast<std::uint32_t>(value)}; });
+    const auto sound = sounds.request("sound", [&] {
+        soundThread = std::this_thread::get_id();
+        return 2;
+    }, [](int value) { return Id{static_cast<std::uint32_t>(value)}; });
+
+    REQUIRE(finishWithin(textures, texture));
+    REQUIRE(finishWithin(sounds, sound));
+    CHECK(texture.get() == Id{1});
+    CHECK(sound.get() == Id{2});
+    CHECK(textureThread == soundThread);
+    CHECK(textureThread != std::this_thread::get_id());
 }

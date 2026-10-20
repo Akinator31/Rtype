@@ -11,7 +11,7 @@ The main menu loads several large models. Synchronous file reads and decoding de
 
 ## Decision
 
-Each asset type has a dedicated FIFO worker queue. The worker reads the file and, where raylib offers a CPU-only operation, decodes it. `ResourceManager::finishPendingLoads()` and `AudioPlayer::finishPendingLoads()` are called by their owning threads. They finalize at most one ready request per asset type on each call. A `std::shared_future<Id>` reports completion or an exception. The caller polls with `wait_for(0)` and may draw a placeholder or loading screen until it is ready; it must not block its own thread with `get()` while a request is pending.
+The engine owns one lazily created FIFO worker queue for asset preparation. The client passes it to the render and audio resource managers; direct users of either manager get a private queue by default. The worker reads the file and, where raylib offers a CPU-only operation, decodes it. `ResourceManager::finishPendingLoads()` and `AudioPlayer::finishPendingLoads()` are called by their owning threads. They finalize at most one ready request per asset type on each call. A `std::shared_future<Id>` reports completion or an exception. The caller polls with `wait_for(0)` and may draw a placeholder or loading screen until it is ready; it must not block its own thread with `get()` while a request is pending.
 
 | Asset | Worker | Owning thread |
 |---|---|---|
@@ -25,7 +25,7 @@ Raylib 6.0 does not expose a CPU-only model loader or a separate model upload op
 
 Requests for the same path and options share a future. The underlying `ResourceCache` serializes inserts and lookups and stores resources at stable addresses, so overlapping requests cannot create duplicate handles. A failed request reports its exception and is removed from the pending map, allowing a retry. Existing synchronous methods remain available and return the same cached handle when an asynchronous request has completed.
 
-The client's startup requests its fonts, starfield and menu models before building the menu. It draws a loading screen using the built-in font until the requests are ready, then builds scenes with the existing synchronous APIs, which find the assets in the cache. Tests exercise worker/owner separation, deduplication, retries, concurrent cache access and the audio path without a device.
+The client's startup requests its fonts, starfield and menu models before building the menu. It draws a loading screen using the built-in font until the requests are ready, then builds scenes with the existing synchronous APIs, which find the assets in the cache. Tests exercise worker/owner separation, deduplication, retries, the engine's shared worker, concurrent cache access and the audio path without a device.
 
 ## Consequences
 

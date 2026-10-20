@@ -9,8 +9,9 @@ namespace rtype::render
 {
 
 // The window is only required to make sure that one is open: graphics resources cannot exist without it
-ResourceManager::ResourceManager(const Window & /*window*/, std::filesystem::path assetsDirectory)
-    : _impl(std::make_unique<Impl>(std::move(assetsDirectory)))
+ResourceManager::ResourceManager(const Window & /*window*/, std::filesystem::path assetsDirectory,
+                                 std::shared_ptr<core::BackgroundLoader> loader)
+    : _impl(std::make_unique<Impl>(std::move(assetsDirectory), std::move(loader)))
 {
 }
 

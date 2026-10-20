@@ -41,6 +41,14 @@ public:
     PreparedSound(const PreparedSound &) = delete;
     PreparedSound &operator=(const PreparedSound &) = delete;
     PreparedSound(PreparedSound &&other) noexcept : _wave(std::exchange(other._wave, {})) {}
+    PreparedSound &operator=(PreparedSound &&other) noexcept
+    {
+        if (this != &other) {
+            UnloadWave(_wave);
+            _wave = std::exchange(other._wave, {});
+        }
+        return *this;
+    }
 
     [[nodiscard]] Wave wave() const { return _wave; }
 };
@@ -181,6 +189,7 @@ public:
 struct AudioPlayer::Impl {
     bool available;
     std::filesystem::path assetsDirectory;
+    std::shared_ptr<core::BackgroundLoader> loader;
     core::ResourceCache<SoundEffect, SoundId> sounds;
     core::ResourceCache<MusicStream, MusicId> musics;
     core::AsyncResourceRequests<SoundId> pendingSounds;
@@ -190,16 +199,21 @@ struct AudioPlayer::Impl {
     float musicVolume = 1.0f;
     float effectsVolume = 1.0f;
 
-    Impl(bool audioAvailable, std::filesystem::path assets)
-        : available(audioAvailable), assetsDirectory(std::move(assets))
+    Impl(bool audioAvailable, std::filesystem::path assets,
+         std::shared_ptr<core::BackgroundLoader> worker)
+        : available(audioAvailable), assetsDirectory(std::move(assets)),
+          loader(worker ? std::move(worker) : std::make_shared<core::BackgroundLoader>()),
+          pendingSounds(loader), pendingMusics(loader)
     {
     }
 
     ::Music *current() { return currentMusic ? musics.get(*currentMusic).get() : nullptr; }
 };
 
-AudioPlayer::AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory)
-    : _impl(std::make_unique<Impl>(device.isAvailable(), std::move(assetsDirectory)))
+AudioPlayer::AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory,
+                         std::shared_ptr<core::BackgroundLoader> loader)
+    : _impl(std::make_unique<Impl>(device.isAvailable(), std::move(assetsDirectory),
+                                   std::move(loader)))
 {
 }
 
