@@ -339,6 +339,60 @@ simulation.context().enemies.addDefinition({"bydo_scout", "bydo_scout", 30, 240.
 - [ADR 0018](../decisions/0018-lua-game-config.md) plans to load the definitions from Lua files, like the
   weapons.
 
+## Waves
+
+A wave is a group of enemies that appear one after the other. Like the enemies, it is **data**: a
+`WaveDefinition`, kept by name in a `WaveRegistry` (`GameContext::waves`). Nothing runs a wave yet: the
+registry is what the spawning will read.
+
+| Field | Type | What it is |
+|---|---|---|
+| `name` | `std::string` | Unique name in the registry |
+| `label` | `std::string` | Short text shown to the players |
+| `description` | `std::string` | Longer text |
+| `quantity` | `std::uint16_t` | How many enemies (above 0) |
+| `spawnInterval` | `float` | Seconds between two enemies (0 or more; 0 = all at once) |
+| `placement` | `WavePlacement` | `Manual` or `Random`, one mode per wave |
+| `spawns` | `std::vector<WaveSpawn>` | Manual only: each enemy (`enemy`, `x`, `y`), in the order they appear |
+| `enemy` | `std::string` | Random only: the id of the `EnemyDefinition` of every enemy |
+| `area` | `WaveArea` | Random only: the rectangle (`minX`, `maxX`, `minY`, `maxY`) where they appear |
+
+```mermaid
+flowchart LR
+    Def["WaveDefinition<br/>name · label · description · quantity · spawnInterval · placement"]
+    Def -- "placement = Manual" --> Spawns["spawns: WaveSpawn[]<br/>enemy · x · y, one per enemy"]
+    Def -- "placement = Random" --> Rand["enemy (id) + area: WaveArea<br/>minX · maxX · minY · maxY"]
+    Def -- "addDefinition(wave, enemies)<br/>checked: name, quantity, interval, placement, area, known enemies" --> Reg["WaveRegistry<br/>GameContext::waves"]
+    Spawns -- "enemy (id)" --> EDef["EnemyDefinition"]
+    Rand -- "enemy (id)" --> EDef
+    EDef -- "addDefinition()" --> EReg["EnemyRegistry<br/>GameContext::enemies"]
+    EReg -. "hasDefinition(id)<br/>when the wave is added" .-> Reg
+    Reg -. "getDefinition(name)" .-> Run["running a wave<br/>(later)"]
+```
+
+Solid arrows exist today; dotted ones are the checks made when a wave is added and what will come next.
+
+The default `area` is a band just past the right edge of the game area (x from `GameWidth` to
+`GameWidth + 100`, the whole height), so that enemies come in from the side. A wave does not mix manual and
+random enemies: for that, play two waves one after the other.
+
+```cpp
+auto &context = simulation.context();
+context.waves.addDefinition(
+    {"scouts_random", "Scouts", "Five scouts from the right", 5, 0.5f, WavePlacement::Random, {}, "bydo_scout"},
+    context.enemies);
+context.waves.addDefinition({"scouts_line", "Scout line", "", 2, 0.0f, WavePlacement::Manual,
+                             {{"bydo_scout", 2000.0f, 200.0f}, {"bydo_scout", 2000.0f, 800.0f}}},
+                            context.enemies);
+```
+
+- `addDefinition()` needs the `EnemyRegistry`: unlike the enemies, the waves check that every enemy they name
+  is known, so the enemies are filled first.
+- It throws `std::invalid_argument` for an empty or taken name, a quantity of 0, a negative interval, a
+  Manual wave whose `spawns` do not number `quantity` or that sets `enemy`, a Random wave without `enemy` or
+  with `spawns`, an unknown enemy, or an empty area (min above max). `getDefinition()` throws
+  `std::out_of_range` for an unknown name.
+
 ## Adding gameplay
 
 The rules are components and systems on the ECS, like the physics, so that anyone can add some:
