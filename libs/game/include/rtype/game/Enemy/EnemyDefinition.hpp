@@ -11,8 +11,8 @@ namespace rtype::game
 struct EnemyDefinition {
     /// Unique name in a registry, e.g. "bydo_scout".
     std::string id;
-    /// Path of the 3D model of its ship, drawn by the client. The game only carries it: it never loads it.
-    std::string model;
+    /// Its ship (model and sounds): the id of a ShipDefinition of the ShipRegistry.
+    std::string ship;
     /// Hit points it starts with (not 0), the same unit as the Health component.
     std::uint8_t health = 1;
     /// Top speed (above 0).

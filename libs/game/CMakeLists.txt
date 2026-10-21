@@ -10,6 +10,7 @@ add_library(rtype_game
     src/Projectile/ProjectileBehavior.cpp
     src/Projectile/ProjectileRegistry.cpp
     src/RemoteWorld.cpp
+    src/Ship/ShipRegistry.cpp
     src/ShipMovement.cpp
     src/Simulation.cpp
     src/System/AreaSystem.cpp

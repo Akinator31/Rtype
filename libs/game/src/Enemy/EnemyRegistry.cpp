@@ -15,6 +15,9 @@ void checkDefinition(const EnemyDefinition &definition)
     if (definition.id.empty()) {
         throw std::invalid_argument("an enemy needs an id");
     }
+    if (definition.ship.empty()) {
+        throw std::invalid_argument(std::format("the enemy '{}' needs a ship", definition.id));
+    }
     if (definition.health == 0) {
         throw std::invalid_argument(std::format("the enemy '{}' needs health", definition.id));
     }

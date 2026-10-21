@@ -683,9 +683,15 @@ TEST_CASE("A projectile vanishes once it has flown the range of its weapon", "[g
 namespace
 {
 
+ShipDefinition scoutShip()
+{
+    return {"bydo_scout", "models/bydo_scout.glb",
+            {"sounds/scout_move.ogg", "sounds/scout_destruction.ogg", "sounds/scout_collision.ogg"}};
+}
+
 EnemyDefinition scout()
 {
-    return {"bydo_scout", "models/bydo_scout.glb", 30, 240.0f, 720.0f, "blaster"};
+    return {"bydo_scout", "bydo_scout", 30, 240.0f, 720.0f, "blaster"};
 }
 
 } // namespace
@@ -697,7 +703,7 @@ TEST_CASE("An enemy registry gives back the enemies, and refuses doubles and unk
 
     CHECK(registry.hasDefinition("bydo_scout"));
     const EnemyDefinition &enemy = registry.getDefinition("bydo_scout");
-    CHECK(enemy.model == "models/bydo_scout.glb");
+    CHECK(enemy.ship == "bydo_scout");
     CHECK(enemy.health == 30);
     CHECK(enemy.speed == Approx(240.0f));
     CHECK(enemy.acceleration == Approx(720.0f));
@@ -707,13 +713,15 @@ TEST_CASE("An enemy registry gives back the enemies, and refuses doubles and unk
     CHECK_THROWS_AS(registry.getDefinition("nope"), std::out_of_range);
 }
 
-TEST_CASE("An enemy registry refuses an enemy without id, health, speed or weapon, or a negative acceleration",
+TEST_CASE("An enemy registry refuses an enemy without id, ship, health, speed or weapon, or a negative "
+          "acceleration",
           "[game]")
 {
     EnemyRegistry registry;
     EnemyDefinition enemy = scout();
 
     SECTION("no id") { enemy.id.clear(); }
+    SECTION("no ship") { enemy.ship.clear(); }
     SECTION("no health") { enemy.health = 0; }
     SECTION("no speed") { enemy.speed = 0.0f; }
     SECTION("a negative acceleration") { enemy.acceleration = -1.0f; }
@@ -723,14 +731,46 @@ TEST_CASE("An enemy registry refuses an enemy without id, health, speed or weapo
     CHECK_FALSE(registry.hasDefinition("bydo_scout"));
 }
 
-TEST_CASE("An enemy with no acceleration is accepted, and its weapon is not looked up", "[game]")
+TEST_CASE("An enemy with no acceleration is accepted, and its ship and weapon are not looked up", "[game]")
 {
     Simulation simulation;
     EnemyDefinition enemy = scout();
     enemy.acceleration = 0.0f;
+    enemy.ship = "not_registered_yet";
     enemy.weapon = "not_registered_yet";
 
     simulation.context().enemies.addDefinition(enemy);
 
     CHECK(simulation.context().enemies.hasDefinition("bydo_scout"));
+}
+
+TEST_CASE("A ship registry gives back the ships with their sounds, and refuses doubles and unknown ids",
+          "[game]")
+{
+    ShipRegistry registry;
+    registry.addDefinition(scoutShip());
+
+    CHECK(registry.hasDefinition("bydo_scout"));
+    const ShipDefinition &ship = registry.getDefinition("bydo_scout");
+    CHECK(ship.model == "models/bydo_scout.glb");
+    CHECK(ship.sounds.move == "sounds/scout_move.ogg");
+    CHECK(ship.sounds.destruction == "sounds/scout_destruction.ogg");
+    CHECK(ship.sounds.collision == "sounds/scout_collision.ogg");
+    CHECK_FALSE(registry.hasDefinition("nope"));
+    CHECK_THROWS_AS(registry.addDefinition(scoutShip()), std::invalid_argument);
+    CHECK_THROWS_AS(registry.getDefinition("nope"), std::out_of_range);
+}
+
+TEST_CASE("A ship registry refuses a ship without id or model, and accepts one without sounds", "[game]")
+{
+    ShipRegistry registry;
+    ShipDefinition nameless = scoutShip();
+    nameless.id.clear();
+    ShipDefinition invisible = scoutShip();
+    invisible.model.clear();
+
+    CHECK_THROWS_AS(registry.addDefinition(nameless), std::invalid_argument);
+    CHECK_THROWS_AS(registry.addDefinition(invisible), std::invalid_argument);
+    registry.addDefinition({"silent", "models/silent.glb", {}});
+    CHECK(registry.getDefinition("silent").sounds.move.empty());
 }

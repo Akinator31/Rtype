@@ -15,8 +15,8 @@ class EnemyRegistry
 
 public:
     /// Adds a definition. Throws std::invalid_argument if its id is empty or already taken, if it has no
-    /// health, no weapon, a speed that is not above 0 or a negative acceleration. The weapon is not looked up
-    /// here, so that the registries can be filled in any order.
+    /// ship, no health, no weapon, a speed that is not above 0 or a negative acceleration. The ship and the
+    /// weapon are not looked up here, so that the registries can be filled in any order.
     void addDefinition(EnemyDefinition definition);
 
     [[nodiscard]] bool hasDefinition(const std::string &id) const;
