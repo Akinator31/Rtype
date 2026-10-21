@@ -685,7 +685,8 @@ namespace
 
 ShipDefinition scoutShip()
 {
-    return {"bydo_scout", "models/bydo_scout.glb",
+    return {"bydo_scout",
+            "models/bydo_scout.glb",
             {"sounds/scout_move.ogg", "sounds/scout_destruction.ogg", "sounds/scout_collision.ogg"}};
 }
 
@@ -720,12 +721,30 @@ TEST_CASE("An enemy registry refuses an enemy without id, ship, health, speed or
     EnemyRegistry registry;
     EnemyDefinition enemy = scout();
 
-    SECTION("no id") { enemy.id.clear(); }
-    SECTION("no ship") { enemy.ship.clear(); }
-    SECTION("no health") { enemy.health = 0; }
-    SECTION("no speed") { enemy.speed = 0.0f; }
-    SECTION("a negative acceleration") { enemy.acceleration = -1.0f; }
-    SECTION("no weapon") { enemy.weapon.clear(); }
+    SECTION("no id")
+    {
+        enemy.id.clear();
+    }
+    SECTION("no ship")
+    {
+        enemy.ship.clear();
+    }
+    SECTION("no health")
+    {
+        enemy.health = 0;
+    }
+    SECTION("no speed")
+    {
+        enemy.speed = 0.0f;
+    }
+    SECTION("a negative acceleration")
+    {
+        enemy.acceleration = -1.0f;
+    }
+    SECTION("no weapon")
+    {
+        enemy.weapon.clear();
+    }
 
     CHECK_THROWS_AS(registry.addDefinition(enemy), std::invalid_argument);
     CHECK_FALSE(registry.hasDefinition("bydo_scout"));
