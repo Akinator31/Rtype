@@ -37,3 +37,8 @@
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
 #include "rtype/game/System/WeaponSystem.hpp"
+#include "rtype/game/Wave/WaveArea.hpp"
+#include "rtype/game/Wave/WaveDefinition.hpp"
+#include "rtype/game/Wave/WavePlacement.hpp"
+#include "rtype/game/Wave/WaveRegistry.hpp"
+#include "rtype/game/Wave/WaveSpawn.hpp"
