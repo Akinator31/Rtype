@@ -5,6 +5,7 @@
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
+#include "rtype/localization/Localization.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
 #include <functional>
@@ -36,6 +37,7 @@ class GameScenes
 {
     engine::Engine &_engine;
     GameSessionSystem &_sessions;
+    localization::Localization &_translations;
     /// The session of the next game scene opened, and what to do when it ends.
     std::unique_ptr<GameSession> _next;
     std::function<void()> _nextEnd;
@@ -51,7 +53,8 @@ class GameScenes
 public:
     /// Declares the scenes. Everything given must outlive the engine.
     GameScenes(engine::Engine &engine, render::ResourceManager &resources, const engine::Metrics &metrics,
-               const engine::InterfaceStyle &style, GameSessionSystem &sessions);
+               const engine::InterfaceStyle &style, GameSessionSystem &sessions,
+               localization::Localization &translations);
 
     GameScenes(const GameScenes &) = delete;
     GameScenes &operator=(const GameScenes &) = delete;

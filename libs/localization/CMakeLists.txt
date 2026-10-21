@@ -1,0 +1,4 @@
+add_library(rtype_localization src/Localization.cpp)
+add_library(rtype::localization ALIAS rtype_localization)
+target_include_directories(rtype_localization PUBLIC include)
+target_link_libraries(rtype_localization PRIVATE rtype_options)

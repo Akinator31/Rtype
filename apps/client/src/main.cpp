@@ -16,6 +16,7 @@
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
+#include "rtype/localization/Localization.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
@@ -98,16 +99,19 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
                   const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
                   rtype::client::Console &console, const rtype::engine::RendererMetrics &metrics,
-                  rtype::client::GameScenes &games)
+                  rtype::client::GameScenes &games,
+                  rtype::localization::Localization &translations)
 {
     const auto quit = [&window] { window.requestClose(); };
     engine.createScene(
         rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
-        [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
-            rtype::client::buildMainMenu(target, scene, resources, style, quit);
+        [&resources, &style, &translations, quit](rtype::engine::Engine &target,
+                                                   rtype::engine::SceneId scene) {
+            rtype::client::buildMainMenu(target, scene, resources, style, translations, quit);
         });
     rtype::client::createSubmenuScenes(
-        engine, style, [&games] { games.play(std::make_unique<rtype::client::LocalSession>()); });
+        engine, style, translations,
+        [&games] { games.play(std::make_unique<rtype::client::LocalSession>()); });
     engine.createScene(
         rtype::client::ConsoleScene, {.overlay = true},
         [&console, &metrics, &style](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
@@ -162,15 +166,19 @@ void run()
         .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96)},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
+    rtype::localization::Localization translations("en");
+    const auto localeDirectory = applicationDirectory() / "assets" / "locales";
+    translations.load("en", localeDirectory / "en.lang");
+    translations.load("fr", localeDirectory / "fr.lang");
 
     rtype::client::Console console;
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, metrics, style);
-    rtype::client::GameScenes games(engine, resources, metrics, style, sessions);
+    rtype::client::GameScenes games(engine, resources, metrics, style, sessions, translations);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style,
-                                       applicationDirectory() / "server.pub");
+                                       applicationDirectory() / "server.pub", translations);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
     rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
                                                                CollisionCellSize);
@@ -178,7 +186,7 @@ void run()
     bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
     bool debugKeyWasDown = false;
 
-    createScenes(engine, resources, style, window, console, metrics, games);
+    createScenes(engine, resources, style, window, console, metrics, games, translations);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
