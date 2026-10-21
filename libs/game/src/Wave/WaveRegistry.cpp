@@ -36,9 +36,8 @@ void checkManual(const WaveDefinition &definition, const EnemyRegistry &enemies)
 void checkRandom(const WaveDefinition &definition, const EnemyRegistry &enemies)
 {
     if (!definition.spawns.empty()) {
-        throw std::invalid_argument(
-            std::format("the random wave '{}' gets its positions from its area, not from spawns",
-                        definition.name));
+        throw std::invalid_argument(std::format(
+            "the random wave '{}' gets its positions from its area, not from spawns", definition.name));
     }
     if (definition.enemy.empty()) {
         throw std::invalid_argument(std::format("the random wave '{}' needs an enemy", definition.name));
