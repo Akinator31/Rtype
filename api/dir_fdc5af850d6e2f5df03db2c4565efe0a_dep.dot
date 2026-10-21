@@ -1,0 +1,13 @@
+digraph "libs/ecs/include/rtype" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_8f93702992ad98af1f993b49d5f2c472 {
+    graph [ bgcolor="#ddddee", pencolor="black", label="include" fontname="Helvetica", fontsize="10", URL="dir_8f93702992ad98af1f993b49d5f2c472.html"]
+  subgraph clusterdir_fdc5af850d6e2f5df03db2c4565efe0a {
+    graph [ bgcolor="#eeeeff", pencolor="black", label="" URL="dir_fdc5af850d6e2f5df03db2c4565efe0a.html"];
+    dir_fdc5af850d6e2f5df03db2c4565efe0a [shape=plaintext label="rtype"];
+  dir_41cf2c6b075f3968172eaf070956e248 [shape=box label="ecs" fillcolor="white" style="filled" color="red" URL="dir_41cf2c6b075f3968172eaf070956e248.html"];
+  }
+  }
+}

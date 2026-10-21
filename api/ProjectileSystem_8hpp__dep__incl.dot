@@ -1,0 +1,13 @@
+digraph "libs/game/include/rtype/game/System/ProjectileSystem.hpp"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="libs/game/include/rtype\l/game/System/ProjectileSystem.hpp",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip=" "];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="libs/game/include/rtype\l/game/Game.hpp",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$Game_8hpp.html",tooltip="Everything of the game in one include, like rtype/physics/Physics.hpp for the physics."];
+  Node1 -> Node3 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node3 [label="libs/game/src/Simulation.cpp",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$Simulation_8cpp.html",tooltip=" "];
+  Node1 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node4 [label="libs/game/src/System\l/ProjectileSystem.cpp",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$ProjectileSystem_8cpp.html",tooltip=" "];
+}

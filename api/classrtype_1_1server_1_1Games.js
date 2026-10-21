@@ -1,0 +1,25 @@
+var classrtype_1_1server_1_1Games =
+[
+    [ "Game", "structrtype_1_1server_1_1Games_1_1Game.html", "structrtype_1_1server_1_1Games_1_1Game" ],
+    [ "InstanceConnection", "structrtype_1_1server_1_1Games_1_1InstanceConnection.html", "structrtype_1_1server_1_1Games_1_1InstanceConnection" ],
+    [ "JoinResult", "classrtype_1_1server_1_1Games.html#a67f31ea7e7ce74dabcce20080829fc94", null ],
+    [ "JoinCallback", "classrtype_1_1server_1_1Games.html#ada94cfa7ba74308964208d226098cf09", null ],
+    [ "LeftHandler", "classrtype_1_1server_1_1Games.html#a72888bcb4c3948dc4b7b1d9cc70fcb80", null ],
+    [ "Games", "classrtype_1_1server_1_1Games.html#a8409573402d1370f6fd9a287bf1dc65e", null ],
+    [ "~Games", "classrtype_1_1server_1_1Games.html#a115701b524ce3cf8b1ead6d8955caf42", null ],
+    [ "Games", "classrtype_1_1server_1_1Games.html#ac3fcccb9b1a2483a067c414eff4018d5", null ],
+    [ "operator=", "classrtype_1_1server_1_1Games.html#a27ec321fa90f14531c0676feb80d7564", null ],
+    [ "instancePort", "classrtype_1_1server_1_1Games.html#a495c004d3a3d3e5e66749b9429cd08de", null ],
+    [ "setLeftHandler", "classrtype_1_1server_1_1Games.html#a4aa40419126bee7f596f3055b7bfb460", null ],
+    [ "list", "classrtype_1_1server_1_1Games.html#ab136f79b630fe3ad8a90c6465bccc1dc", null ],
+    [ "create", "classrtype_1_1server_1_1Games.html#acc6c3860e5912dcaf8b68062622323a5", null ],
+    [ "join", "classrtype_1_1server_1_1Games.html#ac883de8cdd5873e5c69e1e6d26152a70", null ],
+    [ "leave", "classrtype_1_1server_1_1Games.html#aad6cd88b91a2fb295ac8bc46d31c89b9", null ],
+    [ "lobbyClosed", "classrtype_1_1server_1_1Games.html#a1530f2b75f3b6e42073e05e182559bb2", null ],
+    [ "shutdown", "classrtype_1_1server_1_1Games.html#a6c4468c8b506d8fc533828205f5643a4", null ],
+    [ "empty", "classrtype_1_1server_1_1Games.html#a365053b2b4a533476592e4a821500d73", null ],
+    [ "count", "classrtype_1_1server_1_1Games.html#a5e8f7529ecda44f3c8f76e051c83d450", null ],
+    [ "processId", "classrtype_1_1server_1_1Games.html#ad3a81923175d3e09b5433738bf9b1991", null ],
+    [ "SupervisionInterval", "classrtype_1_1server_1_1Games.html#a1ca25af1c5d751d1fc2a2d988dd3bf4a", null ],
+    [ "HelloTimeout", "classrtype_1_1server_1_1Games.html#a243dbfc7b67cfdbee2e151da86b2306d", null ]
+];

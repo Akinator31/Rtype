@@ -1,0 +1,8 @@
+digraph "Graphical Class Hierarchy"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node0 [label="rtype::network::StopSignals",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1network_1_1StopSignals.html",tooltip="Calls a function when the program is asked to stop: Ctrl+C (SIGINT), SIGTERM (sent by kill,..."];
+}

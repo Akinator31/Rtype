@@ -1,0 +1,11 @@
+digraph "apps/keygen/src" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_6ab53923b43b52a8ec7bc4619f0b71f0 {
+    graph [ bgcolor="#ddddee", pencolor="black", label="keygen" fontname="Helvetica", fontsize="10", URL="dir_6ab53923b43b52a8ec7bc4619f0b71f0.html"]
+  dir_9126791fc60bb5f3b1da96312527fffc [shape=box, label="src", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_9126791fc60bb5f3b1da96312527fffc.html"];
+  }
+  dir_6719ab1f1f7655efc2fa43f7eb574fd1 [shape=box label="libs" fillcolor="white" style="filled" color="red" URL="dir_6719ab1f1f7655efc2fa43f7eb574fd1.html"];
+  dir_9126791fc60bb5f3b1da96312527fffc->dir_6719ab1f1f7655efc2fa43f7eb574fd1 [headlabel="3", labeldistance=1.5 headhref="dir_000007_000011.html"];
+}

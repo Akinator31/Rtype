@@ -1,0 +1,21 @@
+var searchData=
+[
+  ['b_3377',['b',['../structrtype_1_1render_1_1Color.html#a79641472ef1a5de89c4c1abb6f23b2f9',1,'rtype::render::Color::b()'],['../structrtype_1_1physics_1_1Collision.html#ab78c399d405641e1ac07ce0b0f187b00',1,'rtype::physics::Collision::b()']]],
+  ['background_3378',['background',['../structrtype_1_1engine_1_1ConsoleStyle.html#aa030a6e06cad41d607cb14266f0d5145',1,'rtype::engine::ConsoleStyle::background()'],['../structrtype_1_1engine_1_1ToastStyle.html#aaed3e461334bf50f6f5d43611679f44c',1,'rtype::engine::ToastStyle::background()'],['../structrtype_1_1engine_1_1InterfaceStyle.html#a8edaad3778c383bdef7550226f96b892',1,'rtype::engine::InterfaceStyle::background()']]],
+  ['baseheight_3379',['baseHeight',['../structrtype_1_1engine_1_1Hitbox.html#a503b03d00af0fe65a48a8c8b747d5f98',1,'rtype::engine::Hitbox']]],
+  ['basewidth_3380',['baseWidth',['../structrtype_1_1engine_1_1Hitbox.html#a972c706b0e50ef035415d3cb5105eae9',1,'rtype::engine::Hitbox']]],
+  ['begin_3381',['begin',['../structrtype_1_1input_1_1TextInput_1_1Range.html#a5caea7b6c6768fe723c212dfa860e69e',1,'rtype::input::TextInput::Range']]],
+  ['bits_3382',['bits',['../structrtype_1_1physics_1_1CollisionLayer.html#a5f3abdab09fe4fe5ebf30c4e9e65ce5c',1,'rtype::physics::CollisionLayer::bits()'],['../structrtype_1_1physics_1_1CollisionMask.html#a386b67b06c367a452b887ae6c3b1443b',1,'rtype::physics::CollisionMask::bits()']]],
+  ['black_3383',['Black',['../namespacertype_1_1render_1_1colors.html#a0027fc8d4c16f93d135ccc3437155c3b',1,'rtype::render::colors']]],
+  ['blue_3384',['Blue',['../namespacertype_1_1render_1_1colors.html#a3d2ebb8540c8a9f6e29f8f316a4fae01',1,'rtype::render::colors']]],
+  ['body_3385',['body',['../structrtype_1_1network_1_1OutgoingDatagram.html#ae13bf6cd091eba5ebf6a8f63c0d9da2c',1,'rtype::network::OutgoingDatagram']]],
+  ['bodyheadersize_3386',['BodyHeaderSize',['../namespacertype_1_1network.html#a31c91298aa4b91ff060d706d67adcdbe',1,'rtype::network']]],
+  ['border_3387',['border',['../structrtype_1_1engine_1_1ToastStyle.html#ab92a11a4bdd5635d54725f2dc3dd0619',1,'rtype::engine::ToastStyle::border()'],['../structrtype_1_1engine_1_1PanelLook.html#a18f4f0ef66fb7f348dd55d59cfab0bf4',1,'rtype::engine::PanelLook::border()']]],
+  ['borderthickness_3388',['borderThickness',['../structrtype_1_1engine_1_1ToastStyle.html#a71f7bc3de4999bb203784243823f0ee5',1,'rtype::engine::ToastStyle::borderThickness()'],['../structrtype_1_1engine_1_1ButtonStyle.html#a5e81b732714f89e0281815e25bd4cd59',1,'rtype::engine::ButtonStyle::borderThickness()']]],
+  ['box_3389',['box',['../structrtype_1_1client_1_1EntityLook.html#a77e5646265df5278353bd32ab1dd4be2',1,'rtype::client::EntityLook']]],
+  ['buffer_3390',['buffer',['../structrtype_1_1network_1_1TcpConnection_1_1Impl.html#a3e4f85352c3cfdee6d9c75bb8fa3c8f9',1,'rtype::network::TcpConnection::Impl::buffer()'],['../structrtype_1_1network_1_1UdpSocket_1_1Impl.html#af7927970c060168905a544fb42d1c86d',1,'rtype::network::UdpSocket::Impl::buffer()']]],
+  ['busy_3391',['busy',['../structrtype_1_1server_1_1Lobby_1_1Client.html#a2d2d366a944f9dd9e6014a6e2c3bb995',1,'rtype::server::Lobby::Client']]],
+  ['button_3392',['button',['../structrtype_1_1engine_1_1InterfaceStyle.html#a8745413a28ef5cd098370004a475a787',1,'rtype::engine::InterfaceStyle']]],
+  ['buttons_3393',['buttons',['../structrtype_1_1game_1_1PlayerInput.html#a61643c74a231549088d43a306d154511',1,'rtype::game::PlayerInput']]],
+  ['bytes_3394',['bytes',['../structrtype_1_1network_1_1DatagramKey_1_1Impl.html#ac2abf3f172ffafc7faedc4241348ccea',1,'rtype::network::DatagramKey::Impl']]]
+];

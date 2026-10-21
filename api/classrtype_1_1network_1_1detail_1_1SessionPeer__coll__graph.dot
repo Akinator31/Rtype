@@ -1,0 +1,11 @@
+digraph "rtype::network::detail::SessionPeer"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="rtype::network::detail\l::SessionPeer",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="One end of a session: its keys, its MessageChannel, and the times that drive the heartbeat and the ti..."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" channel" ,fontname="Helvetica"];
+  Node2 [label="rtype::network::MessageChannel",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1network_1_1MessageChannel.html",tooltip="The reliability layer of one session over UDP (docs/protocol/game.md, sections 5 and 6): numbers the ..."];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ownKey\npeerKey" ,fontname="Helvetica"];
+  Node3 [label="rtype::network::DatagramKey",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1network_1_1DatagramKey.html",tooltip="A 32-byte ChaCha20-Poly1305 key, with which one side encrypts the datagrams it sends."];
+}

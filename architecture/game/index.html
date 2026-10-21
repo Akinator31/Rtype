@@ -1,0 +1,3891 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Networked R-Type clone built on our own C++ game engine">
+      
+      
+      
+        <link rel="canonical" href="https://akinator31.github.io/Rtype/architecture/game/">
+      
+      
+        <link rel="prev" href="../server/">
+      
+      
+        <link rel="next" href="../client-game/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="zensical-0.0.67">
+    
+    
+      
+        <title>Game - R-Type</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.4ae390e2.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.96d1a7e4.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#game" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="R-Type" class="md-header__button md-logo" aria-label="R-Type" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-rocket" viewBox="0 0 24 24"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"/><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            R-Type
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Game
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715M16 12a4 4 0 0 0-4-4M19 5l-1.256 1.256M20 12h2"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="deep-orange"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/Akinator31/Rtype" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Akinator31/Rtype
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/" class="md-tabs__link">
+          
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../protocol/" class="md-tabs__link">
+          
+  
+  Network protocol
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../decisions/" class="md-tabs__link">
+          
+  
+  Technical decisions
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../accessibility/" class="md-tabs__link">
+        
+  
+  Accessibility
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../contributing/" class="md-tabs__link">
+          
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../reference/" class="md-tabs__link">
+        
+  
+  API reference
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="R-Type" class="md-nav__button md-logo" aria-label="R-Type" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-rocket" viewBox="0 0 24 24"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"/><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"/></svg>
+
+    </a>
+    R-Type
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Akinator31/Rtype" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Akinator31/Rtype
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_2">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Getting started
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Building the project
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Architecture
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_3">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Architecture
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  ECS
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../networking-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Networking concepts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Rendering
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Input
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../networking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Networking
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Server
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Game
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Game
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-game-in-three-calls" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        A game in three calls
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="A game in three calls">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#who-calls-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Who calls step()
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Inputs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Snapshots
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-rules-do-now" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        What the rules do now
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#projectiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Projectiles
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#weapons" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Weapons
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ships" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Ships
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enemies" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Enemies
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#waves" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Waves
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-gameplay" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Adding gameplay
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Messages
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Messages">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-world-of-a-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The world of a client
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Tests
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client-game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  A game in the client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client-online/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  The client online
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Audio
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scenes-and-interface/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Scenes and interface
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../guides/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guides
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_4">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Guides
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/write-a-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to write a system
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/draw-a-sprite/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to draw a sprite
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/add-a-menu/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to add a menu
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/add-a-player-action/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to add a player action
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/add-a-network-message/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to add a network message
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/generate-the-server-keys/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to generate the server keys
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/run-a-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to run a server
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/play-online/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Play online
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../protocol/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Network protocol
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Network protocol
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/lobby/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Lobby (TCP)
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Game (UDP)
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/instances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Master and instances
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../decisions/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Technical decisions
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Technical decisions
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0001-cpm-package-manager/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0001 — CPM.cmake as package manager
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0002-raylib-graphics-library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0002 — raylib for the client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0003-documentation-tooling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0003 — Zensical and Doxygen for the documentation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0004-testing-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0004 — Testing tools
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0005-world-in-ecs-interface-in-ui-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0005 — World in the ECS, interface in a separate layer
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0006-ecs-component-storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0006 — ECS component storage
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0007-client-in-the-ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0007 — The whole client in the ECS, with scenes and a hierarchy
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0008-events-switch-systems/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0008 — Events switch systems on and off
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0009-named-scenes-in-the-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0009 — Named scenes in the engine
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0010-physics-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0010 — A custom kinematic physics engine
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0011-networking-library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0011 — Asio as the networking library
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0012-tcp-lobby-udp-game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0012 — TCP for the lobby, UDP for the game
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0013-one-process-per-game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0013 — One process per game
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0014-encryption/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0014 — Encryption of the client/server traffic
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0015-one-game-scene-local-or-remote-session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0015 — One game scene, fed by a local or a remote session
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0016-replication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0016 — Replication of the game world
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0017-asset-loading-threads/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0017 — Asset preparation on a background thread
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0018-lua-game-config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0018 — Lua for the configuration of enemies and weapons
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0019-luabridge3-scripting-library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0019 — LuaBridge3 and a scripting library for Lua behaviors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../accessibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Accessibility
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../contributing/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Contributing
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_8">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Contributing
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Testing policy
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Writing documentation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/releasing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Releasing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/templates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Page templates
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/repository-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Repository setup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  API reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-game-in-three-calls" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        A game in three calls
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="A game in three calls">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#who-calls-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Who calls step()
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Inputs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Snapshots
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-rules-do-now" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        What the rules do now
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#projectiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Projectiles
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#weapons" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Weapons
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ships" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Ships
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enemies" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Enemies
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#waves" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Waves
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-gameplay" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Adding gameplay
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Messages
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Messages">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-world-of-a-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The world of a client
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Tests
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="../" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/Akinator31/Rtype/edit/main/docs/architecture/game.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="game">Game<a class="headerlink" href="#game" title="Permanent link">&para;</a></h1>
+<p>The game library (<code>libs/game</code>, namespace <code>rtype::game</code>) holds the <strong>rules of the R-Type</strong>: the players, their
+ships and projectiles, and later the Bydos and the waves. It is used by the server instances, which
+run the games online, and by the client offline, in its <code>LocalSession</code> (<a href="../client-game/">A game in the client</a>)
+(<a href="../../decisions/0015-one-game-scene-local-or-remote-session/">ADR 0015</a>): the rules are written once, and a
+Bydo behaves the same offline and online.</p>
+<p>The <code>Simulation</code> depends on the ECS, the physics and the log only: no window, no sound, no network. The
+<a href="#messages">messages</a> of the game protocol are written with the serialization of <code>libs/network</code> (<code>Writer</code>,
+<code>Reader</code>), a private dependency: the rules never see it.</p>
+<h2 id="a-game-in-three-calls">A game in three calls<a class="headerlink" href="#a-game-in-three-calls" title="Permanent link">&para;</a></h2>
+<p>A <code>Simulation</code> is one game. It takes the inputs of the players, steps the world <strong>one tick at a time</strong>, and
+gives a <strong>snapshot</strong> of it:</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">"rtype/game/Game.hpp"</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">Simulation</span><span class="w"> </span><span class="n">simulation</span><span class="p">;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">simulation</span><span class="p">.</span><span class="n">addPlayer</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span><span class="w"> </span><span class="c1">// slots 0 to 3</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1">// Every tick, 60 times per second</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">simulation</span><span class="p">.</span><span class="n">setInput</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">input</span><span class="p">);</span><span class="w">                               </span><span class="c1">// the controls of player 0</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">simulation</span><span class="p">.</span><span class="n">step</span><span class="p">();</span><span class="w">                                           </span><span class="c1">// exactly 1/60 s of game</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="k">const</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">Snapshot</span><span class="w"> </span><span class="o">&amp;</span><span class="n">world</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">simulation</span><span class="p">.</span><span class="n">snapshot</span><span class="p">();</span><span class="w">  </span><span class="c1">// what to draw</span>
+</span></code></pre></div>
+<pre class="mermaid"><code>flowchart LR
+    Inputs["PlayerInput&lt;br/&gt;per slot"] --&gt; Sim
+    subgraph Sim["Simulation"]
+        direction TB
+        Ecs["its own ECS&lt;br/&gt;ships, shots..."]
+        Systems["the systems of the rules"]
+    end
+    Sim --&gt; Snapshot["Snapshot&lt;br/&gt;players, entities, events"]</code></pre>
+<p><em>The simulation turns the inputs of the players into a snapshot of the world, one tick at a time.</em></p>
+<h3 id="who-calls-step">Who calls step()<a class="headerlink" href="#who-calls-step" title="Permanent link">&para;</a></h3>
+<p>The simulation never reads a clock: whoever uses it decides when a tick passes. That is what makes a game the
+same on every machine, and the tests exact.</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>Who calls <code>step()</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Client offline</td>
+<td><code>LocalSession::update(elapsed)</code> adds up the frame times and steps once per 1/60 s, like <code>PhysicsStep</code></td>
+</tr>
+<tr>
+<td>Server instance</td>
+<td>The simulation thread, with a <code>Timer</code> at 60 Hz</td>
+</tr>
+<tr>
+<td>Tests</td>
+<td>A loop: 600 steps are 10 seconds of game, computed in a few milliseconds</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The same inputs, in the same order, give the same snapshots</strong>, bit for bit: a test checks it over 20
+seconds of a game with three players. Keep it that way: no clock, no <code>std::rand()</code>, no iteration over an
+<code>std::unordered_map</code> in the rules; a random generator, when the Bydos need one, is seeded by the game.</p>
+<h2 id="inputs">Inputs<a class="headerlink" href="#inputs" title="Permanent link">&para;</a></h2>
+<p><code>PlayerInput</code> is the byte of the protocol (<a href="../../protocol/game/#92-inputs">game protocol</a>): one bit per control.
+It is <strong>data, not a device</strong>: <code>libs/game</code> does not use <code>libs/input</code>, which reads the keyboard and the gamepads
+through raylib and only exists in the client. The client makes the <code>PlayerInput</code> from the virtual gamepad of the
+engine (<code>rtype::engine::Controls</code>, fed by <code>libs/input</code> with the bindings of the player), once per tick; the server
+receives it in <code>INPUT</code> messages.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Keyboard, gamepads ─► libs/input ─► engine::Controls ─► GameSessionSystem ─► game::PlayerInput ─► Simulation
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>   (raylib)          (bindings)    (virtual gamepad)       (client)           (one byte)        (client or server)
+</span></code></pre></div>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">PlayerInput</span><span class="w"> </span><span class="n">input</span><span class="p">;</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">input</span><span class="p">.</span><span class="n">set</span><span class="p">(</span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">PlayerInput</span><span class="o">::</span><span class="n">Up</span><span class="p">,</span><span class="w"> </span><span class="n">controls</span><span class="p">.</span><span class="n">isDown</span><span class="p">(</span><span class="n">rtype</span><span class="o">::</span><span class="n">engine</span><span class="o">::</span><span class="n">Control</span><span class="o">::</span><span class="n">Up</span><span class="p">));</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">input</span><span class="p">.</span><span class="n">set</span><span class="p">(</span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">PlayerInput</span><span class="o">::</span><span class="n">Fire</span><span class="p">,</span><span class="w"> </span><span class="n">controls</span><span class="p">.</span><span class="n">isDown</span><span class="p">(</span><span class="n">rtype</span><span class="o">::</span><span class="n">engine</span><span class="o">::</span><span class="n">Control</span><span class="o">::</span><span class="n">FaceDown</span><span class="p">));</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">input</span><span class="p">.</span><span class="n">direction</span><span class="p">();</span><span class="w">                   </span><span class="c1">// {x, y}, each -1, 0 or 1: up and down together cancel</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">PlayerInput</span><span class="o">::</span><span class="n">fromByte</span><span class="p">(</span><span class="n">b</span><span class="p">);</span><span class="w"> </span><span class="c1">// from the network: the reserved bits are dropped</span>
+</span></code></pre></div>
+<p>An input stays until the next <code>setInput()</code>: a player who holds Right keeps moving.</p>
+<h2 id="snapshots">Snapshots<a class="headerlink" href="#snapshots" title="Permanent link">&para;</a></h2>
+<p>A <code>Snapshot</code> is the world at the end of a tick, with the fields of the <code>SNAPSHOT</code> message
+(<a href="../../protocol/game/#snapshot-0x80">game protocol</a>), plus the events of the tick:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tick</code></td>
+<td>The tick it describes, 1 after the first step</td>
+</tr>
+<tr>
+<td><code>players</code></td>
+<td>Slot, lives and score of each player, by slot</td>
+</tr>
+<tr>
+<td><code>entities</code></td>
+<td>Each entity: id, kind, owner, position (its centre), velocity, health, flags, by id</td>
+</tr>
+<tr>
+<td><code>destroyed</code></td>
+<td>The entities destroyed since the previous snapshot, with the cause (removed, or killed: an explosion)</td>
+</tr>
+<tr>
+<td><code>waveStarted</code>, <code>gameOver</code></td>
+<td>A wave started, the game ended</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Ids are never reused</strong> within a game (<code>NetworkId</code>, unlike the ids of the ECS): a client keeps them to
+  recognize its entities from one snapshot to the next.</li>
+<li><strong>Positions are floats</strong> in game units; the network encodes them in eighths of a unit. Every entity stays in
+  the area the protocol can encode (<code>PositionLimit</code>): what leaves the game area is removed.</li>
+<li>An entity in <code>destroyed</code> is no longer in <code>entities</code>.</li>
+</ul>
+<h2 id="what-the-rules-do-now">What the rules do now<a class="headerlink" href="#what-the-rules-do-now" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Where</th>
+<th>Numbers (<code>Rules</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A ship appears on the left, one height per slot</td>
+<td><code>spawnPlayerShip()</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>It moves with the input, as fast in diagonal</td>
+<td><code>PlayerControlSystem</code>, with <code>shipVelocity()</code> (<code>ShipMovement.hpp</code>, shared with the prediction of the client)</td>
+<td><code>shipSpeed</code> 600 units/s</td>
+</tr>
+<tr>
+<td>It stays entirely in the 1920 × 1080 area</td>
+<td><code>physics::BoundsSystem</code>, <code>ConfinedToBounds</code></td>
+<td><code>shipHalfWidth</code>, <code>shipHalfHeight</code></td>
+</tr>
+<tr>
+<td>Fire held shoots from its nose</td>
+<td><code>PlayerControlSystem</code>, <code>spawnPlayerShot()</code></td>
+<td><code>fireInterval</code> 10 ticks (6 per second), <code>shotSpeed</code> 1500 units/s</td>
+</tr>
+<tr>
+<td>What leaves the area is removed</td>
+<td><code>AreaSystem</code>, <code>LeavesArea</code></td>
+<td><code>areaMargin</code> 128 units</td>
+</tr>
+<tr>
+<td>A player who leaves takes its ship away</td>
+<td><code>Simulation::removePlayer()</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>A Bydo shot that touches a ship destroys it, the player loses a life and gets a new ship, invulnerable for a while</td>
+<td><code>CombatSystem</code></td>
+<td><code>respawnDelay</code> 90 ticks, <code>invulnerableTicks</code> 120</td>
+</tr>
+<tr>
+<td>Every player out of lives ends the game (defeat)</td>
+<td><code>CombatSystem</code></td>
+<td><code>lives</code> 3</td>
+</tr>
+</tbody>
+</table>
+<p>The Bydos, the waves and the score come later. Nothing makes a Bydo shot yet: the hit is there for the
+<a href="#projectiles">projectiles</a> to use.</p>
+<p>A tick runs the systems in this order: <code>PlayerControlSystem</code> (inputs), <code>WeaponSystem</code> (the weapons), <code>ProjectileSystem</code> (the velocity of the
+projectiles), <code>physics::MovementSystem</code> (movement),
+<code>physics::BoundsSystem</code> (the walls), <code>CombatSystem</code> (the hits, the lives), <code>AreaSystem</code> (what left), then the
+snapshot is taken.</p>
+<h2 id="projectiles">Projectiles<a class="headerlink" href="#projectiles" title="Permanent link">&para;</a></h2>
+<p>A kind of projectile is <strong>data</strong>, a <code>ProjectileDefinition</code>, so that a new one is added without writing a
+system. A <code>ProjectileRegistry</code> keeps the definitions by id, and <code>spawnProjectile()</code> makes an entity from one.</p>
+<pre class="mermaid"><code>flowchart LR
+    Cat["ProjectileCategory"] --&gt; Def["ProjectileDefinition&lt;br/&gt;id · model · category · collider"]
+    Def -- "addDefinition()" --&gt; Reg["ProjectileRegistry&lt;br/&gt;GameContext::projectiles"]
+    Reg -- "getDefinition(id)" --&gt; Spawn["spawnProjectile()"]
+    Spawn --&gt; Ent["entity: Projectile · Velocity · Collider&lt;br/&gt;LeavesArea · NetworkId · Kind · Owner · Position"]</code></pre>
+<p>The life of a projectile, from the shot to its disappearance:</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Sys as A system (PlayerControlSystem...)
+    participant Reg as ProjectileRegistry
+    participant Ecs as ECS
+    participant Tick as Systems of the tick
+    participant Cli as Client
+
+    Sys-&gt;&gt;Ecs: defer(spawnProjectile(id, owner, position, velocity))
+    Note over Sys,Ecs: after the systems of the tick, so the caches are not grown while read
+    Ecs-&gt;&gt;Reg: getDefinition(id)
+    Reg--&gt;&gt;Ecs: model, category, collider
+    Ecs-&gt;&gt;Ecs: new entity (Projectile, Velocity, Collider, LeavesArea, NetworkId, Kind, Owner, Position)
+    loop every tick
+        Tick-&gt;&gt;Ecs: MovementSystem moves it
+        Tick-&gt;&gt;Ecs: CombatSystem tests the hits
+    end
+    Tick-&gt;&gt;Ecs: AreaSystem removes it once out of the area (DestroyCause::Removed)
+    Ecs--&gt;&gt;Cli: Snapshot: its Kind, position and velocity; then `destroyed`</code></pre>
+<p>The data of a definition and where each one ends up:</p>
+<pre class="mermaid"><code>classDiagram
+    class ProjectileCategory {
+        &lt;&lt;enum class&gt;&gt;
+        Bullet
+        Missile
+        Laser
+        Plasma
+    }
+    class ProjectileDefinition {
+        string id
+        string model
+        ProjectileCategory category
+        Collider collider
+    }
+    class ProjectileRegistry {
+        addDefinition(definition)
+        hasDefinition(id)
+        getDefinition(id)
+    }
+    class Projectile {
+        &lt;&lt;component&gt;&gt;
+        ProjectileCategory category
+        string model
+    }
+    ProjectileDefinition --&gt; ProjectileCategory
+    ProjectileRegistry "1" o-- "*" ProjectileDefinition
+    ProjectileDefinition ..&gt; Projectile : category and model copied
+    ProjectileDefinition ..&gt; Collider : collider copied to the entity</code></pre>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Type</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>std::string</code></td>
+<td>Unique name in the registry, how the systems and the configuration files designate it</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td><code>std::string</code></td>
+<td>Path of the 3D model. The game only carries it: it has no raylib, the client loads it</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td><code>ProjectileCategory</code></td>
+<td><code>Bullet</code>, <code>Missile</code>, <code>Laser</code>, <code>Plasma</code>: what the rules that depend on the behavior key on</td>
+</tr>
+<tr>
+<td><code>collider</code></td>
+<td><code>physics::Collider</code></td>
+<td>The shape that hits what it meets, centred on the projectile</td>
+</tr>
+</tbody>
+</table>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">simulation</span><span class="p">.</span><span class="n">context</span><span class="p">().</span><span class="n">projectiles</span><span class="p">.</span><span class="n">addDefinition</span><span class="p">(</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="p">{</span><span class="s">"pulse"</span><span class="p">,</span><span class="w"> </span><span class="s">"models/pulse.glb"</span><span class="p">,</span><span class="w"> </span><span class="n">ProjectileCategory</span><span class="o">::</span><span class="n">Plasma</span><span class="p">,</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">     </span><span class="n">physics</span><span class="o">::</span><span class="n">Collider</span><span class="p">{</span><span class="n">physics</span><span class="o">::</span><span class="n">Aabb</span><span class="p">{{},</span><span class="w"> </span><span class="p">{</span><span class="mf">8.0f</span><span class="p">,</span><span class="w"> </span><span class="mf">4.0f</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0f</span><span class="p">}},</span><span class="w"> </span><span class="p">{},</span><span class="w"> </span><span class="nb">false</span><span class="p">}});</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">spawnProjectile</span><span class="p">(</span><span class="n">ecs</span><span class="p">,</span><span class="w"> </span><span class="n">context</span><span class="p">,</span><span class="w"> </span><span class="s">"pulse"</span><span class="p">,</span><span class="w"> </span><span class="n">slot</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">,</span><span class="w"> </span><span class="mf">1500.0f</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0f</span><span class="p">);</span><span class="w"> </span><span class="c1">// from a system, through Ecs::defer()</span>
+</span></code></pre></div>
+<ul>
+<li><strong>The behavior of a category is in functions</strong> (<code>Projectile/ProjectileBehavior.hpp</code>), since a C++ <code>enum class</code>
+  has no methods: one <code>switch</code> per question, so a new category is a new case in each.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Answers</th>
+<th>Bullet</th>
+<th>Missile</th>
+<th>Laser</th>
+<th>Plasma</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getProjectileVelocity(category, launch, age, rules)</code></td>
+<td>How it moves, each tick (<code>ProjectileSystem</code>)</td>
+<td>Straight</td>
+<td>Speeds up (<code>missileBoostPerTick</code>, <code>missileMaxBoost</code>)</td>
+<td>Straight</td>
+<td>Zigzags (<code>plasmaZigzagSpeed</code>, <code>plasmaZigzagInterval</code>)</td>
+</tr>
+<tr>
+<td><code>getProjectileSounds(category)</code></td>
+<td>The paths of its sounds: <code>spawn</code>, <code>move</code>, <code>vanish</code> (left the area), <code>impact</code> (hit). All empty: no sound file yet</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>The sounds are paths: the game has no audio, the client plays them. Nothing sends the events (spawn, vanish,
+  impact) to the client yet, like the model, they wait for a decision on the protocol.
+- <strong>The velocity is not in the definition</strong>: the caller gives it at each shot, so that a weapon decides how
+  fast its projectile goes; it is kept as <code>Projectile::launch</code>, and the category moves the projectile from it. <code>spawnProjectile()</code> throws <code>std::out_of_range</code> for an unknown id.
+- <strong>The registry is an <code>std::unordered_map</code></strong>, only looked up by id, never iterated: this does not break the
+  <a href="#who-calls-step">determinism</a> above. Iterating it in the rules would.
+- <strong>The clients see an <code>EntityKind</code> only</strong>: a projectile with an owner is a <code>PlayerShot</code>, without one a
+  <code>BydoShot</code>. The model and the category are not in the snapshot yet, so the client cannot draw them: it needs
+  a decision on the <a href="../../protocol/game/#91-the-world">protocol</a>.
+- <code>spawnPlayerShot()</code> does not use this system yet.</p>
+<p><a href="../../decisions/0018-lua-game-config/">ADR 0018</a> plans to load the definitions from Lua files; the registry is
+what the loader will fill.</p>
+<h2 id="weapons">Weapons<a class="headerlink" href="#weapons" title="Permanent link">&para;</a></h2>
+<p>A kind of weapon is <strong>data</strong> too, a <code>WeaponDefinition</code>, kept by id in a <code>WeaponRegistry</code>
+(<code>GameContext::weapons</code>). Durations are in ticks, distances in game units.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>projectile</code></td>
+<td><code>std::string</code></td>
+<td>The ammunition: the id of a <code>ProjectileDefinition</code></td>
+</tr>
+<tr>
+<td><code>mechanic</code></td>
+<td><code>ProjectileCategory</code></td>
+<td>The firing mechanic: how its projectiles move (replaces the category of the projectile)</td>
+</tr>
+<tr>
+<td><code>projectileSpeed</code></td>
+<td><code>float</code></td>
+<td>Speed the projectiles leave with, to the right</td>
+</tr>
+<tr>
+<td><code>fireInterval</code></td>
+<td>ticks</td>
+<td>Between two shots while Fire is held (not 0)</td>
+</tr>
+<tr>
+<td><code>range</code></td>
+<td><code>float</code></td>
+<td>Distance a projectile flies before it vanishes, 0 for no limit</td>
+</tr>
+<tr>
+<td><code>magazineSize</code></td>
+<td>shots</td>
+<td>Ammunition capacity, <code>InfiniteAmmo</code> (0) for a weapon that never runs out</td>
+</tr>
+<tr>
+<td><code>reloadTicks</code></td>
+<td>ticks</td>
+<td>Reload time of an empty magazine</td>
+</tr>
+</tbody>
+</table>
+<pre class="mermaid"><code>flowchart LR
+    Proj["ProjectileDefinition&lt;br/&gt;id · model · category · collider"] -- "projectile (id)" --&gt; Def
+    Cat["ProjectileCategory"] -- "mechanic" --&gt; Def
+    Def["WeaponDefinition&lt;br/&gt;id · projectile · mechanic · projectileSpeed&lt;br/&gt;fireInterval · range · magazineSize · reloadTicks"]
+    Def -- "addDefinition()" --&gt; Reg["WeaponRegistry&lt;br/&gt;GameContext::weapons"]
+    Reg -- "equipWeapon()" --&gt; Armed["Armed on the ship&lt;br/&gt;weapon · cooldown · ammo · reloadLeft"]
+    Armed -- "WeaponSystem, Fire held" --&gt; Shot["spawnWeaponShot()"]
+    Reg -- "getDefinition(id)" --&gt; Shot
+    Proj -- "spawnProjectile()" --&gt; Shot
+    Shot --&gt; Ent["Projectile entity&lt;br/&gt;category = mechanic · range · travelled"]
+    Ent -- "ProjectileSystem: travelled ≥ range" --&gt; Gone["removed (DestroyCause::Removed)"]</code></pre>
+<p>The state of the magazine, run by the <code>WeaponSystem</code> at each tick (with <code>magazineSize</code> not <code>InfiniteAmmo</code>):</p>
+<pre class="mermaid"><code>stateDiagram-v2
+    [*] --&gt; Ready: equipWeapon() (full magazine)
+    Ready --&gt; Cooldown: Fire held, one round spent&lt;br/&gt;cooldown = fireInterval
+    Cooldown --&gt; Ready: cooldown reaches 0
+    Ready --&gt; Reloading: last round spent&lt;br/&gt;reloadLeft = reloadTicks
+    Reloading --&gt; Ready: reloadLeft reaches 0&lt;br/&gt;ammo = magazineSize</code></pre>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">simulation</span><span class="p">.</span><span class="n">context</span><span class="p">().</span><span class="n">weapons</span><span class="p">.</span><span class="n">addDefinition</span><span class="p">({</span><span class="s">"blaster"</span><span class="p">,</span><span class="w"> </span><span class="s">"pulse"</span><span class="p">,</span><span class="w"> </span><span class="n">ProjectileCategory</span><span class="o">::</span><span class="n">Laser</span><span class="p">,</span><span class="w"> </span><span class="mf">1000.0f</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mf">600.0f</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">});</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">equipWeapon</span><span class="p">(</span><span class="n">ecs</span><span class="p">,</span><span class="w"> </span><span class="n">context</span><span class="p">,</span><span class="w"> </span><span class="n">ship</span><span class="p">,</span><span class="w"> </span><span class="s">"blaster"</span><span class="p">);</span><span class="w"> </span><span class="c1">// gives the ship an Armed component</span>
+</span></code></pre></div>
+<ul>
+<li><code>WeaponSystem</code> runs each <code>Armed</code> ship: it counts the cooldown down, spends a round per shot, reloads on its
+  own when the magazine is empty (no shot meanwhile) and fires through <code>spawnWeaponShot()</code> (deferred).</li>
+<li>A ship <strong>without</strong> <code>Armed</code> keeps the default shots of <code>PlayerControlSystem</code> (<code>Rules::fireInterval</code>).</li>
+<li>The range is checked by <code>ProjectileSystem</code> on the distance flown (<code>Projectile::travelled</code>); a projectile past
+  it is removed with <code>DestroyCause::Removed</code>.</li>
+</ul>
+<h2 id="ships">Ships<a class="headerlink" href="#ships" title="Permanent link">&para;</a></h2>
+<p>A kind of ship is <strong>data</strong>, a <code>ShipDefinition</code>, kept by id in a <code>ShipRegistry</code> (<code>GameContext::ships</code>): what a
+ship looks and sounds like, whoever flies it. The game only carries the paths of the model and of the sounds:
+it has no window and no audio, the client loads and plays them. An empty sound path means no sound.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model</code></td>
+<td><code>std::string</code></td>
+<td>Path of the 3D model (required)</td>
+</tr>
+<tr>
+<td><code>sounds.move</code></td>
+<td><code>std::string</code></td>
+<td>Played while it moves</td>
+</tr>
+<tr>
+<td><code>sounds.destruction</code></td>
+<td><code>std::string</code></td>
+<td>Played when it is destroyed</td>
+</tr>
+<tr>
+<td><code>sounds.collision</code></td>
+<td><code>std::string</code></td>
+<td>Played when it collides with something</td>
+</tr>
+</tbody>
+</table>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">simulation</span><span class="p">.</span><span class="n">context</span><span class="p">().</span><span class="n">ships</span><span class="p">.</span><span class="n">addDefinition</span><span class="p">({</span><span class="s">"bydo_scout"</span><span class="p">,</span><span class="w"> </span><span class="s">"models/bydo_scout.glb"</span><span class="p">,</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">                                          </span><span class="p">{</span><span class="s">"sounds/scout_move.ogg"</span><span class="p">,</span><span class="w"> </span><span class="s">"sounds/scout_destruction.ogg"</span><span class="p">,</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">                                           </span><span class="s">"sounds/scout_collision.ogg"</span><span class="p">}});</span>
+</span></code></pre></div>
+<p><code>addDefinition()</code> throws <code>std::invalid_argument</code> for an empty or taken id or no model; <code>getDefinition()</code> throws
+<code>std::out_of_range</code> for an unknown id.</p>
+<h2 id="enemies">Enemies<a class="headerlink" href="#enemies" title="Permanent link">&para;</a></h2>
+<p>A kind of enemy is <strong>data</strong> as well, an <code>EnemyDefinition</code>, kept by id in an <code>EnemyRegistry</code>
+(<code>GameContext::enemies</code>). Speeds are in game units per second. Nothing makes an enemy appear in a game yet:
+the registry is the base the spawning and the waves will read.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ship</code></td>
+<td><code>std::string</code></td>
+<td>The id of a <code>ShipDefinition</code>: its model and its sounds</td>
+</tr>
+<tr>
+<td><code>health</code></td>
+<td><code>std::uint8_t</code></td>
+<td>Hit points it starts with, like the <code>Health</code> component (not 0)</td>
+</tr>
+<tr>
+<td><code>speed</code></td>
+<td><code>float</code></td>
+<td>Top speed (above 0)</td>
+</tr>
+<tr>
+<td><code>acceleration</code></td>
+<td><code>float</code></td>
+<td>Speed gained per second until the top speed, in units/s² (0 or more)</td>
+</tr>
+<tr>
+<td><code>weapon</code></td>
+<td><code>std::string</code></td>
+<td>The id of a <code>WeaponDefinition</code></td>
+</tr>
+</tbody>
+</table>
+<pre class="mermaid"><code>flowchart LR
+    Lua["Lua files&lt;br/&gt;(ADR 0018, later)"] -.-&gt; Def
+    Def["EnemyDefinition&lt;br/&gt;id · ship · health · speed · acceleration · weapon"]
+    Def -- "addDefinition()&lt;br/&gt;checked: id, ship, health, speed, acceleration, weapon" --&gt; Reg["EnemyRegistry&lt;br/&gt;GameContext::enemies"]
+    Def -- "ship (id)" --&gt; SDef["ShipDefinition&lt;br/&gt;id · model · sounds (move · destruction · collision)"]
+    SDef -- "addDefinition()" --&gt; SReg["ShipRegistry&lt;br/&gt;GameContext::ships"]
+    Def -- "weapon (id)" --&gt; WDef["WeaponDefinition"]
+    WDef -- "addDefinition()" --&gt; WReg["WeaponRegistry&lt;br/&gt;GameContext::weapons"]
+    Reg -. "getDefinition(id)" .-&gt; Spawn["spawning, waves&lt;br/&gt;(later)"]
+    SReg -. "model, sounds" .-&gt; Spawn
+    WReg -. "equipWeapon()" .-&gt; Spawn</code></pre>
+<p>Solid arrows exist today; dotted ones are what will come next.</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">simulation</span><span class="p">.</span><span class="n">context</span><span class="p">().</span><span class="n">enemies</span><span class="p">.</span><span class="n">addDefinition</span><span class="p">({</span><span class="s">"bydo_scout"</span><span class="p">,</span><span class="w"> </span><span class="s">"bydo_scout"</span><span class="p">,</span><span class="w"> </span><span class="mi">30</span><span class="p">,</span><span class="w"> </span><span class="mf">240.0f</span><span class="p">,</span><span class="w"> </span><span class="mf">720.0f</span><span class="p">,</span><span class="w"> </span><span class="s">"blaster"</span><span class="p">});</span>
+</span></code></pre></div>
+<ul>
+<li><code>addDefinition()</code> throws <code>std::invalid_argument</code> for an empty or taken id, no ship, no health, no weapon, a
+  speed not above 0 or a negative acceleration; <code>getDefinition()</code> throws <code>std::out_of_range</code> for an unknown id.</li>
+<li>The ship and the weapon are <strong>not</strong> looked up when the enemy is added, so that the registries can be filled
+  in any order; an unknown one fails when the enemy is made (<code>getDefinition()</code>, <code>equipWeapon()</code>).</li>
+<li><a href="../../decisions/0018-lua-game-config/">ADR 0018</a> plans to load the definitions from Lua files, like the
+  weapons.</li>
+</ul>
+<h2 id="waves">Waves<a class="headerlink" href="#waves" title="Permanent link">&para;</a></h2>
+<p>A wave is a group of enemies that appear one after the other. Like the enemies, it is <strong>data</strong>: a
+<code>WaveDefinition</code>, kept by name in a <code>WaveRegistry</code> (<code>GameContext::waves</code>). Nothing runs a wave yet: the
+registry is what the spawning will read.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>std::string</code></td>
+<td>Unique name in the registry</td>
+</tr>
+<tr>
+<td><code>label</code></td>
+<td><code>std::string</code></td>
+<td>Short text shown to the players</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td><code>std::string</code></td>
+<td>Longer text</td>
+</tr>
+<tr>
+<td><code>quantity</code></td>
+<td><code>std::uint16_t</code></td>
+<td>How many enemies (above 0)</td>
+</tr>
+<tr>
+<td><code>spawnInterval</code></td>
+<td><code>float</code></td>
+<td>Seconds between two enemies (0 or more; 0 = all at once)</td>
+</tr>
+<tr>
+<td><code>placement</code></td>
+<td><code>WavePlacement</code></td>
+<td><code>Manual</code> or <code>Random</code>, one mode per wave</td>
+</tr>
+<tr>
+<td><code>spawns</code></td>
+<td><code>std::vector&lt;WaveSpawn&gt;</code></td>
+<td>Manual only: each enemy (<code>enemy</code>, <code>x</code>, <code>y</code>), in the order they appear</td>
+</tr>
+<tr>
+<td><code>enemy</code></td>
+<td><code>std::string</code></td>
+<td>Random only: the id of the <code>EnemyDefinition</code> of every enemy</td>
+</tr>
+<tr>
+<td><code>area</code></td>
+<td><code>WaveArea</code></td>
+<td>Random only: the rectangle (<code>minX</code>, <code>maxX</code>, <code>minY</code>, <code>maxY</code>) where they appear</td>
+</tr>
+</tbody>
+</table>
+<pre class="mermaid"><code>flowchart LR
+    Def["WaveDefinition&lt;br/&gt;name · label · description · quantity · spawnInterval · placement"]
+    Def -- "placement = Manual" --&gt; Spawns["spawns: WaveSpawn[]&lt;br/&gt;enemy · x · y, one per enemy"]
+    Def -- "placement = Random" --&gt; Rand["enemy (id) + area: WaveArea&lt;br/&gt;minX · maxX · minY · maxY"]
+    Def -- "addDefinition(wave, enemies)&lt;br/&gt;checked: name, quantity, interval, placement, area, known enemies" --&gt; Reg["WaveRegistry&lt;br/&gt;GameContext::waves"]
+    Spawns -- "enemy (id)" --&gt; EDef["EnemyDefinition"]
+    Rand -- "enemy (id)" --&gt; EDef
+    EDef -- "addDefinition()" --&gt; EReg["EnemyRegistry&lt;br/&gt;GameContext::enemies"]
+    EReg -. "hasDefinition(id)&lt;br/&gt;when the wave is added" .-&gt; Reg
+    Reg -. "getDefinition(name)" .-&gt; Run["running a wave&lt;br/&gt;(later)"]</code></pre>
+<p>Solid arrows exist today; dotted ones are the checks made when a wave is added and what will come next.</p>
+<p>The default <code>area</code> is a band just past the right edge of the game area (x from <code>GameWidth</code> to
+<code>GameWidth + 100</code>, the whole height), so that enemies come in from the side. A wave does not mix manual and
+random enemies: for that, play two waves one after the other.</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">auto</span><span class="w"> </span><span class="o">&amp;</span><span class="n">context</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">simulation</span><span class="p">.</span><span class="n">context</span><span class="p">();</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">context</span><span class="p">.</span><span class="n">waves</span><span class="p">.</span><span class="n">addDefinition</span><span class="p">(</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="p">{</span><span class="s">"scouts_random"</span><span class="p">,</span><span class="w"> </span><span class="s">"Scouts"</span><span class="p">,</span><span class="w"> </span><span class="s">"Five scouts from the right"</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5f</span><span class="p">,</span><span class="w"> </span><span class="n">WavePlacement</span><span class="o">::</span><span class="n">Random</span><span class="p">,</span><span class="w"> </span><span class="p">{},</span><span class="w"> </span><span class="s">"bydo_scout"</span><span class="p">},</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">context</span><span class="p">.</span><span class="n">enemies</span><span class="p">);</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">context</span><span class="p">.</span><span class="n">waves</span><span class="p">.</span><span class="n">addDefinition</span><span class="p">({</span><span class="s">"scouts_line"</span><span class="p">,</span><span class="w"> </span><span class="s">"Scout line"</span><span class="p">,</span><span class="w"> </span><span class="s">""</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0f</span><span class="p">,</span><span class="w"> </span><span class="n">WavePlacement</span><span class="o">::</span><span class="n">Manual</span><span class="p">,</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">                             </span><span class="p">{{</span><span class="s">"bydo_scout"</span><span class="p">,</span><span class="w"> </span><span class="mf">2000.0f</span><span class="p">,</span><span class="w"> </span><span class="mf">200.0f</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="s">"bydo_scout"</span><span class="p">,</span><span class="w"> </span><span class="mf">2000.0f</span><span class="p">,</span><span class="w"> </span><span class="mf">800.0f</span><span class="p">}}},</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">                            </span><span class="n">context</span><span class="p">.</span><span class="n">enemies</span><span class="p">);</span>
+</span></code></pre></div>
+<ul>
+<li><code>addDefinition()</code> needs the <code>EnemyRegistry</code>: unlike the enemies, the waves check that every enemy they name
+  is known, so the enemies are filled first.</li>
+<li>It throws <code>std::invalid_argument</code> for an empty or taken name, a quantity of 0, a negative interval, a
+  Manual wave whose <code>spawns</code> do not number <code>quantity</code> or that sets <code>enemy</code>, a Random wave without <code>enemy</code> or
+  with <code>spawns</code>, an unknown enemy, or an empty area (min above max). <code>getDefinition()</code> throws
+  <code>std::out_of_range</code> for an unknown name.</li>
+</ul>
+<h2 id="adding-gameplay">Adding gameplay<a class="headerlink" href="#adding-gameplay" title="Permanent link">&para;</a></h2>
+<p>The rules are components and systems on the ECS, like the physics, so that anyone can add some:</p>
+<ol>
+<li><strong>A component</strong> in <code>Component/Components.hpp</code>: plain data, <code>struct Charge { std::uint32_t ticks = 0; };</code>.</li>
+<li><strong>A kind of entity</strong>, if the clients must draw it: a value in <code>EntityKind</code> (<code>Snapshot.hpp</code>) and in the table
+   of the <a href="../../protocol/game/#91-the-world">protocol</a>, in the range of its family; then a <code>spawn...()</code>
+   function in <code>Entities.hpp</code>, which gives it a <code>NetworkId</code>, its <code>Kind</code>, its <code>Owner</code> and its <code>Position</code>.</li>
+<li><strong>A system</strong> in <code>System/</code>: it receives the caches, the <code>Ecs</code> and the <code>GameContext</code> (rules, tick, players and
+   their inputs, events), and is registered in the constructor of <code>Simulation</code>, at its place in the tick.</li>
+<li><strong>The numbers</strong> in <code>Rules</code>, so that they can be tuned in one place, and the tests use their own.</li>
+<li><strong>A test</strong> in <code>tests/game_simulation.cpp</code>: inputs in, snapshot checked.</li>
+</ol>
+<p>Inside a system, create and destroy entities through <code>ecs.defer()</code>: changing the world while a system goes
+through the caches is not safe. <code>destroyEntity(ecs, context, entity, cause)</code> destroys an entity and records it
+for the snapshot.</p>
+<h2 id="messages">Messages<a class="headerlink" href="#messages" title="Permanent link">&para;</a></h2>
+<p><code>Messages.hpp</code> turns the messages of a game session into payloads and back, as the
+<a href="../../protocol/game/#9-game-messages">game protocol</a> says. The sessions of <code>libs/network</code> (<code>ClientSession</code>,
+<code>SessionHost</code>) carry them with their type (<code>message_type::Snapshot</code>...); the server and the client share this
+one implementation.</p>
+<table>
+<thead>
+<tr>
+<th>Message</th>
+<th>Type</th>
+<th>Direction</th>
+<th>Struct</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ACCEPTED</code></td>
+<td><code>0x02</code></td>
+<td>Game → Client</td>
+<td><code>AcceptedMessage</code>: slot, tick rate, tick</td>
+</tr>
+<tr>
+<td><code>PLAYER_JOINED</code></td>
+<td><code>0x04</code></td>
+<td>Game → Client</td>
+<td><code>PlayerJoinedMessage</code>: slot, player id, name</td>
+</tr>
+<tr>
+<td><code>PLAYER_LEFT</code></td>
+<td><code>0x05</code></td>
+<td>Game → Client</td>
+<td><code>PlayerLeftMessage</code>: slot, reason</td>
+</tr>
+<tr>
+<td><code>INPUT</code></td>
+<td><code>0x40</code></td>
+<td>Client → Game</td>
+<td><code>InputMessage</code>: tick, inputs newest first</td>
+</tr>
+<tr>
+<td><code>SNAPSHOT</code></td>
+<td><code>0x80</code></td>
+<td>Game → Client</td>
+<td><code>SnapshotPart</code>: tick, last input, part, players, entities</td>
+</tr>
+<tr>
+<td><code>ENTITIES_DESTROYED</code></td>
+<td><code>0x81</code></td>
+<td>Game → Client</td>
+<td><code>EntitiesDestroyedMessage</code>: tick, ids and causes</td>
+</tr>
+<tr>
+<td><code>WAVE_STARTED</code></td>
+<td><code>0x82</code></td>
+<td>Game → Client</td>
+<td><code>WaveStartedMessage</code></td>
+</tr>
+<tr>
+<td><code>GAME_OVER</code></td>
+<td><code>0x83</code></td>
+<td>Game → Client</td>
+<td><code>GameOverMessage</code></td>
+</tr>
+</tbody>
+</table>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1">// Game, once per client, every 2 ticks</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">SnapshotPart</span><span class="w"> </span><span class="o">&amp;</span><span class="n">part</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">splitSnapshot</span><span class="p">(</span><span class="n">simulation</span><span class="p">.</span><span class="n">snapshot</span><span class="p">(),</span><span class="w"> </span><span class="n">lastInput</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="n">host</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">session</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">message_type</span><span class="o">::</span><span class="n">Snapshot</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">encode</span><span class="p">(</span><span class="n">part</span><span class="p">),</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">              </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Delivery</span><span class="o">::</span><span class="n">Unreliable</span><span class="p">);</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="p">}</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="o">&amp;</span><span class="n">message</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">destroyedMessages</span><span class="p">(</span><span class="n">simulation</span><span class="p">.</span><span class="n">snapshot</span><span class="p">()))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">    </span><span class="n">host</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">session</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">message_type</span><span class="o">::</span><span class="n">EntitiesDestroyed</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">encode</span><span class="p">(</span><span class="n">message</span><span class="p">),</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">              </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Delivery</span><span class="o">::</span><span class="n">Reliable</span><span class="p">);</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="p">}</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="c1">// Client, in the message handler of its ClientSession</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">type</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">message_type</span><span class="o">::</span><span class="n">Snapshot</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">part</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">decodeSnapshotPart</span><span class="p">(</span><span class="n">payload</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="w">        </span><span class="n">world</span><span class="p">.</span><span class="n">apply</span><span class="p">(</span><span class="o">*</span><span class="n">part</span><span class="p">);</span>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="p">}</span>
+</span></code></pre></div>
+<ul>
+<li><strong><code>encode()</code></strong> has one overload per message. A value the protocol forbids (a slot above 3, no input, an id
+  of 0, a part that does not fit in a datagram) is a bug of the sender: it throws.</li>
+<li><strong><code>decode...()</code></strong> never throws: it gives nothing for every case the protocol calls malformed, and for bytes
+  left after the last field, and the receiver drops the message. Unknown reasons, causes and outcomes are read
+  as the protocol says (<code>Quit</code>, <code>Removed</code>, <code>Defeat</code>), and reserved bits are dropped. The decoders are pure, with
+  no state: they can be fuzzed.</li>
+<li><strong>Positions and velocities</strong> are floats in the structs, and eighths of a unit on the network: rounded to the
+  nearest eighth, and kept within what an <code>i16</code> holds (−4096 to 4095.875).</li>
+<li><strong><code>splitSnapshot()</code></strong> cuts a <code>Snapshot</code> in parts that fit in a datagram, each with the tick and the players:
+  69 entities per part with four players (<code>maxEntitiesPerPart()</code>), 16 parts at most. <strong><code>destroyedMessages()</code></strong>
+  does the same for the destroyed entities: 228 per message.</li>
+<li><strong>Unknown kinds</strong> are decoded, so that a newer game can add some: <code>isKnown()</code> tells the client to skip them.</li>
+</ul>
+<h3 id="the-world-of-a-client">The world of a client<a class="headerlink" href="#the-world-of-a-client" title="Permanent link">&para;</a></h3>
+<p><code>RemoteWorld</code> keeps the world as a client knows it from those messages, with the rules of the
+<a href="../../protocol/game/#93-snapshots">protocol</a>: snapshots can be lost, late or out of order, and destructions
+are reliable.</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">game</span><span class="o">::</span><span class="n">RemoteWorld</span><span class="w"> </span><span class="n">world</span><span class="p">;</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">world</span><span class="p">.</span><span class="n">apply</span><span class="p">(</span><span class="n">part</span><span class="p">);</span><span class="w">                                </span><span class="c1">// a SNAPSHOT part</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="o">&amp;</span><span class="n">removed</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">world</span><span class="p">.</span><span class="n">apply</span><span class="p">(</span><span class="n">message</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="c1">// an ENTITIES_DESTROYED</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="c1">// removed.last: where it was, for an explosion when removed.cause is Killed</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="p">}</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="o">&amp;</span><span class="p">[</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">entity</span><span class="p">]</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">world</span><span class="p">.</span><span class="n">entities</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* draw it */</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>What arrives</th>
+<th>What the world does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A part older than the latest applied</td>
+<td>Ignored (<code>apply()</code> gives false); the other parts of the latest tick still apply</td>
+</tr>
+<tr>
+<td>An entity in a part</td>
+<td>Created, or updated</td>
+</tr>
+<tr>
+<td>An entity missing from a part</td>
+<td>Kept: its part may have been lost</td>
+</tr>
+<tr>
+<td><code>ENTITIES_DESTROYED</code></td>
+<td>The entities are removed and given back with their last state; their ids are remembered until the snapshots reach the tick of their destruction, so that an older part cannot bring them back</td>
+</tr>
+<tr>
+<td>A kind it does not know</td>
+<td>Skipped</td>
+</tr>
+</tbody>
+</table>
+<p>It keeps the latest state only; drawing 100 ms in the past and interpolating between snapshots come on top of
+it, in the client. Like the Simulation, it has no clock and no network.</p>
+<h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h2>
+<p>The tests in <code>tests/game_simulation.cpp</code> (tag <code>[game]</code>) step simulations and check their snapshots: the
+inputs, the players added and removed, the movement and its speed in diagonal, the walls, the shots and their
+interval, shots removed once out of the area with ids never given again, the same game twice with the same
+inputs, and an hour of random inputs with four players keeping every entity in the range of the protocol.</p>
+<p>The tests in <code>tests/game_messages.cpp</code> (tags <code>[messages]</code> and <code>[world]</code>) check the bytes of the example of the
+specification, the round trip of every message, the rounding and the limits of positions, every malformed
+case, the encoders refusing forbidden values, random bytes that never crash a decoder, the splitting of
+snapshots and destructions into datagrams, the rules of <code>RemoteWorld</code>, and a whole game of four players sent
+through the messages, where the client ends with the world of the game.</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>./build/bin/rtype_tests<span class="w"> </span><span class="s2">"[game]"</span>
+</span></code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../server/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Server">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Server
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../client-game/" class="md-footer__link md-footer__link--next" aria-label="Next: A game in the client">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                A game in the client
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      R-Type team — Epitech B-CPP-500
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Akinator31/Rtype" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M216.5 362.5c-66-8-112.5-55.5-112.5-117 0-25 9-52 24-70-6.5-16.5-5.5-51.5 2-66 20-2.5 47 8 63 22.5 19-6 39-9 63.5-9s44.5 3 62.5 8.5c15.5-14 43-24.5 63-22 7 13.5 8 48.5 1.5 65.5 16 19 24.5 44.5 24.5 70.5 0 61.5-46.5 108-113.5 116.5 17 11 28.5 35 28.5 62.5v52c0 15 12.5 23.5 27.5 17.5C441 459.5 512 369 512 257 512 115.5 397 0 255.5 0S0 115.5 0 257c0 111 70.5 203 165.5 237.5 13.5 5 26.5-4 26.5-17.5v-40c-7 3-16 5-24 5-33 0-52.5-18-66.5-51.5-5.5-13.5-11.5-21.5-23-23-6-.5-8-3-8-6 0-6 10-10.5 20-10.5 14.5 0 27 9 40 27.5 10 14.5 20.5 21 33 21s20.5-4.5 32-16c8.5-8.5 15-16 21-21"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["content.action.edit","content.code.annotate","content.code.copy","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.path","navigation.sections","navigation.tabs","navigation.top","navigation.tracking","search.highlight","toc.follow"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.67a597eb.min.js"></script>
+      
+    
+  </body>
+</html>

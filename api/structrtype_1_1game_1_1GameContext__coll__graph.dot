@@ -1,0 +1,20 @@
+digraph "rtype::game::GameContext"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="rtype::game::GameContext",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="What the systems of the game share besides the components: the rules, the tick, the players and their..."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" rules" ,fontname="Helvetica"];
+  Node2 [label="rtype::game::Rules",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1game_1_1Rules.html",tooltip="The numbers of the gameplay, in one place to tune them: speeds in game units per second,..."];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" enemies" ,fontname="Helvetica"];
+  Node3 [label="rtype::game::EnemyRegistry",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1EnemyRegistry.html",tooltip="The kinds of enemy of a game, by id. Shared by the systems through the GameContext."];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" projectiles" ,fontname="Helvetica"];
+  Node4 [label="rtype::game::ProjectileRegistry",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1ProjectileRegistry.html",tooltip="The kinds of projectile of a game, by id. Shared by the systems through the GameContext."];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" weapons" ,fontname="Helvetica"];
+  Node5 [label="rtype::game::WeaponRegistry",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1WeaponRegistry.html",tooltip="The kinds of weapon of a game, by id. Shared by the systems through the GameContext."];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" waves" ,fontname="Helvetica"];
+  Node6 [label="rtype::game::WaveRegistry",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1WaveRegistry.html",tooltip="The waves of a game, by name. Shared by the systems through the GameContext."];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ships" ,fontname="Helvetica"];
+  Node7 [label="rtype::game::ShipRegistry",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1ShipRegistry.html",tooltip="The kinds of ship of a game, by id. Shared by the systems through the GameContext."];
+}

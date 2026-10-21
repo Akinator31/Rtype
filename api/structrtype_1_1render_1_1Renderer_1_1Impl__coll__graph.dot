@@ -1,0 +1,22 @@
+digraph "rtype::render::Renderer::Impl"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="rtype::render::Renderer\l::Impl",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip=" "];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" textures" ,fontname="Helvetica"];
+  Node2 [label="rtype::core::ResourceCache\l\< rtype::render::detail\l::Texture, rtype::core::Handle \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1core_1_1ResourceCache.html",tooltip=" "];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" lightingShader" ,fontname="Helvetica"];
+  Node3 [label="rtype::render::detail\l::LightingShader",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1render_1_1detail_1_1LightingShader.html",tooltip="Owns the lighting shader of the 3D models: a directional light, such as a sun, plus an ambient light,..."];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" fonts" ,fontname="Helvetica"];
+  Node4 [label="rtype::core::ResourceCache\l\< rtype::render::detail\l::Font, rtype::core::Handle \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1core_1_1ResourceCache.html",tooltip=" "];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" gameSize" ,fontname="Helvetica"];
+  Node5 [label="rtype::render::Vector2",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1render_1_1Vector2.html",tooltip="A 2D position or size, in game units (pixels of the game's logical resolution)."];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" filterShader" ,fontname="Helvetica"];
+  Node6 [label="rtype::render::detail\l::FilterShader",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1render_1_1detail_1_1FilterShader.html",tooltip="Owns the colour filter shader."];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" models" ,fontname="Helvetica"];
+  Node7 [label="rtype::core::ResourceCache\l\< rtype::render::detail\l::Model, rtype::core::Handle \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1core_1_1ResourceCache.html",tooltip=" "];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" frameArea" ,fontname="Helvetica"];
+  Node8 [label="rtype::render::Rectangle",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1render_1_1Rectangle.html",tooltip="An axis-aligned rectangle: its top-left corner and its size."];
+}

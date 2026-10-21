@@ -1,0 +1,15 @@
+digraph "libs/physics/include" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_141148b54b6933c18404c011c8bba79c {
+    graph [ bgcolor="#ddddee", pencolor="black", label="physics" fontname="Helvetica", fontsize="10", URL="dir_141148b54b6933c18404c011c8bba79c.html"]
+  subgraph clusterdir_53f06212de2c9d6789f2de06f79f9384 {
+    graph [ bgcolor="#eeeeff", pencolor="black", label="" URL="dir_53f06212de2c9d6789f2de06f79f9384.html"];
+    dir_53f06212de2c9d6789f2de06f79f9384 [shape=plaintext label="include"];
+  dir_0f3dbef5025b540bf842e184b1447a57 [shape=box label="rtype" fillcolor="white" style="filled" color="red" URL="dir_0f3dbef5025b540bf842e184b1447a57.html"];
+  }
+  }
+  dir_7c30b8dfc30eedeb0f79cc4748007d54 [shape=box label="ecs" fillcolor="white" style="filled" color="red" URL="dir_7c30b8dfc30eedeb0f79cc4748007d54.html"];
+  dir_0f3dbef5025b540bf842e184b1447a57->dir_7c30b8dfc30eedeb0f79cc4748007d54 [headlabel="10", labeldistance=1.5 headhref="dir_000097_000031.html"];
+}

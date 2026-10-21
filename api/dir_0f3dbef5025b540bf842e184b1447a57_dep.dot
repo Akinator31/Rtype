@@ -1,0 +1,15 @@
+digraph "libs/physics/include/rtype" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_53f06212de2c9d6789f2de06f79f9384 {
+    graph [ bgcolor="#ddddee", pencolor="black", label="include" fontname="Helvetica", fontsize="10", URL="dir_53f06212de2c9d6789f2de06f79f9384.html"]
+  subgraph clusterdir_0f3dbef5025b540bf842e184b1447a57 {
+    graph [ bgcolor="#eeeeff", pencolor="black", label="" URL="dir_0f3dbef5025b540bf842e184b1447a57.html"];
+    dir_0f3dbef5025b540bf842e184b1447a57 [shape=plaintext label="rtype"];
+  dir_3e176153cd7e9a4657b2cc513070e6bc [shape=box label="physics" fillcolor="white" style="filled" color="red" URL="dir_3e176153cd7e9a4657b2cc513070e6bc.html"];
+  }
+  }
+  dir_7c30b8dfc30eedeb0f79cc4748007d54 [shape=box label="ecs" fillcolor="white" style="filled" color="red" URL="dir_7c30b8dfc30eedeb0f79cc4748007d54.html"];
+  dir_3e176153cd7e9a4657b2cc513070e6bc->dir_7c30b8dfc30eedeb0f79cc4748007d54 [headlabel="10", labeldistance=1.5 headhref="dir_000098_000031.html"];
+}

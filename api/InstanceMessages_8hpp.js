@@ -1,0 +1,56 @@
+var InstanceMessages_8hpp =
+[
+    [ "InstanceHelloMessage", "structrtype_1_1server_1_1InstanceHelloMessage.html", "structrtype_1_1server_1_1InstanceHelloMessage" ],
+    [ "ReadyMessage", "structrtype_1_1server_1_1ReadyMessage.html", "structrtype_1_1server_1_1ReadyMessage" ],
+    [ "PlayerConnectedMessage", "structrtype_1_1server_1_1PlayerConnectedMessage.html", "structrtype_1_1server_1_1PlayerConnectedMessage" ],
+    [ "PlayerDisconnectedMessage", "structrtype_1_1server_1_1PlayerDisconnectedMessage.html", "structrtype_1_1server_1_1PlayerDisconnectedMessage" ],
+    [ "PlayerScore", "structrtype_1_1server_1_1PlayerScore.html", "structrtype_1_1server_1_1PlayerScore" ],
+    [ "GameOverReport", "structrtype_1_1server_1_1GameOverReport.html", "structrtype_1_1server_1_1GameOverReport" ],
+    [ "ConfigureMessage", "structrtype_1_1server_1_1ConfigureMessage.html", "structrtype_1_1server_1_1ConfigureMessage" ],
+    [ "AddPlayerMessage", "structrtype_1_1server_1_1AddPlayerMessage.html", "structrtype_1_1server_1_1AddPlayerMessage" ],
+    [ "RemovePlayerMessage", "structrtype_1_1server_1_1RemovePlayerMessage.html", "structrtype_1_1server_1_1RemovePlayerMessage" ],
+    [ "ShutdownMessage", "structrtype_1_1server_1_1ShutdownMessage.html", "structrtype_1_1server_1_1ShutdownMessage" ],
+    [ "PlayerDisconnectedReason", "InstanceMessages_8hpp.html#a7276a5a835d441eda4e38510b6869861", [
+      [ "Quit", "InstanceMessages_8hpp.html#a7276a5a835d441eda4e38510b6869861a0d82790b0612935992bd564a17ce37d6", null ],
+      [ "TimedOut", "InstanceMessages_8hpp.html#a7276a5a835d441eda4e38510b6869861a9541eb2348d883dd8e32ae0420274c4c", null ]
+    ] ],
+    [ "RemovePlayerReason", "InstanceMessages_8hpp.html#adac4f0f9cc407c83b8a84196515641c5", [
+      [ "Left", "InstanceMessages_8hpp.html#adac4f0f9cc407c83b8a84196515641c5a945d5e233cf7d6240f6b783b36a374ff", null ],
+      [ "LobbyClosed", "InstanceMessages_8hpp.html#adac4f0f9cc407c83b8a84196515641c5a8669cccb811bdc51f2a4348708f77205", null ]
+    ] ],
+    [ "ShutdownReason", "InstanceMessages_8hpp.html#a6418783909c1ba0fa1f3aeab2057b826", [
+      [ "Empty", "InstanceMessages_8hpp.html#a6418783909c1ba0fa1f3aeab2057b826ace2c8aed9c2fa0cfbed56cbda4d8bf07", null ],
+      [ "MasterStopping", "InstanceMessages_8hpp.html#a6418783909c1ba0fa1f3aeab2057b826a3bb978282ff644e19033b6682d438dd2", null ]
+    ] ],
+    [ "encode", "InstanceMessages_8hpp.html#a6de7970b8c1a56044b787c64ed223b57", null ],
+    [ "encode", "InstanceMessages_8hpp.html#ad00dc8015f8e5a9a6c053fc62c598992", null ],
+    [ "encode", "InstanceMessages_8hpp.html#a530f12efc1635f5f258735ebc8604583", null ],
+    [ "encode", "InstanceMessages_8hpp.html#a47b3da86043a34ceeef376164d1affc1", null ],
+    [ "encode", "InstanceMessages_8hpp.html#a7e20878b2ab88089128e8b5273110dd1", null ],
+    [ "encode", "InstanceMessages_8hpp.html#ab7bc5a23fc8cd8aec4ba2b7bc5340f63", null ],
+    [ "encode", "InstanceMessages_8hpp.html#a8c9c5daf4bf535efcc89ee17ff646891", null ],
+    [ "encode", "InstanceMessages_8hpp.html#a821dd8a39959676b53efdf3901840ac9", null ],
+    [ "encode", "InstanceMessages_8hpp.html#aa99329772b630d5d9be5a4ed27ccd3a2", null ],
+    [ "decodeInstanceHello", "InstanceMessages_8hpp.html#a4265ea49544588933d3d0fe2853a0f63", null ],
+    [ "decodeReady", "InstanceMessages_8hpp.html#a3fd94724aa99bf7fb4a5054580d498c2", null ],
+    [ "decodePlayerConnected", "InstanceMessages_8hpp.html#a81dcefc3d813bca93c13b2e4b174f432", null ],
+    [ "decodePlayerDisconnected", "InstanceMessages_8hpp.html#ab2f06c96b24b77b15f879c67891eb6d3", null ],
+    [ "decodeGameOverReport", "InstanceMessages_8hpp.html#a1b312af82abdfd5b77c2b047888dcf5e", null ],
+    [ "decodeConfigure", "InstanceMessages_8hpp.html#adf2b5e6d14b7776e0f67733b477584c8", null ],
+    [ "decodeAddPlayer", "InstanceMessages_8hpp.html#a0185365ef5f6a845928998bf97658537", null ],
+    [ "decodeRemovePlayer", "InstanceMessages_8hpp.html#a7d5d65e81b8f05a675a5470afe452ed6", null ],
+    [ "decodeShutdown", "InstanceMessages_8hpp.html#a34c548b79a4b5d6c996c488524757496", null ],
+    [ "InstanceProtocolVersion", "InstanceMessages_8hpp.html#a7fd01140c6310b8026b927e25341106b", null ],
+    [ "MaxGameNameLength", "InstanceMessages_8hpp.html#ab1ddfec1903c74d044cc11a65400625a", null ],
+    [ "MaxInstancePlayerNameLength", "InstanceMessages_8hpp.html#a98976f315bc9be73056bcab4da18160b", null ],
+    [ "MaxInstancePlayers", "InstanceMessages_8hpp.html#a85d89015d3de0a0ba3f7c803cb6b3c77", null ],
+    [ "InstanceHello", "InstanceMessages_8hpp.html#ac0c01a7fb069286959d1dfbe9335a964", null ],
+    [ "Ready", "InstanceMessages_8hpp.html#a29d6d59fe24b8392e1ddf865cb443ada", null ],
+    [ "PlayerConnected", "InstanceMessages_8hpp.html#a105bbeac2bfc6d92f2e2fcb5b3cbd8e0", null ],
+    [ "PlayerDisconnected", "InstanceMessages_8hpp.html#a4ad36ae4f08efe8f1016f068eaa19b2a", null ],
+    [ "GameOver", "InstanceMessages_8hpp.html#ae2ece2da8d7b3eeda7a1632846683cbc", null ],
+    [ "Configure", "InstanceMessages_8hpp.html#ac18e5235f93dff1789ee3ab70e72aa0f", null ],
+    [ "AddPlayer", "InstanceMessages_8hpp.html#a273002e2cfee0aaff9c25a0dfb460138", null ],
+    [ "RemovePlayer", "InstanceMessages_8hpp.html#ade12ba473d4a20eb2a28e6dd7d0647f7", null ],
+    [ "Shutdown", "InstanceMessages_8hpp.html#aee2ae1c3e4891a18601970cc7abaaf38", null ]
+];

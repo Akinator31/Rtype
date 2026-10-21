@@ -1,0 +1,13 @@
+digraph "rtype::engine::Light"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="rtype::engine::Light",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="The light of the 3D models."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" light" ,fontname="Helvetica"];
+  Node2 [label="rtype::render::Light",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1render_1_1Light.html",tooltip="The light of the 3D models: a directional light, such as a sun, plus an ambient light so that the sid..."];
+  Node3 -> Node2 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" direction" ,fontname="Helvetica"];
+  Node3 [label="rtype::render::Vector3",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1render_1_1Vector3.html",tooltip="A 3D position, size or direction, in world units. The y axis points up."];
+  Node4 -> Node2 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ambient\ncolor" ,fontname="Helvetica"];
+  Node4 [label="rtype::render::Color",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1render_1_1Color.html",tooltip="A colour, with an alpha channel for transparency (0 is invisible, 255 is opaque)."];
+}

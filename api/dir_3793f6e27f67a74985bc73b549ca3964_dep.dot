@@ -1,0 +1,14 @@
+digraph "apps/client/src/Commands" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_9b7b4a65484447f1a3afc131eb1cf2d0 {
+    graph [ bgcolor="#ddddee", pencolor="black", label="src" fontname="Helvetica", fontsize="10", URL="dir_9b7b4a65484447f1a3afc131eb1cf2d0.html"]
+  dir_778006d81e31425759ce54d17f165bcb [shape=box label="Console" URL="dir_778006d81e31425759ce54d17f165bcb.html"];
+  dir_3793f6e27f67a74985bc73b549ca3964 [shape=box, label="Commands", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_3793f6e27f67a74985bc73b549ca3964.html"];
+  }
+  dir_6719ab1f1f7655efc2fa43f7eb574fd1 [shape=box label="libs" fillcolor="white" style="filled" color="red" URL="dir_6719ab1f1f7655efc2fa43f7eb574fd1.html"];
+  dir_778006d81e31425759ce54d17f165bcb->dir_6719ab1f1f7655efc2fa43f7eb574fd1 [headlabel="12", labeldistance=1.5 headhref="dir_000004_000011.html"];
+  dir_3793f6e27f67a74985bc73b549ca3964->dir_6719ab1f1f7655efc2fa43f7eb574fd1 [headlabel="5", labeldistance=1.5 headhref="dir_000003_000011.html"];
+  dir_3793f6e27f67a74985bc73b549ca3964->dir_778006d81e31425759ce54d17f165bcb [headlabel="4", labeldistance=1.5 headhref="dir_000003_000004.html"];
+}

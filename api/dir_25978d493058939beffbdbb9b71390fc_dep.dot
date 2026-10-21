@@ -1,0 +1,18 @@
+digraph "libs/game/include/rtype" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_c03b5c5fe56ec880f1c2919025e428a5 {
+    graph [ bgcolor="#ddddee", pencolor="black", label="include" fontname="Helvetica", fontsize="10", URL="dir_c03b5c5fe56ec880f1c2919025e428a5.html"]
+  subgraph clusterdir_25978d493058939beffbdbb9b71390fc {
+    graph [ bgcolor="#eeeeff", pencolor="black", label="" URL="dir_25978d493058939beffbdbb9b71390fc.html"];
+    dir_25978d493058939beffbdbb9b71390fc [shape=plaintext label="rtype"];
+  dir_aae50c47df9c5c8777b4b9e3ad45d3ab [shape=box label="game" fillcolor="white" style="filled" color="red" URL="dir_aae50c47df9c5c8777b4b9e3ad45d3ab.html"];
+  }
+  }
+  dir_141148b54b6933c18404c011c8bba79c [shape=box label="physics" fillcolor="white" style="filled" color="red" URL="dir_141148b54b6933c18404c011c8bba79c.html"];
+  dir_7c30b8dfc30eedeb0f79cc4748007d54 [shape=box label="ecs" fillcolor="white" style="filled" color="red" URL="dir_7c30b8dfc30eedeb0f79cc4748007d54.html"];
+  dir_aae50c47df9c5c8777b4b9e3ad45d3ab->dir_141148b54b6933c18404c011c8bba79c [headlabel="7", labeldistance=1.5 headhref="dir_000060_000095.html"];
+  dir_aae50c47df9c5c8777b4b9e3ad45d3ab->dir_7c30b8dfc30eedeb0f79cc4748007d54 [headlabel="12", labeldistance=1.5 headhref="dir_000060_000031.html"];
+  dir_141148b54b6933c18404c011c8bba79c->dir_7c30b8dfc30eedeb0f79cc4748007d54 [headlabel="10", labeldistance=1.5 headhref="dir_000095_000031.html"];
+}

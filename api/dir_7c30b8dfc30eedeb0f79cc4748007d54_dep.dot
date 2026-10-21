@@ -1,0 +1,15 @@
+digraph "libs/ecs" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_6719ab1f1f7655efc2fa43f7eb574fd1 {
+    graph [ bgcolor="#ddddee", pencolor="black", label="libs" fontname="Helvetica", fontsize="10", URL="dir_6719ab1f1f7655efc2fa43f7eb574fd1.html"]
+  subgraph clusterdir_7c30b8dfc30eedeb0f79cc4748007d54 {
+    graph [ bgcolor="#eeeeff", pencolor="black", label="" URL="dir_7c30b8dfc30eedeb0f79cc4748007d54.html"];
+    dir_7c30b8dfc30eedeb0f79cc4748007d54 [shape=plaintext label="ecs"];
+  dir_8f93702992ad98af1f993b49d5f2c472 [shape=box label="include" fillcolor="white" style="filled" color="red" URL="dir_8f93702992ad98af1f993b49d5f2c472.html"];
+  dir_d4929df39c0e3eb021aec5518398b6ec [shape=box label="src" fillcolor="white" style="filled" color="red" URL="dir_d4929df39c0e3eb021aec5518398b6ec.html"];
+  }
+  }
+  dir_d4929df39c0e3eb021aec5518398b6ec->dir_8f93702992ad98af1f993b49d5f2c472 [headlabel="7", labeldistance=1.5 headhref="dir_000038_000032.html"];
+}

@@ -1,0 +1,9 @@
+digraph "rtype::engine::HitboxSystem"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="rtype::engine::HitboxSystem",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="Computes the Hitbox of every widget with a text that can get the focus or is in a Column: the size of..."];
+  Node2 -> Node1 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="rtype::ecs::System",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1ecs_1_1System.html",tooltip="Logic run on the entities that have some components."];
+}

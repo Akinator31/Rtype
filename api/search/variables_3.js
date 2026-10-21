@@ -1,0 +1,23 @@
+var searchData=
+[
+  ['datagramheadersize_3432',['DatagramHeaderSize',['../namespacertype_1_1network.html#ae919fd323cbd1a1c9847d1b1ecbed700',1,'rtype::network']]],
+  ['datagrammagic_3433',['DatagramMagic',['../namespacertype_1_1network.html#a5c7075c59a43567e7f9aed00884cf236',1,'rtype::network']]],
+  ['datagramtagsize_3434',['DatagramTagSize',['../namespacertype_1_1network.html#a0ccf18dfef79653d5f75c0fc5e2972f1',1,'rtype::network']]],
+  ['datagramversion_3435',['DatagramVersion',['../namespacertype_1_1network.html#af0dc552495b3ed38114bdbb87122120a',1,'rtype::network']]],
+  ['decoder_3436',['decoder',['../structrtype_1_1network_1_1FramedConnection_1_1State.html#a8fa90fe23f295d41ef5b5d3eca392bb7',1,'rtype::network::FramedConnection::State']]],
+  ['delay_3437',['delay',['../structrtype_1_1client_1_1IntroSlide.html#a0333d27c280f867994a9faa00674acf8',1,'rtype::client::IntroSlide::delay()'],['../Ships_8cpp.html#abdc33cf25e725134a9b48e79c7031bcf',1,'delay():&#160;Ships.cpp']]],
+  ['delay_3438',['Delay',['../classrtype_1_1client_1_1Interpolation.html#af990613a4a6057e64edeff0831825615',1,'rtype::client::Interpolation']]],
+  ['deliver_3439',['deliver',['../structrtype_1_1network_1_1TcpListener_1_1Impl.html#aadcabf73ae55839e6a6845f238316976',1,'rtype::network::TcpListener::Impl']]],
+  ['depth_3440',['depth',['../structrtype_1_1physics_1_1Collision.html#aaa674e6bf5ad78853a9443a133ddb421',1,'rtype::physics::Collision::depth()'],['../structrtype_1_1physics_1_1Penetration.html#a8c8566193487ade85b7640eedca13435',1,'rtype::physics::Penetration::depth()']]],
+  ['description_3441',['description',['../structrtype_1_1game_1_1WaveDefinition.html#ae4b13ce38aa8aa6afcacb571dd77fa0b',1,'rtype::game::WaveDefinition']]],
+  ['destroyed_3442',['destroyed',['../structrtype_1_1game_1_1GameContext.html#a6f3dd898c818ed4115c5c7c8fa9fd411',1,'rtype::game::GameContext::destroyed()'],['../structrtype_1_1game_1_1Snapshot.html#aa36127d1a45938ec8bd4928ac4bea50e',1,'rtype::game::Snapshot::destroyed()']]],
+  ['destruction_3443',['destruction',['../structrtype_1_1game_1_1ShipSounds.html#a6ff117a68b963b2b6a0977452ebc1f62',1,'rtype::game::ShipSounds']]],
+  ['dim_3444',['dim',['../structrtype_1_1engine_1_1InterfaceStyle.html#a5bc9a50fea0e43b71314c40a77c90f55',1,'rtype::engine::InterfaceStyle']]],
+  ['direction_3445',['direction',['../structrtype_1_1physics_1_1Ray.html#a681f415fbfbe18d47f5e50500835c90f',1,'rtype::physics::Ray::direction()'],['../structrtype_1_1render_1_1Light.html#af54415188d370e8d803718feaa986713',1,'rtype::render::Light::direction()']]],
+  ['directory_3446',['directory',['../structrtype_1_1keygen_1_1Options.html#a4bfe24f1269ee722effc7b9bc9904210',1,'rtype::keygen::Options']]],
+  ['disconnect_3447',['Disconnect',['../namespacertype_1_1network_1_1session__message.html#a9dccb2963e13316bfa94088d80eda1bc',1,'rtype::network::session_message']]],
+  ['disconnectrepeats_3448',['DisconnectRepeats',['../namespacertype_1_1network.html#a5437ac9483c069e34b18ae5454647006',1,'rtype::network']]],
+  ['dock_3449',['dock',['../structrtype_1_1client_1_1Flight.html#aba74a0536c3ef987ca08906ad51b4581',1,'rtype::client::Flight']]],
+  ['done_3450',['done',['../structrtype_1_1server_1_1Games_1_1Game_1_1Creator.html#a45c42887e961b1b05a26fe98ce5da484',1,'rtype::server::Games::Game::Creator']]],
+  ['duration_3451',['duration',['../structrtype_1_1engine_1_1ToastStyle.html#a70a1d7bc07f582fe1d33ca3ebd9444de',1,'rtype::engine::ToastStyle::duration()'],['../structrtype_1_1engine_1_1Subscription.html#ab959c6db47b2c1ccd8ca5131693de9ac',1,'rtype::engine::Subscription::duration()'],['../structrtype_1_1engine_1_1Tween.html#a98ffa19cc6e32dc2a790ccd5818b54f1',1,'rtype::engine::Tween::duration()'],['../structrtype_1_1client_1_1Flight.html#a5efd368cb65989181947ca7c1c3fa1a8',1,'rtype::client::Flight::duration()']]]
+];

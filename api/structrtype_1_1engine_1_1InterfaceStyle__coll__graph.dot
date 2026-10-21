@@ -1,0 +1,25 @@
+digraph "rtype::engine::InterfaceStyle"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="rtype::engine::Interface\lStyle",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="Look of the interface: font, sizes and colours, in game units. One style for the whole interface."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" button" ,fontname="Helvetica"];
+  Node2 [label="rtype::engine::ButtonStyle",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1engine_1_1ButtonStyle.html",tooltip="Look of the buttons: a frosted glass panel of a fixed size, which lights up while the button has the ..."];
+  Node3 -> Node2 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" shadow\ntextShadow\ntopLight" ,fontname="Helvetica"];
+  Node3 [label="rtype::render::Color",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1render_1_1Color.html",tooltip="A colour, with an alpha channel for transparency (0 is invisible, 255 is opaque)."];
+  Node4 -> Node2 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" font" ,fontname="Helvetica"];
+  Node4 [label="rtype::core::Handle\l\< struct FontTag \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1core_1_1Handle.html",tooltip=" "];
+  Node5 -> Node2 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" focused\nnormal" ,fontname="Helvetica"];
+  Node5 [label="rtype::engine::PanelLook",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1engine_1_1PanelLook.html",tooltip="One state of a button: its glass panel and the light around it."];
+  Node3 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" border\nglow\nleft\nright" ,fontname="Helvetica"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" background\ndim\nfocused\nselection\ntext" ,fontname="Helvetica"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" toast" ,fontname="Helvetica"];
+  Node6 [label="rtype::engine::ToastStyle",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1engine_1_1ToastStyle.html",tooltip="Look and timing of the toasts (see Engine::showToast()): a dark rounded panel with a coloured accent ..."];
+  Node3 -> Node6 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" background\nborder\nerror\ninfo\nshadow\nsuccess\ntext\nwarning" ,fontname="Helvetica"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" console" ,fontname="Helvetica"];
+  Node7 [label="rtype::engine::ConsoleStyle",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1engine_1_1ConsoleStyle.html",tooltip="Look of the console: a dark band over the game, its lines, and the command line where commands are ty..."];
+  Node3 -> Node7 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" background\nedge\nfield\nprompt\ntext" ,fontname="Helvetica"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" font" ,fontname="Helvetica"];
+}

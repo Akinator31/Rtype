@@ -1,0 +1,11 @@
+digraph "libs/physics/src/Geometry" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_f470cccb45a16342aed35ba4be56a9ec {
+    graph [ bgcolor="#ddddee", pencolor="black", label="src" fontname="Helvetica", fontsize="10", URL="dir_f470cccb45a16342aed35ba4be56a9ec.html"]
+  dir_4949c250ebc64759a4e8f33d6cdd874f [shape=box, label="Geometry", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_4949c250ebc64759a4e8f33d6cdd874f.html"];
+  }
+  dir_53f06212de2c9d6789f2de06f79f9384 [shape=box label="include" fillcolor="white" style="filled" color="red" URL="dir_53f06212de2c9d6789f2de06f79f9384.html"];
+  dir_4949c250ebc64759a4e8f33d6cdd874f->dir_53f06212de2c9d6789f2de06f79f9384 [headlabel="3", labeldistance=1.5 headhref="dir_000103_000096.html"];
+}

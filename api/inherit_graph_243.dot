@@ -1,0 +1,8 @@
+digraph "Graphical Class Hierarchy"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node0 [label="rtype::server::InputBuffer",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1server_1_1InputBuffer.html",tooltip="The inputs of one player, kept for the ticks they are stamped with (docs/protocol/game...."];
+}

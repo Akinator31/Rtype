@@ -1,0 +1,13 @@
+digraph "libs/physics/include/rtype/physics/Component" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_3e176153cd7e9a4657b2cc513070e6bc {
+    graph [ bgcolor="#ddddee", pencolor="black", label="physics" fontname="Helvetica", fontsize="10", URL="dir_3e176153cd7e9a4657b2cc513070e6bc.html"]
+  dir_f1bf80449ca862cedc1dbaed881c8650 [shape=box label="Geometry" URL="dir_f1bf80449ca862cedc1dbaed881c8650.html"];
+  dir_58e7b1b236dfdedf3ed4726b11da737d [shape=box, label="Component", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_58e7b1b236dfdedf3ed4726b11da737d.html"];
+  }
+  dir_7c30b8dfc30eedeb0f79cc4748007d54 [shape=box label="ecs" fillcolor="white" style="filled" color="red" URL="dir_7c30b8dfc30eedeb0f79cc4748007d54.html"];
+  dir_58e7b1b236dfdedf3ed4726b11da737d->dir_7c30b8dfc30eedeb0f79cc4748007d54 [headlabel="1", labeldistance=1.5 headhref="dir_000099_000031.html"];
+  dir_58e7b1b236dfdedf3ed4726b11da737d->dir_f1bf80449ca862cedc1dbaed881c8650 [headlabel="1", labeldistance=1.5 headhref="dir_000099_000100.html"];
+}

@@ -1,0 +1,11 @@
+digraph "rtype::client::Flight"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="rtype::client::Flight",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="A ship of the menu going back and forth between its dock on the station and the space out of the scre..."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" control\ndock\nfrom\nheading\nhover\nto\nup" ,fontname="Helvetica"];
+  Node2 [label="rtype::render::Vector3",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1render_1_1Vector3.html",tooltip="A 3D position, size or direction, in world units. The y axis points up."];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" animations" ,fontname="Helvetica"];
+  Node3 [label="rtype::client::ShipAnimations",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1client_1_1ShipAnimations.html",tooltip="The animations of the ship model, by index (render::ResourceManager::getModelAnimation()): small flam..."];
+}

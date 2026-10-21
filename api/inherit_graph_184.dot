@@ -1,0 +1,20 @@
+digraph "Graphical Class Hierarchy"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node60 [label="std::enable_shared\l_from_this",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled",tooltip=" "];
+  Node60 -> Node0 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node0 [label="rtype::network::StopSignals\l::Impl",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1network_1_1StopSignals_1_1Impl.html",tooltip=" "];
+  Node60 -> Node62 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node62 [label="rtype::network::TcpConnection\l::Impl",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1network_1_1TcpConnection_1_1Impl.html",tooltip=" "];
+  Node60 -> Node63 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node63 [label="rtype::network::TcpListener\l::Impl",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1network_1_1TcpListener_1_1Impl.html",tooltip=" "];
+  Node60 -> Node64 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node64 [label="rtype::network::Timer\l::Impl",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1network_1_1Timer_1_1Impl.html",tooltip=" "];
+  Node60 -> Node65 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node65 [label="rtype::network::TlsConnection\l::Impl",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1network_1_1TlsConnection_1_1Impl.html",tooltip=" "];
+  Node60 -> Node66 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node66 [label="rtype::network::UdpSocket\l::Impl",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1network_1_1UdpSocket_1_1Impl.html",tooltip=" "];
+}

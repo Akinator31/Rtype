@@ -1,0 +1,58 @@
+digraph "rtype::ecs::System"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="rtype::ecs::System",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="Logic run on the entities that have some components."];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="rtype::client::ConsoleSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1client_1_1ConsoleSystem.html",tooltip="Opens the console scene over the others when F8 is pressed, and closes it when F8 is pressed again."];
+  Node1 -> Node3 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node3 [label="rtype::client::FlightSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1client_1_1FlightSystem.html",tooltip="Flies the ships of the menu: moves each entity with a Flight and a Model along the route of its stage..."];
+  Node1 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node4 [label="rtype::client::GameSession\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1client_1_1GameSessionSystem.html",tooltip="Plays the game session of the game scene (ADR 0015), each frame:"];
+  Node1 -> Node5 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node5 [label="rtype::client::IntroSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1client_1_1IntroSystem.html",tooltip="Plays the intro of the main menu: waits until the player presses any key, gamepad button or mouse but..."];
+  Node1 -> Node6 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node6 [label="rtype::ecs::TransformSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1ecs_1_1TransformSystem.html",tooltip="Computes the Position of every entity that has a Parent and a LocalPosition: the position of the pare..."];
+  Node1 -> Node7 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node7 [label="rtype::engine::AnchorSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1AnchorSystem.html",tooltip="Writes the Position of the entities with an Anchor, every frame, from the part of the game shown on t..."];
+  Node1 -> Node8 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node8 [label="rtype::engine::BoundText\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1BoundTextSystem.html",tooltip="Writes the Text of the entities with a BoundText from their function, every frame."];
+  Node1 -> Node9 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node9 [label="rtype::engine::ColumnLayout\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1ColumnLayoutSystem.html",tooltip="Places the children of every Column: their LocalPosition is set so that they are stacked from the top..."];
+  Node1 -> Node10 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node10 [label="rtype::engine::HitboxSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1HitboxSystem.html",tooltip="Computes the Hitbox of every widget with a text that can get the focus or is in a Column: the size of..."];
+  Node1 -> Node11 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node11 [label="rtype::engine::Interface\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1InterfaceSystem.html",tooltip="Lets the player use the widgets of the scene that receives the input: focus, navigation with the keyb..."];
+  Node1 -> Node12 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node12 [label="rtype::engine::ModelAnimation\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1ModelAnimationSystem.html",tooltip="Plays the animations of the models: moves the time of each ModelAnimation by the elapsed time."];
+  Node1 -> Node13 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node13 [label="rtype::engine::Scenes",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1Scenes.html",tooltip="The stack of open scenes: home screen, game, pause menu over the game..."];
+  Node1 -> Node14 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node14 [label="rtype::engine::SpinSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1SpinSystem.html",tooltip="Turns the models that have a Spin, by their speed times the elapsed time."];
+  Node1 -> Node15 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node15 [label="rtype::engine::ToastSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1ToastSystem.html",tooltip="Shows the toasts (see Engine::showToast()), with the look and timing of InterfaceStyle::toast: stacks..."];
+  Node1 -> Node16 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node16 [label="rtype::engine::TweenSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1TweenSystem.html",tooltip="Advances the tweens and writes their value to the Scale, the Opacity or the Panel highlight of their ..."];
+  Node1 -> Node17 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node17 [label="rtype::engine::WidgetText\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1WidgetTextSystem.html",tooltip="Writes the Text of the widgets that show a value (Toggle, Slider, Choice, TextField) from their value..."];
+  Node1 -> Node18 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node18 [label="rtype::game::AreaSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1AreaSystem.html",tooltip="Removes the entities with LeavesArea once they are entirely outside the game area,..."];
+  Node1 -> Node19 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node19 [label="rtype::game::CombatSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1CombatSystem.html",tooltip="The hits of the game."];
+  Node1 -> Node20 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node20 [label="rtype::game::PlayerControl\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1PlayerControlSystem.html",tooltip="Turns the input of each player into the movement of its ship, and makes it shoot while Fire is held,..."];
+  Node1 -> Node21 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node21 [label="rtype::game::ProjectileSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1ProjectileSystem.html",tooltip="Ages each projectile by one tick and sets its velocity from its category (getProjectileVelocity())."];
+  Node1 -> Node22 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node22 [label="rtype::game::WeaponSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1game_1_1WeaponSystem.html",tooltip="Runs the weapon (Armed) of each ship: waits the fire interval between two shots, spends one round per..."];
+  Node1 -> Node23 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node23 [label="rtype::physics::BoundsSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1physics_1_1BoundsSystem.html",tooltip=" "];
+  Node1 -> Node24 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node24 [label="rtype::physics::Collision\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1physics_1_1CollisionSystem.html",tooltip=" "];
+  Node1 -> Node25 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node25 [label="rtype::physics::Movement\lSystem",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1physics_1_1MovementSystem.html",tooltip=" "];
+  Node1 -> Node26 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node26 [label="rtype::physics::PhysicsStep",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1physics_1_1PhysicsStep.html",tooltip=" "];
+}

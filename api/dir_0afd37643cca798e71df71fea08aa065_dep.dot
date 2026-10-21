@@ -1,0 +1,11 @@
+digraph "libs/game/include/rtype/game/Weapon" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_aae50c47df9c5c8777b4b9e3ad45d3ab {
+    graph [ bgcolor="#ddddee", pencolor="black", label="game" fontname="Helvetica", fontsize="10", URL="dir_aae50c47df9c5c8777b4b9e3ad45d3ab.html"]
+  dir_0fa1131e3639e1b6aafcd0b51d0381e1 [shape=box label="Projectile" URL="dir_0fa1131e3639e1b6aafcd0b51d0381e1.html"];
+  dir_0afd37643cca798e71df71fea08aa065 [shape=box, label="Weapon", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_0afd37643cca798e71df71fea08aa065.html"];
+  }
+  dir_0afd37643cca798e71df71fea08aa065->dir_0fa1131e3639e1b6aafcd0b51d0381e1 [headlabel="1", labeldistance=1.5 headhref="dir_000071_000067.html"];
+}

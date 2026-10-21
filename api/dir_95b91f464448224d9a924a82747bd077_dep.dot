@@ -1,0 +1,15 @@
+digraph "libs/audio/include/rtype" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_b736464e38756f7ae8bfb43255cbf2e1 {
+    graph [ bgcolor="#ddddee", pencolor="black", label="include" fontname="Helvetica", fontsize="10", URL="dir_b736464e38756f7ae8bfb43255cbf2e1.html"]
+  subgraph clusterdir_95b91f464448224d9a924a82747bd077 {
+    graph [ bgcolor="#eeeeff", pencolor="black", label="" URL="dir_95b91f464448224d9a924a82747bd077.html"];
+    dir_95b91f464448224d9a924a82747bd077 [shape=plaintext label="rtype"];
+  dir_edce41f71f52e91e22a6b39fc6c9a0f5 [shape=box label="audio" fillcolor="white" style="filled" URL="dir_edce41f71f52e91e22a6b39fc6c9a0f5.html"];
+  }
+  }
+  dir_6f77a39b07c019ccd7492ea87272f732 [shape=box label="core" fillcolor="white" style="filled" color="red" URL="dir_6f77a39b07c019ccd7492ea87272f732.html"];
+  dir_edce41f71f52e91e22a6b39fc6c9a0f5->dir_6f77a39b07c019ccd7492ea87272f732 [headlabel="1", labeldistance=1.5 headhref="dir_000025_000027.html"];
+}

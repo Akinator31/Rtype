@@ -1,0 +1,8 @@
+digraph "Graphical Class Hierarchy"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node0 [label="rtype::engine::Interface\lBuilder",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classrtype_1_1engine_1_1InterfaceBuilder.html",tooltip="Puts elements of the interface anywhere on the screen, in a scene already open: a HUD,..."];
+}

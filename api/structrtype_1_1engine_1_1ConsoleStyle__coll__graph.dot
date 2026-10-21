@@ -1,0 +1,9 @@
+digraph "rtype::engine::ConsoleStyle"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="rtype::engine::ConsoleStyle",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="Look of the console: a dark band over the game, its lines, and the command line where commands are ty..."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" background\nedge\nfield\nprompt\ntext" ,fontname="Helvetica"];
+  Node2 [label="rtype::render::Color",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1render_1_1Color.html",tooltip="A colour, with an alpha channel for transparency (0 is invisible, 255 is opaque)."];
+}

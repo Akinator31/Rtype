@@ -1,0 +1,4396 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Networked R-Type clone built on our own C++ game engine">
+      
+      
+      
+        <link rel="canonical" href="https://akinator31.github.io/Rtype/architecture/networking/">
+      
+      
+        <link rel="prev" href="../logging/">
+      
+      
+        <link rel="next" href="../server/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="zensical-0.0.67">
+    
+    
+      
+        <title>Networking - R-Type</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.4ae390e2.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.96d1a7e4.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#networking" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="R-Type" class="md-header__button md-logo" aria-label="R-Type" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-rocket" viewBox="0 0 24 24"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"/><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            R-Type
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Networking
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715M16 12a4 4 0 0 0-4-4M19 5l-1.256 1.256M20 12h2"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="deep-orange"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/Akinator31/Rtype" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Akinator31/Rtype
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/" class="md-tabs__link">
+          
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../protocol/" class="md-tabs__link">
+          
+  
+  Network protocol
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../decisions/" class="md-tabs__link">
+          
+  
+  Technical decisions
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../accessibility/" class="md-tabs__link">
+        
+  
+  Accessibility
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../contributing/" class="md-tabs__link">
+          
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../reference/" class="md-tabs__link">
+        
+  
+  API reference
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="R-Type" class="md-nav__button md-logo" aria-label="R-Type" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-rocket" viewBox="0 0 24 24"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"/><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"/></svg>
+
+    </a>
+    R-Type
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Akinator31/Rtype" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Akinator31/Rtype
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_2">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Getting started
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Building the project
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Architecture
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_3">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Architecture
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  ECS
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../networking-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Networking concepts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Rendering
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Input
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Networking
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Networking
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The event loop
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The event loop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#timers-and-stop-signals" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Timers and stop signals
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#addresses" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Addresses
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#udp" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        UDP
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tcp" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        TCP
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tcp-framing" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        TCP framing
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tls" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        TLS
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TLS">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Keys
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connecting" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Connecting
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Threads
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#encrypted-datagrams" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Encrypted datagrams
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reliability-over-udp" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Reliability over UDP
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reliability over UDP">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        How it works
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using it
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#game-sessions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Game sessions
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Game sessions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-a-session-ends" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        How a session ends
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-the-game-protects-itself-against" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        What the game protects itself against
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#binary-serialization" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Binary serialization
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Binary serialization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reading-safely" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Reading safely
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Logs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Tests
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limits-and-next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Limits and next steps
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Server
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Game
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client-game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  A game in the client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client-online/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  The client online
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Audio
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scenes-and-interface/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Scenes and interface
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../guides/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guides
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_4">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Guides
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/write-a-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to write a system
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/draw-a-sprite/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to draw a sprite
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/add-a-menu/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to add a menu
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/add-a-player-action/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to add a player action
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/add-a-network-message/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to add a network message
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/generate-the-server-keys/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to generate the server keys
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/run-a-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  How to run a server
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/play-online/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Play online
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../protocol/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Network protocol
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Network protocol
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/lobby/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Lobby (TCP)
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Game (UDP)
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../protocol/instances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Master and instances
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../decisions/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Technical decisions
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Technical decisions
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0001-cpm-package-manager/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0001 — CPM.cmake as package manager
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0002-raylib-graphics-library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0002 — raylib for the client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0003-documentation-tooling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0003 — Zensical and Doxygen for the documentation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0004-testing-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0004 — Testing tools
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0005-world-in-ecs-interface-in-ui-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0005 — World in the ECS, interface in a separate layer
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0006-ecs-component-storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0006 — ECS component storage
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0007-client-in-the-ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0007 — The whole client in the ECS, with scenes and a hierarchy
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0008-events-switch-systems/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0008 — Events switch systems on and off
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0009-named-scenes-in-the-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0009 — Named scenes in the engine
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0010-physics-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0010 — A custom kinematic physics engine
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0011-networking-library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0011 — Asio as the networking library
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0012-tcp-lobby-udp-game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0012 — TCP for the lobby, UDP for the game
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0013-one-process-per-game/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0013 — One process per game
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0014-encryption/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0014 — Encryption of the client/server traffic
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0015-one-game-scene-local-or-remote-session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0015 — One game scene, fed by a local or a remote session
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0016-replication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0016 — Replication of the game world
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0017-asset-loading-threads/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0017 — Asset preparation on a background thread
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0018-lua-game-config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0018 — Lua for the configuration of enemies and weapons
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/0019-luabridge3-scripting-library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0019 — LuaBridge3 and a scripting library for Lua behaviors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../accessibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Accessibility
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../contributing/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Contributing
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_8">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Contributing
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Testing policy
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Writing documentation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/releasing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Releasing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/templates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Page templates
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/repository-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Repository setup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  API reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The event loop
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The event loop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#timers-and-stop-signals" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Timers and stop signals
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#addresses" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Addresses
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#udp" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        UDP
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tcp" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        TCP
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tcp-framing" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        TCP framing
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tls" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        TLS
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TLS">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Keys
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connecting" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Connecting
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Threads
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#encrypted-datagrams" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Encrypted datagrams
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reliability-over-udp" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Reliability over UDP
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reliability over UDP">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        How it works
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using it
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#game-sessions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Game sessions
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Game sessions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-a-session-ends" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        How a session ends
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-the-game-protects-itself-against" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        What the game protects itself against
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#binary-serialization" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Binary serialization
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Binary serialization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reading-safely" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Reading safely
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Logs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Tests
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limits-and-next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Limits and next steps
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="../" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/Akinator31/Rtype/edit/main/docs/architecture/networking.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="networking">Networking<a class="headerlink" href="#networking" title="Permanent link">&para;</a></h1>
+<p>The network library (<code>libs/network</code>, namespace <code>rtype::network</code>) opens sockets and moves bytes between the
+client and the server. It is shared by both programs and, like the ECS, does not depend on raylib. It is built
+on <a href="https://think-async.com/Asio/">Asio</a> (<a href="../../decisions/0011-networking-library/">ADR 0011</a>) and encrypts
+with <a href="https://www.trustedfirmware.org/projects/mbed-tls/">Mbed TLS</a>
+(<a href="../../decisions/0014-encryption/">ADR 0014</a>). Neither appears in its headers.</p>
+<p>New to networking? Read <a href="../networking-concepts/">Networking concepts</a> first.</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Address</code></td>
+<td>An IP address and a port, <code>127.0.0.1:4242</code></td>
+</tr>
+<tr>
+<td><code>EventLoop</code></td>
+<td>Waits for the network and calls the handlers of the sockets</td>
+</tr>
+<tr>
+<td><code>UdpSocket</code></td>
+<td>Sends and receives datagrams</td>
+</tr>
+<tr>
+<td><code>TcpListener</code></td>
+<td>Listens on a TCP port and accepts connections</td>
+</tr>
+<tr>
+<td><code>TcpConnection</code></td>
+<td>Sends and receives a stream of bytes</td>
+</tr>
+<tr>
+<td><code>TlsConnection</code></td>
+<td>A TCP connection encrypted with TLS 1.3, on which the client is sure to talk to our server</td>
+</tr>
+<tr>
+<td><code>ServerIdentity</code></td>
+<td>The private key of the server, and the certificate it presents</td>
+</tr>
+<tr>
+<td><code>KeyFingerprint</code></td>
+<td>The SHA-256 of a public key, which the client pins</td>
+</tr>
+<tr>
+<td><code>DatagramKey</code>, <code>sealDatagram()</code>, <code>openDatagram()</code></td>
+<td>Encrypt a game datagram with a player's key, and check and decrypt it</td>
+</tr>
+<tr>
+<td><code>ReplayWindow</code>, <code>PacketCounter</code></td>
+<td>Drop the datagrams received twice, and number the ones sent</td>
+</tr>
+<tr>
+<td><code>MessageChannel</code></td>
+<td>Acknowledgements, resends and ordering of the messages of one session over UDP</td>
+</tr>
+<tr>
+<td><code>DatagramBody</code>, <code>encodeBody()</code>, <code>decodeBody()</code></td>
+<td>The decrypted body of a datagram: acknowledgements and messages</td>
+</tr>
+<tr>
+<td><code>Timer</code>, <code>StopSignals</code></td>
+<td>Call a function after a delay or every interval, and when the program is asked to stop</td>
+</tr>
+<tr>
+<td><code>ClientSession</code>, <code>SessionHost</code></td>
+<td>A client's session with its game, and the game's sessions with its players: connecting, heartbeats, timeouts, disconnecting</td>
+</tr>
+<tr>
+<td><code>FramedConnection</code></td>
+<td>A TCP or TLS connection that sends and receives whole messages (frames)</td>
+</tr>
+<tr>
+<td><code>FrameDecoder</code>, <code>makeFrame()</code></td>
+<td>Split a TCP stream into frames, and build a frame</td>
+</tr>
+<tr>
+<td><code>NetworkError</code>, <code>tlsCategory()</code></td>
+<td>The errors of the library and of TLS, as <code>std::error_code</code></td>
+</tr>
+<tr>
+<td><code>Writer</code>, <code>Reader</code></td>
+<td>Turn the fields of a message into bytes and back, following the protocol</td>
+</tr>
+<tr>
+<td><code>isValidText()</code></td>
+<td>Checks a text before sending it as a <code>str8</code></td>
+</tr>
+</tbody>
+</table>
+<p>The lobby, the game instances and the <a href="../../protocol/">protocol</a> messages are built on top of these
+classes, in the next steps of the "Server &amp; networking" work.</p>
+<h2 id="the-event-loop">The event loop<a class="headerlink" href="#the-event-loop" title="Permanent link">&para;</a></h2>
+<p>Sockets do not block: sending returns at once, and received data is given to a <strong>handler</strong>, a function the
+socket calls when data arrives. The <code>EventLoop</code> is what waits for the network and calls these handlers. Every
+socket belongs to a loop, and its handlers are only called on the thread that runs the loop.</p>
+<p>There are two ways to run a loop:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">A network thread (server)</label><label for="__tabbed_1_2">Once per frame (client)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">EventLoop</span><span class="w"> </span><span class="n">loop</span><span class="p">;</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1">// ... create the sockets ...</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="w"> </span><span class="nf">network</span><span class="p">([</span><span class="o">&amp;</span><span class="n">loop</span><span class="p">]</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">loop</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"> </span><span class="p">});</span><span class="w"> </span><span class="c1">// waits for events until stop()</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">// ... the simulation runs on this thread ...</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">loop</span><span class="p">.</span><span class="n">stop</span><span class="p">();</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">network</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">EventLoop</span><span class="w"> </span><span class="n">loop</span><span class="p">;</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1">// ... create the sockets ...</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">window</span><span class="p">.</span><span class="n">shouldClose</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="n">loop</span><span class="p">.</span><span class="n">poll</span><span class="p">();</span><span class="w"> </span><span class="c1">// handles what is ready, returns at once</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="c1">// ... update and draw ...</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">}</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<pre class="mermaid"><code>flowchart LR
+    Game["Any thread&lt;br/&gt;send(), close(), post()"] -- "queued" --&gt; Loop["EventLoop&lt;br/&gt;run() or poll()"]
+    OS["System sockets"] -- "data, connections" --&gt; Loop
+    Loop -- "calls" --&gt; Handlers["Handlers&lt;br/&gt;(on the loop's thread)"]
+    Loop -- "writes" --&gt; OS</code></pre>
+<p><em>Calls from any thread are queued to the loop; the loop talks to the system and calls the handlers on its own
+thread.</em></p>
+<p><strong>Threads.</strong> Every function of the sockets can be called from any thread: the work is handed to the loop's
+thread, and done in the order of the calls. <code>loop.post(function)</code> does the same for any function, which is how
+another thread hands work to the network thread. The handlers are always called on the loop's thread, so the
+data they touch must be protected if another thread reads it.</p>
+<p><strong>Lifetime.</strong> Sockets must be destroyed before their loop. A socket can be destroyed at any time otherwise,
+including from inside one of its handlers: data that arrives afterwards is ignored.</p>
+<p><strong>Exceptions.</strong> An exception thrown by a handler leaves <code>run()</code> or <code>poll()</code>, which can be called again.</p>
+<h3 id="timers-and-stop-signals">Timers and stop signals<a class="headerlink" href="#timers-and-stop-signals" title="Permanent link">&para;</a></h3>
+<p>Two helpers call a function on the loop's thread, like the handlers of the sockets:</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Timer</span><span class="w"> </span><span class="nf">tick</span><span class="p">(</span><span class="n">loop</span><span class="p">);</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">tick</span><span class="p">.</span><span class="n">startRepeating</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">milliseconds</span><span class="p">(</span><span class="mi">16</span><span class="p">),</span><span class="w"> </span><span class="p">[</span><span class="o">&amp;</span><span class="p">]</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">host</span><span class="p">.</span><span class="n">update</span><span class="p">(</span><span class="n">Clock</span><span class="o">::</span><span class="n">now</span><span class="p">());</span><span class="w"> </span><span class="p">});</span><span class="w"> </span><span class="c1">// every tick</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Timer</span><span class="w"> </span><span class="nf">timeout</span><span class="p">(</span><span class="n">loop</span><span class="p">);</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">timeout</span><span class="p">.</span><span class="n">start</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">seconds</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span><span class="w"> </span><span class="p">[</span><span class="o">&amp;</span><span class="p">]</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">connection</span><span class="p">.</span><span class="n">close</span><span class="p">();</span><span class="w"> </span><span class="p">});</span><span class="w"> </span><span class="c1">// once</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">timeout</span><span class="p">.</span><span class="n">cancel</span><span class="p">();</span><span class="w">                                                     </span><span class="c1">// or not at all</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">StopSignals</span><span class="w"> </span><span class="nf">signals</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">*</span><span class="n">signal</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* Ctrl+C, SIGTERM... */</span><span class="w"> </span><span class="p">});</span>
+</span></code></pre></div>
+<ul>
+<li>A <code>Timer</code> started again forgets what it was doing; cancelled or destroyed on the loop's thread, it never calls
+  its handler, even if it was already due. A repeating timer that falls behind skips the calls it missed rather
+  than making them in a burst.</li>
+<li><code>StopSignals</code> catches Ctrl+C (<code>SIGINT</code>), <code>SIGTERM</code>, and on Windows <code>SIGBREAK</code>, while it exists: the program no
+  longer ends at once, the handler decides. The <a href="../server/#stopping">server</a> uses it to stop properly.</li>
+</ul>
+<h2 id="addresses">Addresses<a class="headerlink" href="#addresses" title="Permanent link">&para;</a></h2>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">using</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Address</span><span class="p">;</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">Address</span><span class="o">::</span><span class="n">anyIpv4</span><span class="p">(</span><span class="mi">4242</span><span class="p">);</span><span class="w">                   </span><span class="c1">// 0.0.0.0:4242, every interface: for a server</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">Address</span><span class="o">::</span><span class="n">loopbackIpv4</span><span class="p">(</span><span class="mi">4242</span><span class="p">);</span><span class="w">              </span><span class="c1">// 127.0.0.1:4242, this machine only</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">Address</span><span class="o">::</span><span class="n">parse</span><span class="p">(</span><span class="s">"192.168.1.10"</span><span class="p">,</span><span class="w"> </span><span class="mi">4242</span><span class="p">);</span><span class="w">     </span><span class="c1">// std::optional&lt;Address&gt;: nothing if not an IP address</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">resolve</span><span class="p">(</span><span class="s">"localhost"</span><span class="p">,</span><span class="w"> </span><span class="mi">4242</span><span class="p">);</span><span class="w"> </span><span class="c1">// std::vector&lt;Address&gt;, IPv4 first; looks up host names</span>
+</span></code></pre></div>
+<ul>
+<li><code>parse()</code> only reads IP addresses. <code>resolve()</code> also looks up host names, and <strong>blocks</strong> until the answer
+  arrives, which can take seconds: call it at startup or from a thread that can wait, never in the game loop.
+  It throws <code>std::system_error</code> if the name does not exist.</li>
+<li>Port 0 means "any free port": a socket bound to it gets one from the system, given by <code>localAddress()</code>.</li>
+<li>An address can be logged directly, <code>logger.info("Client connected from {}", address)</code>, and used as a key of
+  an <code>std::unordered_map</code>.</li>
+</ul>
+<h2 id="udp">UDP<a class="headerlink" href="#udp" title="Permanent link">&para;</a></h2>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">UdpSocket</span><span class="w"> </span><span class="nf">socket</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span><span class="w"> </span><span class="n">Address</span><span class="o">::</span><span class="n">anyIpv4</span><span class="p">(</span><span class="mi">4243</span><span class="p">));</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">socket</span><span class="p">.</span><span class="n">startReceiving</span><span class="p">([</span><span class="o">&amp;</span><span class="p">](</span><span class="k">const</span><span class="w"> </span><span class="n">Address</span><span class="w"> </span><span class="o">&amp;</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">span</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">byte</span><span class="o">&gt;</span><span class="w"> </span><span class="n">datagram</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="n">socket</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">datagram</span><span class="p">);</span><span class="w"> </span><span class="c1">// echo</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">});</span>
+</span></code></pre></div>
+<ul>
+<li>The constructor binds the socket, and throws <code>std::system_error</code> if it cannot, for instance if the port is
+  already in use.</li>
+<li><code>send()</code> copies the data: the buffer can be reused at once. A datagram the system cannot send (full buffer,
+  unreachable network) is dropped and logged, like a datagram lost on the way: UDP never guarantees delivery.</li>
+<li>The data given to the handler is only valid during the call: copy it to keep it.</li>
+<li>Errors while receiving are logged, and the socket keeps receiving. On Windows, a datagram sent to a closed
+  port makes the next receive fail: this does not stop the socket.</li>
+</ul>
+<h2 id="tcp">TCP<a class="headerlink" href="#tcp" title="Permanent link">&para;</a></h2>
+<p>A TCP connection is a <strong>stream</strong>: the bytes arrive complete and in order, but not in the pieces they were sent
+in. Two <code>send()</code> calls may arrive in one handler call, and one <code>send()</code> in several. The layer above splits the
+stream into messages (<a href="../../protocol/lobby/#3-framing">protocol framing</a>).</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Server</label><label for="__tabbed_2_2">Client</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TcpListener</span><span class="w"> </span><span class="nf">listener</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span><span class="w"> </span><span class="n">Address</span><span class="o">::</span><span class="n">anyIpv4</span><span class="p">(</span><span class="mi">4242</span><span class="p">));</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TcpConnection</span><span class="o">&gt;</span><span class="w"> </span><span class="n">clients</span><span class="p">;</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">listener</span><span class="p">.</span><span class="n">startAccepting</span><span class="p">([</span><span class="o">&amp;</span><span class="p">](</span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TcpConnection</span><span class="w"> </span><span class="n">connection</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="n">connection</span><span class="p">.</span><span class="n">start</span><span class="p">(</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">        </span><span class="p">[](</span><span class="n">std</span><span class="o">::</span><span class="n">span</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">byte</span><span class="o">&gt;</span><span class="w"> </span><span class="n">bytes</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* bytes received */</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">        </span><span class="p">[](</span><span class="n">std</span><span class="o">::</span><span class="n">error_code</span><span class="w"> </span><span class="n">reason</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* closed by the client, or lost */</span><span class="w"> </span><span class="p">});</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="n">clients</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">connection</span><span class="p">));</span><span class="w"> </span><span class="c1">// keep it, or it is closed</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="p">});</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">using</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TcpConnection</span><span class="p">;</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">TcpConnection</span><span class="o">&gt;</span><span class="w"> </span><span class="n">server</span><span class="p">;</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">TcpConnection</span><span class="o">::</span><span class="n">connect</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span><span class="w"> </span><span class="n">address</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="n">std</span><span class="o">::</span><span class="n">error_code</span><span class="w"> </span><span class="n">error</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">TcpConnection</span><span class="o">&gt;</span><span class="w"> </span><span class="n">connection</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">        </span><span class="n">logger</span><span class="p">.</span><span class="n">error</span><span class="p">(</span><span class="s">"Cannot reach the server: {}"</span><span class="p">,</span><span class="w"> </span><span class="n">error</span><span class="p">.</span><span class="n">message</span><span class="p">());</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">        </span><span class="k">return</span><span class="p">;</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">    </span><span class="n">connection</span><span class="o">-&gt;</span><span class="n">start</span><span class="p">(</span><span class="n">onReceive</span><span class="p">,</span><span class="w"> </span><span class="n">onClose</span><span class="p">);</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">    </span><span class="n">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">connection</span><span class="p">);</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="p">});</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>connect()</code> cannot reach the server</td>
+<td>The handler receives the error: refused, unreachable, or <code>std::errc::timed_out</code> after the timeout (10 s by default)</td>
+</tr>
+<tr>
+<td>The peer closes the connection</td>
+<td>The close handler is called once, with no error</td>
+</tr>
+<tr>
+<td>The connection fails (reset, network down)</td>
+<td>The close handler is called once, with the error</td>
+</tr>
+<tr>
+<td><code>close()</code> is called, or the connection is destroyed</td>
+<td>The bytes already given to <code>send()</code> are sent, then the connection closes. <strong>The handlers are not called</strong>: the code that closed it already knows</td>
+</tr>
+<tr>
+<td>A listener is closed or destroyed</td>
+<td>No new connection is accepted. Connections already accepted stay open</td>
+</tr>
+</tbody>
+</table>
+<p>Connections disable Nagle's algorithm, which would delay small messages to group them: lobby messages are sent
+at once.</p>
+<p>A listener lets a restarted server listen again at once on its port on Linux. It does not on Windows, where
+the same option would let another program take a port in use.</p>
+<h2 id="tcp-framing">TCP framing<a class="headerlink" href="#tcp-framing" title="Permanent link">&para;</a></h2>
+<p>A TCP stream has no boundaries, so each message is sent as a <strong>frame</strong>: its size on two bytes, its type on one
+byte, then its payload (<a href="../../protocol/lobby/#3-framing">lobby, section 3</a>). <code>FramedConnection</code> does it on top
+of a <code>TcpConnection</code>: the code above it only sees whole messages.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>size (u16) | type (u8) | payload (size − 1 bytes)
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>00 09        01          00 01 05 50 61 76 65 6C      HELLO, version 1, "Pavel"
+</span></code></pre></div>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">FramedConnection</span><span class="w"> </span><span class="nf">client</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">connection</span><span class="p">));</span><span class="w"> </span><span class="c1">// a TcpConnection, not started yet</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">client</span><span class="p">.</span><span class="n">start</span><span class="p">(</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="p">[](</span><span class="n">std</span><span class="o">::</span><span class="kt">uint8_t</span><span class="w"> </span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">span</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">byte</span><span class="o">&gt;</span><span class="w"> </span><span class="n">payload</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">        </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Reader</span><span class="w"> </span><span class="nf">reader</span><span class="p">(</span><span class="n">payload</span><span class="p">);</span><span class="w"> </span><span class="c1">// one whole message: decode it according to its type</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="p">},</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">    </span><span class="p">[](</span><span class="n">std</span><span class="o">::</span><span class="n">error_code</span><span class="w"> </span><span class="n">reason</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">reason</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">NetworkError</span><span class="o">::</span><span class="n">FrameTooLarge</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* the peer broke the protocol */</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="p">});</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Writer</span><span class="w"> </span><span class="n">hello</span><span class="p">;</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="n">hello</span><span class="p">.</span><span class="n">writeU16</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="n">hello</span><span class="p">.</span><span class="n">writeString</span><span class="p">(</span><span class="s">"Pavel"</span><span class="p">);</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="n">client</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="mh">0x01</span><span class="p">,</span><span class="w"> </span><span class="n">hello</span><span class="p">.</span><span class="n">bytes</span><span class="p">());</span><span class="w"> </span><span class="c1">// type, then payload: the size is added</span>
+</span></code></pre></div>
+<ul>
+<li><strong>Whole and in order.</strong> Each call to the frame handler is one frame, as it was sent, whatever the pieces TCP
+  delivered.</li>
+<li><strong>Invalid frames close the connection.</strong> A size of 0, or above 16382, is refused as soon as its two bytes
+  arrive, without waiting for the rest. The connection is closed, the close handler receives
+  <code>NetworkError::EmptyFrame</code> or <code>NetworkError::FrameTooLarge</code>, and a warning is logged. The frames received
+  before it are still handled.</li>
+<li><strong>Bounded memory.</strong> The connection keeps at most the frame being received: a peer announcing a frame of
+  16 KiB and sending it slowly holds 16 KiB, never more.</li>
+<li><strong>Payloads above <code>MaxFramePayloadSize</code></strong> (16381 bytes) cannot be sent: <code>send()</code> throws <code>std::length_error</code>.</li>
+<li><strong><code>close()</code></strong> sends the frames already given to <code>send()</code>, then closes. It also stops the frames already
+  received from being handled: after <code>close()</code>, even from inside the frame handler, no handler is called.</li>
+</ul>
+<p>The splitting itself is done by <code>FrameDecoder</code>, which works on bytes only, without a socket, so that it can be
+tested and fuzzed alone:</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">FrameDecoder</span><span class="w"> </span><span class="n">decoder</span><span class="p">;</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">decoder</span><span class="p">.</span><span class="n">feed</span><span class="p">(</span><span class="n">bytes</span><span class="p">);</span><span class="w">                       </span><span class="c1">// bytes received, in any pieces</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">frame</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">decoder</span><span class="p">.</span><span class="n">next</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="c1">// each complete frame</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="n">handle</span><span class="p">(</span><span class="n">frame</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="n">frame</span><span class="o">-&gt;</span><span class="n">payload</span><span class="p">);</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="p">}</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">decoder</span><span class="p">.</span><span class="n">failed</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* decoder.error(): EmptyFrame or FrameTooLarge */</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<h2 id="tls">TLS<a class="headerlink" href="#tls" title="Permanent link">&para;</a></h2>
+<p>The lobby connection is encrypted with <strong>TLS 1.3</strong> (<a href="../../protocol/lobby/#2-tls">lobby, section 2</a>): nobody on
+the path can read or change the bytes, and the client is sure to talk to our server, not to someone in the
+middle. <code>TlsConnection</code> adds it on top of a <code>TcpConnection</code>, and works the same way: <code>start()</code>, <code>send()</code>,
+<code>close()</code>, a receive handler and a close handler.</p>
+<h3 id="keys">Keys<a class="headerlink" href="#keys" title="Permanent link">&para;</a></h3>
+<p>The server has a key pair (ECDSA P-256). It keeps the <strong>private key</strong> secret, in a file given to it, and the
+clients know its <strong>public key</strong>. They do not compare the whole key, only its <strong>fingerprint</strong>: the SHA-256 of
+the key, 64 hexadecimal digits, like SSH's <code>known_hosts</code>
+(<a href="../../decisions/0014-encryption/#tcp-tls-13-server-key-pinned">ADR 0014</a>). The key pair is made with
+<code>r-type_keygen</code>: see <a href="../../guides/generate-the-server-keys/">Generate the server keys</a>.</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1">// Server: its private key, the --key option</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">identity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">ServerIdentity</span><span class="o">::</span><span class="n">load</span><span class="p">(</span><span class="s">"server.key"</span><span class="p">);</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">logger</span><span class="p">.</span><span class="n">info</span><span class="p">(</span><span class="s">"Server key {}"</span><span class="p">,</span><span class="w"> </span><span class="n">identity</span><span class="p">.</span><span class="n">fingerprint</span><span class="p">().</span><span class="n">toHex</span><span class="p">());</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="c1">// Client: the fingerprint of the server's public key, shipped next to the executable...</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">pinned</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">KeyFingerprint</span><span class="o">::</span><span class="n">loadPublicKey</span><span class="p">(</span><span class="s">"server.pub"</span><span class="p">);</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1">// ... or written in a configuration, as 64 hexadecimal digits</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">KeyFingerprint</span><span class="o">&gt;</span><span class="w"> </span><span class="n">fromText</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">KeyFingerprint</span><span class="o">::</span><span class="n">parse</span><span class="p">(</span><span class="n">text</span><span class="p">);</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Gives</th>
+<th>Throws</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ServerIdentity::load(path)</code>, <code>fromPrivateKey(pem)</code></td>
+<td>The identity of the server, from an ECDSA P-256 private key in PEM</td>
+<td><code>std::system_error</code> (file), <code>std::invalid_argument</code> (not such a key)</td>
+</tr>
+<tr>
+<td><code>ServerIdentity::generate()</code></td>
+<td>A new key pair, for the tests and the key generation tool</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>identity.privateKeyPem()</code>, <code>publicKeyPem()</code>, <code>fingerprint()</code></td>
+<td>The keys in PEM, to write them to files, and the fingerprint</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>KeyFingerprint::loadPublicKey(path)</code>, <code>ofPublicKey(pem)</code></td>
+<td>The fingerprint of a public key in PEM</td>
+<td><code>std::system_error</code> (file), <code>std::invalid_argument</code> (not a key)</td>
+</tr>
+<tr>
+<td><code>KeyFingerprint::parse(hex)</code>, <code>toHex()</code></td>
+<td>The fingerprint from and to 64 hexadecimal digits</td>
+<td>— (<code>parse</code> returns <code>std::nullopt</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The fingerprint is the one OpenSSL computes, so it can be checked by hand:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>openssl<span class="w"> </span>pkey<span class="w"> </span>-pubin<span class="w"> </span>-in<span class="w"> </span>server.pub<span class="w"> </span>-outform<span class="w"> </span>DER<span class="w"> </span><span class="p">|</span><span class="w"> </span>sha256sum
+</span></code></pre></div>
+<p>The certificate a TLS server must present is made from the private key when the identity is created: it is
+self-signed, and the client only looks at the key it holds. No certificate authority, domain name or expiry
+date is involved.</p>
+<h3 id="connecting">Connecting<a class="headerlink" href="#connecting" title="Permanent link">&para;</a></h3>
+<p>Each side wraps its TCP connection, not started yet, then starts it:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Client</label><label for="__tabbed_3_2">Server</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TcpConnection</span><span class="o">::</span><span class="n">connect</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span><span class="w"> </span><span class="n">server</span><span class="p">,</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">    </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="n">std</span><span class="o">::</span><span class="n">error_code</span><span class="w"> </span><span class="n">error</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TcpConnection</span><span class="o">&gt;</span><span class="w"> </span><span class="n">connection</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* server unreachable */</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">        </span><span class="n">lobby</span><span class="p">.</span><span class="n">emplace</span><span class="p">(</span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">FramedConnection</span><span class="p">(</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">            </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TlsConnection</span><span class="o">::</span><span class="n">client</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="o">*</span><span class="n">connection</span><span class="p">),</span><span class="w"> </span><span class="n">pinned</span><span class="p">)));</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">        </span><span class="n">lobby</span><span class="o">-&gt;</span><span class="n">start</span><span class="p">(</span><span class="n">onFrame</span><span class="p">,</span><span class="w"> </span><span class="n">onClose</span><span class="p">);</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">        </span><span class="n">lobby</span><span class="o">-&gt;</span><span class="n">send</span><span class="p">(</span><span class="mh">0x01</span><span class="p">,</span><span class="w"> </span><span class="n">hello</span><span class="p">.</span><span class="n">bytes</span><span class="p">());</span><span class="w"> </span><span class="c1">// waits for the end of the handshake</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">    </span><span class="p">});</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">listener</span><span class="p">.</span><span class="n">startAccepting</span><span class="p">([</span><span class="o">&amp;</span><span class="p">](</span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TcpConnection</span><span class="w"> </span><span class="n">connection</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">    </span><span class="k">auto</span><span class="w"> </span><span class="n">client</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">make_unique</span><span class="o">&lt;</span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">FramedConnection</span><span class="o">&gt;</span><span class="p">(</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">        </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">TlsConnection</span><span class="o">::</span><span class="n">server</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">connection</span><span class="p">),</span><span class="w"> </span><span class="n">identity</span><span class="p">));</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="n">client</span><span class="o">-&gt;</span><span class="n">start</span><span class="p">(</span><span class="n">onFrame</span><span class="p">,</span><span class="w"> </span><span class="n">onClose</span><span class="p">);</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="n">clients</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">client</span><span class="p">));</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="p">});</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p><code>FramedConnection</code> takes a <code>TlsConnection</code> as well as a <code>TcpConnection</code>: the frames are then encrypted, and the
+code above does not change.</p>
+<ul>
+<li><strong>The handshake starts with <code>start()</code>.</strong> Both sides agree on keys, and the server proves it holds the private
+  key of its certificate. It takes one round trip, a few milliseconds on a local network.</li>
+<li><strong>Bytes sent before its end wait for it</strong>, then leave encrypted. The client can send <code>HELLO</code> at once.</li>
+<li><strong>Its end can be known</strong>: <code>start()</code> takes a third handler, optional, called once when the handshake has
+  ended, before the first bytes received. The lobby uses it to time the handshake and <code>HELLO</code> apart
+  (<code>start(onFrame, onClose, onSecured)</code> on a <code>FramedConnection</code> over TLS; never called over plain TCP).</li>
+<li><strong>The client checks the key.</strong> If the server presents another key, the handshake fails, an error is logged
+  with the fingerprint presented, and the close handler receives <code>NetworkError::UntrustedServer</code>. Nothing the
+  client sent is ever delivered to that server.</li>
+<li><strong>TLS 1.3 only</strong>, with the algorithms of the specification: <code>TLS_CHACHA20_POLY1305_SHA256</code> (preferred) or
+  <code>TLS_AES_128_GCM_SHA256</code>, key exchange with <code>x25519</code> or <code>secp256r1</code>, signatures with
+  <code>ecdsa_secp256r1_sha256</code>. A peer offering only TLS 1.2 is refused. No session ticket, no resumption.</li>
+<li><strong>Everything received is authenticated.</strong> A changed byte, a record from someone else, or a peer that does
+  not speak TLS ends the connection with an error of <code>tlsCategory()</code>, whose <code>message()</code> comes from Mbed TLS.</li>
+<li><strong><code>close()</code></strong> sends the bytes already given to <code>send()</code>, tells the peer that the connection ends (a TLS
+  <code>close_notify</code>), then closes. Called during the handshake, it waits for its end if bytes are waiting to be
+  sent. The peer's close handler is called without error.</li>
+</ul>
+<p>The close handler of a TLS connection, or of a framed connection over TLS, can receive:</p>
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No error</td>
+<td>The peer closed the connection</td>
+</tr>
+<tr>
+<td><code>NetworkError::UntrustedServer</code></td>
+<td>Client: the server does not have the pinned key. Tell the player the server is not the expected one.</td>
+</tr>
+<tr>
+<td><code>NetworkError::HandshakeInterrupted</code></td>
+<td>The TCP connection ended during the handshake: closed, or reset, by the peer</td>
+</tr>
+<tr>
+<td><code>reason.category() == tlsCategory()</code></td>
+<td>The TLS layer refused something: wrong version, invalid record, alert from the peer…</td>
+</tr>
+<tr>
+<td><code>NetworkError::EmptyFrame</code>, <code>FrameTooLarge</code></td>
+<td>Framed connections: the peer sent an invalid frame</td>
+</tr>
+<tr>
+<td>A system error</td>
+<td>The connection was lost</td>
+</tr>
+</tbody>
+</table>
+<h3 id="threads">Threads<a class="headerlink" href="#threads" title="Permanent link">&para;</a></h3>
+<p>Mbed TLS is built without its own locks. Every call into it, from any connection or identity, holds one lock of
+the library, so identities can be loaded and connections used from any thread. A handshake holds it for about a
+millisecond: negligible at the scale of a lobby, and a reason to enable the locks of Mbed TLS
+(<code>MBEDTLS_THREADING_C</code>) if measurements ever show waiting.</p>
+<h2 id="encrypted-datagrams">Encrypted datagrams<a class="headerlink" href="#encrypted-datagrams" title="Permanent link">&para;</a></h2>
+<p>Every datagram of a game is encrypted and authenticated (<a href="../../protocol/game/#2-datagram-layout">game protocol</a>,
+<a href="../../decisions/0014-encryption/">ADR 0014</a>). UDP has no connection and no handshake, so TLS cannot be used:
+the master draws two keys per player, sends them to the client over TLS (<code>GAME_JOINED</code>) and to the game, and
+each side encrypts what it sends with its own key.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a> 0      2   3   4             8                       16                      16 + n         32 + n
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a> ┌──────┬───┬───┬─────────────┬───────────────────────┬───────────────────────┬──────────────┐
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a> │ "RT" │ 1 │ 0 │ session id  │ packet number         │ body, encrypted       │ tag          │
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a> └──────┴───┴───┴─────────────┴───────────────────────┴───────────────────────┴──────────────┘
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>  header: in clear, but covered by the tag              ChaCha20                 Poly1305
+</span></code></pre></div>
+<ul>
+<li>The <strong>header</strong> stays in clear, so that the receiver knows the session, hence the key, before decrypting.
+  The tag covers it as well: changing the session id or the packet number makes the datagram invalid.</li>
+<li>The <strong>body</strong> is encrypted with <strong>ChaCha20-Poly1305</strong> (RFC 8439). The nonce, a number that must never be
+  used twice with the same key, is the packet number: that is why <code>PacketCounter</code> never gives a number twice,
+  and stops instead of going back to 0.</li>
+<li>The <strong>tag</strong> (16 bytes) proves that the datagram was made with the key and not changed on the way. Without
+  the key, nobody can make a datagram that opens, nor change a byte of one, which also proves who sent it:
+  only the player who received the key over TLS.</li>
+</ul>
+<p>These functions only take bytes and give bytes, with no socket, like the frame decoder: the sessions of the
+next steps call them.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Sending</label><label for="__tabbed_4_2">Receiving</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1">// Once per session: the key of this side, and its packet numbers</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">DatagramKey</span><span class="w"> </span><span class="nf">ownKey</span><span class="p">(</span><span class="n">keyBytes</span><span class="p">);</span><span class="w">   </span><span class="c1">// 32 bytes from GAME_JOINED</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">PacketCounter</span><span class="w"> </span><span class="n">packets</span><span class="p">;</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="c1">// For every datagram</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kt">uint64_t</span><span class="o">&gt;</span><span class="w"> </span><span class="n">number</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">packets</span><span class="p">.</span><span class="n">next</span><span class="p">();</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">number</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">    </span><span class="c1">// Every packet number was used (2^64 - 1 datagrams): the session must close</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="p">}</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="n">socket</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">peer</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">sealDatagram</span><span class="p">(</span><span class="n">ownKey</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="n">sessionId</span><span class="p">,</span><span class="w"> </span><span class="o">*</span><span class="n">number</span><span class="p">},</span><span class="w"> </span><span class="n">body</span><span class="p">));</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1">// Once per session: the key of the peer, and the numbers already received</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">DatagramKey</span><span class="w"> </span><span class="nf">peerKey</span><span class="p">(</span><span class="n">peerKeyBytes</span><span class="p">);</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">ReplayWindow</span><span class="w"> </span><span class="n">window</span><span class="p">;</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="c1">// For every datagram, in this order, dropping it silently at the first failure</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">header</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">parseDatagramHeader</span><span class="p">(</span><span class="n">datagram</span><span class="p">);</span><span class="w"> </span><span class="c1">// size, magic, version...</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">header</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">header</span><span class="o">-&gt;</span><span class="n">session</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">sessionId</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">    </span><span class="k">return</span><span class="p">;</span>
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="p">}</span>
+</span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">window</span><span class="p">.</span><span class="n">accepts</span><span class="p">(</span><span class="n">header</span><span class="o">-&gt;</span><span class="n">packetNumber</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="w">    </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="c1">// received already: duplicated by the network, or replayed by an attacker</span>
+</span><span id="__span-16-12"><a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="p">}</span>
+</span><span id="__span-16-13"><a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">openDatagram</span><span class="p">(</span><span class="n">peerKey</span><span class="p">,</span><span class="w"> </span><span class="n">datagram</span><span class="p">);</span>
+</span><span id="__span-16-14"><a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">body</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-16-15"><a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a><span class="w">    </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="c1">// forged, or changed on the way</span>
+</span><span id="__span-16-16"><a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a><span class="p">}</span>
+</span><span id="__span-16-17"><a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a><span class="n">window</span><span class="p">.</span><span class="n">mark</span><span class="p">(</span><span class="n">header</span><span class="o">-&gt;</span><span class="n">packetNumber</span><span class="p">);</span><span class="w"> </span><span class="c1">// only now: a forged datagram must not move the window</span>
+</span><span id="__span-16-18"><a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a><span class="n">handle</span><span class="p">(</span><span class="o">*</span><span class="n">body</span><span class="p">);</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Gives</th>
+<th>Refuses</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DatagramKey(bytes)</code>, <code>DatagramKey::generate()</code>, <code>key.bytes()</code></td>
+<td>A key from its 32 bytes or drawn at random, and its bytes to send them over TLS</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>parseDatagramHeader(datagram)</code></td>
+<td>The session and the packet number, not authenticated yet</td>
+<td>Size outside 32–1200 bytes, wrong magic, version or reserved byte, session or number 0 (<code>std::nullopt</code>)</td>
+</tr>
+<tr>
+<td><code>sealDatagram(key, header, body)</code></td>
+<td>The datagram, <code>body.size() + 32</code> bytes</td>
+<td>A body above 1168 bytes (<code>std::length_error</code>), a session or number 0 (<code>std::invalid_argument</code>)</td>
+</tr>
+<tr>
+<td><code>openDatagram(key, datagram)</code></td>
+<td>The body</td>
+<td>An invalid header, another key, any byte changed (<code>std::nullopt</code>)</td>
+</tr>
+<tr>
+<td><code>window.accepts(n)</code>, <code>window.mark(n)</code></td>
+<td>Whether <code>n</code> may be new, and remembering it</td>
+<td>0, a number received already, more than 256 below the highest one</td>
+</tr>
+<tr>
+<td><code>packets.next()</code></td>
+<td>1, 2, 3…</td>
+<td>After <code>2^64 - 1</code> (<code>std::nullopt</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why a replay window.</strong> An attacker can record a valid datagram and send it again later: it still opens,
+since it was made with the key. The window remembers the numbers received, and drops the second copy. It only
+keeps the last 256: a datagram later than that is useless in a game anyway, and the window stays 40 bytes.</p>
+<p><strong>Keys are secret.</strong> A <code>DatagramKey</code> is never logged, its bytes are erased from memory when its last copy is
+destroyed, and copying it shares the same key. Like TLS, sealing and opening hold the lock of Mbed TLS
+(<a href="#threads">Threads</a>), so keys can be used from any thread.</p>
+<h2 id="reliability-over-udp">Reliability over UDP<a class="headerlink" href="#reliability-over-udp" title="Permanent link">&para;</a></h2>
+<p>UDP loses, duplicates and reorders datagrams. Most game messages do not mind: a snapshot lost is replaced by
+the next one. Some must arrive, though: an entity destroyed, the end of the game. The <code>MessageChannel</code> gives
+each message the choice (<a href="../../protocol/game/#6-reliability">game protocol</a>):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>Delivery::Unreliable</code></th>
+<th><code>Delivery::Reliable</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sent</td>
+<td>Once</td>
+<td>Again and again, until the peer acknowledges it</td>
+</tr>
+<tr>
+<td>Arrives</td>
+<td>Maybe, in any order</td>
+<td>Exactly once, in the order it was sent</td>
+</tr>
+<tr>
+<td>For</td>
+<td>What the next message replaces: snapshots, inputs</td>
+<td>What must not be missed: destructions, waves, the end of the game</td>
+</tr>
+</tbody>
+</table>
+<h3 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h3>
+<p><strong>Acknowledgements.</strong> Every datagram says which packets were received from the peer: the highest number
+(<code>Ack</code>) and 32 bits for the 32 before it (<code>Ack bits</code>), taken straight from the <code>ReplayWindow</code>. A datagram
+lost now is acknowledged, or not, by any of the next 33: one ack lost costs nothing.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>Packets received by B:  … 37 38 __ 40 41          (39 was lost)
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>B tells A:               Ack = 41, Ack bits: bit 0 = 1 (40 ✓), bit 1 = 0 (39 ✗), bit 2 = 1 (38 ✓), bit 3 = 1 (37 ✓)
+</span></code></pre></div>
+<p><strong>Resending.</strong> The sender remembers which packet carried each reliable message. When one of them is
+acknowledged, the message is forgotten; when none is after the <strong>resend delay</strong>, <code>max(1.5 × RTT, 100 ms)</code>, the
+message goes again in the next datagram, which has a new packet number. A message may be sent several times;
+the receiver keeps the first copy only.</p>
+<p><strong>Ordering.</strong> Each reliable message has an id, 0, 1, 2… (wrapping from 65535 to 0). The receiver delivers id
+<code>E</code>, then <code>E + 1</code>, and so on: a message that arrives early waits until those before it are there, at most 256
+ahead. An id already delivered is ignored.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>Received:     2   0   3   1
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>Delivered:    –   0   –   1 2 3
+</span></code></pre></div>
+<p><strong>Round-trip time.</strong> When a packet is acknowledged, the time since it was sent is a sample of the RTT, smoothed
+as <code>0.9 × rtt + 0.1 × sample</code>. It sets the resend delay, and it is the ping shown to the player. Until the first
+sample, it is assumed to be 100 ms.</p>
+<p><strong>Failing.</strong> If the peer stops acknowledging, the reliable messages pile up: at 256 waiting, the channel
+<strong>fails</strong> and the session must close. Likewise once every packet number was used.</p>
+<h3 id="using-it">Using it<a class="headerlink" href="#using-it" title="Permanent link">&para;</a></h3>
+<p>The channel only builds and reads the <strong>bodies</strong> of the datagrams, and is given the time: the session around
+it seals and opens them (<a href="#encrypted-datagrams">Encrypted datagrams</a>), and owns the socket and the timers.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Sending</label><label for="__tabbed_5_2">Receiving</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">MessageChannel</span><span class="w"> </span><span class="n">channel</span><span class="p">;</span><span class="w">   </span><span class="c1">// one per session</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="n">channel</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="mh">0x80</span><span class="p">,</span><span class="w"> </span><span class="n">snapshot</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Delivery</span><span class="o">::</span><span class="n">Unreliable</span><span class="p">);</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="n">channel</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="mh">0x81</span><span class="p">,</span><span class="w"> </span><span class="n">destroyed</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Delivery</span><span class="o">::</span><span class="n">Reliable</span><span class="p">);</span>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>
+</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="c1">// Once per tick, or at least once per second (a heartbeat then): as many datagrams as needed</span>
+</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">MessageChannel</span><span class="o">::</span><span class="n">Clock</span><span class="o">::</span><span class="n">now</span><span class="p">();</span>
+</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="k">do</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-19-9"><a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">datagram</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">channel</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="n">now</span><span class="p">);</span>
+</span><span id="__span-19-10"><a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">datagram</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-19-11"><a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">closeSession</span><span class="p">();</span><span class="w"> </span><span class="c1">// the channel failed</span>
+</span><span id="__span-19-12"><a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-19-13"><a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a><span class="w">    </span><span class="n">socket</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">peer</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">sealDatagram</span><span class="p">(</span><span class="n">ownKey</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="n">sessionId</span><span class="p">,</span><span class="w"> </span><span class="n">datagram</span><span class="o">-&gt;</span><span class="n">packetNumber</span><span class="p">},</span>
+</span><span id="__span-19-14"><a id="__codelineno-19-14" name="__codelineno-19-14" href="#__codelineno-19-14"></a><span class="w">                                                   </span><span class="n">datagram</span><span class="o">-&gt;</span><span class="n">body</span><span class="p">));</span>
+</span><span id="__span-19-15"><a id="__codelineno-19-15" name="__codelineno-19-15" href="#__codelineno-19-15"></a><span class="p">}</span><span class="w"> </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">channel</span><span class="p">.</span><span class="n">hasMessagesToSend</span><span class="p">(</span><span class="n">now</span><span class="p">));</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">header</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">parseDatagramHeader</span><span class="p">(</span><span class="n">datagram</span><span class="p">);</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">header</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">header</span><span class="o">-&gt;</span><span class="n">session</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">sessionId</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">!</span><span class="n">channel</span><span class="p">.</span><span class="n">accepts</span><span class="p">(</span><span class="n">header</span><span class="o">-&gt;</span><span class="n">packetNumber</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="k">return</span><span class="p">;</span>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="p">}</span>
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">openDatagram</span><span class="p">(</span><span class="n">peerKey</span><span class="p">,</span><span class="w"> </span><span class="n">datagram</span><span class="p">);</span>
+</span><span id="__span-20-6"><a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">body</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="w">    </span><span class="k">return</span><span class="p">;</span>
+</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="p">}</span>
+</span><span id="__span-20-9"><a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">messages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">channel</span><span class="p">.</span><span class="n">receive</span><span class="p">(</span><span class="n">header</span><span class="o">-&gt;</span><span class="n">packetNumber</span><span class="p">,</span><span class="w"> </span><span class="o">*</span><span class="n">body</span><span class="p">,</span><span class="w"> </span><span class="n">now</span><span class="p">);</span>
+</span><span id="__span-20-10"><a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">messages</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-20-11"><a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a><span class="w">    </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="c1">// malformed body: dropped, and not acknowledged</span>
+</span><span id="__span-20-12"><a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a><span class="p">}</span>
+</span><span id="__span-20-13"><a id="__codelineno-20-13" name="__codelineno-20-13" href="#__codelineno-20-13"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">ReceivedMessage</span><span class="w"> </span><span class="o">&amp;</span><span class="n">message</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">messages</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-20-14"><a id="__codelineno-20-14" name="__codelineno-20-14" href="#__codelineno-20-14"></a><span class="w">    </span><span class="n">handle</span><span class="p">(</span><span class="n">message</span><span class="p">.</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="n">message</span><span class="p">.</span><span class="n">payload</span><span class="p">);</span>
+</span><span id="__span-20-15"><a id="__codelineno-20-15" name="__codelineno-20-15" href="#__codelineno-20-15"></a><span class="p">}</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p><code>next()</code> puts the reliable messages due first, then the unreliable ones in order, as many as fit in 1200
+bytes. A snapshot part that fills a datagram goes in its own: <code>hasMessagesToSend()</code> tells when another datagram
+is needed.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Gives</th>
+<th>Refuses or fails</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>send(type, payload, delivery)</code></td>
+<td>Queues the message</td>
+<td>A payload above 1151 bytes (unreliable) or 1149 (reliable): <code>std::length_error</code>. Returns false if the channel failed</td>
+</tr>
+<tr>
+<td><code>next(now)</code></td>
+<td>The packet number and body of the next datagram</td>
+<td><code>std::nullopt</code> once failed</td>
+</tr>
+<tr>
+<td><code>hasMessagesToSend(now)</code></td>
+<td>Whether another datagram is needed now</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>accepts(n)</code>, <code>receive(n, body, now)</code></td>
+<td>Whether a packet may be new; the messages to handle</td>
+<td><code>std::nullopt</code> for a packet already received or a malformed body</td>
+</tr>
+<tr>
+<td><code>rtt()</code>, <code>resendDelay()</code>, <code>pendingReliable()</code>, <code>failed()</code></td>
+<td>The measures, for the logs and the console</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><code>encodeBody()</code> and <code>decodeBody()</code> are the codec of the body alone, for the tests and the fuzzer.</p>
+<h2 id="game-sessions">Game sessions<a class="headerlink" href="#game-sessions" title="Permanent link">&para;</a></h2>
+<p>A <strong>session</strong> is the link between one client and its game, over UDP: everything above put together, plus what
+makes it a connection (<a href="../../protocol/game/#7-session">game protocol</a>). The master gives both sides the same
+session id and keys (<code>GAME_JOINED</code> to the client, <code>ADD_PLAYER</code> to the game); then:</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant C as ClientSession
+    participant G as SessionHost (game)
+    Note over G: add(session, keys): waits 10 s for its client
+    C-&gt;&gt;G: CONNECT (reliable, sent again until acknowledged)
+    Note over G: onConnected(session, address)
+    G-&gt;&gt;C: ACCEPTED (made by the game: slot, tick rate, tick)
+    Note over C: onAccepted(payload): State::Connected
+    C--&gt;&gt;G: game messages, at least one datagram per second
+    G--&gt;&gt;C: game messages, at least one datagram per second
+    C-&gt;&gt;G: DISCONNECT × 3, or 5 s of silence
+    Note over G: onClosed(session, end)</code></pre>
+<p><em>A session connects with <code>CONNECT</code> and <code>ACCEPTED</code>, stays open with heartbeats, and ends with <code>DISCONNECT</code> or a
+timeout.</em></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>ClientSession</code> (client)</th>
+<th><code>SessionHost</code> (game)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sessions</td>
+<td>One: the one of <code>GAME_JOINED</code></td>
+<td>One per player, added on <code>ADD_PLAYER</code></td>
+</tr>
+<tr>
+<td>Sends to</td>
+<td>The game's address, through its send function</td>
+<td>The address each client sends from, learned from its first authentic datagram</td>
+</tr>
+<tr>
+<td>Handlers</td>
+<td><code>onAccepted</code>, <code>onMessage</code>, <code>onClose</code></td>
+<td><code>onConnected</code>, <code>onMessage</code>, <code>onClosed</code></td>
+</tr>
+<tr>
+<td>Before connecting</td>
+<td><code>send()</code> refuses game messages until <code>ACCEPTED</code></td>
+<td>Messages before <code>CONNECT</code> are ignored</td>
+</tr>
+<tr>
+<td>Gives up</td>
+<td>No <code>ACCEPTED</code> within 5 s: <code>ConnectTimedOut</code> (UDP is probably blocked)</td>
+<td>No <code>CONNECT</code> within 10 s: <code>ConnectTimedOut</code></td>
+</tr>
+</tbody>
+</table>
+<p>Like the channel, the sessions have no socket and no clock: they are given the datagrams received and the time,
+and send through a function. The application owns the <code>UdpSocket</code> and calls <code>update()</code> regularly:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Client (game loop)</label><label for="__tabbed_6_2">Game (network thread)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">UdpSocket</span><span class="w"> </span><span class="nf">socket</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Address</span><span class="o">::</span><span class="n">anyIpv4</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">ClientSession</span><span class="w"> </span><span class="nf">session</span><span class="p">(</span><span class="n">joined</span><span class="p">.</span><span class="n">sessionId</span><span class="p">,</span><span class="w"> </span><span class="n">joined</span><span class="p">.</span><span class="n">clientKey</span><span class="p">,</span><span class="w"> </span><span class="n">joined</span><span class="p">.</span><span class="n">serverKey</span><span class="p">,</span>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">    </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="n">std</span><span class="o">::</span><span class="n">span</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">byte</span><span class="o">&gt;</span><span class="w"> </span><span class="n">datagram</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">socket</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">gameAddress</span><span class="p">,</span><span class="w"> </span><span class="n">datagram</span><span class="p">);</span><span class="w"> </span><span class="p">});</span>
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="n">socket</span><span class="p">.</span><span class="n">startReceiving</span><span class="p">([</span><span class="o">&amp;</span><span class="p">](</span><span class="k">const</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Address</span><span class="w"> </span><span class="o">&amp;</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">span</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">byte</span><span class="o">&gt;</span><span class="w"> </span><span class="n">datagram</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">from</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">gameAddress</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="c1">// only the game's datagrams</span>
+</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="w">        </span><span class="n">session</span><span class="p">.</span><span class="n">receive</span><span class="p">(</span><span class="n">datagram</span><span class="p">,</span><span class="w"> </span><span class="n">Clock</span><span class="o">::</span><span class="n">now</span><span class="p">());</span>
+</span><span id="__span-21-8"><a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-21-9"><a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a><span class="p">});</span>
+</span><span id="__span-21-10"><a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a><span class="n">session</span><span class="p">.</span><span class="n">start</span><span class="p">(</span><span class="n">onAccepted</span><span class="p">,</span><span class="w"> </span><span class="n">onMessage</span><span class="p">,</span><span class="w"> </span><span class="n">onClose</span><span class="p">,</span><span class="w"> </span><span class="n">Clock</span><span class="o">::</span><span class="n">now</span><span class="p">());</span>
+</span><span id="__span-21-11"><a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a>
+</span><span id="__span-21-12"><a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a><span class="c1">// Every frame</span>
+</span><span id="__span-21-13"><a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a><span class="n">loop</span><span class="p">.</span><span class="n">poll</span><span class="p">();</span>
+</span><span id="__span-21-14"><a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a><span class="n">session</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">InputType</span><span class="p">,</span><span class="w"> </span><span class="n">input</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Delivery</span><span class="o">::</span><span class="n">Unreliable</span><span class="p">);</span>
+</span><span id="__span-21-15"><a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a><span class="n">session</span><span class="p">.</span><span class="n">update</span><span class="p">(</span><span class="n">Clock</span><span class="o">::</span><span class="n">now</span><span class="p">());</span><span class="w"> </span><span class="c1">// sends, resends, acknowledgements, heartbeat, timeouts</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">UdpSocket</span><span class="w"> </span><span class="nf">socket</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Address</span><span class="o">::</span><span class="n">anyIpv4</span><span class="p">(</span><span class="n">port</span><span class="p">));</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">SessionHost</span><span class="w"> </span><span class="nf">host</span><span class="p">(</span>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">    </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="k">const</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Address</span><span class="w"> </span><span class="o">&amp;</span><span class="n">to</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">span</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">byte</span><span class="o">&gt;</span><span class="w"> </span><span class="n">datagram</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">socket</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">to</span><span class="p">,</span><span class="w"> </span><span class="n">datagram</span><span class="p">);</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">    </span><span class="p">{</span>
+</span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="w">        </span><span class="p">.</span><span class="n">onConnected</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="n">std</span><span class="o">::</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">session</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Address</span><span class="w"> </span><span class="o">&amp;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="w">            </span><span class="n">host</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">session</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">session_message</span><span class="o">::</span><span class="n">Accepted</span><span class="p">,</span><span class="w"> </span><span class="n">accepted</span><span class="p">,</span>
+</span><span id="__span-22-7"><a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a><span class="w">                      </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Delivery</span><span class="o">::</span><span class="n">Reliable</span><span class="p">);</span>
+</span><span id="__span-22-8"><a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a><span class="w">        </span><span class="p">},</span>
+</span><span id="__span-22-9"><a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a><span class="w">        </span><span class="p">.</span><span class="n">onMessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="n">std</span><span class="o">::</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">session</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">uint8_t</span><span class="w"> </span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">span</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">byte</span><span class="o">&gt;</span><span class="w"> </span><span class="n">payload</span><span class="p">)</span><span class="w"> </span><span class="p">{},</span>
+</span><span id="__span-22-10"><a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a><span class="w">        </span><span class="p">.</span><span class="n">onClosed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="n">std</span><span class="o">::</span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">session</span><span class="p">,</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">SessionEnd</span><span class="w"> </span><span class="n">end</span><span class="p">)</span><span class="w"> </span><span class="p">{},</span>
+</span><span id="__span-22-11"><a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a><span class="w">    </span><span class="p">});</span>
+</span><span id="__span-22-12"><a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a><span class="n">socket</span><span class="p">.</span><span class="n">startReceiving</span><span class="p">([</span><span class="o">&amp;</span><span class="p">](</span><span class="k">const</span><span class="w"> </span><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Address</span><span class="w"> </span><span class="o">&amp;</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">span</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">byte</span><span class="o">&gt;</span><span class="w"> </span><span class="n">datagram</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-22-13"><a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a><span class="w">    </span><span class="n">host</span><span class="p">.</span><span class="n">receive</span><span class="p">(</span><span class="n">from</span><span class="p">,</span><span class="w"> </span><span class="n">datagram</span><span class="p">,</span><span class="w"> </span><span class="n">Clock</span><span class="o">::</span><span class="n">now</span><span class="p">());</span>
+</span><span id="__span-22-14"><a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a><span class="p">});</span>
+</span><span id="__span-22-15"><a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a>
+</span><span id="__span-22-16"><a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a><span class="n">host</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="n">sessionId</span><span class="p">,</span><span class="w"> </span><span class="n">clientKey</span><span class="p">,</span><span class="w"> </span><span class="n">serverKey</span><span class="p">,</span><span class="w"> </span><span class="n">Clock</span><span class="o">::</span><span class="n">now</span><span class="p">());</span><span class="w"> </span><span class="c1">// on ADD_PLAYER</span>
+</span><span id="__span-22-17"><a id="__codelineno-22-17" name="__codelineno-22-17" href="#__codelineno-22-17"></a><span class="n">host</span><span class="p">.</span><span class="n">update</span><span class="p">(</span><span class="n">Clock</span><span class="o">::</span><span class="n">now</span><span class="p">());</span><span class="w">                                </span><span class="c1">// every tick</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>The session layer handles <code>CONNECT</code>, <code>ACCEPTED</code> and <code>DISCONNECT</code> itself; every other message (<code>PLAYER_JOINED</code>,
+<code>INPUT</code>, <code>SNAPSHOT</code>…) goes to <code>onMessage</code>. The payload of <code>ACCEPTED</code> is made by the game and given as is to the
+client's <code>onAccepted</code>.</p>
+<h3 id="how-a-session-ends">How a session ends<a class="headerlink" href="#how-a-session-ends" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th><code>SessionEnd::Cause</code></th>
+<th>When</th>
+<th><code>DISCONNECT</code> sent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Disconnected</code></td>
+<td>The peer sent <code>DISCONNECT</code>, with its reason (<code>Quit</code>, <code>GameOver</code>, <code>Shutdown</code>, <code>ProtocolError</code>)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>TimedOut</code></td>
+<td>Nothing authentic received for <strong>5 s</strong>: the peer crashed or lost the network</td>
+<td>No: the peer does not hear anyway</td>
+</tr>
+<tr>
+<td><code>ConnectTimedOut</code></td>
+<td>Never connected (5 s for the client, 10 s for the game)</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>Failed</code></td>
+<td>The peer stopped acknowledging: 256 reliable messages wait</td>
+<td>Yes, <code>ProtocolError</code></td>
+</tr>
+<tr>
+<td>—</td>
+<td>The application called <code>close(reason)</code></td>
+<td>Yes, with the reason; <strong>no handler is called</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>DISCONNECT</code> is not reliable: it is sent in <strong>three datagrams in a row</strong>, and one of them is enough. If all
+three are lost, the peer closes after its 5 s timeout.</p>
+<h3 id="what-the-game-protects-itself-against">What the game protects itself against<a class="headerlink" href="#what-the-game-protects-itself-against" title="Permanent link">&para;</a></h3>
+<p><code>SessionHost::receive()</code> follows the order of the protocol and drops silently at the first failure, <strong>without
+ever answering</strong>: an answer to a forged datagram could be used to flood someone else.</p>
+<ol>
+<li>Size and header (<code>parseDatagramHeader()</code>).</li>
+<li>A known session.</li>
+<li><strong>At most 200 datagrams per second and per source address</strong>, counted before decrypting: a flood costs
+   almost nothing.</li>
+<li>The replay window, then the tag, then the body.</li>
+</ol>
+<p><strong>A client whose port changes</strong>, which a home router may do, is followed: an authentic datagram from another
+address with a newer packet number moves the session there. An older one, arriving late, does not.</p>
+<p><strong>Handlers may call the host</strong>, including <code>close()</code> of the session they are called for: the messages that
+follow in the same datagram are then dropped.</p>
+<h2 id="binary-serialization">Binary serialization<a class="headerlink" href="#binary-serialization" title="Permanent link">&para;</a></h2>
+<p>A message is sent as bytes: each field written one after the other, as the
+<a href="../../protocol/#2-conventions">protocol conventions</a> define it: big-endian integers, no padding,
+<code>str8</code> texts. <code>Writer</code> writes the fields, <code>Reader</code> reads them back. To add a message, follow
+<a href="../../guides/add-a-network-message/">Add a network message</a>.</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Writer</span><span class="w"> </span><span class="n">writer</span><span class="p">;</span>
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="n">writer</span><span class="p">.</span><span class="n">writeU8</span><span class="p">(</span><span class="mh">0x01</span><span class="p">);</span><span class="w">        </span><span class="c1">// type: HELLO</span>
+</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="n">writer</span><span class="p">.</span><span class="n">writeU16</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span><span class="w">          </span><span class="c1">// version</span>
+</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="n">writer</span><span class="p">.</span><span class="n">writeString</span><span class="p">(</span><span class="s">"Pavel"</span><span class="p">);</span><span class="w"> </span><span class="c1">// name: length on one byte, then the UTF-8 bytes</span>
+</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="n">connection</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">writer</span><span class="p">.</span><span class="n">bytes</span><span class="p">());</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Type of the specification</th>
+<th>Writer</th>
+<th>Reader</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>u8</code>, <code>u16</code>, <code>u32</code>, <code>u64</code></td>
+<td><code>writeU8()</code> … <code>writeU64()</code></td>
+<td><code>readU8()</code> … <code>readU64()</code></td>
+</tr>
+<tr>
+<td><code>i16</code>, <code>i32</code></td>
+<td><code>writeI16()</code>, <code>writeI32()</code></td>
+<td><code>readI16()</code>, <code>readI32()</code></td>
+</tr>
+<tr>
+<td><code>bool</code></td>
+<td><code>writeBool()</code></td>
+<td><code>readBool()</code>: a value other than 0 or 1 is an error</td>
+</tr>
+<tr>
+<td><code>bytes[N]</code></td>
+<td><code>writeBytes(span)</code></td>
+<td><code>readBytes(n)</code> (a view into the data) or <code>readBytes&lt;N&gt;()</code> (a copy)</td>
+</tr>
+<tr>
+<td><code>str8</code></td>
+<td><code>writeString(text)</code></td>
+<td><code>readString(min, max)</code>: length range of the field, text checked</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why not <code>memcpy</code> a struct?</strong> The compiler adds padding between fields, differently on GCC and MSVC, and an
+x86 processor stores integers little-endian. Writing each field explicitly gives the same bytes everywhere.</p>
+<h3 id="reading-safely">Reading safely<a class="headerlink" href="#reading-safely" title="Permanent link">&para;</a></h3>
+<p>The bytes come from the network: they may be cut, forged or random. <code>Reader</code> is built so that a decoder
+cannot go wrong:</p>
+<ul>
+<li><strong>It never reads past the end.</strong> A field that is not entirely there fails.</li>
+<li>
+<p><strong>The first failure sticks.</strong> After a missing or invalid field, every later read returns 0, <code>false</code> or an
+  empty value, and <code>error()</code> keeps the first problem. A decoder reads all its fields, then checks once:</p>
+<div class="language-cpp highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="n">rtype</span><span class="o">::</span><span class="n">network</span><span class="o">::</span><span class="n">Reader</span><span class="w"> </span><span class="nf">reader</span><span class="p">(</span><span class="n">payload</span><span class="p">);</span>
+</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="kt">uint16_t</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reader</span><span class="p">.</span><span class="n">readU16</span><span class="p">();</span>
+</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reader</span><span class="p">.</span><span class="n">readString</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">);</span>
+</span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">reader</span><span class="p">.</span><span class="n">finish</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="c1">// fails if a read failed, or if bytes are left</span>
+</span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="w">    </span><span class="n">logger</span><span class="p">.</span><span class="n">debug</span><span class="p">(</span><span class="s">"HELLO dropped: {}"</span><span class="p">,</span><span class="w"> </span><span class="n">toString</span><span class="p">(</span><span class="n">reader</span><span class="p">.</span><span class="n">error</span><span class="p">()));</span>
+</span><span id="__span-24-6"><a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">nullopt</span><span class="p">;</span>
+</span><span id="__span-24-7"><a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="p">}</span>
+</span></code></pre></div>
+</li>
+<li>
+<p><strong>Texts are checked</strong>: valid UTF-8 (no cut or overlong characters, no surrogates), no ASCII control
+  character, length within the range of the field. A name cannot carry a line break that would forge a line
+  in the logs, nor terminal escape codes.</p>
+</li>
+<li><strong>Decoders refuse values themselves</strong> with <code>reader.fail()</code>, for instance a number of players above 4.</li>
+<li><strong>Nothing is allocated from an unchecked length.</strong> A <code>str8</code> is at most 255 bytes and only built once its
+  bytes are there. For a list, never <code>reserve(count)</code> with a count read from the network: loop while
+  <code>reader.ok()</code>, and the loop stops at the end of the data even if the count announces 65535 entries.</li>
+<li><strong>No side effect</strong>: a reader only reads its bytes. Decoders built on it are pure functions, bytes in and
+  message or error out, which a fuzzer can call millions of times
+  (<a href="../../contributing/testing/">testing policy</a>).</li>
+</ul>
+<p><code>Writer</code> is used with values from our own code: a value the protocol forbids (a <code>str8</code> over 255 bytes, a text
+with a control character) is a programming error, and throws an exception. Check a text typed by the player
+with <code>isValidText()</code> before sending it.</p>
+<h2 id="logs">Logs<a class="headerlink" href="#logs" title="Permanent link">&para;</a></h2>
+<p>The library writes with a logger named <code>network</code> (<a href="../logging/">Logging</a>):</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Messages</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>trace</code></td>
+<td>Every datagram and every piece of a stream received, with its size</td>
+</tr>
+<tr>
+<td><code>trace</code> (TLS)</td>
+<td>Every piece of a TLS stream decrypted, with its size</td>
+</tr>
+<tr>
+<td><code>trace</code> (datagrams)</td>
+<td>Every encrypted datagram dropped, with the reason: invalid header, or not authentic. Never the keys</td>
+</tr>
+<tr>
+<td><code>trace</code> (reliability)</td>
+<td>Every malformed body dropped, every reliable message sent again</td>
+</tr>
+<tr>
+<td><code>debug</code> (reliability)</td>
+<td>A channel that fails, and why; unreliable messages dropped because too many wait to be sent</td>
+</tr>
+<tr>
+<td><code>trace</code> (sessions)</td>
+<td>Every datagram of an unknown session dropped</td>
+</tr>
+<tr>
+<td><code>debug</code> (sessions)</td>
+<td>Sessions added, connecting, accepted, connected, moved to another address, closed and ended (with the cause), source addresses over 200 datagrams per second</td>
+</tr>
+<tr>
+<td><code>debug</code></td>
+<td>Sockets opened and closed, connections accepted, opened, closed and lost, datagrams dropped, TLS handshakes started and done (with the cipher suite)</td>
+</tr>
+<tr>
+<td><code>warning</code></td>
+<td>A listener that cannot accept connections (for instance, no file descriptor left), a peer sending an invalid frame, a TLS connection failing or closed during its handshake</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td>A TLS server presenting a key other than the pinned one, with its fingerprint</td>
+</tr>
+</tbody>
+</table>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="nv">RTYPE_LOG_LEVEL</span><span class="o">=</span>debug<span class="w"> </span>./build/bin/r-type_server
+</span></code></pre></div>
+<h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h2>
+<p>The tests in <code>tests/network.cpp</code> (tag <code>[network]</code>) run over the loopback, with ports chosen by the system so
+that they never conflict: datagrams in both directions and from another thread, ports in use, connections,
+large transfers, closing from either side, refused connections and timeouts.</p>
+<p>The tests in <code>tests/serialization.cpp</code> (same tag) check the round trip of every type, the edge values, every
+rejection case, and the <code>HELLO</code> frame given as an example in the specification, byte for byte.</p>
+<p>The tests in <code>tests/framing.cpp</code> (same tag) check the frame decoder with frames cut byte by byte, grouped, or
+cut at random places, the maximum size and the invalid sizes; then framed connections over the loopback: frames
+in both directions, a peer sending an invalid frame, and <code>close()</code> from inside the frame handler.</p>
+<p>The tests in <code>tests/tls.cpp</code> (same tag) check the fingerprints against the one OpenSSL computes, the identities
+(generated, saved and read back, refused keys, files), then TLS connections over the loopback: large transfers
+in both directions, bytes sent before the handshake, a server with another key, a relay in the middle that
+reads nothing and whose changed byte is detected, peers that do not speak TLS, closing, frames over TLS, the end of the handshake reported once and never
+for a failed one, and
+Mbed TLS used from two threads at once.</p>
+<p>The tests in <code>tests/datagram.cpp</code> (same tag) check two datagrams byte for byte against another implementation
+of RFC 8439 (Python's <code>cryptography</code> package), the round trip of bodies from 0 to 1168 bytes, that every bit
+changed anywhere makes a datagram invalid, other keys, random bytes, every invalid header, the edges of the
+replay window (256 and 257 numbers below, jumps, any order, the largest number) and the end of the packet
+numbers.</p>
+<p>The tests in <code>tests/reliability.cpp</code> (same tag) check the body byte for byte, its round trip, every malformed
+case and random bodies; then a channel alone: acknowledgements, resends after the delay and not before, delivery
+in order whatever the order of the datagrams, ids wrapping from 65535 to 0, large messages in datagrams of their
+own, the RTT, and failing when the peer stops acknowledging. Last, two channels play 10 seconds of a game
+through a <strong>fake network</strong> that loses 30 % of the datagrams, duplicates 10 % and delays them by 20 to 120 ms,
+so that they arrive out of order: every reliable message arrives once and in order, no unreliable message
+arrives twice.</p>
+<p>The tests in <code>tests/session.cpp</code> (same tag) run a <code>ClientSession</code> and a <code>SessionHost</code> through a fake network in
+memory, with the time given by the test: connecting, <code>CONNECT</code> sent again, both connect timeouts, heartbeats
+over 20 s of silence, the 5 s timeout on both sides, 30 % loss, <code>DISCONNECT</code> both ways and with two copies out of
+three lost, a game that stops acknowledging, a handler that closes its session, replayed, forged and unknown
+datagrams that get no answer, a client whose port changes, a late datagram from another address, and the limit
+of 200 datagrams per second. A last test runs a session over real UDP sockets on the loopback.</p>
+<p>The tests in <code>tests/timer.cpp</code> (same tag) check timers once and repeating, cancelled and destroyed when already
+due, started again and from another thread, and the stop signals, raised in the test process itself.</p>
+<p>Our client and server were also checked against OpenSSL, by hand (it is not installed on every CI runner):</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="c1"># Our client against an OpenSSL server holding the test key of tests/tls.cpp</span>
+</span><span id="__span-26-2"><a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>openssl<span class="w"> </span>req<span class="w"> </span>-new<span class="w"> </span>-x509<span class="w"> </span>-key<span class="w"> </span>test.key<span class="w"> </span>-out<span class="w"> </span>test.crt<span class="w"> </span>-subj<span class="w"> </span><span class="s2">"/CN=test"</span>
+</span><span id="__span-26-3"><a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>openssl<span class="w"> </span>s_server<span class="w"> </span>-accept<span class="w"> </span><span class="m">4433</span><span class="w"> </span>-key<span class="w"> </span>test.key<span class="w"> </span>-cert<span class="w"> </span>test.crt<span class="w"> </span>-tls1_3<span class="w"> </span>-www
+</span><span id="__span-26-4"><a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="c1"># OpenSSL's client against our server: TLS 1.3 accepted, TLS 1.2 refused</span>
+</span><span id="__span-26-5"><a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>openssl<span class="w"> </span>s_client<span class="w"> </span>-connect<span class="w"> </span><span class="m">127</span>.0.0.1:4433<span class="w"> </span>-tls1_3
+</span><span id="__span-26-6"><a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a>openssl<span class="w"> </span>s_client<span class="w"> </span>-connect<span class="w"> </span><span class="m">127</span>.0.0.1:4433<span class="w"> </span>-tls1_2
+</span></code></pre></div>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>./build/bin/rtype_tests<span class="w"> </span><span class="s2">"[network]"</span>
+</span></code></pre></div>
+<h2 id="limits-and-next-steps">Limits and next steps<a class="headerlink" href="#limits-and-next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>No R-Type messages yet</strong>: the lobby and the game instances come next, following the
+  <a href="../../protocol/">protocol</a>. The fuzzing of the decoders comes with them; <code>parseDatagramHeader()</code> and
+  <code>openDatagram()</code> are ready for it.</li>
+<li><strong>No handshake timeout in the connection itself</strong>: a peer that opens a connection and never finishes the
+  handshake keeps it open. The server closes such connections with the limits of the
+  <a href="../../protocol/">protocol</a> (10 s for the handshake), in the lobby step.</li>
+<li><strong>One lock for all of Mbed TLS</strong>, see <a href="#threads">Threads</a>.</li>
+<li><strong>One copy per send</strong>: <code>send()</code> copies the data into a new buffer, unless it is given a <code>std::vector</code> it can
+  take (<code>send(std::move(bytes))</code>). Enough for now; a pool of buffers can replace it if measurements show the
+  cost.</li>
+<li><strong>IPv4 or IPv6, not both on one socket</strong>: a socket bound to <code>Address::anyIpv6()</code> may or may not accept IPv4
+  depending on the system. The server listens on IPv4 for now.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../logging/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Logging">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Logging
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../server/" class="md-footer__link md-footer__link--next" aria-label="Next: Server">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Server
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      R-Type team — Epitech B-CPP-500
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Akinator31/Rtype" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M216.5 362.5c-66-8-112.5-55.5-112.5-117 0-25 9-52 24-70-6.5-16.5-5.5-51.5 2-66 20-2.5 47 8 63 22.5 19-6 39-9 63.5-9s44.5 3 62.5 8.5c15.5-14 43-24.5 63-22 7 13.5 8 48.5 1.5 65.5 16 19 24.5 44.5 24.5 70.5 0 61.5-46.5 108-113.5 116.5 17 11 28.5 35 28.5 62.5v52c0 15 12.5 23.5 27.5 17.5C441 459.5 512 369 512 257 512 115.5 397 0 255.5 0S0 115.5 0 257c0 111 70.5 203 165.5 237.5 13.5 5 26.5-4 26.5-17.5v-40c-7 3-16 5-24 5-33 0-52.5-18-66.5-51.5-5.5-13.5-11.5-21.5-23-23-6-.5-8-3-8-6 0-6 10-10.5 20-10.5 14.5 0 27 9 40 27.5 10 14.5 20.5 21 33 21s20.5-4.5 32-16c8.5-8.5 15-16 21-21"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["content.action.edit","content.code.annotate","content.code.copy","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.path","navigation.sections","navigation.tabs","navigation.top","navigation.tracking","search.highlight","toc.follow"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.67a597eb.min.js"></script>
+      
+    
+  </body>
+</html>

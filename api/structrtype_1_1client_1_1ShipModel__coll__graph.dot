@@ -1,0 +1,11 @@
+digraph "rtype::client::ShipModel"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="rtype::client::ShipModel",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="A ship model the menu can fly, with its animations."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" animations" ,fontname="Helvetica"];
+  Node2 [label="rtype::client::ShipAnimations",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1client_1_1ShipAnimations.html",tooltip="The animations of the ship model, by index (render::ResourceManager::getModelAnimation()): small flam..."];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" model" ,fontname="Helvetica"];
+  Node3 [label="rtype::core::Handle\l\< struct ModelTag \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1core_1_1Handle.html",tooltip=" "];
+}

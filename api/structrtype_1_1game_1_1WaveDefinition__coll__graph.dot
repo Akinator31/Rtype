@@ -1,0 +1,9 @@
+digraph "rtype::game::WaveDefinition"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="rtype::game::WaveDefinition",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="A group of enemies that appear one after the other."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" area" ,fontname="Helvetica"];
+  Node2 [label="rtype::game::WaveArea",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structrtype_1_1game_1_1WaveArea.html",tooltip="The rectangle where the enemies of a Random wave appear, in game units."];
+}

@@ -1,0 +1,11 @@
+digraph "libs/ecs/include/rtype/ecs/Component" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_41cf2c6b075f3968172eaf070956e248 {
+    graph [ bgcolor="#ddddee", pencolor="black", label="ecs" fontname="Helvetica", fontsize="10", URL="dir_41cf2c6b075f3968172eaf070956e248.html"]
+  dir_a5d7e864ccb2c6f0e95c5a74c2c61ad6 [shape=box label="Entity" URL="dir_a5d7e864ccb2c6f0e95c5a74c2c61ad6.html"];
+  dir_91e1cedc6df10275ce3bbf25512af51b [shape=box, label="Component", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_91e1cedc6df10275ce3bbf25512af51b.html"];
+  }
+  dir_91e1cedc6df10275ce3bbf25512af51b->dir_a5d7e864ccb2c6f0e95c5a74c2c61ad6 [headlabel="3", labeldistance=1.5 headhref="dir_000035_000036.html"];
+}

@@ -1,0 +1,21 @@
+digraph "libs/engine/include/rtype/engine/Engine" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_e94ebfe46629859e07dcd4dd1549825d {
+    graph [ bgcolor="#ddddee", pencolor="black", label="engine" fontname="Helvetica", fontsize="10", URL="dir_e94ebfe46629859e07dcd4dd1549825d.html"]
+  dir_3ea1fdd4857fa3a34b28f6b9b3065275 [shape=box label="Event" URL="dir_3ea1fdd4857fa3a34b28f6b9b3065275.html"];
+  dir_403b79e6c6a598f472e0bd8c7b8ab280 [shape=box label="Control" URL="dir_403b79e6c6a598f472e0bd8c7b8ab280.html"];
+  dir_891ecc4c525710f334f97d70c812632f [shape=box label="Component" URL="dir_891ecc4c525710f334f97d70c812632f.html"];
+  dir_ea9f1aaf39d274e03a30cf4d6ae2c8dc [shape=box label="Scene" URL="dir_ea9f1aaf39d274e03a30cf4d6ae2c8dc.html"];
+  dir_07299e4d9374c9c763c2bb5532e4b312 [shape=box, label="Engine", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_07299e4d9374c9c763c2bb5532e4b312.html"];
+  }
+  dir_7c30b8dfc30eedeb0f79cc4748007d54 [shape=box label="ecs" fillcolor="white" style="filled" color="red" URL="dir_7c30b8dfc30eedeb0f79cc4748007d54.html"];
+  dir_ea9f1aaf39d274e03a30cf4d6ae2c8dc->dir_7c30b8dfc30eedeb0f79cc4748007d54 [headlabel="4", labeldistance=1.5 headhref="dir_000046_000031.html"];
+  dir_07299e4d9374c9c763c2bb5532e4b312->dir_3ea1fdd4857fa3a34b28f6b9b3065275 [headlabel="1", labeldistance=1.5 headhref="dir_000042_000043.html"];
+  dir_07299e4d9374c9c763c2bb5532e4b312->dir_403b79e6c6a598f472e0bd8c7b8ab280 [headlabel="1", labeldistance=1.5 headhref="dir_000042_000041.html"];
+  dir_07299e4d9374c9c763c2bb5532e4b312->dir_7c30b8dfc30eedeb0f79cc4748007d54 [headlabel="1", labeldistance=1.5 headhref="dir_000042_000031.html"];
+  dir_07299e4d9374c9c763c2bb5532e4b312->dir_891ecc4c525710f334f97d70c812632f [headlabel="1", labeldistance=1.5 headhref="dir_000042_000016.html"];
+  dir_07299e4d9374c9c763c2bb5532e4b312->dir_ea9f1aaf39d274e03a30cf4d6ae2c8dc [headlabel="1", labeldistance=1.5 headhref="dir_000042_000046.html"];
+  dir_3ea1fdd4857fa3a34b28f6b9b3065275->dir_7c30b8dfc30eedeb0f79cc4748007d54 [headlabel="1", labeldistance=1.5 headhref="dir_000043_000031.html"];
+}
