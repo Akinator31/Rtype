@@ -13,6 +13,8 @@
 
 #include "rtype/game/Component/Components.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Enemy/EnemyDefinition.hpp"
+#include "rtype/game/Enemy/EnemyRegistry.hpp"
 #include "rtype/game/Entities.hpp"
 #include "rtype/game/GameContext.hpp"
 #include "rtype/game/Messages.hpp"
