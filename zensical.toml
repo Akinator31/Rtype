@@ -32,6 +32,7 @@ nav = [
     "architecture/client-online.md",
     "architecture/audio.md",
     "architecture/scenes-and-interface.md",
+    "architecture/threads.md",
   ] },
   { "Guides" = [
     "guides/index.md",
