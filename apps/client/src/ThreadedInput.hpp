@@ -44,8 +44,8 @@ struct InputFrame {
                     static_cast<int>(pad), static_cast<input::GamepadButton>(index));
             }
             for (std::size_t index = 0; index < axes; ++index) {
-                frame.padAxes[pad][index] = devices.gamepadAxis(
-                    static_cast<int>(pad), static_cast<input::GamepadAxis>(index));
+                frame.padAxes[pad][index] =
+                    devices.gamepadAxis(static_cast<int>(pad), static_cast<input::GamepadAxis>(index));
             }
         }
         for (std::size_t index = 0; index < mouseButtons; ++index) {
@@ -123,8 +123,7 @@ class SnapshotInput : public input::InputSource
     std::function<void(const std::string &)> _copy;
 
 public:
-    explicit SnapshotInput(std::function<void(const std::string &)> copy)
-        : _copy(std::move(copy)) {}
+    explicit SnapshotInput(std::function<void(const std::string &)> copy) : _copy(std::move(copy)) {}
 
     void update(InputFrame frame) { _frame = std::move(frame); }
 
@@ -149,12 +148,9 @@ public:
         return _frame.mouse[static_cast<std::size_t>(button)];
     }
     [[nodiscard]] float mouseWheel() const override { return _frame.wheel; }
-    [[nodiscard]] std::u32string takeTypedText() override
-    {
-        return std::exchange(_frame.typed, {});
-    }
+    [[nodiscard]] std::u32string takeTypedText() override { return std::exchange(_frame.typed, {}); }
     [[nodiscard]] std::string clipboardText() const override { return _frame.clipboard; }
     void setClipboardText(const std::string &text) override { _copy(text); }
 };
 
-}
+} // namespace rtype::client

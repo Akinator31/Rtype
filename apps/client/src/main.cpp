@@ -188,8 +188,8 @@ void run()
             rtype::client::OnlineScenes online(engine, network, games, metrics, style,
                                                applicationDirectory() / "server.pub");
             rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
-            rtype::engine::ColliderDebugRenderer colliderDebugRenderer(
-                engine.getEcs(), engine.getScenes(), CollisionCellSize);
+            rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
+                                                                       CollisionCellSize);
             createScenes(engine, resources, style, window, console, metrics, games);
             rtype::client::registerClientCommands(console, engine, window);
             engine.switchScene(rtype::client::MainMenuScene);
@@ -225,8 +225,7 @@ void run()
     std::exception_ptr renderFailure;
     try {
         while (!window.shouldClose()) {
-            const auto queryDeadline = std::chrono::steady_clock::now() +
-                                       std::chrono::milliseconds(4);
+            const auto queryDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(4);
             do {
                 resources.finishPendingLoads();
                 queries.drain();

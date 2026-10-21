@@ -104,8 +104,9 @@ SceneRenderer::SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle
 {
 }
 
-void SceneRenderer::drawConsoleField(render::RenderContext &renderer, const Text &text, const TextField &field,
-                                     render::Vector2 topLeft, float size, float opacity) const
+void SceneRenderer::drawConsoleField(render::RenderContext &renderer, const Text &text,
+                                     const TextField &field, render::Vector2 topLeft, float size,
+                                     float opacity) const
 {
     const std::string prompt = fieldPrefix(field);
     renderer.drawText(text.font, prompt, topLeft, size, faded(_style.console.prompt, opacity));

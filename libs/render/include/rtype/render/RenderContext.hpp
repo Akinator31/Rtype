@@ -39,4 +39,4 @@ public:
                           Color color) = 0;
 };
 
-}
+} // namespace rtype::render

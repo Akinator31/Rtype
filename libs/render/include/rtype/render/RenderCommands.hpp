@@ -87,8 +87,7 @@ class CommandRecorder : public RenderContext
     RenderCommands _commands;
 
 public:
-    CommandRecorder(Renderer &renderer, RenderQueries &queries)
-        : _renderer(renderer), _queries(queries) {}
+    CommandRecorder(Renderer &renderer, RenderQueries &queries) : _renderer(renderer), _queries(queries) {}
 
     [[nodiscard]] RenderCommands take() { return std::exchange(_commands, {}); }
 
@@ -120,9 +119,8 @@ public:
     void drawTexture(TextureId texture, Rectangle source, Rectangle destination, float rotation,
                      Color tint) override
     {
-        _commands.emplace_back([=](Renderer &renderer) {
-            renderer.drawTexture(texture, source, destination, rotation, tint);
-        });
+        _commands.emplace_back(
+            [=](Renderer &renderer) { renderer.drawTexture(texture, source, destination, rotation, tint); });
     }
     void drawRectangle(Rectangle rectangle, Color color) override
     {
@@ -134,18 +132,15 @@ public:
     }
     void drawRectangleOutline(Rectangle rectangle, float thickness, Color color) override
     {
-        _commands.emplace_back([=](Renderer &renderer) {
-            renderer.drawRectangleOutline(rectangle, thickness, color);
-        });
+        _commands.emplace_back(
+            [=](Renderer &renderer) { renderer.drawRectangleOutline(rectangle, thickness, color); });
     }
     void drawRoundedRectangle(Rectangle rectangle, float radius, Color left, Color right) override
     {
-        _commands.emplace_back([=](Renderer &renderer) {
-            renderer.drawRoundedRectangle(rectangle, radius, left, right);
-        });
+        _commands.emplace_back(
+            [=](Renderer &renderer) { renderer.drawRoundedRectangle(rectangle, radius, left, right); });
     }
-    void drawRoundedRectangleOutline(Rectangle rectangle, float radius, float thickness,
-                                     Color color) override
+    void drawRoundedRectangleOutline(Rectangle rectangle, float radius, float thickness, Color color) override
     {
         _commands.emplace_back([=](Renderer &renderer) {
             renderer.drawRoundedRectangleOutline(rectangle, radius, thickness, color);
@@ -153,21 +148,17 @@ public:
     }
     void drawCircleOutline(Vector2 center, float radius, float thickness, Color color) override
     {
-        _commands.emplace_back([=](Renderer &renderer) {
-            renderer.drawCircleOutline(center, radius, thickness, color);
-        });
+        _commands.emplace_back(
+            [=](Renderer &renderer) { renderer.drawCircleOutline(center, radius, thickness, color); });
     }
     void drawLine(Vector2 start, Vector2 end, float thickness, Color color) override
     {
-        _commands.emplace_back([=](Renderer &renderer) {
-            renderer.drawLine(start, end, thickness, color);
-        });
+        _commands.emplace_back([=](Renderer &renderer) { renderer.drawLine(start, end, thickness, color); });
     }
     void drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color color) override
     {
-        _commands.emplace_back([=](Renderer &renderer) {
-            renderer.drawTriangle(first, second, third, color);
-        });
+        _commands.emplace_back(
+            [=](Renderer &renderer) { renderer.drawTriangle(first, second, third, color); });
     }
     void drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
                    Vector3 rotationAxis, float rotationAngle, float scale, Color tint,
@@ -189,13 +180,11 @@ public:
             renderer.blendModelAnimations(model, from, fromTime, to, toTime, amount);
         });
     }
-    void drawText(FontId font, const std::string &text, Vector2 position, float size,
-                  Color color) override
+    void drawText(FontId font, const std::string &text, Vector2 position, float size, Color color) override
     {
-        _commands.emplace_back([=](Renderer &renderer) {
-            renderer.drawText(font, text, position, size, color);
-        });
+        _commands.emplace_back(
+            [=](Renderer &renderer) { renderer.drawText(font, text, position, size, color); });
     }
 };
 
-}
+} // namespace rtype::render
