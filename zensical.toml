@@ -70,6 +70,7 @@ nav = [
     "decisions/0016-replication.md",
     "decisions/0017-asset-loading-threads.md",
     "decisions/0018-lua-game-config.md",
+    "decisions/0019-luabridge3-scripting-library.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
