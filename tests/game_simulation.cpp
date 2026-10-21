@@ -793,3 +793,128 @@ TEST_CASE("A ship registry refuses a ship without id or model, and accepts one w
     registry.addDefinition({"silent", "models/silent.glb", {}});
     CHECK(registry.getDefinition("silent").sounds.move.empty());
 }
+
+namespace
+{
+
+EnemyRegistry scoutEnemies()
+{
+    EnemyRegistry enemies;
+    enemies.addDefinition(scout());
+    return enemies;
+}
+
+WaveDefinition randomWave()
+{
+    WaveDefinition wave;
+    wave.name = "scouts_random";
+    wave.label = "Scouts";
+    wave.description = "Five scouts from the right";
+    wave.quantity = 5;
+    wave.spawnInterval = 0.5f;
+    wave.placement = WavePlacement::Random;
+    wave.enemy = "bydo_scout";
+    return wave;
+}
+
+WaveDefinition manualWave()
+{
+    WaveDefinition wave;
+    wave.name = "scouts_line";
+    wave.label = "Scout line";
+    wave.quantity = 2;
+    wave.spawnInterval = 0.0f;
+    wave.placement = WavePlacement::Manual;
+    wave.spawns = {{"bydo_scout", 2000.0f, 200.0f}, {"bydo_scout", 2000.0f, 800.0f}};
+    return wave;
+}
+
+} // namespace
+
+TEST_CASE("A wave registry gives back the waves of both placements, and refuses doubles and unknown names",
+          "[game]")
+{
+    const EnemyRegistry enemies = scoutEnemies();
+    WaveRegistry registry;
+    registry.addDefinition(randomWave(), enemies);
+    registry.addDefinition(manualWave(), enemies);
+
+    const WaveDefinition &random = registry.getDefinition("scouts_random");
+    CHECK(random.label == "Scouts");
+    CHECK(random.quantity == 5);
+    CHECK(random.spawnInterval == Approx(0.5f));
+    CHECK(random.placement == WavePlacement::Random);
+    CHECK(random.area.minX == Approx(GameWidth));
+    CHECK(random.area.maxY == Approx(GameHeight));
+    const WaveDefinition &manual = registry.getDefinition("scouts_line");
+    CHECK(manual.placement == WavePlacement::Manual);
+    REQUIRE(manual.spawns.size() == 2);
+    CHECK(manual.spawns[1].y == Approx(800.0f));
+    CHECK_FALSE(registry.hasDefinition("nope"));
+    CHECK_THROWS_AS(registry.addDefinition(randomWave(), enemies), std::invalid_argument);
+    CHECK_THROWS_AS(registry.getDefinition("nope"), std::out_of_range);
+}
+
+TEST_CASE("A wave registry refuses a wave that is not valid", "[game]")
+{
+    const EnemyRegistry enemies = scoutEnemies();
+    WaveRegistry registry;
+    WaveDefinition wave = randomWave();
+
+    SECTION("no name")
+    {
+        wave.name.clear();
+    }
+    SECTION("no enemy")
+    {
+        wave.quantity = 0;
+    }
+    SECTION("a negative interval")
+    {
+        wave.spawnInterval = -0.1f;
+    }
+    SECTION("a random wave without enemy")
+    {
+        wave.enemy.clear();
+    }
+    SECTION("a random wave with an unknown enemy")
+    {
+        wave.enemy = "nope";
+    }
+    SECTION("a random wave with spawns")
+    {
+        wave.spawns = manualWave().spawns;
+    }
+    SECTION("a random wave with an empty area")
+    {
+        wave.area.minY = 10.0f;
+        wave.area.maxY = 5.0f;
+    }
+    SECTION("a manual wave with a quantity other than its spawns")
+    {
+        wave = manualWave();
+        wave.quantity = 3;
+    }
+    SECTION("a manual wave with an unknown enemy")
+    {
+        wave = manualWave();
+        wave.spawns[1].enemy = "nope";
+    }
+    SECTION("a manual wave with an enemy")
+    {
+        wave = manualWave();
+        wave.enemy = "bydo_scout";
+    }
+
+    CHECK_THROWS_AS(registry.addDefinition(wave, enemies), std::invalid_argument);
+    CHECK_FALSE(registry.hasDefinition(wave.name));
+}
+
+TEST_CASE("A game context keeps the waves", "[game]")
+{
+    Simulation simulation;
+    simulation.context().enemies.addDefinition(scout());
+    simulation.context().waves.addDefinition(randomWave(), simulation.context().enemies);
+
+    CHECK(simulation.context().waves.hasDefinition("scouts_random"));
+}

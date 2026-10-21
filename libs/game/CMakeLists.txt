@@ -18,6 +18,7 @@ add_library(rtype_game
     src/System/PlayerControlSystem.cpp
     src/System/ProjectileSystem.cpp
     src/System/WeaponSystem.cpp
+    src/Wave/WaveRegistry.cpp
     src/Weapon/WeaponRegistry.cpp
 )
 add_library(rtype::game ALIAS rtype_game)

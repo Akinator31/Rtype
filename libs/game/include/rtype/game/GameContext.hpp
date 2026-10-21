@@ -7,6 +7,7 @@
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/game/Wave/WaveRegistry.hpp"
 #include "rtype/game/Weapon/WeaponRegistry.hpp"
 
 #include <array>
@@ -38,6 +39,7 @@ struct GameContext {
     ShipRegistry ships;
     WeaponRegistry weapons;
     EnemyRegistry enemies;
+    WaveRegistry waves;
     /// The tick being simulated, from 1.
     std::uint32_t tick = 0;
     std::array<PlayerSlot, MaxPlayers> players{};
