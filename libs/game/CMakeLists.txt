@@ -3,12 +3,14 @@
 # depends on the ECS, the physics and the log only: no raylib, no network. The messages of the game protocol
 # (Messages.hpp, RemoteWorld.hpp) are written with the serialization of libs/network, a private dependency.
 add_library(rtype_game
+    src/Enemy/EnemyRegistry.cpp
     src/Entities.cpp
     src/Messages.cpp
     src/PlayerInput.cpp
     src/Projectile/ProjectileBehavior.cpp
     src/Projectile/ProjectileRegistry.cpp
     src/RemoteWorld.cpp
+    src/Ship/ShipRegistry.cpp
     src/ShipMovement.cpp
     src/Simulation.cpp
     src/System/AreaSystem.cpp

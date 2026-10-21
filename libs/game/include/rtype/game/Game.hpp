@@ -13,6 +13,8 @@
 
 #include "rtype/game/Component/Components.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Enemy/EnemyDefinition.hpp"
+#include "rtype/game/Enemy/EnemyRegistry.hpp"
 #include "rtype/game/Entities.hpp"
 #include "rtype/game/GameContext.hpp"
 #include "rtype/game/Messages.hpp"
@@ -23,6 +25,9 @@
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/RemoteWorld.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/Ship/ShipDefinition.hpp"
+#include "rtype/game/Ship/ShipRegistry.hpp"
+#include "rtype/game/Ship/ShipSounds.hpp"
 #include "rtype/game/ShipMovement.hpp"
 #include "rtype/game/Simulation.hpp"
 #include "rtype/game/Snapshot.hpp"

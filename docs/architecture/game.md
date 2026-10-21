@@ -276,6 +276,69 @@ equipWeapon(ecs, context, ship, "blaster"); // gives the ship an Armed component
 - The range is checked by `ProjectileSystem` on the distance flown (`Projectile::travelled`); a projectile past
   it is removed with `DestroyCause::Removed`.
 
+## Ships
+
+A kind of ship is **data**, a `ShipDefinition`, kept by id in a `ShipRegistry` (`GameContext::ships`): what a
+ship looks and sounds like, whoever flies it. The game only carries the paths of the model and of the sounds:
+it has no window and no audio, the client loads and plays them. An empty sound path means no sound.
+
+| Field | Type | What it is |
+|---|---|---|
+| `model` | `std::string` | Path of the 3D model (required) |
+| `sounds.move` | `std::string` | Played while it moves |
+| `sounds.destruction` | `std::string` | Played when it is destroyed |
+| `sounds.collision` | `std::string` | Played when it collides with something |
+
+```cpp
+simulation.context().ships.addDefinition({"bydo_scout", "models/bydo_scout.glb",
+                                          {"sounds/scout_move.ogg", "sounds/scout_destruction.ogg",
+                                           "sounds/scout_collision.ogg"}});
+```
+
+`addDefinition()` throws `std::invalid_argument` for an empty or taken id or no model; `getDefinition()` throws
+`std::out_of_range` for an unknown id.
+
+## Enemies
+
+A kind of enemy is **data** as well, an `EnemyDefinition`, kept by id in an `EnemyRegistry`
+(`GameContext::enemies`). Speeds are in game units per second. Nothing makes an enemy appear in a game yet:
+the registry is the base the spawning and the waves will read.
+
+| Field | Type | What it is |
+|---|---|---|
+| `ship` | `std::string` | The id of a `ShipDefinition`: its model and its sounds |
+| `health` | `std::uint8_t` | Hit points it starts with, like the `Health` component (not 0) |
+| `speed` | `float` | Top speed (above 0) |
+| `acceleration` | `float` | Speed gained per second until the top speed, in units/s² (0 or more) |
+| `weapon` | `std::string` | The id of a `WeaponDefinition` |
+
+```mermaid
+flowchart LR
+    Lua["Lua files<br/>(ADR 0018, later)"] -.-> Def
+    Def["EnemyDefinition<br/>id · ship · health · speed · acceleration · weapon"]
+    Def -- "addDefinition()<br/>checked: id, ship, health, speed, acceleration, weapon" --> Reg["EnemyRegistry<br/>GameContext::enemies"]
+    Def -- "ship (id)" --> SDef["ShipDefinition<br/>id · model · sounds (move · destruction · collision)"]
+    SDef -- "addDefinition()" --> SReg["ShipRegistry<br/>GameContext::ships"]
+    Def -- "weapon (id)" --> WDef["WeaponDefinition"]
+    WDef -- "addDefinition()" --> WReg["WeaponRegistry<br/>GameContext::weapons"]
+    Reg -. "getDefinition(id)" .-> Spawn["spawning, waves<br/>(later)"]
+    SReg -. "model, sounds" .-> Spawn
+    WReg -. "equipWeapon()" .-> Spawn
+```
+
+Solid arrows exist today; dotted ones are what will come next.
+
+```cpp
+simulation.context().enemies.addDefinition({"bydo_scout", "bydo_scout", 30, 240.0f, 720.0f, "blaster"});
+```
+
+- `addDefinition()` throws `std::invalid_argument` for an empty or taken id, no ship, no health, no weapon, a
+  speed not above 0 or a negative acceleration; `getDefinition()` throws `std::out_of_range` for an unknown id.
+- The ship and the weapon are **not** looked up when the enemy is added, so that the registries can be filled
+  in any order; an unknown one fails when the enemy is made (`getDefinition()`, `equipWeapon()`).
+- [ADR 0018](../decisions/0018-lua-game-config.md) plans to load the definitions from Lua files, like the
+  weapons.
+
 ## Adding gameplay
 
 The rules are components and systems on the ECS, like the physics, so that anyone can add some:

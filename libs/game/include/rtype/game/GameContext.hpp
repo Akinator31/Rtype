@@ -1,9 +1,11 @@
 #pragma once
 
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Enemy/EnemyRegistry.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/game/Weapon/WeaponRegistry.hpp"
 
@@ -33,7 +35,9 @@ struct PlayerSlot {
 struct GameContext {
     Rules rules;
     ProjectileRegistry projectiles;
+    ShipRegistry ships;
     WeaponRegistry weapons;
+    EnemyRegistry enemies;
     /// The tick being simulated, from 1.
     std::uint32_t tick = 0;
     std::array<PlayerSlot, MaxPlayers> players{};
