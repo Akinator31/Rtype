@@ -23,6 +23,7 @@ add_executable(rtype_tests
     ecs_world.cpp
     engine.cpp
     framing.cpp
+    game_config.cpp
     game_messages.cpp
     game_simulation.cpp
     keygen.cpp
@@ -71,7 +72,8 @@ target_link_libraries(rtype_test_child PRIVATE rtype_options)
 add_dependencies(rtype_tests rtype_test_child r-type_server)
 target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
-    RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>")
+    RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"
+    RTYPE_TEST_CONFIG="${PROJECT_SOURCE_DIR}/config")
 # The helpers the tests share
 target_include_directories(rtype_tests PRIVATE helpers)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)

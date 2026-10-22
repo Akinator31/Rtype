@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/ecs/Ecs.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/GameContext.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Rules.hpp"
@@ -39,9 +40,13 @@ class Simulation
     Snapshot _snapshot;
 
     void buildSnapshot();
+    void registerConfig(const GameConfig &config);
 
 public:
-    explicit Simulation(Rules rules = {});
+    /// @param config The definitions of the game (loadGameConfig()), registered in the context.
+    /// @throws std::invalid_argument if a definition is refused by its registry: a config that
+    /// loadGameConfig() accepted never is.
+    explicit Simulation(Rules rules = {}, const GameConfig &config = {});
 
     Simulation(const Simulation &) = delete;
     Simulation &operator=(const Simulation &) = delete;
@@ -77,7 +82,7 @@ public:
     /// The ECS of the game, for the tests and the debugging tools.
     [[nodiscard]] ecs::Ecs &ecs() { return _ecs; }
 
-    /// What the systems share, to register the projectiles of the game and for the tests.
+    /// What the systems share, for the tests.
     [[nodiscard]] GameContext &context() { return _context; }
 };
 

@@ -9,7 +9,7 @@ namespace rtype::game
 {
 
 /// Everything that makes a kind of projectile: creating a new one is filling this and registering it in a
-/// ProjectileRegistry (ADR 0018 will load it from a file).
+/// ProjectileRegistry; loadGameConfig() reads them from config/projectiles/ (ADR 0018).
 struct ProjectileDefinition {
     /// Unique name in a registry, e.g. "pulse".
     std::string id;
