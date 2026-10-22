@@ -97,8 +97,11 @@ to what is behind them without hiding anything, white hot where they face the ca
 `images/fx/energy_noise.png` flowing over them. As the ships, `ShotLook::core` is the box around the core of
 the model seen through the camera of the game, trail and rings excluded, measured on the model: the model is
 scaled to make its width that of the collider and centred on the shot, and the colliders have the
-proportions of the cores (`config/projectiles/`). The shots of the Bydos face left. The plasma orbs of the
-Bydos have their own kind, `BYDO_PLASMA_SHOT`, so that they have their own model.
+proportions of the cores (`config/projectiles/`). The shots of the Bydos face left. A shot is turned in the
+plane of the game the way it flies, from its velocity: a Bydo shot aimed at a player
+([Enemy behaviors](game.md#enemy-behaviors)) flies askew, and a plasma orb sways with its zigzag. Its collider
+stays a box aligned with the axes. The plasma orbs of the Bydos have their own kind, `BYDO_PLASMA_SHOT`, so
+that they have their own model.
 
 ### Ships in 3D
 

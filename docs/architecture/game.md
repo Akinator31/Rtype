@@ -349,6 +349,7 @@ A kind of enemy is **data** as well, an `EnemyDefinition`, kept by id in an `Ene
 | `weapon` | `std::string` | The id of a `WeaponDefinition` |
 | `score` | `std::uint32_t` | Points for the player who destroys it (default 100) |
 | `collisionDamage` | `std::uint8_t` | Hit points a ship loses when it runs into it (default 20) |
+| `behavior` | `std::optional<EnemyBehavior>` | What moves it and makes it fire (see [Enemy behaviors](#enemy-behaviors)); none: it flies left and fires as soon as it can |
 
 ```mermaid
 flowchart LR
@@ -362,7 +363,7 @@ flowchart LR
     Reg -- "getDefinition(id)" --> Spawn["spawnEnemy()<br/>BydoFlyer: Enemy · Health · Damage · Collider · LeavesArea"]
     SReg -- "collider" --> Spawn
     WReg -- "equipWeapon()" --> Spawn
-    Spawn --> Fly["EnemySystem: speeds up to the left<br/>WeaponSystem: fires in the area"]
+    Spawn --> Fly["EnemySystem: its behavior, or speeds up to the left<br/>WeaponSystem: fires on orders, or in the area"]
 ```
 
 ```cpp
@@ -374,10 +375,70 @@ simulation.context().enemies.addDefinition({"bydo_scout", "bydo_scout", 30, 240.
 - The ship and the weapon are **not** looked up when the enemy is added, so that the registries can be filled
   in any order; an unknown one fails when the enemy is made: `spawnEnemy()` throws `std::out_of_range`.
 - `spawnEnemy(ecs, context, id, x, y)` makes a `BydoFlyer` (the only kind of Bydo the clients are told for now)
-  with no owner, still: the `EnemySystem` speeds it up to the left, in a straight line until the patterns of
-  [ADR 0019](../decisions/0019-luabridge3-scripting-library.md).
+  with no owner, still. Without a behavior, the `EnemySystem` speeds it up to the left, in a straight line, and
+  the `WeaponSystem` fires its weapon as soon as it is in the game area; with one, it gets an `EnemyOrders` and
+  does what its behavior says.
 - The definitions come from the Lua files of `config/enemies/`, like those of the other kinds (see
   [Configuration](#configuration)).
+
+### Enemy behaviors
+
+A kind of enemy can be **code**: an `update(enemy, game)` function in its file of `config/enemies/`, called at
+every tick for each of its enemies, which decides when it moves and when it fires
+([ADR 0019](../decisions/0019-luabridge3-scripting-library.md)). How to write one is in the guide
+[Configure enemies and weapons](../guides/configure-enemies-and-weapons.md#scripting-a-behavior);
+`config/enemies/bydo_gunner.lua` is an example.
+
+```mermaid
+flowchart LR
+    File["config/enemies/bydo_gunner.lua<br/>update = function(enemy, game)"] -- "loadGameConfig()<br/>the code of the file" --> Def["EnemyDefinition::behavior<br/>file · code"]
+    Def -- "first enemy of the kind:<br/>the file runs again" --> State["scripting::State of the game<br/>(EnemyScripts, owned by the EnemySystem)"]
+    State -- "update(enemy, game)<br/>each tick, each enemy" --> Orders["velocity · EnemyOrders<br/>destination · fire · target"]
+    Orders --> Enemy["EnemySystem: flies to the destination"]
+    Orders --> Weapon["WeaponSystem: fires if ordered and ready"]
+```
+
+**What a behavior sees.** `enemy` is the enemy itself and `game` the game, both read-only (writing a field is an
+error):
+
+| Value | What it is |
+|---|---|
+| `enemy.x`, `enemy.y` | Its position, the centre of its ship, in game units (1920 × 1080, y down) |
+| `enemy.velocityX`, `enemy.velocityY` | Its velocity, in units per second: its direction |
+| `enemy.speed` | The top speed of its definition, the speed of `moveTo()` |
+| `enemy.age` | Seconds since it appeared |
+| `enemy.health` | Hit points left |
+| `enemy.arrived` | It is on the destination of its last `moveTo()` |
+| `enemy.weapon` | Its weapon: `id`, `ready` (it fires at this tick if ordered to), `ammo` (shots before it reloads, `math.huge` for a weapon that never runs dry), `reloading` |
+| `enemy.memory` | A table of its own, kept from one tick to the next, empty when it appears: what this enemy remembers |
+| `game.tick`, `game.time` | The tick, and the seconds since the game started |
+| `game.players` | The players who have a ship, by slot: `slot`, `x`, `y`, `velocityX`, `velocityY`, `weapon` (as that of the enemy) |
+| `game:randomNumber(min, max)`, `game:randomInteger(first, last)` | Random numbers drawn from the seed of the game, the only ones a behavior has |
+
+**What it orders.** Nothing ordered, the enemy keeps its velocity and does not fire.
+
+| Order | What it does |
+|---|---|
+| `enemy:setVelocity(x, y)` | Its velocity from now on, in units per second; it forgets its destination |
+| `enemy:moveTo(x, y)` | It flies to this point at its top speed and stops on it; the destination is kept until another order |
+| `enemy:fire()` | Fires its weapon at this tick, straight ahead (to the left), if it is ready |
+| `enemy:fireAt(x, y)` | Same, towards a point: the shot flies along the line from the nose of the ship to it (`spawnAimedShot()`) |
+
+- **Each enemy on its own.** The function is the same for every enemy of the kind, but each call gets its own
+  `enemy` and its own `memory`: one gunner can be firing while another is still coming in.
+- **Fire is asked for at every tick**: a shot ordered while the weapon is not ready is not kept for later. The
+  weapon keeps its rules (fire interval, magazine, reload); `enemy.weapon.ready` says if a shot ordered now
+  goes.
+- **Deterministic.** The behaviors run in the order of the entities, in the sandbox of the configuration (no
+  clock, no `math.random`), with the random numbers of the game: the same game replays the same, on the server
+  and offline. An online client never runs them, it shows the snapshots.
+- **One state per game.** `EnemyScripts` (`src/Enemy/`, the only place of the game that binds C++ to Lua) owns a
+  `scripting::State` per `Simulation`: a behavior is loaded with the first enemy of its kind, by running its
+  file again; the files have their own globals. A call may execute `EnemyScripts::InstructionLimit` (100 000)
+  instructions.
+- **A behavior that fails is stopped.** An error, the instruction limit, a file without `update`: the error is
+  logged with the file, and the behavior is stopped for the rest of the game. Its enemies lose their
+  `EnemyOrders` and fly and fire as if they had no behavior; the game goes on.
 
 ## Waves
 
@@ -503,16 +564,18 @@ rtype::game::Simulation simulation({}, loaded.config);
 - **`GameConfig`** is plain values (`Config/GameConfig.hpp`): it is read once, then each `Simulation` gets a
   copy and registers it in its `GameContext`, in the order of the dependencies (projectiles, weapons, ships,
   enemies, waves, then the player).
-- **No Lua in the headers of the game.** `libs/scripting` is a private dependency of `libs/game`; only the
-  sources of `src/Config/` include Lua and LuaBridge3 (`rtype/scripting/Lua.hpp`).
+- **No Lua in the public headers of the game.** `libs/scripting` is a private dependency of `libs/game`; only
+  the sources of `src/Config/` and `src/Enemy/` (the [behaviors](#enemy-behaviors)) include Lua and LuaBridge3
+  (`rtype/scripting/Lua.hpp`).
 
 **`libs/scripting`** (`rtype::scripting`) builds Lua 5.4 from its sources (without the `io`, `os`, `package`,
 `debug`, `coroutine` and `utf8` libraries) and gives a `State`: only the base functions, `table`, `string` and
 `math`, without `load`, `loadfile`, `dofile`, `math.random` nor `math.randomseed`; text chunks only (no
-precompiled bytecode); an instruction limit (`State::DefaultInstructionLimit`) that stops an endless loop with
-an error; and an environment table per run, so that two files do not share their globals. Its errors are
-`ScriptError`s whose message starts with the name of the file. Lua's string hashes get a fixed seed, so that
-`pairs()` goes through a table in the same order on every run.
+precompiled bytecode); an instruction limit (`State::DefaultInstructionLimit`) for each run of a file and
+each call of a function (`callFunction()`), that stops an endless loop with an error; and an environment table
+per run, so that two files do not share their globals. Its errors are `ScriptError`s whose message starts with
+the name of the file. Lua's string hashes get a fixed seed, so that `pairs()` goes through a table in the same
+order on every run.
 
 ## Adding gameplay
 
@@ -615,13 +678,19 @@ interval, shots removed once out of the area with ids never given again, the sam
 inputs, and an hour of random inputs with four players keeping every entity in the range of the protocol.
 They also check the Bydos (their flight, their shots to the left), the hits (damage, score, a Bydo running
 into a ship), and the waves: one per difficulty, a missing difficulty skipped, the interval and the area of
-their enemies, the wave drawn from the seed, nothing without a player, and the victory told once.
+their enemies, the wave drawn from the seed, nothing without a player, and the victory told once. The
+behaviors of the Bydos: flying to a point and stopping there, firing only when ordered, aiming at a player,
+the memory of each enemy, their random numbers drawn from the seed, an enemy without orders keeping still, and
+a behavior that fails or never ends stopped while the game goes on.
 
 The tests in `tests/game_config.cpp` (tag `[game]`) load the configuration of the repository, read each kind
 with its defaults, and check each error: the field that is missing, of the wrong type, out of range or
 unknown, the file that does not return a table or does not run, the unknown ids, the ids defined twice, a
-missing `player.lua`, and the errors of several files at once. The tests in `tests/scripting.cpp` (tag `[scripting]`) check the sandbox of
-the `State`, the instruction limit, the separate globals and the names in the errors.
+missing `player.lua`, and the errors of several files at once; an enemy with an `update` function keeps the
+code of its file, and the gunner of the repository stops, fires three orbs and leaves. The tests in
+`tests/scripting.cpp` (tag `[scripting]`) check the sandbox of the `State`, the instruction limit, the separate
+globals, the names in the errors, and the functions called with their arguments, each call under a limit of its
+own.
 
 The tests in `tests/game_messages.cpp` (tags `[messages]` and `[world]`) check the bytes of the example of the
 specification, the round trip of every message, the rounding and the limits of positions, every malformed
