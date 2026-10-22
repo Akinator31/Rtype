@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/render/ColorFilter.hpp"
+#include "rtype/render/Energy.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
@@ -164,6 +165,14 @@ public:
                    Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
                    Color tint = colors::White, float spinAngle = 0.0f,
                    const std::vector<int> &hiddenMeshes = {});
+    /// Draws a 3D model of energy (a shot, a beam, a plasma orb) seen through the camera: it glows with the
+    /// colour of its texture, added to what is behind it, white hot where it faces the camera, flickering
+    /// with the noise of `energy`. It hides nothing: draw it after the models it may cover.
+    /// The other parameters are those of drawModel().
+    /// @throws std::logic_error if no frame is started.
+    void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
+                         Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
+                         float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
 
     /// Poses an animated model at a time of one of its animations: the next draws of this model show this
     /// pose, until it is animated again. Several entities sharing a model each pose it before being drawn.

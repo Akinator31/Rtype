@@ -1,5 +1,6 @@
 #include "rtype/render/Renderer.hpp"
 
+#include "EnergyShader.hpp"
 #include "FilterShader.hpp"
 #include "LightingShader.hpp"
 #include "Resources.hpp"
@@ -170,6 +171,7 @@ struct Renderer::Impl {
     std::optional<RenderTarget> target;
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
+    detail::EnergyShader energyShader;
     ColorFilter colorFilter = ColorFilter::None;
     bool inFrame = false;
 
@@ -426,6 +428,19 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
                                toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint),
                                hiddenMeshes);
     // EndMode3D() resets the view to window pixels: go back to game units for what is drawn next
+    EndMode3D();
+    _impl->beginGameView();
+}
+
+void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
+                               Vector3 rotationAxis, float rotationAngle, float scale, Color tint,
+                               float spinAngle)
+{
+    _impl->requireFrame();
+    BeginMode3D(toRaylib(camera));
+    _impl->energyShader.draw(_impl->models.get(model).get(), energy, _impl->textures.get(energy.noise).get(),
+                             toRaylib(camera.position), toRaylib(position), toRaylib(rotationAxis),
+                             rotationAngle, spinAngle, scale, toRaylib(tint));
     EndMode3D();
     _impl->beginGameView();
 }
