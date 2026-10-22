@@ -2,6 +2,7 @@
 
 #include "Config/TableReader.hpp"
 #include "rtype/game/Enemy/EnemyDefinition.hpp"
+#include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/Projectile/ProjectileDefinition.hpp"
 #include "rtype/game/Ship/ShipDefinition.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
@@ -18,5 +19,6 @@ namespace rtype::game
 [[nodiscard]] ShipDefinition readShipDefinition(TableReader &table);
 [[nodiscard]] EnemyDefinition readEnemyDefinition(TableReader &table);
 [[nodiscard]] WaveDefinition readWaveDefinition(TableReader &table);
+[[nodiscard]] PlayerDefinition readPlayerDefinition(TableReader &table);
 
 } // namespace rtype::game

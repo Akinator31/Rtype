@@ -33,6 +33,8 @@ struct WeaponDefinition {
     std::uint32_t magazineSize = 0;
     /// Ticks to reload an empty magazine. The weapon reloads on its own and cannot fire meanwhile.
     std::uint32_t reloadTicks = 0;
+    /// Hit points each projectile takes from what it hits (not 0).
+    std::uint8_t damage = 10;
 };
 
 } // namespace rtype::game

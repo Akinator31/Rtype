@@ -11,4 +11,8 @@ return {
     acceleration = 720,
     -- The id of a weapon of config/weapons/
     weapon = "blaster",
+    -- Points for the player who destroys it (default 100)
+    score = 100,
+    -- Hit points a player ship loses when it runs into it, 0 to 255 (default 20)
+    collisionDamage = 20,
 }

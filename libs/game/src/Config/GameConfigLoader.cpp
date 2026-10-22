@@ -33,6 +33,9 @@ struct FromFile {
 template <typename Definition>
 using DefinitionReader = Definition (*)(TableReader &);
 
+/// The file of the player, at the root of the directory.
+constexpr std::string_view PlayerFile = "player.lua";
+
 /// The `.lua` files under `folder`, by path, so that every machine reads them in the same order.
 std::vector<std::filesystem::path> listScripts(const std::filesystem::path &folder,
                                                std::vector<std::string> &errors)
@@ -133,7 +136,25 @@ struct ReadFiles {
     std::vector<FromFile<ShipDefinition>> ships;
     std::vector<FromFile<EnemyDefinition>> enemies;
     std::vector<FromFile<WaveDefinition>> waves;
+    std::optional<FromFile<PlayerDefinition>> player;
 };
+
+/// The file of the player, at the root of the directory: required, a game cannot be played without it.
+std::optional<FromFile<PlayerDefinition>> readPlayerFile(const std::filesystem::path &directory,
+                                                        std::vector<std::string> &errors)
+{
+    const std::string name(PlayerFile);
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(directory / name, error)) {
+        errors.push_back(std::format("{}: missing: the players need a ship and a weapon", name));
+        return std::nullopt;
+    }
+    std::optional<PlayerDefinition> player = readScript(directory / name, name, readPlayerDefinition, errors);
+    if (player) {
+        return FromFile<PlayerDefinition>{name, std::move(*player)};
+    }
+    return std::nullopt;
+}
 
 ReadFiles readFiles(const std::filesystem::path &directory, std::vector<std::string> &errors)
 {
@@ -144,6 +165,7 @@ ReadFiles readFiles(const std::filesystem::path &directory, std::vector<std::str
     files.ships = readFolder<ShipDefinition>(directory, "ships", readShipDefinition, errors);
     files.enemies = readFolder<EnemyDefinition>(directory, "enemies", readEnemyDefinition, errors);
     files.waves = readFolder<WaveDefinition>(directory, "waves", readWaveDefinition, errors);
+    files.player = readPlayerFile(directory, errors);
     return files;
 }
 
@@ -172,12 +194,19 @@ void checkDefinitions(const ReadFiles &files, std::vector<std::string> &errors)
         checkReference(ships.hasDefinition(enemy.ship), file, "ship", "ship", enemy.ship, errors);
         checkReference(weapons.hasDefinition(enemy.weapon), file, "weapon", "weapon", enemy.weapon, errors);
     }
+    const auto &[file, player] = *files.player;
+    checkReference(ships.hasDefinition(player.ship), file, "ship", "ship", player.ship, errors);
+    checkReference(weapons.hasDefinition(player.weapon), file, "weapon", "weapon", player.weapon, errors);
 }
 
 GameConfig takeConfig(ReadFiles &files)
 {
-    return {takeDefinitions(files.projectiles), takeDefinitions(files.weapons), takeDefinitions(files.ships),
-            takeDefinitions(files.enemies), takeDefinitions(files.waves)};
+    return {takeDefinitions(files.projectiles),
+            takeDefinitions(files.weapons),
+            takeDefinitions(files.ships),
+            takeDefinitions(files.enemies),
+            takeDefinitions(files.waves),
+            std::move(files.player->definition)};
 }
 
 } // namespace

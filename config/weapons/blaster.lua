@@ -15,4 +15,6 @@ return {
     magazineSize = 8,
     -- Ticks to reload an empty magazine
     reloadTicks = 90,
+    -- Hit points each projectile takes from what it hits, 1 to 255 (default 10)
+    damage = 10,
 }

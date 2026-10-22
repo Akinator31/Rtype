@@ -5,4 +5,6 @@ return {
     health = 80,
     speed = 150,
     weapon = "plasma_gun",
+    score = 250,
+    collisionDamage = 40,
 }

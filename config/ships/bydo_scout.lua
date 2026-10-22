@@ -9,4 +9,6 @@ return {
         destruction = "",
         collision = "",
     },
+    -- The shape that hits and is hit, centred on the ship (default: a box of 48 by 24)
+    collider = { shape = "box", halfWidth = 40, halfHeight = 24 },
 }

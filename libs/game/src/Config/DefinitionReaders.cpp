@@ -118,6 +118,7 @@ WeaponDefinition readWeaponDefinition(TableReader &table)
         static_cast<std::uint32_t>(table.readInteger("magazineSize", 0, MaxU32, definition.magazineSize));
     definition.reloadTicks =
         static_cast<std::uint32_t>(table.readInteger("reloadTicks", 0, MaxU32, definition.reloadTicks));
+    definition.damage = static_cast<std::uint8_t>(table.readInteger("damage", 1, MaxU8, definition.damage));
     table.checkAllFieldsRead();
     return definition;
 }
@@ -129,6 +130,9 @@ ShipDefinition readShipDefinition(TableReader &table)
     definition.model = table.readString("model");
     if (table.hasField("sounds")) {
         definition.sounds = readShipSounds(table.readTable("sounds"));
+    }
+    if (table.hasField("collider")) {
+        definition.collider = readCollider(table.readTable("collider"));
     }
     table.checkAllFieldsRead();
     return definition;
@@ -144,6 +148,9 @@ EnemyDefinition readEnemyDefinition(TableReader &table)
     definition.acceleration =
         table.readNumber("acceleration", NumberRange::ZeroOrMore, definition.acceleration);
     definition.weapon = table.readString("weapon");
+    definition.score = static_cast<std::uint32_t>(table.readInteger("score", 0, MaxU32, definition.score));
+    definition.collisionDamage =
+        static_cast<std::uint8_t>(table.readInteger("collisionDamage", 0, MaxU8, definition.collisionDamage));
     table.checkAllFieldsRead();
     return definition;
 }
@@ -172,6 +179,16 @@ WaveDefinition readWaveDefinition(TableReader &table)
         listed
             ? static_cast<std::uint16_t>(table.readInteger("quantity", 1, MaxU16, definition.spawns.size()))
             : static_cast<std::uint16_t>(table.readInteger("quantity", 1, MaxU16));
+    table.checkAllFieldsRead();
+    return definition;
+}
+
+PlayerDefinition readPlayerDefinition(TableReader &table)
+{
+    PlayerDefinition definition;
+    definition.ship = table.readString("ship");
+    definition.weapon = table.readString("weapon");
+    definition.health = static_cast<std::uint8_t>(table.readInteger("health", 1, MaxU8, definition.health));
     table.checkAllFieldsRead();
     return definition;
 }
