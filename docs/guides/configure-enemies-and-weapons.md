@@ -86,6 +86,7 @@ config/
     return {
         name = "hunters",
         label = "Hunters",
+        difficulty = 3,
         placement = "random",
         enemy = "bydo_hunter",
         quantity = 4,
@@ -172,6 +173,7 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `name` | string | *required* | Unique among the waves |
 | `label` | string | `""` | Short text shown to the players |
 | `description` | string | `""` | Longer text |
+| `difficulty` | whole number from 1 to 5 | *required* | How hard the wave is, 1 the easiest |
 | `placement` | `"manual"` or `"random"` | *required* | Each enemy listed with its position, or one kind of enemy placed at random |
 | `spawnInterval` | number, 0 or more | `1` | Seconds between two enemies, 0 for all at once |
 | `spawns` | list of `{ enemy = "...", x = ..., y = ... }` | | Manual only, *required*: each enemy and where it appears, in order |

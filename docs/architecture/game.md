@@ -350,6 +350,7 @@ registry is what the spawning will read.
 | `name` | `std::string` | Unique name in the registry |
 | `label` | `std::string` | Short text shown to the players |
 | `description` | `std::string` | Longer text |
+| `difficulty` | `std::uint8_t` | How hard the wave is, from 1 (`MinWaveDifficulty`) to 5 (`MaxWaveDifficulty`) |
 | `quantity` | `std::uint16_t` | How many enemies (above 0) |
 | `spawnInterval` | `float` | Seconds between two enemies (0 or more; 0 = all at once) |
 | `placement` | `WavePlacement` | `Manual` or `Random`, one mode per wave |
@@ -359,10 +360,10 @@ registry is what the spawning will read.
 
 ```mermaid
 flowchart LR
-    Def["WaveDefinition<br/>name · label · description · quantity · spawnInterval · placement"]
+    Def["WaveDefinition<br/>name · label · description · difficulty · quantity · spawnInterval · placement"]
     Def -- "placement = Manual" --> Spawns["spawns: WaveSpawn[]<br/>enemy · x · y, one per enemy"]
     Def -- "placement = Random" --> Rand["enemy (id) + area: WaveArea<br/>minX · maxX · minY · maxY"]
-    Def -- "addDefinition(wave, enemies)<br/>checked: name, quantity, interval, placement, area, known enemies" --> Reg["WaveRegistry<br/>GameContext::waves"]
+    Def -- "addDefinition(wave, enemies)<br/>checked: name, quantity, difficulty, interval, placement, area, known enemies" --> Reg["WaveRegistry<br/>GameContext::waves"]
     Spawns -- "enemy (id)" --> EDef["EnemyDefinition"]
     Rand -- "enemy (id)" --> EDef
     EDef -- "addDefinition()" --> EReg["EnemyRegistry<br/>GameContext::enemies"]
@@ -379,9 +380,9 @@ random enemies: for that, play two waves one after the other.
 ```cpp
 auto &context = simulation.context();
 context.waves.addDefinition(
-    {"scouts_random", "Scouts", "Five scouts from the right", 5, 0.5f, WavePlacement::Random, {}, "bydo_scout"},
+    {"scouts_random", "Scouts", "Five scouts from the right", 2, 5, 0.5f, WavePlacement::Random, {}, "bydo_scout"},
     context.enemies);
-context.waves.addDefinition({"scouts_line", "Scout line", "", 2, 0.0f, WavePlacement::Manual,
+context.waves.addDefinition({"scouts_line", "Scout line", "", 1, 2, 0.0f, WavePlacement::Manual,
                              {{"bydo_scout", 2000.0f, 200.0f}, {"bydo_scout", 2000.0f, 800.0f}}},
                             context.enemies);
 ```
