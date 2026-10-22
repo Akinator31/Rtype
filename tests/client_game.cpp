@@ -7,6 +7,7 @@
 #include "Game/GameSessionSystem.hpp"
 #include "Game/GameView.hpp"
 #include "Game/LocalSession.hpp"
+#include "Game/ShotLooks.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -364,6 +365,41 @@ TEST_CASE("A kind of shot given a look is a 3D model of energy, its core on the 
     CHECK(model.scale == Approx(lookOf(*fired).box.width / 4.0f));
     CHECK(model.position.x == Approx(fired->x - (1.0f * model.scale)));
     CHECK(model.position.y == Approx(fired->y));
+}
+
+TEST_CASE("A shot fired askew turns its model the way it flies, its core still on the shot", "[client]")
+{
+    rtype::ecs::Ecs ecs;
+    ShotLooks looks;
+    // A model that faces left, its core 4 units long, centred 1 unit right of its origin when straight
+    looks.setLook(rtype::game::EntityKind::BydoShot, {{}, {-1.0f, -0.5f, 4.0f, 1.0f}, true, {}});
+    rtype::game::EntityState state{7, rtype::game::EntityKind::BydoShot, rtype::game::NoOwner};
+    state.x = 500.0f;
+    state.y = 300.0f;
+    // Where the nose of the model points after its turns: a half turn around its vertical axis to face left,
+    // then a half turn around the axis of the model
+    const auto noseOf = [](const rtype::engine::Model &model) {
+        const rtype::render::Vector3 &axis = model.rotationAxis;
+        return rtype::render::Vector2{1.0f - (2.0f * axis.x * axis.x), -2.0f * axis.x * axis.y};
+    };
+
+    state.velocityX = -600.0f;
+    const rtype::ecs::entity_t straight = ecs.createEntity();
+    looks.addModel(ecs, straight, state, lookOf(state));
+    const rtype::engine::Model &ahead = ecs.getComponent<rtype::engine::Model>(straight);
+    CHECK(noseOf(ahead).x == Approx(-1.0f));
+    CHECK(noseOf(ahead).y == Approx(0.0f).margin(1e-6));
+    CHECK(ahead.position.x == Approx(500.0f - (1.0f * ahead.scale)));
+
+    // Down and to the left, at 45 degrees
+    state.velocityY = 600.0f;
+    const rtype::ecs::entity_t askew = ecs.createEntity();
+    looks.addModel(ecs, askew, state, lookOf(state));
+    const rtype::engine::Model &turned = ecs.getComponent<rtype::engine::Model>(askew);
+    CHECK(noseOf(turned).x == Approx(-std::numbers::sqrt2_v<float> / 2.0f));
+    CHECK(noseOf(turned).y == Approx(std::numbers::sqrt2_v<float> / 2.0f));
+    CHECK(turned.position.x == Approx(500.0f - (std::numbers::sqrt2_v<float> / 2.0f * turned.scale)));
+    CHECK(turned.position.y == Approx(300.0f + (std::numbers::sqrt2_v<float> / 2.0f * turned.scale)));
 }
 
 TEST_CASE("Shots appear when fired, and their entities go when they leave the game", "[client]")

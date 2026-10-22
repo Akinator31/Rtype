@@ -38,7 +38,8 @@ public:
     /// Gives an entity the model of its kind, placed on it.
     void addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state,
                   const EntityLook &look) const;
-    /// Puts the core of the model of an entity on the latest state of its shot.
+    /// Puts the core of the model of an entity on the latest state of its shot, turned the way it flies: a
+    /// shot aimed at a player flies askew.
     void placeModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state) const;
 };
 
