@@ -6,6 +6,7 @@
 #include "Game/GameSessionSystem.hpp"
 #include "Game/LocalSession.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
@@ -14,8 +15,10 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <vector>
 
@@ -216,6 +219,23 @@ TEST_CASE("Each entity of the game has its size, the ships of the players the co
     }
 }
 
+TEST_CASE("The camera of the game sees the game plane as the screen sees the game", "[client]")
+{
+    // A 16:10 screen shows more of the game above and under it
+    const rtype::render::Camera view = computeGameView({0.0f, -60.0f, 1920.0f, 1200.0f});
+
+    CHECK(view.projection == rtype::render::Projection::Orthographic);
+    CHECK(view.fieldOfView == Approx(1200.0f));
+    CHECK(view.target.x == Approx(960.0f));
+    CHECK(view.target.y == Approx(540.0f));
+    CHECK(view.target.z == Approx(0.0f));
+    CHECK(view.position.x == Approx(960.0f));
+    CHECK(view.position.y == Approx(540.0f));
+    // In front of the plane, y pointing down on the screen, as in the game
+    CHECK(view.position.z < 0.0f);
+    CHECK(view.up.y == Approx(-1.0f));
+}
+
 // --- The world in the scene ---
 
 TEST_CASE("The world of the session is drawn in the scene, and follows it", "[client]")
@@ -238,6 +258,75 @@ TEST_CASE("The world of the session is drawn in the scene, and follows it", "[cl
     client.input.keys = {Key::Right};
     client.run(30);
     CHECK(client.ecs.getComponent<rtype::ecs::Position>(*ship).x > start + 100.0f);
+}
+
+TEST_CASE("A kind of ship given a look is a 3D model, its hull on the box of the ship", "[client]")
+{
+    Client client;
+    // A hull 4 units long, centred 1 unit right of the origin of the model and 1 unit above it
+    const ShipLook look{{{}, {0, 1, 2, 3}}, {-1.0f, -2.0f, 4.0f, 2.0f}, false, {4, 5}};
+    client.sessions.setShipLook(rtype::game::EntityKind::PlayerShip, look);
+    const rtype::game::Rules rules;
+
+    client.run(1);
+    const rtype::game::EntityState &state = client.session->simulation().snapshot().entities[0];
+    const std::optional<rtype::ecs::entity_t> ship = client.sessions.entityOf(state.id);
+    REQUIRE(ship);
+    REQUIRE(client.ecs.hasComponent<rtype::engine::Model>(*ship));
+    CHECK_FALSE(client.ecs.hasComponent<rtype::engine::Box>(*ship));
+    const rtype::engine::Model &model = client.ecs.getComponent<rtype::engine::Model>(*ship);
+    // As long as the box of the ship, the centre of its hull on the ship
+    CHECK(model.scale == Approx(rules.shipHalfWidth * 2.0f / 4.0f));
+    CHECK(model.position.x == Approx(state.x - (1.0f * model.scale)));
+    CHECK(model.position.y == Approx(state.y + (1.0f * model.scale)));
+    // No flames while it does not fly forward, its flames animated while it does
+    const auto animationOf = [&] {
+        return client.ecs.getComponent<rtype::engine::ModelAnimation>(*ship).animation;
+    };
+    CHECK(animationOf() == look.model.animations.idle);
+    CHECK(model.hiddenMeshes == look.flameMeshes);
+    client.input.keys = {Key::Right};
+    client.run(2);
+    CHECK(animationOf() == look.model.animations.move);
+    CHECK(model.hiddenMeshes.empty());
+    client.input.keys = {Key::Left};
+    client.run(2);
+    CHECK(animationOf() == look.model.animations.idle);
+    CHECK(model.hiddenMeshes == look.flameMeshes);
+
+    // Climbing: the ship rolls its belly towards the camera little by little, its hull staying on it
+    client.input.keys = {Key::Up};
+    client.run(1);
+    CHECK(animationOf() == look.model.animations.idle);
+    CHECK(model.hiddenMeshes == look.flameMeshes);
+    const auto rollOf = [&] { return client.ecs.getComponent<ShipAttitude>(*ship).roll; };
+    CHECK(rollOf() < 0.0f);
+    CHECK(rollOf() > -12.0f);
+    client.run(12);
+    CHECK(rollOf() < -28.0f);
+    CHECK(rollOf() >= -40.0f);
+    // Its flame holds still while it climbs
+    const auto timeOf = [&] { return client.ecs.getComponent<rtype::engine::ModelAnimation>(*ship).time; };
+    const float held = timeOf();
+    client.run(3);
+    CHECK(timeOf() == held);
+    // Around its length, the axis of its tilt
+    CHECK(model.rotationAxis.x == Approx(1.0f));
+    CHECK(model.rotationAngle == Approx(200.0f + rollOf()));
+    const rtype::ecs::Position &position = client.ecs.getComponent<rtype::ecs::Position>(*ship);
+    const float roll = rollOf() * std::numbers::pi_v<float> / 180.0f;
+    CHECK(model.position.x == Approx(position.x - (1.0f * model.scale)));
+    CHECK(model.position.y == Approx(position.y + (1.0f * model.scale * std::cos(roll))));
+
+    // Diving: its top towards the camera, less far; then flying straight again
+    client.input.keys = {Key::Down};
+    client.run(30);
+    CHECK(rollOf() > 18.0f);
+    CHECK(rollOf() <= 25.0f);
+    client.input.keys.clear();
+    client.run(60);
+    CHECK(rollOf() == Approx(0.0f).margin(0.1f));
+    CHECK(animationOf() == look.model.animations.idle);
 }
 
 TEST_CASE("Shots appear when fired, and their entities go when they leave the game", "[client]")

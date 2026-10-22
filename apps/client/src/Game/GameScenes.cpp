@@ -3,6 +3,7 @@
 #include "Assets.hpp"
 #include "Game/LocalSession.hpp"
 #include "MainMenu/MainMenu.hpp"
+#include "ShipModel.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
@@ -11,6 +12,7 @@
 #include <format>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace rtype::client
 {
@@ -22,6 +24,20 @@ namespace
 constexpr float HudMargin = 40.0f;
 constexpr float HudLineSpacing = 56.0f;
 
+/// The hulls of the ship models seen through the camera of the game, flames excluded, in model units:
+/// measured on the models in their Move pose, the ship of the players facing right, the drop ship of the
+/// Bydos facing left. The colliders of the ships have the same proportions (Rules::shipHalfWidth,
+/// config/ships/bydo_scout.lua).
+constexpr render::Rectangle EznoHull{-8.66f, -3.31f, 17.31f, 10.01f};
+constexpr render::Rectangle DropShipHull{-11.95f, -5.74f, 23.9f, 9.11f};
+
+/// The meshes of the flames and trails of the ship models, by index in their files.
+const std::vector<int> EznoFlames{2, 6};
+const std::vector<int> DropShipFlames{9, 10, 11, 12};
+
+/// The ships are lit from the top left, in front of them, in the world of the game where y points down.
+constexpr render::Light GameLight{{0.5f, 0.8f, 0.6f}, {255, 248, 240, 255}, {48, 50, 62, 255}};
+
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources,
@@ -29,10 +45,16 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                        GameSessionSystem &sessions, localization::Localization &translations)
     : _engine(engine), _sessions(sessions), _translations(translations)
 {
+    sessions.setShipLook(game::EntityKind::PlayerShip,
+                         {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoFlames});
+    sessions.setShipLook(
+        game::EntityKind::BydoFlyer,
+        {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP), DropShipHull, true, DropShipFlames});
     engine.createScene(GameScene,
                        {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
-                       [this, &resources, &style](engine::Engine & /*target*/, engine::SceneId scene) {
-                           build(scene, resources, style);
+                       [this, &resources, &metrics, &style](engine::Engine & /*target*/,
+                                                            engine::SceneId scene) {
+                           build(scene, resources, metrics, style);
                        });
     engine.createScene(PauseScene, {.overlay = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
@@ -63,7 +85,7 @@ void GameScenes::end()
 }
 
 void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources,
-                       const engine::InterfaceStyle &style)
+                       const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     ecs::Ecs &ecs = _engine.getEcs();
 
@@ -71,6 +93,8 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     ecs.addComponent<engine::SceneMember>(sky, scene);
     ecs.addComponent<engine::Backdrop>(
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
+    ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
+    ecs.addComponent<engine::Light>(sky, GameLight);
 
     // One line per player, in its colour, empty while the slot is free
     engine::InterfaceBuilder hud(ecs, scene, style);

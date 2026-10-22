@@ -67,19 +67,52 @@ pause menu, or when its session is over (`isOver()`): game over, or the game los
 
 ## What it looks like
 
-For now each entity is a coloured box. The snapshots carry the kind of an entity, not its size: a ship has
-the size of the [rules](game.md), the other kinds that of the configuration of the repository.
+Each entity has the size of its collider in the game. The snapshots carry the kind of an entity, not its
+size: a ship has the size of the [rules](game.md), the other kinds that of the configuration of the
+repository.
 
 | Entity | Look |
 |---|---|
-| Ship | 96 × 48, in the colour of its player: blue, red, green, yellow for the slots 0 to 3 |
-| Shot | 24 × 8, in the colour of the player who fired (a charged shot 48 × 16) |
-| Bydo (`BydoFlyer`) | 80 × 48, purple |
-| Bydo shot | 16 × 16, orange |
+| Ship | 120 × 70: the 3D model `spaceship_ezno.glb`, tinted with the colour of its player (blue, red, green, yellow for the slots 0 to 3) |
+| Shot | 24 × 8 box, in the colour of the player who fired (a charged shot 48 × 16) |
+| Bydo (`BydoFlyer`) | 100 × 38: the 3D model `drop_ship_v2.glb`, facing left |
+| Bydo shot | 16 × 16 box, orange |
 | Any other kind | A grey square |
 
-`lookOf()` decides it, from a table indexed by kind: sprites can replace the boxes there, without changing the
-rest.
+`lookOf()` gives the size and colour of each kind, from a table indexed by kind. A kind given a `ShipLook`
+(`GameSessionSystem::setShipLook()`, called by `GameScenes`) is drawn with its 3D model instead of a box;
+without one, as in the tests, it stays a box.
+
+### Ships in 3D
+
+The game is flat, its models are not. The game scene has an **orthographic** camera
+(`computeGameView(visibleArea)`) that sees the plane z = 0 as the screen sees the game: a world unit for a
+game unit, y pointing down, centred on the visible area. A model placed at the position of an entity is drawn
+where its box would be, with the same size anywhere on the screen: what is drawn is what collides.
+
+- **Orientation**: the models point their nose to +x and their top to +y. A half turn around the x axis
+  puts their top up on the screen and their side towards the camera, and 20° more show a little of their top.
+  The Bydos are also turned by a half turn around their vertical axis, to face left.
+- **Size**: `ShipLook::hull` is the box around the hull of the model seen through this camera, flames and
+  trails excluded, in model units, measured on the model in its `Move` pose. The model is scaled to make the
+  width of this box that of the collider, and moved to put its centre on the entity. The colliders have the
+  proportions of these hulls: `Rules::shipHalfWidth/Height` 60 × 35 for the players, `halfWidth = 50,
+  halfHeight = 19` in `config/ships/bydo_scout.lua`. A new model means measuring its hull again.
+- **Roll**: a ship rolls around its length while it climbs (its belly towards the camera, up to 40°) or
+  dives (its top, up to 25°), at full vertical speed (`ShipAttitude`, from the vertical velocity of the snapshots). The
+  roll eases towards its target every frame and adds to the tilt, around the same x axis; the hull stays
+  centred on the entity. Only drawn: the collider stays the box of the level hull. The `MoveUp` / `MoveDown`
+  animations of the rig are not used: they switch at once, and roll the ship further than the game wants.
+- **Flames**: only while the ship flies forward, to the right for the players (to the left for the Bydos),
+  with the `Move` animation. Otherwise, climbing and diving included, it has no flame: the meshes of its
+  flames and trails (`ShipLook::flameMeshes`, by index in the model file) go into `Model::hiddenMeshes`, which
+  the renderer does not draw, and its pose holds still (`Idle`, `ModelAnimation::speed` 0).
+- **Cost**: the models are skinned on the CPU, a few milliseconds per pose. The ships that fly alike are
+  kept in step (the time of their animation is that of the session), and the `SceneRenderer` poses a model
+  again only when its pose changes: ten Bydos cost one pose per frame.
+
+The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
+an entity flies.
 
 ## Tests
 
@@ -89,8 +122,11 @@ rest.
   player moved by its input, nothing while paused;
 - `inputFrom()` and `lookOf()`: the controls held become the bits of the input, the ship has the size of the
   rules, the four players have four colours, the Bydos a look of their own;
+- `computeGameView()`: an orthographic camera centred on the visible area, as high as it, y pointing down;
 - the `GameSessionSystem` in an `Engine`: the ship drawn where the simulation puts it and moved by the
-  keyboard, shots created when fired and destroyed once out of the area, the game stopped while a menu is over
+  keyboard, a 3D model fitted to its box once given a `ShipLook` (rolling its belly towards the camera little
+  by little while it climbs, the hull staying on the ship, its top while it dives, level again once it
+  stops), shots created when fired and destroyed once out of the area, the game stopped while a menu is over
   its scene, an empty input under a menu even for a session that goes on (as online), and the session forgotten
   when its scene closes.
 

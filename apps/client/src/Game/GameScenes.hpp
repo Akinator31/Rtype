@@ -21,8 +21,9 @@ inline constexpr const char *PauseScene = "pause";
 /// The scenes of a game (ADR 0015): the game scene, which plays a GameSession through the GameSessionSystem,
 /// and the pause menu over it.
 ///
-/// - The game scene shows the starry sky, the world of the session, and a HUD with the lives and score of
-///   each player, in its colour.
+/// - The game scene shows the starry sky, the world of the session (the ships of the players and the Bydos
+///   in 3D, through an orthographic camera: what is drawn is what collides), and a HUD with the lives and
+///   score of each player, in its colour.
 /// - Escape (or Start on a gamepad) opens the pause menu: Resume, or Leave the game. Offline, the game stops
 ///   while it is open.
 /// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
@@ -47,7 +48,7 @@ class GameScenes
     /// The game ends: once.
     void end();
 
-    void build(engine::SceneId scene, render::ResourceManager &resources,
+    void build(engine::SceneId scene, render::ResourceManager &resources, const engine::Metrics &metrics,
                const engine::InterfaceStyle &style);
 
 public:
