@@ -26,8 +26,8 @@ constexpr float HudLineSpacing = 56.0f;
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                       GameSessionSystem &sessions)
-    : _engine(engine), _sessions(sessions)
+                       GameSessionSystem &sessions, localization::Localization &translations)
+    : _engine(engine), _sessions(sessions), _translations(translations)
 {
     engine.createScene(GameScene,
                        {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
@@ -36,9 +36,11 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                        });
     engine.createScene(PauseScene, {.overlay = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style, "Pause", true);
-                           menu.button("Resume", [&target] { target.popScene(); });
-                           menu.button("Leave the game", [this] { end(); });
+                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
+                                                    _translations.text("game.pause"), true);
+                           menu.button(_translations.text("game.resume"),
+                                       [&target] { target.popScene(); });
+                           menu.button(_translations.text("game.leave"), [this] { end(); });
                        });
 }
 
@@ -77,8 +79,9 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
             [this, slot] {
                 for (const game::PlayerState &player : _sessions.players()) {
                     if (player.slot == slot) {
-                        return std::format("P{}   Lives {}   Score {:06}", slot + 1, player.lives,
-                                           player.score);
+                        return std::format("P{}   {} {}   {} {:06}", slot + 1,
+                                           _translations.text("hud.lives"), player.lives,
+                                           _translations.text("hud.score"), player.score);
                     }
                 }
                 return std::string();

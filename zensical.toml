@@ -24,6 +24,7 @@ nav = [
     "architecture/networking-concepts.md",
     "architecture/rendering.md",
     "architecture/input.md",
+    "architecture/localization.md",
     "architecture/logging.md",
     "architecture/networking.md",
     "architecture/server.md",

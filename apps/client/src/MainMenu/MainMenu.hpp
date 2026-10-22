@@ -2,6 +2,7 @@
 
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Style.hpp"
+#include "rtype/localization/Localization.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
 #include <functional>
@@ -20,6 +21,7 @@ inline constexpr const char *MainMenuScene = "main_menu";
 /// @param style Look of the buttons. It must outlive the scene.
 /// @param quit Called when the player presses the quit button.
 void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
-                   const engine::InterfaceStyle &style, const std::function<void()> &quit);
+                   const engine::InterfaceStyle &style, localization::Localization &translations,
+                   const std::function<void()> &quit);
 
 } // namespace rtype::client
