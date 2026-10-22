@@ -217,9 +217,15 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
         if (animations.has(entity)) {
             poseModel(renderer, model.model, animations.get(entity));
         }
-        renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
-                           model.rotationAngle, model.scale, model.tint, model.spinAngle,
-                           model.hiddenMeshes);
+        if (model.energy) {
+            renderer.drawEnergyModel(model.model, camera->view, *model.energy, model.position,
+                                     model.rotationAxis, model.rotationAngle, model.scale, model.tint,
+                                     model.spinAngle);
+        } else {
+            renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
+                               model.rotationAngle, model.scale, model.tint, model.spinAngle,
+                               model.hiddenMeshes);
+        }
     }
 }
 

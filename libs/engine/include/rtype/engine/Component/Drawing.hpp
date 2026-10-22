@@ -1,9 +1,11 @@
 #pragma once
 
+#include "rtype/render/Energy.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -84,8 +86,12 @@ struct Model {
     /// How much the model is turned around its own vertical axis, in degrees, before rotationAxis: a ring
     /// keeps its tilt while it spins. Moved by a Spin.
     float spinAngle = 0.0f;
-    /// Meshes of the model not drawn, by index in the model file: the flame of a ship that does not fly.
+    /// Meshes of the model not drawn, by index in the model file: the flame of a ship that does not fly. Only
+    /// for a model lit by the light.
     std::vector<int> hiddenMeshes;
+    /// Set for a model of energy (a shot, a beam): it glows over what is behind it instead of being lit by
+    /// the light (render::Renderer::drawEnergyModel()).
+    std::optional<render::Energy> energy;
 };
 
 /// The camera that the 3D models are seen through. The first visible entity with a Camera is used; without
