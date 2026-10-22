@@ -69,7 +69,7 @@ class SceneRenderer
     [[nodiscard]] std::vector<ecs::entity_t> getModelsInOrder();
     /// Draws the first shown Backdrop over the whole visible area.
     void drawBackdrop(render::Renderer &renderer);
-    /// Draws the 3D models, seen through the camera and lit by the light.
+    /// Draws the 3D models, seen through the camera and lit by the light, then the glow of the energy models.
     void drawModels(render::Renderer &renderer);
     /// Poses the model at the time of its animation, unless it is already in this pose.
     void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation);

@@ -227,6 +227,8 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
                                model.hiddenMeshes);
         }
     }
+    // The light of the energy models spreads over the world, under the 2D entities and the interface
+    renderer.drawGlow();
 }
 
 void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre,
