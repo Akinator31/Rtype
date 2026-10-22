@@ -3,6 +3,7 @@
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
 #   MainMenu/            the home screen and its submenus
 #   Online/              playing online: the lobby of a server, and its scenes
+#   ShipModel            the ship models and their animations, flown by the menu and by the game
 add_library(r-type_client_core STATIC
     src/Commands/Commands.cpp
     src/Commands/QuitCommand.cpp
@@ -26,6 +27,7 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Submenus.cpp
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
+    src/ShipModel.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core

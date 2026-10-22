@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rtype/render/ResourceManager.hpp"
+#include "ShipModel.hpp"
 #include "rtype/render/Types.hpp"
 
 #include <vector>
@@ -22,21 +22,6 @@ enum class FlightStage {
     Departure,
     /// Waits out of the screen before coming back.
     Away,
-};
-
-/// The animations of the ship model, by index (render::ResourceManager::getModelAnimation()): small flame
-/// when it hovers or rests, big flame when it flies, nose up or down when it climbs or goes down.
-struct ShipAnimations {
-    int idle = 0;
-    int move = 0;
-    int moveUp = 0;
-    int moveDown = 0;
-};
-
-/// A ship model the menu can fly, with its animations.
-struct ShipModel {
-    render::ModelId model;
-    ShipAnimations animations;
 };
 
 /// A ship of the menu going back and forth between its dock on the station and the space out of the screen.
