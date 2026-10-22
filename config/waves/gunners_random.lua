@@ -3,6 +3,8 @@ return {
     name = "gunners_random",
     label = "Gunners",
     description = "Five gunners from the right",
+    -- How hard the wave is, 1 (easiest) to 5
+    difficulty = 2,
     placement = "random",
     enemy = "bydo_gunner",
     quantity = 5,

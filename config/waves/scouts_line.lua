@@ -3,6 +3,8 @@ return {
     name = "scouts_line",
     label = "Scout line",
     description = "Two scouts from the right, one high and one low",
+    -- How hard the wave is, 1 (easiest) to 5
+    difficulty = 1,
     placement = "manual",
     -- Seconds between two enemies, 0 for all at once
     spawnInterval = 0,
