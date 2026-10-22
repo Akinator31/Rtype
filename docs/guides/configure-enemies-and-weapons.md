@@ -160,7 +160,7 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `id` | string | *required* | Unique among the ships |
 | `model` | string | *required* | Path of the 3D model, under the assets of the client |
 | `sounds` | table | no sound | `move`, `destruction`, `collision`: paths of sounds, each optional (`""` for none) |
-| `collider` | table, like that of a projectile | a box, `halfWidth = 48, halfHeight = 24` | The shape that hits and is hit. Ignored for the ship of the players, whose size is that of the rules of the game |
+| `collider` | table, like that of a projectile | a box, `halfWidth = 48, halfHeight = 24` | The shape that hits and is hit. The client draws the model of the Bydos to the width of this box: give it the proportions of the hull of the model ([the client in a game](../architecture/client-game.md)). Ignored for the ship of the players, whose size is that of the rules of the game |
 
 ### Enemies (`config/enemies/`)
 

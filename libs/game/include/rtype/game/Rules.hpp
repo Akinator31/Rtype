@@ -13,9 +13,10 @@ struct Rules {
 
     /// Speed of a ship, in every direction (diagonals included).
     float shipSpeed = 600.0f;
-    /// Half the size of a ship: it stays entirely in the game area.
-    float shipHalfWidth = 48.0f;
-    float shipHalfHeight = 24.0f;
+    /// Half the size of a ship: it stays entirely in the game area. The proportions of the hull of its model,
+    /// as the client draws it.
+    float shipHalfWidth = 60.0f;
+    float shipHalfHeight = 35.0f;
 
     /// A missile speeds up by this fraction of its launch speed per tick, up to missileMaxBoost times it.
     float missileBoostPerTick = 0.02f;

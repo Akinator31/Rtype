@@ -2,5 +2,5 @@
 -- client: a collider here would be ignored.
 return {
     id = "player_ship",
-    model = "models/spaceship.glb",
+    model = "models/spaceship_ezno.glb",
 }
