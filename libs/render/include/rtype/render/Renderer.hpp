@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace rtype::render
 {
@@ -156,10 +157,13 @@ public:
     /// @param tint Colour multiplied with the model.
     /// @param spinAngle How much the model is turned around its own vertical axis (y), in degrees, before the
     /// rotation around rotationAxis: a tilted ring keeps its tilt while it spins.
+    /// @param hiddenMeshes Meshes not drawn, by index in the model file: the flame of a ship that does not
+    /// fly.
     /// @throws std::logic_error if no frame is started.
     void drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
                    Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
-                   Color tint = colors::White, float spinAngle = 0.0f);
+                   Color tint = colors::White, float spinAngle = 0.0f,
+                   const std::vector<int> &hiddenMeshes = {});
 
     /// Poses an animated model at a time of one of its animations: the next draws of this model show this
     /// pose, until it is animated again. Several entities sharing a model each pose it before being drawn.

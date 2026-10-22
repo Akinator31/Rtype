@@ -41,9 +41,10 @@ public:
     LightingShader &operator=(LightingShader &&) = delete;
 
     /// Draws a model lit by the light, like DrawModelEx(), turned first by spinAngle degrees around its own
-    /// vertical axis. Must be called in 3D mode.
+    /// vertical axis, without its hidden meshes (by index). Must be called in 3D mode.
     void draw(const Model &model, const Light &light, ::Vector3 position, ::Vector3 rotationAxis,
-              float rotationAngle, float spinAngle, float scale, ::Color tint);
+              float rotationAngle, float spinAngle, float scale, ::Color tint,
+              const std::vector<int> &hiddenMeshes);
 };
 
 } // namespace rtype::render::detail

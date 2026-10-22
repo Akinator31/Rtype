@@ -50,8 +50,10 @@ constexpr float builtinFontSize = 10.0f;
 
 Camera3D toRaylib(const Camera &camera)
 {
+    const int projection =
+        camera.projection == Projection::Orthographic ? CAMERA_ORTHOGRAPHIC : CAMERA_PERSPECTIVE;
     return {toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up), camera.fieldOfView,
-            CAMERA_PERSPECTIVE};
+            projection};
 }
 
 Vector2 fromRaylib(::Vector2 vector)
@@ -415,12 +417,14 @@ void Renderer::drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color 
 }
 
 void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
-                         Vector3 rotationAxis, float rotationAngle, float scale, Color tint, float spinAngle)
+                         Vector3 rotationAxis, float rotationAngle, float scale, Color tint, float spinAngle,
+                         const std::vector<int> &hiddenMeshes)
 {
     _impl->requireFrame();
     BeginMode3D(toRaylib(camera));
     _impl->lightingShader.draw(_impl->models.get(model).get(), light, toRaylib(position),
-                               toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint));
+                               toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint),
+                               hiddenMeshes);
     // EndMode3D() resets the view to window pixels: go back to game units for what is drawn next
     EndMode3D();
     _impl->beginGameView();
