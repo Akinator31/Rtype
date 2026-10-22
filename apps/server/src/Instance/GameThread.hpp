@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Rules.hpp"
@@ -32,7 +33,7 @@ struct TickResult {
 /// it hands back the result of each tick: they share nothing else.
 ///
 /// @code
-/// rtype::server::GameThread game({}, [&](rtype::server::TickResult result) {
+/// rtype::server::GameThread game({}, config, [&](rtype::server::TickResult result) {
 ///     loop.post([&, result = std::move(result)] { host.publish(result); }); // to the network thread
 /// });
 /// game.start();
@@ -72,6 +73,7 @@ private:
     using Command = std::variant<AddPlayer, RemovePlayer, ReceiveInputs>;
 
     rtype::game::Rules _rules;
+    rtype::game::GameConfig _config;
     PublishFunction _publish;
     FailureFunction _onFailure;
 
@@ -86,7 +88,9 @@ private:
     void run();
 
 public:
-    GameThread(rtype::game::Rules rules, PublishFunction publish, FailureFunction onFailure = {});
+    /// @param config The definitions of the game (readGameConfig()), given to its Simulation.
+    GameThread(rtype::game::Rules rules, rtype::game::GameConfig config, PublishFunction publish,
+               FailureFunction onFailure = {});
     /// Stops the thread, as stop() does.
     ~GameThread();
 
