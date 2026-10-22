@@ -1279,6 +1279,11 @@ TEST_CASE("A model animation moves its time by the elapsed time", "[engine][anim
     engine.update(0.5f);
     CHECK(ecs.getComponent<ModelAnimation>(ship).animation == 1);
     CHECK(ecs.getComponent<ModelAnimation>(ship).time == 0.5f);
+
+    // Held: its time stays
+    ecs.getComponent<ModelAnimation>(ship).speed = 0.0f;
+    engine.update(0.5f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).time == 0.5f);
 }
 
 TEST_CASE("Switching a model animation fades from the previous one", "[engine][animation]")

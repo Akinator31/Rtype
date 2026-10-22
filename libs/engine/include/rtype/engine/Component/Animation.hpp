@@ -53,7 +53,8 @@ struct Spin {
 
 /// Plays an animation of the skinned Model of the entity, in a loop: the ModelAnimationSystem moves its time,
 /// the SceneRenderer poses the model before drawing it. Play another one with switchModelAnimation(), which
-/// fades from the previous one, so that the model does not jump from a pose to the other.
+/// fades from the previous one, so that the model does not jump from a pose to the other. A speed of 0 holds
+/// the pose.
 /// @code
 /// const int idle = resources.getModelAnimation(model, "Idle");
 /// ecs.addComponent<ModelAnimation>(ship, idle);
@@ -65,6 +66,10 @@ struct ModelAnimation {
     int previousAnimation = 0;
     float previousTime = 0.0f;
     float fadeDuration = 0.0f;
+    /// How fast its time goes by: 1 plays the animation, 0 holds its pose.
+    float speed = 1.0f;
+
+    friend bool operator==(const ModelAnimation &, const ModelAnimation &) = default;
 };
 
 /// Plays another animation from its start, fading from the current one for `fadeDuration` seconds.

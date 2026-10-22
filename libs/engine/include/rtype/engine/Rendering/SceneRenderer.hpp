@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Toast.hpp"
 #include "rtype/engine/Component/Widget.hpp"
@@ -42,9 +43,18 @@ namespace rtype::engine
 /// @endcode
 class SceneRenderer
 {
+    /// The pose an animated model was last given.
+    struct Pose {
+        render::ModelId model;
+        ModelAnimation animation;
+    };
+
     ecs::Ecs &_ecs;
     Scenes &_scenes;
     const InterfaceStyle &_style;
+    /// Posing a skinned model costs milliseconds: a model is posed again only when its pose changes, so that
+    /// entities sharing a model and an animation, at the same time, are posed once.
+    std::vector<Pose> _poses;
 
     /// Whether the entity is in a visible scene and not hidden.
     [[nodiscard]] bool isShown(ecs::entity_t entity);
@@ -61,6 +71,8 @@ class SceneRenderer
     void drawBackdrop(render::Renderer &renderer);
     /// Draws the 3D models, seen through the camera and lit by the light.
     void drawModels(render::Renderer &renderer);
+    /// Poses the model at the time of its animation, unless it is already in this pose.
+    void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation);
     /// Draws a glass panel with its shadows and glow, in the look of its highlight.
     void drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre, float scale,
                    float opacity) const;

@@ -12,7 +12,8 @@ void ModelAnimationSystem::update(float elapsed)
 {
     for (ecs::entity_t entity = 0; entity < _animations.size(); ++entity) {
         if (_animations.has(entity)) {
-            _animations.get(entity).time += elapsed;
+            ModelAnimation &animation = _animations.get(entity);
+            animation.time += elapsed * animation.speed;
         }
     }
 }

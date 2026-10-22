@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 /// Client side of the engine: components and systems that connect the ECS to the rendering, the input and the
 /// interface. The ECS itself (rtype::ecs) is shared with the server.
@@ -83,6 +84,8 @@ struct Model {
     /// How much the model is turned around its own vertical axis, in degrees, before rotationAxis: a ring
     /// keeps its tilt while it spins. Moved by a Spin.
     float spinAngle = 0.0f;
+    /// Meshes of the model not drawn, by index in the model file: the flame of a ship that does not fly.
+    std::vector<int> hiddenMeshes;
 };
 
 /// The camera that the 3D models are seen through. The first visible entity with a Camera is used; without

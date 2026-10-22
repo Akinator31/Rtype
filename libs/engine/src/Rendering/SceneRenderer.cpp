@@ -69,7 +69,7 @@ void drawBlurred(render::Renderer &renderer, render::Rectangle area, float radiu
 }
 
 // Poses the model at the time of its animation, between the previous and the current one while it fades
-void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
+void applyPose(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
 {
     if (animation.time >= animation.fadeDuration) {
         renderer.animateModel(model, animation.animation, animation.time);
@@ -185,6 +185,20 @@ void SceneRenderer::drawBackdrop(render::Renderer &renderer)
     }
 }
 
+void SceneRenderer::poseModel(render::Renderer &renderer, render::ModelId model,
+                              const ModelAnimation &animation)
+{
+    const auto posed = std::ranges::find(_poses, model, &Pose::model);
+    if (posed == _poses.end()) {
+        _poses.push_back({model, animation});
+    } else if (posed->animation == animation) {
+        return;
+    } else {
+        posed->animation = animation;
+    }
+    applyPose(renderer, model, animation);
+}
+
 void SceneRenderer::drawModels(render::Renderer &renderer)
 {
     const Camera *camera = findCamera();
@@ -204,7 +218,8 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
             poseModel(renderer, model.model, animations.get(entity));
         }
         renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
-                           model.rotationAngle, model.scale, model.tint, model.spinAngle);
+                           model.rotationAngle, model.scale, model.tint, model.spinAngle,
+                           model.hiddenMeshes);
     }
 }
 
