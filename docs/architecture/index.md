@@ -112,7 +112,8 @@ The programs are built on twelve libraries:
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
 | `libs/network` | Addresses, UDP and TCP sockets, the event loop that runs them, TCP framing, TLS and the binary serialization. Wraps Asio and Mbed TLS. Shared with the server. | [Networking](networking.md) |
 | `libs/physics` | Movement and collisions as components and systems on the ECS. Knows no game: each game names its collision layers and reacts to the collisions. Shared with the server. | — |
-| `libs/game` | The rules of the R-Type: a `Simulation` that takes the inputs of the players and steps the world one tick at a time. Shared by the server and the client offline; no raylib, no network. | [Game](game.md) |
+| `libs/game` | The rules of the R-Type: a `Simulation` that takes the inputs of the players and steps the world one tick at a time, and the loader of the Lua configuration of its enemies and weapons. Shared by the server and the client offline; no raylib, no network. | [Game](game.md) |
+| `libs/scripting` | Lua 5.4 and LuaBridge3, built from source, and a sandboxed `State` that runs a file in its own environment. Knows no game. Shared with the server. | [Game](game.md#configuration) |
 | `libs/lobby` | The messages of the lobby protocol, between a client and the master: hello, list, create and join games. Shared by the client and the server. | [Server](server.md#the-lobby) |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
@@ -121,7 +122,7 @@ The programs are built on twelve libraries:
 
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
-raylib: the ECS, the physics, the game, the lobby, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
+raylib: the ECS, the physics, the game, the scripting, the lobby, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
 private dependencies of `network`, and reproc, which starts the instances of the server, a private dependency of
 `r-type_server`.
 
@@ -132,6 +133,7 @@ apps/       executables, one subdirectory per program
   client/   graphical client (r-type_client)
     assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
+config/     the Lua configuration of the game: enemies, weapons... (client and server)
   keygen/   generates the keys of the server (r-type_keygen)
 libs/       libraries shared by the programs, one subdirectory per library
   audio/    sound effects and music (client)
@@ -144,6 +146,7 @@ libs/       libraries shared by the programs, one subdirectory per library
   log/      logging (client and server)
   network/  addresses, sockets and event loop (client and server)
   render/   window, resources and drawing (client)
+  scripting/ Lua and its sandbox (client and server)
   shaders/  GLSL shaders, embedded in the binaries at build time (client)
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
@@ -166,3 +169,7 @@ The client's assets live in `apps/client/assets/`. The build copies them next to
 (`build/bin/assets/`) and the client package ships them in the same place, so the client loads them from
 `rtype::render::applicationDirectory() / "assets"` and finds them wherever it is started from. Paths given
 to the `ResourceManager` are relative to this directory, for instance `"sprites/player.png"`.
+
+The configuration of the game lives in `config/` at the root, since the client and the server read the same
+files. The build copies it next to both programs (`build/bin/config/`, removed and copied again at each build)
+and both packages ship it; see [Configure enemies and weapons](../guides/configure-enemies-and-weapons.md).

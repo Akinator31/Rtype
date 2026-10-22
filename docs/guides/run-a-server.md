@@ -11,14 +11,16 @@ on their own machine for development or on a machine on the Internet.
 
 ## Steps
 
-1. **Check the configuration.** `--check` loads the key and opens the port, then exits, without running the
-   server:
+1. **Check the configuration.** `--check` loads the key and the game configuration (the `config/` folder next
+   to the server, or `--config <dir>`, see [Configure enemies and weapons](configure-enemies-and-weapons.md))
+   and opens the port, then exits, without running the server:
 
     ```sh
     ./build/bin/r-type_server --key keys/server.key --check
     ```
 
     ```
+    INFO  master   Game configuration /home/me/Rtype/build/bin/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
     INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
     INFO  master   Server key 5b61c7a9ce1a44bfc64fec2013a4a09b6b4d5a8db4129eff890a1462c7ea1f1c
     INFO  master   Check passed: the server can start
@@ -68,6 +70,7 @@ and exits with code 1:
 |---|---|
 | `Cannot read the key server.key: No such file or directory` | Give the path with `--key`, or [make the keys](generate-the-server-keys.md) |
 | `... is not a key of the server` | The file is not an ECDSA P-256 private key: give `server.key`, not `server.pub` |
+| `Configuration: enemies/x.lua: ...`, then `The game configuration in ... is not valid` | Fix the file and the field it names ([fields](configure-enemies-and-weapons.md#fields)), or give another folder with `--config` |
 | `Cannot listen on 0.0.0.0:4242: Address already in use` | Another server runs on that port: stop it, or choose another with `--port` |
 
 Once it runs, the games it starts show in its logs. Players who create a game and get `GAME_START_FAILED` point
