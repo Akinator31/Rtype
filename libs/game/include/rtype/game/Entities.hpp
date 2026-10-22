@@ -13,11 +13,15 @@
 namespace rtype::game
 {
 
-/// The ship of a player, at its place on the left of the game area: one height per slot.
+/// The ship of a player, at its place on the left of the game area: one height per slot. It has the health
+/// and the weapon of context.player (no weapon if its id is empty).
 ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot);
 
-/// A shot of a player, going right from a position.
-ecs::entity_t spawnPlayerShot(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot, float x, float y);
+/// A Bydo of context.enemies at a position, still: the EnemySystem speeds it up to the left. It has the
+/// hitbox of its ship, the health and the weapon of its definition, and hurts the ships it runs into. It is
+/// removed once out of the game area. Throws std::out_of_range if `enemyId`, its ship or its weapon is
+/// unknown.
+ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string &enemyId, float x, float y);
 
 /// A projectile of a registered kind, from a position, with a velocity (game units per second). It belongs to
 /// a player if `owner` is a slot, to nobody if it is NoOwner. It is removed once out of the game area.
@@ -26,13 +30,13 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
                               float x, float y, float velocityX, float velocityY);
 
 /// Gives a weapon of context.weapons to a ship, with a full magazine (it replaces the one it had). From then
-/// on the WeaponSystem makes it fire instead of the default shots. Throws std::out_of_range if `weaponId` is
-/// not in context.weapons.
+/// on the WeaponSystem makes it fire. Throws std::out_of_range if `weaponId` is not in context.weapons.
 void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const std::string &weaponId);
 
-/// A shot of a weapon: its projectile, fired to the right at the speed of the weapon, with the firing
-/// mechanic and the range of the weapon. `x` and `y` are the position of the ship, the shot appears at its
-/// nose. Throws std::out_of_range if the weapon or its projectile is unknown.
+/// A shot of a weapon: its projectile, fired forward at the speed of the weapon, with the firing mechanic,
+/// the range and the damage of the weapon. Forward is to the right for a player, to the left for a Bydo
+/// (NoOwner). `x` and `y` are the nose of the ship: the shot appears just in front of it. Throws
+/// std::out_of_range if the weapon or its projectile is unknown.
 ecs::entity_t spawnWeaponShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
                               std::uint8_t owner, float x, float y);
 

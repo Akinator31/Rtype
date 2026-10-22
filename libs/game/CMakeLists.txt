@@ -10,6 +10,7 @@ add_library(rtype_game
     src/Config/TableReader.cpp
     src/Enemy/EnemyRegistry.cpp
     src/Entities.cpp
+    src/Hitbox.cpp
     src/Messages.cpp
     src/PlayerInput.cpp
     src/Projectile/ProjectileBehavior.cpp
@@ -20,8 +21,10 @@ add_library(rtype_game
     src/Simulation.cpp
     src/System/AreaSystem.cpp
     src/System/CombatSystem.cpp
+    src/System/EnemySystem.cpp
     src/System/PlayerControlSystem.cpp
     src/System/ProjectileSystem.cpp
+    src/System/WaveSystem.cpp
     src/System/WeaponSystem.cpp
     src/Wave/WaveRegistry.cpp
     src/Weapon/WeaponRegistry.cpp

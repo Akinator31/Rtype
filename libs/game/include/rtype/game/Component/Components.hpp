@@ -64,8 +64,18 @@ struct Health {
 /// The ship of a player, controlled by its input.
 struct PlayerShip {
     std::uint8_t slot = 0;
-    /// Ticks before it can fire again.
-    std::uint32_t fireCooldown = 0;
+};
+
+/// A Bydo, made from its EnemyDefinition (spawnEnemy()).
+struct Enemy {
+    /// Id of the EnemyDefinition.
+    std::string id;
+};
+
+/// Hurts what it hits: the shots of a player hurt the Bydos, the Bydos and their shots hurt the players.
+struct Damage {
+    /// Hit points it takes from what it hits.
+    std::uint8_t points = 0;
 };
 
 /// Cannot be hit for some ticks: a ship that just appeared.
