@@ -5,6 +5,7 @@
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Rules.hpp"
 
+#include <algorithm>
 #include <array>
 #include <unordered_set>
 #include <utility>
@@ -22,6 +23,30 @@ const game::Rules DefaultRules{};
 constexpr int ShotOrder = 10;
 constexpr int ShipOrder = 20;
 
+/// How a kind of entity is drawn. The snapshots do not carry the sizes of the shots and of the Bydos: those
+/// of the configuration of the repository, until they have models.
+struct KindLook {
+    game::EntityKind kind;
+    float width;
+    float height;
+    /// Drawn in the colour of its player rather than in `color`.
+    bool playerColored;
+    render::Color color;
+    int order;
+};
+
+const std::array<KindLook, 5> KindLooks{{
+    {game::EntityKind::PlayerShip, DefaultRules.shipHalfWidth * 2.0f, DefaultRules.shipHalfHeight * 2.0f,
+     true, {}, ShipOrder},
+    {game::EntityKind::PlayerShot, 24.0f, 8.0f, true, {}, ShotOrder},
+    {game::EntityKind::PlayerChargedShot, 48.0f, 16.0f, true, {}, ShotOrder},
+    {game::EntityKind::BydoFlyer, 80.0f, 48.0f, false, {171, 71, 188, 255}, ShipOrder},
+    {game::EntityKind::BydoShot, 16.0f, 16.0f, false, {255, 112, 67, 255}, ShotOrder},
+}};
+
+/// The other kinds come with the gameplay: a grey box until they have a look.
+const KindLook UnknownLook{game::EntityKind::BydoBoss, 48.0f, 48.0f, false, render::colors::Gray, ShipOrder};
+
 } // namespace
 
 render::Color playerColor(std::uint8_t slot)
@@ -37,20 +62,10 @@ render::Color playerColor(std::uint8_t slot)
 
 EntityLook lookOf(const game::EntityState &entity)
 {
-    switch (entity.kind) {
-    case game::EntityKind::PlayerShip:
-        return {{DefaultRules.shipHalfWidth * 2.0f, DefaultRules.shipHalfHeight * 2.0f,
-                 playerColor(entity.owner)},
-                ShipOrder};
-    case game::EntityKind::PlayerShot:
-    case game::EntityKind::PlayerChargedShot:
-        return {{DefaultRules.shotHalfWidth * 2.0f, DefaultRules.shotHalfHeight * 2.0f,
-                 playerColor(entity.owner)},
-                ShotOrder};
-    default:
-        // The other kinds come with the gameplay: a box until they have a look
-        return {{48.0f, 48.0f, render::colors::Gray}, ShipOrder};
-    }
+    const auto found = std::ranges::find(KindLooks, entity.kind, &KindLook::kind);
+    const KindLook &look = found != KindLooks.end() ? *found : UnknownLook;
+    const render::Color color = look.playerColored ? playerColor(entity.owner) : look.color;
+    return {{look.width, look.height, color}, look.order};
 }
 
 game::PlayerInput inputFrom(const engine::Controls &controls)

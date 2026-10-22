@@ -8,6 +8,7 @@
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Constants.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -53,6 +54,20 @@ public:
 };
 
 /// The engine of the client without a window: a fake keyboard, and the system that plays the games.
+/// The players with a cannon firing every 10 ticks at 1500 units per second.
+rtype::game::GameConfig armedConfig()
+{
+    rtype::game::GameConfig config;
+    config.projectiles.push_back({"shot",
+                                  "",
+                                  rtype::game::ProjectileCategory::Bullet,
+                                  {rtype::physics::Aabb{{}, {12.0f, 4.0f, 0.0f}}, {}, false}});
+    config.weapons.push_back({"cannon", "shot"});
+    config.ships.push_back({"fighter", "models/fighter.glb", {}});
+    config.player = {"fighter", "cannon", 100};
+    return config;
+}
+
 struct Client {
     FakeInput input;
     rtype::engine::Engine engine;
@@ -62,13 +77,13 @@ struct Client {
     rtype::engine::SceneId scene;
     LocalSession *session = nullptr;
 
-    explicit Client(rtype::game::Rules rules = {})
+    explicit Client(rtype::game::Rules rules = {}, const rtype::game::GameConfig &config = {})
         : sessions(engine.getEcs().registerSystem<GameSessionSystem>(engine.getEcs(), engine.getScenes(),
                                                                      engine.getControls()))
     {
         engine.setInputSource(input);
         scene = scenes.open({.updatesWhenCovered = true});
-        auto created = std::make_unique<LocalSession>(rules);
+        auto created = std::make_unique<LocalSession>(rules, config);
         session = created.get();
         sessions.start(std::move(created), scene);
     }
@@ -171,7 +186,7 @@ TEST_CASE("The controls of the engine become the input of the player", "[client]
     CHECK(inputFrom(controls).buttons == 0);
 }
 
-TEST_CASE("Each entity of the game has the size of the rules, the ships the colour of their player",
+TEST_CASE("Each entity of the game has its size, the ships of the players the colour of their player",
           "[client]")
 {
     const rtype::game::Rules rules;
@@ -183,8 +198,15 @@ TEST_CASE("Each entity of the game has the size of the rules, the ships the colo
     CHECK(shipLook.box.height == Approx(rules.shipHalfHeight * 2.0f));
     CHECK(shipLook.box.color.r == playerColor(2).r);
     CHECK(shipLook.box.color.g == playerColor(2).g);
-    CHECK(lookOf(shot).box.width == Approx(rules.shotHalfWidth * 2.0f));
+    CHECK(lookOf(shot).box.width < shipLook.box.width);
+    CHECK(lookOf(shot).box.color.r == playerColor(2).r);
     CHECK(lookOf(shot).order < shipLook.order);
+    // The Bydos have a look of their own, not the grey box of the unknown kinds
+    const EntityLook bydo = lookOf({3, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner});
+    const EntityLook bydoShot = lookOf({4, rtype::game::EntityKind::BydoShot, rtype::game::NoOwner});
+    CHECK(bydo.box.color.r != rtype::render::colors::Gray.r);
+    CHECK(bydo.order == shipLook.order);
+    CHECK(bydoShot.order < bydo.order);
     // The four players have four colours
     for (std::uint8_t first = 0; first < 4; ++first) {
         for (std::uint8_t second = first + 1; second < 4; ++second) {
@@ -220,8 +242,7 @@ TEST_CASE("The world of the session is drawn in the scene, and follows it", "[cl
 
 TEST_CASE("Shots appear when fired, and their entities go when they leave the game", "[client]")
 {
-    rtype::game::Rules rules;
-    Client client(rules);
+    Client client({}, armedConfig());
 
     client.input.keys = {Key::Space};
     client.run(30);
