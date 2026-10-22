@@ -17,10 +17,10 @@ namespace rtype::game
 /// and the weapon of context.player (no weapon if its id is empty).
 ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot);
 
-/// A Bydo of context.enemies at a position, still: the EnemySystem speeds it up to the left. It has the
-/// hitbox of its ship, the health and the weapon of its definition, and hurts the ships it runs into. It is
-/// removed once out of the game area. Throws std::out_of_range if `enemyId`, its ship or its weapon is
-/// unknown.
+/// A Bydo of context.enemies at a position, still: the EnemySystem moves it, with the behavior of its
+/// definition if it has one (then with EnemyOrders), to the left otherwise. It has the hitbox of its ship,
+/// the health and the weapon of its definition, and hurts the ships it runs into. It is removed once out of
+/// the game area. Throws std::out_of_range if `enemyId`, its ship or its weapon is unknown.
 ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string &enemyId, float x, float y);
 
 /// A projectile of a registered kind, from a position, with a velocity (game units per second). It belongs to
@@ -39,6 +39,11 @@ void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const 
 /// std::out_of_range if the weapon or its projectile is unknown.
 ecs::entity_t spawnWeaponShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
                               std::uint8_t owner, float x, float y);
+
+/// Same as spawnWeaponShot(), fired towards a point instead of forward: the shot flies along the line from
+/// the nose to the point, and goes past it. A point on the nose itself fires forward.
+ecs::entity_t spawnAimedShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
+                             std::uint8_t owner, float x, float y, float targetX, float targetY);
 
 /// The ship of a player, if it has one.
 [[nodiscard]] std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot);

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -189,6 +190,7 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     CHECK(scout.speed == Approx(EnemyDefinition{}.speed));
     CHECK(scout.score == EnemyDefinition{}.score);
     CHECK(scout.collisionDamage == EnemyDefinition{}.collisionDamage);
+    CHECK_FALSE(scout.behavior);
     const EnemyDefinition &enemy = config.enemies[1];
     CHECK(enemy.health == 255);
     CHECK(enemy.acceleration == Approx(0.0f));
@@ -311,6 +313,9 @@ TEST_CASE("A wrong field is an error naming the file and the field", "[game]")
           "player.lua: health: expected an integer from 1 to 255");
     CHECK(errorWith("player_weapon", "player.lua", "return { ship = 'scout' }") ==
           "player.lua: weapon: missing");
+    CHECK(errorWith("update", "enemies/scout.lua",
+                    "return { id = 'scout', ship = 'scout', health = 1, weapon = 'blaster', update = 3 }") ==
+          "enemies/scout.lua: update: expected a function");
     CHECK(errorWith("difficulty", "waves/line.lua",
                     "return { name = 'line', difficulty = 6, placement = 'random', enemy = 'scout',"
                     " quantity = 1 }") == "waves/line.lua: difficulty: expected an integer from 1 to 5");
@@ -328,6 +333,23 @@ TEST_CASE("A file that does not return a table, or does not run, is an error nam
                ContainsSubstring("instruction limit"));
     CHECK_THAT(errorWith("os", "ships/scout.lua", "return { id = 'scout', model = os.time() }"),
                ContainsSubstring("ships/scout.lua:1:"));
+}
+
+TEST_CASE("An enemy with an update function keeps the code of its file, its behavior", "[game]")
+{
+    const ConfigDirectory directory("behavior");
+    directory.writeValid();
+    const std::string code = "return { id = 'scout', ship = 'scout', health = 30, weapon = 'blaster',\n"
+                             "    update = function(enemy, game) enemy:fire() end }\n";
+    directory.write("enemies/scout.lua", code);
+
+    const LoadedGameConfig loaded = loadGameConfig(directory.path);
+    INFO(listErrors(loaded));
+    REQUIRE(loaded.isValid());
+    const std::optional<EnemyBehavior> &behavior = loaded.config.enemies.at(0).behavior;
+    REQUIRE(behavior);
+    CHECK(behavior->file == "enemies/scout.lua");
+    CHECK(behavior->code == code);
 }
 
 TEST_CASE("A file can compute its values with the sandbox", "[game]")

@@ -151,6 +151,10 @@ EnemyDefinition readEnemyDefinition(TableReader &table)
     definition.score = static_cast<std::uint32_t>(table.readInteger("score", 0, MaxU32, definition.score));
     definition.collisionDamage =
         static_cast<std::uint8_t>(table.readInteger("collisionDamage", 0, MaxU8, definition.collisionDamage));
+    if (table.readFunction("update")) {
+        // Its file and its code are only known to the loader
+        definition.behavior = EnemyBehavior{};
+    }
     table.checkAllFieldsRead();
     return definition;
 }

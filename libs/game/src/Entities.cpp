@@ -7,6 +7,8 @@
 #include "rtype/physics/Component/Collider.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 
+#include <cmath>
+
 namespace rtype::game
 {
 
@@ -73,6 +75,9 @@ ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string 
     ecs.addComponent<physics::Collider>(entity, collider);
     const physics::Vec3 half = halfSizeOf(collider);
     ecs.addComponent<LeavesArea>(entity, half.x, half.y);
+    if (enemy.behavior) {
+        ecs.addComponent<EnemyOrders>(entity);
+    }
     equipWeapon(ecs, context, entity, enemy.weapon);
     return entity;
 }
@@ -101,13 +106,29 @@ void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const 
 ecs::entity_t spawnWeaponShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
                               std::uint8_t owner, float x, float y)
 {
-    const WeaponDefinition &weapon = context.weapons.getDefinition(weaponId);
     const float forward = owner < MaxPlayers ? 1.0f : -1.0f;
+    return spawnAimedShot(ecs, context, weaponId, owner, x, y, x + forward, y);
+}
+
+ecs::entity_t spawnAimedShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
+                             std::uint8_t owner, float x, float y, float targetX, float targetY)
+{
+    const WeaponDefinition &weapon = context.weapons.getDefinition(weaponId);
+    float directionX = targetX - x;
+    float directionY = targetY - y;
+    const float distance = std::hypot(directionX, directionY);
+    if (distance > 0.0f) {
+        directionX /= distance;
+        directionY /= distance;
+    } else {
+        directionX = owner < MaxPlayers ? 1.0f : -1.0f;
+        directionY = 0.0f;
+    }
     const float halfWidth = halfSizeOf(context.projectiles.getDefinition(weapon.projectile).collider).x;
-    const float startX = x + forward * halfWidth;
-    const float speed = forward * weapon.projectileSpeed;
     const ecs::entity_t shot =
-        spawnProjectile(ecs, context, weapon.projectile, owner, startX, y, speed, 0.0f);
+        spawnProjectile(ecs, context, weapon.projectile, owner, x + (directionX * halfWidth),
+                        y + (directionY * halfWidth), directionX * weapon.projectileSpeed,
+                        directionY * weapon.projectileSpeed);
     Projectile &projectile = ecs.getComponent<Projectile>(shot);
     projectile.category = weapon.mechanic;
     projectile.range = weapon.range;

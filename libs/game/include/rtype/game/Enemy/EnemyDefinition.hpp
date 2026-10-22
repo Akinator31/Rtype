@@ -1,6 +1,9 @@
 #pragma once
 
+#include "rtype/game/Enemy/EnemyBehavior.hpp"
+
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace rtype::game
@@ -27,6 +30,9 @@ struct EnemyDefinition {
     std::uint32_t score = 100;
     /// Hit points a player ship loses when it runs into it; the enemy keeps going.
     std::uint8_t collisionDamage = 20;
+    /// What moves it and makes it fire; without one, it speeds up to the left and fires as soon as it is in
+    /// the game area.
+    std::optional<EnemyBehavior> behavior = std::nullopt;
 };
 
 } // namespace rtype::game

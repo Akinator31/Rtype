@@ -1291,3 +1291,167 @@ TEST_CASE("The wave of a difficulty is drawn from the seed of the rules", "[game
     CHECK(std::ranges::count(drawn, "a") > 0);
     CHECK(std::ranges::count(drawn, "b") > 0);
 }
+
+// --- The behaviors of the Bydos ---
+
+namespace
+{
+
+/// battleConfig() with scouts moved by a behavior.
+GameConfig scriptedConfig(const std::string &code)
+{
+    GameConfig config = battleConfig();
+    config.enemies.front().behavior = EnemyBehavior{"enemies/test.lua", code};
+    return config;
+}
+
+std::vector<EntityState> enemyShotsOf(const Snapshot &snapshot)
+{
+    return entitiesOf(snapshot, EntityKind::BydoPlasmaShot);
+}
+
+} // namespace
+
+TEST_CASE("A behavior flies its Bydo to a point, where it stops, and fires only when it says so", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game)\n"
+                                             "    enemy:moveTo(1500, 300)\n"
+                                             "    if enemy.arrived then enemy:fire() end\n"
+                                             "end }"));
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1700.0f, 300.0f);
+    CHECK(simulation.ecs().hasComponent<EnemyOrders>(spawned));
+
+    // At its top speed at once, 240 units per second: 200 units in 50 ticks, in the area but not fired
+    simulation.step();
+    const EntityState flying = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    CHECK(flying.velocityX == Approx(-240.0f));
+    CHECK(flying.velocityY == Approx(0.0f).margin(1e-4));
+    run(simulation, 45);
+    CHECK(enemyShotsOf(simulation.snapshot()).empty());
+
+    run(simulation, 10);
+    const EntityState stopped = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    CHECK(stopped.x == Approx(1500.0f));
+    CHECK(stopped.y == Approx(300.0f));
+    CHECK(stopped.velocityX == Approx(0.0f).margin(1e-4));
+    const std::vector<EntityState> shots = enemyShotsOf(simulation.snapshot());
+    REQUIRE_FALSE(shots.empty());
+    CHECK(shots[0].velocityX < 0.0f);
+}
+
+TEST_CASE("A behavior aims at a player, with what it sees of the players and of its weapon", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game)\n"
+                                             "    local player = game.players[1]\n"
+                                             "    local weapon = enemy.weapon\n"
+                                             "    if player and weapon.ready and weapon.ammo == 3\n"
+                                             "       and weapon.id == 'blaster' then\n"
+                                             "        enemy:fireAt(player.x, player.y)\n"
+                                             "    end\n"
+                                             "end }"));
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 700.0f);
+
+    run(simulation, 2);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    std::vector<rtype::physics::Velocity> launches;
+    rtype::ecs::ComponentCache<Projectile> &projectiles = ecs.cache<Projectile>();
+    for (rtype::ecs::entity_t entity = 0; entity < projectiles.size(); ++entity) {
+        if (projectiles.has(entity) && ecs.isAlive(entity)) {
+            launches.push_back(projectiles.get(entity).launch);
+        }
+    }
+    // Only with a full magazine: one shot, towards the ship, at the speed of the blaster
+    REQUIRE(launches.size() == 1);
+    const float noseX = 1500.0f - 48.0f;
+    CHECK(launches[0].y / launches[0].x == Approx((ship.y - 700.0f) / (ship.x - noseX)));
+    CHECK(launches[0].x < 0.0f);
+    CHECK(std::hypot(launches[0].x, launches[0].y) == Approx(1000.0f));
+}
+
+TEST_CASE("Each Bydo of a behavior remembers its own values, and sees its age and the time", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game)\n"
+                                             "    enemy.memory.ticks = (enemy.memory.ticks or 0) + 1\n"
+                                             "    enemy:setVelocity(enemy.age * 60, enemy.memory.ticks)\n"
+                                             "end }"));
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 300.0f);
+    run(simulation, 10);
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 700.0f);
+    run(simulation, 5);
+
+    const std::vector<EntityState> enemies = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer);
+    REQUIRE(enemies.size() == 2);
+    CHECK(enemies[0].velocityY == Approx(15.0f));
+    CHECK(enemies[0].velocityX == Approx(14.0f));
+    CHECK(enemies[1].velocityY == Approx(5.0f));
+    CHECK(enemies[1].velocityX == Approx(4.0f));
+}
+
+TEST_CASE("The random numbers of a behavior come from the seed of the rules", "[game]")
+{
+    const auto drawSpeed = [](std::uint32_t seed) {
+        Rules rules;
+        rules.seed = seed;
+        Simulation simulation(rules, scriptedConfig("return { update = function(enemy, game)\n"
+                                                    "    enemy:setVelocity(-game:randomNumber(100, 200),\n"
+                                                    "                      game:randomInteger(3, 1))\n"
+                                                    "end }"));
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 300.0f);
+        simulation.step();
+        return entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    };
+
+    const EntityState first = drawSpeed(7);
+    CHECK(first.velocityX == drawSpeed(7).velocityX);
+    CHECK(first.velocityX <= -100.0f);
+    CHECK(first.velocityX >= -200.0f);
+    CHECK(first.velocityY >= 1.0f);
+    CHECK(first.velocityY <= 3.0f);
+}
+
+TEST_CASE("A behavior that fails or never ends is stopped: its Bydos fly and fire as if they had none",
+          "[game]")
+{
+    std::string code;
+    SECTION("an error")
+    {
+        code = "return { update = function(enemy, game) error('boom') end }";
+    }
+    SECTION("an endless loop")
+    {
+        code = "return { update = function(enemy, game) while true do end end }";
+    }
+    SECTION("a read-only value written")
+    {
+        code = "return { update = function(enemy, game) enemy.x = 0 end }";
+    }
+    SECTION("no update function")
+    {
+        code = "return { speed = 3 }";
+    }
+    Simulation simulation({}, scriptedConfig(code));
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 300.0f);
+
+    simulation.step();
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0).velocityX == Approx(-12.0f));
+    CHECK_FALSE(simulation.ecs().hasComponent<EnemyOrders>(spawned));
+    run(simulation, 2);
+    CHECK_FALSE(enemyShotsOf(simulation.snapshot()).empty());
+}
+
+TEST_CASE("A Bydo of a behavior that gives no order keeps still and does not fire", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game) end }"));
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 300.0f);
+
+    run(simulation, 30);
+    const EntityState enemy = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    CHECK(enemy.x == Approx(1500.0f));
+    CHECK(enemy.velocityX == Approx(0.0f));
+    CHECK(enemyShotsOf(simulation.snapshot()).empty());
+}

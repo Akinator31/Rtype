@@ -38,7 +38,7 @@ void spendRound(Armed &armed, const WeaponDefinition &weapon)
 
 WeaponSystem::WeaponSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context)
     : _ecs(ecs), _context(context), _weapons(use<Armed>(caches)), _ships(use<PlayerShip>(caches)),
-      _enemies(use<Enemy>(caches)), _positions(use<ecs::Position>(caches)),
+      _enemies(use<Enemy>(caches)), _orders(use<EnemyOrders>(caches)), _positions(use<ecs::Position>(caches)),
       _colliders(use<physics::Collider>(caches))
 {
 }
@@ -73,6 +73,9 @@ bool WeaponSystem::wantsToFire(ecs::entity_t entity) const
     if (_ships.has(entity)) {
         return _context.players[_ships.get(entity).slot].input.isHeld(PlayerInput::Fire);
     }
+    if (_orders.has(entity)) {
+        return _orders.get(entity).fire;
+    }
     const float x = _positions.get(entity).x;
     return _enemies.has(entity) && x >= 0.0f && x <= GameWidth;
 }
@@ -83,6 +86,13 @@ void WeaponSystem::fire(ecs::entity_t entity, const std::string &weapon)
     const float forward = owner < MaxPlayers ? 1.0f : -1.0f;
     const ecs::Position position = _positions.get(entity);
     const float noseX = position.x + forward * halfSizeOf(_colliders.get(entity)).x;
+    if (_orders.has(entity) && _orders.get(entity).target) {
+        const ecs::Position target = *_orders.get(entity).target;
+        _ecs.defer([this, weapon, owner, noseX, y = position.y, target] {
+            spawnAimedShot(_ecs, _context, weapon, owner, noseX, y, target.x, target.y);
+        });
+        return;
+    }
     _ecs.defer([this, weapon, owner, noseX, y = position.y] {
         spawnWeaponShot(_ecs, _context, weapon, owner, noseX, y);
     });

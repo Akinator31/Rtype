@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <system_error>
@@ -129,6 +131,25 @@ std::vector<Definition> takeDefinitions(std::vector<FromFile<Definition>> &read)
     return definitions;
 }
 
+/// Gives each enemy whose file has an `update` function the code of its file: its behavior is run again by
+/// each Simulation, in a state of its own.
+void readBehaviors(const std::filesystem::path &directory, std::vector<FromFile<EnemyDefinition>> &enemies,
+                   std::vector<std::string> &errors)
+{
+    for (auto &[file, enemy] : enemies) {
+        if (!enemy.behavior) {
+            continue;
+        }
+        std::ifstream stream(directory / file, std::ios::binary);
+        if (!stream) {
+            errors.push_back(std::format("{}: cannot be read", file));
+            continue;
+        }
+        enemy.behavior = EnemyBehavior{file, std::string(std::istreambuf_iterator<char>(stream),
+                                                         std::istreambuf_iterator<char>())};
+    }
+}
+
 /// Every definition of the files, with the file of each one.
 struct ReadFiles {
     std::vector<FromFile<ProjectileDefinition>> projectiles;
@@ -164,6 +185,7 @@ ReadFiles readFiles(const std::filesystem::path &directory, std::vector<std::str
     files.weapons = readFolder<WeaponDefinition>(directory, "weapons", readWeaponDefinition, errors);
     files.ships = readFolder<ShipDefinition>(directory, "ships", readShipDefinition, errors);
     files.enemies = readFolder<EnemyDefinition>(directory, "enemies", readEnemyDefinition, errors);
+    readBehaviors(directory, files.enemies, errors);
     files.waves = readFolder<WaveDefinition>(directory, "waves", readWaveDefinition, errors);
     files.player = readPlayerFile(directory, errors);
     return files;
