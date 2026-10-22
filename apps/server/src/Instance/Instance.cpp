@@ -1,5 +1,6 @@
 #include "Instance/Instance.hpp"
 
+#include "Common/GameConfig.hpp"
 #include "Common/InstanceMessages.hpp"
 #include "Common/Lifecycle.hpp"
 #include "Common/Secret.hpp"
@@ -17,6 +18,7 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <utility>
 
 namespace rtype::server
 {
@@ -121,10 +123,10 @@ class Instance
     }
 
 public:
-    Instance(const InstanceOptions &options, rtype::network::EventLoop &loop)
+    Instance(const InstanceOptions &options, rtype::game::GameConfig config, rtype::network::EventLoop &loop)
         : _options(options), _loop(loop),
           _game(
-              {},
+              {}, std::move(config),
               // Each tick, from the game thread to the network thread
               [this](TickResult result) {
                   _loop.post([this, result = std::move(result)] {
@@ -233,8 +235,13 @@ public:
 
 int runInstance(const InstanceOptions &options, std::istream &input)
 {
+    std::optional<rtype::game::GameConfig> config =
+        readGameConfig(getConfigDirectory(options.config), logger());
+    if (!config) {
+        return Failure;
+    }
     rtype::network::EventLoop loop;
-    Instance instance(options, loop);
+    Instance instance(options, std::move(*config), loop);
 
     if (options.standalone) {
         logger().warning("Standalone game {}: no master, public test keys. For development only", options.id);

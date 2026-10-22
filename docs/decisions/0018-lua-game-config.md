@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted; *The binding* and *Where it lives* superseded by [0019](0019-luabridge3-scripting-library.md) |
 | **Date** | 2026-10-20 |
 
 ## Context

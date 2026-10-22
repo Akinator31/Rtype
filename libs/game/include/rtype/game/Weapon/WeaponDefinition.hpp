@@ -12,7 +12,8 @@ namespace rtype::game
 inline constexpr std::uint32_t InfiniteAmmo = 0;
 
 /// Everything that makes a kind of weapon: creating a new one is filling this and registering it in a
-/// WeaponRegistry. Durations are in ticks (TickRate per second), distances in game units.
+/// WeaponRegistry; loadGameConfig() reads them from config/weapons/ (ADR 0018). Durations are in ticks
+/// (TickRate per second), distances in game units.
 struct WeaponDefinition {
     /// Unique name in a registry, e.g. "blaster".
     std::string id;

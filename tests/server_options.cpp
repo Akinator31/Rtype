@@ -1,12 +1,16 @@
 // Tests of the command line of r-type_server and of the secret of its instances
 // (docs/architecture/server.md).
 
+#include "Common/GameConfig.hpp"
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
 #include "Server.hpp"
+#include "rtype/network/Tls.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -38,7 +42,62 @@ TEST_CASE("Without arguments, the server is a master with the default settings",
     CHECK(options.master.lastGamePort == 4299);
     CHECK(options.master.key == "server.key");
     CHECK_FALSE(options.master.check);
+    CHECK(options.master.config.empty());
+    CHECK(options.instance.config.empty());
     CHECK_FALSE(options.logLevel);
+}
+
+TEST_CASE("The option --config is read by the master and by an instance", "[server]")
+{
+    CHECK(parse({"--config", "/srv/rtype/config"}).master.config == "/srv/rtype/config");
+    const Options instance =
+        parse({"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--config", "conf"});
+    CHECK(instance.instance.config == "conf");
+    CHECK_THROWS_AS(parse({"--config"}), std::invalid_argument);
+}
+
+TEST_CASE("The configuration of the game is next to the executable, unless --config says otherwise",
+          "[server]")
+{
+    CHECK(getConfigDirectory({}).filename() == "config");
+    CHECK(getConfigDirectory("elsewhere") == "elsewhere");
+}
+
+TEST_CASE("A server reads a valid configuration, and refuses one with errors", "[server]")
+{
+    const rtype::log::Logger logger("test");
+    const std::filesystem::path broken = std::filesystem::temp_directory_path() / "rtype_tests_server_config";
+    std::filesystem::remove_all(broken);
+    std::filesystem::create_directories(broken / "ships");
+    std::ofstream(broken / "ships" / "broken.lua") << "return { id = 'broken' }";
+
+    const auto valid = readGameConfig(RTYPE_TEST_CONFIG, logger);
+    REQUIRE(valid);
+    CHECK_FALSE(valid->enemies.empty());
+    CHECK_FALSE(readGameConfig(broken, logger));
+    std::filesystem::remove_all(broken);
+}
+
+TEST_CASE("A master with a configuration that has errors does not start", "[server]")
+{
+    const std::filesystem::path directory =
+        std::filesystem::temp_directory_path() / "rtype_tests_master_config";
+    std::filesystem::remove_all(directory);
+    std::filesystem::create_directories(directory / "enemies");
+    std::ofstream(directory / "enemies" / "broken.lua") << "return 3";
+    const std::filesystem::path key = directory / "server.key";
+    std::ofstream(key) << rtype::network::ServerIdentity::generate().privateKeyPem();
+    const std::string keyArgument = key.string();
+    const std::string configArgument = directory.string();
+    std::ostringstream out;
+    std::istringstream in;
+
+    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument}, out, in) ==
+          Success);
+    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument, "--config",
+                                            configArgument},
+              out, in) == Failure);
+    std::filesystem::remove_all(directory);
 }
 
 TEST_CASE("Every option of the master is read", "[server]")

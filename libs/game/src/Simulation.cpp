@@ -32,10 +32,11 @@ const rtype::log::Logger &logger()
 
 } // namespace
 
-Simulation::Simulation(Rules rules)
+Simulation::Simulation(Rules rules, const GameConfig &config)
 {
     _context.rules = rules;
     _context.seedRandom();
+    registerConfig(config);
     // The order of a tick: the inputs, the weapons, the projectiles, the movement, the walls, the hits, then
     // what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
@@ -45,6 +46,25 @@ Simulation::Simulation(Rules rules)
     _ecs.registerSystem<physics::BoundsSystem>(_ecs);
     _ecs.registerSystem<CombatSystem>(_ecs, _context);
     _ecs.registerSystem<AreaSystem>(_ecs, _context);
+}
+
+void Simulation::registerConfig(const GameConfig &config)
+{
+    for (const ProjectileDefinition &projectile : config.projectiles) {
+        _context.projectiles.addDefinition(projectile);
+    }
+    for (const WeaponDefinition &weapon : config.weapons) {
+        _context.weapons.addDefinition(weapon);
+    }
+    for (const ShipDefinition &ship : config.ships) {
+        _context.ships.addDefinition(ship);
+    }
+    for (const EnemyDefinition &enemy : config.enemies) {
+        _context.enemies.addDefinition(enemy);
+    }
+    for (const WaveDefinition &wave : config.waves) {
+        _context.waves.addDefinition(wave, _context.enemies);
+    }
 }
 
 void Simulation::addPlayer(std::uint8_t slot)

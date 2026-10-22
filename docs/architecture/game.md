@@ -222,8 +222,8 @@ spawnProjectile(ecs, context, "pulse", slot, x, y, 1500.0f, 0.0f); // from a sys
   a decision on the [protocol](../protocol/game.md#91-the-world).
 - `spawnPlayerShot()` does not use this system yet.
 
-[ADR 0018](../decisions/0018-lua-game-config.md) plans to load the definitions from Lua files; the registry is
-what the loader will fill.
+The definitions come from the Lua files of `config/projectiles/` (see [Configuration](#configuration)); the
+`Simulation` registers them when it is made.
 
 ## Weapons
 
@@ -314,7 +314,7 @@ the registry is the base the spawning and the waves will read.
 
 ```mermaid
 flowchart LR
-    Lua["Lua files<br/>(ADR 0018, later)"] -.-> Def
+    Lua["config/enemies/*.lua<br/>(loadGameConfig)"] --> Def
     Def["EnemyDefinition<br/>id · ship · health · speed · acceleration · weapon"]
     Def -- "addDefinition()<br/>checked: id, ship, health, speed, acceleration, weapon" --> Reg["EnemyRegistry<br/>GameContext::enemies"]
     Def -- "ship (id)" --> SDef["ShipDefinition<br/>id · model · sounds (move · destruction · collision)"]
@@ -336,8 +336,114 @@ simulation.context().enemies.addDefinition({"bydo_scout", "bydo_scout", 30, 240.
   speed not above 0 or a negative acceleration; `getDefinition()` throws `std::out_of_range` for an unknown id.
 - The ship and the weapon are **not** looked up when the enemy is added, so that the registries can be filled
   in any order; an unknown one fails when the enemy is made (`getDefinition()`, `equipWeapon()`).
-- [ADR 0018](../decisions/0018-lua-game-config.md) plans to load the definitions from Lua files, like the
-  weapons.
+- The definitions come from the Lua files of `config/enemies/`, like those of the other kinds (see
+  [Configuration](#configuration)).
+
+## Waves
+
+A wave is a group of enemies that appear one after the other. Like the enemies, it is **data**: a
+`WaveDefinition`, kept by name in a `WaveRegistry` (`GameContext::waves`). Nothing runs a wave yet: the
+registry is what the spawning will read.
+
+| Field | Type | What it is |
+|---|---|---|
+| `name` | `std::string` | Unique name in the registry |
+| `label` | `std::string` | Short text shown to the players |
+| `description` | `std::string` | Longer text |
+| `quantity` | `std::uint16_t` | How many enemies (above 0) |
+| `spawnInterval` | `float` | Seconds between two enemies (0 or more; 0 = all at once) |
+| `placement` | `WavePlacement` | `Manual` or `Random`, one mode per wave |
+| `spawns` | `std::vector<WaveSpawn>` | Manual only: each enemy (`enemy`, `x`, `y`), in the order they appear |
+| `enemy` | `std::string` | Random only: the id of the `EnemyDefinition` of every enemy |
+| `area` | `WaveArea` | Random only: the rectangle (`minX`, `maxX`, `minY`, `maxY`) where they appear |
+
+```mermaid
+flowchart LR
+    Def["WaveDefinition<br/>name · label · description · quantity · spawnInterval · placement"]
+    Def -- "placement = Manual" --> Spawns["spawns: WaveSpawn[]<br/>enemy · x · y, one per enemy"]
+    Def -- "placement = Random" --> Rand["enemy (id) + area: WaveArea<br/>minX · maxX · minY · maxY"]
+    Def -- "addDefinition(wave, enemies)<br/>checked: name, quantity, interval, placement, area, known enemies" --> Reg["WaveRegistry<br/>GameContext::waves"]
+    Spawns -- "enemy (id)" --> EDef["EnemyDefinition"]
+    Rand -- "enemy (id)" --> EDef
+    EDef -- "addDefinition()" --> EReg["EnemyRegistry<br/>GameContext::enemies"]
+    EReg -. "hasDefinition(id)<br/>when the wave is added" .-> Reg
+    Reg -. "getDefinition(name)" .-> Run["running a wave<br/>(later)"]
+```
+
+Solid arrows exist today; dotted ones are the checks made when a wave is added and what will come next.
+
+The default `area` is a band just past the right edge of the game area (x from `GameWidth` to
+`GameWidth + 100`, the whole height), so that enemies come in from the side. A wave does not mix manual and
+random enemies: for that, play two waves one after the other.
+
+```cpp
+auto &context = simulation.context();
+context.waves.addDefinition(
+    {"scouts_random", "Scouts", "Five scouts from the right", 5, 0.5f, WavePlacement::Random, {}, "bydo_scout"},
+    context.enemies);
+context.waves.addDefinition({"scouts_line", "Scout line", "", 2, 0.0f, WavePlacement::Manual,
+                             {{"bydo_scout", 2000.0f, 200.0f}, {"bydo_scout", 2000.0f, 800.0f}}},
+                            context.enemies);
+```
+
+- `addDefinition()` needs the `EnemyRegistry`: unlike the enemies, the waves check that every enemy they name
+  is known, so the enemies are filled first.
+- It throws `std::invalid_argument` for an empty or taken name, a quantity of 0, a negative interval, a
+  Manual wave whose `spawns` do not number `quantity` or that sets `enemy`, a Random wave without `enemy` or
+  with `spawns`, an unknown enemy, or an empty area (min above max). `getDefinition()` throws
+  `std::out_of_range` for an unknown name.
+
+## Configuration
+
+The definitions of a game are not written in C++: each one is a Lua file of the `config/` folder, which the
+server and the client read the same way ([ADR 0018](../decisions/0018-lua-game-config.md),
+[ADR 0019](../decisions/0019-luabridge3-scripting-library.md)). How to write one, with every field, is in the
+guide [Configure enemies and weapons](../guides/configure-enemies-and-weapons.md).
+
+```mermaid
+flowchart LR
+    Files["config/<br/>projectiles/ weapons/ ships/ enemies/ waves/<br/>one .lua file per definition"]
+    Files -- "one sandboxed State per file<br/>(libs/scripting)" --> Tables["returned tables"]
+    Tables -- "TableReader: types, required fields,<br/>ranges, unknown fields" --> Defs["definitions"]
+    Defs -- "registries: their checks<br/>then the ids each one names" --> Config["GameConfig<br/>(or the errors)"]
+    Config -- "Simulation(rules, config)" --> Context["GameContext registries"]
+```
+
+```cpp
+const rtype::game::LoadedGameConfig loaded = rtype::game::loadGameConfig("config");
+if (!loaded.isValid()) {
+    for (const std::string &error : loaded.errors) { /* "enemies/bydo_scout.lua: health: expected ..." */ }
+}
+rtype::game::Simulation simulation({}, loaded.config);
+```
+
+- **`loadGameConfig(directory)`** (`Config/GameConfigLoader.hpp`) reads every `.lua` file under the five
+  folders, sub-folders included, sorted by path so that every machine reads them in the same order. Each file
+  runs in a `scripting::State` of its own and returns one table; a missing folder has no definitions, a
+  missing directory is an error.
+- **The checks come in two steps.** First each table: the types, the required fields, the ranges and the
+  unknown fields (a misspelt optional field is an error, not a silent default), by a `TableReader` that reads
+  the fields raw (no metamethod runs). Then, once every file is read, the registries check the definitions
+  (an id defined twice...) and the ids they name are looked up: a weapon its projectile, an enemy its ship and
+  its weapon, a wave its enemies. The second step only runs if the first one found nothing, so that a broken
+  file does not make every file that names it fail too.
+- **All or nothing.** Every error of a step is listed, one line each with its file and field; with any error,
+  `LoadedGameConfig::config` is empty. The loader logs nothing: the server refuses to start and logs them
+  ([Server](server.md#common-options)), the client starts without the configuration and shows them in its
+  console.
+- **`GameConfig`** is plain values (`Config/GameConfig.hpp`): it is read once, then each `Simulation` gets a
+  copy and registers it in its `GameContext`, in the order of the dependencies (projectiles, weapons, ships,
+  enemies, waves).
+- **No Lua in the headers of the game.** `libs/scripting` is a private dependency of `libs/game`; only the
+  sources of `src/Config/` include Lua and LuaBridge3 (`rtype/scripting/Lua.hpp`).
+
+**`libs/scripting`** (`rtype::scripting`) builds Lua 5.4 from its sources (without the `io`, `os`, `package`,
+`debug`, `coroutine` and `utf8` libraries) and gives a `State`: only the base functions, `table`, `string` and
+`math`, without `load`, `loadfile`, `dofile`, `math.random` nor `math.randomseed`; text chunks only (no
+precompiled bytecode); an instruction limit (`State::DefaultInstructionLimit`) that stops an endless loop with
+an error; and an environment table per run, so that two files do not share their globals. Its errors are
+`ScriptError`s whose message starts with the name of the file. Lua's string hashes get a fixed seed, so that
+`pairs()` goes through a table in the same order on every run.
 
 ## Adding gameplay
 
@@ -439,6 +545,12 @@ inputs, the players added and removed, the movement and its speed in diagonal, t
 interval, shots removed once out of the area with ids never given again, the same game twice with the same
 inputs, and an hour of random inputs with four players keeping every entity in the range of the protocol.
 
+The tests in `tests/game_config.cpp` (tag `[game]`) load the configuration of the repository, read each kind
+with its defaults, and check each error: the field that is missing, of the wrong type, out of range or
+unknown, the file that does not return a table or does not run, the unknown ids, the ids defined twice, and the
+errors of several files at once. The tests in `tests/scripting.cpp` (tag `[scripting]`) check the sandbox of
+the `State`, the instruction limit, the separate globals and the names in the errors.
+
 The tests in `tests/game_messages.cpp` (tags `[messages]` and `[world]`) check the bytes of the example of the
 specification, the round trip of every message, the rounding and the limits of positions, every malformed
 case, the encoders refusing forbidden values, random bytes that never crash a decoder, the splitting of
@@ -446,5 +558,5 @@ snapshots and destructions into datagrams, the rules of `RemoteWorld`, and a who
 through the messages, where the client ends with the world of the game.
 
 ```sh
-./build/bin/rtype_tests "[game]"
+./build/bin/rtype_tests "[game],[scripting]"
 ```

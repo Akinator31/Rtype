@@ -21,6 +21,7 @@ CPMAddPackage(
 
 add_library(r-type_server_core STATIC
     src/Server.cpp
+    src/Common/GameConfig.cpp
     src/Common/InstanceMessages.cpp
     src/Common/Lifecycle.cpp
     src/Common/Options.cpp

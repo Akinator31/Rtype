@@ -7,7 +7,8 @@ namespace rtype::game
 {
 
 /// Everything that makes a kind of enemy: creating a new one is filling this and registering it in an
-/// EnemyRegistry (ADR 0018 will load it from a file). Speeds are in game units per second.
+/// EnemyRegistry; loadGameConfig() reads them from config/enemies/ (ADR 0018). Speeds are in game units per
+/// second.
 struct EnemyDefinition {
     /// Unique name in a registry, e.g. "bydo_scout".
     std::string id;
