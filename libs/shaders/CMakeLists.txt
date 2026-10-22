@@ -39,6 +39,8 @@ endfunction()
 
 rtype_embed_shader(ColorFilter ColorFilter.frag)
 rtype_embed_shader(Lighting Lighting.vert Lighting.frag)
+rtype_embed_shader(PbrLighting PbrLighting.vert PbrLighting.frag)
+rtype_embed_shader(Energy Energy.vert Energy.frag)
 
 # The headers are generated before any target linking the library is built
 get_property(headers GLOBAL PROPERTY RTYPE_SHADER_HEADERS)
