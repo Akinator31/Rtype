@@ -400,6 +400,8 @@ TEST_CASE("A shot of a Bydo destroys a ship, which comes back invulnerable after
     simulation.step();
 
     CHECK(wasDestroyed(simulation.snapshot(), ship.id, DestroyCause::Killed));
+    // The shot is spent on the ship
+    CHECK(wasDestroyed(simulation.snapshot(), 1000, DestroyCause::Killed));
     CHECK(!shipOf(simulation.snapshot(), 0));
     CHECK(simulation.snapshot().players[0].lives == rules.lives - 1);
     CHECK(!simulation.snapshot().gameOver);
@@ -1156,6 +1158,31 @@ TEST_CASE("The shots of a player take the damage of its weapon from a Bydo, and 
     CHECK(hurt);
     CHECK(wasDestroyed(simulation.snapshot(), enemy, DestroyCause::Killed));
     CHECK(simulation.snapshot().players[0].score == 100);
+}
+
+TEST_CASE("A shot that hits is killed, for the client to draw its impact", "[game]")
+{
+    Simulation simulation({}, battleConfig());
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x + 400.0f, ship.y);
+    simulation.setInput(0, held(PlayerInput::Fire));
+    simulation.step();
+    simulation.setInput(0, {});
+    const std::vector<EntityState> fired = entitiesOf(simulation.snapshot(), EntityKind::PlayerShot);
+    REQUIRE(fired.size() == 1);
+
+    std::optional<DestroyCause> cause;
+    for (int tick = 0; tick < 60 && !cause; ++tick) {
+        simulation.step();
+        for (const DestroyedEntity &destroyed : simulation.snapshot().destroyed) {
+            if (destroyed.id == fired[0].id) {
+                cause = destroyed.cause;
+            }
+        }
+    }
+    CHECK(cause == DestroyCause::Killed);
 }
 
 TEST_CASE("A Bydo that runs into a ship hurts it and keeps going; the ship is safe for a while", "[game]")

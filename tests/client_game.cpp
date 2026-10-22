@@ -6,6 +6,8 @@
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
 #include "Game/GameView.hpp"
+#include "Game/ImpactLooks.hpp"
+#include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
 #include "Game/ShotLooks.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
@@ -23,6 +25,7 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <utility>
 #include <vector>
 
 using namespace rtype::client;
@@ -472,4 +475,145 @@ TEST_CASE("The session stops when its scene closes", "[client]")
     for (rtype::ecs::entity_t entity = 0; entity < replicated.size(); ++entity) {
         CHECK_FALSE(replicated.has(entity));
     }
+}
+
+// --- Impacts ---
+
+namespace
+{
+
+/// A session that gives the snapshots written by the test.
+class ScriptedSession final : public GameSession
+{
+public:
+    std::vector<rtype::game::Snapshot> snapshots;
+
+    [[nodiscard]] std::uint8_t localSlot() const override { return 0; }
+    void setInput(rtype::game::PlayerInput /*input*/) override {}
+    void update(float /*elapsed*/) override {}
+    [[nodiscard]] std::vector<rtype::game::Snapshot> takeSnapshots() override
+    {
+        return std::exchange(snapshots, {});
+    }
+    void setPaused(bool /*paused*/) override {}
+    [[nodiscard]] bool isOver() const override { return false; }
+};
+
+/// The engine of the client playing a scripted session, its impacts played.
+struct ImpactClient {
+    rtype::engine::Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    GameSessionSystem &sessions;
+    rtype::engine::SceneId scene;
+    ScriptedSession *session = nullptr;
+
+    ImpactClient()
+        : sessions(engine.getEcs().registerSystem<GameSessionSystem>(engine.getEcs(), engine.getScenes(),
+                                                                     engine.getControls()))
+    {
+        ecs.registerSystem<ImpactSystem>(ecs);
+        scene = engine.getScenes().open({});
+        auto created = std::make_unique<ScriptedSession>();
+        session = created.get();
+        sessions.start(std::move(created), scene);
+    }
+
+    /// One frame that receives a snapshot.
+    void receive(rtype::game::Snapshot snapshot)
+    {
+        session->snapshots.push_back(std::move(snapshot));
+        engine.update(Tick);
+    }
+
+    [[nodiscard]] std::vector<rtype::ecs::entity_t> impacts()
+    {
+        std::vector<rtype::ecs::entity_t> found;
+        auto &impacts = ecs.cache<Impact>();
+        for (rtype::ecs::entity_t entity = 0; entity < impacts.size(); ++entity) {
+            if (impacts.has(entity) && ecs.isAlive(entity)) {
+                found.push_back(entity);
+            }
+        }
+        return found;
+    }
+};
+
+rtype::game::EntityState shotAt(std::uint32_t id, float x, float y)
+{
+    rtype::game::EntityState shot{id, rtype::game::EntityKind::PlayerShot, 0};
+    shot.x = x;
+    shot.y = y;
+    return shot;
+}
+
+const ImpactLook SparkLook{{}, 2, 0.4f, 3.0f, {10, 20, 30, 200}, {}};
+
+rtype::game::Snapshot snapshotOf(std::uint32_t tick, std::vector<rtype::game::EntityState> entities,
+                                 std::vector<rtype::game::DestroyedEntity> destroyed = {})
+{
+    rtype::game::Snapshot snapshot;
+    snapshot.tick = tick;
+    snapshot.entities = std::move(entities);
+    snapshot.destroyed = std::move(destroyed);
+    return snapshot;
+}
+
+} // namespace
+
+TEST_CASE("A shot killed in the game leaves its impact where it was last drawn, played once", "[client]")
+{
+    ImpactClient client;
+    client.sessions.setImpactLook(rtype::game::EntityKind::PlayerShot, SparkLook);
+    client.receive(snapshotOf(1, {shotAt(5, 300.0f, 200.0f)}));
+
+    // Online, the destruction comes first, while the shot is still drawn
+    client.receive(snapshotOf(2, {shotAt(5, 310.0f, 200.0f)}, {{5, rtype::game::DestroyCause::Killed}}));
+    CHECK(client.impacts().empty());
+    client.receive(snapshotOf(3, {}));
+
+    const std::vector<rtype::ecs::entity_t> impacts = client.impacts();
+    REQUIRE(impacts.size() == 1);
+    const rtype::ecs::entity_t impact = impacts[0];
+    CHECK(client.ecs.getComponent<rtype::engine::SceneMember>(impact).scene == client.scene);
+    const rtype::engine::Model &model = client.ecs.getComponent<rtype::engine::Model>(impact);
+    CHECK(model.position.x == Approx(310.0f));
+    CHECK(model.position.y == Approx(200.0f));
+    // In front of the game, towards the camera
+    CHECK(model.position.z < 0.0f);
+    CHECK(model.scale == Approx(3.0f));
+    CHECK(model.tint.r == 10);
+    CHECK(model.energy);
+    const auto &animation = client.ecs.getComponent<rtype::engine::ModelAnimation>(impact);
+    CHECK(animation.animation == 2);
+    CHECK(animation.speed == 0.0f);
+    CHECK(animation.time == Approx(Tick));
+
+    // Opaque, then fading out in the last quarter of its animation, then gone before it loops
+    client.receive(snapshotOf(4, {}));
+    CHECK(client.ecs.getComponent<rtype::engine::Model>(impact).tint.a == 200);
+    for (int frame = 0; frame < 17; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(5 + frame), {}));
+    }
+    REQUIRE(client.ecs.isAlive(impact));
+    const std::uint8_t fading = client.ecs.getComponent<rtype::engine::Model>(impact).tint.a;
+    CHECK(fading < 200);
+    CHECK(fading > 0);
+    for (int frame = 0; frame < 6; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(22 + frame), {}));
+    }
+    CHECK(client.impacts().empty());
+}
+
+TEST_CASE("An entity removed without effect, or of a kind without an impact, leaves none", "[client]")
+{
+    ImpactClient client;
+    client.sessions.setImpactLook(rtype::game::EntityKind::PlayerShot, SparkLook);
+    rtype::game::EntityState bydoShot{7, rtype::game::EntityKind::BydoShot, rtype::game::NoOwner};
+    client.receive(snapshotOf(1, {shotAt(5, 300.0f, 200.0f), bydoShot}));
+
+    client.receive(snapshotOf(
+        2, {}, {{5, rtype::game::DestroyCause::Removed}, {7, rtype::game::DestroyCause::Killed}}));
+
+    CHECK(client.sessions.entityCount() == 0);
+    CHECK(client.impacts().empty());
 }
