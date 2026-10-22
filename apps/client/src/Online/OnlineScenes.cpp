@@ -88,8 +88,7 @@ std::optional<std::pair<std::string, std::uint16_t>> splitServer(const std::stri
 
 OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                            const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                           std::filesystem::path publicKey,
-                           localization::Localization &translations)
+                           std::filesystem::path publicKey, localization::Localization &translations)
     : _engine(engine), _loop(loop), _games(games), _translations(translations),
       _publicKey(std::move(publicKey))
 {
@@ -99,17 +98,15 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
                                                     _translations.text("menu.online"), true);
                            const ecs::entity_t server =
                                menu.textField(_translations.text("online.server"), _serverText, {}, 64);
-                           const ecs::entity_t name =
-                               menu.textField(_translations.text("online.name"), _name, {},
-                                              lobby::MaxPlayerNameLength);
+                           const ecs::entity_t name = menu.textField(_translations.text("online.name"), _name,
+                                                                     {}, lobby::MaxPlayerNameLength);
                            menu.button(_translations.text("online.connect"), [this, &target, server, name] {
                                _serverText =
                                    target.getEcs().getComponent<engine::TextField>(server).input.text();
                                _name = target.getEcs().getComponent<engine::TextField>(name).input.text();
                                connect();
                            });
-                           menu.button(_translations.text("online.back"),
-                                       [&target] { target.popScene(); });
+                           menu.button(_translations.text("online.back"), [&target] { target.popScene(); });
                        });
 
     engine.createScene(
@@ -128,8 +125,8 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
             });
             for (std::size_t i = 0; i < std::min(_list.size(), MaxGamesShown); ++i) {
                 const lobby::GameInfo &game = _list[i];
-                menu.button(std::format("{} {} ({}/{})", _translations.text("online.join"),
-                                        game.name, game.players, game.maxPlayers),
+                menu.button(std::format("{} {} ({}/{})", _translations.text("online.join"), game.name,
+                                        game.players, game.maxPlayers),
                             [this, id = game.id] {
                                 if (_lobby) {
                                     _lobby->joinGame(id, [this](const LobbyClient::JoinResult &result) {

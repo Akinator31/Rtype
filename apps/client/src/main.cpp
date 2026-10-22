@@ -16,8 +16,8 @@
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/input/Devices.hpp"
-#include "rtype/log/Logger.hpp"
 #include "rtype/localization/Localization.hpp"
+#include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
@@ -127,12 +127,11 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
                   rtype::localization::Localization &translations)
 {
     const auto quit = [&window] { window.requestClose(); };
-    engine.createScene(
-        rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
-        [&resources, &style, &translations, quit](rtype::engine::Engine &target,
-                                                   rtype::engine::SceneId scene) {
-            rtype::client::buildMainMenu(target, scene, resources, style, translations, quit);
-        });
+    engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
+                       [&resources, &style, &translations, quit](rtype::engine::Engine &target,
+                                                                 rtype::engine::SceneId scene) {
+                           rtype::client::buildMainMenu(target, scene, resources, style, translations, quit);
+                       });
     rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
         games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
     });

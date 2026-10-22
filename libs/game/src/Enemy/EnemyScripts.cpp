@@ -147,7 +147,7 @@ ScriptWeapon describeWeapon(const GameContext &context, const Armed &armed)
 bool isOnDestination(const ecs::Position &position, const EnemyOrders &orders)
 {
     return orders.destination && std::hypot(orders.destination->x - position.x,
-                                             orders.destination->y - position.y) <= ArrivalDistance;
+                                            orders.destination->y - position.y) <= ArrivalDistance;
 }
 
 ScriptEnemy describeEnemy(ecs::Ecs &ecs, GameContext &context, ecs::entity_t entity,

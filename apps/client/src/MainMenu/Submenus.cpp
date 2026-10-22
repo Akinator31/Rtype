@@ -35,10 +35,10 @@ void createSubmenuScene(engine::Engine &engine, const engine::InterfaceStyle &st
             engine::InterfaceBuilder interface(target.getEcs(), scene, style);
             interface.backButton([&target] { target.popScene(); },
                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            interface.boundText(
-                [&translations, titleKey] { return translations.text(titleKey); },
-                {engine::AnchorPoint::TopLeft, screenMargin + style.button.height + style.headerSpacing,
-                 screenMargin + ((style.button.height - style.textSize) / 2.0f)});
+            interface.boundText([&translations, titleKey] { return translations.text(titleKey); },
+                                {engine::AnchorPoint::TopLeft,
+                                 screenMargin + style.button.height + style.headerSpacing,
+                                 screenMargin + ((style.button.height - style.textSize) / 2.0f)});
             float top = buttonsTop;
             for (const SubmenuButton &button : buttons) {
                 const ecs::entity_t entity =
@@ -60,20 +60,18 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
             engine::InterfaceBuilder interface(target.getEcs(), scene, style);
             interface.backButton([&target] { target.popScene(); },
                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            interface.boundText(
-                [&translations] { return translations.text("menu.settings"); },
-                {engine::AnchorPoint::TopLeft, screenMargin + style.button.height + style.headerSpacing,
-                 screenMargin + ((style.button.height - style.textSize) / 2.0f)});
+            interface.boundText([&translations] { return translations.text("menu.settings"); },
+                                {engine::AnchorPoint::TopLeft,
+                                 screenMargin + style.button.height + style.headerSpacing,
+                                 screenMargin + ((style.button.height - style.textSize) / 2.0f)});
             const auto label = [&translations] {
-                const std::string key = translations.language() == "fr" ? "language.french"
-                                                                       : "language.english";
+                const std::string key =
+                    translations.language() == "fr" ? "language.french" : "language.english";
                 return translations.text("settings.language") + ": " + translations.text(key);
             };
             const ecs::entity_t choice = interface.button(
                 label(),
-                [&translations] {
-                    translations.setLanguage(translations.language() == "fr" ? "en" : "fr");
-                },
+                [&translations] { translations.setLanguage(translations.language() == "fr" ? "en" : "fr"); },
                 {engine::AnchorPoint::TopLeft, screenMargin, buttonsTop});
             target.getEcs().addComponent<engine::BoundText>(choice, label);
         });

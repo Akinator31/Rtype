@@ -318,11 +318,10 @@ TEST_CASE("A wrong field is an error naming the file and the field", "[game]")
     CHECK(errorWith("sounds", "ships/scout.lua",
                     "return { id = 'scout', model = 'm.glb', sounds = { move = 3 } }") ==
           "ships/scout.lua: sounds.move: expected a string");
-    CHECK(errorWith(
-              "spawn", "waves/line.lua",
-              "return { name = 'line', difficulty = 1, placement = 'manual',"
-              " spawns = { { enemy = 'scout', x = 0, y = 0 },"
-              " { x = 0, y = 0 } } }") == "waves/line.lua: spawns[2].enemy: missing");
+    CHECK(errorWith("spawn", "waves/line.lua",
+                    "return { name = 'line', difficulty = 1, placement = 'manual',"
+                    " spawns = { { enemy = 'scout', x = 0, y = 0 },"
+                    " { x = 0, y = 0 } } }") == "waves/line.lua: spawns[2].enemy: missing");
     CHECK(errorWith("spawns", "waves/line.lua",
                     "return { name = 'line', difficulty = 1, placement = 'manual', spawns = 3 }") ==
           "waves/line.lua: spawns: expected a list of tables");
@@ -408,8 +407,7 @@ TEST_CASE("An unknown id named by a definition is an error of its file", "[game]
           "enemies/scout.lua: weapon: unknown weapon 'nope'");
     CHECK(errorWith("wave", "waves/line.lua",
                     "return { name = 'line', difficulty = 1, placement = 'random', enemy = 'nope',"
-                    " quantity = 2 }") ==
-          "waves/line.lua: the wave 'line' uses the unknown enemy 'nope'");
+                    " quantity = 2 }") == "waves/line.lua: the wave 'line' uses the unknown enemy 'nope'");
     CHECK(errorWith("player_ship", "player.lua", "return { ship = 'nope', weapon = 'blaster' }") ==
           "player.lua: ship: unknown ship 'nope'");
     CHECK(errorWith("player_unknown_weapon", "player.lua", "return { ship = 'scout', weapon = 'nope' }") ==

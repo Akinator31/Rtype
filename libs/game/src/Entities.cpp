@@ -125,10 +125,9 @@ ecs::entity_t spawnAimedShot(ecs::Ecs &ecs, GameContext &context, const std::str
         directionY = 0.0f;
     }
     const float halfWidth = halfSizeOf(context.projectiles.getDefinition(weapon.projectile).collider).x;
-    const ecs::entity_t shot =
-        spawnProjectile(ecs, context, weapon.projectile, owner, x + (directionX * halfWidth),
-                        y + (directionY * halfWidth), directionX * weapon.projectileSpeed,
-                        directionY * weapon.projectileSpeed);
+    const ecs::entity_t shot = spawnProjectile(
+        ecs, context, weapon.projectile, owner, x + (directionX * halfWidth), y + (directionY * halfWidth),
+        directionX * weapon.projectileSpeed, directionY * weapon.projectileSpeed);
     Projectile &projectile = ecs.getComponent<Projectile>(shot);
     projectile.category = weapon.mechanic;
     projectile.range = weapon.range;

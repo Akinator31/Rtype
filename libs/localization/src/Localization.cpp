@@ -19,7 +19,7 @@ std::string trim(std::string_view value)
     return std::string(value.substr(start, end - start + 1));
 }
 
-}
+} // namespace
 
 Localization::Localization(std::string defaultLanguage)
     : _defaultLanguage(std::move(defaultLanguage)), _language(_defaultLanguage)
@@ -93,4 +93,4 @@ std::string Localization::text(std::string_view key) const
     return std::string(key);
 }
 
-}
+} // namespace rtype::localization

@@ -53,9 +53,7 @@ bool isFlyingForward(const ShipLook &ship, const game::EntityState &state)
 /// The model of a ship in the colour of its player, lightened so that its details still show.
 render::Color tintOf(const EntityLook &look)
 {
-    const auto lighten = [](std::uint8_t channel) {
-        return static_cast<std::uint8_t>((channel + 255) / 2);
-    };
+    const auto lighten = [](std::uint8_t channel) { return static_cast<std::uint8_t>((channel + 255) / 2); };
     return {lighten(look.box.color.r), lighten(look.box.color.g), lighten(look.box.color.b), 255};
 }
 

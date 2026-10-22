@@ -83,9 +83,8 @@ void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
     const render::Vector2 place{screenMargin, -screenMargin - (rowsBelow * buttonsSpacing)};
     const render::Vector2 entrance{place.x - buttonsEntrance, place.y};
     const float delay = buttonsDelay + (static_cast<float>(row) * buttonsStagger);
-    const ecs::entity_t button =
-        interface.button(translations.text(key), onPress,
-                         {engine::AnchorPoint::BottomLeft, entrance.x, entrance.y});
+    const ecs::entity_t button = interface.button(translations.text(key), onPress,
+                                                  {engine::AnchorPoint::BottomLeft, entrance.x, entrance.y});
     ecs.addComponent<engine::BoundText>(button, [&translations, key] { return translations.text(key); });
     ecs.addComponent<ecs::Hidden>(button);
     ecs.addComponent<IntroSlide>(button, entrance, place, delay, engine::Easing::EaseOutBack);
@@ -96,12 +95,12 @@ void createButtons(engine::Engine &engine, engine::InterfaceBuilder &interface,
                    localization::Localization &translations, const std::function<void()> &quit)
 {
     ecs::Ecs &ecs = engine.getEcs();
-    createButton(ecs, interface, translations, "menu.play",
-                 [&engine] { engine.pushScene(PlayMenuScene); }, 0);
-    createButton(ecs, interface, translations, "menu.online",
-                 [&engine] { engine.pushScene(OnlineMenuScene); }, 1);
-    createButton(ecs, interface, translations, "menu.settings",
-                 [&engine] { engine.pushScene(SettingsMenuScene); }, 2);
+    createButton(
+        ecs, interface, translations, "menu.play", [&engine] { engine.pushScene(PlayMenuScene); }, 0);
+    createButton(
+        ecs, interface, translations, "menu.online", [&engine] { engine.pushScene(OnlineMenuScene); }, 1);
+    createButton(
+        ecs, interface, translations, "menu.settings", [&engine] { engine.pushScene(SettingsMenuScene); }, 2);
     createButton(ecs, interface, translations, "menu.quit", quit, 3);
 }
 

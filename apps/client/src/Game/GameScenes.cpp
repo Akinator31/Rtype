@@ -79,9 +79,8 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
 {
     sessions.setShipLook(game::EntityKind::PlayerShip,
                          {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoFlames});
-    sessions.setShipLook(
-        game::EntityKind::BydoFlyer,
-        {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP), DropShipHull, true, DropShipFlames});
+    sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
+                                                       DropShipHull, true, DropShipFlames});
     const render::Energy energy{
         resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
     const render::TextureId light =
@@ -95,18 +94,16 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     sessions.setShotLook(game::EntityKind::BydoPlasmaShot,
                          {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true,
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
-    engine.createScene(GameScene,
-                       {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
-                       [this, &resources, &metrics, &style](engine::Engine & /*target*/,
-                                                            engine::SceneId scene) {
-                           build(scene, resources, metrics, style);
-                       });
+    engine.createScene(
+        GameScene, {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
+        [this, &resources, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {
+            build(scene, resources, metrics, style);
+        });
     engine.createScene(PauseScene, {.overlay = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
                            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
                                                     _translations.text("game.pause"), true);
-                           menu.button(_translations.text("game.resume"),
-                                       [&target] { target.popScene(); });
+                           menu.button(_translations.text("game.resume"), [&target] { target.popScene(); });
                            menu.button(_translations.text("game.leave"), [this] { end(); });
                        });
 }

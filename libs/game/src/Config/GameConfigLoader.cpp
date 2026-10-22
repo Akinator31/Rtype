@@ -145,8 +145,8 @@ void readBehaviors(const std::filesystem::path &directory, std::vector<FromFile<
             errors.push_back(std::format("{}: cannot be read", file));
             continue;
         }
-        enemy.behavior = EnemyBehavior{file, std::string(std::istreambuf_iterator<char>(stream),
-                                                         std::istreambuf_iterator<char>())};
+        enemy.behavior = EnemyBehavior{
+            file, std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>())};
     }
 }
 
@@ -162,7 +162,7 @@ struct ReadFiles {
 
 /// The file of the player, at the root of the directory: required, a game cannot be played without it.
 std::optional<FromFile<PlayerDefinition>> readPlayerFile(const std::filesystem::path &directory,
-                                                        std::vector<std::string> &errors)
+                                                         std::vector<std::string> &errors)
 {
     const std::string name(PlayerFile);
     std::error_code error;
@@ -223,12 +223,9 @@ void checkDefinitions(const ReadFiles &files, std::vector<std::string> &errors)
 
 GameConfig takeConfig(ReadFiles &files)
 {
-    return {takeDefinitions(files.projectiles),
-            takeDefinitions(files.weapons),
-            takeDefinitions(files.ships),
-            takeDefinitions(files.enemies),
-            takeDefinitions(files.waves),
-            std::move(files.player->definition)};
+    return {takeDefinitions(files.projectiles), takeDefinitions(files.weapons),
+            takeDefinitions(files.ships),       takeDefinitions(files.enemies),
+            takeDefinitions(files.waves),       std::move(files.player->definition)};
 }
 
 } // namespace

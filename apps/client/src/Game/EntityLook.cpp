@@ -32,8 +32,12 @@ struct KindLook {
 };
 
 const std::array<KindLook, 6> KindLooks{{
-    {game::EntityKind::PlayerShip, DefaultRules.shipHalfWidth * 2.0f, DefaultRules.shipHalfHeight * 2.0f,
-     true, {}, ShipOrder},
+    {game::EntityKind::PlayerShip,
+     DefaultRules.shipHalfWidth * 2.0f,
+     DefaultRules.shipHalfHeight * 2.0f,
+     true,
+     {},
+     ShipOrder},
     {game::EntityKind::PlayerShot, 68.0f, 18.8f, true, {}, ShotOrder},
     {game::EntityKind::PlayerChargedShot, 48.0f, 16.0f, true, {}, ShotOrder},
     {game::EntityKind::BydoFlyer, 140.0f, 54.0f, false, {171, 71, 188, 255}, ShipOrder},
