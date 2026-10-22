@@ -57,7 +57,7 @@ struct ConfigDirectory {
         write("enemies/scout.lua",
               "return { id = 'scout', ship = 'scout', health = 30, weapon = 'blaster' }");
         write("waves/line.lua",
-              "return { name = 'line', placement = 'manual', spawns = {"
+              "return { name = 'line', difficulty = 1, placement = 'manual', spawns = {"
               " { enemy = 'scout', x = 2000, y = 200 }, { enemy = 'scout', x = 2000, y = 800 } } }");
     }
 };
@@ -122,7 +122,7 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     directory.write("enemies/tank.lua", "return { id = 'tank', ship = 'tank', health = 255, speed = 100,"
                                         " acceleration = 0, weapon = 'gun' }");
     directory.write("waves/tanks.lua",
-                    "return { name = 'tanks', label = 'Tanks', description = 'Three tanks',"
+                    "return { name = 'tanks', label = 'Tanks', description = 'Three tanks', difficulty = 5,"
                     " placement = 'random', enemy = 'tank', quantity = 3, spawnInterval = 0.5,"
                     " area = { minX = 2000, maxY = 500 } }");
 
@@ -176,12 +176,14 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
 
     REQUIRE(config.waves.size() == 2);
     const WaveDefinition &line = config.waves[0];
+    CHECK(line.difficulty == 1);
     CHECK(line.placement == WavePlacement::Manual);
     CHECK(line.quantity == 2);
     REQUIRE(line.spawns.size() == 2);
     CHECK(line.spawns[1].y == Approx(800.0f));
     const WaveDefinition &tanks = config.waves[1];
     CHECK(tanks.label == "Tanks");
+    CHECK(tanks.difficulty == 5);
     CHECK(tanks.quantity == 3);
     CHECK(tanks.spawnInterval == Approx(0.5f));
     CHECK(tanks.area.minX == Approx(2000.0f));
@@ -261,14 +263,21 @@ TEST_CASE("A wrong field is an error naming the file and the field", "[game]")
           "ships/scout.lua: sounds.move: expected a string");
     CHECK(errorWith(
               "spawn", "waves/line.lua",
-              "return { name = 'line', placement = 'manual', spawns = { { enemy = 'scout', x = 0, y = 0 },"
+              "return { name = 'line', difficulty = 1, placement = 'manual',"
+              " spawns = { { enemy = 'scout', x = 0, y = 0 },"
               " { x = 0, y = 0 } } }") == "waves/line.lua: spawns[2].enemy: missing");
-    CHECK(
-        errorWith("spawns", "waves/line.lua", "return { name = 'line', placement = 'manual', spawns = 3 }") ==
-        "waves/line.lua: spawns: expected a list of tables");
+    CHECK(errorWith("spawns", "waves/line.lua",
+                    "return { name = 'line', difficulty = 1, placement = 'manual', spawns = 3 }") ==
+          "waves/line.lua: spawns: expected a list of tables");
     CHECK(errorWith("random_quantity", "waves/line.lua",
-                    "return { name = 'line', placement = 'random', enemy = 'scout' }") ==
+                    "return { name = 'line', difficulty = 1, placement = 'random', enemy = 'scout' }") ==
           "waves/line.lua: quantity: missing");
+    CHECK(errorWith("no_difficulty", "waves/line.lua",
+                    "return { name = 'line', placement = 'random', enemy = 'scout', quantity = 1 }") ==
+          "waves/line.lua: difficulty: missing");
+    CHECK(errorWith("difficulty", "waves/line.lua",
+                    "return { name = 'line', difficulty = 6, placement = 'random', enemy = 'scout',"
+                    " quantity = 1 }") == "waves/line.lua: difficulty: expected an integer from 1 to 5");
 }
 
 TEST_CASE("A file that does not return a table, or does not run, is an error naming it", "[game]")
@@ -312,7 +321,8 @@ TEST_CASE("An unknown id named by a definition is an error of its file", "[game]
                     "return { id = 'scout', ship = 'scout', health = 1, weapon = 'nope' }") ==
           "enemies/scout.lua: weapon: unknown weapon 'nope'");
     CHECK(errorWith("wave", "waves/line.lua",
-                    "return { name = 'line', placement = 'random', enemy = 'nope', quantity = 2 }") ==
+                    "return { name = 'line', difficulty = 1, placement = 'random', enemy = 'nope',"
+                    " quantity = 2 }") ==
           "waves/line.lua: the wave 'line' uses the unknown enemy 'nope'");
 }
 

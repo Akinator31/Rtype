@@ -154,6 +154,8 @@ WaveDefinition readWaveDefinition(TableReader &table)
     definition.name = table.readString("name");
     definition.label = table.readString("label", "");
     definition.description = table.readString("description", "");
+    definition.difficulty =
+        static_cast<std::uint8_t>(table.readInteger("difficulty", MinWaveDifficulty, MaxWaveDifficulty));
     definition.spawnInterval =
         table.readNumber("spawnInterval", NumberRange::ZeroOrMore, definition.spawnInterval);
     definition.placement = static_cast<WavePlacement>(table.readChoice("placement", PlacementNames));

@@ -57,6 +57,10 @@ void checkDefinition(const WaveDefinition &definition, const EnemyRegistry &enem
     if (definition.quantity == 0) {
         throw std::invalid_argument(std::format("the wave '{}' needs at least one enemy", definition.name));
     }
+    if (definition.difficulty < MinWaveDifficulty || definition.difficulty > MaxWaveDifficulty) {
+        throw std::invalid_argument(std::format("the wave '{}' needs a difficulty from {} to {}",
+                                                definition.name, MinWaveDifficulty, MaxWaveDifficulty));
+    }
     if (!(definition.spawnInterval >= 0.0f)) {
         throw std::invalid_argument(
             std::format("the wave '{}' needs a positive spawn interval", definition.name));

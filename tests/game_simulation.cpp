@@ -810,6 +810,7 @@ WaveDefinition randomWave()
     wave.name = "scouts_random";
     wave.label = "Scouts";
     wave.description = "Five scouts from the right";
+    wave.difficulty = 2;
     wave.quantity = 5;
     wave.spawnInterval = 0.5f;
     wave.placement = WavePlacement::Random;
@@ -841,6 +842,7 @@ TEST_CASE("A wave registry gives back the waves of both placements, and refuses 
 
     const WaveDefinition &random = registry.getDefinition("scouts_random");
     CHECK(random.label == "Scouts");
+    CHECK(random.difficulty == 2);
     CHECK(random.quantity == 5);
     CHECK(random.spawnInterval == Approx(0.5f));
     CHECK(random.placement == WavePlacement::Random);
@@ -868,6 +870,14 @@ TEST_CASE("A wave registry refuses a wave that is not valid", "[game]")
     SECTION("no enemy")
     {
         wave.quantity = 0;
+    }
+    SECTION("a difficulty of 0")
+    {
+        wave.difficulty = 0;
+    }
+    SECTION("a difficulty above 5")
+    {
+        wave.difficulty = MaxWaveDifficulty + 1;
     }
     SECTION("a negative interval")
     {

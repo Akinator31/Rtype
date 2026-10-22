@@ -11,6 +11,10 @@
 namespace rtype::game
 {
 
+/// The difficulty of the easiest waves, and of the hardest.
+constexpr std::uint8_t MinWaveDifficulty = 1;
+constexpr std::uint8_t MaxWaveDifficulty = 5;
+
 /// A group of enemies that appear one after the other. Creating a new wave is filling this and registering it
 /// in a WaveRegistry; loadGameConfig() reads them from config/waves/ (ADR 0018).
 struct WaveDefinition {
@@ -19,6 +23,8 @@ struct WaveDefinition {
     /// Short text shown to the players, e.g. "Scout line".
     std::string label;
     std::string description;
+    /// How hard the wave is, from MinWaveDifficulty to MaxWaveDifficulty.
+    std::uint8_t difficulty = MinWaveDifficulty;
     /// How many enemies the wave has (above 0). For a Manual wave, it is the size of `spawns`.
     std::uint16_t quantity = 1;
     /// Seconds between two enemies (0 or more; 0 makes them all appear at once).
