@@ -10,6 +10,7 @@
 // Images
 #define RTYPE_IMAGE_STARFIELD "images/starfield.png"
 #define RTYPE_IMAGE_ENERGY_NOISE "images/fx/energy_noise.png"
+#define RTYPE_IMAGE_GLOW_CORE "images/fx/glow_core.png"
 
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"

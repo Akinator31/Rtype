@@ -47,6 +47,29 @@ constexpr render::Rectangle OrbPlasmaCore{-0.9f, -0.9f, 1.8f, 1.8f};
 /// The ships are lit from the top left, in front of them, in the world of the game where y points down.
 constexpr render::Light GameLight{{0.5f, 0.8f, 0.6f}, {255, 248, 240, 255}, {48, 50, 62, 255}};
 
+/// The colours of the light around the shots, those of their energy; the alpha is how bright it is.
+constexpr render::Color PlayerShotLight{80, 200, 255, 130};
+constexpr render::Color BydoShotLight{185, 90, 255, 115};
+constexpr render::Color PlasmaOrbLight{255, 120, 35, 135};
+/// How far the light of a shot spreads around its core, in heights of the core.
+constexpr float ShotLightSpread = 1.5f;
+
+/// The energy of a shot with a light around its core.
+/// @param core The core of the shot model, as in ShotLook.
+render::Energy shine(render::Energy energy, render::TextureId light, render::Rectangle core,
+                     render::Color color)
+{
+    const float margin = core.height * ShotLightSpread;
+    // The cores are measured through the camera of the game, where y points down: the models have y up
+    energy.halo = render::Energy::Halo{
+        light,
+        color,
+        {core.x + (core.width / 2.0f), -(core.y + (core.height / 2.0f)), 0.0f},
+        {core.width + (2.0f * margin), core.height + (2.0f * margin)},
+    };
+    return energy;
+}
+
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources,
@@ -61,12 +84,17 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP), DropShipHull, true, DropShipFlames});
     const render::Energy energy{
         resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
+    const render::TextureId light =
+        resources.loadTexture(RTYPE_IMAGE_GLOW_CORE, render::TextureFiltering::Smooth);
     sessions.setShotLook(game::EntityKind::PlayerShot,
-                         {resources.loadModel(RTYPE_MODEL_SHOT_BASIC), ShotBasicCore, false, energy});
+                         {resources.loadModel(RTYPE_MODEL_SHOT_BASIC), ShotBasicCore, false,
+                          shine(energy, light, ShotBasicCore, PlayerShotLight)});
     sessions.setShotLook(game::EntityKind::BydoShot,
-                         {resources.loadModel(RTYPE_MODEL_SHOT_SPIRAL), ShotSpiralCore, true, energy});
+                         {resources.loadModel(RTYPE_MODEL_SHOT_SPIRAL), ShotSpiralCore, true,
+                          shine(energy, light, ShotSpiralCore, BydoShotLight)});
     sessions.setShotLook(game::EntityKind::BydoPlasmaShot,
-                         {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true, energy});
+                         {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true,
+                          shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
     engine.createScene(GameScene,
                        {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
                        [this, &resources, &metrics, &style](engine::Engine & /*target*/,
