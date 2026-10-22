@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::StartsWith;
@@ -94,6 +95,41 @@ TEST_CASE("An endless loop is stopped by the instruction limit", "[scripting]")
                StartsWith("test.lua:") && ContainsSubstring("instruction limit"));
     // The limit is per run: the state still works after
     CHECK(state.runCode("return 1", "after.lua").unsafe_cast<int>() == 1);
+}
+
+TEST_CASE("A function of the state is called with its arguments, each call under a limit of its own",
+          "[scripting]")
+{
+    State state(10'000);
+    const luabridge::LuaRef chunk =
+        state.runCode("local total = 0\n"
+                      "return {\n"
+                      "    add = function(a, b) total = total + a + b; return total end,\n"
+                      "    total = function(out) out.value = total end,\n"
+                      "    spin = function(n) for i = 1, n do end end,\n"
+                      "}",
+                      "calls.lua");
+    lua_State *lua = state.getLuaState();
+    const std::vector<luabridge::LuaRef> numbers{luabridge::LuaRef(lua, 2), luabridge::LuaRef(lua, 3)};
+    state.callFunction(chunk.rawget("add"), numbers, "calls.lua");
+    state.callFunction(chunk.rawget("add"), numbers, "calls.lua");
+    const std::vector<luabridge::LuaRef> out{luabridge::newTable(lua)};
+    state.callFunction(chunk.rawget("total"), out, "calls.lua");
+    CHECK(out[0].rawget("value").unsafe_cast<int>() == 10);
+
+    // A run of a few thousand instructions each time, which would reach the limit if it were shared
+    const std::vector<luabridge::LuaRef> loops{luabridge::LuaRef(lua, 1000)};
+    for (int call = 0; call < 10; ++call) {
+        state.callFunction(chunk.rawget("spin"), loops, "calls.lua");
+    }
+    const std::vector<luabridge::LuaRef> endless{luabridge::LuaRef(lua, 1'000'000)};
+    CHECK_THROWS_AS(state.callFunction(chunk.rawget("spin"), endless, "calls.lua"), ScriptError);
+    try {
+        state.callFunction(chunk.rawget("nope"), {}, "calls.lua");
+        FAIL("calling nil must throw");
+    } catch (const ScriptError &error) {
+        CHECK_THAT(error.what(), StartsWith("calls.lua: ") && ContainsSubstring("expected a function"));
+    }
 }
 
 TEST_CASE("The errors name the file: syntax, runtime, error objects", "[scripting]")
