@@ -492,7 +492,7 @@ Each entity:
 | Cause | Value | Meaning |
 |---|---|---|
 | `REMOVED` | 0 | Removed without effect: it left the game area, or its time was over |
-| `KILLED` | 1 | Destroyed in the game: the client draws an explosion |
+| `KILLED` | 1 | Destroyed in the game, a ship killed or a shot that hit: the client draws an explosion or an impact |
 
 **Receiver behaviour:** the client removes the entities and remembers their ids
 ([section 9.3](#93-snapshots)). Unknown ids are remembered too: their first snapshot may still be on its way.
