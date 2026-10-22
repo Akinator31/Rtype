@@ -14,6 +14,7 @@
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
@@ -31,6 +32,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace
@@ -94,11 +96,30 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     return true;
 }
 
+/// Loads the configuration of the game (ADR 0018), next to the executable. Unlike the server, the client
+/// starts with a configuration that has errors: it goes without it (an offline game has no enemies nor
+/// weapons), and says why in the console and in the logs.
+rtype::game::GameConfig readGameConfig(rtype::client::Console &console)
+{
+    const rtype::log::Logger logger("client");
+    rtype::game::LoadedGameConfig loaded =
+        rtype::game::loadGameConfig(rtype::render::applicationDirectory() / "config");
+    if (loaded.isValid()) {
+        return std::move(loaded.config);
+    }
+    console.print("The game configuration has errors: the game runs without it");
+    for (const std::string &error : loaded.errors) {
+        console.print(error);
+        logger.warning("Configuration: {}", error);
+    }
+    return {};
+}
+
 /// Declares the scenes of the client, but those of a game, which GameScenes declares.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
                   const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
                   rtype::client::Console &console, const rtype::engine::RendererMetrics &metrics,
-                  rtype::client::GameScenes &games)
+                  rtype::client::GameScenes &games, const rtype::game::GameConfig &config)
 {
     const auto quit = [&window] { window.requestClose(); };
     engine.createScene(
@@ -106,8 +127,9 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
         [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
             rtype::client::buildMainMenu(target, scene, resources, style, quit);
         });
-    rtype::client::createSubmenuScenes(
-        engine, style, [&games] { games.play(std::make_unique<rtype::client::LocalSession>()); });
+    rtype::client::createSubmenuScenes(engine, style, [&games, &config] {
+        games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
+    });
     engine.createScene(
         rtype::client::ConsoleScene, {.overlay = true},
         [&console, &metrics, &style](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
@@ -164,6 +186,7 @@ void run()
     const rtype::engine::RendererMetrics metrics(renderer);
 
     rtype::client::Console console;
+    const rtype::game::GameConfig config = readGameConfig(console);
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
     engine.setInputSource(devices);
@@ -178,7 +201,7 @@ void run()
     bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
     bool debugKeyWasDown = false;
 
-    createScenes(engine, resources, style, window, console, metrics, games);
+    createScenes(engine, resources, style, window, console, metrics, games, config);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
