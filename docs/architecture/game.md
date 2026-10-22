@@ -1,7 +1,7 @@
 # Game
 
 The game library (`libs/game`, namespace `rtype::game`) holds the **rules of the R-Type**: the players, their
-ships and projectiles, and later the Bydos and the waves. It is used by the server instances, which
+ships and weapons, the Bydos, the hits and the waves. It is used by the server instances, which
 run the games online, and by the client offline, in its `LocalSession` ([A game in the client](client-game.md))
 ([ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md)): the rules are written once, and a
 Bydo behaves the same offline and online.
@@ -102,22 +102,38 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 
 | Rule | Where | Numbers (`Rules`) |
 |---|---|---|
-| A ship appears on the left, one height per slot | `spawnPlayerShip()` | — |
+| A ship appears on the left, one height per slot, with the health and the weapon of the [players](#players) | `spawnPlayerShip()` | — |
 | It moves with the input, as fast in diagonal | `PlayerControlSystem`, with `shipVelocity()` (`ShipMovement.hpp`, shared with the prediction of the client) | `shipSpeed` 600 units/s |
 | It stays entirely in the 1920 × 1080 area | `physics::BoundsSystem`, `ConfinedToBounds` | `shipHalfWidth`, `shipHalfHeight` |
-| Fire held shoots from its nose | `PlayerControlSystem`, `spawnPlayerShot()` | `fireInterval` 10 ticks (6 per second), `shotSpeed` 1500 units/s |
+| Fire held shoots its [weapon](#weapons) from its nose, to the right | `WeaponSystem`, `spawnWeaponShot()` | — (the weapon's) |
+| The waves come one after the other, one per difficulty, then the game is won | `WaveSystem`, `spawnEnemy()` | `firstWaveDelay` 120 ticks, `wavePause` 180 |
+| A Bydo flies to the left, and fires its weapon once in the area | `EnemySystem`, `WeaponSystem` | — (its definition's) |
+| What has `Damage` hurts what it touches: player shots the Bydos, the Bydos and their shots the ships | `CombatSystem` | `hitInvulnerableTicks` 60 |
+| A Bydo with no hit points left is destroyed, its score goes to the player of the shot | `CombatSystem` | — |
+| A ship with no hit points left is destroyed, the player loses a life and gets a new ship, invulnerable for a while | `CombatSystem` | `respawnDelay` 90 ticks, `invulnerableTicks` 120 |
+| Every player out of lives ends the game (defeat) | `CombatSystem` | `lives` 3 |
 | What leaves the area is removed | `AreaSystem`, `LeavesArea` | `areaMargin` 128 units |
 | A player who leaves takes its ship away | `Simulation::removePlayer()` | — |
-| A Bydo shot that touches a ship destroys it, the player loses a life and gets a new ship, invulnerable for a while | `CombatSystem` | `respawnDelay` 90 ticks, `invulnerableTicks` 120 |
-| Every player out of lives ends the game (defeat) | `CombatSystem` | `lives` 3 |
 
-The Bydos, the waves and the score come later. Nothing makes a Bydo shot yet: the hit is there for the
-[projectiles](#projectiles) to use.
+A tick runs the systems in this order: `PlayerControlSystem` (inputs), `WaveSystem` (the waves),
+`EnemySystem` (the Bydos), `WeaponSystem` (the weapons), `ProjectileSystem` (the velocity of the projectiles),
+`physics::MovementSystem` (movement), `physics::BoundsSystem` (the walls), `CombatSystem` (the hits, the
+lives), `AreaSystem` (what left), then the snapshot is taken.
 
-A tick runs the systems in this order: `PlayerControlSystem` (inputs), `WeaponSystem` (the weapons), `ProjectileSystem` (the velocity of the
-projectiles), `physics::MovementSystem` (movement),
-`physics::BoundsSystem` (the walls), `CombatSystem` (the hits, the lives), `AreaSystem` (what left), then the
-snapshot is taken.
+### Hits
+
+The `CombatSystem` tests what touches what with the colliders of the entities, boxes or spheres
+(`overlaps()`, `Hitbox.hpp`). An entity with a `Damage` component takes that many hit points from the `Health`
+of what it hits:
+
+- **A player shot** (its `Owner` is a slot) hurts a Bydo and is spent (`DestroyCause::Removed`). The Bydo
+  with no hit points left is destroyed (`DestroyCause::Killed`) and `EnemyDefinition::score` goes to the
+  player of the shot.
+- **A Bydo shot** (`NoOwner`) hurts a ship and is spent; **a Bydo** hurts a ship it runs into
+  (`EnemyDefinition::collisionDamage`) and keeps going. A ship that survives is invulnerable for
+  `hitInvulnerableTicks`, so that a Bydo on it does not take its health away tick after tick.
+- The damage of a shot is that of its weapon (`WeaponDefinition::damage`): `spawnWeaponShot()` gives it its
+  `Damage`. A projectile made by `spawnProjectile()` alone has none: it hurts nothing.
 
 ## Projectiles
 
@@ -220,7 +236,7 @@ spawnProjectile(ecs, context, "pulse", slot, x, y, 1500.0f, 0.0f); // from a sys
 - **The clients see an `EntityKind` only**: a projectile with an owner is a `PlayerShot`, without one a
   `BydoShot`. The model and the category are not in the snapshot yet, so the client cannot draw them: it needs
   a decision on the [protocol](../protocol/game.md#91-the-world).
-- `spawnPlayerShot()` does not use this system yet.
+- The players and the Bydos fire them through their [weapons](#weapons), which give them their damage.
 
 The definitions come from the Lua files of `config/projectiles/` (see [Configuration](#configuration)); the
 `Simulation` registers them when it is made.
@@ -234,23 +250,24 @@ A kind of weapon is **data** too, a `WeaponDefinition`, kept by id in a `WeaponR
 |---|---|---|
 | `projectile` | `std::string` | The ammunition: the id of a `ProjectileDefinition` |
 | `mechanic` | `ProjectileCategory` | The firing mechanic: how its projectiles move (replaces the category of the projectile) |
-| `projectileSpeed` | `float` | Speed the projectiles leave with, to the right |
+| `projectileSpeed` | `float` | Speed the projectiles leave with, forward: to the right for a player, to the left for a Bydo |
 | `fireInterval` | ticks | Between two shots while Fire is held (not 0) |
 | `range` | `float` | Distance a projectile flies before it vanishes, 0 for no limit |
 | `magazineSize` | shots | Ammunition capacity, `InfiniteAmmo` (0) for a weapon that never runs out |
 | `reloadTicks` | ticks | Reload time of an empty magazine |
+| `damage` | `std::uint8_t` | Hit points each projectile takes from what it hits (not 0, default 10) |
 
 ```mermaid
 flowchart LR
     Proj["ProjectileDefinition<br/>id · model · category · collider"] -- "projectile (id)" --> Def
     Cat["ProjectileCategory"] -- "mechanic" --> Def
-    Def["WeaponDefinition<br/>id · projectile · mechanic · projectileSpeed<br/>fireInterval · range · magazineSize · reloadTicks"]
+    Def["WeaponDefinition<br/>id · projectile · mechanic · projectileSpeed<br/>fireInterval · range · magazineSize · reloadTicks · damage"]
     Def -- "addDefinition()" --> Reg["WeaponRegistry<br/>GameContext::weapons"]
     Reg -- "equipWeapon()" --> Armed["Armed on the ship<br/>weapon · cooldown · ammo · reloadLeft"]
-    Armed -- "WeaponSystem, Fire held" --> Shot["spawnWeaponShot()"]
+    Armed -- "WeaponSystem: Fire held (player),<br/>in the area (Bydo)" --> Shot["spawnWeaponShot()"]
     Reg -- "getDefinition(id)" --> Shot
     Proj -- "spawnProjectile()" --> Shot
-    Shot --> Ent["Projectile entity<br/>category = mechanic · range · travelled"]
+    Shot --> Ent["Projectile entity<br/>category = mechanic · range · travelled · Damage"]
     Ent -- "ProjectileSystem: travelled ≥ range" --> Gone["removed (DestroyCause::Removed)"]
 ```
 
@@ -259,7 +276,7 @@ The state of the magazine, run by the `WeaponSystem` at each tick (with `magazin
 ```mermaid
 stateDiagram-v2
     [*] --> Ready: equipWeapon() (full magazine)
-    Ready --> Cooldown: Fire held, one round spent<br/>cooldown = fireInterval
+    Ready --> Cooldown: fires, one round spent<br/>cooldown = fireInterval
     Cooldown --> Ready: cooldown reaches 0
     Ready --> Reloading: last round spent<br/>reloadLeft = reloadTicks
     Reloading --> Ready: reloadLeft reaches 0<br/>ammo = magazineSize
@@ -271,8 +288,11 @@ equipWeapon(ecs, context, ship, "blaster"); // gives the ship an Armed component
 ```
 
 - `WeaponSystem` runs each `Armed` ship: it counts the cooldown down, spends a round per shot, reloads on its
-  own when the magazine is empty (no shot meanwhile) and fires through `spawnWeaponShot()` (deferred).
-- A ship **without** `Armed` keeps the default shots of `PlayerControlSystem` (`Rules::fireInterval`).
+  own when the magazine is empty (no shot meanwhile) and fires through `spawnWeaponShot()` (deferred), from
+  the nose of the ship (the edge of its collider). A player fires while Fire is held, a Bydo as soon as it is
+  in the game area.
+- A ship **without** `Armed` does not fire. The ships of the players get the weapon of the
+  [players](#players), the Bydos that of their definition.
 - The range is checked by `ProjectileSystem` on the distance flown (`Projectile::travelled`); a projectile past
   it is removed with `DestroyCause::Removed`.
 
@@ -288,6 +308,7 @@ it has no window and no audio, the client loads and plays them. An empty sound p
 | `sounds.move` | `std::string` | Played while it moves |
 | `sounds.destruction` | `std::string` | Played when it is destroyed |
 | `sounds.collision` | `std::string` | Played when it collides with something |
+| `collider` | `physics::Collider` | The shape that hits and is hit, centred on the ship (default a box of 48 × 24 half sizes). The ships of the players keep the box of the rules, shared with the prediction of the client |
 
 ```cpp
 simulation.context().ships.addDefinition({"bydo_scout", "models/bydo_scout.glb",
@@ -298,35 +319,51 @@ simulation.context().ships.addDefinition({"bydo_scout", "models/bydo_scout.glb",
 `addDefinition()` throws `std::invalid_argument` for an empty or taken id or no model; `getDefinition()` throws
 `std::out_of_range` for an unknown id.
 
+## Players
+
+What every player starts with is a `PlayerDefinition` (`Player/PlayerDefinition.hpp`), given in
+`GameConfig::player` and kept in `GameContext::player`:
+
+| Field | Type | What it is |
+|---|---|---|
+| `ship` | `std::string` | The id of a `ShipDefinition`: its model and its sounds |
+| `weapon` | `std::string` | The id of a `WeaponDefinition`, given to every ship of a player (`equipWeapon()`) |
+| `health` | `std::uint8_t` | Hit points of each ship (not 0, default 100) |
+
+The `Simulation` throws `std::invalid_argument` for an unknown ship or weapon, or no health. Left empty, as in
+a `GameConfig` made by hand, the ships have no weapon and do not fire. The configuration of the repository
+gives the players `player_ship` and `player_cannon` (`config/player.lua`).
+
 ## Enemies
 
 A kind of enemy is **data** as well, an `EnemyDefinition`, kept by id in an `EnemyRegistry`
-(`GameContext::enemies`). Speeds are in game units per second. Nothing makes an enemy appear in a game yet:
-the registry is the base the spawning and the waves will read.
+(`GameContext::enemies`). Speeds are in game units per second. The [waves](#waves) make them appear with
+`spawnEnemy()`.
 
 | Field | Type | What it is |
 |---|---|---|
 | `ship` | `std::string` | The id of a `ShipDefinition`: its model and its sounds |
 | `health` | `std::uint8_t` | Hit points it starts with, like the `Health` component (not 0) |
 | `speed` | `float` | Top speed (above 0) |
-| `acceleration` | `float` | Speed gained per second until the top speed, in units/s² (0 or more) |
+| `acceleration` | `float` | Speed gained per second until the top speed, in units/s² (0 or more; 0 = top speed at once) |
 | `weapon` | `std::string` | The id of a `WeaponDefinition` |
+| `score` | `std::uint32_t` | Points for the player who destroys it (default 100) |
+| `collisionDamage` | `std::uint8_t` | Hit points a ship loses when it runs into it (default 20) |
 
 ```mermaid
 flowchart LR
     Lua["config/enemies/*.lua<br/>(loadGameConfig)"] --> Def
-    Def["EnemyDefinition<br/>id · ship · health · speed · acceleration · weapon"]
+    Def["EnemyDefinition<br/>id · ship · health · speed · acceleration · weapon · score · collisionDamage"]
     Def -- "addDefinition()<br/>checked: id, ship, health, speed, acceleration, weapon" --> Reg["EnemyRegistry<br/>GameContext::enemies"]
-    Def -- "ship (id)" --> SDef["ShipDefinition<br/>id · model · sounds (move · destruction · collision)"]
+    Def -- "ship (id)" --> SDef["ShipDefinition<br/>id · model · sounds (move · destruction · collision) · collider"]
     SDef -- "addDefinition()" --> SReg["ShipRegistry<br/>GameContext::ships"]
     Def -- "weapon (id)" --> WDef["WeaponDefinition"]
     WDef -- "addDefinition()" --> WReg["WeaponRegistry<br/>GameContext::weapons"]
-    Reg -. "getDefinition(id)" .-> Spawn["spawning, waves<br/>(later)"]
-    SReg -. "model, sounds" .-> Spawn
-    WReg -. "equipWeapon()" .-> Spawn
+    Reg -- "getDefinition(id)" --> Spawn["spawnEnemy()<br/>BydoFlyer: Enemy · Health · Damage · Collider · LeavesArea"]
+    SReg -- "collider" --> Spawn
+    WReg -- "equipWeapon()" --> Spawn
+    Spawn --> Fly["EnemySystem: speeds up to the left<br/>WeaponSystem: fires in the area"]
 ```
-
-Solid arrows exist today; dotted ones are what will come next.
 
 ```cpp
 simulation.context().enemies.addDefinition({"bydo_scout", "bydo_scout", 30, 240.0f, 720.0f, "blaster"});
@@ -335,15 +372,18 @@ simulation.context().enemies.addDefinition({"bydo_scout", "bydo_scout", 30, 240.
 - `addDefinition()` throws `std::invalid_argument` for an empty or taken id, no ship, no health, no weapon, a
   speed not above 0 or a negative acceleration; `getDefinition()` throws `std::out_of_range` for an unknown id.
 - The ship and the weapon are **not** looked up when the enemy is added, so that the registries can be filled
-  in any order; an unknown one fails when the enemy is made (`getDefinition()`, `equipWeapon()`).
+  in any order; an unknown one fails when the enemy is made: `spawnEnemy()` throws `std::out_of_range`.
+- `spawnEnemy(ecs, context, id, x, y)` makes a `BydoFlyer` (the only kind of Bydo the clients are told for now)
+  with no owner, still: the `EnemySystem` speeds it up to the left, in a straight line until the patterns of
+  [ADR 0019](../decisions/0019-luabridge3-scripting-library.md).
 - The definitions come from the Lua files of `config/enemies/`, like those of the other kinds (see
   [Configuration](#configuration)).
 
 ## Waves
 
 A wave is a group of enemies that appear one after the other. Like the enemies, it is **data**: a
-`WaveDefinition`, kept by name in a `WaveRegistry` (`GameContext::waves`). Nothing runs a wave yet: the
-registry is what the spawning will read.
+`WaveDefinition`, kept by name in a `WaveRegistry` (`GameContext::waves`), run by the `WaveSystem` (see
+[A game of waves](#a-game-of-waves)).
 
 | Field | Type | What it is |
 |---|---|---|
@@ -368,10 +408,10 @@ flowchart LR
     Rand -- "enemy (id)" --> EDef
     EDef -- "addDefinition()" --> EReg["EnemyRegistry<br/>GameContext::enemies"]
     EReg -. "hasDefinition(id)<br/>when the wave is added" .-> Reg
-    Reg -. "getDefinition(name)" .-> Run["running a wave<br/>(later)"]
+    Reg -- "listWavesOfDifficulty(n)" --> Run["WaveSystem"]
 ```
 
-Solid arrows exist today; dotted ones are the checks made when a wave is added and what will come next.
+The dotted arrow is the check made when a wave is added.
 
 The default `area` is a band just past the right edge of the game area (x from `GameWidth` to
 `GameWidth + 100`, the whole height), so that enemies come in from the side. A wave does not mix manual and
@@ -393,6 +433,34 @@ context.waves.addDefinition({"scouts_line", "Scout line", "", 1, 2, 0.0f, WavePl
   Manual wave whose `spawns` do not number `quantity` or that sets `enemy`, a Random wave without `enemy` or
   with `spawns`, an unknown enemy, or an empty area (min above max). `getDefinition()` throws
   `std::out_of_range` for an unknown name.
+- `listWavesOfDifficulty(n)` gives the names of the waves of a difficulty **in alphabetical order**: the map is
+  never iterated as it is, so that the same random number draws the same wave on every machine.
+
+### A game of waves
+
+A game has five waves at most: wave n is a wave of difficulty n, drawn at random among those of that
+difficulty (`GameContext::randomBetween()`, from `Rules::seed`). A difficulty without a wave is skipped. The
+`WaveSystem` keeps where the game is in `GameContext::wave` (`WaveProgress`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> Waiting: firstWaveDelay ticks<br/>(counted while a player is in)
+    Waiting --> Playing: draws a wave of the next difficulty<br/>waveStarted = n
+    Waiting --> Won: no difficulty left
+    Playing --> Playing: an enemy every spawnInterval seconds
+    Playing --> Waiting: all sent, none left<br/>wavePause ticks
+    Playing --> Won: it was of difficulty 5
+    Won --> [*]: gameOver = Victory
+```
+
+- A wave sends its enemies one every `spawnInterval` seconds (all at once for 0): a `Manual` wave at the
+  positions of its `spawns`, a `Random` one at a random point of its `area`. They are created after the
+  systems of the tick (`spawnEnemy()`, deferred).
+- It ends once every enemy is sent and none is left, destroyed or gone out of the area.
+- The start of a wave is in the snapshot (`waveStarted`, its number, which is its difficulty); the server
+  sends it to the clients (`WAVE_STARTED`).
+- Nothing happens without a wave in the registry (the tests made by hand), nor while no player is in. Once
+  the game is over (`GameContext::over`), won or lost, the waves stop.
 
 ## Configuration
 
@@ -403,7 +471,7 @@ guide [Configure enemies and weapons](../guides/configure-enemies-and-weapons.md
 
 ```mermaid
 flowchart LR
-    Files["config/<br/>projectiles/ weapons/ ships/ enemies/ waves/<br/>one .lua file per definition"]
+    Files["config/<br/>projectiles/ weapons/ ships/ enemies/ waves/ player.lua<br/>one .lua file per definition"]
     Files -- "one sandboxed State per file<br/>(libs/scripting)" --> Tables["returned tables"]
     Tables -- "TableReader: types, required fields,<br/>ranges, unknown fields" --> Defs["definitions"]
     Defs -- "registries: their checks<br/>then the ids each one names" --> Config["GameConfig<br/>(or the errors)"]
@@ -419,14 +487,14 @@ rtype::game::Simulation simulation({}, loaded.config);
 ```
 
 - **`loadGameConfig(directory)`** (`Config/GameConfigLoader.hpp`) reads every `.lua` file under the five
-  folders, sub-folders included, sorted by path so that every machine reads them in the same order. Each file
-  runs in a `scripting::State` of its own and returns one table; a missing folder has no definitions, a
-  missing directory is an error.
+  folders, sub-folders included, sorted by path so that every machine reads them in the same order, and
+  `player.lua` at the root. Each file runs in a `scripting::State` of its own and returns one table; a missing
+  folder has no definitions, a missing directory or `player.lua` is an error.
 - **The checks come in two steps.** First each table: the types, the required fields, the ranges and the
   unknown fields (a misspelt optional field is an error, not a silent default), by a `TableReader` that reads
   the fields raw (no metamethod runs). Then, once every file is read, the registries check the definitions
   (an id defined twice...) and the ids they name are looked up: a weapon its projectile, an enemy its ship and
-  its weapon, a wave its enemies. The second step only runs if the first one found nothing, so that a broken
+  its weapon, a wave its enemies, the player its ship and its weapon. The second step only runs if the first one found nothing, so that a broken
   file does not make every file that names it fail too.
 - **All or nothing.** Every error of a step is listed, one line each with its file and field; with any error,
   `LoadedGameConfig::config` is empty. The loader logs nothing: the server refuses to start and logs them
@@ -434,7 +502,7 @@ rtype::game::Simulation simulation({}, loaded.config);
   console.
 - **`GameConfig`** is plain values (`Config/GameConfig.hpp`): it is read once, then each `Simulation` gets a
   copy and registers it in its `GameContext`, in the order of the dependencies (projectiles, weapons, ships,
-  enemies, waves).
+  enemies, waves, then the player).
 - **No Lua in the headers of the game.** `libs/scripting` is a private dependency of `libs/game`; only the
   sources of `src/Config/` include Lua and LuaBridge3 (`rtype/scripting/Lua.hpp`).
 
@@ -545,11 +613,14 @@ The tests in `tests/game_simulation.cpp` (tag `[game]`) step simulations and che
 inputs, the players added and removed, the movement and its speed in diagonal, the walls, the shots and their
 interval, shots removed once out of the area with ids never given again, the same game twice with the same
 inputs, and an hour of random inputs with four players keeping every entity in the range of the protocol.
+They also check the Bydos (their flight, their shots to the left), the hits (damage, score, a Bydo running
+into a ship), and the waves: one per difficulty, a missing difficulty skipped, the interval and the area of
+their enemies, the wave drawn from the seed, nothing without a player, and the victory told once.
 
 The tests in `tests/game_config.cpp` (tag `[game]`) load the configuration of the repository, read each kind
 with its defaults, and check each error: the field that is missing, of the wrong type, out of range or
-unknown, the file that does not return a table or does not run, the unknown ids, the ids defined twice, and the
-errors of several files at once. The tests in `tests/scripting.cpp` (tag `[scripting]`) check the sandbox of
+unknown, the file that does not return a table or does not run, the unknown ids, the ids defined twice, a
+missing `player.lua`, and the errors of several files at once. The tests in `tests/scripting.cpp` (tag `[scripting]`) check the sandbox of
 the `State`, the instruction limit, the separate globals and the names in the errors.
 
 The tests in `tests/game_messages.cpp` (tags `[messages]` and `[world]`) check the bytes of the example of the

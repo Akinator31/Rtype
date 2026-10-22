@@ -67,16 +67,19 @@ pause menu, or when its session is over (`isOver()`): game over, or the game los
 
 ## What it looks like
 
-For now each entity is a coloured box of the size of its collider in the [rules](game.md), so that what is
-drawn is what collides:
+For now each entity is a coloured box. The snapshots carry the kind of an entity, not its size: a ship has
+the size of the [rules](game.md), the other kinds that of the configuration of the repository.
 
 | Entity | Look |
 |---|---|
 | Ship | 96 × 48, in the colour of its player: blue, red, green, yellow for the slots 0 to 3 |
-| Shot | 24 × 8, in the colour of the player who fired |
-| Anything else (Bydos, later) | A grey square |
+| Shot | 24 × 8, in the colour of the player who fired (a charged shot 48 × 16) |
+| Bydo (`BydoFlyer`) | 80 × 48, purple |
+| Bydo shot | 16 × 16, orange |
+| Any other kind | A grey square |
 
-`lookOf()` decides it: sprites can replace the boxes there, without changing the rest.
+`lookOf()` decides it, from a table indexed by kind: sprites can replace the boxes there, without changing the
+rest.
 
 ## Tests
 
@@ -84,8 +87,8 @@ drawn is what collides:
 
 - the `LocalSession`: 60 steps per second of game time with frames of any length, at most 5 per update, its
   player moved by its input, nothing while paused;
-- `inputFrom()` and `lookOf()`: the controls held become the bits of the input, the sizes are those of the
-  rules, the four players have four colours;
+- `inputFrom()` and `lookOf()`: the controls held become the bits of the input, the ship has the size of the
+  rules, the four players have four colours, the Bydos a look of their own;
 - the `GameSessionSystem` in an `Engine`: the ship drawn where the simulation puts it and moved by the
   keyboard, shots created when fired and destroyed once out of the area, the game stopped while a menu is over
   its scene, an empty input under a menu even for a session that goes on (as online), and the session forgotten
