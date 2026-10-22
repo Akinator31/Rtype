@@ -103,9 +103,8 @@ void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resour
     sessions.setImpactLook(
         game::EntityKind::PlayerShot,
         loadImpactLook(resources, RTYPE_MODEL_IMPACT_SPARK, SparkScale, PlayerShotImpact, energy));
-    sessions.setImpactLook(
-        game::EntityKind::BydoShot,
-        loadImpactLook(resources, RTYPE_MODEL_IMPACT_BURST, BurstScale, BydoShotImpact, energy));
+    sessions.setImpactLook(game::EntityKind::BydoShot, loadImpactLook(resources, RTYPE_MODEL_IMPACT_BURST,
+                                                                      BurstScale, BydoShotImpact, energy));
     sessions.setImpactLook(
         game::EntityKind::BydoPlasmaShot,
         loadImpactLook(resources, RTYPE_MODEL_IMPACT_SPLASH, SplashScale, PlasmaOrbImpact, energy));

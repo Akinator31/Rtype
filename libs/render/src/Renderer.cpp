@@ -532,10 +532,9 @@ void Renderer::drawGlow()
                 model.applyPose(*draw.pose);
             }
             BeginMode3D(draw.camera);
-            _impl->energyShader.draw(model.get(), draw.energy,
-                                     _impl->textures.get(draw.energy.noise).get(), draw.camera.position,
-                                     draw.position, draw.rotationAxis, draw.rotationAngle, draw.spinAngle,
-                                     draw.scale, draw.tint);
+            _impl->energyShader.draw(model.get(), draw.energy, _impl->textures.get(draw.energy.noise).get(),
+                                     draw.camera.position, draw.position, draw.rotationAxis,
+                                     draw.rotationAngle, draw.spinAngle, draw.scale, draw.tint);
             EndMode3D();
         }
     });

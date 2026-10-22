@@ -611,8 +611,8 @@ TEST_CASE("An entity removed without effect, or of a kind without an impact, lea
     rtype::game::EntityState bydoShot{7, rtype::game::EntityKind::BydoShot, rtype::game::NoOwner};
     client.receive(snapshotOf(1, {shotAt(5, 300.0f, 200.0f), bydoShot}));
 
-    client.receive(snapshotOf(
-        2, {}, {{5, rtype::game::DestroyCause::Removed}, {7, rtype::game::DestroyCause::Killed}}));
+    client.receive(
+        snapshotOf(2, {}, {{5, rtype::game::DestroyCause::Removed}, {7, rtype::game::DestroyCause::Killed}}));
 
     CHECK(client.sessions.entityCount() == 0);
     CHECK(client.impacts().empty());
