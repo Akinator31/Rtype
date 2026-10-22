@@ -45,7 +45,7 @@ struct ConfigDirectory {
     {
         const std::filesystem::path target = path / file;
         std::filesystem::create_directories(target.parent_path());
-        std::ofstream(target) << code;
+        std::ofstream(target, std::ios::binary) << code;
     }
 
     /// A small valid configuration: one of each kind, and the player.
