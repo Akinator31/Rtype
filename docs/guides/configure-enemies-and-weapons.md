@@ -125,7 +125,7 @@ written `5` or `5.0`, not `5.5`.
 | Field | Type | Default | What it is |
 |---|---|---|---|
 | `id` | string | *required* | Unique among the projectiles |
-| `model` | string | `""` | Path of the 3D model, drawn by the client |
+| `model` | string | `""` | Path of the 3D model. The client chooses the model by kind of shot (shot of a player, plasma orb or other shot of a Bydo) and draws it to the width of the collider: give the collider the proportions of the core of the model |
 | `category` | `"bullet"`, `"missile"`, `"laser"` or `"plasma"` | `"bullet"` | How it moves: straight, speeding up, straight, zigzagging ([behaviors](../architecture/game.md#projectiles)) |
 | `collider` | table | *required* | The shape that hits, see below |
 

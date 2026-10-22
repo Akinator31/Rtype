@@ -21,6 +21,15 @@ physics::Collider box(float halfWidth, float halfHeight)
     return {physics::Aabb{{}, {halfWidth, halfHeight, 0.0f}}, {}, false};
 }
 
+/// What the clients see of a projectile: a shot of a player, or a plasma orb or another shot of a Bydo.
+EntityKind findProjectileKind(std::uint8_t owner, ProjectileCategory category)
+{
+    if (owner < MaxPlayers) {
+        return EntityKind::PlayerShot;
+    }
+    return category == ProjectileCategory::Plasma ? EntityKind::BydoPlasmaShot : EntityKind::BydoShot;
+}
+
 ecs::entity_t spawnVisible(ecs::Ecs &ecs, GameContext &context, EntityKind kind, std::uint8_t owner, float x,
                            float y)
 {
@@ -72,7 +81,7 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
                               float x, float y, float velocityX, float velocityY)
 {
     const ProjectileDefinition &definition = context.projectiles.getDefinition(id);
-    const EntityKind kind = owner < MaxPlayers ? EntityKind::PlayerShot : EntityKind::BydoShot;
+    const EntityKind kind = findProjectileKind(owner, definition.category);
     const ecs::entity_t projectile = spawnVisible(ecs, context, kind, owner, x, y);
     ecs.addComponent<Projectile>(projectile, definition.category, definition.model,
                                  physics::Velocity{velocityX, velocityY}, 0U);

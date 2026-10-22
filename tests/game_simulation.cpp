@@ -546,6 +546,28 @@ TEST_CASE(
     CHECK(simulation.snapshot().entities.empty());
 }
 
+TEST_CASE("A projectile of a Bydo is a plasma shot for the clients if it is plasma, a Bydo shot otherwise",
+          "[game]")
+{
+    Simulation simulation{Rules{}};
+    GameContext &context = simulation.context();
+    context.projectiles.addDefinition(pulse());
+    ProjectileDefinition laser = pulse();
+    laser.id = "laser";
+    laser.category = ProjectileCategory::Laser;
+    context.projectiles.addDefinition(laser);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    const auto kindOf = [&](const std::string &id, std::uint8_t owner) {
+        const rtype::ecs::entity_t projectile =
+            spawnProjectile(ecs, context, id, owner, 500.0f, 300.0f, 0.0f, 0.0f);
+        return ecs.getComponent<Kind>(projectile).value;
+    };
+
+    CHECK(kindOf("pulse", NoOwner) == EntityKind::BydoPlasmaShot);
+    CHECK(kindOf("laser", NoOwner) == EntityKind::BydoShot);
+    CHECK(kindOf("pulse", 1) == EntityKind::PlayerShot);
+}
+
 TEST_CASE("Each category moves its projectiles its own way", "[game]")
 {
     const Rules rules;
@@ -1096,13 +1118,14 @@ TEST_CASE("A Bydo speeds up to the left, and fires to the left once in the game 
     simulation.step();
     const EntityState first = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
     CHECK(first.velocityX == Approx(-12.0f));
-    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoShot).empty());
+    // The pulse of these tests is a plasma projectile
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoPlasmaShot).empty());
 
     // Its top speed is 240 units per second, reached in a third of a second
     run(simulation, 60);
     const EntityState later = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
     CHECK(later.velocityX == Approx(-240.0f));
-    const std::vector<EntityState> shots = entitiesOf(simulation.snapshot(), EntityKind::BydoShot);
+    const std::vector<EntityState> shots = entitiesOf(simulation.snapshot(), EntityKind::BydoPlasmaShot);
     REQUIRE_FALSE(shots.empty());
     CHECK(shots[0].velocityX < 0.0f);
     CHECK(shots[0].x < later.x);

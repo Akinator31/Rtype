@@ -234,8 +234,8 @@ spawnProjectile(ecs, context, "pulse", slot, x, y, 1500.0f, 0.0f); // from a sys
 - **The registry is an `std::unordered_map`**, only looked up by id, never iterated: this does not break the
   [determinism](#who-calls-step) above. Iterating it in the rules would.
 - **The clients see an `EntityKind` only**: a projectile with an owner is a `PlayerShot`, without one a
-  `BydoShot`. The model and the category are not in the snapshot yet, so the client cannot draw them: it needs
-  a decision on the [protocol](../protocol/game.md#91-the-world).
+  `BydoPlasmaShot` if its category is `Plasma`, a `BydoShot` otherwise. The client draws each kind with its
+  own model; the model of the definition is not in the snapshot.
 - The players and the Bydos fire them through their [weapons](#weapons), which give them their damage.
 
 The definitions come from the Lua files of `config/projectiles/` (see [Configuration](#configuration)); the

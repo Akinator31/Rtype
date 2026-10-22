@@ -136,6 +136,7 @@ bool isKnown(EntityKind kind)
     case EntityKind::BydoTank:
     case EntityKind::BydoBoss:
     case EntityKind::BydoShot:
+    case EntityKind::BydoPlasmaShot:
         return true;
     }
     return false;

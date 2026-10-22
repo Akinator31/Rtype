@@ -20,6 +20,7 @@ enum class EntityKind : std::uint8_t {
     BydoTank = 0x12,
     BydoBoss = 0x1F,
     BydoShot = 0x40,
+    BydoPlasmaShot = 0x41,
 };
 
 /// Why an entity was destroyed, for what the client shows.
