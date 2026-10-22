@@ -1,57 +1,17 @@
 #include "Game/GameSessionSystem.hpp"
 
+#include "Game/EntityLook.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Component/Animation.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Control/Control.hpp"
 #include "rtype/game/PlayerInput.hpp"
-#include "rtype/game/Rules.hpp"
 
-#include <array>
 #include <unordered_set>
 #include <utility>
 
 namespace rtype::client
 {
-
-namespace
-{
-
-/// The sizes of the rules, so that what is drawn is what collides.
-const game::Rules DefaultRules{};
-
-/// Drawn above the background, the shots under the ships.
-constexpr int ShotOrder = 10;
-constexpr int ShipOrder = 20;
-
-} // namespace
-
-render::Color playerColor(std::uint8_t slot)
-{
-    static constexpr std::array<render::Color, 4> Colors = {{
-        {79, 195, 247, 255},  // blue
-        {239, 83, 80, 255},   // red
-        {102, 187, 106, 255}, // green
-        {255, 202, 40, 255},  // yellow
-    }};
-    return slot < Colors.size() ? Colors[slot] : render::colors::White;
-}
-
-EntityLook lookOf(const game::EntityState &entity)
-{
-    switch (entity.kind) {
-    case game::EntityKind::PlayerShip:
-        return {{DefaultRules.shipHalfWidth * 2.0f, DefaultRules.shipHalfHeight * 2.0f,
-                 playerColor(entity.owner)},
-                ShipOrder};
-    case game::EntityKind::PlayerShot:
-    case game::EntityKind::PlayerChargedShot:
-        return {{DefaultRules.shotHalfWidth * 2.0f, DefaultRules.shotHalfHeight * 2.0f,
-                 playerColor(entity.owner)},
-                ShotOrder};
-    default:
-        // The other kinds come with the gameplay: a box until they have a look
-        return {{48.0f, 48.0f, render::colors::Gray}, ShipOrder};
-    }
-}
 
 game::PlayerInput inputFrom(const engine::Controls &controls)
 {
@@ -71,6 +31,9 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<Replicated>(caches);
     use<ecs::Position>(caches);
     use<engine::Box>(caches);
+    use<engine::Model>(caches);
+    use<engine::ModelAnimation>(caches);
+    use<ShipAttitude>(caches);
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
 }
@@ -92,6 +55,17 @@ void GameSessionSystem::stop()
     _entities.clear();
     _players.clear();
     _tick = 0;
+    _clock = 0.0f;
+}
+
+void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
+{
+    _shipLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
+{
+    _shotLooks.setLook(kind, look);
 }
 
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
@@ -120,9 +94,11 @@ void GameSessionSystem::update(float elapsed)
     _session->setPaused(!playing);
     _session->setInput(playing ? inputFrom(_controls) : game::PlayerInput{});
     _session->update(elapsed);
+    _clock += elapsed;
     for (const game::Snapshot &snapshot : _session->takeSnapshots()) {
         apply(snapshot);
     }
+    placeShipModels(elapsed);
     if (_session->isOver() && _onOver) {
         // Once: it usually switches scenes, at the next update
         const std::function<void()> onOver = std::exchange(_onOver, nullptr);
@@ -140,18 +116,11 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     for (const game::EntityState &state : snapshot.entities) {
         present.insert(state.id);
         const auto found = _entities.find(state.id);
-        if (found != _entities.end() && _ecs.isAlive(found->second)) {
-            _ecs.getComponent<ecs::Position>(found->second.id) = {state.x, state.y};
+        if (found == _entities.end() || !_ecs.isAlive(found->second)) {
+            createEntity(state);
             continue;
         }
-        const EntityLook look = lookOf(state);
-        const ecs::entity_t entity = _ecs.createEntity();
-        _ecs.addComponent<engine::SceneMember>(entity, *_scene);
-        _ecs.addComponent<Replicated>(entity, state.id);
-        _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
-        _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
-        _ecs.addComponent<engine::Box>(entity, look.box);
-        _entities.insert_or_assign(state.id, _ecs.ref(entity));
+        moveEntity(found->second.id, state);
     }
 
     // Each snapshot holds the whole world: what is not in it any more is gone
@@ -162,6 +131,43 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         _ecs.destroyEntity(entry->second.id);
         entry = _entities.erase(entry);
+    }
+}
+
+void GameSessionSystem::createEntity(const game::EntityState &state)
+{
+    const EntityLook look = lookOf(state);
+    const ecs::entity_t entity = _ecs.createEntity();
+    _ecs.addComponent<engine::SceneMember>(entity, *_scene);
+    _ecs.addComponent<Replicated>(entity, state.id);
+    _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
+    _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
+    if (_shipLooks.hasLook(state.kind)) {
+        _shipLooks.addModel(_ecs, entity, state, look, _clock);
+    } else if (_shotLooks.hasLook(state.kind)) {
+        _shotLooks.addModel(_ecs, entity, state, look);
+    } else {
+        _ecs.addComponent<engine::Box>(entity, look.box);
+    }
+    _entities.insert_or_assign(state.id, _ecs.ref(entity));
+}
+
+void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState &state)
+{
+    _ecs.getComponent<ecs::Position>(entity) = {state.x, state.y};
+    if (_ecs.hasComponent<ShipAttitude>(entity)) {
+        _shipLooks.moveModel(_ecs, entity, state, _clock);
+    } else if (_ecs.hasComponent<engine::Model>(entity)) {
+        _shotLooks.placeModel(_ecs, entity, state);
+    }
+}
+
+void GameSessionSystem::placeShipModels(float elapsed)
+{
+    for (const auto &[networkId, entity] : _entities) {
+        if (_ecs.isAlive(entity) && _ecs.hasComponent<ShipAttitude>(entity.id)) {
+            ShipLooks::placeModel(_ecs, entity.id, elapsed);
+        }
     }
 }
 

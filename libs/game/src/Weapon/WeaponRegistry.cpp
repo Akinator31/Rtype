@@ -15,6 +15,9 @@ void WeaponRegistry::addDefinition(WeaponDefinition definition)
     if (definition.fireInterval == 0) {
         throw std::invalid_argument(std::format("the weapon '{}' needs a fire interval", definition.id));
     }
+    if (definition.damage == 0) {
+        throw std::invalid_argument(std::format("the weapon '{}' needs damage", definition.id));
+    }
     if (_definitions.contains(definition.id)) {
         throw std::invalid_argument(std::format("the weapon '{}' is already defined", definition.id));
     }

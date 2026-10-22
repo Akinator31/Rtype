@@ -2,11 +2,13 @@
 
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
+#include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/game/Wave/WaveProgress.hpp"
 #include "rtype/game/Wave/WaveRegistry.hpp"
 #include "rtype/game/Weapon/WeaponRegistry.hpp"
 
@@ -40,9 +42,14 @@ struct GameContext {
     WeaponRegistry weapons;
     EnemyRegistry enemies;
     WaveRegistry waves;
+    /// The ship and the weapon of every player.
+    PlayerDefinition player;
     /// The tick being simulated, from 1.
     std::uint32_t tick = 0;
     std::array<PlayerSlot, MaxPlayers> players{};
+    WaveProgress wave;
+    /// The game ended, won or lost: nothing more happens to the waves nor to the outcome.
+    bool over = false;
 
     /// Events since the previous snapshot.
     std::vector<DestroyedEntity> destroyed;
@@ -54,6 +61,14 @@ struct GameContext {
     [[nodiscard]] std::uint32_t randomBetween(std::uint32_t first, std::uint32_t last)
     {
         return first + static_cast<std::uint32_t>(_random() % (last - first + 1));
+    }
+
+    /// A number from `min` to `max` included, in steps of a thousandth of the interval, as reproducible as
+    /// randomBetween().
+    [[nodiscard]] float randomNumber(float min, float max)
+    {
+        constexpr std::uint32_t Steps = 1000;
+        return min + (max - min) * static_cast<float>(randomBetween(0, Steps)) / static_cast<float>(Steps);
     }
 
     /// A new NetworkId: 1, 2, 3... never twice in a game.

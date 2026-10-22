@@ -16,8 +16,8 @@
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/input/Devices.hpp"
-#include "rtype/log/Logger.hpp"
 #include "rtype/localization/Localization.hpp"
+#include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
@@ -59,6 +59,9 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         RTYPE_MODEL_SHIP_SPACESHIP,
         RTYPE_MODEL_SHIP_BATTLESTAR,
         RTYPE_MODEL_SHIP_DROP_SHIP,
+        RTYPE_MODEL_SHOT_BASIC,
+        RTYPE_MODEL_SHOT_SPIRAL,
+        RTYPE_MODEL_ORB_PLASMA,
     };
     std::vector<std::shared_future<ModelId>> models;
     for (const char *path : modelPaths) {
@@ -124,12 +127,11 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
                   rtype::localization::Localization &translations)
 {
     const auto quit = [&window] { window.requestClose(); };
-    engine.createScene(
-        rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
-        [&resources, &style, &translations, quit](rtype::engine::Engine &target,
-                                                   rtype::engine::SceneId scene) {
-            rtype::client::buildMainMenu(target, scene, resources, style, translations, quit);
-        });
+    engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
+                       [&resources, &style, &translations, quit](rtype::engine::Engine &target,
+                                                                 rtype::engine::SceneId scene) {
+                           rtype::client::buildMainMenu(target, scene, resources, style, translations, quit);
+                       });
     rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
         games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
     });

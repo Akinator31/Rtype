@@ -5,6 +5,7 @@
 
 #include <raymath.h>
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -47,6 +48,24 @@ Model spin(const Model &model, float angle)
     Model spun = model;
     spun.transform = MatrixMultiply(MatrixRotateY(angle * DEG2RAD), model.transform);
     return spun;
+}
+
+// The meshes of the model, but the hidden ones
+struct ShownMeshes {
+    std::vector<Mesh> meshes;
+    std::vector<int> materials;
+};
+
+ShownMeshes findShownMeshes(const Model &model, const std::vector<int> &hiddenMeshes)
+{
+    ShownMeshes shown;
+    for (int mesh = 0; mesh < model.meshCount; ++mesh) {
+        if (std::ranges::find(hiddenMeshes, mesh) == hiddenMeshes.end()) {
+            shown.meshes.push_back(model.meshes[mesh]);
+            shown.materials.push_back(model.meshMaterial[mesh]);
+        }
+    }
+    return shown;
 }
 
 } // namespace
@@ -102,18 +121,23 @@ std::vector<Material> LightingShader::createLitMaterials(const Model &model) con
 }
 
 void LightingShader::draw(const Model &model, const Light &light, ::Vector3 position, ::Vector3 rotationAxis,
-                          float rotationAngle, float spinAngle, float scale, ::Color tint)
+                          float rotationAngle, float spinAngle, float scale, ::Color tint,
+                          const std::vector<int> &hiddenMeshes)
 {
     const ::Vector3 scales{scale, scale, scale};
+    ShownMeshes shown = findShownMeshes(model, hiddenMeshes);
+    Model drawn = spin(model, spinAngle);
+    drawn.meshCount = static_cast<int>(shown.meshes.size());
+    drawn.meshes = shown.meshes.data();
+    drawn.meshMaterial = shown.materials.data();
     if (!_available) {
-        DrawModelEx(spin(model, spinAngle), position, rotationAxis, rotationAngle, scales, tint);
+        DrawModelEx(drawn, position, rotationAxis, rotationAngle, scales, tint);
         return;
     }
     setLight(light, hasNormalMap(model));
     std::vector<Material> materials = createLitMaterials(model);
-    Model lit = spin(model, spinAngle);
-    lit.materials = materials.data();
-    DrawModelEx(lit, position, rotationAxis, rotationAngle, scales, tint);
+    drawn.materials = materials.data();
+    DrawModelEx(drawn, position, rotationAxis, rotationAngle, scales, tint);
 }
 
 } // namespace rtype::render::detail

@@ -1,4 +1,5 @@
 #include "rtype/localization/Localization.hpp"
+
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/System/BoundTextSystem.hpp"
@@ -30,7 +31,7 @@ struct CatalogFile {
     ~CatalogFile() { std::filesystem::remove(path); }
 };
 
-}
+} // namespace
 
 TEST_CASE("Localization switches languages at runtime and falls back to the default", "[localization]")
 {
@@ -76,8 +77,8 @@ TEST_CASE("Bound interface text follows a language change without reopening its 
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
     const auto entity = ecs.createEntity();
     ecs.addComponent<rtype::engine::Text>(entity, "", rtype::render::FontId{0});
-    ecs.addComponent<rtype::engine::BoundText>(
-        entity, [&translations] { return translations.text("menu.play"); });
+    ecs.addComponent<rtype::engine::BoundText>(entity,
+                                               [&translations] { return translations.text("menu.play"); });
     ecs.update(0.0f);
     CHECK(ecs.getComponent<rtype::engine::Text>(entity).text == "Play");
 

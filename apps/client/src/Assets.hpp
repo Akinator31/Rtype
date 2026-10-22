@@ -9,6 +9,8 @@
 
 // Images
 #define RTYPE_IMAGE_STARFIELD "images/starfield.png"
+#define RTYPE_IMAGE_ENERGY_NOISE "images/fx/energy_noise.png"
+#define RTYPE_IMAGE_GLOW_CORE "images/fx/glow_core.png"
 
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
@@ -21,3 +23,6 @@
 #define RTYPE_MODEL_SHIP_SPACESHIP "models/spaceship.glb"
 #define RTYPE_MODEL_SHIP_BATTLESTAR "models/battlestar_galactica_ship.glb"
 #define RTYPE_MODEL_SHIP_DROP_SHIP "models/drop_ship_v2.glb"
+#define RTYPE_MODEL_SHOT_BASIC "models/projectiles/player/shot_basic.glb"
+#define RTYPE_MODEL_SHOT_SPIRAL "models/projectiles/enemy/shot_spiral.glb"
+#define RTYPE_MODEL_ORB_PLASMA "models/projectiles/enemy/orb_plasma.glb"

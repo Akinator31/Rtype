@@ -1,9 +1,10 @@
 #pragma once
 
 #include "Game/GameSession.hpp"
+#include "Game/ShipLooks.hpp"
+#include "Game/ShotLooks.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/System/System.hpp"
-#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/game/PlayerInput.hpp"
@@ -25,19 +26,6 @@ struct Replicated {
     std::uint32_t networkId = 0;
 };
 
-/// How an entity of the game is drawn, for now: a coloured box of its size, the ships in the colour of
-/// their player. Sprites can replace the boxes without changing the rest.
-struct EntityLook {
-    engine::Box box;
-    int order = 0;
-};
-
-/// The look of an entity of the game.
-[[nodiscard]] EntityLook lookOf(const game::EntityState &entity);
-
-/// The colour of a player: blue, red, green, yellow for the slots 0 to 3.
-[[nodiscard]] render::Color playerColor(std::uint8_t slot);
-
 /// The input of the local player, from the virtual gamepad of the engine: the directions, and FaceDown
 /// (Space, A on a gamepad) to fire.
 [[nodiscard]] game::PlayerInput inputFrom(const engine::Controls &controls);
@@ -48,7 +36,9 @@ struct EntityLook {
 ///    not receive the input (a menu is over it);
 /// 2. the session updates, paused while a menu is over the scene;
 /// 3. each snapshot becomes entities of the scene: one per entity of the game, created when it appears,
-///    moved, and destroyed when it is no longer in the world.
+///    moved, and destroyed when it is no longer in the world. The kinds given a ShipLook are 3D models, which
+///    roll around their length, smoothly, as their ship climbs or dives; those given a ShotLook are models of
+///    energy; the others are boxes.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens
@@ -65,10 +55,17 @@ class GameSessionSystem : public ecs::System
     std::function<void()> _onOver;
     /// The entity of the scene of each entity of the game, by id.
     std::unordered_map<std::uint32_t, ecs::EntityRef> _entities;
+    ShipLooks _shipLooks;
+    ShotLooks _shotLooks;
     std::vector<game::PlayerState> _players;
     std::uint32_t _tick = 0;
+    /// Seconds the session has been played: the time of the animations of the ships.
+    float _clock = 0.0f;
 
     void apply(const game::Snapshot &snapshot);
+    void createEntity(const game::EntityState &state);
+    void moveEntity(ecs::entity_t entity, const game::EntityState &state);
+    void placeShipModels(float elapsed);
 
 public:
     GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, engine::Scenes &scenes,
@@ -80,6 +77,10 @@ public:
                std::function<void()> onOver = {});
     /// Stops the session. Its entities stay until their scene closes.
     void stop();
+    /// Draws the ships of this kind with a 3D model from now on, instead of a box.
+    void setShipLook(game::EntityKind kind, const ShipLook &look);
+    /// Draws the shots of this kind with a 3D model of energy from now on, instead of a box.
+    void setShotLook(game::EntityKind kind, const ShotLook &look);
 
     void update(float elapsed) override;
 

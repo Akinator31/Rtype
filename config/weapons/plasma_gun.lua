@@ -5,4 +5,5 @@ return {
     mechanic = "plasma",
     projectileSpeed = 600,
     fireInterval = 30,
+    damage = 25,
 }

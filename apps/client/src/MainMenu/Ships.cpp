@@ -57,18 +57,11 @@ constexpr render::Vector3 stationTop{0.0f, 1.0f, 0.0f};
 /// the other.
 constexpr render::Vector3 waitingPoint{30.0f, -40.0f, -60.0f};
 
-ShipAnimations findShipAnimations(const render::ResourceManager &resources, render::ModelId model)
-{
-    return {resources.getModelAnimation(model, "Idle"), resources.getModelAnimation(model, "Move"),
-            resources.getModelAnimation(model, "MoveUp"), resources.getModelAnimation(model, "MoveDown")};
-}
-
 std::vector<ShipModel> loadShipModels(render::ResourceManager &resources)
 {
     std::vector<ShipModel> models;
     for (const char *path : shipModelPaths) {
-        const render::ModelId model = resources.loadModel(path);
-        models.push_back({model, findShipAnimations(resources, model)});
+        models.push_back(loadShipModel(resources, path));
     }
     return models;
 }

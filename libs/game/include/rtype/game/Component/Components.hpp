@@ -1,10 +1,12 @@
 #pragma once
 
+#include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/game/Projectile/ProjectileCategory.hpp"
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 /// The components of the game. The position, the velocity and the collider are those of the ECS and of the
@@ -64,8 +66,30 @@ struct Health {
 /// The ship of a player, controlled by its input.
 struct PlayerShip {
     std::uint8_t slot = 0;
-    /// Ticks before it can fire again.
-    std::uint32_t fireCooldown = 0;
+};
+
+/// A Bydo, made from its EnemyDefinition (spawnEnemy()).
+struct Enemy {
+    /// Id of the EnemyDefinition.
+    std::string id;
+    /// Ticks since it appeared.
+    std::uint32_t age = 0;
+};
+
+/// What the behavior of a Bydo orders it, if its EnemyDefinition has one (EnemySystem): it then fires only
+/// when ordered to (WeaponSystem).
+struct EnemyOrders {
+    /// Where it flies at its top speed, to stop there; none, it keeps its velocity.
+    std::optional<ecs::Position> destination;
+    /// Fire at this tick, if its weapon is ready: straight ahead, or towards `target`.
+    bool fire = false;
+    std::optional<ecs::Position> target;
+};
+
+/// Hurts what it hits: the shots of a player hurt the Bydos, the Bydos and their shots hurt the players.
+struct Damage {
+    /// Hit points it takes from what it hits.
+    std::uint8_t points = 0;
 };
 
 /// Cannot be hit for some ticks: a ship that just appeared.

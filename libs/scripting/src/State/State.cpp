@@ -136,11 +136,29 @@ luabridge::LuaRef State::runCode(std::string_view code, const std::string &name)
 luabridge::LuaRef State::runLoadedChunk(const std::string &name)
 {
     giveOwnEnvironment(_lua);
+    runPushedFunction(0, 1, name);
+    return luabridge::LuaRef::fromStack(_lua);
+}
+
+void State::callFunction(const luabridge::LuaRef &function, std::span<const luabridge::LuaRef> arguments,
+                         const std::string &name)
+{
+    if (!function.isCallable()) {
+        throw ScriptError(name, "expected a function");
+    }
+    function.push(_lua);
+    for (const luabridge::LuaRef &argument : arguments) {
+        argument.push(_lua);
+    }
+    runPushedFunction(static_cast<int>(arguments.size()), 0, name);
+}
+
+void State::runPushedFunction(int argumentCount, int resultCount, const std::string &name)
+{
     _instructionsLeft = _instructionLimit;
-    if (lua_pcall(_lua, 0, 1, 0) != LUA_OK) {
+    if (lua_pcall(_lua, argumentCount, resultCount, 0) != LUA_OK) {
         throw ScriptError(name, popError(_lua));
     }
-    return luabridge::LuaRef::fromStack(_lua);
 }
 
 } // namespace rtype::scripting

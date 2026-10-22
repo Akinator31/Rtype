@@ -3,8 +3,10 @@
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace rtype::game
 {
@@ -25,6 +27,12 @@ public:
 
     /// Throws std::out_of_range if the name is unknown.
     [[nodiscard]] const WaveDefinition &getDefinition(const std::string &name) const;
+
+    /// The names of the waves of a difficulty, in alphabetical order, so that the same random number picks
+    /// the same wave on every machine. Empty if there is none.
+    [[nodiscard]] std::vector<std::string> listWavesOfDifficulty(std::uint8_t difficulty) const;
+
+    [[nodiscard]] bool isEmpty() const { return _definitions.empty(); }
 };
 
 } // namespace rtype::game

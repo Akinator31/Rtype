@@ -68,6 +68,9 @@ public:
 
     [[nodiscard]] bool readBoolean(const std::string &name, bool fallback);
 
+    /// An optional function: whether the table has it. Its code is not run.
+    [[nodiscard]] bool readFunction(const std::string &name);
+
     /// An optional string among `choices`: gives its index in them, `fallback` if absent.
     [[nodiscard]] std::size_t readChoice(const std::string &name, std::span<const std::string_view> choices,
                                          std::size_t fallback);

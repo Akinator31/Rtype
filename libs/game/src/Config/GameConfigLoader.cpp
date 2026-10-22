@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <system_error>
@@ -32,6 +34,9 @@ struct FromFile {
 
 template <typename Definition>
 using DefinitionReader = Definition (*)(TableReader &);
+
+/// The file of the player, at the root of the directory.
+constexpr std::string_view PlayerFile = "player.lua";
 
 /// The `.lua` files under `folder`, by path, so that every machine reads them in the same order.
 std::vector<std::filesystem::path> listScripts(const std::filesystem::path &folder,
@@ -126,6 +131,25 @@ std::vector<Definition> takeDefinitions(std::vector<FromFile<Definition>> &read)
     return definitions;
 }
 
+/// Gives each enemy whose file has an `update` function the code of its file: its behavior is run again by
+/// each Simulation, in a state of its own.
+void readBehaviors(const std::filesystem::path &directory, std::vector<FromFile<EnemyDefinition>> &enemies,
+                   std::vector<std::string> &errors)
+{
+    for (auto &[file, enemy] : enemies) {
+        if (!enemy.behavior) {
+            continue;
+        }
+        std::ifstream stream(directory / file, std::ios::binary);
+        if (!stream) {
+            errors.push_back(std::format("{}: cannot be read", file));
+            continue;
+        }
+        enemy.behavior = EnemyBehavior{
+            file, std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>())};
+    }
+}
+
 /// Every definition of the files, with the file of each one.
 struct ReadFiles {
     std::vector<FromFile<ProjectileDefinition>> projectiles;
@@ -133,7 +157,25 @@ struct ReadFiles {
     std::vector<FromFile<ShipDefinition>> ships;
     std::vector<FromFile<EnemyDefinition>> enemies;
     std::vector<FromFile<WaveDefinition>> waves;
+    std::optional<FromFile<PlayerDefinition>> player;
 };
+
+/// The file of the player, at the root of the directory: required, a game cannot be played without it.
+std::optional<FromFile<PlayerDefinition>> readPlayerFile(const std::filesystem::path &directory,
+                                                         std::vector<std::string> &errors)
+{
+    const std::string name(PlayerFile);
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(directory / name, error)) {
+        errors.push_back(std::format("{}: missing: the players need a ship and a weapon", name));
+        return std::nullopt;
+    }
+    std::optional<PlayerDefinition> player = readScript(directory / name, name, readPlayerDefinition, errors);
+    if (player) {
+        return FromFile<PlayerDefinition>{name, std::move(*player)};
+    }
+    return std::nullopt;
+}
 
 ReadFiles readFiles(const std::filesystem::path &directory, std::vector<std::string> &errors)
 {
@@ -143,7 +185,9 @@ ReadFiles readFiles(const std::filesystem::path &directory, std::vector<std::str
     files.weapons = readFolder<WeaponDefinition>(directory, "weapons", readWeaponDefinition, errors);
     files.ships = readFolder<ShipDefinition>(directory, "ships", readShipDefinition, errors);
     files.enemies = readFolder<EnemyDefinition>(directory, "enemies", readEnemyDefinition, errors);
+    readBehaviors(directory, files.enemies, errors);
     files.waves = readFolder<WaveDefinition>(directory, "waves", readWaveDefinition, errors);
+    files.player = readPlayerFile(directory, errors);
     return files;
 }
 
@@ -172,12 +216,16 @@ void checkDefinitions(const ReadFiles &files, std::vector<std::string> &errors)
         checkReference(ships.hasDefinition(enemy.ship), file, "ship", "ship", enemy.ship, errors);
         checkReference(weapons.hasDefinition(enemy.weapon), file, "weapon", "weapon", enemy.weapon, errors);
     }
+    const auto &[file, player] = *files.player;
+    checkReference(ships.hasDefinition(player.ship), file, "ship", "ship", player.ship, errors);
+    checkReference(weapons.hasDefinition(player.weapon), file, "weapon", "weapon", player.weapon, errors);
 }
 
 GameConfig takeConfig(ReadFiles &files)
 {
-    return {takeDefinitions(files.projectiles), takeDefinitions(files.weapons), takeDefinitions(files.ships),
-            takeDefinitions(files.enemies), takeDefinitions(files.waves)};
+    return {takeDefinitions(files.projectiles), takeDefinitions(files.weapons),
+            takeDefinitions(files.ships),       takeDefinitions(files.enemies),
+            takeDefinitions(files.waves),       std::move(files.player->definition)};
 }
 
 } // namespace

@@ -494,7 +494,8 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 
 - **The limits of the lobby are not options yet**: `LobbyLimits` has the defaults of the protocol; options can
   come when a host needs others.
-- **No waves yet**: there are no Bydos in the game for now, so `WAVE_STARTED` is never sent.
+- **The waves are sent, not shown**: the instance sends `WAVE_STARTED` at the start of each wave, but the client
+  does not decode it yet (no HUD).
 - **The client draws the latest snapshot**: drawing in the past between two snapshots (interpolation) and
   predicting the ship of the player come on the side of the client, and make the game online as smooth as
   offline.

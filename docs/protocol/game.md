@@ -345,6 +345,7 @@ hence what the client draws:
 | `BYDO_TANK` | `0x12` | None | Hit points left |
 | `BYDO_BOSS` | `0x1F` | None | Hit points left |
 | `BYDO_SHOT` | `0x40` | None | 0 |
+| `BYDO_PLASMA_SHOT` | `0x41` | None | 0 |
 
 - Ranges: `0x01`–`0x0F` players and their shots, `0x10`–`0x3F` Bydos, `0x40`–`0x5F` Bydo shots, `0x60`–`0xFF`
   reserved for later kinds (power-ups, the Force, obstacles). Kind `0x00` is invalid.

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -44,12 +45,13 @@ struct ConfigDirectory {
     {
         const std::filesystem::path target = path / file;
         std::filesystem::create_directories(target.parent_path());
-        std::ofstream(target) << code;
+        std::ofstream(target, std::ios::binary) << code;
     }
 
-    /// A small valid configuration: one of each kind.
+    /// A small valid configuration: one of each kind, and the player.
     void writeValid() const
     {
+        write("player.lua", "return { ship = 'scout', weapon = 'blaster' }");
         write("projectiles/pulse.lua",
               "return { id = 'pulse', collider = { shape = 'box', halfWidth = 12, halfHeight = 4 } }");
         write("weapons/blaster.lua", "return { id = 'blaster', projectile = 'pulse' }");
@@ -57,7 +59,7 @@ struct ConfigDirectory {
         write("enemies/scout.lua",
               "return { id = 'scout', ship = 'scout', health = 30, weapon = 'blaster' }");
         write("waves/line.lua",
-              "return { name = 'line', placement = 'manual', spawns = {"
+              "return { name = 'line', difficulty = 1, placement = 'manual', spawns = {"
               " { enemy = 'scout', x = 2000, y = 200 }, { enemy = 'scout', x = 2000, y = 800 } } }");
     }
 };
@@ -103,6 +105,40 @@ TEST_CASE("The configuration of the repository loads, and a Simulation registers
     CHECK(context.ships.hasDefinition("bydo_scout"));
     CHECK(context.enemies.hasDefinition("bydo_scout"));
     CHECK(context.waves.hasDefinition("scouts_line"));
+    CHECK(context.weapons.hasDefinition(context.player.weapon));
+    CHECK(context.ships.hasDefinition(context.player.ship));
+    // A wave of each difficulty: the game draws one of each
+    for (std::uint8_t difficulty = MinWaveDifficulty; difficulty <= MaxWaveDifficulty; ++difficulty) {
+        INFO("difficulty " << int{difficulty});
+        CHECK_FALSE(context.waves.listWavesOfDifficulty(difficulty).empty());
+    }
+}
+
+TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest player, then leaves", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    Simulation simulation({}, loaded.config);
+    simulation.addPlayer(0);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    const rtype::ecs::entity_t gunner = spawnEnemy(ecs, simulation.context(), "bydo_gunner", 2000.0f, 540.0f);
+    const auto countOrbs = [&simulation] {
+        return std::ranges::count(simulation.snapshot().entities, EntityKind::BydoPlasmaShot,
+                                  &EntityState::kind);
+    };
+
+    // 500 units at 150 per second, then a second to aim: no orb before
+    for (int tick = 0; tick < 255; ++tick) {
+        simulation.step();
+    }
+    CHECK(ecs.getComponent<rtype::ecs::Position>(gunner).x == Approx(1500.0f));
+    CHECK(countOrbs() == 0);
+    // An orb every half second, then it flies away
+    for (int tick = 0; tick < 75; ++tick) {
+        simulation.step();
+    }
+    CHECK(countOrbs() == 3);
+    CHECK(ecs.getComponent<rtype::ecs::Position>(gunner).x < 1500.0f);
 }
 
 TEST_CASE("Each kind of file is read into its definition, with the defaults of the optional fields", "[game]")
@@ -115,14 +151,17 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     directory.write("weapons/gun.lua",
                     "return { id = 'gun', projectile = 'orb', mechanic = 'missile',"
                     " projectileSpeed = 800, fireInterval = 4.0, range = 500, magazineSize = 8,"
-                    " reloadTicks = 90 }");
+                    " reloadTicks = 90, damage = 40 }");
     directory.write("ships/tank.lua",
                     "return { id = 'tank', model = 'models/tank.glb',"
-                    " sounds = { move = 'sounds/move.ogg', destruction = 'sounds/boom.ogg' } }");
+                    " sounds = { move = 'sounds/move.ogg', destruction = 'sounds/boom.ogg' },"
+                    " collider = { shape = 'box', halfWidth = 60, halfHeight = 30 } }");
     directory.write("enemies/tank.lua", "return { id = 'tank', ship = 'tank', health = 255, speed = 100,"
-                                        " acceleration = 0, weapon = 'gun' }");
+                                        " acceleration = 0, weapon = 'gun', score = 500,"
+                                        " collisionDamage = 0 }");
+    directory.write("player.lua", "return { ship = 'tank', weapon = 'gun', health = 50 }");
     directory.write("waves/tanks.lua",
-                    "return { name = 'tanks', label = 'Tanks', description = 'Three tanks',"
+                    "return { name = 'tanks', label = 'Tanks', description = 'Three tanks', difficulty = 5,"
                     " placement = 'random', enemy = 'tank', quantity = 3, spawnInterval = 0.5,"
                     " area = { minX = 2000, maxY = 500 } }");
 
@@ -153,6 +192,7 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     CHECK(blaster.mechanic == defaults.mechanic);
     CHECK(blaster.fireInterval == defaults.fireInterval);
     CHECK(blaster.magazineSize == InfiniteAmmo);
+    CHECK(blaster.damage == defaults.damage);
     const WeaponDefinition &gun = config.weapons[1];
     CHECK(gun.mechanic == ProjectileCategory::Missile);
     CHECK(gun.projectileSpeed == Approx(800.0f));
@@ -160,9 +200,14 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     CHECK(gun.range == Approx(500.0f));
     CHECK(gun.magazineSize == 8);
     CHECK(gun.reloadTicks == 90);
+    CHECK(gun.damage == 40);
 
     REQUIRE(config.ships.size() == 2);
+    const ShipDefinition &scoutShip = config.ships[0];
+    CHECK(halfSizeOf(scoutShip.collider).x == Approx(halfSizeOf(ShipDefinition{}.collider).x));
     const ShipDefinition &tank = config.ships[1];
+    CHECK(halfSizeOf(tank.collider).x == Approx(60.0f));
+    CHECK(halfSizeOf(tank.collider).y == Approx(30.0f));
     CHECK(tank.sounds.move == "sounds/move.ogg");
     CHECK(tank.sounds.destruction == "sounds/boom.ogg");
     CHECK(tank.sounds.collision.empty());
@@ -170,18 +215,29 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     REQUIRE(config.enemies.size() == 2);
     const EnemyDefinition &scout = config.enemies[0];
     CHECK(scout.speed == Approx(EnemyDefinition{}.speed));
+    CHECK(scout.score == EnemyDefinition{}.score);
+    CHECK(scout.collisionDamage == EnemyDefinition{}.collisionDamage);
+    CHECK_FALSE(scout.behavior);
     const EnemyDefinition &enemy = config.enemies[1];
     CHECK(enemy.health == 255);
     CHECK(enemy.acceleration == Approx(0.0f));
+    CHECK(enemy.score == 500);
+    CHECK(enemy.collisionDamage == 0);
+
+    CHECK(config.player.ship == "tank");
+    CHECK(config.player.weapon == "gun");
+    CHECK(config.player.health == 50);
 
     REQUIRE(config.waves.size() == 2);
     const WaveDefinition &line = config.waves[0];
+    CHECK(line.difficulty == 1);
     CHECK(line.placement == WavePlacement::Manual);
     CHECK(line.quantity == 2);
     REQUIRE(line.spawns.size() == 2);
     CHECK(line.spawns[1].y == Approx(800.0f));
     const WaveDefinition &tanks = config.waves[1];
     CHECK(tanks.label == "Tanks");
+    CHECK(tanks.difficulty == 5);
     CHECK(tanks.quantity == 3);
     CHECK(tanks.spawnInterval == Approx(0.5f));
     CHECK(tanks.area.minX == Approx(2000.0f));
@@ -193,6 +249,7 @@ TEST_CASE("The files are read from sub-folders too, in the order of their paths,
           "[game]")
 {
     const ConfigDirectory directory("order");
+    directory.writeValid();
     directory.write("projectiles/b.lua", "return { id = 'b', collider = { shape = 'sphere', radius = 1 } }");
     directory.write("projectiles/a/c.lua",
                     "return { id = 'c', collider = { shape = 'sphere', radius = 1 } }");
@@ -203,18 +260,20 @@ TEST_CASE("The files are read from sub-folders too, in the order of their paths,
 
     INFO(listErrors(loaded));
     REQUIRE(loaded.isValid());
-    REQUIRE(loaded.config.projectiles.size() == 3);
+    REQUIRE(loaded.config.projectiles.size() == 4);
     CHECK(loaded.config.projectiles[0].id == "c");
     CHECK(loaded.config.projectiles[1].id == "a");
     CHECK(loaded.config.projectiles[2].id == "b");
+    CHECK(loaded.config.projectiles[3].id == "pulse");
 }
 
-TEST_CASE("A directory without folders is an empty configuration, a missing one is an error", "[game]")
+TEST_CASE("A directory without player.lua is an error, as a missing one", "[game]")
 {
     const ConfigDirectory directory("empty");
 
     const LoadedGameConfig empty = loadGameConfig(directory.path);
-    CHECK(empty.isValid());
+    REQUIRE(empty.errors.size() == 1);
+    CHECK(empty.errors.front() == "player.lua: missing: the players need a ship and a weapon");
     CHECK(empty.config.projectiles.empty());
 
     const LoadedGameConfig missing = loadGameConfig(directory.path / "nope");
@@ -259,16 +318,33 @@ TEST_CASE("A wrong field is an error naming the file and the field", "[game]")
     CHECK(errorWith("sounds", "ships/scout.lua",
                     "return { id = 'scout', model = 'm.glb', sounds = { move = 3 } }") ==
           "ships/scout.lua: sounds.move: expected a string");
-    CHECK(errorWith(
-              "spawn", "waves/line.lua",
-              "return { name = 'line', placement = 'manual', spawns = { { enemy = 'scout', x = 0, y = 0 },"
-              " { x = 0, y = 0 } } }") == "waves/line.lua: spawns[2].enemy: missing");
-    CHECK(
-        errorWith("spawns", "waves/line.lua", "return { name = 'line', placement = 'manual', spawns = 3 }") ==
-        "waves/line.lua: spawns: expected a list of tables");
+    CHECK(errorWith("spawn", "waves/line.lua",
+                    "return { name = 'line', difficulty = 1, placement = 'manual',"
+                    " spawns = { { enemy = 'scout', x = 0, y = 0 },"
+                    " { x = 0, y = 0 } } }") == "waves/line.lua: spawns[2].enemy: missing");
+    CHECK(errorWith("spawns", "waves/line.lua",
+                    "return { name = 'line', difficulty = 1, placement = 'manual', spawns = 3 }") ==
+          "waves/line.lua: spawns: expected a list of tables");
     CHECK(errorWith("random_quantity", "waves/line.lua",
-                    "return { name = 'line', placement = 'random', enemy = 'scout' }") ==
+                    "return { name = 'line', difficulty = 1, placement = 'random', enemy = 'scout' }") ==
           "waves/line.lua: quantity: missing");
+    CHECK(errorWith("no_difficulty", "waves/line.lua",
+                    "return { name = 'line', placement = 'random', enemy = 'scout', quantity = 1 }") ==
+          "waves/line.lua: difficulty: missing");
+    CHECK(errorWith("damage", "weapons/blaster.lua",
+                    "return { id = 'blaster', projectile = 'pulse', damage = 0 }") ==
+          "weapons/blaster.lua: damage: expected an integer from 1 to 255");
+    CHECK(errorWith("player_health", "player.lua",
+                    "return { ship = 'scout', weapon = 'blaster', health = 0 }") ==
+          "player.lua: health: expected an integer from 1 to 255");
+    CHECK(errorWith("player_weapon", "player.lua", "return { ship = 'scout' }") ==
+          "player.lua: weapon: missing");
+    CHECK(errorWith("update", "enemies/scout.lua",
+                    "return { id = 'scout', ship = 'scout', health = 1, weapon = 'blaster', update = 3 }") ==
+          "enemies/scout.lua: update: expected a function");
+    CHECK(errorWith("difficulty", "waves/line.lua",
+                    "return { name = 'line', difficulty = 6, placement = 'random', enemy = 'scout',"
+                    " quantity = 1 }") == "waves/line.lua: difficulty: expected an integer from 1 to 5");
 }
 
 TEST_CASE("A file that does not return a table, or does not run, is an error naming it", "[game]")
@@ -285,10 +361,28 @@ TEST_CASE("A file that does not return a table, or does not run, is an error nam
                ContainsSubstring("ships/scout.lua:1:"));
 }
 
+TEST_CASE("An enemy with an update function keeps the code of its file, its behavior", "[game]")
+{
+    const ConfigDirectory directory("behavior");
+    directory.writeValid();
+    const std::string code = "return { id = 'scout', ship = 'scout', health = 30, weapon = 'blaster',\n"
+                             "    update = function(enemy, game) enemy:fire() end }\n";
+    directory.write("enemies/scout.lua", code);
+
+    const LoadedGameConfig loaded = loadGameConfig(directory.path);
+    INFO(listErrors(loaded));
+    REQUIRE(loaded.isValid());
+    const std::optional<EnemyBehavior> &behavior = loaded.config.enemies.at(0).behavior;
+    REQUIRE(behavior);
+    CHECK(behavior->file == "enemies/scout.lua");
+    CHECK(behavior->code == code);
+}
+
 TEST_CASE("A file can compute its values with the sandbox", "[game]")
 {
     const ConfigDirectory directory("compute");
-    directory.write("projectiles/pulse.lua", R"(
+    directory.writeValid();
+    directory.write("projectiles/computed.lua", R"(
         local size = 4
         return { id = string.format('pulse_%d', size), collider = { shape = 'box', halfWidth = size * 3,
                  halfHeight = math.max(size, 2) } }
@@ -312,8 +406,12 @@ TEST_CASE("An unknown id named by a definition is an error of its file", "[game]
                     "return { id = 'scout', ship = 'scout', health = 1, weapon = 'nope' }") ==
           "enemies/scout.lua: weapon: unknown weapon 'nope'");
     CHECK(errorWith("wave", "waves/line.lua",
-                    "return { name = 'line', placement = 'random', enemy = 'nope', quantity = 2 }") ==
-          "waves/line.lua: the wave 'line' uses the unknown enemy 'nope'");
+                    "return { name = 'line', difficulty = 1, placement = 'random', enemy = 'nope',"
+                    " quantity = 2 }") == "waves/line.lua: the wave 'line' uses the unknown enemy 'nope'");
+    CHECK(errorWith("player_ship", "player.lua", "return { ship = 'nope', weapon = 'blaster' }") ==
+          "player.lua: ship: unknown ship 'nope'");
+    CHECK(errorWith("player_unknown_weapon", "player.lua", "return { ship = 'scout', weapon = 'nope' }") ==
+          "player.lua: weapon: unknown weapon 'nope'");
 }
 
 TEST_CASE("An id defined twice is an error of the second file", "[game]")

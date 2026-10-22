@@ -15,7 +15,7 @@ class WeaponRegistry
 
 public:
     /// Adds a definition. Throws std::invalid_argument if its id is empty or already taken, or if its
-    /// fireInterval is 0.
+    /// fireInterval or its damage is 0.
     void addDefinition(WeaponDefinition definition);
 
     [[nodiscard]] bool hasDefinition(const std::string &id) const;

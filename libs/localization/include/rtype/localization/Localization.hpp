@@ -27,4 +27,4 @@ public:
     [[nodiscard]] std::string text(std::string_view key) const;
 };
 
-}
+} // namespace rtype::localization

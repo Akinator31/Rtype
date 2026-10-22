@@ -1,6 +1,8 @@
 add_library(rtype_render
     src/ColorFilter.cpp
+    src/EnergyShader.cpp
     src/FilterShader.cpp
+    src/GlowPass.cpp
     src/LightingShader.cpp
     src/Paths.cpp
     src/RaylibLog.cpp

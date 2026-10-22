@@ -41,11 +41,13 @@ class Simulation
 
     void buildSnapshot();
     void registerConfig(const GameConfig &config);
+    void registerPlayer(const PlayerDefinition &player);
 
 public:
-    /// @param config The definitions of the game (loadGameConfig()), registered in the context.
-    /// @throws std::invalid_argument if a definition is refused by its registry: a config that
-    /// loadGameConfig() accepted never is.
+    /// @param config The definitions of the game (loadGameConfig()), registered in the context. Its waves
+    /// are played as soon as a player is in (WaveSystem); without waves, the game only ends in defeat.
+    /// @throws std::invalid_argument if a definition is refused by its registry, or if the player names an
+    /// unknown ship or weapon: a config that loadGameConfig() accepted never is.
     explicit Simulation(Rules rules = {}, const GameConfig &config = {});
 
     Simulation(const Simulation &) = delete;

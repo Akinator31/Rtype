@@ -5,8 +5,8 @@
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
-#include "rtype/localization/Localization.hpp"
 #include "rtype/lobby/Messages.hpp"
+#include "rtype/localization/Localization.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 

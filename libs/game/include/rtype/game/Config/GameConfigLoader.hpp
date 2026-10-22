@@ -22,15 +22,16 @@ struct LoadedGameConfig {
 
 /// Reads the configuration of the game from `directory` (ADR 0018,
 /// docs/guides/configure-enemies-and-weapons.md): every `.lua` file under its folders projectiles/, weapons/,
-/// ships/, enemies/ and waves/, sub-folders included, in alphabetical order. Each file runs in a sandboxed
-/// state of its own and returns the table of one definition. The tables are checked (types, required fields,
-/// ranges, unknown fields); once every file is read, the definitions are checked as their registries do, then
-/// the ids they name: a weapon its projectile, an enemy its ship and its weapon, a wave its enemies.
+/// ships/, enemies/ and waves/, sub-folders included, in alphabetical order, and the file player.lua at its
+/// root (required). Each file runs in a sandboxed state of its own and returns the table of one definition.
+/// The tables are checked (types, required fields, ranges, unknown fields); once every file is read, the
+/// definitions are checked as their registries do, then the ids they name: a weapon its projectile, an enemy
+/// its ship and its weapon, a wave its enemies, the player its ship and its weapon.
 ///
 /// Every error of a step is reported, not only the first one; the registries and the ids are only checked if
 /// every file could be read, so that a broken file does not make those that name it fail too. A missing
-/// folder has no definitions; a missing directory is an error. Nothing is logged: the server and the client
-/// say it their own way.
+/// folder has no definitions; a missing directory, or player.lua, is an error. Nothing is logged: the server
+/// and the client say it their own way.
 [[nodiscard]] LoadedGameConfig loadGameConfig(const std::filesystem::path &directory);
 
 } // namespace rtype::game

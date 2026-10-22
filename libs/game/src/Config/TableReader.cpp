@@ -204,6 +204,18 @@ bool TableReader::readBoolean(const std::string &name, bool fallback)
     return value.unsafe_cast<bool>();
 }
 
+bool TableReader::readFunction(const std::string &name)
+{
+    const luabridge::LuaRef value = getField(name);
+    if (value.isNil()) {
+        return false;
+    }
+    if (!value.isFunction()) {
+        fail(name, "expected a function");
+    }
+    return true;
+}
+
 std::size_t TableReader::readChoice(const std::string &name, std::span<const std::string_view> choices,
                                     std::size_t fallback)
 {
