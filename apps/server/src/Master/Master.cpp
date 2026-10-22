@@ -1,5 +1,6 @@
 #include "Master/Master.hpp"
 
+#include "Common/GameConfig.hpp"
 #include "Common/Lifecycle.hpp"
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
@@ -12,6 +13,7 @@
 #include "rtype/network/Tls.hpp"
 
 #include <chrono>
+#include <filesystem>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -61,6 +63,11 @@ int runMaster(const MasterOptions &options)
         logger.error("{} is not a key of the server: {}", options.key.string(), error.what());
         return Failure;
     }
+    // The instances load it again: checked here, a server with a broken configuration does not start
+    const std::filesystem::path config = std::filesystem::absolute(getConfigDirectory(options.config));
+    if (!readGameConfig(config, logger)) {
+        return Failure;
+    }
 
     rtype::network::EventLoop loop;
     std::optional<rtype::network::TcpListener> listener;
@@ -82,13 +89,14 @@ int runMaster(const MasterOptions &options)
 
     std::optional<Games> games;
     try {
-        games.emplace(loop, GamesSettings{
-                                .executable = currentExecutable(),
-                                .leadingArguments = {},
-                                .trailingArguments = {"--log-level", levelArgument()},
-                                .firstPort = options.firstGamePort,
-                                .lastPort = options.lastGamePort,
-                            });
+        games.emplace(loop,
+                      GamesSettings{
+                          .executable = currentExecutable(),
+                          .leadingArguments = {},
+                          .trailingArguments = {"--log-level", levelArgument(), "--config", config.string()},
+                          .firstPort = options.firstGamePort,
+                          .lastPort = options.lastGamePort,
+                      });
     } catch (const std::system_error &error) {
         logger.error("Cannot prepare the games: {}", error.what());
         return Failure;

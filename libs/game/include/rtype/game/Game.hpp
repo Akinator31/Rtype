@@ -9,9 +9,12 @@
 /// - Standalone.hpp: the public sessions of a game without a master, for development.
 /// - ShipMovement.hpp: how a ship moves, shared with the prediction of the client.
 /// - Rules.hpp, Constants.hpp: the numbers of the gameplay and of the game area.
+/// - Config/: the definitions of a game (enemies, weapons...), loaded from the Lua files (ADR 0018).
 /// - Component/, System/, Entities.hpp, GameContext.hpp: the rules themselves, to add gameplay.
 
 #include "rtype/game/Component/Components.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
+#include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Enemy/EnemyDefinition.hpp"
 #include "rtype/game/Enemy/EnemyRegistry.hpp"

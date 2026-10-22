@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Game/GameSession.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Simulation.hpp"
 
@@ -32,7 +33,8 @@ private:
     std::vector<game::Snapshot> _snapshots;
 
 public:
-    explicit LocalSession(game::Rules rules = {});
+    /// @param config The definitions of the game, loaded once by the client (loadGameConfig()).
+    explicit LocalSession(game::Rules rules = {}, const game::GameConfig &config = {});
 
     [[nodiscard]] std::uint8_t localSlot() const override { return 0; }
     void setInput(game::PlayerInput input) override { _input = input; }

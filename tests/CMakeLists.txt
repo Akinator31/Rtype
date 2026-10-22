@@ -23,6 +23,7 @@ add_executable(rtype_tests
     ecs_world.cpp
     engine.cpp
     framing.cpp
+    game_config.cpp
     game_messages.cpp
     game_simulation.cpp
     keygen.cpp
@@ -46,6 +47,7 @@ add_executable(rtype_tests
     reliability.cpp
     resource_cache.cpp
     scenes.cpp
+    scripting.cpp
     serialization.cpp
     server_instance.cpp
     server_lifecycle.cpp
@@ -62,7 +64,7 @@ add_executable(rtype_tests
 )
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::log rtype::network rtype::physics rtype::render
-    rtype::shaders r-type_client_core r-type_keygen_core r-type_server_core
+    rtype::scripting rtype::shaders r-type_client_core r-type_keygen_core r-type_server_core
     Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
 add_executable(rtype_test_child helpers/process_child.cpp)
@@ -70,7 +72,8 @@ target_link_libraries(rtype_test_child PRIVATE rtype_options)
 add_dependencies(rtype_tests rtype_test_child r-type_server)
 target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
-    RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>")
+    RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"
+    RTYPE_TEST_CONFIG="${PROJECT_SOURCE_DIR}/config")
 # The helpers the tests share
 target_include_directories(rtype_tests PRIVATE helpers)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)

@@ -1,0 +1,36 @@
+#pragma once
+
+#include "rtype/game/Config/GameConfig.hpp"
+
+#include <filesystem>
+#include <string>
+#include <vector>
+
+namespace rtype::game
+{
+
+/// What loadGameConfig() found.
+struct LoadedGameConfig {
+    /// Empty if there is any error: a configuration is taken whole or not at all.
+    GameConfig config;
+    /// One line per problem, naming the file and the field:
+    /// "enemies/bydo_scout.lua: health: expected an integer from 1 to 255".
+    std::vector<std::string> errors;
+
+    [[nodiscard]] bool isValid() const { return errors.empty(); }
+};
+
+/// Reads the configuration of the game from `directory` (ADR 0018,
+/// docs/guides/configure-enemies-and-weapons.md): every `.lua` file under its folders projectiles/, weapons/,
+/// ships/, enemies/ and waves/, sub-folders included, in alphabetical order. Each file runs in a sandboxed
+/// state of its own and returns the table of one definition. The tables are checked (types, required fields,
+/// ranges, unknown fields); once every file is read, the definitions are checked as their registries do, then
+/// the ids they name: a weapon its projectile, an enemy its ship and its weapon, a wave its enemies.
+///
+/// Every error of a step is reported, not only the first one; the registries and the ids are only checked if
+/// every file could be read, so that a broken file does not make those that name it fail too. A missing
+/// folder has no definitions; a missing directory is an error. Nothing is logged: the server and the client
+/// say it their own way.
+[[nodiscard]] LoadedGameConfig loadGameConfig(const std::filesystem::path &directory);
+
+} // namespace rtype::game

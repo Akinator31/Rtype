@@ -12,7 +12,7 @@ namespace rtype::game
 {
 
 /// A group of enemies that appear one after the other. Creating a new wave is filling this and registering it
-/// in a WaveRegistry (ADR 0018 will load it from a file).
+/// in a WaveRegistry; loadGameConfig() reads them from config/waves/ (ADR 0018).
 struct WaveDefinition {
     /// Unique name in a registry, e.g. "scouts_line".
     std::string name;

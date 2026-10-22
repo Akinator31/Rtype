@@ -22,7 +22,7 @@ Master options:
       --bind <ip>            Address to listen on (default: 0.0.0.0, every interface)
       --game-ports <a>-<b>   UDP ports of the games, one per game (default: 4243-4299)
   -k, --key <file>           Private key of the server (default: server.key), made with r-type_keygen
-      --check                Check that the server can start (key, port), then exit
+      --check                Check that the server can start (key, port, configuration), then exit
 
 Instance options (given by the master):
       --id <id>              Id of the game, from 1
@@ -32,6 +32,8 @@ Instance options (given by the master):
   The master writes the secret of the instance on its standard input.
 
 Other options:
+      --config <dir>         Configuration of the game, the Lua files of the enemies and weapons
+                             (default: the config folder next to the program)
       --log-level <level>    trace, debug, info, warning or error (default: RTYPE_LOG_LEVEL, or info)
   -h, --help                 Show this help
       --version              Show the version
@@ -115,6 +117,9 @@ Options parseOptions(std::span<const std::string_view> arguments)
                 throw std::invalid_argument(
                     std::format("unknown log level '{}': trace, debug, info, warning or error", name));
             }
+        } else if (argument == "--config") {
+            options.master.config = std::filesystem::path(std::string(value()));
+            options.instance.config = options.master.config;
         } else if (argument == "-p" || argument == "--port") {
             // 0 lets the system choose: for the tests and --check
             port =

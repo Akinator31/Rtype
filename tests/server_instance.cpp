@@ -421,7 +421,7 @@ TEST_CASE("The game thread steps 60 times per second and applies each input at i
 {
     std::mutex mutex;
     std::vector<TickResult> results;
-    GameThread game({}, [&](TickResult result) {
+    GameThread game({}, {}, [&](TickResult result) {
         const std::scoped_lock lock(mutex);
         results.push_back(std::move(result));
     });
@@ -583,7 +583,7 @@ TEST_CASE("The link fails on what the protocol does not expect", "[instance]")
 TEST_CASE("A game over is sent to the clients, reported with the scores, and nothing follows", "[instance]")
 {
     EventLoop loop;
-    GameThread game({}, [](TickResult) {});
+    GameThread game({}, {}, [](TickResult) {});
     std::optional<GameOverReport> report;
     GameHost host(loop, Address::loopbackIpv4(0), 4, game,
                   {.onConnected = {}, .onDisconnected = {}, .onGameOver = [&](const GameOverReport &scores) {
