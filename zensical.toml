@@ -43,6 +43,7 @@ nav = [
     "guides/add-a-player-action.md",
     "guides/add-a-network-message.md",
     "guides/configure-enemies-and-weapons.md",
+    "guides/script-enemy-behaviors.md",
     "guides/generate-the-server-keys.md",
     "guides/run-a-server.md",
     "guides/play-online.md",

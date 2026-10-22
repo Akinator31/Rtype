@@ -386,8 +386,8 @@ simulation.context().enemies.addDefinition({"bydo_scout", "bydo_scout", 30, 240.
 A kind of enemy can be **code**: an `update(enemy, game)` function in its file of `config/enemies/`, called at
 every tick for each of its enemies, which decides when it moves and when it fires
 ([ADR 0019](../decisions/0019-luabridge3-scripting-library.md)). How to write one is in the guide
-[Configure enemies and weapons](../guides/configure-enemies-and-weapons.md#scripting-a-behavior);
-`config/enemies/bydo_gunner.lua` is an example.
+[Script the behavior of an enemy](../guides/script-enemy-behaviors.md); `config/enemies/bydo_gunner.lua` is an
+example.
 
 ```mermaid
 flowchart LR
@@ -398,40 +398,23 @@ flowchart LR
     Orders --> Weapon["WeaponSystem: fires if ordered and ready"]
 ```
 
-**What a behavior sees.** `enemy` is the enemy itself and `game` the game, both read-only (writing a field is an
-error):
+**What a behavior sees and orders**, with recipes, is in the guide
+[Script the behavior of an enemy](../guides/script-enemy-behaviors.md#reference): the enemy (position, velocity,
+top speed, age, health, weapon, a `memory` of its own), the players and their weapons, the time and the random
+numbers of the game; the orders `setVelocity`, `moveTo`, `fire` and `fireAt`. On the C++ side:
 
-| Value | What it is |
-|---|---|
-| `enemy.x`, `enemy.y` | Its position, the centre of its ship, in game units (1920 × 1080, y down) |
-| `enemy.velocityX`, `enemy.velocityY` | Its velocity, in units per second: its direction |
-| `enemy.speed` | The top speed of its definition, the speed of `moveTo()` |
-| `enemy.age` | Seconds since it appeared |
-| `enemy.health` | Hit points left |
-| `enemy.arrived` | It is on the destination of its last `moveTo()` |
-| `enemy.weapon` | Its weapon: `id`, `ready` (it fires at this tick if ordered to), `ammo` (shots before it reloads, `math.huge` for a weapon that never runs dry), `reloading` |
-| `enemy.memory` | A table of its own, kept from one tick to the next, empty when it appears: what this enemy remembers |
-| `game.tick`, `game.time` | The tick, and the seconds since the game started |
-| `game.players` | The players who have a ship, by slot: `slot`, `x`, `y`, `velocityX`, `velocityY`, `weapon` (as that of the enemy) |
-| `game:randomNumber(min, max)`, `game:randomInteger(first, last)` | Random numbers drawn from the seed of the game, the only ones a behavior has |
-
-**What it orders.** Nothing ordered, the enemy keeps its velocity and does not fire.
-
-| Order | What it does |
-|---|---|
-| `enemy:setVelocity(x, y)` | Its velocity from now on, in units per second; it forgets its destination |
-| `enemy:moveTo(x, y)` | It flies to this point at its top speed and stops on it; the destination is kept until another order |
-| `enemy:fire()` | Fires its weapon at this tick, straight ahead (to the left), if it is ready |
-| `enemy:fireAt(x, y)` | Same, towards a point: the shot flies along the line from the nose of the ship to it (`spawnAimedShot()`) |
-
-- **Each enemy on its own.** The function is the same for every enemy of the kind, but each call gets its own
-  `enemy` and its own `memory`: one gunner can be firing while another is still coming in.
-- **Fire is asked for at every tick**: a shot ordered while the weapon is not ready is not kept for later. The
-  weapon keeps its rules (fire interval, magazine, reload); `enemy.weapon.ready` says if a shot ordered now
-  goes.
-- **Deterministic.** The behaviors run in the order of the entities, in the sandbox of the configuration (no
-  clock, no `math.random`), with the random numbers of the game: the same game replays the same, on the server
-  and offline. An online client never runs them, it shows the snapshots.
+- **The bound types are copies.** `EnemyScripts` gives each call an `enemy` userdata built from the components
+  (`Position`, `Velocity`, `Health`, `Armed`, `Enemy::age`, `EnemyOrders`), owned by Lua, read-only, and reads
+  its orders back after the call: a new velocity, and the `EnemyOrders` (destination, kept from one tick to the
+  next; `fire` and `target`, reset at every call). A script that keeps `enemy` changes nothing. `game` is built
+  once per tick (`startTick()`), with the players in slot order.
+- **Moving and firing stay in C++.** The `EnemySystem` flies an enemy with a destination to it at its top
+  speed, slower on the last tick so that it stops on it; the `WeaponSystem` fires an enemy with `EnemyOrders`
+  only when `fire` is set and the weapon is ready, towards `target` with `spawnAimedShot()`. `weapon.ready`
+  tells the script the weapon is ready *at this tick*, the `WeaponSystem` running after the `EnemySystem`.
+- **Deterministic.** The behaviors run in the order of the entities, in the sandbox of the configuration, with
+  the random numbers of the `GameContext`: the same game replays the same, on the server and offline. An online
+  client never runs them, it shows the snapshots.
 - **One state per game.** `EnemyScripts` (`src/Enemy/`, the only place of the game that binds C++ to Lua) owns a
   `scripting::State` per `Simulation`: a behavior is loaded with the first enemy of its kind, by running its
   file again; the files have their own globals. A call may execute `EnemyScripts::InstructionLimit` (100 000)

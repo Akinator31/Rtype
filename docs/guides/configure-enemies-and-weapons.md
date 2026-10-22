@@ -174,7 +174,7 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `weapon` | string | *required* | The id of its weapon |
 | `score` | whole number, 0 or more | `100` | Points for the player who destroys it |
 | `collisionDamage` | whole number from 0 to 255 | `20` | Hit points a player ship loses when it runs into it; the enemy keeps going |
-| `update` | function | none | Its behavior, called at every tick: see [Scripting a behavior](#scripting-a-behavior). Without one, it flies left and fires as soon as it is in the game area |
+| `update` | function | none | Its behavior, called at every tick: see [Script the behavior of an enemy](script-enemy-behaviors.md). Without one, it flies left and fires as soon as it is in the game area |
 
 ### Waves (`config/waves/`)
 
@@ -227,63 +227,8 @@ Each file has its own globals: a file cannot read what another one sets.
 ## Scripting a behavior
 
 An enemy without `update` flies straight to the left and fires whenever its weapon is ready. To decide when
-it moves and when it fires, give it an `update(enemy, game)` function: the game calls it at every tick (60 times
-a second) for **each** enemy of that kind, with this enemy and the game.
-
-This one comes in, stops at `x = 1500`, waits a second, fires three shots at the nearest player, then leaves:
-
-```lua
-local function findNearestPlayer(enemy, players)
-    local nearest, nearestDistance = nil, math.huge
-    for _, player in ipairs(players) do
-        local distance = (player.x - enemy.x) ^ 2 + (player.y - enemy.y) ^ 2
-        if distance < nearestDistance then
-            nearest, nearestDistance = player, distance
-        end
-    end
-    return nearest
-end
-
-return {
-    id = "bydo_gunner",
-    ship = "bydo_scout",
-    health = 80,
-    weapon = "plasma_gun",
-
-    update = function(enemy, game)
-        local memory = enemy.memory
-        memory.shots = memory.shots or 0
-        if memory.shots >= 3 then
-            enemy:setVelocity(-enemy.speed, 0)
-            return
-        end
-        enemy:moveTo(1500, enemy.y)
-        if not enemy.arrived then
-            return
-        end
-        memory.stoppedAt = memory.stoppedAt or game.time
-        local target = findNearestPlayer(enemy, game.players)
-        if target and enemy.weapon.ready and game.time - memory.stoppedAt >= 1 then
-            enemy:fireAt(target.x, target.y)
-            memory.shots = memory.shots + 1
-        end
-    end,
-}
-```
-
-- **What it sees and orders**: its position, velocity, age, health and weapon, the players and their weapons;
-  it orders `setVelocity`, `moveTo`, `fire` and `fireAt`. The full list is in
-  [Enemy behaviors](../architecture/game.md#enemy-behaviors).
-- **`enemy.memory`** is a table that belongs to this enemy alone and is kept from one tick to the next: count its
-  shots there, or the time it stopped. A local variable of the file is shared by every enemy of the kind.
-- **Firing** is an order of the tick: give it at every tick you want a shot. The weapon still waits its fire
-  interval and reloads; `enemy.weapon.ready` tells you whether a shot ordered now goes.
-- **Random numbers** come from `game:randomNumber(min, max)` and `game:randomInteger(first, last)`, drawn from
-  the seed of the game, so that the server and the client offline agree.
-- **When it goes wrong**: an error in `update`, or a loop that runs too long, is logged with the file and the
-  line; the behavior is stopped for the rest of the game and its enemies fly and fire as if they had none. The
-  game goes on. A file whose `update` is not a function is an error of the configuration, like any wrong field
-  (`enemies/bydo_gunner.lua: update: expected a function`).
+it moves, where it goes and when it fires, give it an `update(enemy, game)` function, called at every tick for
+each enemy of that kind: see [Script the behavior of an enemy](script-enemy-behaviors.md).
 
 ## When a file is wrong
 
