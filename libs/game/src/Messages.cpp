@@ -123,23 +123,30 @@ EntityState readEntity(Reader &reader)
     return entity;
 }
 
+/// The values of a byte.
+constexpr std::size_t ByteValues = std::numeric_limits<std::uint8_t>::max() + 1;
+
+/// Whether each byte is a kind of entity, indexed by the byte.
+constexpr std::array<bool, ByteValues> KnownKinds = [] {
+    std::array<bool, ByteValues> known{};
+    for (const EntityKind kind :
+         {EntityKind::PlayerShip, EntityKind::PlayerShot, EntityKind::PlayerChargedShot,
+          EntityKind::BydoFlyer, EntityKind::BydoShooter, EntityKind::BydoTank, EntityKind::BydoBoss,
+          EntityKind::BydoShot, EntityKind::BydoPlasmaShot}) {
+        known[static_cast<std::uint8_t>(kind)] = true;
+    }
+    return known;
+}();
+
+/// The reasons of PLAYER_LEFT, indexed by their value.
+constexpr std::array<LeaveReason, 3> LeaveReasons{LeaveReason::Quit, LeaveReason::TimedOut,
+                                                  LeaveReason::LobbyClosed};
+
 } // namespace
 
 bool isKnown(EntityKind kind)
 {
-    switch (kind) {
-    case EntityKind::PlayerShip:
-    case EntityKind::PlayerShot:
-    case EntityKind::PlayerChargedShot:
-    case EntityKind::BydoFlyer:
-    case EntityKind::BydoShooter:
-    case EntityKind::BydoTank:
-    case EntityKind::BydoBoss:
-    case EntityKind::BydoShot:
-    case EntityKind::BydoPlasmaShot:
-        return true;
-    }
-    return false;
+    return KnownKinds[static_cast<std::uint8_t>(kind)];
 }
 
 // --- ACCEPTED, PLAYER_JOINED, PLAYER_LEFT ---
@@ -220,15 +227,7 @@ std::optional<PlayerLeftMessage> decodePlayerLeft(std::span<const std::byte> pay
     if (!reader.finish()) {
         return std::nullopt;
     }
-    switch (static_cast<LeaveReason>(reason)) {
-    case LeaveReason::TimedOut:
-    case LeaveReason::LobbyClosed:
-        message.reason = static_cast<LeaveReason>(reason);
-        break;
-    default:
-        message.reason = LeaveReason::Quit;
-        break;
-    }
+    message.reason = reason < LeaveReasons.size() ? LeaveReasons[reason] : LeaveReason::Quit;
     return message;
 }
 
