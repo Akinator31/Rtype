@@ -16,6 +16,8 @@ add_library(r-type_client_core STATIC
     src/Game/GameScenes.cpp
     src/Game/GameSessionSystem.cpp
     src/Game/GameView.cpp
+    src/Game/ImpactLooks.cpp
+    src/Game/ImpactSystem.cpp
     src/Game/Interpolation.cpp
     src/Game/LocalSession.cpp
     src/Game/Prediction.cpp

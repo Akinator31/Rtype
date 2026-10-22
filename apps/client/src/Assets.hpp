@@ -26,3 +26,7 @@
 #define RTYPE_MODEL_SHOT_BASIC "models/projectiles/player/shot_basic.glb"
 #define RTYPE_MODEL_SHOT_SPIRAL "models/projectiles/enemy/shot_spiral.glb"
 #define RTYPE_MODEL_ORB_PLASMA "models/projectiles/enemy/orb_plasma.glb"
+#define RTYPE_MODEL_IMPACT_SPARK "models/fx/impacts/impact_spark.glb"
+#define RTYPE_MODEL_IMPACT_BURST "models/fx/impacts/impact_burst.glb"
+#define RTYPE_MODEL_IMPACT_SPLASH "models/fx/impacts/impact_splash.glb"
+#define RTYPE_MODEL_IMPACT_EXPLOSION "models/fx/impacts/impact_explosion.glb"

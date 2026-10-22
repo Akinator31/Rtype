@@ -20,6 +20,7 @@ apps/client/src/Game/
   GameView.cpp           the orthographic camera of the game scene (computeGameView())
   ShipLooks.cpp          the 3D models of the ships: fitted to their box, rolling, flames
   ShotLooks.cpp          the models of energy of the shots
+  ImpactLooks.cpp        the impacts of the shots and the explosions of the ships (ImpactSystem plays them)
   GameScenes.cpp         the game scene, its HUD, and the pause menu
 ```
 
@@ -134,6 +135,32 @@ where its box would be, with the same size anywhere on the screen: what is drawn
 The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
 an entity flies.
 
+### Impacts
+
+An entity destroyed in the game (`DestroyCause::Killed`) leaves an impact where it was last drawn: a shot that
+hit something, a ship shot down. One that leaves the area or whose player leaves (`Removed`) leaves nothing.
+The game marks a shot that hits `Killed` (`CombatSystem`), so the client draws its impact.
+
+| Destroyed | Impact (`models/fx/impacts/`) | Colour |
+|---|---|---|
+| Shot of a player | `impact_spark.glb` | cyan, as its energy |
+| Bydo shot (`pulse`) | `impact_burst.glb` | purple |
+| Bydo plasma orb | `impact_splash.glb` | orange |
+| Bydo, ship of a player | `impact_explosion.glb` | its own orange, deepened |
+
+The impacts are skinned models of energy, exported from Blender with a single animation, `Impact` (0.43 s
+to 1 s). `ImpactLook` (`GameSessionSystem::setImpactLook()`, set by `GameScenes`) gives the model, its
+animation and length (`ResourceManager::getModelAnimationDuration()`), its scale in game units per model unit,
+and its tint: the models of the shot impacts are white, drawn in the colour of their shot. The impact is an
+entity of its own (`Impact`, `Model`, `ModelAnimation` with a speed of 0), 300 units in front of the plane of
+the game so that the wings of the ships do not hide it. The `ImpactSystem` moves the time of its animation,
+fades it out during the last quarter, and destroys it at its end, before the animation would loop.
+
+Online, `ENTITIES_DESTROYED` arrives while the entity is still drawn, about 100 ms in the past: the
+`GameSessionSystem` remembers the ids killed, and the impact appears when the entity goes. Several impacts of
+the same model share it in different poses: the renderer poses the model again before drawing each one, in
+the glow of the frame too.
+
 ## Tests
 
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:
@@ -148,7 +175,10 @@ an entity flies.
   by little while it climbs, the hull staying on the ship, its top while it dives, level again once it
   stops), shots created when fired and destroyed once out of the area, the game stopped while a menu is over
   its scene, an empty input under a menu even for a session that goes on (as online), and the session forgotten
-  when its scene closes.
+  when its scene closes;
+- the impacts: an entity killed leaves the impact of its kind where it was last drawn, even when its
+  destruction comes first (online), fades out, and is gone at the end of its animation; an entity removed, or
+  of a kind without an impact, leaves none.
 
 ```sh
 ./build/bin/rtype_tests "[client]"
@@ -158,6 +188,5 @@ an entity flies.
 
 - **No interpolation offline**: the entities move 60 times per second, the rate of the simulation; online,
   they are interpolated between the snapshots ([The client online](client-online.md#interpolation)).
-- **Boxes instead of sprites**, and no explosion when an entity is destroyed: the snapshots already say which
-  ones were killed (`DestroyCause::Killed`).
+- **No sound** with the impacts and explosions yet.
 - **No end of game**: the rules have no lives to lose yet (`server: gameplay`).

@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -110,6 +111,19 @@ public:
 // moved-from model frees nothing.
 class Model
 {
+public:
+    // A pose of a skinned model: a blend between times of two animations, from 0 for the first one to 1 for
+    // the second one. A single animation is the second one, at an amount of 1.
+    struct Pose {
+        int first = -1;
+        float firstTime = 0.0f;
+        int second = -1;
+        float secondTime = 0.0f;
+        float amount = 1.0f;
+
+        friend bool operator==(const Pose &, const Pose &) = default;
+    };
+
 private:
     // raylib samples the animations of glTF files at this rate
     static constexpr float framesPerSecond = 60.0f;
@@ -117,6 +131,8 @@ private:
     ::Model _model;
     ModelAnimation *_animations = nullptr;
     int _animationCount = 0;
+    // The pose of the vertices in graphics memory, none before the first one
+    mutable std::optional<Pose> _pose;
 
     // IsModelValid() rejects every skinned model in raylib 6.0: it requires the bone buffers in graphics
     // memory, which raylib only uploads with GPU skinning, disabled by default (it skins on the CPU instead).
@@ -174,7 +190,7 @@ public:
     Model &operator=(const Model &) = delete;
     Model(Model &&other) noexcept
         : _model(std::exchange(other._model, {})), _animations(std::exchange(other._animations, nullptr)),
-          _animationCount(std::exchange(other._animationCount, 0))
+          _animationCount(std::exchange(other._animationCount, 0)), _pose(std::exchange(other._pose, {}))
     {
     }
     Model &operator=(Model &&) = delete;
@@ -197,26 +213,49 @@ public:
         return -1;
     }
 
+    // Length of an animation, in seconds: its time loops back to 0 past it.
+    // @throws std::out_of_range if the model has no such animation.
+    [[nodiscard]] float getAnimationDuration(int animation) const
+    {
+        if (!hasAnimation(animation)) {
+            throw std::out_of_range("No animation " + std::to_string(animation) + " in this model");
+        }
+        // The first sample is at time 0
+        return static_cast<float>(std::max(_animations[animation].keyframeCount - 1, 0)) / framesPerSecond;
+    }
+
     // Moves the vertices of the model to their place at a time of an animation, in seconds. The animation
     // loops. The model keeps this pose until it is animated again. Const like drawing: only the vertices in
     // graphics memory change, and the renderer, which poses models, only reads the resources.
-    void animate(int animation, float time) const
-    {
-        if (hasAnimation(animation)) {
-            UpdateModelAnimation(_model, _animations[animation], time * framesPerSecond);
-        }
-    }
+    void animate(int animation, float time) const { applyPose({animation, time, animation, time, 1.0f}); }
 
     // Like animate(), with a pose between two animations: `amount` goes from 0 for the first one to 1 for the
     // second one.
     void blendAnimations(int first, float firstTime, int second, float secondTime, float amount) const
     {
-        if (!hasAnimation(first) || !hasAnimation(second)) {
-            animate(second, secondTime);
+        applyPose({first, firstTime, second, secondTime, std::clamp(amount, 0.0f, 1.0f)});
+    }
+
+    // The pose of the vertices, none if the model was never animated.
+    [[nodiscard]] const std::optional<Pose> &getPose() const { return _pose; }
+
+    // Moves the vertices of the model to a pose, unless they already are in it: several entities share the
+    // model, each posing it before it is drawn.
+    void applyPose(const Pose &pose) const
+    {
+        if (_pose == pose) {
             return;
         }
-        UpdateModelAnimationEx(_model, _animations[first], firstTime * framesPerSecond, _animations[second],
-                               secondTime * framesPerSecond, std::clamp(amount, 0.0f, 1.0f));
+        _pose = pose;
+        if (!hasAnimation(pose.second)) {
+            return;
+        }
+        if (pose.amount >= 1.0f || !hasAnimation(pose.first)) {
+            UpdateModelAnimation(_model, _animations[pose.second], pose.secondTime * framesPerSecond);
+            return;
+        }
+        UpdateModelAnimationEx(_model, _animations[pose.first], pose.firstTime * framesPerSecond,
+                               _animations[pose.second], pose.secondTime * framesPerSecond, pose.amount);
     }
 };
 

@@ -126,10 +126,11 @@ The `CombatSystem` tests what touches what with the colliders of the entities, b
 (`overlaps()`, `Hitbox.hpp`). An entity with a `Damage` component takes that many hit points from the `Health`
 of what it hits:
 
-- **A player shot** (its `Owner` is a slot) hurts a Bydo and is spent (`DestroyCause::Removed`). The Bydo
+- **A player shot** (its `Owner` is a slot) hurts a Bydo and is spent (`DestroyCause::Killed`: the client draws
+  its impact). The Bydo
   with no hit points left is destroyed (`DestroyCause::Killed`) and `EnemyDefinition::score` goes to the
   player of the shot.
-- **A Bydo shot** (`NoOwner`) hurts a ship and is spent; **a Bydo** hurts a ship it runs into
+- **A Bydo shot** (`NoOwner`) hurts a ship and is spent, killed as well; **a Bydo** hurts a ship it runs into
   (`EnemyDefinition::collisionDamage`) and keeps going. A ship that survives is invulnerable for
   `hitInvulnerableTicks`, so that a Bydo on it does not take its health away tick after tick.
 - The damage of a shot is that of its weapon (`WeaponDefinition::damage`): `spawnWeaponShot()` gives it its

@@ -216,6 +216,7 @@ struct Renderer::Impl {
         float scale;
         float spinAngle;
         ::Color tint;
+        std::optional<detail::Model::Pose> pose;
     };
 
     const core::ResourceCache<detail::Texture, TextureId> &textures;
@@ -510,8 +511,8 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
     EndMode3D();
     _impl->beginGameView();
     if (energy.bloom > 0.0f) {
-        _impl->glowQueue.push_back(
-            {model, view, energy, origin, axis, rotationAngle, scale, spinAngle, fade(tint, energy.bloom)});
+        _impl->glowQueue.push_back({model, view, energy, origin, axis, rotationAngle, scale, spinAngle,
+                                    fade(tint, energy.bloom), _impl->models.get(model).getPose()});
     }
 }
 
@@ -526,11 +527,14 @@ void Renderer::drawGlow()
     EndTextureMode();
     const Texture2D *glow = _impl->glowPass.render(toRaylib(_impl->target->resolution()), [this] {
         for (const Impl::GlowDraw &draw : _impl->glowQueue) {
+            const detail::Model &model = _impl->models.get(draw.model);
+            if (draw.pose) {
+                model.applyPose(*draw.pose);
+            }
             BeginMode3D(draw.camera);
-            _impl->energyShader.draw(_impl->models.get(draw.model).get(), draw.energy,
-                                     _impl->textures.get(draw.energy.noise).get(), draw.camera.position,
-                                     draw.position, draw.rotationAxis, draw.rotationAngle, draw.spinAngle,
-                                     draw.scale, draw.tint);
+            _impl->energyShader.draw(model.get(), draw.energy, _impl->textures.get(draw.energy.noise).get(),
+                                     draw.camera.position, draw.position, draw.rotationAxis,
+                                     draw.rotationAngle, draw.spinAngle, draw.scale, draw.tint);
             EndMode3D();
         }
     });

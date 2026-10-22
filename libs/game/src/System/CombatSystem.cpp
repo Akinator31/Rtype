@@ -81,7 +81,7 @@ void CombatSystem::hitEnemies(const Targets &targets, std::unordered_set<ecs::en
             continue;
         }
         spent.insert(shot);
-        destroyLater(shot, DestroyCause::Removed);
+        destroyLater(shot, DestroyCause::Killed);
         if (hurt(*enemy, shot)) {
             spent.insert(*enemy);
             destroyLater(*enemy, DestroyCause::Killed);
@@ -103,7 +103,7 @@ void CombatSystem::hitShips(const Targets &targets, std::unordered_set<ecs::enti
         // A shot is spent, a Bydo keeps going
         if (!_enemies.has(*danger)) {
             spent.insert(*danger);
-            destroyLater(*danger, DestroyCause::Removed);
+            destroyLater(*danger, DestroyCause::Killed);
         }
         if (hurt(ship, *danger)) {
             loseShip(ship);

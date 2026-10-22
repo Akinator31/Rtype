@@ -54,6 +54,23 @@ constexpr render::Color PlasmaOrbLight{255, 120, 35, 135};
 /// How far the light of a shot spreads around its core, in heights of the core.
 constexpr float ShotLightSpread = 1.5f;
 
+/// The animation of the impact models, played once.
+constexpr const char *ImpactAnimation = "Impact";
+/// The colours of the impacts of the shots, those of their energy: the impact models are white.
+constexpr render::Color PlayerShotImpact{80, 200, 255, 255};
+constexpr render::Color BydoShotImpact{185, 90, 255, 255};
+constexpr render::Color PlasmaOrbImpact{255, 120, 35, 255};
+/// The explosion model is pale orange, and its layers add up: deepened and dimmed, it stays orange instead of
+/// turning white, and its glow does not cover the screen.
+constexpr render::Color ExplosionTint{255, 150, 80, 190};
+constexpr float ExplosionBloom = 0.4f;
+/// The sizes of the impacts, in game units per model unit: about the size of what was destroyed.
+constexpr float SparkScale = 20.0f;
+constexpr float BurstScale = 15.0f;
+constexpr float SplashScale = 24.0f;
+constexpr float BydoExplosionScale = 25.0f;
+constexpr float ShipExplosionScale = 28.0f;
+
 /// The energy of a shot with a light around its core.
 /// @param core The core of the shot model, as in ShotLook.
 render::Energy shine(render::Energy energy, render::TextureId light, render::Rectangle core,
@@ -68,6 +85,37 @@ render::Energy shine(render::Energy energy, render::TextureId light, render::Rec
         {core.width + (2.0f * margin), core.height + (2.0f * margin)},
     };
     return energy;
+}
+
+/// The impact played by the model at a path, its animation played once.
+ImpactLook loadImpactLook(render::ResourceManager &resources, const char *path, float scale,
+                          render::Color tint, const render::Energy &energy)
+{
+    const render::ModelId model = resources.loadModel(path);
+    const int animation = resources.getModelAnimation(model, ImpactAnimation);
+    return {model, animation, resources.getModelAnimationDuration(model, animation), scale, tint, energy};
+}
+
+/// Gives each kind of shot the impact it leaves where it hits, and each kind of ship its explosion.
+void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                    const render::Energy &energy)
+{
+    sessions.setImpactLook(
+        game::EntityKind::PlayerShot,
+        loadImpactLook(resources, RTYPE_MODEL_IMPACT_SPARK, SparkScale, PlayerShotImpact, energy));
+    sessions.setImpactLook(game::EntityKind::BydoShot, loadImpactLook(resources, RTYPE_MODEL_IMPACT_BURST,
+                                                                      BurstScale, BydoShotImpact, energy));
+    sessions.setImpactLook(
+        game::EntityKind::BydoPlasmaShot,
+        loadImpactLook(resources, RTYPE_MODEL_IMPACT_SPLASH, SplashScale, PlasmaOrbImpact, energy));
+    render::Energy explosion = energy;
+    explosion.bloom = ExplosionBloom;
+    sessions.setImpactLook(game::EntityKind::BydoFlyer,
+                           loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, BydoExplosionScale,
+                                          ExplosionTint, explosion));
+    sessions.setImpactLook(game::EntityKind::PlayerShip,
+                           loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, ShipExplosionScale,
+                                          ExplosionTint, explosion));
 }
 
 } // namespace
@@ -94,6 +142,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     sessions.setShotLook(game::EntityKind::BydoPlasmaShot,
                          {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true,
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
+    setImpactLooks(sessions, resources, energy);
     engine.createScene(
         GameScene, {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
         [this, &resources, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {

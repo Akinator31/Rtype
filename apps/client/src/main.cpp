@@ -5,6 +5,7 @@
 #include "Console/ConsoleSystem.hpp"
 #include "Game/GameScenes.hpp"
 #include "Game/GameSessionSystem.hpp"
+#include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
@@ -62,6 +63,10 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         RTYPE_MODEL_SHOT_BASIC,
         RTYPE_MODEL_SHOT_SPIRAL,
         RTYPE_MODEL_ORB_PLASMA,
+        RTYPE_MODEL_IMPACT_SPARK,
+        RTYPE_MODEL_IMPACT_BURST,
+        RTYPE_MODEL_IMPACT_SPLASH,
+        RTYPE_MODEL_IMPACT_EXPLOSION,
     };
     std::vector<std::shared_future<ModelId>> models;
     for (const char *path : modelPaths) {
@@ -155,6 +160,7 @@ rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
     // After the menus, which read the input first: Escape opens the pause menu before the game reads it
     auto &sessions =
         ecs.registerSystem<rtype::client::GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
+    ecs.registerSystem<rtype::client::ImpactSystem>(ecs);
     ecs.registerSystem<rtype::engine::WidgetTextSystem>();
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
     ecs.registerSystem<rtype::engine::TweenSystem>();

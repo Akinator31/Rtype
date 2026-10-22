@@ -27,7 +27,7 @@ enum class EntityKind : std::uint8_t {
 enum class DestroyCause : std::uint8_t {
     /// Removed without effect: it left the game area, or its player left.
     Removed = 0,
-    /// Destroyed in the game: the client draws an explosion.
+    /// Destroyed in the game, a ship killed or a shot that hit: the client draws an explosion or an impact.
     Killed = 1,
 };
 

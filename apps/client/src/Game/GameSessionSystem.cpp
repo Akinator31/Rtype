@@ -36,6 +36,7 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<ShipAttitude>(caches);
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
+    use<Impact>(caches);
 }
 
 void GameSessionSystem::start(std::unique_ptr<GameSession> session, engine::SceneId scene,
@@ -53,6 +54,7 @@ void GameSessionSystem::stop()
     _scene.reset();
     _onOver = nullptr;
     _entities.clear();
+    _killed.clear();
     _players.clear();
     _tick = 0;
     _clock = 0.0f;
@@ -66,6 +68,11 @@ void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
 void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
 {
     _shotLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &look)
+{
+    _impactLooks.setLook(kind, look);
 }
 
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
@@ -122,6 +129,7 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         moveEntity(found->second.id, state);
     }
+    rememberKilled(snapshot.destroyed);
 
     // Each snapshot holds the whole world: what is not in it any more is gone
     for (auto entry = _entities.begin(); entry != _entities.end();) {
@@ -129,8 +137,17 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
             ++entry;
             continue;
         }
-        _ecs.destroyEntity(entry->second.id);
+        removeEntity(entry->first, entry->second);
         entry = _entities.erase(entry);
+    }
+}
+
+void GameSessionSystem::rememberKilled(const std::vector<game::DestroyedEntity> &destroyed)
+{
+    for (const game::DestroyedEntity &entity : destroyed) {
+        if (entity.cause == game::DestroyCause::Killed && _entities.contains(entity.id)) {
+            _killed.insert(entity.id);
+        }
     }
 }
 
@@ -139,7 +156,7 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     const EntityLook look = lookOf(state);
     const ecs::entity_t entity = _ecs.createEntity();
     _ecs.addComponent<engine::SceneMember>(entity, *_scene);
-    _ecs.addComponent<Replicated>(entity, state.id);
+    _ecs.addComponent<Replicated>(entity, state.id, state.kind);
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
     if (_shipLooks.hasLook(state.kind)) {
@@ -150,6 +167,19 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
         _ecs.addComponent<engine::Box>(entity, look.box);
     }
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
+}
+
+void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityRef &entity)
+{
+    const bool killed = _killed.erase(networkId) > 0;
+    if (!_ecs.isAlive(entity)) {
+        return;
+    }
+    const game::EntityKind kind = _ecs.getComponent<Replicated>(entity.id).kind;
+    if (killed && _impactLooks.hasLook(kind)) {
+        _impactLooks.createImpact(_ecs, *_scene, kind, _ecs.getComponent<ecs::Position>(entity.id));
+    }
+    _ecs.destroyEntity(entity.id);
 }
 
 void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState &state)
