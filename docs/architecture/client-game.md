@@ -16,6 +16,10 @@ apps/client/src/Game/
   LocalSession.cpp       a game offline: the Simulation, stepped 60 times per second
   RemoteSession.cpp      a game online: the UDP session with the instance (The client online)
   GameSessionSystem.cpp  controls → PlayerInput → session; snapshots → entities of the scene
+  EntityLook.cpp         the box of each kind of entity (lookOf()), the colours of the players
+  GameView.cpp           the orthographic camera of the game scene (computeGameView())
+  ShipLooks.cpp          the 3D models of the ships: fitted to their box, rolling, flames
+  ShotLooks.cpp          the models of energy of the shots
   GameScenes.cpp         the game scene, its HUD, and the pause menu
 ```
 
@@ -73,15 +77,28 @@ repository.
 
 | Entity | Look |
 |---|---|
-| Ship | 120 × 70: the 3D model `spaceship_ezno.glb`, tinted with the colour of its player (blue, red, green, yellow for the slots 0 to 3) |
-| Shot | 24 × 8 box, in the colour of the player who fired (a charged shot 48 × 16) |
-| Bydo (`BydoFlyer`) | 100 × 38: the 3D model `drop_ship_v2.glb`, facing left |
-| Bydo shot | 16 × 16 box, orange |
+| Ship | 168 × 98: the 3D model `spaceship_ezno.glb`, tinted with the colour of its player (blue, red, green, yellow for the slots 0 to 3) |
+| Shot | 68 × 18.8: the model of energy `projectiles/player/shot_basic.glb` (a charged shot: a 48 × 16 box in the colour of the player) |
+| Bydo (`BydoFlyer`) | 140 × 54: the 3D model `drop_ship_v2.glb`, facing left |
+| Bydo shot (`pulse`) | 68 × 22: the model of energy `projectiles/enemy/shot_spiral.glb`, facing left |
+| Bydo plasma orb (`BydoPlasmaShot`) | 44 × 44: the model of energy `projectiles/enemy/orb_plasma.glb` |
 | Any other kind | A grey square |
 
 `lookOf()` gives the size and colour of each kind, from a table indexed by kind. A kind given a `ShipLook`
-(`GameSessionSystem::setShipLook()`, called by `GameScenes`) is drawn with its 3D model instead of a box;
-without one, as in the tests, it stays a box.
+or a `ShotLook` (`GameSessionSystem::setShipLook()` / `setShotLook()`, called by `GameScenes`, kept by
+`ShipLooks` / `ShotLooks`, which give the entities their models) is drawn with
+its 3D model instead of a box; without one, as in the tests, it stays a box.
+
+### Shots in 3D
+
+The shots are models of energy (`engine::Model::energy`), drawn with the energy shader
+(`libs/shaders/glsl/Energy.frag`, `render::Renderer::drawEnergyModel()`): the colour of their texture, added
+to what is behind them without hiding anything, white hot where they face the camera, flickering with
+`images/fx/energy_noise.png` flowing over them. As the ships, `ShotLook::core` is the box around the core of
+the model seen through the camera of the game, trail and rings excluded, measured on the model: the model is
+scaled to make its width that of the collider and centred on the shot, and the colliders have the
+proportions of the cores (`config/projectiles/`). The shots of the Bydos face left. The plasma orbs of the
+Bydos have their own kind, `BYDO_PLASMA_SHOT`, so that they have their own model.
 
 ### Ships in 3D
 
@@ -96,8 +113,8 @@ where its box would be, with the same size anywhere on the screen: what is drawn
 - **Size**: `ShipLook::hull` is the box around the hull of the model seen through this camera, flames and
   trails excluded, in model units, measured on the model in its `Move` pose. The model is scaled to make the
   width of this box that of the collider, and moved to put its centre on the entity. The colliders have the
-  proportions of these hulls: `Rules::shipHalfWidth/Height` 60 × 35 for the players, `halfWidth = 50,
-  halfHeight = 19` in `config/ships/bydo_scout.lua`. A new model means measuring its hull again.
+  proportions of these hulls: `Rules::shipHalfWidth/Height` 84 × 49 for the players, `halfWidth = 70,
+  halfHeight = 27` in `config/ships/bydo_scout.lua`. A new model means measuring its hull again.
 - **Roll**: a ship rolls around its length while it climbs (its belly towards the camera, up to 40°) or
   dives (its top, up to 25°), at full vertical speed (`ShipAttitude`, from the vertical velocity of the snapshots). The
   roll eases towards its target every frame and adds to the tilt, around the same x axis; the hull stays

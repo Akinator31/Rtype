@@ -59,6 +59,9 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         RTYPE_MODEL_SHIP_SPACESHIP,
         RTYPE_MODEL_SHIP_BATTLESTAR,
         RTYPE_MODEL_SHIP_DROP_SHIP,
+        RTYPE_MODEL_SHOT_BASIC,
+        RTYPE_MODEL_SHOT_SPIRAL,
+        RTYPE_MODEL_ORB_PLASMA,
     };
     std::vector<std::shared_future<ModelId>> models;
     for (const char *path : modelPaths) {

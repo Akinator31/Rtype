@@ -2,8 +2,10 @@
 // drawing the world of a session in a scene, without a window (ADR 0015, docs/architecture/client-game.md).
 
 #include "FakeInput.hpp"
+#include "Game/EntityLook.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
+#include "Game/GameView.hpp"
 #include "Game/LocalSession.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
@@ -99,13 +101,15 @@ struct Client {
         }
     }
 
+    /// The boxes narrower than a ship.
     [[nodiscard]] std::size_t countShots()
     {
+        const float shipWidth = rtype::game::Rules{}.shipHalfWidth * 2.0f;
         std::size_t shots = 0;
         auto &replicated = ecs.cache<Replicated>();
         auto &boxes = ecs.cache<rtype::engine::Box>();
         for (rtype::ecs::entity_t entity = 0; entity < replicated.size(); ++entity) {
-            if (replicated.has(entity) && ecs.isAlive(entity) && boxes.get(entity).width < 50.0f) {
+            if (replicated.has(entity) && ecs.isAlive(entity) && boxes.get(entity).width < shipWidth) {
                 ++shots;
             }
         }
@@ -210,6 +214,10 @@ TEST_CASE("Each entity of the game has its size, the ships of the players the co
     CHECK(bydo.box.color.r != rtype::render::colors::Gray.r);
     CHECK(bydo.order == shipLook.order);
     CHECK(bydoShot.order < bydo.order);
+    // Its plasma orbs too, round
+    const EntityLook orb = lookOf({5, rtype::game::EntityKind::BydoPlasmaShot, rtype::game::NoOwner});
+    CHECK(orb.box.color.r != rtype::render::colors::Gray.r);
+    CHECK(orb.box.width == Approx(orb.box.height));
     // The four players have four colours
     for (std::uint8_t first = 0; first < 4; ++first) {
         for (std::uint8_t second = first + 1; second < 4; ++second) {
@@ -327,6 +335,35 @@ TEST_CASE("A kind of ship given a look is a 3D model, its hull on the box of the
     client.run(60);
     CHECK(rollOf() == Approx(0.0f).margin(0.1f));
     CHECK(animationOf() == look.model.animations.idle);
+}
+
+TEST_CASE("A kind of shot given a look is a 3D model of energy, its core on the box of the shot", "[client]")
+{
+    Client client({}, armedConfig());
+    // A core 4 units long, centred 1 unit right of the origin of the model
+    const ShotLook look{{}, {-1.0f, -0.5f, 4.0f, 1.0f}, false, {{}, 2.0f}};
+    client.sessions.setShotLook(rtype::game::EntityKind::PlayerShot, look);
+
+    client.input.keys = {Key::Space};
+    client.run(1);
+    std::optional<rtype::game::EntityState> fired;
+    for (const rtype::game::EntityState &state : client.session->simulation().snapshot().entities) {
+        if (state.kind == rtype::game::EntityKind::PlayerShot) {
+            fired = state;
+        }
+    }
+    REQUIRE(fired);
+    const std::optional<rtype::ecs::entity_t> shot = client.sessions.entityOf(fired->id);
+    REQUIRE(shot);
+    REQUIRE(client.ecs.hasComponent<rtype::engine::Model>(*shot));
+    CHECK_FALSE(client.ecs.hasComponent<rtype::engine::Box>(*shot));
+    const rtype::engine::Model &model = client.ecs.getComponent<rtype::engine::Model>(*shot);
+    REQUIRE(model.energy);
+    CHECK(model.energy->boost == Approx(2.0f));
+    // As long as the box of the shot, the centre of its core on the shot
+    CHECK(model.scale == Approx(lookOf(*fired).box.width / 4.0f));
+    CHECK(model.position.x == Approx(fired->x - (1.0f * model.scale)));
+    CHECK(model.position.y == Approx(fired->y));
 }
 
 TEST_CASE("Shots appear when fired, and their entities go when they leave the game", "[client]")

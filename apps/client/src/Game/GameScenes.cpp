@@ -1,6 +1,8 @@
 #include "Game/GameScenes.hpp"
 
 #include "Assets.hpp"
+#include "Game/EntityLook.hpp"
+#include "Game/GameView.hpp"
 #include "Game/LocalSession.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "ShipModel.hpp"
@@ -35,6 +37,13 @@ constexpr render::Rectangle DropShipHull{-11.95f, -5.74f, 23.9f, 9.11f};
 const std::vector<int> EznoFlames{2, 6};
 const std::vector<int> DropShipFlames{9, 10, 11, 12};
 
+/// The cores of the shot models seen through the camera of the game, trails and rings excluded, in model
+/// units, measured on the models: the shot of the players facing right, the shots of the Bydos facing left.
+/// The colliders of the shots have the same proportions (config/projectiles/).
+constexpr render::Rectangle ShotBasicCore{-1.6f, -0.55f, 4.0f, 1.1f};
+constexpr render::Rectangle ShotSpiralCore{-2.4f, -0.73f, 4.48f, 1.46f};
+constexpr render::Rectangle OrbPlasmaCore{-0.9f, -0.9f, 1.8f, 1.8f};
+
 /// The ships are lit from the top left, in front of them, in the world of the game where y points down.
 constexpr render::Light GameLight{{0.5f, 0.8f, 0.6f}, {255, 248, 240, 255}, {48, 50, 62, 255}};
 
@@ -50,6 +59,14 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     sessions.setShipLook(
         game::EntityKind::BydoFlyer,
         {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP), DropShipHull, true, DropShipFlames});
+    const render::Energy energy{
+        resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
+    sessions.setShotLook(game::EntityKind::PlayerShot,
+                         {resources.loadModel(RTYPE_MODEL_SHOT_BASIC), ShotBasicCore, false, energy});
+    sessions.setShotLook(game::EntityKind::BydoShot,
+                         {resources.loadModel(RTYPE_MODEL_SHOT_SPIRAL), ShotSpiralCore, true, energy});
+    sessions.setShotLook(game::EntityKind::BydoPlasmaShot,
+                         {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true, energy});
     engine.createScene(GameScene,
                        {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
                        [this, &resources, &metrics, &style](engine::Engine & /*target*/,
