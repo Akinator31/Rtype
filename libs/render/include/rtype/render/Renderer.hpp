@@ -167,12 +167,19 @@ public:
                    const std::vector<int> &hiddenMeshes = {});
     /// Draws a 3D model of energy (a shot, a beam, a plasma orb) seen through the camera: it glows with the
     /// colour of its texture, added to what is behind it, white hot where it faces the camera, flickering
-    /// with the noise of `energy`. It hides nothing: draw it after the models it may cover.
+    /// with the noise of `energy`, with the halo of `energy` around it. It hides nothing: draw it after the
+    /// models it may cover. Its light also spreads around it when drawGlow() is called.
     /// The other parameters are those of drawModel().
     /// @throws std::logic_error if no frame is started.
     void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
                          Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
                          float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
+    /// Makes the energy models drawn since the start of the frame (or the previous call) shine: their light
+    /// is blurred around them and added over everything drawn so far. Call it after the 3D models and before
+    /// the interface, which it would otherwise cover. Does nothing without energy models; if the graphics
+    /// card cannot blur, a warning is logged once and nothing glows.
+    /// @throws std::logic_error if no frame is started.
+    void drawGlow();
 
     /// Poses an animated model at a time of one of its animations: the next draws of this model show this
     /// pose, until it is animated again. Several entities sharing a model each pose it before being drawn.
