@@ -114,6 +114,33 @@ TEST_CASE("The configuration of the repository loads, and a Simulation registers
     }
 }
 
+TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest player, then leaves", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    Simulation simulation({}, loaded.config);
+    simulation.addPlayer(0);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    const rtype::ecs::entity_t gunner = spawnEnemy(ecs, simulation.context(), "bydo_gunner", 2000.0f, 540.0f);
+    const auto countOrbs = [&simulation] {
+        return std::ranges::count(simulation.snapshot().entities, EntityKind::BydoPlasmaShot,
+                                  &EntityState::kind);
+    };
+
+    // 500 units at 150 per second, then a second to aim: no orb before
+    for (int tick = 0; tick < 255; ++tick) {
+        simulation.step();
+    }
+    CHECK(ecs.getComponent<rtype::ecs::Position>(gunner).x == Approx(1500.0f));
+    CHECK(countOrbs() == 0);
+    // An orb every half second, then it flies away
+    for (int tick = 0; tick < 75; ++tick) {
+        simulation.step();
+    }
+    CHECK(countOrbs() == 3);
+    CHECK(ecs.getComponent<rtype::ecs::Position>(gunner).x < 1500.0f);
+}
+
 TEST_CASE("Each kind of file is read into its definition, with the defaults of the optional fields", "[game]")
 {
     const ConfigDirectory directory("kinds");
