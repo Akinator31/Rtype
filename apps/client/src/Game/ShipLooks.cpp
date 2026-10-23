@@ -33,8 +33,8 @@ constexpr float RollResponse = 10.0f;
 
 constexpr float RadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
 
-/// The flames of a ship, whatever it does: a little flame, halfway between the Idle pose of the rig (0), whose
-/// flames hide in the thrusters, and the Move one (1).
+/// The flames of a ship, whatever it does: a little flame, halfway between the Idle pose of the rig (0),
+/// whose flames hide in the thrusters, and the Move one (1).
 constexpr float Flame = 0.5f;
 
 /// The roll a ship turns towards: its vertical speed, as a fraction of the speed of the ships of the players.
