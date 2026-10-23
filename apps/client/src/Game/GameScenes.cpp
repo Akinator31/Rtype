@@ -79,6 +79,8 @@ constexpr float PlasmaOrbVolume = 0.7f;
 /// How loud the ships are when destroyed: louder than the shots, the ship of a player more than a Bydo.
 constexpr float BydoDestructionVolume = 0.8f;
 constexpr float ShipDestructionVolume = 1.0f;
+/// How loud a shot is when it hits something: its file is much quieter than the others.
+constexpr float CollisionVolume = 1.0f;
 
 /// The energy of a shot with a light around its core.
 /// @param core The core of the shot model, as in ShotLook.
@@ -147,6 +149,16 @@ void setDestructionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio
     sessions.setDestructionSound(game::EntityKind::PlayerShip, {destruction, ShipDestructionVolume});
 }
 
+/// Gives each kind of shot the sound of its collision: the game kills a shot that hits something.
+void setCollisionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
+{
+    const audio::SoundId collision = audio.loadSound(RTYPE_SOUND_COLLISION);
+    for (const game::EntityKind kind :
+         {game::EntityKind::PlayerShot, game::EntityKind::BydoShot, game::EntityKind::BydoPlasmaShot}) {
+        sessions.setDestructionSound(kind, {collision, CollisionVolume});
+    }
+}
+
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
@@ -174,6 +186,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     setImpactLooks(sessions, resources, energy);
     setShotSounds(sessions, audio);
     setDestructionSounds(sessions, audio);
+    setCollisionSounds(sessions, audio);
     engine.createScene(
         GameScene, {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
         [this, &resources, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {

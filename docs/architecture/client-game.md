@@ -21,7 +21,7 @@ apps/client/src/Game/
   ShipLooks.cpp          the 3D models of the ships: fitted to their box, rolling, flames
   ShotLooks.cpp          the models of energy of the shots
   ImpactLooks.cpp        the impacts of the shots and the explosions of the ships (ImpactSystem plays them)
-  EntitySounds.cpp       the sound of each kind of entity, for a shot fired or a ship destroyed
+  EntitySounds.cpp       the sound of each kind of entity, for a shot fired, a shot that hits, a ship destroyed
   GameScenes.cpp         the game scene, its HUD, and the pause menu
 ```
 
@@ -175,6 +175,8 @@ A shot that appears in the game plays the sound of the weapon that fired it (`so
 | Bydo plasma orb | `plasma_gun` of the gunners | `big_blaster.wav` | 0.7 |
 
 A ship killed in the game explodes with `sounds/fx/destruction.wav`: a Bydo at 0.8, the ship of a player at 1.
+A shot that hits something, which the game kills too, sounds with `sounds/fx/collision.wav`, at 1 whatever the
+shot: the file is much quieter than the others. A shot that destroys a ship plays both.
 
 The clients see the kind of an entity, not the weapon that fired it, so the sounds go by kind, like the looks:
 an `EntitySound` gives the sound and its volume, for the shots (`GameSessionSystem::setShotSound()`) and for the
@@ -217,5 +219,4 @@ know which enemy a Bydo is.
 
 - **No interpolation offline**: the entities move 60 times per second, the rate of the simulation; online,
   they are interpolated between the snapshots ([The client online](client-online.md#interpolation)).
-- **No sound** with the impacts of the shots yet, only with the shots fired and the ships destroyed.
 - **No end of game**: the rules have no lives to lose yet (`server: gameplay`).
