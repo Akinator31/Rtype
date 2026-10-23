@@ -35,3 +35,4 @@
 #define RTYPE_SOUND_BASICAL_BLASTER "sounds/fx/blaster/basical_blaster.wav"
 #define RTYPE_SOUND_LOW_BLASTER "sounds/fx/blaster/low_blaster.wav"
 #define RTYPE_SOUND_BIG_BLASTER "sounds/fx/blaster/big_blaster.wav"
+#define RTYPE_SOUND_DESTRUCTION "sounds/fx/destruction.wav"

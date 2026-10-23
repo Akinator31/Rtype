@@ -76,6 +76,9 @@ constexpr float ShipExplosionScale = 28.0f;
 constexpr float PlayerShotVolume = 0.5f;
 constexpr float BydoShotVolume = 0.35f;
 constexpr float PlasmaOrbVolume = 0.7f;
+/// How loud the ships are when destroyed: louder than the shots, the ship of a player more than a Bydo.
+constexpr float BydoDestructionVolume = 0.8f;
+constexpr float ShipDestructionVolume = 1.0f;
 
 /// The energy of a shot with a light around its core.
 /// @param core The core of the shot model, as in ShotLook.
@@ -136,6 +139,14 @@ void setShotSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
                           {audio.loadSound(RTYPE_SOUND_BIG_BLASTER), PlasmaOrbVolume});
 }
 
+/// Gives each kind of ship the sound of its explosion.
+void setDestructionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
+{
+    const audio::SoundId destruction = audio.loadSound(RTYPE_SOUND_DESTRUCTION);
+    sessions.setDestructionSound(game::EntityKind::BydoFlyer, {destruction, BydoDestructionVolume});
+    sessions.setDestructionSound(game::EntityKind::PlayerShip, {destruction, ShipDestructionVolume});
+}
+
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
@@ -162,6 +173,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
     setImpactLooks(sessions, resources, energy);
     setShotSounds(sessions, audio);
+    setDestructionSounds(sessions, audio);
     engine.createScene(
         GameScene, {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
         [this, &resources, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {

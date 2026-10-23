@@ -650,3 +650,28 @@ TEST_CASE("An entity removed without effect, or of a kind without an impact, lea
     CHECK(client.sessions.entityCount() == 0);
     CHECK(client.impacts().empty());
 }
+
+TEST_CASE("A ship killed in the game sounds with its impact, on its side of the screen", "[client]")
+{
+    ImpactClient client;
+    const rtype::audio::SoundId destruction{4};
+    client.sessions.setImpactLook(rtype::game::EntityKind::BydoFlyer, SparkLook);
+    client.sessions.setDestructionSound(rtype::game::EntityKind::BydoFlyer, {destruction, 0.8f});
+    rtype::game::EntityState bydo{5, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner};
+    bydo.x = 1700.0f;
+    rtype::game::EntityState fled{6, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner};
+    client.receive(snapshotOf(1, {bydo, fled}));
+    CHECK_FALSE(client.ecs.hasComponent<rtype::engine::SoundEffect>(*client.sessions.entityOf(5)));
+
+    client.receive(
+        snapshotOf(2, {}, {{5, rtype::game::DestroyCause::Killed}, {6, rtype::game::DestroyCause::Removed}}));
+
+    const std::vector<rtype::ecs::entity_t> impacts = client.impacts();
+    REQUIRE(impacts.size() == 1);
+    REQUIRE(client.ecs.hasComponent<rtype::engine::SoundEffect>(impacts[0]));
+    const auto &effect = client.ecs.getComponent<rtype::engine::SoundEffect>(impacts[0]);
+    CHECK(effect.sound == destruction);
+    CHECK(effect.settings.volume == 0.8f);
+    // On the right of the game area: heard on the right
+    CHECK(effect.settings.pan > 0.0f);
+}

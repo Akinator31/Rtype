@@ -1,10 +1,10 @@
 #pragma once
 
+#include "Game/EntitySounds.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/ImpactLooks.hpp"
 #include "Game/ShipLooks.hpp"
 #include "Game/ShotLooks.hpp"
-#include "Game/ShotSounds.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/System/System.hpp"
 #include "rtype/engine/Control/Controls.hpp"
@@ -43,9 +43,9 @@ struct Replicated {
 ///    moved, and destroyed when it is no longer in the world. The kinds given a ShipLook are 3D models, which
 ///    roll around their length, smoothly, as their ship climbs or dives; those given a ShotLook are models of
 ///    energy; the others are boxes. An entity killed in the game (a ship shot down, a shot that hit) leaves
-///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. A shot that
-///    appears is given the engine::SoundEffect of its kind, if it was given a ShotSound: the
-///    engine::SoundSystem plays it.
+///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. The sounds are
+///    engine::SoundEffect given to entities, which the engine::SoundSystem plays: a shot that appears has the
+///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens
@@ -65,7 +65,8 @@ class GameSessionSystem : public ecs::System
     ShipLooks _shipLooks;
     ShotLooks _shotLooks;
     ImpactLooks _impactLooks;
-    ShotSounds _shotSounds;
+    EntitySounds _shotSounds;
+    EntitySounds _destructionSounds;
     /// The entities drawn that the game killed: they leave an impact when they go.
     std::unordered_set<std::uint32_t> _killed;
     std::vector<game::PlayerState> _players;
@@ -100,7 +101,10 @@ public:
     /// Leaves an impact where the game kills an entity of this kind from now on.
     void setImpactLook(game::EntityKind kind, const ImpactLook &look);
     /// Plays a sound when a shot of this kind appears from now on.
-    void setShotSound(game::EntityKind kind, const ShotSound &sound);
+    void setShotSound(game::EntityKind kind, const EntitySound &sound);
+    /// Plays a sound where the game kills an entity of this kind from now on, with its impact: a kind without
+    /// an ImpactLook makes no sound.
+    void setDestructionSound(game::EntityKind kind, const EntitySound &sound);
 
     void update(float elapsed) override;
 

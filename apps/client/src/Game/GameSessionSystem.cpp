@@ -77,9 +77,14 @@ void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &l
     _impactLooks.setLook(kind, look);
 }
 
-void GameSessionSystem::setShotSound(game::EntityKind kind, const ShotSound &sound)
+void GameSessionSystem::setShotSound(game::EntityKind kind, const EntitySound &sound)
 {
     _shotSounds.setSound(kind, sound);
+}
+
+void GameSessionSystem::setDestructionSound(game::EntityKind kind, const EntitySound &sound)
+{
+    _destructionSounds.setSound(kind, sound);
 }
 
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
@@ -173,7 +178,7 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     } else {
         _ecs.addComponent<engine::Box>(entity, look.box);
     }
-    _shotSounds.addSound(_ecs, entity, state);
+    _shotSounds.addSound(_ecs, entity, state.kind, state.x);
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
 }
 
@@ -185,7 +190,9 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
     }
     const game::EntityKind kind = _ecs.getComponent<Replicated>(entity.id).kind;
     if (killed && _impactLooks.hasLook(kind)) {
-        _impactLooks.createImpact(_ecs, *_scene, kind, _ecs.getComponent<ecs::Position>(entity.id));
+        const ecs::Position position = _ecs.getComponent<ecs::Position>(entity.id);
+        const ecs::entity_t impact = _impactLooks.createImpact(_ecs, *_scene, kind, position);
+        _destructionSounds.addSound(_ecs, impact, kind, position.x);
     }
     _ecs.destroyEntity(entity.id);
 }
