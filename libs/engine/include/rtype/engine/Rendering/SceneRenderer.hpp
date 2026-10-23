@@ -76,6 +76,13 @@ class SceneRenderer
     /// Draws a glass panel with its shadows and glow, in the look of its highlight.
     void drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre, float scale,
                    float opacity) const;
+    /// A Flare button: its text and, while it is lit, the line of light across it and the star after it.
+    void drawFlare(render::Renderer &renderer, const Panel &panel, const Text &text, render::Vector2 centre,
+                   float opacity) const;
+    void drawFlareLight(render::Renderer &renderer, const Panel &panel, render::Rectangle textArea,
+                        render::Vector2 star, float opacity) const;
+    void drawFlareLine(render::Renderer &renderer, float left, float right, float middle, float y, float head,
+                       float shine, float opacity) const;
     /// Draws a toast in the look of InterfaceStyle::toast: its panel, its accent and its text.
     void drawToast(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
                    float opacity) const;

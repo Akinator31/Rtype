@@ -61,7 +61,7 @@ float ToastSystem::computeOpacity(const Toast &toast) const
 float ToastSystem::computeWidth(const Toast &toast) const
 {
     const ToastStyle &style = _style.toast;
-    const float text = _metrics.measureText(_style.button.font, toast.text, style.textSize).x;
+    const float text = _metrics.measureText(_style.button.font, toast.text, style.textSize, 0.0f).x;
     // Padding, accent, padding, text, padding
     return std::max(style.minWidth, (3.0f * style.padding) + style.accentWidth + text);
 }

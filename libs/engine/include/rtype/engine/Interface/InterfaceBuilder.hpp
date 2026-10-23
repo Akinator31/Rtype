@@ -61,6 +61,11 @@ public:
     /// A button running an action when confirmed or clicked, drawn as a glass Panel (InterfaceStyle::button).
     /// The buttons of a builder get the focus in the order they are created.
     ecs::entity_t button(const std::string &text, std::function<void()> onPress, Anchor anchor);
+    /// A button made of text alone (PanelType::Flare, InterfaceStyle::flare), as wide as its text: a line of
+    /// light traces itself across it while it has the focus. Its action runs a moment after it is pressed,
+    /// once its burst has been seen (FlareStyle::pressDelay). It gets the focus in the same order as the
+    /// other buttons.
+    ecs::entity_t flareButton(const std::string &text, std::function<void()> onPress, Anchor anchor);
     /// A small square button with a leftwards arrow, to go back to the previous screen: a glass Panel as high
     /// as the other buttons. It gets the focus in the same order as them.
     ecs::entity_t backButton(std::function<void()> onPress, Anchor anchor);

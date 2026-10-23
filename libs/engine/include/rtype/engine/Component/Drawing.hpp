@@ -62,13 +62,24 @@ struct Box {
     float outline = 0.0f;
 };
 
-/// A rounded glass panel, centred on the position of the entity, behind its text: the frame of a button. It
-/// is drawn with the ButtonStyle of the interface, between its normal and its focused look.
+/// How a Panel is drawn.
+enum class PanelType {
+    /// A rounded glass panel behind the text, drawn with InterfaceStyle::button.
+    Glass,
+    /// No panel: the text alone, crossed by a line of light with a star after it while the button is lit,
+    /// drawn with InterfaceStyle::flare. The button fits its text: the width of its Panel is not used.
+    Flare,
+};
+
+/// The frame of a button, centred on the position of the entity, behind its text: the area the mouse points
+/// at, and what lights up while the button has the focus.
 struct Panel {
     float width = 0.0f;
     float height = 0.0f;
     /// 0 for the normal look, 1 for the focused one, in between while the button fades from one to the other.
+    /// A Flare goes above 1 for a moment when it is pressed, up to FlareStyle::pressedHighlight.
     float highlight = 0.0f;
+    PanelType type = PanelType::Glass;
 };
 
 /// A 3D model, seen through the Camera of the scenes. It is drawn in the World layer, before the 2D entities,

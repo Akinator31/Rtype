@@ -22,8 +22,9 @@ void TweenSystem::apply(ecs::entity_t entity, TweenTarget target, float value)
         _opacities.emplace(entity, std::clamp(value, 0.0f, 1.0f));
         break;
     case TweenTarget::Highlight:
+        // A pressed Flare shines beyond its lit look, above 1
         if (_panels.has(entity)) {
-            _panels.get(entity).highlight = std::clamp(value, 0.0f, 1.0f);
+            _panels.get(entity).highlight = std::max(value, 0.0f);
         }
         break;
     }

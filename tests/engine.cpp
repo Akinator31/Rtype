@@ -42,9 +42,10 @@ class FakeMetrics : public Metrics
 {
 public:
     [[nodiscard]] rtype::render::Vector2 measureText(rtype::render::FontId /*font*/, const std::string &text,
-                                                     float size) const override
+                                                     float size, float spacing) const override
     {
-        return {0.5f * size * static_cast<float>(text.size()), size};
+        const auto count = static_cast<float>(text.size());
+        return {(0.5f * size * count) + (spacing * std::max(count - 1.0f, 0.0f)), size};
     }
     [[nodiscard]] rtype::render::Vector2 gameSize() const override { return {1920.0f, 1080.0f}; }
     [[nodiscard]] rtype::render::Rectangle visibleArea() const override { return screen; }
@@ -457,6 +458,91 @@ TEST_CASE("A back button is a square button with an arrow", "[engine][interface]
 
     world.press({Key::Enter});
     CHECK(pressed == 1);
+}
+
+TEST_CASE("A flare button is as wide as its spaced text and its star", "[engine][interface]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t play = ui.flareButton("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+
+    world.update();
+    const FlareStyle &style = world.style.flare;
+    // 4 letters half as wide as high, and 3 spaces between them
+    const float textWidth = (4.0f * style.textSize / 2.0f) + (3.0f * style.letterSpacing);
+    const Hitbox &hitbox = world.ecs.getComponent<Hitbox>(play);
+    CHECK(world.ecs.getComponent<Panel>(play).type == PanelType::Flare);
+    CHECK(hitbox.baseWidth == style.computeWidth(textWidth));
+    CHECK(hitbox.baseHeight == style.height);
+    CHECK(positionOf(world, play).x == 20.0f + (hitbox.baseWidth / 2.0f));
+}
+
+TEST_CASE("A flare button runs its action once its burst has been seen, once per press",
+          "[engine][interface]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    int pressed = 0;
+    ui.flareButton("PLAY", [&pressed] { ++pressed; }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    world.update();
+
+    world.press({Key::Enter});
+    world.press({Key::Enter});
+    CHECK(pressed == 0);
+
+    world.update(world.style.flare.pressDelay);
+    CHECK(pressed == 1);
+    world.update(world.style.flare.pressDelay);
+    CHECK(pressed == 1);
+}
+
+TEST_CASE("A flare button traces its line slower than it goes out", "[engine][tween]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t play = ui.flareButton("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    ui.flareButton("QUIT", [] {}, {AnchorPoint::TopLeft, 20.0f, 100.0f});
+    world.update();
+    const auto highlightOf = [&] { return world.ecs.getComponent<Panel>(play).highlight; };
+
+    // The keyboard lights the focused button
+    world.press({Key::Down});
+    world.press({Key::Up});
+    world.update(world.style.flare.fadeDuration);
+    CHECK(highlightOf() < 1.0f);
+    world.update(world.style.flare.traceDuration);
+    CHECK(std::abs(highlightOf() - 1.0f) < 1e-6f);
+
+    world.press({Key::Down});
+    world.update(world.style.flare.fadeDuration);
+    CHECK(std::abs(highlightOf()) < 1e-6f);
+}
+
+TEST_CASE("A pressed flare button shines brighter for a moment, then stays lit", "[engine][tween]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t play = ui.flareButton("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    world.update();
+    const auto highlightOf = [&] { return world.ecs.getComponent<Panel>(play).highlight; };
+
+    world.press({Key::Enter});
+    CHECK(highlightOf() > 1.0f);
+
+    world.update(world.style.flare.pressDuration);
+    world.update(world.style.flare.fadeDuration);
+    CHECK(std::abs(highlightOf() - 1.0f) < 1e-6f);
+}
+
+TEST_CASE("A glass button does not shine beyond its lit look when it is pressed", "[engine][tween]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t play = ui.button("Play", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    world.update();
+
+    world.press({Key::Enter});
+    CHECK(world.ecs.getComponent<Panel>(play).highlight <= 1.0f);
 }
 
 TEST_CASE("A header puts the title after the back button", "[engine][interface]")

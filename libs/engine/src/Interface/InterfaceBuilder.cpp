@@ -84,6 +84,19 @@ ecs::entity_t InterfaceBuilder::button(const std::string &text, std::function<vo
     return createButton(text, _style.button.width, std::move(onPress), anchor);
 }
 
+ecs::entity_t InterfaceBuilder::flareButton(const std::string &text, std::function<void()> onPress,
+                                            Anchor anchor)
+{
+    const FlareStyle &style = _style.flare;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, text, style.font, style.textSize, style.text);
+    _ecs.addComponent<Panel>(entity, 0.0f, style.height, 0.0f, PanelType::Flare);
+    _ecs.addComponent<Focusable>(entity, _count++);
+    _ecs.addComponent<Scale>(entity);
+    _ecs.addComponent<Button>(entity, std::move(onPress));
+    return entity;
+}
+
 ecs::entity_t InterfaceBuilder::backButton(std::function<void()> onPress, Anchor anchor)
 {
     return createButton(leftwardsArrow, _style.button.height, std::move(onPress), anchor);

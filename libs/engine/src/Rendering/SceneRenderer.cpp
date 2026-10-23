@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,48 @@ PanelLook mix(const PanelLook &from, const PanelLook &to, float amount)
 {
     return {mix(from.left, to.left, amount), mix(from.right, to.right, amount),
             mix(from.border, to.border, amount), mix(from.glow, to.glow, amount)};
+}
+
+/// The colour more or less opaque, as much as a light more or less strong: brighter beyond 1.
+render::Color brightened(render::Color color, float strength)
+{
+    color.a = static_cast<std::uint8_t>(std::clamp(static_cast<float>(color.a) * strength, 0.0f, 255.0f));
+    return color;
+}
+
+/// A four-pointed star turned by `angle` degrees: a thin triangle from the centre to each point.
+void drawStar(render::Renderer &renderer, render::Vector2 centre, float size, float thickness, float angle,
+              render::Color color)
+{
+    const float radians = angle * std::numbers::pi_v<float> / 180.0f;
+    const render::Vector2 along{std::cos(radians), std::sin(radians)};
+    const render::Vector2 across{-along.y, along.x};
+    const float half = thickness / 2.0f;
+    for (const render::Vector2 arm : {along, across}) {
+        const render::Vector2 first{centre.x + (arm.y * half), centre.y - (arm.x * half)};
+        const render::Vector2 second{centre.x - (arm.y * half), centre.y + (arm.x * half)};
+        renderer.drawTriangle(first, second, {centre.x + (arm.x * size), centre.y + (arm.y * size)}, color);
+        renderer.drawTriangle(first, second, {centre.x - (arm.x * size), centre.y - (arm.y * size)}, color);
+    }
+}
+
+/// A horizontal line from `left` to `right`, its colour going from `from` to `to`, cut at `end`.
+void drawFadingLine(render::Renderer &renderer, float left, float right, float y, float thickness,
+                    render::Color from, render::Color to, float end)
+{
+    const float cut = std::min(right, end);
+    if (cut <= left) {
+        return;
+    }
+    const render::Color last = mix(from, to, (cut - left) / (right - left));
+    const render::Rectangle area{left, y - (thickness / 2.0f), cut - left, thickness};
+    renderer.drawRoundedRectangle(area, thickness / 2.0f, from, last);
+}
+
+render::Color clear(render::Color color)
+{
+    color.a = 0;
+    return color;
 }
 
 render::Rectangle grow(render::Rectangle area, float margin)
@@ -241,7 +284,7 @@ void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, re
                               float scale, float opacity) const
 {
     const ButtonStyle &style = _style.button;
-    const PanelLook look = mix(style.normal, style.focused, panel.highlight);
+    const PanelLook look = mix(style.normal, style.focused, std::clamp(panel.highlight, 0.0f, 1.0f));
     const float width = panel.width * scale;
     const float height = panel.height * scale;
     const render::Rectangle area{centre.x - width / 2.0f, centre.y - height / 2.0f, width, height};
@@ -255,6 +298,83 @@ void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, re
     renderer.drawRoundedRectangle(area, radius, faded(look.left, opacity), faded(look.right, opacity));
     renderer.drawRoundedRectangleOutline(area, radius, style.borderThickness * scale,
                                          faded(look.border, opacity));
+}
+
+/// The line fades in from its left end to the middle of the text, then stays bright up to the star; it is
+/// drawn from its left end up to `head`, where it is being traced.
+void SceneRenderer::drawFlareLine(render::Renderer &renderer, float left, float right, float middle, float y,
+                                  float head, float shine, float opacity) const
+{
+    const FlareStyle &style = _style.flare;
+    const render::Color bright = faded(brightened(style.line, shine), opacity);
+    drawFadingLine(renderer, left, middle, y, style.lineThickness, clear(bright), bright, head);
+    drawFadingLine(renderer, middle, right, y, style.lineThickness, bright, bright, head);
+}
+
+/// While the button lights up, the line runs from left to right with a bright head, and the star flares when
+/// the line reaches it. When the button is pressed, the star bursts and turns, and a pulse of light runs from
+/// it to the far end of the line.
+void SceneRenderer::drawFlareLight(render::Renderer &renderer, const Panel &panel, render::Rectangle textArea,
+                                   render::Vector2 star, float opacity) const
+{
+    const FlareStyle &style = _style.flare;
+    const float trace = std::clamp(panel.highlight, 0.0f, 1.0f);
+    const float burst =
+        std::clamp((panel.highlight - 1.0f) / std::max(style.pressedHighlight - 1.0f, 0.001f), 0.0f, 1.0f);
+    const float shine = std::max(panel.highlight, 1.0f);
+    const float left = textArea.x - style.lineBefore;
+    const float right = star.x;
+    const float head = left + ((right - left) * trace);
+    const render::Color white = faded(style.litText, opacity);
+
+    drawBlurred(renderer, textArea, textArea.height / 2.0f, style.textGlowBlur,
+                faded(style.textGlow, opacity * trace));
+    const float coreEnd = std::min(head, right);
+    if (coreEnd > textArea.x) {
+        const render::Rectangle core{textArea.x, star.y - (style.lineThickness / 2.0f), coreEnd - textArea.x,
+                                     style.lineThickness};
+        drawBlurred(renderer, core, style.lineThickness, style.lineGlowBlur * shine,
+                    faded(brightened(style.lineGlow, shine), opacity));
+    }
+    drawFlareLine(renderer, left, right, textArea.x + (textArea.width / 2.0f), star.y, head, shine, opacity);
+    if (trace < 1.0f) {
+        drawFadingLine(renderer, head - style.pulseLength, head, star.y, 2.0f * style.lineThickness,
+                       clear(white), white, head);
+    }
+
+    // The star flares once the head of the line touches its left point, until the head reaches its centre
+    const float starLeft = star.x - style.starSize;
+    const float appearance = std::clamp((head - starLeft) / (right - starLeft), 0.0f, 1.0f);
+    if (appearance > 0.0f) {
+        const float growth = 1.0f + ((style.burstScale - 1.0f) * burst);
+        const float size = style.starSize * ease(Easing::EaseOutBack, appearance) * growth;
+        drawBlurred(renderer, {star.x - size / 2.0f, star.y - size / 2.0f, size, size}, size / 2.0f,
+                    style.lineGlowBlur * (1.0f + burst), faded(brightened(style.lineGlow, shine), opacity));
+        drawStar(renderer, star, size, style.starThickness * (1.0f + burst), style.burstTurn * burst, white);
+    }
+    if (burst > 0.0f) {
+        const float pulse = star.x - ((star.x - left) * (1.0f - burst));
+        const render::Color fading = faded(style.litText, opacity * burst);
+        drawFadingLine(renderer, pulse, pulse + style.pulseLength, star.y, 2.0f * style.lineThickness, fading,
+                       clear(fading), right);
+    }
+}
+
+void SceneRenderer::drawFlare(render::Renderer &renderer, const Panel &panel, const Text &text,
+                              render::Vector2 centre, float opacity) const
+{
+    const FlareStyle &style = _style.flare;
+    const float trace = std::clamp(panel.highlight, 0.0f, 1.0f);
+    const render::Vector2 measured =
+        renderer.measureText(text.font, text.text, text.size, style.letterSpacing);
+    const render::Vector2 topLeft{centre.x - (style.computeWidth(measured.x) / 2.0f) + style.padding,
+                                  centre.y - (measured.y / 2.0f)};
+    const render::Vector2 star{topLeft.x + measured.x + style.starGap + style.starSize, centre.y};
+    if (trace > 0.0f) {
+        drawFlareLight(renderer, panel, {topLeft.x, topLeft.y, measured.x, measured.y}, star, opacity);
+    }
+    renderer.drawText(text.font, text.text, topLeft, text.size,
+                      faded(mix(style.text, style.litText, trace), opacity), style.letterSpacing);
 }
 
 void SceneRenderer::drawToast(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
@@ -338,8 +458,13 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                                   sprite.height * scale},
                                  0.0f, faded(sprite.tint, opacity));
         }
-        if (hasPanel) {
+        const bool isFlare = hasPanel && panels.get(entity).type == PanelType::Flare;
+        if (hasPanel && !isFlare) {
             drawPanel(renderer, panels.get(entity), {centre.x, centre.y}, scale, opacity);
+        }
+        if (isFlare && texts.has(entity)) {
+            drawFlare(renderer, panels.get(entity), texts.get(entity), {centre.x, centre.y}, opacity);
+            continue;
         }
         if (toasts.has(entity)) {
             drawToast(renderer, toasts.get(entity), {centre.x, centre.y}, opacity);

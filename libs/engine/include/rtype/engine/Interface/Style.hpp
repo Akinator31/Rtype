@@ -58,6 +58,60 @@ struct ButtonStyle {
     std::optional<SoundEffect> clickSound;
 };
 
+/// Look of the buttons made of text alone (PanelType::Flare): spaced letters. When the button lights up, a
+/// line of light traces itself across the text and a star flares after it; when it is pressed, the star
+/// bursts and a pulse of light runs along the line, which shines brighter. The sounds are those of
+/// ButtonStyle. Sizes are in game units, durations in seconds.
+struct FlareStyle {
+    render::FontId font;
+    float textSize = 30.0f;
+    /// Space added between two letters.
+    float letterSpacing = 12.0f;
+    /// The area the mouse points at: the text and the star, with this space around them, as high as `height`.
+    float padding = 12.0f;
+    float height = 56.0f;
+    render::Color text{255, 255, 255, 150};
+    render::Color litText = render::colors::White;
+    /// Halo behind the lit text.
+    render::Color textGlow{255, 255, 255, 24};
+    float textGlowBlur = 30.0f;
+
+    /// The line starts this far before the text, fades in until the middle of the text, and ends on the
+    /// star.
+    render::Color line{255, 255, 255, 170};
+    float lineThickness = 1.5f;
+    float lineBefore = 150.0f;
+    /// Light spreading around the line, which grows with it when the button is pressed.
+    render::Color lineGlow{255, 255, 255, 40};
+    float lineGlowBlur = 8.0f;
+
+    /// A four-pointed star, this far after the text, its points this long.
+    float starGap = 18.0f;
+    float starSize = 9.0f;
+    float starThickness = 2.0f;
+
+    /// Time for the line to trace itself when the button lights up, and to go out when it is left.
+    float traceDuration = 0.4f;
+    float fadeDuration = 0.15f;
+
+    /// Highlight reached when the button is pressed, and the time it takes to come back to 1. The action of
+    /// the button runs pressDelay after the press, once the burst has been seen.
+    float pressedHighlight = 2.0f;
+    float pressDuration = 0.45f;
+    float pressDelay = 0.3f;
+    /// The star grows by burstScale and turns by burstTurn degrees when pressed.
+    float burstScale = 2.6f;
+    float burstTurn = 90.0f;
+    /// The pulse of light that runs from the star to the far end of the line.
+    float pulseLength = 70.0f;
+
+    /// Width of a button whose text is this wide.
+    [[nodiscard]] float computeWidth(float textWidth) const
+    {
+        return padding + textWidth + starGap + (2.0f * starSize) + padding;
+    }
+};
+
 /// Look of the console: a dark band over the game, its lines, and the command line where commands are typed
 /// (a TextFieldType::Console field).
 struct ConsoleStyle {
@@ -163,6 +217,7 @@ struct InterfaceStyle {
     /// Background of the selected text in a text field.
     render::Color selection{0, 121, 241, 160};
     ButtonStyle button{};
+    FlareStyle flare{};
     ConsoleStyle console{};
     ToastStyle toast{};
 };

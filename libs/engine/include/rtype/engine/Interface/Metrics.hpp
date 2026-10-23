@@ -24,8 +24,9 @@ public:
     virtual ~Metrics() = default;
 
     /// Size that a text takes once drawn, in game units.
+    /// @param spacing Space added between two characters (see render::Renderer::drawText()).
     [[nodiscard]] virtual render::Vector2 measureText(render::FontId font, const std::string &text,
-                                                      float size) const = 0;
+                                                      float size, float spacing) const = 0;
     /// Size of the game, the same on every screen.
     [[nodiscard]] virtual render::Vector2 gameSize() const = 0;
     /// Part of the game shown on the screen: the game area, plus what is around it when the screen has
@@ -45,8 +46,8 @@ public:
     /// @param renderer It must outlive the metrics.
     explicit RendererMetrics(const render::Renderer &renderer) : _renderer(renderer) {}
 
-    [[nodiscard]] render::Vector2 measureText(render::FontId font, const std::string &text,
-                                              float size) const override;
+    [[nodiscard]] render::Vector2 measureText(render::FontId font, const std::string &text, float size,
+                                              float spacing) const override;
     [[nodiscard]] render::Vector2 gameSize() const override;
     [[nodiscard]] render::Rectangle visibleArea() const override;
     [[nodiscard]] render::Vector2 windowToGame(render::Vector2 position) const override;

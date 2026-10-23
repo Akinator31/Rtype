@@ -18,7 +18,7 @@ std::optional<render::Vector2> AnchorSystem::sizeOf(ecs::entity_t entity) const
     }
     if (_texts.has(entity)) {
         const Text &text = _texts.get(entity);
-        return _metrics.measureText(text.font, text.text, text.size);
+        return _metrics.measureText(text.font, text.text, text.size, 0.0f);
     }
     if (_sprites.has(entity)) {
         return render::Vector2{_sprites.get(entity).width, _sprites.get(entity).height};
