@@ -27,8 +27,8 @@ void EntitySounds::addSound(ecs::Ecs &ecs, ecs::entity_t entity, game::EntityKin
         return;
     }
     const float pan = ((x / game::GameWidth) * 2.0f - 1.0f) * PanSpread;
-    ecs.addComponent<engine::SoundEffect>(
-        entity, found->second.sound, audio::PlaySettings{.volume = found->second.volume, .pan = pan});
+    ecs.addComponent<engine::SoundEffect>(entity, found->second.sound,
+                                          audio::PlaySettings{.volume = found->second.volume, .pan = pan});
 }
 
 } // namespace rtype::client
