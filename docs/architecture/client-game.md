@@ -21,6 +21,7 @@ apps/client/src/Game/
   ShipLooks.cpp          the 3D models of the ships: fitted to their box, rolling, flames
   ShotLooks.cpp          the models of energy of the shots
   ImpactLooks.cpp        the impacts of the shots and the explosions of the ships (ImpactSystem plays them)
+  ShotSounds.cpp         the sound of each kind of shot, given to it when it appears
   GameScenes.cpp         the game scene, its HUD, and the pause menu
 ```
 
@@ -163,6 +164,23 @@ Online, `ENTITIES_DESTROYED` arrives while the entity is still drawn, about 100 
 the same model share it in different poses: the renderer poses the model again before drawing each one, in
 the glow of the frame too.
 
+### Shot sounds
+
+A shot that appears in the game plays the sound of the weapon that fired it (`sounds/fx/blaster/`):
+
+| Shot | Weapon | Sound | Volume |
+|---|---|---|---|
+| Shot of a player | `player_cannon` | `basical_blaster.wav` | 0.5 |
+| Bydo shot (`pulse`) | `blaster` of the scouts | `low_blaster.wav`, the shortest: they fire 12 times per second | 0.35 |
+| Bydo plasma orb | `plasma_gun` of the gunners | `big_blaster.wav` | 0.7 |
+
+The clients see the kind of an entity, not the weapon that fired it, so the sounds go by kind, like the looks:
+`ShotSound` (`GameSessionSystem::setShotSound()`, set by `GameScenes`) gives the sound and its volume. The
+`GameSessionSystem` does not play it: it gives the entity of a shot that appears an `engine::SoundEffect`, heard
+from the side of the screen the shot is on (pan up to 0.6 at the edges), and the engine's `SoundSystem`,
+registered right after the game, plays it in the same frame ([Audio](audio.md#in-the-engine)). Online, it plays
+when the shot is drawn, about 100 ms after it was fired. `medium_blaster.wav` is not used yet.
+
 ## Tests
 
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:
@@ -180,7 +198,9 @@ the glow of the frame too.
   when its scene closes;
 - the impacts: an entity killed leaves the impact of its kind where it was last drawn, even when its
   destruction comes first (online), fades out, and is gone at the end of its animation; an entity removed, or
-  of a kind without an impact, leaves none.
+  of a kind without an impact, leaves none;
+- the shot sounds: a shot of a kind given a sound appears with its `SoundEffect`, its volume, and a pan on
+  its side of the screen; the other entities have none.
 
 ```sh
 ./build/bin/rtype_tests "[client]"
@@ -190,5 +210,5 @@ the glow of the frame too.
 
 - **No interpolation offline**: the entities move 60 times per second, the rate of the simulation; online,
   they are interpolated between the snapshots ([The client online](client-online.md#interpolation)).
-- **No sound** with the impacts and explosions yet.
+- **No sound** with the impacts and explosions yet, only with the shots.
 - **No end of game**: the rules have no lives to lose yet (`server: gameplay`).

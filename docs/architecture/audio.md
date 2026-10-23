@@ -81,6 +81,25 @@ audio.play(explosion, {.volume = 0.8f, .pitch = 0.9f, .pan = -0.5f});
 A music is too long to be decoded in memory at once: it is read from its file in small parts while it plays.
 `update()` reads the next part; it must be called **once per frame**, otherwise the music stutters, then stops.
 
+## In the engine
+
+In the client, no system calls the `AudioPlayer`, as none calls the `Renderer`: a system gives a
+`SoundEffect` (`rtype/engine/Component/Sound.hpp`: a `SoundId` and its `PlaySettings`) to an entity, and the
+engine's `SoundSystem` plays it at its next update, then removes it from the entity. The `SoundSystem` also calls
+`AudioPlayer::update()`, once per frame, for the music.
+
+```cpp
+AudioDevice device;
+AudioPlayer audio(device, applicationDirectory() / "assets");   // before the engine: it outlives the system
+Engine engine;
+engine.getEcs().registerSystem<SoundSystem>(audio);             // after the systems that give sounds
+
+ecs.addComponent<SoundEffect>(shot, audio.loadSound("sounds/shot.wav"), PlaySettings{.volume = 0.5f});
+```
+
+The engine links the audio library, which is why it stays client-only with the rendering and the input. The
+shots of the game are its first users ([A game in the client](client-game.md#shot-sounds)).
+
 ## Volumes
 
 | Volume | Set with | Applies to |
