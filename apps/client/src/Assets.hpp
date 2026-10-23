@@ -30,3 +30,12 @@
 #define RTYPE_MODEL_IMPACT_BURST "models/fx/impacts/impact_burst.glb"
 #define RTYPE_MODEL_IMPACT_SPLASH "models/fx/impacts/impact_splash.glb"
 #define RTYPE_MODEL_IMPACT_EXPLOSION "models/fx/impacts/impact_explosion.glb"
+
+// Sounds
+#define RTYPE_SOUND_BASICAL_BLASTER "sounds/fx/blaster/basical_blaster.wav"
+#define RTYPE_SOUND_LOW_BLASTER "sounds/fx/blaster/low_blaster.wav"
+#define RTYPE_SOUND_BIG_BLASTER "sounds/fx/blaster/big_blaster.wav"
+#define RTYPE_SOUND_DESTRUCTION "sounds/fx/destruction.wav"
+#define RTYPE_SOUND_COLLISION "sounds/fx/collision.wav"
+#define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
+#define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"

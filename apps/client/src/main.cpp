@@ -12,6 +12,8 @@
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "rtype/audio/AudioDevice.hpp"
+#include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -41,6 +43,9 @@ namespace
 {
 
 constexpr float CollisionCellSize = 64.0f;
+/// How loud the buttons are: the hover is heard at each move in a menu, the click file is quiet.
+constexpr float ButtonHoverVolume = 0.4f;
+constexpr float ButtonClickVolume = 1.0f;
 
 bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &renderer,
                    rtype::render::ResourceManager &resources)
@@ -151,6 +156,7 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
 /// @return The system that plays the games.
 rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
                                                   rtype::input::Devices &devices,
+                                                  rtype::audio::AudioPlayer &audio,
                                                   const rtype::engine::RendererMetrics &metrics,
                                                   const rtype::engine::InterfaceStyle &style)
 {
@@ -161,6 +167,8 @@ rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
     auto &sessions =
         ecs.registerSystem<rtype::client::GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
     ecs.registerSystem<rtype::client::ImpactSystem>(ecs);
+    // After the menus and the game, to play their sounds in the frame they give them
+    ecs.registerSystem<rtype::engine::SoundSystem>(audio);
     ecs.registerSystem<rtype::engine::WidgetTextSystem>();
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
     ecs.registerSystem<rtype::engine::TweenSystem>();
@@ -181,6 +189,8 @@ void run()
     using namespace rtype::render;
 
     Window window({.fullscreen = true});
+    const rtype::audio::AudioDevice audioDevice;
+    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets");
     rtype::engine::Engine engine;
     ResourceManager resources(window, applicationDirectory() / "assets", engine.assetLoading().queue());
     Renderer renderer(window, resources);
@@ -192,7 +202,11 @@ void run()
 
     const rtype::engine::InterfaceStyle style{
         .font = resources.loadFont(RTYPE_FONT_TITLE, 160),
-        .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96)},
+        .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96),
+                   .hoverSound = rtype::engine::SoundEffect{audio.loadSound(RTYPE_SOUND_BUTTON_HOVER),
+                                                            {.volume = ButtonHoverVolume}},
+                   .clickSound = rtype::engine::SoundEffect{audio.loadSound(RTYPE_SOUND_BUTTON_CLICK),
+                                                            {.volume = ButtonClickVolume}}},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
     rtype::localization::Localization translations("en");
@@ -205,8 +219,8 @@ void run()
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
     engine.setInputSource(devices);
-    rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, metrics, style);
-    rtype::client::GameScenes games(engine, resources, metrics, style, sessions, translations);
+    rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, audio, metrics, style);
+    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style,
                                        applicationDirectory() / "server.pub", translations);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);

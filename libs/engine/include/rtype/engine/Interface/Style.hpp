@@ -1,11 +1,13 @@
 #pragma once
 
 #include "rtype/engine/Component/Layout.hpp"
+#include "rtype/engine/Component/Sound.hpp"
 #include "rtype/engine/Component/Toast.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
 #include <cstddef>
+#include <optional>
 
 namespace rtype::engine
 {
@@ -21,7 +23,7 @@ struct PanelLook {
 };
 
 /// Look of the buttons: a frosted glass panel of a fixed size, which lights up while the button has the
-/// focus. Sizes are in game units.
+/// focus, and their sounds. Sizes are in game units.
 struct ButtonStyle {
     /// Font of the text of the buttons.
     render::FontId font;
@@ -48,6 +50,12 @@ struct ButtonStyle {
 
     PanelLook normal{{255, 255, 255, 102}, {255, 255, 255, 18}, {255, 255, 255, 102}, {191, 224, 255, 0}};
     PanelLook focused{{255, 255, 255, 158}, {217, 237, 255, 51}, {255, 255, 255, 242}, {191, 224, 255, 128}};
+
+    /// Played when a panel lights up, under the pointer or with the focus, but not when a menu appears with
+    /// its first button lit. None by default.
+    std::optional<SoundEffect> hoverSound;
+    /// Played when a button is pressed, before its action. None by default.
+    std::optional<SoundEffect> clickSound;
 };
 
 /// Look of the console: a dark band over the game, its lines, and the command line where commands are typed

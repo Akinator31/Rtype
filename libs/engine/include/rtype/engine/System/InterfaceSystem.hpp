@@ -6,6 +6,7 @@
 #include "rtype/ecs/System/System.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Sound.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Navigation.hpp"
@@ -32,6 +33,8 @@ namespace rtype::engine
 /// focus. A console text field keeps its size. A widget with a Panel (a button) keeps its size too: its panel
 /// lights up instead, fading to the focused look while the pointer is over it, or while it has the focus once
 /// the keyboard or a gamepad is used.
+/// - The buttons sound (ButtonStyle::hoverSound, clickSound) when their panel lights up and when they are
+///   pressed: they are given a SoundEffect, which the SoundSystem plays.
 ///
 /// The actions of the widgets run after the update (Ecs::defer()): a button may open a menu, which creates
 /// entities while this system is still going through the widgets.
@@ -63,6 +66,7 @@ class InterfaceSystem : public ecs::System
     ecs::ComponentCache<Slider> &_sliders;
     ecs::ComponentCache<Choice> &_choices;
     ecs::ComponentCache<TextField> &_fields;
+    ecs::ComponentCache<SoundEffect> &_sounds;
 
     [[nodiscard]] std::vector<ecs::entity_t> widgets();
     [[nodiscard]] bool contains(ecs::entity_t widget, render::Vector2 point) const;
@@ -71,7 +75,10 @@ class InterfaceSystem : public ecs::System
     void animateFocus(ecs::entity_t widget);
     void animateUnfocus(ecs::entity_t widget);
     [[nodiscard]] bool isLit(ecs::entity_t widget, std::optional<ecs::entity_t> hovered) const;
-    void lightPanels(const std::vector<ecs::entity_t> &widgets, std::optional<ecs::entity_t> hovered);
+    /// @param appeared The widgets have just appeared: their panels light up silently.
+    void lightPanels(const std::vector<ecs::entity_t> &widgets, std::optional<ecs::entity_t> hovered,
+                     bool appeared);
+    void playSound(ecs::entity_t widget, const std::optional<SoundEffect> &sound);
     void updatePointerMode(bool mouseMoved);
     void activate(ecs::entity_t widget);
     void click(ecs::entity_t widget);

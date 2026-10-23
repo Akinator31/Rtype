@@ -13,6 +13,7 @@ add_library(r-type_client_core STATIC
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
     src/Game/EntityLook.cpp
+    src/Game/EntitySounds.cpp
     src/Game/GameScenes.cpp
     src/Game/GameSessionSystem.cpp
     src/Game/GameView.cpp

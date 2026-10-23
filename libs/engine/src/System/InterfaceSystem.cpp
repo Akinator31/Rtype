@@ -24,7 +24,7 @@ InterfaceSystem::InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, Sc
       _hitboxes(use<Hitbox>(caches)), _positions(use<ecs::Position>(caches)), _scales(use<Scale>(caches)),
       _tweens(use<Tween>(caches)), _panels(use<Panel>(caches)), _buttons(use<Button>(caches)),
       _toggles(use<Toggle>(caches)), _sliders(use<Slider>(caches)), _choices(use<Choice>(caches)),
-      _fields(use<TextField>(caches))
+      _fields(use<TextField>(caches)), _sounds(use<SoundEffect>(caches))
 {
 }
 
@@ -107,7 +107,7 @@ bool InterfaceSystem::isLit(ecs::entity_t widget, std::optional<ecs::entity_t> h
 }
 
 void InterfaceSystem::lightPanels(const std::vector<ecs::entity_t> &widgets,
-                                  std::optional<ecs::entity_t> hovered)
+                                  std::optional<ecs::entity_t> hovered, bool appeared)
 {
     for (const ecs::entity_t widget : widgets) {
         if (!_panels.has(widget)) {
@@ -122,7 +122,17 @@ void InterfaceSystem::lightPanels(const std::vector<ecs::entity_t> &widgets,
                                           .to = target,
                                           .duration = _style.button.fadeDuration,
                                           .easing = Easing::EaseOut});
+            if (target == 1.0f && !appeared) {
+                playSound(widget, _style.button.hoverSound);
+            }
         }
+    }
+}
+
+void InterfaceSystem::playSound(ecs::entity_t widget, const std::optional<SoundEffect> &sound)
+{
+    if (sound) {
+        _sounds.emplace(widget, *sound);
     }
 }
 
@@ -143,6 +153,7 @@ void InterfaceSystem::updatePointerMode(bool mouseMoved)
 void InterfaceSystem::activate(ecs::entity_t widget)
 {
     if (_buttons.has(widget)) {
+        playSound(widget, _style.button.clickSound);
         if (auto onPress = _buttons.get(widget).onPress) {
             _ecs.defer(std::move(onPress));
         }
@@ -210,7 +221,8 @@ void InterfaceSystem::update(float elapsed)
     }
     const auto focusedIt =
         std::ranges::find_if(list, [this](ecs::entity_t entity) { return _focused.has(entity); });
-    if (focusedIt == list.end()) {
+    const bool appeared = focusedIt == list.end();
+    if (appeared) {
         setFocus(list, list.front());
     }
     const render::Vector2 pointer = _metrics.windowToGame({mouse.x, mouse.y});
@@ -261,7 +273,7 @@ void InterfaceSystem::update(float elapsed)
             adjust(*hovered, wheel > 0.0f ? 1 : -1);
         }
     }
-    lightPanels(list, hovered);
+    lightPanels(list, hovered, appeared);
     // Characters typed while no text field has the focus are lost, not delayed until a field gets it. raylib
     // already drops them every frame; other input sources may keep them, so they are dropped here too.
     (void)_input.takeTypedText();

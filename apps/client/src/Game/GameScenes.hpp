@@ -2,6 +2,7 @@
 
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
+#include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
@@ -31,7 +32,7 @@ inline constexpr const char *PauseScene = "pause";
 ///
 /// @code
 /// auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
-/// GameScenes games(engine, resources, metrics, style, sessions);
+/// GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
 /// games.play(std::make_unique<LocalSession>()); // "Play" > "Solo"
 /// @endcode
 class GameScenes
@@ -53,9 +54,9 @@ class GameScenes
 
 public:
     /// Declares the scenes. Everything given must outlive the engine.
-    GameScenes(engine::Engine &engine, render::ResourceManager &resources, const engine::Metrics &metrics,
-               const engine::InterfaceStyle &style, GameSessionSystem &sessions,
-               localization::Localization &translations);
+    GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
+               const engine::Metrics &metrics, const engine::InterfaceStyle &style,
+               GameSessionSystem &sessions, localization::Localization &translations);
 
     GameScenes(const GameScenes &) = delete;
     GameScenes &operator=(const GameScenes &) = delete;
