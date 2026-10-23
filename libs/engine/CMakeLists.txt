@@ -1,5 +1,5 @@
-# Game engine built on the ECS: events, plus the client side connecting the ECS to the rendering, the input and
-# the interface (menus as entities, see ADR 0007).
+# Game engine built on the ECS: events, plus the client side connecting the ECS to the rendering, the input,
+# the sound and the interface (menus as entities, see ADR 0007).
 add_library(rtype_engine
     src/Component/Animation.cpp
     src/Component/Layout.cpp
@@ -20,6 +20,7 @@ add_library(rtype_engine
     src/System/HitboxSystem.cpp
     src/System/InterfaceSystem.cpp
     src/System/ModelAnimationSystem.cpp
+    src/System/SoundSystem.cpp
     src/System/SpinSystem.cpp
     src/System/ToastSystem.cpp
     src/System/TweenSystem.cpp
@@ -28,4 +29,4 @@ add_library(rtype_engine
 add_library(rtype::engine ALIAS rtype_engine)
 target_include_directories(rtype_engine PUBLIC include)
 # Public: the public headers use their types
-target_link_libraries(rtype_engine PUBLIC rtype::ecs rtype::input rtype::render rtype::save PRIVATE rtype::physics rtype_options)
+target_link_libraries(rtype_engine PUBLIC rtype::audio rtype::ecs rtype::input rtype::render rtype::save PRIVATE rtype::physics rtype_options)

@@ -8,6 +8,8 @@
 #include "rtype/engine/Engine.hpp"
 
 #include "FakeInput.hpp"
+#include "rtype/audio/AudioDevice.hpp"
+#include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -17,6 +19,8 @@
 
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -1295,4 +1299,29 @@ TEST_CASE("Switching a model animation fades from the previous one", "[engine][a
     CHECK(animation.previousAnimation == 2);
     CHECK(animation.previousTime == 1.5f);
     CHECK(animation.fadeDuration == 0.75f);
+}
+
+TEST_CASE("The sound system plays each sound effect once, then takes it from its entity", "[engine][sound]")
+{
+    // Audio is disabled: the sound file is only checked to exist, and nothing is heard
+    const std::filesystem::path assets = std::filesystem::temp_directory_path() / "rtype_engine_sounds";
+    std::filesystem::create_directories(assets);
+    std::ofstream(assets / "shot.wav") << "fake";
+    {
+        const rtype::audio::AudioDevice device({.enabled = false});
+        rtype::audio::AudioPlayer audio(device, assets);
+        Engine engine;
+        rtype::ecs::Ecs &ecs = engine.getEcs();
+        ecs.registerSystem<SoundSystem>(audio);
+        const entity_t shot = ecs.createEntity();
+        ecs.addComponent<SoundEffect>(shot, audio.loadSound("shot.wav"),
+                                      rtype::audio::PlaySettings{.pan = -0.5f});
+
+        engine.update(0.016f);
+        CHECK(ecs.isAlive(shot));
+        CHECK_FALSE(ecs.hasComponent<SoundEffect>(shot));
+        engine.update(0.016f);
+        CHECK_FALSE(ecs.hasComponent<SoundEffect>(shot));
+    }
+    std::filesystem::remove_all(assets);
 }
