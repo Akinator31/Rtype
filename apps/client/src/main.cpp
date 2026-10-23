@@ -53,7 +53,9 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     using namespace rtype::render;
     const auto title = resources.loadFontAsync(RTYPE_FONT_TITLE, 160);
     const auto button = resources.loadFontAsync(RTYPE_FONT_BUTTON, 96);
+    const auto flare = resources.loadFontAsync(RTYPE_FONT_FLARE, 96);
     const auto sky = resources.loadTextureAsync(RTYPE_IMAGE_STARFIELD, TextureFiltering::Smooth);
+    const auto logo = resources.loadTextureAsync(RTYPE_IMAGE_LOGO, TextureFiltering::Smooth);
     constexpr std::array modelPaths{
         RTYPE_MODEL_PLANET,
         RTYPE_MODEL_PLANET_DUST,
@@ -73,6 +75,8 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         RTYPE_MODEL_IMPACT_SPLASH,
         RTYPE_MODEL_IMPACT_EXPLOSION,
     };
+    // The fonts and the textures above
+    constexpr std::size_t otherAssets = 5;
     std::vector<std::shared_future<ModelId>> models;
     for (const char *path : modelPaths) {
         models.push_back(resources.loadModelAsync(path));
@@ -83,18 +87,19 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     };
     while (!window.shouldClose()) {
         resources.finishPendingLoads();
-        std::size_t completed = static_cast<std::size_t>(ready(title)) +
-                                static_cast<std::size_t>(ready(button)) +
-                                static_cast<std::size_t>(ready(sky));
+        std::size_t completed =
+            static_cast<std::size_t>(ready(title)) + static_cast<std::size_t>(ready(button)) +
+            static_cast<std::size_t>(ready(flare)) + static_cast<std::size_t>(ready(sky)) +
+            static_cast<std::size_t>(ready(logo));
         for (const auto &model : models) {
             completed += static_cast<std::size_t>(ready(model));
         }
-        if (completed == models.size() + 3) {
+        if (completed == models.size() + otherAssets) {
             break;
         }
         renderer.beginFrame();
         renderer.drawText("Loading assets " + std::to_string(completed) + "/" +
-                              std::to_string(models.size() + 3),
+                              std::to_string(models.size() + otherAssets),
                           {80.0f, 90.0f}, 40.0f, colors::White);
         renderer.endFrame();
     }
@@ -103,7 +108,9 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     }
     title.get();
     button.get();
+    flare.get();
     sky.get();
+    logo.get();
     for (const auto &model : models) {
         model.get();
     }
@@ -207,6 +214,7 @@ void run()
                                                             {.volume = ButtonHoverVolume}},
                    .clickSound = rtype::engine::SoundEffect{audio.loadSound(RTYPE_SOUND_BUTTON_CLICK),
                                                             {.volume = ButtonClickVolume}}},
+        .flare = {.font = resources.loadFont(RTYPE_FONT_FLARE, 96)},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
     rtype::localization::Localization translations("en");

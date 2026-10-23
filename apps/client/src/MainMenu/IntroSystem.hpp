@@ -15,7 +15,8 @@ namespace rtype::client
 
 /// Plays the intro of the main menu: waits until the player presses any key, gamepad button or mouse button
 /// while the scene of the Intro receives the input, then flies its Camera from the asteroids to the view of
-/// the menu, shows the Hidden elements with an IntroSlide and moves them all to their place.
+/// the menu, shows the Hidden elements with an IntroSlide and moves, scales and fades them all to their
+/// place.
 ///
 /// Register it before the AnchorSystem, which places the elements from their Anchor.
 class IntroSystem : public ecs::System
@@ -26,6 +27,8 @@ class IntroSystem : public ecs::System
     ecs::ComponentCache<engine::Camera> &_cameras;
     ecs::ComponentCache<IntroSlide> &_slides;
     ecs::ComponentCache<engine::Anchor> &_anchors;
+    ecs::ComponentCache<engine::Scale> &_scales;
+    ecs::ComponentCache<engine::Opacity> &_opacities;
     ecs::ComponentCache<ecs::Hidden> &_hidden;
     /// Whether something was held at the previous update: holding a key does not start the intro, pressing
     /// it does.

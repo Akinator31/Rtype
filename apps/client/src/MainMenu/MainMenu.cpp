@@ -19,17 +19,30 @@ namespace rtype::client
 namespace
 {
 
-// Distance between the tops of two buttons, one above the other, as in the design
-constexpr float buttonsSpacing = 103.0f;
-
-/// The buttons are in a column in the bottom left corner, Play at the top and Quit at the bottom.
+/// The buttons are in a column on the right of the screen, under the station, Play at the top and Quit at
+/// the bottom: the centre of Quit is buttonsBottom above the bottom of the screen, and the centres of two
+/// buttons are buttonsSpacing apart.
 constexpr int buttonsCount = 4;
+constexpr float buttonsBottom = 150.0f;
+constexpr float buttonsSpacing = 76.0f;
 
-/// The buttons come from this far beyond their place, out of the left edge of the screen, buttonsDelay
-/// seconds after the player presses; each button comes buttonsStagger seconds after the one above it.
-constexpr float buttonsEntrance = 800.0f;
-constexpr float buttonsDelay = 0.4f;
-constexpr float buttonsStagger = 0.08f;
+/// The buttons fade in while they slide from this far on the right of their place, buttonsDelay seconds
+/// after the player presses, while the camera flies; each button comes buttonsStagger seconds after the one
+/// above it.
+constexpr float buttonsEntrance = 60.0f;
+constexpr float buttonsDelay = 1.0f;
+constexpr float buttonsStagger = 0.1f;
+constexpr float buttonsDuration = 0.8f;
+
+/// The logo is a picture of 1920 x 1080 pixels, drawn at logoWidth game units while the camera waits in the
+/// asteroids, in the middle of the screen. When the player presses, it rises by logoRise and shrinks to
+/// logoMenuScale while the camera flies to the menu, to stay at the top of the screen.
+constexpr render::Rectangle logoPicture{0.0f, 0.0f, 1920.0f, 1080.0f};
+constexpr float logoWidth = 1500.0f;
+constexpr float logoRise = -400.0f;
+constexpr float logoMenuScale = 0.42f;
+constexpr float logoDelay = 0.2f;
+constexpr float logoDuration = 3.2f;
 
 /// Camera of the main menu: a narrow field of view, so that the planet on the side of the screen is not
 /// distorted by the perspective.
@@ -75,21 +88,64 @@ void createMainMenuSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceMan
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
 }
 
-/// The button at `row` of the column, counted from the top, hidden until the player presses, then coming
-/// from the left edge.
+/// The logo of the game, in the middle of the screen until the player presses, then at the top.
+void createLogo(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render::ResourceManager &resources)
+{
+    const float height = logoWidth * logoPicture.height / logoPicture.width;
+    const ecs::entity_t logo =
+        interface.sprite(resources.loadTexture(RTYPE_IMAGE_LOGO, render::TextureFiltering::Smooth),
+                         logoPicture, logoWidth, height, {engine::AnchorPoint::Center, 0.0f, 0.0f});
+    ecs.addComponent<engine::Scale>(logo);
+    ecs.addComponent<IntroSlide>(logo, IntroSlide{.from = {0.0f, 0.0f},
+                                                  .to = {0.0f, logoRise},
+                                                  .delay = logoDelay,
+                                                  .duration = logoDuration,
+                                                  .easing = engine::Easing::EaseOut,
+                                                  .toScale = logoMenuScale});
+}
+
+/// The text in capitals, like the buttons of the design: the letters of ASCII and the accented letters of
+/// Latin-1 (é is written in UTF-8 as C3 A9, É as C3 89).
+std::string toCapitals(std::string text)
+{
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const auto byte = static_cast<unsigned char>(text[index]);
+        if (byte >= 'a' && byte <= 'z') {
+            text[index] = static_cast<char>(byte - ('a' - 'A'));
+        } else if (byte == 0xC3 && index + 1 < text.size()) {
+            const auto next = static_cast<unsigned char>(text[index + 1]);
+            if (next >= 0xA0 && next <= 0xBE && next != 0xB7) {
+                text[index + 1] = static_cast<char>(next - 0x20);
+            }
+            ++index;
+        }
+    }
+    return text;
+}
+
+/// The button at `row` of the column, counted from the top, hidden until the player presses, then fading
+/// in from the right.
 void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
                   localization::Localization &translations, const std::string &key,
                   const std::function<void()> &onPress, int row)
 {
     const auto rowsBelow = static_cast<float>(buttonsCount - 1 - row);
-    const render::Vector2 place{screenMargin, -screenMargin - (rowsBelow * buttonsSpacing)};
-    const render::Vector2 entrance{place.x - buttonsEntrance, place.y};
+    const render::Vector2 place{-screenMargin, -buttonsBottom - (rowsBelow * buttonsSpacing)};
+    const render::Vector2 entrance{place.x + buttonsEntrance, place.y};
     const float delay = buttonsDelay + (static_cast<float>(row) * buttonsStagger);
-    const ecs::entity_t button = interface.button(translations.text(key), onPress,
-                                                  {engine::AnchorPoint::BottomLeft, entrance.x, entrance.y});
-    ecs.addComponent<engine::BoundText>(button, [&translations, key] { return translations.text(key); });
+    const ecs::entity_t button =
+        interface.flareButton(toCapitals(translations.text(key)), onPress,
+                              {engine::AnchorPoint::BottomRight, entrance.x, entrance.y});
+    ecs.addComponent<engine::BoundText>(button,
+                                        [&translations, key] { return toCapitals(translations.text(key)); });
+    ecs.addComponent<engine::Opacity>(button);
     ecs.addComponent<ecs::Hidden>(button);
-    ecs.addComponent<IntroSlide>(button, entrance, place, delay, engine::Easing::EaseOutBack);
+    ecs.addComponent<IntroSlide>(button, IntroSlide{.from = entrance,
+                                                    .to = place,
+                                                    .delay = delay,
+                                                    .duration = buttonsDuration,
+                                                    .easing = engine::Easing::EaseOut,
+                                                    .fromOpacity = 0.0f});
 }
 
 /// The buttons of the menu: Play, Online and Settings open their submenu.
@@ -120,6 +176,7 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
     createShips(ecs, scene, resources, {createMainMenuView(), getPlanetCentre(), getPlanetRadius()});
 
     engine::InterfaceBuilder interface(ecs, scene, style);
+    createLogo(ecs, interface, resources);
     createButtons(engine, interface, translations, quit);
 }
 
