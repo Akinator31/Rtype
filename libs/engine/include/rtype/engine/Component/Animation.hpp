@@ -54,7 +54,7 @@ struct Spin {
 /// Plays an animation of the skinned Model of the entity, in a loop: the ModelAnimationSystem moves its time,
 /// the SceneRenderer poses the model before drawing it. Play another one with switchModelAnimation(), which
 /// fades from the previous one, so that the model does not jump from a pose to the other. A speed of 0 holds
-/// the pose.
+/// the pose. A second animation can be mixed in for good, in step with it: a pose between two of the rig.
 /// @code
 /// const int idle = resources.getModelAnimation(model, "Idle");
 /// ecs.addComponent<ModelAnimation>(ship, idle);
@@ -68,6 +68,10 @@ struct ModelAnimation {
     float fadeDuration = 0.0f;
     /// How fast its time goes by: 1 plays the animation, 0 holds its pose.
     float speed = 1.0f;
+    /// Another animation played at the same time: blendAmount 0 shows only `animation`, 1 only this one, 0.5
+    /// halfway between them, such as a flame halfway between Idle and Move. Not mixed in while it fades.
+    int blendedAnimation = 0;
+    float blendAmount = 0.0f;
 
     friend bool operator==(const ModelAnimation &, const ModelAnimation &) = default;
 };
