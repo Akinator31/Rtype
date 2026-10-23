@@ -124,11 +124,13 @@ where its box would be, with the same size anywhere on the screen: what is drawn
   roll eases towards its target every frame and adds to the tilt, around the same x axis; the hull stays
   centred on the entity. Only drawn: the collider stays the box of the level hull. The `MoveUp` / `MoveDown`
   animations of the rig are not used: they switch at once, and roll the ship further than the game wants.
-- **Flames**: only while the ship flies forward, to the right for the players (to the left for the Bydos),
-  with the `Move` animation. Otherwise, climbing and diving included, it has no flame: the meshes of its
-  flames and trails (`ShipLook::flameMeshes`, by index in the model file) go into `Model::hiddenMeshes`, which
-  the renderer does not draw, and its pose holds still (`Idle`, `ModelAnimation::speed` 0).
-- **Cost**: the models are skinned on the CPU, a few milliseconds per pose. The ships that fly alike are
+- **Flames**: a little flame, whatever the ship does: the `Idle` animation of the rig hides its flames in the
+  thrusters, `Move` shows them long, and the ship is posed halfway between the two
+  (`ModelAnimation::blendedAnimation` = `Move`, `blendAmount` 0.5). The trails behind the flames are never
+  drawn: they stretch far behind the ship once it rolls its belly towards the camera. Their meshes
+  (`ShipLook::trailMeshes`, by index in the model file) go into `Model::hiddenMeshes`, which the renderer does
+  not draw.
+- **Cost**: the models are skinned on the CPU, a few milliseconds per pose. The ships of a model are
   kept in step (the time of their animation is that of the session), and the `SceneRenderer` poses a model
   again only when its pose changes: ten Bydos cost one pose per frame.
 

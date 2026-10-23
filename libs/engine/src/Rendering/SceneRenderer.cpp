@@ -68,9 +68,15 @@ void drawBlurred(render::Renderer &renderer, render::Rectangle area, float radiu
     }
 }
 
-// Poses the model at the time of its animation, between the previous and the current one while it fades
+// Poses the model at the time of its animation, between the previous and the current one while it fades, or
+// mixed with its blended animation
 void applyPose(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
 {
+    if (animation.time >= animation.fadeDuration && animation.blendAmount > 0.0f) {
+        renderer.blendModelAnimations(model, animation.animation, animation.time, animation.blendedAnimation,
+                                      animation.time, animation.blendAmount);
+        return;
+    }
     if (animation.time >= animation.fadeDuration) {
         renderer.animateModel(model, animation.animation, animation.time);
         return;

@@ -31,14 +31,14 @@ struct ShipLook {
     render::Rectangle hull;
     /// The model is turned to face left: the Bydos fly towards the players.
     bool facesLeft = false;
-    /// The meshes of its flames and trails, by index in the model file: hidden while the ship does not fly
-    /// forward.
-    std::vector<int> flameMeshes;
+    /// The meshes of the trails behind its flames, by index in the model file: never drawn, they stretch far
+    /// behind the ship once it rolls its belly towards the camera.
+    std::vector<int> trailMeshes;
 };
 
 /// The ShipLook of each kind of ship drawn in 3D, and the models they give to the entities of the game scene:
 /// seen from the side and a little from above, rolling around their length, smoothly, as their ship climbs
-/// or dives, with flames only while it flies forward (docs/architecture/client-game.md, "Ships in 3D").
+/// or dives, with a little flame, whatever they do (docs/architecture/client-game.md, "Ships in 3D").
 class ShipLooks
 {
     std::unordered_map<game::EntityKind, ShipLook> _looks;
@@ -52,7 +52,8 @@ public:
     /// @param clock Seconds the session has been played: the time of the animations.
     void addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, const EntityLook &look,
                   float clock) const;
-    /// Turns the model of an entity towards the roll and the animation of the latest state of its ship.
+    /// Turns the model of an entity towards the roll of the latest state of its ship, its animation in step
+    /// with the session.
     void moveModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, float clock) const;
     /// Rolls the model of an entity towards its roll for `elapsed` seconds, and puts its hull on the entity.
     static void placeModel(ecs::Ecs &ecs, ecs::entity_t entity, float elapsed);

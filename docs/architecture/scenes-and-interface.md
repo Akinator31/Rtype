@@ -69,7 +69,7 @@ renderer.endFrame();
 | 3 | `GameSessionSystem` | The game: the input of the player to its session, the snapshots to the entities of the game scene ([A game in the client](client-game.md)). |
 | 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem` | Texts of the widgets and bound texts, tweens, spinning models. |
 | 5 | `FlightSystem`, `IntroSystem` | Client systems of the main menu: the ships flying around the station, the intro. |
-| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`, unless the model already has this pose (entities sharing a model and an animation at the same time are posed once). `ModelAnimation::speed` 0 holds the pose. |
+| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`, unless the model already has this pose (entities sharing a model and an animation at the same time are posed once). `ModelAnimation::speed` 0 holds the pose; `blendedAnimation` and `blendAmount` mix a second animation in, in step. |
 | 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
 | 8 | `ToastSystem` | Places, fades and destroys the toasts. |
 | 9 | `TransformSystem` | Positions of the children from their parents, last. |
