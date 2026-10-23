@@ -68,7 +68,8 @@ std::optional<std::pair<std::string, std::string>> parseLine(std::string_view li
 }
 
 /// Reads the whole text as a number, std::nullopt if anything else is left.
-template <typename Number> std::optional<Number> parseNumber(std::string_view text)
+template <typename Number>
+std::optional<Number> parseNumber(std::string_view text)
 {
     Number number{};
     const char *end = text.data() + text.size();

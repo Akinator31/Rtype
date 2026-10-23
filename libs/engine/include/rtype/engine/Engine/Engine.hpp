@@ -16,8 +16,8 @@
 namespace rtype::engine
 {
 
-/// Owns the ECS, the events (ADR 0008), the scenes (ADR 0009), the controls (the virtual gamepad) and the save
-/// (the values kept from one run to the next).
+/// Owns the ECS, the events (ADR 0008), the scenes (ADR 0009), the controls (the virtual gamepad) and the
+/// save (the values kept from one run to the next).
 ///
 /// At the start of each update, the engine destroys the entities of the scenes closed since the previous one,
 /// whoever closed them (a scene request, a menu button calling Scenes::close(), Back).

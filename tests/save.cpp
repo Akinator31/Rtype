@@ -1,5 +1,6 @@
-#include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/save/Save/Save.hpp"
+
+#include "rtype/engine/Engine/Engine.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -156,7 +157,8 @@ TEST_CASE("A missing file leaves no value, as on a first run", "[save]")
 TEST_CASE("Lines without '=' are ignored, Windows line ends are accepted", "[save]")
 {
     const SaveDirectory directory;
-    std::ofstream(directory.path / "save.txt", std::ios::binary) << "audio.volume=80\r\n\nbroken line\nname=\n";
+    std::ofstream(directory.path / "save.txt", std::ios::binary)
+        << "audio.volume=80\r\n\nbroken line\nname=\n";
     rtype::save::Save save(directory.path / "save.txt");
 
     save.readFile();
