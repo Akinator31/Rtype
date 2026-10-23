@@ -13,8 +13,12 @@ namespace rtype::client
 /// the planet, with a SpinSystem.
 void createPlanetSystem(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources);
 
-/// A view from inside the rings of asteroids, close to the rocks, on the side of the planet facing the camera
-/// of the menu: it looks along the rings, so that only asteroids are seen, not the planet. A camera flying
+/// Where the centre of the planet is, and its radius, in world units: the ships of the menu hide behind it.
+[[nodiscard]] render::Vector3 getPlanetCentre();
+[[nodiscard]] float getPlanetRadius();
+
+/// A view from inside the rings of asteroids, close to the rocks, on the side of the planet facing the menu:
+/// it looks along the rings, so that only asteroids are seen, not the planet. A camera flying
 /// from there to the view of the menu leaves the rings without crossing the planet.
 /// @param view The camera of the menu: the view keeps its field of view.
 [[nodiscard]] render::Camera createAsteroidsView(const render::Camera &view);

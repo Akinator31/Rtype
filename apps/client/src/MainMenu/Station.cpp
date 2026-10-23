@@ -10,10 +10,10 @@ namespace rtype::client
 namespace
 {
 
-/// Far behind the planet, on the right of the screen, at the height of its centre. The model is about 264
-/// units long: scaled down, it looks small and far.
-constexpr render::Vector3 stationPosition{22.5f, -.8959122f, -74.042f};
-constexpr float stationScale = 0.11f;
+/// Far behind the planet, on the right of the screen, a little above its centre. The model is about 264 units
+/// long: scaled down, it looks small and far.
+constexpr render::Vector3 stationPosition{62.6734f, 14.8833f, -133.7145f};
+constexpr float stationScale = 0.1706f;
 
 /// Tilted towards the camera, so that its top can be seen.
 constexpr Rotation stationTilt{{0.6488686f, 0.5675164f, 0.50684774f}, 53.071587f};
@@ -21,14 +21,14 @@ constexpr Rotation stationTilt{{0.6488686f, 0.5675164f, 0.50684774f}, 53.071587f
 } // namespace
 
 /// The sun of the menu comes from behind the station, which would face the camera with its dark side: its own
-/// light comes from the front, above and to the left, so that the side seen is lit. It is dimmer than the
-/// sun, so that the far station does not stand out more than the planet.
+/// light comes from the right of the screen, like the sun on the planet, from above and a little from the
+/// front. It grazes the side seen, so that the arms and the rings cast their relief instead of looking flat.
 render::Light createStationLight()
 {
     render::Light light;
-    light.direction = {0.5f, -0.4f, -1.0f};
-    light.color = {160, 154, 142, 255};
-    light.ambient = {20, 21, 28, 255};
+    light.direction = {-0.6f, -0.54f, -0.81f};
+    light.color = {220, 208, 186, 255};
+    light.ambient = {12, 13, 20, 255};
     return light;
 }
 

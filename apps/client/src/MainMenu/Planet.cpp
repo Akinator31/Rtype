@@ -27,6 +27,9 @@ struct Placement {
 /// they all get this placement.
 const Placement PlanetSystem{{-25.0f, 0.0f, -60.0f}, {0.2f, 1.0f, 0.1f}, 120.0f, 1.3f};
 
+/// The planet model is a sphere of this radius, centred on its origin.
+constexpr float planetModelRadius = 10.0f;
+
 /// Speeds of the rotations, in degrees per second: the planet turns very slowly on itself, its dust a little
 /// faster, as if blown by the wind; the inner ring goes faster than the outer one, like closer orbits.
 constexpr float planetSpeed = 0.8f;
@@ -42,6 +45,9 @@ constexpr float viewHeight = 0.8f;
 /// it, and down towards their plane, in degrees.
 constexpr float viewTurnTowardsPlanet = 12.0f;
 constexpr float viewDip = 4.0f;
+/// The view is on the side of the rings facing this point, where the camera of the menu was when the view was
+/// chosen: moving the camera of the menu does not move it.
+constexpr render::Vector3 viewSide{0.0f, 0.0f, 0.0f};
 
 /// Drawing orders: the opaque models first, then the transparent dust over what it covers.
 enum DrawingOrder : int {
@@ -73,12 +79,22 @@ void createSpinningModel(ecs::Ecs &ecs, engine::SceneId scene, render::ModelId m
 
 } // namespace
 
+render::Vector3 getPlanetCentre()
+{
+    return PlanetSystem.position;
+}
+
+float getPlanetRadius()
+{
+    return planetModelRadius * PlanetSystem.scale;
+}
+
 render::Camera createAsteroidsView(const render::Camera &view)
 {
     const Rotation tilt{PlanetSystem.rotationAxis, PlanetSystem.rotationAngle};
     // The viewer is above the plane of the rings, on the side of their normal
     const render::Vector3 normal = rotate({0.0f, 1.0f, 0.0f}, tilt);
-    const render::Vector3 towardsViewer = view.position - PlanetSystem.position;
+    const render::Vector3 towardsViewer = viewSide - PlanetSystem.position;
     const render::Vector3 outwards = normalize(towardsViewer - (normal * dot(towardsViewer, normal)));
     // Along the rings, towards the left of the screen, where there is nothing behind them
     render::Vector3 along = cross(normal, outwards);

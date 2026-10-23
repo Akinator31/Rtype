@@ -36,6 +36,8 @@ constexpr float buttonsStagger = 0.08f;
 render::Camera createMainMenuView()
 {
     render::Camera view;
+    view.position = {-18.2015f, 0.2817f, -21.8759f};
+    view.target = {-17.8749f, 0.2868f, -22.8210f};
     view.fieldOfView = 30.0f;
     return view;
 }
@@ -115,7 +117,7 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
     createMainMenuSky(ecs, scene, resources);
     createPlanetSystem(ecs, scene, resources);
     createStation(ecs, scene, resources);
-    createShips(ecs, scene, resources);
+    createShips(ecs, scene, resources, {createMainMenuView(), getPlanetCentre(), getPlanetRadius()});
 
     engine::InterfaceBuilder interface(ecs, scene, style);
     createButtons(engine, interface, translations, quit);
