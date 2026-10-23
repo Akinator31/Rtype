@@ -77,9 +77,11 @@ private:
 
     static ::Font load(const std::filesystem::path &file, int size)
     {
-        std::vector<int> characters = fontCharacters();
-        return LoadFontEx(file.string().c_str(), size, characters.data(),
-                          static_cast<int>(characters.size()));
+        const std::vector<unsigned char> bytes = core::readAssetFile(file);
+        std::vector<int> characters = fontCharacters(bytes);
+        return LoadFontFromMemory(file.extension().string().c_str(), bytes.data(),
+                                  static_cast<int>(bytes.size()), size, characters.data(),
+                                  static_cast<int>(characters.size()));
     }
 
 public:
