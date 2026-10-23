@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -598,6 +599,66 @@ TEST_CASE("With the keyboard, the focused button lights up", "[engine][tween]")
     world.update(world.style.button.fadeDuration);
     CHECK(std::abs(highlightOf(play)) < 1e-6f);
     CHECK(std::abs(highlightOf(quit) - 1.0f) < 1e-6f);
+}
+
+TEST_CASE("A button sounds when it lights up and when it is pressed, not when its menu appears",
+          "[engine][interface][sound]")
+{
+    World world;
+    const rtype::audio::SoundId hover{1};
+    const rtype::audio::SoundId click{2};
+    world.style.button.hoverSound = SoundEffect{hover, {.volume = 0.4f}};
+    world.style.button.clickSound = SoundEffect{click, {}};
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
+    const entity_t play = menu.button("Play", [] {});
+    const entity_t quit = menu.button("Quit", [] {});
+    // Nobody plays the sounds: they stay on the buttons
+    const auto soundOf = [&](entity_t entity) -> std::optional<rtype::audio::SoundId> {
+        if (!world.ecs.hasComponent<SoundEffect>(entity)) {
+            return std::nullopt;
+        }
+        return world.ecs.getComponent<SoundEffect>(entity).sound;
+    };
+    world.update();
+    CHECK_FALSE(soundOf(play));
+
+    world.press({Key::Down});
+    CHECK_FALSE(soundOf(play));
+    REQUIRE(soundOf(quit) == hover);
+    CHECK(world.ecs.getComponent<SoundEffect>(quit).settings.volume == 0.4f);
+
+    world.press({Key::Enter});
+    CHECK(soundOf(quit) == click);
+
+    // With the keyboard, the first button of a menu that appears lights up silently
+    MenuBuilder submenu(world.ecs, world.scenes, world.metrics, world.style, "Submenu");
+    const entity_t back = submenu.button("Back", [] {});
+    world.update();
+    REQUIRE(world.isFocused(back));
+    CHECK_FALSE(soundOf(back));
+
+    // The pointer away, the panel goes out; over the button, it lights up again
+    world.input.mouse = {10.0f, 10.0f};
+    world.update();
+    world.update(world.style.button.fadeDuration);
+    world.ecs.removeComponent<SoundEffect>(back);
+    const rtype::ecs::Position centre = world.ecs.getComponent<rtype::ecs::Position>(back);
+    world.input.mouse = {centre.x, centre.y};
+    world.update();
+    CHECK(soundOf(back) == hover);
+}
+
+TEST_CASE("Without sounds in the style, the buttons are silent", "[engine][interface][sound]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
+    menu.button("Play", [] {});
+    const entity_t quit = menu.button("Quit", [] {});
+    world.update();
+
+    world.press({Key::Down});
+    world.press({Key::Enter});
+    CHECK_FALSE(world.ecs.hasComponent<SoundEffect>(quit));
 }
 
 TEST_CASE("A button is the size of its panel", "[engine][interface]")

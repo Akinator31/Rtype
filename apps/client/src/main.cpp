@@ -43,6 +43,9 @@ namespace
 {
 
 constexpr float CollisionCellSize = 64.0f;
+/// How loud the buttons are: the hover is heard at each move in a menu, the click file is quiet.
+constexpr float ButtonHoverVolume = 0.4f;
+constexpr float ButtonClickVolume = 1.0f;
 
 bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &renderer,
                    rtype::render::ResourceManager &resources)
@@ -164,7 +167,7 @@ rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
     auto &sessions =
         ecs.registerSystem<rtype::client::GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
     ecs.registerSystem<rtype::client::ImpactSystem>(ecs);
-    // After the game, to play the sounds of its shots in the frame they appear
+    // After the menus and the game, to play their sounds in the frame they give them
     ecs.registerSystem<rtype::engine::SoundSystem>(audio);
     ecs.registerSystem<rtype::engine::WidgetTextSystem>();
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
@@ -199,7 +202,11 @@ void run()
 
     const rtype::engine::InterfaceStyle style{
         .font = resources.loadFont(RTYPE_FONT_TITLE, 160),
-        .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96)},
+        .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96),
+                   .hoverSound = rtype::engine::SoundEffect{audio.loadSound(RTYPE_SOUND_BUTTON_HOVER),
+                                                            {.volume = ButtonHoverVolume}},
+                   .clickSound = rtype::engine::SoundEffect{audio.loadSound(RTYPE_SOUND_BUTTON_CLICK),
+                                                            {.volume = ButtonClickVolume}}},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
     rtype::localization::Localization translations("en");

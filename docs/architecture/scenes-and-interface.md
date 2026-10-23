@@ -283,9 +283,21 @@ Toasts are stacked from the corner, the newest nearest to it; the others glide t
 - The mouse focuses a widget only when it moves, so that a still pointer does not fight the keyboard.
 - A click activates the widget under the pointer, not the focused one.
 - Characters typed while no text field has the focus are dropped.
+- The buttons sound when their panel lights up (under the pointer, or given the focus by the keyboard or a
+  gamepad) and when they are pressed, if the style has the sounds (`ButtonStyle::hoverSound`, `clickSound`,
+  optional `SoundEffect`): the `InterfaceSystem` gives the `SoundEffect` to the button, and the `SoundSystem`
+  plays it in the frame, before the deferred action of the button. A menu that appears lights its first button
+  silently, otherwise every menu opened with the keyboard would sound twice.
+
+  ```cpp
+  const SoundEffect hover{audio.loadSound("sounds/fx/button/hover.wav"), {.volume = 0.4f}};
+  const SoundEffect click{audio.loadSound("sounds/fx/button/click.wav"), {}};
+  const InterfaceStyle style{.button = {.font = buttonFont, .hoverSound = hover, .clickSound = click}};
+  ```
 
 ## Testing
 
 The ECS has its own tests (see [ECS](ecs.md#testing)). `tests/scenes.cpp` tests the scenes, and
 `tests/engine.cpp` builds menus with `MenuBuilder` and drives them with the `FakeInput` and fake text
-measures, without a window: focus, every widget, layout, mouse, scenes, and the bounce of the focused widget.
+measures, without a window: focus, every widget, layout, mouse, scenes, the bounce of the focused widget, and
+the sounds of the buttons.

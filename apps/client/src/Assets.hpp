@@ -37,3 +37,5 @@
 #define RTYPE_SOUND_BIG_BLASTER "sounds/fx/blaster/big_blaster.wav"
 #define RTYPE_SOUND_DESTRUCTION "sounds/fx/destruction.wav"
 #define RTYPE_SOUND_COLLISION "sounds/fx/collision.wav"
+#define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
+#define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"
