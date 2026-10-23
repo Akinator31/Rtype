@@ -98,7 +98,7 @@ ecs.addComponent<SoundEffect>(shot, audio.loadSound("sounds/shot.wav"), PlaySett
 ```
 
 The engine links the audio library, which is why it stays client-only with the rendering and the input. The
-shots of the game are its first users ([A game in the client](client-game.md#shot-sounds)).
+shots and the explosions of the ships are its first users ([A game in the client](client-game.md#sounds)).
 
 ## Volumes
 
