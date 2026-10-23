@@ -14,6 +14,7 @@
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/engine/System/ModelAnimationSystem.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Constants.hpp"
 
@@ -275,6 +276,7 @@ TEST_CASE("The world of the session is drawn in the scene, and follows it", "[cl
 TEST_CASE("A kind of ship given a look is a 3D model, its hull on the box of the ship", "[client]")
 {
     Client client;
+    client.ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
     // A hull 4 units long, centred 1 unit right of the origin of the model and 1 unit above it
     const ShipLook look{{{}, {0, 1, 2, 3}}, {-1.0f, -2.0f, 4.0f, 2.0f}, false, {4, 5}};
     client.sessions.setShipLook(rtype::game::EntityKind::PlayerShip, look);
@@ -291,37 +293,38 @@ TEST_CASE("A kind of ship given a look is a 3D model, its hull on the box of the
     CHECK(model.scale == Approx(rules.shipHalfWidth * 2.0f / 4.0f));
     CHECK(model.position.x == Approx(state.x - (1.0f * model.scale)));
     CHECK(model.position.y == Approx(state.y + (1.0f * model.scale)));
-    // No flames while it does not fly forward, its flames animated while it does
-    const auto animationOf = [&] {
-        return client.ecs.getComponent<rtype::engine::ModelAnimation>(*ship).animation;
+    // A little flame, halfway between Idle and Move, whatever it does, and no trails
+    const auto animationOf = [&]() -> const rtype::engine::ModelAnimation & {
+        return client.ecs.getComponent<rtype::engine::ModelAnimation>(*ship);
     };
-    CHECK(animationOf() == look.model.animations.idle);
-    CHECK(model.hiddenMeshes == look.flameMeshes);
+    CHECK(animationOf().animation == look.model.animations.idle);
+    CHECK(animationOf().blendedAnimation == look.model.animations.move);
+    CHECK(animationOf().blendAmount == 0.5f);
+    CHECK(model.hiddenMeshes == look.trailMeshes);
     client.input.keys = {Key::Right};
-    client.run(2);
-    CHECK(animationOf() == look.model.animations.move);
-    CHECK(model.hiddenMeshes.empty());
+    client.run(17);
+    CHECK(animationOf().animation == look.model.animations.idle);
+    CHECK(animationOf().blendAmount == 0.5f);
     client.input.keys = {Key::Left};
-    client.run(2);
-    CHECK(animationOf() == look.model.animations.idle);
-    CHECK(model.hiddenMeshes == look.flameMeshes);
+    client.run(17);
+    CHECK(animationOf().blendAmount == 0.5f);
 
     // Climbing: the ship rolls its belly towards the camera little by little, its hull staying on it
     client.input.keys = {Key::Up};
     client.run(1);
-    CHECK(animationOf() == look.model.animations.idle);
-    CHECK(model.hiddenMeshes == look.flameMeshes);
     const auto rollOf = [&] { return client.ecs.getComponent<ShipAttitude>(*ship).roll; };
     CHECK(rollOf() < 0.0f);
     CHECK(rollOf() > -12.0f);
     client.run(12);
     CHECK(rollOf() < -28.0f);
     CHECK(rollOf() >= -40.0f);
-    // Its flame holds still while it climbs
+    // Its flame keeps flickering while it climbs
     const auto timeOf = [&] { return client.ecs.getComponent<rtype::engine::ModelAnimation>(*ship).time; };
-    const float held = timeOf();
+    const float before = timeOf();
     client.run(3);
-    CHECK(timeOf() == held);
+    CHECK(timeOf() > before);
+    CHECK(animationOf().blendAmount == 0.5f);
+    CHECK(model.hiddenMeshes == look.trailMeshes);
     // Around its length, the axis of its tilt
     CHECK(model.rotationAxis.x == Approx(1.0f));
     CHECK(model.rotationAngle == Approx(200.0f + rollOf()));
@@ -338,7 +341,7 @@ TEST_CASE("A kind of ship given a look is a 3D model, its hull on the box of the
     client.input.keys.clear();
     client.run(60);
     CHECK(rollOf() == Approx(0.0f).margin(0.1f));
-    CHECK(animationOf() == look.model.animations.idle);
+    CHECK(animationOf().blendAmount == 0.5f);
 }
 
 TEST_CASE("A kind of shot given a look is a 3D model of energy, its core on the box of the shot", "[client]")

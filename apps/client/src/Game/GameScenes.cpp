@@ -33,9 +33,9 @@ constexpr float HudLineSpacing = 56.0f;
 constexpr render::Rectangle EznoHull{-8.66f, -3.31f, 17.31f, 10.01f};
 constexpr render::Rectangle DropShipHull{-11.95f, -5.74f, 23.9f, 9.11f};
 
-/// The meshes of the flames and trails of the ship models, by index in their files.
-const std::vector<int> EznoFlames{2, 6};
-const std::vector<int> DropShipFlames{9, 10, 11, 12};
+/// The meshes of the trails behind the flames of the ship models, by index in their files.
+const std::vector<int> EznoTrails{6};
+const std::vector<int> DropShipTrails{10, 12};
 
 /// The cores of the shot models seen through the camera of the game, trails and rings excluded, in model
 /// units, measured on the models: the shot of the players facing right, the shots of the Bydos facing left.
@@ -126,9 +126,9 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     : _engine(engine), _sessions(sessions), _translations(translations)
 {
     sessions.setShipLook(game::EntityKind::PlayerShip,
-                         {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoFlames});
+                         {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoTrails});
     sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
-                                                       DropShipHull, true, DropShipFlames});
+                                                       DropShipHull, true, DropShipTrails});
     const render::Energy energy{
         resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
     const render::TextureId light =

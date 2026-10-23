@@ -33,21 +33,15 @@ constexpr float RollResponse = 10.0f;
 
 constexpr float RadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
 
-/// Seconds for the flame of a ship to grow or shrink when it starts or stops flying forward.
-constexpr float FlameFade = 0.25f;
+/// The flames of a ship, whatever it does: a little flame, halfway between the Idle pose of the rig (0), whose
+/// flames hide in the thrusters, and the Move one (1).
+constexpr float Flame = 0.5f;
 
 /// The roll a ship turns towards: its vertical speed, as a fraction of the speed of the ships of the players.
 float computeTargetRoll(const game::EntityState &state)
 {
     const float climb = std::clamp(-state.velocityY / DefaultRules.shipSpeed, -1.0f, 1.0f);
     return -climb * (climb > 0.0f ? MaxClimbRoll : MaxDiveRoll);
-}
-
-/// Whether a ship flies forward: to the right for the players, to the left for the Bydos. Only then has it
-/// flames, animated; otherwise it has none, even while it climbs or dives.
-bool isFlyingForward(const ShipLook &ship, const game::EntityState &state)
-{
-    return ship.facesLeft ? state.velocityX < 0.0f : state.velocityX > 0.0f;
 }
 
 /// The model of a ship in the colour of its player, lightened so that its details still show.
@@ -78,9 +72,12 @@ void ShipLooks::addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::Entity
     ecs.addComponent<engine::Model>(entity, ship.model.model, render::Vector3{}, LengthAxis,
                                     HalfTurn + ShipTilt, look.box.width / hull.width,
                                     isPlayerShip ? tintOf(look) : render::colors::White,
-                                    ship.facesLeft ? HalfTurn : 0.0f);
-    ecs.addComponent<engine::ModelAnimation>(
-        entity, isFlyingForward(ship, state) ? ship.model.animations.move : ship.model.animations.idle);
+                                    ship.facesLeft ? HalfTurn : 0.0f)
+        .hiddenMeshes = ship.trailMeshes;
+    engine::ModelAnimation &animation =
+        ecs.addComponent<engine::ModelAnimation>(entity, ship.model.animations.idle);
+    animation.blendedAnimation = ship.model.animations.move;
+    animation.blendAmount = Flame;
     const render::Vector2 hullCentre{hull.x + (hull.width / 2.0f), hull.y + (hull.height / 2.0f)};
     ecs.addComponent<ShipAttitude>(entity, hullCentre);
     moveModel(ecs, entity, state, clock);
@@ -91,22 +88,8 @@ void ShipLooks::moveModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::Entit
                           float clock) const
 {
     ecs.getComponent<ShipAttitude>(entity).targetRoll = computeTargetRoll(state);
-    engine::ModelAnimation &animation = ecs.getComponent<engine::ModelAnimation>(entity);
-    const ShipLook &ship = _looks.at(state.kind);
-    const bool forward = isFlyingForward(ship, state);
-    ecs.getComponent<engine::Model>(entity).hiddenMeshes = forward ? std::vector<int>{} : ship.flameMeshes;
-    const int next = forward ? ship.model.animations.move : ship.model.animations.idle;
-    if (animation.animation != next) {
-        engine::switchModelAnimation(animation, next, FlameFade);
-    } else if (animation.time < animation.fadeDuration) {
-        return;
-    } else if (forward) {
-        // In step with the game: the ships of a model that fly alike share their pose, posed once a frame
-        animation = {next, clock};
-    } else {
-        // Without flames, the ship holds still where the fade left it: not posed again
-        animation = {next, animation.time, next, 0.0f, 0.0f, 0.0f};
-    }
+    // In step with the game: the ships of a model share their pose, posed once a frame
+    ecs.getComponent<engine::ModelAnimation>(entity).time = clock;
 }
 
 void ShipLooks::placeModel(ecs::Ecs &ecs, ecs::entity_t entity, float elapsed)
