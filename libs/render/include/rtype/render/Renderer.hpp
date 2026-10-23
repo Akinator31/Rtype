@@ -198,8 +198,10 @@ public:
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.
     /// @param size Height of the characters, in game units.
+    /// @param spacing Space added between two characters, in game units: widely spaced capitals.
     /// @throws std::logic_error if no frame is started.
-    void drawText(FontId font, const std::string &text, Vector2 position, float size, Color color);
+    void drawText(FontId font, const std::string &text, Vector2 position, float size, Color color,
+                  float spacing = 0.0f);
     /// Draws text with raylib's built-in font, which is always available. Meant for debugging.
     /// @throws std::logic_error if no frame is started.
     void drawText(const std::string &text, Vector2 position, float size, Color color);
@@ -211,7 +213,8 @@ public:
     /// Size of a texture, in texture pixels.
     [[nodiscard]] Vector2 textureSize(TextureId texture) const;
     /// Size that the text would take once drawn with drawText(), for instance to centre it.
-    [[nodiscard]] Vector2 measureText(FontId font, const std::string &text, float size) const;
+    [[nodiscard]] Vector2 measureText(FontId font, const std::string &text, float size,
+                                      float spacing = 0.0f) const;
     /// Size that the text would take once drawn with the built-in font.
     [[nodiscard]] Vector2 measureText(const std::string &text, float size) const;
 };

@@ -563,10 +563,12 @@ void Renderer::blendModelAnimations(ModelId model, int from, float fromTime, int
     _impl->models.get(model).blendAnimations(from, fromTime, to, toTime, amount);
 }
 
-void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color)
+void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color,
+                        float spacing)
 {
     _impl->requireFrame();
-    DrawTextEx(_impl->fonts.get(font).get(), text.c_str(), toRaylib(position), size, 0.0f, toRaylib(color));
+    DrawTextEx(_impl->fonts.get(font).get(), text.c_str(), toRaylib(position), size, spacing,
+               toRaylib(color));
 }
 
 void Renderer::drawText(const std::string &text, Vector2 position, float size, Color color)
@@ -588,9 +590,9 @@ Vector2 Renderer::textureSize(TextureId texture) const
     return {static_cast<float>(raw.width), static_cast<float>(raw.height)};
 }
 
-Vector2 Renderer::measureText(FontId font, const std::string &text, float size) const
+Vector2 Renderer::measureText(FontId font, const std::string &text, float size, float spacing) const
 {
-    return fromRaylib(MeasureTextEx(_impl->fonts.get(font).get(), text.c_str(), size, 0.0f));
+    return fromRaylib(MeasureTextEx(_impl->fonts.get(font).get(), text.c_str(), size, spacing));
 }
 
 Vector2 Renderer::measureText(const std::string &text, float size) const
