@@ -4,6 +4,7 @@
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Sound.hpp"
 #include "rtype/engine/Control/Control.hpp"
 #include "rtype/game/PlayerInput.hpp"
 
@@ -37,6 +38,7 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
     use<Impact>(caches);
+    use<engine::SoundEffect>(caches);
 }
 
 void GameSessionSystem::start(std::unique_ptr<GameSession> session, engine::SceneId scene,
@@ -73,6 +75,11 @@ void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
 void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &look)
 {
     _impactLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setShotSound(game::EntityKind kind, const ShotSound &sound)
+{
+    _shotSounds.setSound(kind, sound);
 }
 
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
@@ -166,6 +173,7 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     } else {
         _ecs.addComponent<engine::Box>(entity, look.box);
     }
+    _shotSounds.addSound(_ecs, entity, state);
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
 }
 

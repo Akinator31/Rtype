@@ -13,6 +13,7 @@
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Sound.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/System/ModelAnimationSystem.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
@@ -423,6 +424,35 @@ TEST_CASE("Shots appear when fired, and their entities go when they leave the ga
     client.run(120);
     CHECK(client.countShots() == 0);
     CHECK(client.sessions.entityCount() == 1);
+}
+
+TEST_CASE("A shot of a kind given a sound appears with it, for the sound system of the engine", "[client]")
+{
+    Client client({}, armedConfig());
+    const rtype::audio::SoundId fire{7};
+    client.sessions.setShotSound(rtype::game::EntityKind::PlayerShot, {fire, 0.5f});
+
+    client.input.keys = {Key::Space};
+    client.run(30);
+    std::size_t shots = 0;
+    auto &replicated = client.ecs.cache<Replicated>();
+    for (rtype::ecs::entity_t entity = 0; entity < replicated.size(); ++entity) {
+        if (!replicated.has(entity) || !client.ecs.isAlive(entity)) {
+            continue;
+        }
+        if (replicated.get(entity).kind != rtype::game::EntityKind::PlayerShot) {
+            CHECK_FALSE(client.ecs.hasComponent<rtype::engine::SoundEffect>(entity));
+            continue;
+        }
+        ++shots;
+        REQUIRE(client.ecs.hasComponent<rtype::engine::SoundEffect>(entity));
+        const auto &effect = client.ecs.getComponent<rtype::engine::SoundEffect>(entity);
+        CHECK(effect.sound == fire);
+        CHECK(effect.settings.volume == 0.5f);
+        // Fired from the left of the game area: heard on the left
+        CHECK(effect.settings.pan < 0.0f);
+    }
+    CHECK(shots >= 2);
 }
 
 TEST_CASE("The game stops while a menu is over its scene", "[client]")

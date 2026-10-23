@@ -71,6 +71,12 @@ constexpr float SplashScale = 24.0f;
 constexpr float BydoExplosionScale = 25.0f;
 constexpr float ShipExplosionScale = 28.0f;
 
+/// How loud the shots are: the players fire all the time, the Bydos often and many at once, their plasma orbs
+/// rarely.
+constexpr float PlayerShotVolume = 0.5f;
+constexpr float BydoShotVolume = 0.35f;
+constexpr float PlasmaOrbVolume = 0.7f;
+
 /// The energy of a shot with a light around its core.
 /// @param core The core of the shot model, as in ShotLook.
 render::Energy shine(render::Energy energy, render::TextureId light, render::Rectangle core,
@@ -118,9 +124,21 @@ void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resour
                                           ExplosionTint, explosion));
 }
 
+/// Gives each kind of shot the sound of the weapon that fires it: the cannon of the players, the blaster of
+/// the Bydo scouts, the plasma gun of the gunners.
+void setShotSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
+{
+    sessions.setShotSound(game::EntityKind::PlayerShot,
+                          {audio.loadSound(RTYPE_SOUND_BASICAL_BLASTER), PlayerShotVolume});
+    sessions.setShotSound(game::EntityKind::BydoShot,
+                          {audio.loadSound(RTYPE_SOUND_LOW_BLASTER), BydoShotVolume});
+    sessions.setShotSound(game::EntityKind::BydoPlasmaShot,
+                          {audio.loadSound(RTYPE_SOUND_BIG_BLASTER), PlasmaOrbVolume});
+}
+
 } // namespace
 
-GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources,
+GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations)
     : _engine(engine), _sessions(sessions), _translations(translations)
@@ -143,6 +161,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                          {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true,
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
     setImpactLooks(sessions, resources, energy);
+    setShotSounds(sessions, audio);
     engine.createScene(
         GameScene, {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
         [this, &resources, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {

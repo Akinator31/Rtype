@@ -4,6 +4,7 @@
 #include "Game/ImpactLooks.hpp"
 #include "Game/ShipLooks.hpp"
 #include "Game/ShotLooks.hpp"
+#include "Game/ShotSounds.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/System/System.hpp"
 #include "rtype/engine/Control/Controls.hpp"
@@ -42,7 +43,9 @@ struct Replicated {
 ///    moved, and destroyed when it is no longer in the world. The kinds given a ShipLook are 3D models, which
 ///    roll around their length, smoothly, as their ship climbs or dives; those given a ShotLook are models of
 ///    energy; the others are boxes. An entity killed in the game (a ship shot down, a shot that hit) leaves
-///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook.
+///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. A shot that
+///    appears is given the engine::SoundEffect of its kind, if it was given a ShotSound: the
+///    engine::SoundSystem plays it.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens
@@ -62,6 +65,7 @@ class GameSessionSystem : public ecs::System
     ShipLooks _shipLooks;
     ShotLooks _shotLooks;
     ImpactLooks _impactLooks;
+    ShotSounds _shotSounds;
     /// The entities drawn that the game killed: they leave an impact when they go.
     std::unordered_set<std::uint32_t> _killed;
     std::vector<game::PlayerState> _players;
@@ -95,6 +99,8 @@ public:
     void setShotLook(game::EntityKind kind, const ShotLook &look);
     /// Leaves an impact where the game kills an entity of this kind from now on.
     void setImpactLook(game::EntityKind kind, const ImpactLook &look);
+    /// Plays a sound when a shot of this kind appears from now on.
+    void setShotSound(game::EntityKind kind, const ShotSound &sound);
 
     void update(float elapsed) override;
 
