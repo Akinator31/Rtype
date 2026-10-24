@@ -55,6 +55,13 @@ struct Color {
     std::uint8_t a = 255;
 };
 
+/// A colour at a place of a gradient.
+struct ColorStop {
+    /// Where the colour is reached, from 0 at the start of the gradient to 1 at its end.
+    float position = 0.0f;
+    Color color;
+};
+
 /// Common colours.
 namespace colors
 {

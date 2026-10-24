@@ -138,6 +138,15 @@ public:
     /// @throws std::logic_error if no frame is started.
     void drawCircleOutline(Vector2 center, float radius, float thickness, Color color);
 
+    /// Draws an arc of a ring, for instance a circle open on its sides.
+    /// @param center Centre of the circle, in game units.
+    /// @param radius Outer radius, in game units. Nothing is drawn if it is not strictly positive.
+    /// @param thickness Width of the ring, in game units, drawn inside the radius.
+    /// @param startAngle, endAngle Ends of the arc, in degrees, turning clockwise on the screen from the
+    /// right: 0 is on the right of the centre, 90 below it.
+    /// @throws std::logic_error if no frame is started.
+    void drawArc(Vector2 center, float radius, float thickness, float startAngle, float endAngle, Color color);
+
     /// Draws a straight line.
     /// @param start First end of the line, in game units.
     /// @param end Second end of the line, in game units.
@@ -202,6 +211,16 @@ public:
     /// @throws std::logic_error if no frame is started.
     void drawText(FontId font, const std::string &text, Vector2 position, float size, Color color,
                   float spacing = 0.0f);
+    /// Draws text with a loaded font, its colour changing from the top of the line to the bottom of it: the
+    /// chrome of a title.
+    /// @param position Top-left corner of the text, in game units.
+    /// @param size Height of the characters, in game units. It is also the height of the gradient.
+    /// @param stops Colours from the top (position 0) to the bottom (position 1) of the line, in the order of
+    /// their positions. A single stop gives a plain colour; none draws nothing.
+    /// @param spacing Space added between two characters, in game units.
+    /// @throws std::logic_error if no frame is started.
+    void drawGradientText(FontId font, const std::string &text, Vector2 position, float size,
+                          const std::vector<ColorStop> &stops, float spacing = 0.0f);
     /// Draws text with raylib's built-in font, which is always available. Meant for debugging.
     /// @throws std::logic_error if no frame is started.
     void drawText(const std::string &text, Vector2 position, float size, Color color);
