@@ -54,6 +54,7 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     const auto title = resources.loadFontAsync(RTYPE_FONT_TITLE, 160);
     const auto button = resources.loadFontAsync(RTYPE_FONT_BUTTON, 96);
     const auto flare = resources.loadFontAsync(RTYPE_FONT_FLARE, 96);
+    const auto display = resources.loadFontAsync(RTYPE_FONT_DISPLAY, 96);
     const auto sky = resources.loadTextureAsync(RTYPE_IMAGE_STARFIELD, TextureFiltering::Smooth);
     const auto logo = resources.loadTextureAsync(RTYPE_IMAGE_LOGO, TextureFiltering::Smooth);
     constexpr std::array modelPaths{
@@ -76,7 +77,7 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         RTYPE_MODEL_IMPACT_EXPLOSION,
     };
     // The fonts and the textures above
-    constexpr std::size_t otherAssets = 5;
+    constexpr std::size_t otherAssets = 6;
     std::vector<std::shared_future<ModelId>> models;
     for (const char *path : modelPaths) {
         models.push_back(resources.loadModelAsync(path));
@@ -89,7 +90,8 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         resources.finishPendingLoads();
         std::size_t completed =
             static_cast<std::size_t>(ready(title)) + static_cast<std::size_t>(ready(button)) +
-            static_cast<std::size_t>(ready(flare)) + static_cast<std::size_t>(ready(sky)) +
+            static_cast<std::size_t>(ready(flare)) + static_cast<std::size_t>(ready(display)) +
+            static_cast<std::size_t>(ready(sky)) +
             static_cast<std::size_t>(ready(logo));
         for (const auto &model : models) {
             completed += static_cast<std::size_t>(ready(model));
@@ -109,6 +111,7 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     title.get();
     button.get();
     flare.get();
+    display.get();
     sky.get();
     logo.get();
     for (const auto &model : models) {
@@ -207,6 +210,8 @@ void run()
         return;
     }
 
+    const FontId display = resources.loadFont(RTYPE_FONT_DISPLAY, 96);
+    const FontId messageFont = resources.loadFont(RTYPE_FONT_BUTTON, 96);
     const rtype::engine::InterfaceStyle style{
         .font = resources.loadFont(RTYPE_FONT_TITLE, 160),
         .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96),
@@ -215,6 +220,11 @@ void run()
                    .clickSound = rtype::engine::SoundEffect{audio.loadSound(RTYPE_SOUND_BUTTON_CLICK),
                                                             {.volume = ButtonClickVolume}}},
         .flare = {.font = resources.loadFont(RTYPE_FONT_FLARE, 96)},
+        .toast = {.nameFont = display, .messageFont = messageFont},
+        .title = {.font = display},
+        .slider = {.font = display},
+        .toggle = {.font = display},
+        .gauge = {.font = display},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
     rtype::localization::Localization translations("en");

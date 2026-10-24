@@ -32,6 +32,7 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Ships.cpp
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
+    src/MainMenu/UiShowcase.cpp
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
     src/ShipModel.cpp

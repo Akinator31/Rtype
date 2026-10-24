@@ -1,6 +1,7 @@
 #include "MainMenu/Submenus.hpp"
 
 #include "MainMenu/Layout.hpp"
+#include "MainMenu/UiShowcase.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 
@@ -35,7 +36,7 @@ void createSubmenuScene(engine::Engine &engine, const engine::InterfaceStyle &st
             engine::InterfaceBuilder interface(target.getEcs(), scene, style);
             interface.backButton([&target] { target.popScene(); },
                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            interface.boundText([&translations, titleKey] { return translations.text(titleKey); },
+            interface.boundTitle([&translations, titleKey] { return translations.text(titleKey); },
                                 {engine::AnchorPoint::TopLeft,
                                  screenMargin + style.button.height + style.headerSpacing,
                                  screenMargin + ((style.button.height - style.textSize) / 2.0f)});
@@ -60,7 +61,7 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
             engine::InterfaceBuilder interface(target.getEcs(), scene, style);
             interface.backButton([&target] { target.popScene(); },
                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            interface.boundText([&translations] { return translations.text("menu.settings"); },
+            interface.boundTitle([&translations] { return translations.text("menu.settings"); },
                                 {engine::AnchorPoint::TopLeft,
                                  screenMargin + style.button.height + style.headerSpacing,
                                  screenMargin + ((style.button.height - style.textSize) / 2.0f)});
@@ -74,6 +75,11 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
                 [&translations] { translations.setLanguage(translations.language() == "fr" ? "en" : "fr"); },
                 {engine::AnchorPoint::TopLeft, screenMargin, buttonsTop});
             target.getEcs().addComponent<engine::BoundText>(choice, label);
+            const ecs::entity_t showcase = interface.button(
+                translations.text("showcase.open"), [&target] { target.pushScene(UiShowcaseScene); },
+                {engine::AnchorPoint::TopLeft, screenMargin, buttonsTop + buttonsSpacing});
+            target.getEcs().addComponent<engine::BoundText>(
+                showcase, [&translations] { return translations.text("showcase.open"); });
         });
 }
 
@@ -85,6 +91,7 @@ void createSubmenuScenes(engine::Engine &engine, const engine::InterfaceStyle &s
     createSubmenuScene(engine, style, PlayMenuScene, translations, "menu.play",
                        {{"menu.solo", std::move(playSolo)}});
     createSettingsScene(engine, style, translations);
+    createUiShowcaseScene(engine, style, translations);
 }
 
 } // namespace rtype::client

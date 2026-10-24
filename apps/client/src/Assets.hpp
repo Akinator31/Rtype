@@ -7,6 +7,7 @@
 #define RTYPE_FONT_TITLE "fonts/FiraSans-Black.ttf"
 #define RTYPE_FONT_BUTTON "fonts/Inter-SemiBold.ttf"
 #define RTYPE_FONT_FLARE "fonts/Orbitron-Medium.ttf"
+#define RTYPE_FONT_DISPLAY "fonts/Audiowide-Regular.ttf"
 
 // Images
 #define RTYPE_IMAGE_STARFIELD "images/starfield.png"
