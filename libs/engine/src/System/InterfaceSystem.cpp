@@ -123,7 +123,7 @@ void InterfaceSystem::lightPanels(const std::vector<ecs::entity_t> &widgets,
             _tweens.emplace(widget, Tween{.target = TweenTarget::Highlight,
                                           .from = _panels.get(widget).highlight,
                                           .to = target,
-                                          .duration = computeFadeDuration(_panels.get(widget), target),
+                                          .duration = computeFadeDuration(target),
                                           .easing = Easing::EaseOut});
             if (target == 1.0f && !appeared) {
                 playSound(widget, _style.button.hoverSound);
@@ -132,18 +132,10 @@ void InterfaceSystem::lightPanels(const std::vector<ecs::entity_t> &widgets,
     }
 }
 
-/// A Flare takes its time to trace its line when it lights up, and goes out quickly.
-float InterfaceSystem::computeFadeDuration(const Panel &panel, float target) const
+/// A button takes its time to trace its line when it lights up, and goes out quickly.
+float InterfaceSystem::computeFadeDuration(float target) const
 {
-    if (panel.type != PanelType::Flare) {
-        return _style.button.fadeDuration;
-    }
     return target > 0.0f ? _style.flare.traceDuration : _style.flare.fadeDuration;
-}
-
-bool InterfaceSystem::isFlare(ecs::entity_t widget) const
-{
-    return _panels.has(widget) && _panels.get(widget).type == PanelType::Flare;
 }
 
 bool InterfaceSystem::isPressDelayed(ecs::entity_t widget) const
@@ -164,7 +156,7 @@ void InterfaceSystem::runDelayedPresses(float elapsed)
     std::erase_if(_delayedPresses, [](const DelayedPress &press) { return press.delay <= 0.0f; });
 }
 
-/// The highlight of a pressed Flare jumps above 1, then comes back to its lit look: its star bursts.
+/// The highlight of a pressed button jumps above 1, then comes back to its lit look: its star bursts.
 void InterfaceSystem::burstPanel(ecs::entity_t widget)
 {
     _tweens.emplace(widget, Tween{.target = TweenTarget::Highlight,
@@ -197,18 +189,13 @@ void InterfaceSystem::updatePointerMode(bool mouseMoved)
 // The actions are copied into the deferred calls: the components may move in memory before the calls run
 void InterfaceSystem::activate(ecs::entity_t widget)
 {
-    if (_buttons.has(widget) && isFlare(widget)) {
+    if (_buttons.has(widget)) {
         if (isPressDelayed(widget)) {
             return;
         }
         playSound(widget, _style.button.clickSound);
         burstPanel(widget);
         _delayedPresses.push_back({widget, _style.flare.pressDelay, _buttons.get(widget).onPress});
-    } else if (_buttons.has(widget)) {
-        playSound(widget, _style.button.clickSound);
-        if (auto onPress = _buttons.get(widget).onPress) {
-            _ecs.defer(std::move(onPress));
-        }
     } else if (_toggles.has(widget)) {
         const Toggle toggle = _toggles.get(widget);
         _ecs.defer([toggle] { toggle.set(!toggle.get()); });

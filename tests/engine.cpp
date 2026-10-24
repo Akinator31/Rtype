@@ -155,6 +155,7 @@ TEST_CASE("Confirm runs the action of the focused button", "[engine][interface]"
     world.update();
 
     world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
 
     REQUIRE(pressed == "Play");
 }
@@ -222,6 +223,7 @@ TEST_CASE("A button can open another menu", "[engine][interface]")
     world.update();
 
     world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
 
     REQUIRE(opened.size() == 1);
     REQUIRE(world.scenes.top() == opened.front());
@@ -404,9 +406,9 @@ TEST_CASE("Widgets are stacked in a column, centred", "[engine][layout]")
     world.update();
 
     const auto y = [&](entity_t entity) { return world.ecs.getComponent<rtype::ecs::Position>(entity).y; };
-    REQUIRE(std::abs(y(first) - 523.8f) < 0.01f);
+    REQUIRE(std::abs(y(first) - 532.8f) < 0.01f);
     REQUIRE(std::abs(y(second) - 604.8f) < 0.01f);
-    REQUIRE(std::abs(y(third) - 685.8f) < 0.01f);
+    REQUIRE(std::abs(y(third) - 676.8f) < 0.01f);
     REQUIRE(world.ecs.getComponent<rtype::ecs::Position>(second).x == 960.0f);
 }
 
@@ -426,6 +428,7 @@ TEST_CASE("A menu can be built in a named scene", "[engine][interface][scenes]")
     REQUIRE(world.scenes.sceneOf(play) == world.scenes.top());
 
     world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
     REQUIRE(played);
 }
 
@@ -517,15 +520,16 @@ TEST_CASE("An anchored button can be focused and pressed", "[engine][interface]"
 
     world.update();
     REQUIRE(world.isFocused(back));
-    CHECK(positionOf(world, back).x == 20.0f + 238.0f);
+    CHECK(positionOf(world, back).x == 20.0f + (world.ecs.getComponent<Hitbox>(back).baseWidth / 2.0f));
 
     world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
     CHECK(pressed == 1);
     world.press({Key::Down});
     CHECK(world.isFocused(next));
 }
 
-TEST_CASE("A back button is a square button with an arrow", "[engine][interface]")
+TEST_CASE("A back button is a button with an arrow", "[engine][interface]")
 {
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
@@ -533,13 +537,12 @@ TEST_CASE("A back button is a square button with an arrow", "[engine][interface]
     const entity_t back = ui.backButton([&pressed] { ++pressed; }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
 
     world.update();
-    const auto &panel = world.ecs.getComponent<Panel>(back);
-    CHECK(panel.width == panel.height);
     CHECK(world.textOf(back) == "\xE2\x86\x90");
-    CHECK(positionOf(world, back).x == 20.0f + (panel.width / 2.0f));
+    CHECK(positionOf(world, back).x == 20.0f + (world.ecs.getComponent<Hitbox>(back).baseWidth / 2.0f));
     REQUIRE(world.isFocused(back));
 
     world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
     CHECK(pressed == 1);
 }
 
@@ -547,14 +550,13 @@ TEST_CASE("A flare button is as wide as its spaced text and its star", "[engine]
 {
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
-    const entity_t play = ui.flareButton("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    const entity_t play = ui.button("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
 
     world.update();
     const FlareStyle &style = world.style.flare;
     // 4 letters half as wide as high, and 3 spaces between them
     const float textWidth = (4.0f * style.textSize / 2.0f) + (3.0f * style.letterSpacing);
     const Hitbox &hitbox = world.ecs.getComponent<Hitbox>(play);
-    CHECK(world.ecs.getComponent<Panel>(play).type == PanelType::Flare);
     CHECK(hitbox.baseWidth == style.computeWidth(textWidth));
     CHECK(hitbox.baseHeight == style.height);
     CHECK(positionOf(world, play).x == 20.0f + (hitbox.baseWidth / 2.0f));
@@ -566,7 +568,7 @@ TEST_CASE("A flare button runs its action once its burst has been seen, once per
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
     int pressed = 0;
-    ui.flareButton("PLAY", [&pressed] { ++pressed; }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    ui.button("PLAY", [&pressed] { ++pressed; }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
     world.update();
 
     world.press({Key::Enter});
@@ -583,8 +585,8 @@ TEST_CASE("A flare button traces its line slower than it goes out", "[engine][tw
 {
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
-    const entity_t play = ui.flareButton("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
-    ui.flareButton("QUIT", [] {}, {AnchorPoint::TopLeft, 20.0f, 100.0f});
+    const entity_t play = ui.button("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    ui.button("QUIT", [] {}, {AnchorPoint::TopLeft, 20.0f, 100.0f});
     world.update();
     const auto highlightOf = [&] { return world.ecs.getComponent<Panel>(play).highlight; };
 
@@ -605,7 +607,7 @@ TEST_CASE("A pressed flare button shines brighter for a moment, then stays lit",
 {
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
-    const entity_t play = ui.flareButton("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
+    const entity_t play = ui.button("PLAY", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
     world.update();
     const auto highlightOf = [&] { return world.ecs.getComponent<Panel>(play).highlight; };
 
@@ -617,16 +619,6 @@ TEST_CASE("A pressed flare button shines brighter for a moment, then stays lit",
     CHECK(std::abs(highlightOf() - 1.0f) < 1e-6f);
 }
 
-TEST_CASE("A glass button does not shine beyond its lit look when it is pressed", "[engine][tween]")
-{
-    World world;
-    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
-    const entity_t play = ui.button("Play", [] {}, {AnchorPoint::TopLeft, 20.0f, 20.0f});
-    world.update();
-
-    world.press({Key::Enter});
-    CHECK(world.ecs.getComponent<Panel>(play).highlight <= 1.0f);
-}
 
 TEST_CASE("A header puts the title after the back button", "[engine][interface]")
 {
@@ -639,6 +631,7 @@ TEST_CASE("A header puts the title after the back button", "[engine][interface]"
     world.update();
     REQUIRE(world.isFocused(back));
     world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
     CHECK(pressed == 1);
     CHECK(world.textOf(back) == "\xE2\x86\x90");
 }
@@ -674,7 +667,8 @@ TEST_CASE("A click activates the widget under the pointer, not the focused one",
     world.clickAt(100.0f, 100.0f);
     REQUIRE(pressed.empty());
 
-    world.clickAt(960.0f, 708.8f);
+    world.clickAt(960.0f, 676.8f);
+    world.update(world.style.flare.pressDelay);
     REQUIRE(pressed == "Quit");
     REQUIRE(world.isFocused(quit));
 }
@@ -737,7 +731,7 @@ TEST_CASE("A button lights up while the pointer is over it, without growing", "[
     const auto highlightOf = [&](entity_t entity) { return world.ecs.getComponent<Panel>(entity).highlight; };
 
     // Focused, but the player uses the mouse and the pointer is elsewhere
-    world.update(world.style.button.fadeDuration);
+    world.update(world.style.flare.traceDuration);
     CHECK(highlightOf(play) == 0.0f);
 
     world.input.mouse = {960.0f, 604.8f};
@@ -745,13 +739,13 @@ TEST_CASE("A button lights up while the pointer is over it, without growing", "[
     world.update(0.05f);
     CHECK(highlightOf(play) > 0.0f);
     CHECK(highlightOf(play) < 1.0f);
-    world.update(world.style.button.fadeDuration);
+    world.update(world.style.flare.traceDuration);
     CHECK(std::abs(highlightOf(play) - 1.0f) < 1e-6f);
     CHECK(world.ecs.getComponent<Scale>(play).value == 1.0f);
 
     world.input.mouse = {10.0f, 10.0f};
     world.update();
-    world.update(world.style.button.fadeDuration);
+    world.update(world.style.flare.traceDuration);
     CHECK(std::abs(highlightOf(play)) < 1e-6f);
 }
 
@@ -765,7 +759,7 @@ TEST_CASE("With the keyboard, the focused button lights up", "[engine][tween]")
     const auto highlightOf = [&](entity_t entity) { return world.ecs.getComponent<Panel>(entity).highlight; };
 
     world.press({Key::Down});
-    world.update(world.style.button.fadeDuration);
+    world.update(world.style.flare.traceDuration);
     CHECK(std::abs(highlightOf(play)) < 1e-6f);
     CHECK(std::abs(highlightOf(quit) - 1.0f) < 1e-6f);
 }
@@ -809,7 +803,7 @@ TEST_CASE("A button sounds when it lights up and when it is pressed, not when it
     // The pointer away, the panel goes out; over the button, it lights up again
     world.input.mouse = {10.0f, 10.0f};
     world.update();
-    world.update(world.style.button.fadeDuration);
+    world.update(world.style.flare.traceDuration);
     world.ecs.removeComponent<SoundEffect>(back);
     const rtype::ecs::Position centre = world.ecs.getComponent<rtype::ecs::Position>(back);
     world.input.mouse = {centre.x, centre.y};
@@ -830,7 +824,7 @@ TEST_CASE("Without sounds in the style, the buttons are silent", "[engine][inter
     CHECK_FALSE(world.ecs.hasComponent<SoundEffect>(quit));
 }
 
-TEST_CASE("A button is the size of its panel", "[engine][interface]")
+TEST_CASE("A button is as wide as its text and as high as the style says", "[engine][interface]")
 {
     World world;
     MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Menu");
@@ -838,8 +832,8 @@ TEST_CASE("A button is the size of its panel", "[engine][interface]")
     world.update();
 
     const Hitbox &box = world.ecs.getComponent<Hitbox>(play);
-    CHECK(box.width == world.style.button.width);
-    CHECK(box.height == world.style.button.height);
+    CHECK(box.baseWidth > 0.0f);
+    CHECK(box.height == world.style.flare.height);
 }
 
 TEST_CASE("Easings start at 0 and end at 1", "[engine][tween]")

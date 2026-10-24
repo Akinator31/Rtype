@@ -114,30 +114,12 @@ ecs::entity_t InterfaceBuilder::sprite(render::TextureId texture, render::Rectan
     return entity;
 }
 
-ecs::entity_t InterfaceBuilder::createButton(const std::string &text, float width,
-                                             std::function<void()> onPress, Anchor anchor)
-{
-    const ecs::entity_t entity = element(anchor);
-    _ecs.addComponent<Text>(entity, text, _style.button.font, _style.button.textSize, _style.text);
-    _ecs.addComponent<Panel>(entity, width, _style.button.height);
-    _ecs.addComponent<Focusable>(entity, _count++);
-    _ecs.addComponent<Scale>(entity);
-    _ecs.addComponent<Button>(entity, std::move(onPress));
-    return entity;
-}
-
 ecs::entity_t InterfaceBuilder::button(const std::string &text, std::function<void()> onPress, Anchor anchor)
-{
-    return createButton(text, _style.button.width, std::move(onPress), anchor);
-}
-
-ecs::entity_t InterfaceBuilder::flareButton(const std::string &text, std::function<void()> onPress,
-                                            Anchor anchor)
 {
     const FlareStyle &style = _style.flare;
     const ecs::entity_t entity = element(anchor);
     _ecs.addComponent<Text>(entity, text, style.font, style.textSize, style.text);
-    _ecs.addComponent<Panel>(entity, 0.0f, style.height, 0.0f, PanelType::Flare);
+    _ecs.addComponent<Panel>(entity, style.height);
     _ecs.addComponent<Focusable>(entity, _count++);
     _ecs.addComponent<Scale>(entity);
     _ecs.addComponent<Button>(entity, std::move(onPress));
@@ -146,14 +128,14 @@ ecs::entity_t InterfaceBuilder::flareButton(const std::string &text, std::functi
 
 ecs::entity_t InterfaceBuilder::backButton(std::function<void()> onPress, Anchor anchor)
 {
-    return createButton(leftwardsArrow, _style.button.height, std::move(onPress), anchor);
+    return button(leftwardsArrow, std::move(onPress), anchor);
 }
 
 ecs::entity_t InterfaceBuilder::header(const std::string &title, std::function<void()> onBack, Anchor anchor)
 {
     const ecs::entity_t back = backButton(std::move(onBack), anchor);
-    const float titleX = anchor.x + _style.button.height + _style.headerSpacing;
-    const float titleY = anchor.y + ((_style.button.height - _style.textSize) / 2.0f);
+    const float titleX = anchor.x + _style.flare.height + _style.headerSpacing;
+    const float titleY = anchor.y + ((_style.flare.height - _style.textSize) / 2.0f);
     this->title(title, {anchor.point, titleX, titleY});
     return back;
 }

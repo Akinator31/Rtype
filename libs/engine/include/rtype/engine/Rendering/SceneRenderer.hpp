@@ -73,10 +73,7 @@ class SceneRenderer
     void drawModels(render::Renderer &renderer);
     /// Poses the model at the time of its animation, unless it is already in this pose.
     void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation);
-    /// Draws a glass panel with its shadows and glow, in the look of its highlight.
-    void drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre, float scale,
-                   float opacity) const;
-    /// A Flare button: its text and, while it is lit, the line of light across it and the star after it.
+    /// A button: its text and, while it is lit, the line of light across it and the star after it.
     void drawFlare(render::Renderer &renderer, const Panel &panel, const Text &text, render::Vector2 centre,
                    float opacity) const;
     void drawFlareLight(render::Renderer &renderer, const Panel &panel, render::Rectangle textArea,

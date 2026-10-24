@@ -15,53 +15,18 @@
 namespace rtype::engine
 {
 
-/// One state of a button: its glass panel and the light around it.
-struct PanelLook {
-    /// Colours of the panel, blended from its left edge to its right edge.
-    render::Color left;
-    render::Color right;
-    render::Color border;
-    /// Light spreading around the panel; transparent for none.
-    render::Color glow;
-};
-
-/// Look of the buttons: a frosted glass panel of a fixed size, which lights up while the button has the
-/// focus, and their sounds. Sizes are in game units.
+/// The font of the console, and the sounds of the buttons. How a button looks is FlareStyle.
 struct ButtonStyle {
-    /// Font of the text of the buttons.
+    /// Font of the console.
     render::FontId font;
-    float textSize = 32.0f;
-    float width = 476.0f;
-    float height = 65.0f;
-    float cornerRadius = 23.0f;
-    float borderThickness = 1.5f;
-    /// How far the glow spreads around the panel.
-    float glowSize = 28.0f;
-    /// Shadow cast below the panel: its colour, how far below and how blurred.
-    render::Color shadow{0, 0, 0, 102};
-    float shadowOffset = 18.0f;
-    float shadowBlur = 40.0f;
-    /// Faint light along the top edge of the panel.
-    render::Color topLight{255, 255, 255, 26};
-    float topLightOffset = 2.0f;
-    float topLightBlur = 12.0f;
-    /// Shadow under the text, so that it stands out from the glass.
-    render::Color textShadow{0, 0, 0, 128};
-    float textShadowOffset = 2.0f;
-    /// Time to go from one look to the other, in seconds.
-    float fadeDuration = 0.15f;
-
-    PanelLook normal{{255, 255, 255, 102}, {255, 255, 255, 18}, {255, 255, 255, 102}, {191, 224, 255, 0}};
-    PanelLook focused{{255, 255, 255, 158}, {217, 237, 255, 51}, {255, 255, 255, 242}, {191, 224, 255, 128}};
-
-    /// Played when a panel lights up, under the pointer or with the focus, but not when a menu appears with
+    /// Played when a button lights up, under the pointer or with the focus, but not when a menu appears with
     /// its first button lit. None by default.
     std::optional<SoundEffect> hoverSound;
     /// Played when a button is pressed, before its action. None by default.
     std::optional<SoundEffect> clickSound;
 };
 
-/// Look of the buttons made of text alone (PanelType::Flare): spaced letters. When the button lights up, a
+/// Look of the buttons: text alone, with spaced letters. When the button lights up, a
 /// line of light traces itself across the text and a star flares after it; when it is pressed, the star
 /// bursts and a pulse of light runs along the line, which shines brighter. The sounds are those of
 /// ButtonStyle. Sizes are in game units, durations in seconds.

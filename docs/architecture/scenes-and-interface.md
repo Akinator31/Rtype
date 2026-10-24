@@ -242,9 +242,8 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 | `boundText` | A `Text` rewritten every frame from a function by the `BoundTextSystem` (score, lives, ping) |
 | `box` | A filled or outlined `Box` |
 | `sprite` | A `Sprite`: a texture or a part of it |
-| `button` | A focusable `Button`, drawn as a glass panel (`InterfaceStyle::button`); the buttons of a builder get the focus in the order they are created |
-| `flareButton` | A `Button` of text alone (`PanelType::Flare`, `InterfaceStyle::flare`), as wide as its spaced letters and its star: when lit, a line of light traces itself across the text and a star flares after it; when pressed, the star bursts, a pulse runs along the line, and the action runs `pressDelay` later. The buttons of the main menu |
-| `backButton` | A small square `Button` with a leftwards arrow (←), as high as the other buttons, to go back |
+| `button` | A focusable `Button` of text alone (`InterfaceStyle::flare`), as wide as its spaced letters and its star: when lit, a line of light traces itself across the text and a star flares after it; when pressed, the star bursts, a pulse runs along the line, and the action runs `pressDelay` later. The buttons of a builder get the focus in the order they are created |
+| `backButton` | A `Button` with a leftwards arrow (←), to go back |
 | `header` | The top of a secondary screen: a `backButton`, then the title to its right on the same line |
 
 A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
@@ -337,7 +336,7 @@ The client shows all of them, with the toasts, in the *Interface* menu of the se
 - The mouse focuses a widget only when it moves, so that a still pointer does not fight the keyboard.
 - A click activates the widget under the pointer, not the focused one.
 - Characters typed while no text field has the focus are dropped.
-- The buttons sound when their panel lights up (under the pointer, or given the focus by the keyboard or a
+- The buttons sound when they light up (under the pointer, or given the focus by the keyboard or a
   gamepad) and when they are pressed, if the style has the sounds (`ButtonStyle::hoverSound`, `clickSound`,
   optional `SoundEffect`): the `InterfaceSystem` gives the `SoundEffect` to the button, and the `SoundSystem`
   plays it in the frame, before the deferred action of the button. A menu that appears lights its first button
@@ -349,11 +348,11 @@ The client shows all of them, with the toasts, in the *Interface* menu of the se
   const InterfaceStyle style{.button = {.font = buttonFont, .hoverSound = hover, .clickSound = click}};
   ```
 
-- A `Panel` has a `highlight`: 0 for its normal look, 1 for its lit one, faded by a `Highlight` tween. For a
-  `flareButton`, it is how far the line is traced (`traceDuration` to light up, `fadeDuration` to go out);
+- A `Panel` (the mark of a button) has a `highlight`: 0 for its normal look, 1 for its lit one, faded by a
+  `Highlight` tween. It is how far the line is traced (`traceDuration` to light up, `fadeDuration` to go out);
   it goes above 1 when the button is pressed (`FlareStyle::pressedHighlight`), then back to 1 in
   `pressDuration`: the burst. Its action waits `pressDelay`, so that the burst is seen before a menu covers
-  it; pressing again meanwhile does nothing. A glass panel is drawn as lit above 1.
+  it; pressing again meanwhile does nothing.
 
 ## Testing
 

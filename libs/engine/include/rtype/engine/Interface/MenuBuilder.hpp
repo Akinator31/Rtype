@@ -60,7 +60,7 @@ public:
 
     /// A text that cannot get the focus.
     ecs::entity_t label(const std::string &text);
-    /// A button running an action when confirmed or clicked, drawn as a glass Panel (InterfaceStyle::button).
+    /// A button running an action when confirmed or clicked, drawn as a button of text alone (InterfaceStyle::flare).
     ecs::entity_t button(const std::string &text, std::function<void()> onPress);
     /// An on / off setting.
     ecs::entity_t toggle(const std::string &caption, std::function<bool()> get,

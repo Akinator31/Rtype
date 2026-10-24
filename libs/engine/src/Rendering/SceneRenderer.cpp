@@ -36,11 +36,6 @@ render::Color mix(render::Color from, render::Color to, float amount)
     return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a)};
 }
 
-PanelLook mix(const PanelLook &from, const PanelLook &to, float amount)
-{
-    return {mix(from.left, to.left, amount), mix(from.right, to.right, amount),
-            mix(from.border, to.border, amount), mix(from.glow, to.glow, amount)};
-}
 
 /// The colour more or less opaque, as much as a light more or less strong: brighter beyond 1.
 render::Color brightened(render::Color color, float strength)
@@ -290,12 +285,6 @@ render::Rectangle computeCoverSource(render::Vector2 picture, render::Rectangle 
     return {(picture.x - width) / 2.0f, (picture.y - height) / 2.0f, width, height};
 }
 
-render::Rectangle moveDown(render::Rectangle area, float distance)
-{
-    area.y += distance;
-    return area;
-}
-
 } // namespace
 
 SceneRenderer::SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle &style)
@@ -428,26 +417,6 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
     }
     // The light of the energy models spreads over the world, under the 2D entities and the interface
     renderer.drawGlow();
-}
-
-void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre,
-                              float scale, float opacity) const
-{
-    const ButtonStyle &style = _style.button;
-    const PanelLook look = mix(style.normal, style.focused, std::clamp(panel.highlight, 0.0f, 1.0f));
-    const float width = panel.width * scale;
-    const float height = panel.height * scale;
-    const render::Rectangle area{centre.x - width / 2.0f, centre.y - height / 2.0f, width, height};
-    const float radius = style.cornerRadius * scale;
-
-    drawBlurred(renderer, moveDown(area, style.shadowOffset * scale), radius, style.shadowBlur * scale,
-                faded(style.shadow, opacity));
-    drawBlurred(renderer, moveDown(area, -style.topLightOffset * scale), radius, style.topLightBlur * scale,
-                faded(style.topLight, opacity));
-    drawBlurred(renderer, area, radius, style.glowSize * scale, faded(look.glow, opacity));
-    renderer.drawRoundedRectangle(area, radius, faded(look.left, opacity), faded(look.right, opacity));
-    renderer.drawRoundedRectangleOutline(area, radius, style.borderThickness * scale,
-                                         faded(look.border, opacity));
 }
 
 /// The line fades in from its left end to the middle of the text, then stays bright up to the star; it is
@@ -953,11 +922,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                                   sprite.height * scale},
                                  0.0f, faded(sprite.tint, opacity));
         }
-        const bool isFlare = hasPanel && panels.get(entity).type == PanelType::Flare;
-        if (hasPanel && !isFlare) {
-            drawPanel(renderer, panels.get(entity), {centre.x, centre.y}, scale, opacity);
-        }
-        if (isFlare && texts.has(entity)) {
+        if (hasPanel && texts.has(entity)) {
             drawFlare(renderer, panels.get(entity), texts.get(entity), {centre.x, centre.y}, opacity);
             continue;
         }
@@ -1014,11 +979,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                 renderer.drawRectangle({begin, topLeft.y, offsetOf(selection.end) - begin, measured.y},
                                        faded(_style.selection, opacity));
             }
-            if (hasPanel) {
-                renderer.drawText(text.font, text.text,
-                                  {topLeft.x, topLeft.y + _style.button.textShadowOffset * scale}, size,
-                                  faded(_style.button.textShadow, opacity));
-            }
+
             if (isConsoleField) {
                 drawConsoleField(renderer, text, fields.get(entity), topLeft, size, opacity);
             } else {

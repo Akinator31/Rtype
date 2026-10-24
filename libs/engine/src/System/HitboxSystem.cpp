@@ -25,7 +25,7 @@ void HitboxSystem::update(float /*elapsed*/)
 render::Vector2 HitboxSystem::measure(ecs::entity_t entity) const
 {
     const Text &text = _texts.get(entity);
-    if (_panels.has(entity) && _panels.get(entity).type == PanelType::Flare) {
+    if (_panels.has(entity)) {
         const FlareStyle &style = _style.flare;
         const float width = _metrics.measureText(text.font, text.text, text.size, style.letterSpacing).x;
         return {style.computeWidth(width), style.height};
@@ -36,10 +36,7 @@ render::Vector2 HitboxSystem::measure(ecs::entity_t entity) const
     if (_switches.has(entity)) {
         return {_style.toggle.width, _style.toggle.height};
     }
-    if (_panels.has(entity)) {
-        const Panel &panel = _panels.get(entity);
-        return {panel.width, panel.height};
-    }
+
     const render::Vector2 size = _metrics.measureText(text.font, text.text, text.size, 0.0f);
     return {size.x + 2.0f * _style.padding, size.y + 2.0f * _style.padding};
 }

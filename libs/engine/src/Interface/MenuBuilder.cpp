@@ -84,8 +84,8 @@ ecs::entity_t MenuBuilder::label(const std::string &text)
 ecs::entity_t MenuBuilder::button(const std::string &text, std::function<void()> onPress)
 {
     const ecs::entity_t entity = widget(text, true);
-    _ecs.addComponent<Text>(entity, text, _style.button.font, _style.button.textSize, _style.text);
-    _ecs.addComponent<Panel>(entity, _style.button.width, _style.button.height);
+    _ecs.addComponent<Text>(entity, text, _style.flare.font, _style.flare.textSize, _style.flare.text);
+    _ecs.addComponent<Panel>(entity, _style.flare.height);
     _ecs.addComponent<Button>(entity, std::move(onPress));
     return entity;
 }

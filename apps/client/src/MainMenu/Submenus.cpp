@@ -38,8 +38,8 @@ void createSubmenuScene(engine::Engine &engine, const engine::InterfaceStyle &st
                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
             interface.boundTitle([&translations, titleKey] { return translations.text(titleKey); },
                                 {engine::AnchorPoint::TopLeft,
-                                 screenMargin + style.button.height + style.headerSpacing,
-                                 screenMargin + ((style.button.height - style.textSize) / 2.0f)});
+                                 screenMargin + style.flare.height + style.headerSpacing,
+                                 screenMargin + ((style.flare.height - style.textSize) / 2.0f)});
             float top = buttonsTop;
             for (const SubmenuButton &button : buttons) {
                 const ecs::entity_t entity =
@@ -63,8 +63,8 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
             interface.boundTitle([&translations] { return translations.text("menu.settings"); },
                                 {engine::AnchorPoint::TopLeft,
-                                 screenMargin + style.button.height + style.headerSpacing,
-                                 screenMargin + ((style.button.height - style.textSize) / 2.0f)});
+                                 screenMargin + style.flare.height + style.headerSpacing,
+                                 screenMargin + ((style.flare.height - style.textSize) / 2.0f)});
             const auto label = [&translations] {
                 const std::string key =
                     translations.language() == "fr" ? "language.french" : "language.english";

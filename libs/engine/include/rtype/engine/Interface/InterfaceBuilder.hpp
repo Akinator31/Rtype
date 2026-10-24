@@ -38,8 +38,7 @@ class InterfaceBuilder
     int _count = 0;
 
     ecs::entity_t element(Anchor anchor);
-    ecs::entity_t createButton(const std::string &text, float width, std::function<void()> onPress,
-                               Anchor anchor);
+
 
 public:
     /// @param style It must outlive the builder.
@@ -63,14 +62,10 @@ public:
     /// @param source Part of the texture, in texture pixels.
     ecs::entity_t sprite(render::TextureId texture, render::Rectangle source, float width, float height,
                          Anchor anchor);
-    /// A button running an action when confirmed or clicked, drawn as a glass Panel (InterfaceStyle::button).
-    /// The buttons of a builder get the focus in the order they are created.
+    /// A button made of text alone (InterfaceStyle::flare), as wide as its text: a line of light traces itself
+    /// across it while it has the focus. Its action runs a moment after it is pressed, once its burst has been
+    /// seen (FlareStyle::pressDelay). The buttons of a builder get the focus in the order they are created.
     ecs::entity_t button(const std::string &text, std::function<void()> onPress, Anchor anchor);
-    /// A button made of text alone (PanelType::Flare, InterfaceStyle::flare), as wide as its text: a line of
-    /// light traces itself across it while it has the focus. Its action runs a moment after it is pressed,
-    /// once its burst has been seen (FlareStyle::pressDelay). It gets the focus in the same order as the
-    /// other buttons.
-    ecs::entity_t flareButton(const std::string &text, std::function<void()> onPress, Anchor anchor);
     /// A value between 0 and 1 the player sets by dragging the handle of a rail, or with Left and Right, the
     /// mouse wheel and the keys (InterfaceStyle::slider): its caption above the rail, its value as a
     /// percentage on the right. It gets the focus in the same order as the buttons. The anchor places the
@@ -90,8 +85,8 @@ public:
     /// @param caption Written above the rail with the value as a percentage; none if empty.
     /// @param get Reads the value, so that the gauge always shows the real one.
     ecs::entity_t gauge(const std::string &caption, std::function<float()> get, Anchor anchor);
-    /// A small square button with a leftwards arrow, to go back to the previous screen: a glass Panel as high
-    /// as the other buttons. It gets the focus in the same order as them.
+    /// A button with a leftwards arrow, to go back to the previous screen. It gets the focus in the same order
+    /// as the other buttons.
     ecs::entity_t backButton(std::function<void()> onPress, Anchor anchor);
     /// The top of a secondary screen, such as a submenu: a back button, then the title (see title()) to its right,
     /// centred on the same line. The anchor places the back button; the title follows it, so the anchor

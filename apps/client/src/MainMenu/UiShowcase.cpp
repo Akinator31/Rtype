@@ -98,7 +98,7 @@ void createNotificationButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface
                               localization::Localization &translations, const std::string &key,
                               std::function<void()> onPress, int rowsBelow)
 {
-    const ecs::entity_t button = interface.flareButton(
+    const ecs::entity_t button = interface.button(
         translations.text(key), std::move(onPress),
         {engine::AnchorPoint::BottomRight, -screenMargin,
          -buttonsBottom - (static_cast<float>(rowsBelow) * buttonsSpacing)});
@@ -163,8 +163,8 @@ void createUiShowcaseScene(engine::Engine &engine, const engine::InterfaceStyle 
                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
             interface.boundTitle([&translations] { return translations.text("showcase.title"); },
                                  {engine::AnchorPoint::TopLeft,
-                                  screenMargin + style.button.height + style.headerSpacing,
-                                  screenMargin + ((style.button.height - style.textSize) / 2.0f)});
+                                  screenMargin + style.flare.height + style.headerSpacing,
+                                  screenMargin + ((style.flare.height - style.textSize) / 2.0f)});
             createSliders(interface, style);
             createSwitches(interface);
             createGauges(interface);
