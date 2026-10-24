@@ -83,7 +83,28 @@ class SceneRenderer
                         render::Vector2 star, float opacity) const;
     void drawFlareLine(render::Renderer &renderer, float left, float right, float middle, float y, float head,
                        float shine, float opacity) const;
-    /// Draws a toast in the look of InterfaceStyle::toast: its panel, its accent and its text.
+    /// Draws a title (see Title): its text in chrome, with a light around it.
+    void drawTitle(render::Renderer &renderer, const Text &text, render::Vector2 centre, float scale,
+                   float opacity) const;
+    /// Draws a slider (see SliderTrack): its caption and value, its rail and its handle.
+    void drawSlider(render::Renderer &renderer, const Slider &slider, const SliderTrack &track,
+                    const Text &text, render::Vector2 centre, float opacity) const;
+    /// Draws a switch (see SwitchTrack): its caption, then "OFF", a link with a dot on it, and "ON".
+    void drawSwitch(render::Renderer &renderer, const Toggle &toggle, const SwitchTrack &track, const Text &text,
+                    render::Vector2 centre, float opacity) const;
+    /// Draws a gauge: its caption and value, its rail, and its light up to its value with a spark at the end.
+    void drawGauge(render::Renderer &renderer, const Gauge &gauge, render::Vector2 centre, float opacity) const;
+    /// Draws an announcement: an icon and a title, a line of light under them, and the detail. `progress` goes
+    /// from 0 to 1 while it appears, and back to 0 while it leaves: each part has its moment in this entrance.
+    void drawAnnouncement(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
+                          float progress) const;
+    /// Draws a banner: a band across the screen between two lines of light, its title and its detail, with an
+    /// entrance in the same way as an announcement.
+    void drawBanner(render::Renderer &renderer, const Toast &toast, render::Vector2 centre, float progress) const;
+    /// Draws a line of text with its icon.
+    void drawEventLine(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
+                       float opacity) const;
+    /// Draws a toast in the look of InterfaceStyle::toast: its words on a line, then its icon.
     void drawToast(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
                    float opacity) const;
     /// Draws a console text field: its prompt in the prompt colour of the style, then its content.

@@ -270,6 +270,89 @@ TEST_CASE("A slider changes by steps and stays between 0 and 1", "[engine][inter
     REQUIRE(world.textOf(slider) == "Volume: 90%");
 }
 
+TEST_CASE("A slider with a rail follows the pointer while it is dragged", "[engine][interface][slider]")
+{
+    World world;
+    float volume = 0.5f;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t slider = ui.slider(
+        "Volume", [&] { return volume; }, [&](float value) { volume = value; }, 0.1f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+
+    const rtype::ecs::Position rail = world.ecs.getComponent<rtype::ecs::Position>(slider);
+    const float left = rail.x - (world.style.slider.width / 2.0f);
+    const SliderTrack &track = world.ecs.getComponent<SliderTrack>(slider);
+
+    // Pressed a quarter along the rail: the value goes there, and follows the pointer until it is released
+    world.input.mouse = {left + (0.25f * world.style.slider.width), rail.y};
+    world.input.mouseButtons = {MouseButton::Left};
+    world.update();
+    world.update(world.style.slider.fadeDuration);
+    CHECK(std::abs(volume - 0.25f) < 0.01f);
+    CHECK(track.grab > 0.99f);
+
+    world.input.mouse = {left + (0.8f * world.style.slider.width), rail.y};
+    world.update();
+    CHECK(std::abs(volume - 0.8f) < 0.01f);
+
+    // Past the end of the rail, the value stops at 1; once released, the pointer does not move it any more
+    world.input.mouse = {left + (2.0f * world.style.slider.width), rail.y};
+    world.update();
+    CHECK(volume == 1.0f);
+    world.input.mouseButtons.clear();
+    world.update();
+    world.input.mouse = {left, rail.y};
+    world.update(world.style.slider.fadeDuration);
+    CHECK(volume == 1.0f);
+    CHECK(track.grab < 0.01f);
+}
+
+TEST_CASE("The keys and the wheel step a slider with a rail", "[engine][interface][slider]")
+{
+    World world;
+    float volume = 0.5f;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    ui.slider(
+        "Volume", [&] { return volume; }, [&](float value) { volume = value; }, 0.25f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+
+    world.press({Key::Right});
+    CHECK(std::abs(volume - 0.75f) < 1e-6f);
+    world.press({Key::Left});
+    world.press({Key::Left});
+    CHECK(std::abs(volume - 0.25f) < 1e-6f);
+}
+
+TEST_CASE("A slider with a rail is as big as its rail and handle", "[engine][interface][slider]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t slider = ui.slider(
+        "Volume", [] { return 0.5f; }, [](float) {}, 0.1f, {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+
+    const Hitbox &box = world.ecs.getComponent<Hitbox>(slider);
+    CHECK(box.width == world.style.slider.getAreaWidth());
+    CHECK(box.height == world.style.slider.getHeight());
+}
+
+TEST_CASE("A title is a text drawn in chrome, and follows its function", "[engine][interface]")
+{
+    World world;
+    std::string title = "Settings";
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t entity = ui.boundTitle([&] { return title; }, {AnchorPoint::TopLeft, 0.0f, 0.0f});
+    world.update();
+    CHECK(world.ecs.hasComponent<Title>(entity));
+    CHECK(world.textOf(entity) == "Settings");
+
+    title = "Paramètres";
+    world.update();
+    CHECK(world.textOf(entity) == "Paramètres");
+}
+
 TEST_CASE("A choice goes through its options and around", "[engine][interface]")
 {
     World world;
@@ -1235,6 +1318,11 @@ namespace
     return {1920.0f - style.margin - (width / 2.0f), style.margin + (style.height() / 2.0f) + (place * step)};
 }
 
+[[nodiscard]] float widthOf(World &world, entity_t toast)
+{
+    return world.ecs.getComponent<Toast>(toast).width;
+}
+
 [[nodiscard]] std::size_t countToasts(World &world)
 {
     const auto &toasts = world.ecs.cache<Toast>();
@@ -1310,8 +1398,8 @@ TEST_CASE("Toasts stack from their corner, the newest nearest to it", "[engine][
 
     world.update(1.0f);
 
-    const rtype::render::Vector2 nearest = toastCentreAt(style, 0.0f, style.minWidth);
-    const rtype::render::Vector2 below = toastCentreAt(style, 1.0f, style.minWidth);
+    const rtype::render::Vector2 nearest = toastCentreAt(style, 0.0f, widthOf(world, newer));
+    const rtype::render::Vector2 below = toastCentreAt(style, 1.0f, widthOf(world, older));
     CHECK(isNear(positionOf(world, newer).x, nearest.x));
     CHECK(isNear(positionOf(world, newer).y, nearest.y));
     CHECK(isNear(positionOf(world, older).x, below.x));
@@ -1328,11 +1416,11 @@ TEST_CASE("A new toast takes its place at once, the others glide to theirs", "[e
     world.engine.showToast("Second");
     world.update(0.01f);
     const float olderY = positionOf(world, older).y;
-    CHECK(olderY > toastCentreAt(style, 0.0f, style.minWidth).y);
-    CHECK(olderY < toastCentreAt(style, 1.0f, style.minWidth).y);
+    CHECK(olderY > toastCentreAt(style, 0.0f, widthOf(world, older)).y);
+    CHECK(olderY < toastCentreAt(style, 1.0f, widthOf(world, older)).y);
 
     world.update(1.0f);
-    CHECK(isNear(positionOf(world, older).y, toastCentreAt(style, 1.0f, style.minWidth).y));
+    CHECK(isNear(positionOf(world, older).y, toastCentreAt(style, 1.0f, widthOf(world, older)).y));
 }
 
 TEST_CASE("Toasts in a bottom corner stack upwards", "[engine][toast]")
@@ -1346,7 +1434,7 @@ TEST_CASE("Toasts in a bottom corner stack upwards", "[engine][toast]")
     world.update(1.0f);
 
     const float nearestY = 1080.0f - style.margin - (style.height() / 2.0f);
-    CHECK(isNear(positionOf(world, newer).x, style.margin + (style.minWidth / 2.0f)));
+    CHECK(isNear(positionOf(world, newer).x, style.margin + (widthOf(world, newer) / 2.0f)));
     CHECK(isNear(positionOf(world, newer).y, nearestY));
     CHECK(isNear(positionOf(world, older).y, nearestY - style.height() - style.spacing));
 }
@@ -1360,11 +1448,40 @@ TEST_CASE("A toast is wide enough for its text", "[engine][toast]")
 
     world.update(1.0f);
 
-    // Padding, accent, padding, text, padding
-    const float textWidth = 0.5f * style.textSize * static_cast<float>(text.size());
-    const float width = (3.0f * style.padding) + style.accentWidth + textWidth;
+    // The message, then the icon, after a gap
+    const float textWidth = (0.5f * style.nameSize * static_cast<float>(text.size())) +
+                            (style.letterSpacing * static_cast<float>(text.size() - 1));
+    const float width = textWidth + style.gap + style.iconSize;
     CHECK(isNear(world.ecs.getComponent<Toast>(toast).width, width));
     CHECK(isNear(positionOf(world, toast).x, toastCentreAt(style, 0.0f, width).x));
+}
+
+TEST_CASE("A toast reads as a line: its subject, its message, its actor, then its icon", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const entity_t toast = world.engine.showToast("ORBITAL MODULE", "taken by", "KAZE", ToastType::Success);
+    const entity_t alone = world.engine.showToast("Settings saved");
+
+    world.update(1.0f);
+
+    const Toast &line = world.ecs.getComponent<Toast>(toast);
+    CHECK(line.subject == "ORBITAL MODULE");
+    CHECK(line.text == "taken by");
+    CHECK(line.actor == "KAZE");
+    CHECK(line.type == ToastType::Success);
+    const auto names = [&](std::size_t letters) {
+        return (0.5f * style.nameSize * static_cast<float>(letters)) +
+               (style.letterSpacing * static_cast<float>(letters - 1));
+    };
+    const float message = 0.5f * style.messageSize * 8.0f;
+    CHECK(isNear(line.width, names(14) + style.gap + message + style.gap + names(4) + style.gap + style.iconSize));
+
+    // A message alone is shown as the subject
+    const Toast &single = world.ecs.getComponent<Toast>(alone);
+    CHECK(single.getHeadline() == "Settings saved");
+    CHECK(single.getBody().empty());
+    CHECK(isNear(single.width, names(14) + style.gap + style.iconSize));
 }
 
 TEST_CASE("Beyond the maximum, the oldest toast fades out", "[engine][toast]")
@@ -1385,6 +1502,237 @@ TEST_CASE("Beyond the maximum, the oldest toast fades out", "[engine][toast]")
     world.update(style.fadeDuration / 2.0f);
     CHECK_FALSE(world.ecs.hasComponent<Toast>(oldest));
     CHECK(countToasts(world) == style.maxVisible);
+}
+
+TEST_CASE("The handle of a slider lights up only while the pointer is over it", "[engine][interface][slider]")
+{
+    World world;
+    float volume = 0.5f;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t slider = ui.slider(
+        "Volume", [&] { return volume; }, [&](float value) { volume = value; }, 0.1f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+    const SliderStyle &style = world.style.slider;
+    const rtype::ecs::Position rail = world.ecs.getComponent<rtype::ecs::Position>(slider);
+    const SliderTrack &track = world.ecs.getComponent<SliderTrack>(slider);
+    const float handleX = rail.x - (style.width / 2.0f) + (0.5f * style.width);
+    const float railY = style.getRailY(rail.y);
+
+    // On the slider, but far from the handle: the caption lights up, the handle does not
+    world.input.mouse = {handleX - 200.0f, railY};
+    world.update();
+    world.update(style.fadeDuration);
+    CHECK(track.hover < 0.01f);
+    CHECK(track.focus > 0.99f);
+
+    // Over the handle
+    world.input.mouse = {handleX + 4.0f, railY + 3.0f};
+    world.update();
+    world.update(style.fadeDuration);
+    CHECK(track.hover > 0.99f);
+
+    // Away again
+    world.input.mouse = {handleX, railY + 200.0f};
+    world.update();
+    world.update(style.fadeDuration);
+    CHECK(track.hover < 0.01f);
+}
+
+TEST_CASE("A switch shows its toggle, slides its dot, and lights up under the pointer",
+          "[engine][interface][switch]")
+{
+    World world;
+    bool vibration = false;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t entity = ui.toggle(
+        "Vibration", [&] { return vibration; }, [&](bool value) { vibration = value; },
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+    const SwitchStyle &style = world.style.toggle;
+    const SwitchTrack &track = world.ecs.getComponent<SwitchTrack>(entity);
+    const rtype::ecs::Position row = world.ecs.getComponent<rtype::ecs::Position>(entity);
+
+    // Its row is its hitbox, and Confirm sets it
+    const Hitbox &box = world.ecs.getComponent<Hitbox>(entity);
+    CHECK(box.width == style.width);
+    CHECK(box.height == style.height);
+    world.press({Key::Enter});
+    CHECK(vibration);
+
+    // The dot slides to the ON side, not at once
+    world.update(style.slideDuration / 2.0f);
+    CHECK(track.position > 0.01f);
+    CHECK(track.position < 0.99f);
+    world.update(style.slideDuration);
+    CHECK(track.position > 0.99f);
+
+    // The part of the row on the right lights up; the caption on the left only lights the caption
+    world.input.mouse = {row.x - (style.width / 2.0f) + 40.0f, row.y};
+    world.update();
+    world.update(style.slideDuration);
+    CHECK(track.hover < 0.01f);
+    CHECK(track.focus > 0.99f);
+    world.input.mouse = {row.x + (style.width / 2.0f) - 20.0f, row.y};
+    world.update();
+    world.update(style.slideDuration);
+    CHECK(track.hover > 0.99f);
+
+    // A click on the row sets the toggle back
+    world.clickAt(row.x - (style.width / 2.0f) + 40.0f, row.y);
+    CHECK_FALSE(vibration);
+}
+
+TEST_CASE("A switch lights up only over what is drawn of it, not over the rest of its row",
+          "[engine][interface][switch]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t entity = ui.toggle(
+        "Vibration", [] { return false; }, [](bool) {}, {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+    const SwitchStyle &style = world.style.toggle;
+    const SwitchTrack &track = world.ecs.getComponent<SwitchTrack>(entity);
+    const rtype::ecs::Position row = world.ecs.getComponent<rtype::ecs::Position>(entity);
+    const auto measure = [&](const char *label, float size, float spacing) {
+        const std::string text = label;
+        return rtype::render::Vector2{(0.5f * size * static_cast<float>(text.size())) +
+                                          (spacing * static_cast<float>(text.size() - 1)),
+                                      size};
+    };
+    const SwitchLayout layout = computeSwitchLayout(style, {row.x, row.y}, measure);
+    const auto hoveredAt = [&](float x, float y) {
+        world.input.mouse = {x, y};
+        world.update();
+        world.update(style.slideDuration);
+        return track.hover > 0.99f;
+    };
+
+    // Inside: on the "OFF" label, on the link, on the "ON" label, and in the small margin around them
+    CHECK(hoveredAt(layout.offX + 2.0f, row.y));
+    CHECK(hoveredAt((layout.linkLeft + layout.linkRight) / 2.0f, row.y));
+    CHECK(hoveredAt(layout.onX + 2.0f, row.y));
+    CHECK(hoveredAt(layout.offX - (style.hoverMargin / 2.0f), row.y));
+    // Outside: just beyond the margin on the left and on the right, and above and below the labels, although
+    // still inside the row
+    CHECK_FALSE(hoveredAt(layout.offX - style.hoverMargin - 2.0f, row.y));
+    CHECK_FALSE(hoveredAt(layout.hoverArea.x + layout.hoverArea.width + 2.0f, row.y));
+    CHECK_FALSE(hoveredAt(layout.linkLeft + 10.0f, layout.hoverArea.y - 2.0f));
+    CHECK_FALSE(hoveredAt(layout.linkLeft + 10.0f, layout.hoverArea.y + layout.hoverArea.height + 2.0f));
+    // The caption on the left lights the caption only
+    CHECK_FALSE(hoveredAt(row.x - (style.width / 2.0f) + 20.0f, row.y));
+    CHECK(track.focus > 0.99f);
+    // The area is as high as what is drawn, not as the whole row
+    CHECK(layout.hoverArea.height < style.height);
+}
+
+TEST_CASE("A gauge shows the value it reads, takes no focus, and is placed by its size", "[engine][interface][gauge]")
+{
+    World world;
+    float charge = 0.25f;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t gauge = ui.gauge("Charge", [&] { return charge; }, {AnchorPoint::TopLeft, 100.0f, 200.0f});
+    const entity_t button = ui.button("Play", [] {}, {AnchorPoint::TopLeft, 100.0f, 400.0f});
+    world.update();
+
+    const GaugeStyle &style = world.style.gauge;
+    CHECK_FALSE(world.ecs.hasComponent<Focusable>(gauge));
+    CHECK(world.isFocused(button));
+    // Its top left corner is at its anchor
+    const rtype::ecs::Position centre = world.ecs.getComponent<rtype::ecs::Position>(gauge);
+    CHECK(isNear(centre.x - (style.width / 2.0f), 100.0f));
+    CHECK(isNear(centre.y - (style.getHeight() / 2.0f), 200.0f));
+    CHECK(world.ecs.getComponent<Gauge>(gauge).get() == 0.25f);
+    charge = 1.0f;
+    CHECK(world.ecs.getComponent<Gauge>(gauge).get() == 1.0f);
+}
+
+TEST_CASE("Announcements and banners are toasts of their own kind, with a stack each", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const entity_t line = world.engine.showToast("Saved");
+    const entity_t announcement = world.engine.showAnnouncement("PLAYER 2 JOINED", "Room", ToastType::Info);
+    const entity_t banner = world.engine.showBanner("SECTOR 02", "DEBRIS FIELD", ToastType::Error);
+
+    world.update(1.0f);
+
+    CHECK(world.ecs.getComponent<Toast>(line).kind == ToastKind::Line);
+    const Toast &announced = world.ecs.getComponent<Toast>(announcement);
+    CHECK(announced.kind == ToastKind::Announcement);
+    CHECK(announced.getHeadline() == "PLAYER 2 JOINED");
+    CHECK(announced.getBody() == "Room");
+    CHECK(world.ecs.getComponent<Toast>(banner).kind == ToastKind::Banner);
+
+    // Each kind starts its own stack: all three are at their first place
+    CHECK(isNear(world.ecs.getComponent<Toast>(line).place, 0.0f));
+    CHECK(isNear(announced.place, 0.0f));
+    CHECK(isNear(world.ecs.getComponent<Toast>(banner).place, 0.0f));
+
+    // An announcement is centred at the top of the screen, a banner across the whole screen
+    CHECK(isNear(positionOf(world, announcement).x, 960.0f));
+    CHECK(isNear(positionOf(world, announcement).y, style.announcementTop + (style.getHeight(ToastKind::Announcement) / 2.0f)));
+    CHECK(isNear(world.ecs.getComponent<Toast>(banner).width, 1920.0f));
+    CHECK(isNear(positionOf(world, banner).x, 960.0f));
+    CHECK(isNear(positionOf(world, banner).y, style.bannerCentre * 1080.0f));
+}
+
+TEST_CASE("Beyond their maximum, the oldest announcement and banner leave", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const auto count = [&](ToastKind kind) {
+        const auto &toasts = world.ecs.cache<Toast>();
+        std::size_t total = 0;
+        for (entity_t entity = 0; entity < toasts.size(); ++entity) {
+            total += (toasts.has(entity) && toasts.get(entity).kind == kind) ? 1 : 0;
+        }
+        return total;
+    };
+    for (std::size_t shown = 0; shown <= style.maxAnnouncements; ++shown) {
+        world.engine.showAnnouncement("TITLE", "Detail");
+        world.update(style.announcementIn);
+    }
+    // The oldest one is leaving: it is gone once its exit is over
+    world.update(style.announcementOut);
+    CHECK(count(ToastKind::Announcement) == style.maxAnnouncements);
+
+    world.engine.showBanner("FIRST", "Banner");
+    world.update(style.bannerIn);
+    world.engine.showBanner("SECOND", "Banner");
+    world.update(style.bannerOut / 2.0f);
+    CHECK(count(ToastKind::Banner) == 2);
+    world.update(style.bannerOut);
+    CHECK(count(ToastKind::Banner) == 1);
+}
+
+TEST_CASE("Announcements and banners appear and leave over their own time", "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const entity_t announcement = world.engine.showAnnouncement("TITLE", "Detail");
+    const entity_t banner = world.engine.showBanner("TITLE", "Detail");
+
+    world.update(0.0f);
+    CHECK(isNear(opacityOf(world, announcement), 0.0f));
+    CHECK(isNear(opacityOf(world, banner), 0.0f));
+
+    // Half way through their entrance: the opacity is the progress that the drawing follows
+    world.update(style.announcementIn / 2.0f);
+    CHECK(isNear(opacityOf(world, announcement), 0.5f));
+    CHECK(opacityOf(world, banner) < 0.5f);
+    world.update(style.bannerIn);
+    CHECK(isNear(opacityOf(world, announcement), 1.0f));
+    CHECK(isNear(opacityOf(world, banner), 1.0f));
+
+    // They stay for the duration of the style, then leave over their own time
+    const float elapsed = (style.announcementIn / 2.0f) + style.bannerIn;
+    world.update(style.getLifetime(ToastKind::Announcement) - (style.announcementOut / 2.0f) - elapsed);
+    CHECK(isNear(opacityOf(world, announcement), 0.5f));
+
+    world.update(style.announcementOut / 2.0f);
+    CHECK_FALSE(world.ecs.hasComponent<Toast>(announcement));
+    CHECK(world.ecs.hasComponent<Toast>(banner));
 }
 
 TEST_CASE("A spinning model turns at its speed and stays between 0 and 360 degrees", "[engine][spin]")

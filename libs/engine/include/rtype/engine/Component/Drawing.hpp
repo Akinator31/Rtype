@@ -42,6 +42,10 @@ struct BoundText {
     std::function<std::string()> get;
 };
 
+/// Makes the Text of the entity a title: capitals in chrome with a light around them, drawn with
+/// InterfaceStyle::title instead of the colour of the text. The size of the text is kept.
+struct Title {};
+
 /// A texture or a part of it (one frame of a sprite sheet), centred on the position of the entity.
 struct Sprite {
     render::TextureId texture;

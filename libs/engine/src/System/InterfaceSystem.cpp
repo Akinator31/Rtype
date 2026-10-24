@@ -1,6 +1,7 @@
 #include "rtype/engine/System/InterfaceSystem.hpp"
 
 #include "rtype/ecs/Ecs.hpp"
+#include "rtype/engine/Interface/SwitchLayout.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -23,8 +24,8 @@ InterfaceSystem::InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, Sc
       _navigation(std::move(navigation)), _focusables(use<Focusable>(caches)), _focused(use<Focused>(caches)),
       _hitboxes(use<Hitbox>(caches)), _positions(use<ecs::Position>(caches)), _scales(use<Scale>(caches)),
       _tweens(use<Tween>(caches)), _panels(use<Panel>(caches)), _buttons(use<Button>(caches)),
-      _toggles(use<Toggle>(caches)), _sliders(use<Slider>(caches)), _choices(use<Choice>(caches)),
-      _fields(use<TextField>(caches)), _sounds(use<SoundEffect>(caches))
+      _toggles(use<Toggle>(caches)), _sliders(use<Slider>(caches)), _tracks(use<SliderTrack>(caches)), _switches(use<SwitchTrack>(caches)), _texts(use<Text>(caches)),
+      _choices(use<Choice>(caches)), _fields(use<TextField>(caches)), _sounds(use<SoundEffect>(caches))
 {
 }
 
@@ -68,10 +69,12 @@ void InterfaceSystem::setFocus(const std::vector<ecs::entity_t> &widgets, ecs::e
     animateFocus(widget);
 }
 
-/// Widgets with a Panel light up instead (see lightPanels()); a console field stays still, as a command line.
+/// Widgets with a Panel light up instead (see lightPanels()); a slider grows its handle; a console field stays
+/// still, as a command line.
 bool InterfaceSystem::keepsSize(ecs::entity_t widget) const
 {
-    return _panels.has(widget) || (_fields.has(widget) && _fields.get(widget).type == TextFieldType::Console);
+    return _panels.has(widget) || _tracks.has(widget) || _switches.has(widget) ||
+           (_fields.has(widget) && _fields.get(widget).type == TextFieldType::Console);
 }
 
 void InterfaceSystem::animateFocus(ecs::entity_t widget)
@@ -253,6 +256,86 @@ void InterfaceSystem::adjust(ecs::entity_t widget, int direction)
     }
 }
 
+void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
+                                    std::optional<ecs::entity_t> hovered, render::Vector2 pointer,
+                                    float elapsed)
+{
+    const bool isMouseHeld = _input.isMouseButtonDown(input::MouseButton::Left);
+    if (!isMouseHeld) {
+        _dragged.reset();
+    } else if (hovered && _navigation.wasPressed(Navigation::Click) && _sliders.has(*hovered) &&
+               _tracks.has(*hovered)) {
+        _dragged = *hovered;
+    }
+    if (_dragged && (!_ecs.isAlive(*_dragged) || !_sliders.has(*_dragged) || !_positions.has(*_dragged))) {
+        _dragged.reset();
+    }
+    if (_dragged) {
+        // The handle follows the pointer along the rail, to the hundredth
+        const float width = _style.slider.width;
+        const float left = _positions.get(*_dragged).x - (width / 2.0f);
+        const float value = std::round(std::clamp((pointer.x - left) / width, 0.0f, 1.0f) * 100.0f) / 100.0f;
+        const Slider slider = _sliders.get(*_dragged);
+        if (slider.get && slider.set && std::abs(slider.get() - value) > 0.001f) {
+            _ecs.defer([slider, value] { slider.set(value); });
+        }
+    }
+
+    const float step = elapsed / std::max(_style.slider.fadeDuration, 0.001f);
+    const auto approach = [](float current, float target, float amount) {
+        return current + std::clamp(target - current, -amount, amount);
+    };
+    for (const ecs::entity_t widget : widgets) {
+        if (_tracks.has(widget)) {
+            // The handle lights up only while the pointer is over it, the caption also with the focus
+            SliderTrack &track = _tracks.get(widget);
+            const bool isGrabbed = _dragged == widget;
+            const bool isOver = _pointerMode && isOverHandle(widget, pointer);
+            track.hover = approach(track.hover, isGrabbed || isOver ? 1.0f : 0.0f, step);
+            track.grab = approach(track.grab, isGrabbed ? 1.0f : 0.0f, step);
+            track.focus = approach(track.focus, isLit(widget, hovered) ? 1.0f : 0.0f, step);
+        }
+        if (_switches.has(widget) && _toggles.has(widget)) {
+            SwitchTrack &track = _switches.get(widget);
+            const Toggle &toggle = _toggles.get(widget);
+            const float slide = elapsed / std::max(_style.toggle.slideDuration, 0.001f);
+            track.hover = approach(track.hover, _pointerMode && isOverSwitch(widget, pointer) ? 1.0f : 0.0f, step);
+            track.focus = approach(track.focus, isLit(widget, hovered) ? 1.0f : 0.0f, step);
+            track.position = approach(track.position, toggle.get && toggle.get() ? 1.0f : 0.0f, slide);
+        }
+    }
+}
+
+bool InterfaceSystem::isOverHandle(ecs::entity_t widget, render::Vector2 pointer) const
+{
+    if (!_sliders.has(widget) || !_positions.has(widget)) {
+        return false;
+    }
+    const SliderStyle &style = _style.slider;
+    const Slider &slider = _sliders.get(widget);
+    const ecs::Position &centre = _positions.get(widget);
+    const float value = std::clamp(slider.get ? slider.get() : 0.0f, 0.0f, 1.0f);
+    const float x = centre.x - (style.width / 2.0f) + (value * style.width);
+    const float y = style.getRailY(centre.y);
+    const float reach = style.handleHoverRadius + style.handleRingGap;
+    return std::hypot(pointer.x - x, pointer.y - y) <= reach;
+}
+
+bool InterfaceSystem::isOverSwitch(ecs::entity_t widget, render::Vector2 pointer) const
+{
+    if (!_texts.has(widget) || !_positions.has(widget)) {
+        return false;
+    }
+    // The group on the right of the row: "OFF", the link, "ON", and only a small margin around them
+    const render::FontId font = _texts.get(widget).font;
+    const SwitchLayout layout = computeSwitchLayout(
+        _style.toggle, {_positions.get(widget).x, _positions.get(widget).y},
+        [&](const char *label, float size, float spacing) {
+            return _metrics.measureText(font, label, size, spacing);
+        });
+    return layout.contains(pointer);
+}
+
 void InterfaceSystem::update(float elapsed)
 {
     _navigation.update(_input, elapsed);
@@ -324,6 +407,7 @@ void InterfaceSystem::update(float elapsed)
         }
     }
     lightPanels(list, hovered, appeared);
+    updateSliders(list, hovered, pointer, elapsed);
     // Characters typed while no text field has the focus are lost, not delayed until a field gets it. raylib
     // already drops them every frame; other input sources may keep them, so they are dropped here too.
     (void)_input.takeTypedText();

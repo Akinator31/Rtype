@@ -51,7 +51,8 @@ MenuBuilder::MenuBuilder(ecs::Ecs &ecs, SceneId scene, const Metrics &metrics, c
         ecs.addComponent<SceneMember>(heading, _scene);
         ecs.addComponent<ecs::Position>(heading, game.x / 2.0f, game.y * titleHeight);
         ecs.addComponent<Drawable>(heading, Layer::Interface, contentOrder);
-        ecs.addComponent<Text>(heading, title, style.font, style.titleSize, style.text);
+        ecs.addComponent<Text>(heading, title, style.title.font, style.titleSize, style.text);
+        ecs.addComponent<Title>(heading);
     }
 
     ecs.addComponent<SceneMember>(_column, _scene);

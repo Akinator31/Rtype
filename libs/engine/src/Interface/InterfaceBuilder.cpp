@@ -3,6 +3,7 @@
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 
 #include <utility>
@@ -48,6 +49,52 @@ ecs::entity_t InterfaceBuilder::boundText(std::function<std::string()> get, Anch
 {
     const ecs::entity_t entity = text(get ? get() : std::string(), anchor);
     _ecs.addComponent<BoundText>(entity, std::move(get));
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::title(const std::string &text, Anchor anchor)
+{
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, text, _style.title.font, _style.textSize, _style.text);
+    _ecs.addComponent<Title>(entity);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::boundTitle(std::function<std::string()> get, Anchor anchor)
+{
+    const ecs::entity_t entity = title(get ? get() : std::string(), anchor);
+    _ecs.addComponent<BoundText>(entity, std::move(get));
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::slider(const std::string &caption, std::function<float()> get,
+                                       std::function<void(float)> set, float step, Anchor anchor)
+{
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, caption, _style.slider.font, _style.slider.captionSize, _style.text);
+    _ecs.addComponent<Slider>(entity, Slider{caption, std::move(get), std::move(set), step});
+    _ecs.addComponent<SliderTrack>(entity);
+    _ecs.addComponent<Focusable>(entity, _count++);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::toggle(const std::string &caption, std::function<bool()> get,
+                                       std::function<void(bool)> set, Anchor anchor)
+{
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, caption, _style.toggle.font, _style.toggle.captionSize, _style.text);
+    _ecs.addComponent<Toggle>(entity, Toggle{caption, std::move(get), std::move(set)});
+    _ecs.addComponent<SwitchTrack>(entity);
+    _ecs.addComponent<Focusable>(entity, _count++);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::gauge(const std::string &caption, std::function<float()> get, Anchor anchor)
+{
+    const GaugeStyle &style = _style.gauge;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Gauge>(entity, Gauge{caption, std::move(get)});
+    _ecs.addComponent<Extent>(entity, style.width, style.getHeight());
     return entity;
 }
 
@@ -107,7 +154,7 @@ ecs::entity_t InterfaceBuilder::header(const std::string &title, std::function<v
     const ecs::entity_t back = backButton(std::move(onBack), anchor);
     const float titleX = anchor.x + _style.button.height + _style.headerSpacing;
     const float titleY = anchor.y + ((_style.button.height - _style.textSize) / 2.0f);
-    text(title, {anchor.point, titleX, titleY});
+    this->title(title, {anchor.point, titleX, titleY});
     return back;
 }
 
