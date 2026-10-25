@@ -86,27 +86,111 @@ std::optional<std::pair<std::string, std::uint16_t>> splitServer(const std::stri
     return std::pair{host, static_cast<std::uint16_t>(value)};
 }
 
+std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerprint,
+                                          std::size_t groupsPerLine)
+{
+    constexpr std::size_t GroupSize = 4;
+    const std::string hex = fingerprint.toHex();
+    const std::size_t perLine = std::max<std::size_t>(groupsPerLine, 1) * GroupSize;
+    std::vector<std::string> lines;
+    for (std::size_t line = 0; line < hex.size(); line += perLine) {
+        std::string text;
+        for (std::size_t group = line; group < std::min(line + perLine, hex.size()); group += GroupSize) {
+            if (!text.empty()) {
+                text += ' ';
+            }
+            text += hex.substr(group, GroupSize);
+        }
+        lines.push_back(std::move(text));
+    }
+    return lines;
+}
+
 OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                            const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                           std::filesystem::path publicKey, localization::Localization &translations)
-    : _engine(engine), _loop(loop), _games(games), _translations(translations),
-      _publicKey(std::move(publicKey))
+                           localization::Localization &translations)
+    : _engine(engine), _loop(loop), _games(games), _translations(translations), _known(engine.getSave())
 {
-    engine.createScene(OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
+    engine.createScene(
+        OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
+        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
+            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
+                                     _translations.text("menu.online"), true);
+            const ecs::entity_t name =
+                menu.textField(_translations.text("online.name"), _name, {}, lobby::MaxPlayerNameLength);
+            const auto readName = [this, &target, name] {
+                _name = target.getEcs().getComponent<engine::TextField>(name).input.text();
+            };
+            for (const OfficialServer &official : OfficialServers) {
+                menu.button(std::format("{} {}", _translations.text("online.official"), official.name),
+                            [this, readName, &official] {
+                                readName();
+                                _serverText = std::format("{}:{}", official.host, official.port);
+                                connect();
+                            });
+            }
+            const ecs::entity_t server =
+                menu.textField(_translations.text("online.server"), _serverText, {}, 64);
+            const auto readServer = [this, &target, server] {
+                _serverText = target.getEcs().getComponent<engine::TextField>(server).input.text();
+            };
+            menu.button(_translations.text("online.connect"), [this, readName, readServer] {
+                readName();
+                readServer();
+                connect();
+            });
+            menu.button(_translations.text("online.forget"), [this, readServer] {
+                readServer();
+                forgetServer();
+            });
+            menu.button(_translations.text("online.back"), [&target] { target.popScene(); });
+        });
+
+    engine.createScene(TrustServerScene, {.overlay = true, .hidesInterfaceBelow = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
                            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
-                                                    _translations.text("menu.online"), true);
-                           const ecs::entity_t server =
-                               menu.textField(_translations.text("online.server"), _serverText, {}, 64);
-                           const ecs::entity_t name = menu.textField(_translations.text("online.name"), _name,
-                                                                     {}, lobby::MaxPlayerNameLength);
-                           menu.button(_translations.text("online.connect"), [this, &target, server, name] {
-                               _serverText =
-                                   target.getEcs().getComponent<engine::TextField>(server).input.text();
-                               _name = target.getEcs().getComponent<engine::TextField>(name).input.text();
+                                                    _translations.text("trust.title"), true);
+                           menu.label(std::format("{} {}", _translations.text("trust.first"), _address));
+                           menu.label(_translations.text("trust.key"));
+                           if (_presented) {
+                               for (const std::string &line : fingerprintLines(*_presented)) {
+                                   menu.label(line);
+                               }
+                           }
+                           menu.label(_translations.text("trust.check"));
+                           menu.button(_translations.text("trust.accept"), [this, &target] {
+                               target.popScene();
+                               if (_presented && !_known.trust(_address, *_presented)) {
+                                   _engine.showToast("The key is only trusted until the game closes: cannot "
+                                                     "write the save",
+                                                     engine::ToastType::Error);
+                               }
                                connect();
                            });
-                           menu.button(_translations.text("online.back"), [&target] { target.popScene(); });
+                           menu.button(_translations.text("trust.cancel"), [&target] { target.popScene(); });
+                       });
+
+    engine.createScene(ChangedKeyScene, {.overlay = true, .hidesInterfaceBelow = true},
+                       [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
+                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
+                                                    _translations.text("changed.title"), true);
+                           menu.label(std::format("{} {}", _translations.text("changed.text"), _address));
+                           const std::vector<network::KeyFingerprint> expected = _known.trusted(_address);
+                           if (!expected.empty()) {
+                               menu.label(_translations.text("changed.expected"));
+                               for (const std::string &line : fingerprintLines(expected.front())) {
+                                   menu.label(line);
+                               }
+                           }
+                           if (_presented) {
+                               menu.label(_translations.text("changed.presented"));
+                               for (const std::string &line : fingerprintLines(*_presented)) {
+                                   menu.label(line);
+                               }
+                           }
+                           menu.label(_translations.text("changed.attack"));
+                           menu.label(_translations.text("changed.forget"));
+                           menu.button(_translations.text("changed.back"), [&target] { target.popScene(); });
                        });
 
     engine.createScene(
@@ -154,14 +238,6 @@ void OnlineScenes::connect()
         _engine.showToast("Invalid server: give host:port", engine::ToastType::Error);
         return;
     }
-    std::optional<network::KeyFingerprint> pinned;
-    try {
-        pinned = network::KeyFingerprint::loadPublicKey(_publicKey);
-    } catch (const std::exception &error) {
-        logger().error("Cannot read the key of the server {}: {}", _publicKey.string(), error.what());
-        _engine.showToast("server.pub is missing next to the client", engine::ToastType::Error);
-        return;
-    }
     // An IP is used as it is; a name is looked up, which blocks a moment, on a click
     _server = network::Address::parse(parts->first, parts->second);
     if (!_server) {
@@ -173,10 +249,12 @@ void OnlineScenes::connect()
         }
     }
 
+    _address = serverAddress(parts->first, parts->second);
+
     forgetLobby();
     _engine.showToast(std::format("Connecting to {}...", _serverText));
     _lobby = std::make_unique<LobbyClient>(
-        _loop, *_server, *pinned, _name,
+        _loop, *_server, _known.trusted(_address), _name,
         LobbyClient::Handlers{
             .onWelcome = [this](std::uint32_t) { refresh(); },
             .onLeftGame =
@@ -187,7 +265,45 @@ void OnlineScenes::connect()
                                           : engine::ToastType::Info);
                 },
             .onClosed = [this](const std::string &reason) { lobbyClosed(reason); },
+            .onUntrusted = [this](const network::KeyFingerprint &presented) { untrusted(presented); },
         });
+}
+
+void OnlineScenes::untrusted(const network::KeyFingerprint &presented)
+{
+    forgetLobby();
+    _presented = presented;
+    switch (_known.judge(_address, presented)) {
+    case KnownServers::Verdict::FirstUse:
+        _engine.pushScene(TrustServerScene);
+        return;
+    case KnownServers::Verdict::Changed:
+        logger().error("{} presented the key {}, not the one trusted: refused", _address, presented.toHex());
+        _engine.pushScene(ChangedKeyScene);
+        return;
+    case KnownServers::Verdict::DevelopmentKey:
+        logger().error("{} presented the public development key: refused", _address);
+        _engine.showToast("This server uses the public development key: refused", engine::ToastType::Error);
+        return;
+    }
+}
+
+void OnlineScenes::forgetServer()
+{
+    const auto parts = splitServer(_serverText);
+    if (!parts) {
+        _engine.showToast("Invalid server: give host:port", engine::ToastType::Error);
+        return;
+    }
+    const std::string address = serverAddress(parts->first, parts->second);
+    if (_known.isOfficial(address)) {
+        _engine.showToast("The keys of an official server cannot be forgotten", engine::ToastType::Error);
+    } else if (_known.forget(address)) {
+        _engine.showToast(
+            std::format("Key of {} forgotten: it is asked again at the next connection", address));
+    } else {
+        _engine.showToast(std::format("No key trusted for {}", address));
+    }
 }
 
 void OnlineScenes::refresh()

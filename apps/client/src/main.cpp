@@ -129,6 +129,19 @@ rtype::game::GameConfig readGameConfig(rtype::client::Console &console)
     return {};
 }
 
+/// Reads the save of the player, in its data directory: the servers it trusts, for now (ADR 0020). A save
+/// that cannot be read is logged, and the client starts without it.
+void readSave(rtype::save::Save &save)
+{
+    const rtype::log::Logger logger("client");
+    save.setPath(rtype::render::userDataDirectory() / "save.txt");
+    try {
+        save.readFile();
+    } catch (const std::exception &error) {
+        logger.warning("Cannot read the save {}: {}", save.getPath().string(), error.what());
+    }
+}
+
 /// Declares the scenes of the client, but those of a game, which GameScenes declares.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
                   const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
@@ -192,6 +205,7 @@ void run()
     const rtype::audio::AudioDevice audioDevice;
     rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets");
     rtype::engine::Engine engine;
+    readSave(engine.getSave());
     ResourceManager resources(window, applicationDirectory() / "assets", engine.assetLoading().queue());
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
@@ -221,8 +235,7 @@ void run()
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, audio, metrics, style);
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
-    rtype::client::OnlineScenes online(engine, network, games, metrics, style,
-                                       applicationDirectory() / "server.pub", translations);
+    rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
     rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
                                                                CollisionCellSize);

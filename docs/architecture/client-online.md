@@ -30,7 +30,7 @@ sequenceDiagram
     participant M as Master
     participant I as Instance
     P->>C: Online, server and name, Connect
-    C->>M: TCP, TLS (key of server.pub pinned), HELLO
+    C->>M: TCP, TLS (keys trusted for the server pinned), HELLO
     M->>C: WELCOME
     C->>M: LIST_GAMES
     M->>C: GAME_LIST: the lobby is shown
@@ -43,11 +43,12 @@ sequenceDiagram
 
 *The client goes through the master to get a game, then talks to its instance directly.*
 
-1. **Online** asks for the server (`host:port`, the port 4242 by default, `[::1]:4242` for IPv6) and the name of
-   the player. An IP address is used as it is; a host name is looked up when Connect is pressed.
-2. **The key of the server** is read from `server.pub`, next to the executable
-   ([Generate the server keys](../guides/generate-the-server-keys.md)). A server that does not hold the matching
-   private key is refused during the handshake: "This is not the expected server".
+1. **Online** asks for the name of the player, and offers the official servers in one click; any other server
+   is typed (`host:port`, the port 4242 by default, `[::1]:4242` for IPv6). An IP address is used as it is; a
+   host name is looked up when Connect is pressed.
+2. **The keys of the server** are those `KnownServers` trusts for it ([Trusted servers](#trusted-servers)). A
+   server that does not hold a matching private key is refused during the handshake, before `HELLO` leaves: the
+   player is asked to trust it if it was never met, warned otherwise.
 3. **The lobby** lists the games of the server: Create a game (for 4 players, named after the player), Join one,
    Refresh, Disconnect. Escape disconnects too.
 4. **The game** plays a `RemoteSession` with what `GAME_JOINED` gave. When it ends, by the pause menu or because
@@ -56,13 +57,39 @@ sequenceDiagram
 Everything that goes wrong is shown in a toast: a server unreachable or not the expected one, a game full, a
 game that crashed, the connection lost. A lobby connection lost brings the player back to the main menu.
 
+## Trusted servers
+
+Players never handle a key file ([ADR 0020](../decisions/0020-server-key-distribution.md)). `KnownServers`
+(`Online/KnownServers.hpp`) gives the keys the client trusts for a server, known by its address in lowercase
+(`serverAddress()`: `rtype.example.org:4242`, `[::1]:4242`):
+
+| Server | Keys trusted | Where they come from |
+|---|---|---|
+| Official | Its main key and its backup key | `OfficialServers`, in `Online/OfficialServers.hpp`: changing them is a commit |
+| Trusted by the player | The key shown at the first connection | The save, under `servers.known.<address>` |
+| Any, in a **Debug** build | The development key | `keys/development/`, built in as a header (`rtype::keys::developmentFingerprint()`) |
+
+When the server presents a key it does not trust, the LobbyClient calls `onUntrusted` with it, and
+`KnownServers::judge()` tells what it means:
+
+| Verdict | The client |
+|---|---|
+| `FirstUse`: a server never met | Shows its fingerprint (`fingerprintLines()`, in groups of 4 digits) in the scene `online_trust`. **Trust and connect** remembers it (`trust()`, which writes the save) and connects again |
+| `Changed`: an official server, or one trusted with another key | Refuses it, and shows the key expected and the key presented in the scene `online_changed_key`. No button accepts the new key: the player must **Forget the server key** in the Online menu first (`forget()`), which an official server cannot |
+| `DevelopmentKey`: the development key, in a Release build | Refuses it, with a toast: its private key is public |
+
+The save is in the data directory of the player (`rtype::render::userDataDirectory()`: `%APPDATA%\R-Type` on
+Windows, `~/.local/share/r-type` elsewhere), read when the client starts. A save that cannot be written keeps
+the key trusted until the client closes, and says so.
+
 ## LobbyClient
 
 ```cpp
-rtype::client::LobbyClient lobby(loop, server, pinned, "Pavel",
+rtype::client::LobbyClient lobby(loop, server, known.trusted(address), "Pavel",
     {.onWelcome = [&](std::uint32_t player) { lobby.listGames(showList); },
      .onLeftGame = [&](const rtype::lobby::LeftGameMessage &left) { /* game over, crash, timeout */ },
-     .onClosed = [&](const std::string &reason) { /* toast it */ }});
+     .onClosed = [&](const std::string &reason) { /* toast it */ },
+     .onUntrusted = [&](const rtype::network::KeyFingerprint &presented) { /* ask the player, or warn */ }});
 lobby.joinGame(id, [&](const rtype::client::LobbyClient::JoinResult &result) { /* GAME_JOINED or an error */ });
 ```
 
@@ -160,10 +187,16 @@ them, through the interpolation.
 - the address of a server, and a message for every error of the master;
 - two clients welcomed, a game created, listed and joined, an error given to its request, a player who leaves;
 - a server without the pinned key refused, a server unreachable, a name refused before connecting;
+- a client trusting no key told the key of the server instead of closed, then welcomed once it trusts it;
 - two clients playing the same game, each moving its own ship and seeing the other's, with the names of the
   players, the world drawn at every frame behind the newest one, and inputs stamped ahead of the world;
 - a game that crashes reported to its player, who can create another one, and a game that stops ending the
   session of its player.
+
+`tests/known_servers.cpp` (tag `[online]`) checks the keys trusted for each server: the official ones with
+their backup key, never asked nor forgotten; a server trusted on first use, kept in the save, then refused with
+another key until forgotten; the development key trusted by Debug builds only, and the one committed; the
+fingerprints built into the client valid; a fingerprint shown in groups of 4 digits.
 
 `tests/client_interpolation.cpp` (tag `[interpolation]`) plays a server sending 30 snapshots per second to a
 client drawing 144 frames per second: the world drawn 100 ms behind, an entity moving a little at every frame,

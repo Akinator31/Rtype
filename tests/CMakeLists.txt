@@ -27,6 +27,7 @@ add_executable(rtype_tests
     game_messages.cpp
     game_simulation.cpp
     keygen.cpp
+    known_servers.cpp
     lobby_messages.cpp
     log.cpp
     localization.cpp
@@ -66,7 +67,7 @@ add_executable(rtype_tests
 )
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render rtype::save
-    rtype::scripting rtype::shaders r-type_client_core r-type_keygen_core r-type_server_core
+    rtype::scripting rtype::shaders rtype::development_key r-type_client_core r-type_keygen_core r-type_server_core
     Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
 add_executable(rtype_test_child helpers/process_child.cpp)
@@ -75,7 +76,8 @@ add_dependencies(rtype_tests rtype_test_child r-type_server)
 target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
     RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"
-    RTYPE_TEST_CONFIG="${PROJECT_SOURCE_DIR}/config")
+    RTYPE_TEST_CONFIG="${PROJECT_SOURCE_DIR}/config"
+    RTYPE_TEST_DEVELOPMENT_KEYS="${PROJECT_SOURCE_DIR}/keys/development")
 # The helpers the tests share
 target_include_directories(rtype_tests PRIVATE helpers)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
