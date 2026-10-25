@@ -529,7 +529,7 @@ TEST_CASE("An anchored button can be focused and pressed", "[engine][interface]"
     CHECK(world.isFocused(next));
 }
 
-TEST_CASE("A back button is a button with an arrow", "[engine][interface]")
+TEST_CASE("A back button is a button with a chevron", "[engine][interface]")
 {
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
@@ -537,7 +537,7 @@ TEST_CASE("A back button is a button with an arrow", "[engine][interface]")
     const entity_t back = ui.backButton([&pressed] { ++pressed; }, {AnchorPoint::TopLeft, 20.0f, 20.0f});
 
     world.update();
-    CHECK(world.textOf(back) == "\xE2\x86\x90");
+    CHECK(world.textOf(back) == "<");
     CHECK(positionOf(world, back).x == 20.0f + (world.ecs.getComponent<Hitbox>(back).baseWidth / 2.0f));
     REQUIRE(world.isFocused(back));
 
@@ -633,7 +633,7 @@ TEST_CASE("A header puts the title after the back button", "[engine][interface]"
     world.press({Key::Enter});
     world.update(world.style.flare.pressDelay);
     CHECK(pressed == 1);
-    CHECK(world.textOf(back) == "\xE2\x86\x90");
+    CHECK(world.textOf(back) == "<");
 }
 
 TEST_CASE("The mouse focuses the widget under it, only when it moves", "[engine][interface]")

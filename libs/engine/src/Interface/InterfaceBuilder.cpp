@@ -17,8 +17,8 @@ namespace
 // Drawing order inside the interface layer, over the background of a menu
 constexpr int contentOrder = 1;
 
-// "←" in UTF-8
-constexpr const char *leftwardsArrow = "\xE2\x86\x90";
+// ASCII: the font of the buttons (Orbitron) has no "←", which would be drawn as "?"
+constexpr const char *backArrow = "<";
 
 } // namespace
 
@@ -128,7 +128,7 @@ ecs::entity_t InterfaceBuilder::button(const std::string &text, std::function<vo
 
 ecs::entity_t InterfaceBuilder::backButton(std::function<void()> onPress, Anchor anchor)
 {
-    return button(leftwardsArrow, std::move(onPress), anchor);
+    return button(backArrow, std::move(onPress), anchor);
 }
 
 ecs::entity_t InterfaceBuilder::header(const std::string &title, std::function<void()> onBack, Anchor anchor)

@@ -243,7 +243,7 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 | `box` | A filled or outlined `Box` |
 | `sprite` | A `Sprite`: a texture or a part of it |
 | `button` | A focusable `Button` of text alone (`InterfaceStyle::flare`), as wide as its spaced letters and its star: when lit, a line of light traces itself across the text and a star flares after it; when pressed, the star bursts, a pulse runs along the line, and the action runs `pressDelay` later. The buttons of a builder get the focus in the order they are created |
-| `backButton` | A `Button` with a leftwards arrow (←), to go back |
+| `backButton` | A `Button` with a "<", to go back (the font of the buttons has no "←") |
 | `header` | The top of a secondary screen: a `backButton`, then the title to its right on the same line |
 
 A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
