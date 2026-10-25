@@ -20,6 +20,7 @@ struct TlsConnection::Impl : std::enable_shared_from_this<Impl> {
     ReceiveHandler onReceive;
     CloseHandler onClose;
     SecuredHandler onSecured;
+    UntrustedHandler onUntrusted;
     /// close() was called, or the connection ended: no handler is called any more. Set from any thread.
     std::atomic<bool> closed = false;
     /// start() was called on the loop's thread.
@@ -29,7 +30,7 @@ struct TlsConnection::Impl : std::enable_shared_from_this<Impl> {
     /// close() waits for the end of the handshake, to send the bytes given to send() before it.
     bool closing = false;
 
-    /// `side` is the pinned key of the server (client), or the identity of the server (server).
+    /// `side` is the keys trusted (client), or the identity of the server (server).
     template <typename Side>
     Impl(std::shared_ptr<TcpConnection::Impl> connection, Side &&side)
         : tcp(std::move(connection)), session(std::forward<Side>(side))
@@ -105,9 +106,13 @@ struct TlsConnection::Impl : std::enable_shared_from_this<Impl> {
         }
         if (const std::error_code error = session.error()) {
             if (error == NetworkError::UntrustedServer) {
-                logger().error("TLS server {} presented the key {}, not the pinned one: it is not our server",
-                               tcp->remote,
-                               session.presentedKey() ? session.presentedKey()->toHex() : "none");
+                logger().warning("TLS server {} presented the key {}, which is not trusted", tcp->remote,
+                                 session.presentedKey() ? session.presentedKey()->toHex() : "none");
+                if (onUntrusted && session.presentedKey()) {
+                    const UntrustedHandler handler = std::move(onUntrusted);
+                    onUntrusted = nullptr;
+                    handler(*session.presentedKey());
+                }
             } else {
                 logger().warning("TLS {} failed{}: {}", tcp->remote,
                                  session.secured() ? "" : " during the handshake", error.message());
@@ -198,7 +203,15 @@ TlsConnection::TlsConnection(std::shared_ptr<Impl> impl)
 
 TlsConnection TlsConnection::client(TcpConnection connection, const KeyFingerprint &server)
 {
-    return TlsConnection(std::make_shared<Impl>(std::move(connection._impl), server));
+    return client(std::move(connection), std::vector{server});
+}
+
+TlsConnection TlsConnection::client(TcpConnection connection, std::vector<KeyFingerprint> trusted,
+                                    UntrustedHandler onUntrusted)
+{
+    auto impl = std::make_shared<Impl>(std::move(connection._impl), std::move(trusted));
+    impl->onUntrusted = std::move(onUntrusted);
+    return TlsConnection(std::move(impl));
 }
 
 TlsConnection TlsConnection::server(TcpConnection connection, const ServerIdentity &identity)

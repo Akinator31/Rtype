@@ -50,12 +50,15 @@ Any other message is answered with `ERROR`: `HELLO_REQUIRED` before `HELLO`, `AL
 
 ### Key pinning
 
-The client knows in advance the **fingerprint** of the master's public key: the SHA-256 hash of the DER
-encoding of the `SubjectPublicKeyInfo` of the certificate, 32 bytes, written as 64 hexadecimal characters in
-the client's configuration.
+The client knows the **fingerprints** of the public keys it trusts for the master: the SHA-256 hash of the DER
+encoding of the `SubjectPublicKeyInfo` of the certificate, 32 bytes, written as 64 hexadecimal characters.
 
 - The client MUST compute the fingerprint of the certificate the master presents, and abort the handshake if
-  it differs from the pinned one. It reports the error to the player: the server is not the expected one.
+  it is not one it trusts for that server. It MUST NOT send any lobby message before the handshake succeeded
+  with a trusted key.
+- A client MAY trust a master it never met on first use: it aborts the handshake, shows the fingerprint to the
+  user, and if the user trusts it, remembers it for that server and connects again. Once a key is remembered,
+  a different key MUST be refused, not offered to the user again in the same way.
 - The client MUST NOT rely on certificate authorities, host names or validity dates: the pinned key replaces
   them.
 

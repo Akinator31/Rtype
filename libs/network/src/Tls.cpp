@@ -339,7 +339,7 @@ KeyFingerprint ServerIdentity::fingerprint() const
 namespace detail
 {
 
-TlsSession::TlsSession(const KeyFingerprint &pinned) : _pinned(pinned)
+TlsSession::TlsSession(std::vector<KeyFingerprint> trusted) : _client(true), _trusted(std::move(trusted))
 {
     setup(MBEDTLS_SSL_IS_CLIENT);
 }
@@ -373,7 +373,7 @@ void TlsSession::setup(int endpoint)
         mbedtls_ssl_conf_sig_algs(&_config, SignatureAlgorithms.data());
         if (endpoint == MBEDTLS_SSL_IS_CLIENT) {
             // There is no certificate authority: the certificate is accepted by verifyCallback() if it holds
-            // the pinned key, and the handshake fails otherwise
+            // a trusted key, and the handshake fails otherwise
             mbedtls_ssl_conf_authmode(&_config, MBEDTLS_SSL_VERIFY_OPTIONAL);
 #if defined(MBEDTLS_SSL_SESSION_TICKETS)
             mbedtls_ssl_conf_session_tickets(&_config, MBEDTLS_SSL_SESSION_TICKETS_DISABLED);
@@ -430,7 +430,7 @@ int TlsSession::verifyCallback(void *self, mbedtls_x509_crt *certificate, int de
         return 0;
     }
     session._presented = fingerprintOf({certificate->pk_raw.p, certificate->pk_raw.len});
-    if (session._presented == session._pinned) {
+    if (session.trusts(session._presented)) {
         // Trusted because of its key, whatever its issuer and its dates
         *flags = 0;
         return 0;
@@ -460,7 +460,7 @@ void TlsSession::handshake()
         fail(result);
         return;
     }
-    if (_pinned && _presented != _pinned) {
+    if (_client && !trusts(_presented)) {
         // Cannot happen if Mbed TLS called verifyCallback(): checked again, as it is the whole point
         _pinRejected = true;
         fail(MBEDTLS_ERR_X509_FATAL_ERROR);
@@ -559,6 +559,11 @@ std::string TlsSession::cipherSuite() const
     const auto lock = lockCrypto();
     const char *name = mbedtls_ssl_get_ciphersuite(&_ssl);
     return name != nullptr ? name : "none";
+}
+
+bool TlsSession::trusts(const std::optional<KeyFingerprint> &key) const
+{
+    return key && std::ranges::find(_trusted, *key) != _trusted.end();
 }
 
 void TlsSession::fail(int code)
