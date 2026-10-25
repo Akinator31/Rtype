@@ -28,6 +28,7 @@ else()
 endif()
 
 add_subdirectory(libs)
+add_subdirectory(keys/development)
 add_subdirectory(apps)
 
 if(RTYPE_BUILD_TESTS)
