@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted, partly superseded by [0020](0020-server-key-distribution.md) |
 | **Date** | 2026-10-15 |
 
 ## Context

@@ -28,12 +28,12 @@ constexpr std::string_view Usage = R"(Usage: r-type_keygen [--out <directory>] [
 
 Generates the key pair the server proves its identity with:
   server.key  the private key, to keep on the server only and never share
-  server.pub  the public key, to give with the client
+  server.pub  the public key, whose fingerprint the clients trust
 
 Options:
   -o, --out <directory>     Where to write the keys, created if missing (default: the current directory)
-  -f, --force               Replace the keys already there: the clients that pin the old key will refuse
-                            the server until they get the new server.pub
+  -f, --force               Replace the keys already there: the clients that trust the old key will
+                            refuse the server until they forget it, or get a release with the new one
       --fingerprint <file>  Show the fingerprint of a key file (server.key or server.pub), write nothing
   -h, --help                Show this help
 
@@ -208,7 +208,8 @@ int run(std::span<const std::string_view> arguments, std::ostream &out)
         logger.debug("Keys written in {}", options.directory.string());
         out << "Private key: " << files.privateKey.string()
             << "  (keep it on the server only, never share it)\n"
-            << "Public key:  " << files.publicKey.string() << "  (give it with the client)\n"
+            << "Public key:  " << files.publicKey.string()
+            << "  (public: its fingerprint is what the clients trust)\n"
             << "Fingerprint: " << identity.fingerprint().toHex() << '\n';
         return Success;
     } catch (const std::filesystem::filesystem_error &error) {
