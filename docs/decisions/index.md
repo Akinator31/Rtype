@@ -25,6 +25,7 @@ technical and comparative study of the project.
 | [0017](0017-asset-loading-threads.md) | Asset preparation on a background thread | Accepted |
 | [0018](0018-lua-game-config.md) | Lua for the configuration of enemies and weapons | Accepted, partly superseded by [0019](0019-luabridge3-scripting-library.md) |
 | [0019](0019-luabridge3-scripting-library.md) | LuaBridge3 and a scripting library for Lua behaviors | Accepted |
+| [0020](0020-server-key-distribution.md) | Official server built in, trust on first use for the others | Proposed |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.
