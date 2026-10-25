@@ -5,12 +5,17 @@
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "Master/Process.hpp"
+#include "rtype/keys/DevelopmentKey.hpp"
 #include "rtype/log/Log.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/TcpListener.hpp"
 #include "rtype/network/Timer.hpp"
 #include "rtype/network/Tls.hpp"
+
+#ifdef RTYPE_DEVELOPMENT_KEY
+#include "rtype/keys/DevelopmentPrivateKey.hpp"
+#endif
 
 #include <chrono>
 #include <filesystem>
@@ -44,6 +49,39 @@ std::string levelArgument()
     return "info";
 }
 
+/// The key of the master: the file of --key, or server.key. A Debug master without either uses the
+/// development key; a Release master refuses it (ADR 0020).
+std::optional<rtype::network::ServerIdentity> loadIdentity(const MasterOptions &options,
+                                                           const rtype::log::Logger &logger)
+{
+#ifdef RTYPE_DEVELOPMENT_KEY
+    if (!options.keyGiven && !std::filesystem::exists(options.key)) {
+        logger.warning("No {}: the server uses the public development key, which only Debug clients trust",
+                       options.key.string());
+        return rtype::network::ServerIdentity::fromPrivateKey(rtype::keys::DevelopmentPrivateKey);
+    }
+#endif
+    std::optional<rtype::network::ServerIdentity> identity;
+    try {
+        identity = rtype::network::ServerIdentity::load(options.key);
+    } catch (const std::system_error &error) {
+        logger.error("Cannot read the key {}: {}. Make one with r-type_keygen, or give its path with --key",
+                     options.key.string(), error.code().message());
+        return std::nullopt;
+    } catch (const std::invalid_argument &error) {
+        logger.error("{} is not a key of the server: {}", options.key.string(), error.what());
+        return std::nullopt;
+    }
+    if (!rtype::keys::DevelopmentKeyTrusted &&
+        identity->fingerprint() == rtype::keys::developmentFingerprint()) {
+        logger.error("{} is the public development key: anyone could pretend to be this server. Make a key "
+                     "of its own with r-type_keygen",
+                     options.key.string());
+        return std::nullopt;
+    }
+    return identity;
+}
+
 } // namespace
 
 int runMaster(const MasterOptions &options)
@@ -52,15 +90,8 @@ int runMaster(const MasterOptions &options)
 
     // Everything that can fail is done before running: a server that cannot work stops at once, with the
     // reason
-    std::optional<rtype::network::ServerIdentity> identity;
-    try {
-        identity = rtype::network::ServerIdentity::load(options.key);
-    } catch (const std::system_error &error) {
-        logger.error("Cannot read the key {}: {}. Make one with r-type_keygen, or give its path with --key",
-                     options.key.string(), error.code().message());
-        return Failure;
-    } catch (const std::invalid_argument &error) {
-        logger.error("{} is not a key of the server: {}", options.key.string(), error.what());
+    const std::optional<rtype::network::ServerIdentity> identity = loadIdentity(options, logger);
+    if (!identity) {
         return Failure;
     }
     // The instances load it again: checked here, a server with a broken configuration does not start

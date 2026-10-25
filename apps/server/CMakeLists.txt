@@ -37,7 +37,7 @@ add_library(r-type_server_core STATIC
     src/Master/Process.cpp
 )
 target_include_directories(r-type_server_core PUBLIC src)
-target_link_libraries(r-type_server_core PUBLIC rtype::game rtype::lobby rtype::log rtype::network PRIVATE rtype_options reproc)
+target_link_libraries(r-type_server_core PUBLIC rtype::game rtype::lobby rtype::log rtype::network PRIVATE rtype_options rtype::development_key reproc)
 target_compile_definitions(r-type_server_core PRIVATE
     RTYPE_VERSION="${PROJECT_VERSION}"
     # A game without a master, with a fixed test key: never in the released binaries (ADR 0013)

@@ -5,6 +5,7 @@
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
 #include "Server.hpp"
+#include "rtype/keys/DevelopmentKey.hpp"
 #include "rtype/network/Tls.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -41,6 +42,7 @@ TEST_CASE("Without arguments, the server is a master with the default settings",
     CHECK(options.master.firstGamePort == 4243);
     CHECK(options.master.lastGamePort == 4299);
     CHECK(options.master.key == "server.key");
+    CHECK_FALSE(options.master.keyGiven);
     CHECK_FALSE(options.master.check);
     CHECK(options.master.config.empty());
     CHECK(options.instance.config.empty());
@@ -110,6 +112,7 @@ TEST_CASE("Every option of the master is read", "[server]")
     CHECK(options.master.firstGamePort == 6000);
     CHECK(options.master.lastGamePort == 6009);
     CHECK(options.master.key == "/etc/rtype/server.key");
+    CHECK(options.master.keyGiven);
     CHECK(options.master.check);
     CHECK(options.logLevel == rtype::log::Level::Debug);
     CHECK(parse({"-p", "0", "-k", "a.key"}).master.listen == Address::anyIpv4(0));
@@ -214,6 +217,30 @@ TEST_CASE("A master without its key does not start", "[server]")
 
     CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", "missing-rtype-test.key"}, out,
               in) == Failure);
+}
+
+TEST_CASE("Only a Debug master starts with the public development key", "[server]")
+{
+    std::ostringstream out;
+    std::istringstream in;
+    const int expected = rtype::keys::DevelopmentKeyTrusted ? Success : Failure;
+
+    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--config", RTYPE_TEST_CONFIG, "--key",
+                                            RTYPE_TEST_DEVELOPMENT_KEYS "/server.key"},
+              out, in) == expected);
+}
+
+TEST_CASE("A Debug master without a key uses the development key, a Release master does not start",
+          "[server]")
+{
+    if (std::filesystem::exists("server.key")) {
+        SKIP("A server.key is in the working directory");
+    }
+    std::ostringstream out;
+    std::istringstream in;
+
+    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--config", RTYPE_TEST_CONFIG}, out,
+              in) == (rtype::keys::DevelopmentKeyTrusted ? Success : Failure));
 }
 
 TEST_CASE("An instance without a secret on its standard input does not start", "[server]")

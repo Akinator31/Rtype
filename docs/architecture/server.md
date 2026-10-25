@@ -62,7 +62,7 @@ a server that cannot work stops at once with the reason.*
 | `-p`, `--port <port>` | 4242 | TCP port of the lobby; 0 lets the system choose |
 | `--bind <ip>` | `0.0.0.0` | Address to listen on: every interface by default, `127.0.0.1` for this machine only |
 | `--game-ports <first>-<last>` | 4243–4299 | UDP ports of the games, one per game: their number is the most games at once |
-| `-k`, `--key <file>` | `server.key` | Private key of the server ([Generate the server keys](../guides/generate-the-server-keys.md)) |
+| `-k`, `--key <file>` | `server.key` | Private key of the server ([Generate the server keys](../guides/generate-the-server-keys.md)). Without it nor `server.key`, a Debug server uses the development key |
 | `--check` | | Loads the key and the game configuration and opens the port, then exits: checks a configuration without running it |
 
 The master loads its key (`ServerIdentity::load()`), checks the configuration of the game and opens its port
@@ -75,8 +75,15 @@ INFO  master   Server key 4026de0635ae89391bff98b7b9ddc0689fa8529f9804e4c4721ead
 INFO  master   Master started: Ctrl+C to stop
 ```
 
-The fingerprint is the one the clients pin: compare it with `r-type_keygen --fingerprint server.pub` when
+The fingerprint is the one the clients trust: compare it with `r-type_keygen --fingerprint server.pub` when
 something looks wrong.
+
+The development key pair, committed in `keys/development/`, is built into the server as a header
+([ADR 0020](../decisions/0020-server-key-distribution.md)):
+
+- a **Debug** master given no `--key` and finding no `server.key` uses it, with a warning;
+- a **Release** master refuses to start with it, whatever the file: its private key is public, so anyone
+  could pretend to be the server. Its private key is not even in Release binaries.
 
 ### Instance
 

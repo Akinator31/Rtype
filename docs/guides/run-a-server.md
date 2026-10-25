@@ -7,7 +7,8 @@ on their own machine for development or on a machine on the Internet.
 
 - The project builds: see [Build](../getting-started/build.md). The server is `build/bin/r-type_server`
   (`build\bin\Release\r-type_server.exe` on Windows), or the one of the server archive of a release.
-- The server keys: see [Generate the server keys](generate-the-server-keys.md).
+- The server keys: see [Generate the server keys](generate-the-server-keys.md). A Debug server without them
+  uses the public development key, which only Debug clients trust: fine on your machine, never for players.
 
 ## Steps
 
@@ -26,7 +27,9 @@ on their own machine for development or on a machine on the Internet.
     INFO  master   Check passed: the server can start
     ```
 
-    The server key must be the fingerprint of the `server.pub` the players have.
+    The server key is the fingerprint the clients trust: the one built into them for the official server, the
+    one players are shown at their first connection for another one. A Release server refuses to start with
+    the development key.
 
 2. **Open the ports** if players come from another machine: the TCP port of the lobby (4242), and the UDP
    range of the games (4243 to 4299), in the firewall of the machine and, at home, as port forwarding on the

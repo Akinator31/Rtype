@@ -22,6 +22,7 @@ Master options:
       --bind <ip>            Address to listen on (default: 0.0.0.0, every interface)
       --game-ports <a>-<b>   UDP ports of the games, one per game (default: 4243-4299)
   -k, --key <file>           Private key of the server (default: server.key), made with r-type_keygen
+                             (debug builds without one: the public development key)
       --check                Check that the server can start (key, port, configuration), then exit
 
 Instance options (given by the master):
@@ -145,6 +146,7 @@ Options parseOptions(std::span<const std::string_view> arguments)
             masterOnly.push_back(argument);
         } else if (argument == "-k" || argument == "--key") {
             options.master.key = std::filesystem::path(std::string(value()));
+            options.master.keyGiven = true;
             masterOnly.push_back(argument);
         } else if (argument == "--check") {
             options.master.check = true;

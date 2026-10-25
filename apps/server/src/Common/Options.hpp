@@ -33,6 +33,9 @@ struct MasterOptions {
     std::uint16_t lastGamePort = 4299;
     /// The private key the master proves its identity with (docs/guides/generate-the-server-keys.md).
     std::filesystem::path key = "server.key";
+    /// `key` was given with --key: a Debug master without it, and without server.key, uses the development
+    /// key instead (ADR 0020).
+    bool keyGiven = false;
     /// Only check that the server can start (key, ports, configuration), then exit.
     bool check = false;
     /// The configuration of the game, given to the instances; empty: config/ next to the executable.
