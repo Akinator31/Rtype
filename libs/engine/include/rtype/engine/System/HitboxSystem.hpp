@@ -13,8 +13,8 @@ namespace rtype::engine
 {
 
 /// Computes the Hitbox of every widget with a text that can get the focus or is in a Column: the size of its
-/// Panel if it has one, of its rail if it is a slider, of its row if it is a switch, else of its text plus the padding of the style, times its
-/// Scale.
+/// Panel if it has one, of its rail if it is a slider, of its row if it is a switch, else of its text plus
+/// the padding of the style, times its Scale.
 class HitboxSystem : public ecs::System
 {
     const Metrics &_metrics;

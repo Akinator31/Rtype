@@ -80,9 +80,9 @@ struct FlareStyle {
     }
 };
 
-/// Look of the console, like the rest of the interface: a dark veil over the game with no frame, a fine line of
-/// light along its bottom edge, grey lines of text, and above the command line (a TextFieldType::Console field)
-/// a fine rule. Sizes are in game units.
+/// Look of the console, like the rest of the interface: a dark veil over the game with no frame, a fine line
+/// of light along its bottom edge, grey lines of text, and above the command line (a TextFieldType::Console
+/// field) a fine rule. Sizes are in game units.
 struct ConsoleStyle {
     float textSize = 26.0f;
     float margin = 48.0f;
@@ -100,11 +100,11 @@ struct ConsoleStyle {
     float cursorWidth = 2.0f;
 };
 
-/// Look and timing of the toasts (see Engine::showToast()): no panel, a line of text on the edge of the screen,
-/// written with light: the subject in bright capitals, the message in grey, the actor in bright capitals, and
-/// an icon at the end. A toast with a message alone shows it in bright capitals. Toasts are stacked from a
-/// corner of the screen, the newest nearest to it, and aligned on the edge of this corner. Sizes are in game
-/// units, durations in seconds.
+/// Look and timing of the toasts (see Engine::showToast()): no panel, a line of text on the edge of the
+/// screen, written with light: the subject in bright capitals, the message in grey, the actor in bright
+/// capitals, and an icon at the end. A toast with a message alone shows it in bright capitals. Toasts are
+/// stacked from a corner of the screen, the newest nearest to it, and aligned on the edge of this corner.
+/// Sizes are in game units, durations in seconds.
 struct ToastStyle {
     /// Corner of the screen the toasts are stacked from, and the distance from its edges.
     AnchorPoint corner = AnchorPoint::TopRight;
@@ -148,8 +148,8 @@ struct ToastStyle {
     /// Beyond it, the oldest toasts fade out early.
     std::size_t maxVisible = 4;
 
-    /// An announcement (ToastKind::Announcement): its icon and title in bright capitals, a line of light under
-    /// them, and a line of detail in grey. It is centred at the top of the screen.
+    /// An announcement (ToastKind::Announcement): its icon and title in bright capitals, a line of light
+    /// under them, and a line of detail in grey. It is centred at the top of the screen.
     float announcementTitleSize = 30.0f;
     float announcementTitleSpacing = 6.5f;
     float announcementDetailSize = 26.0f;
@@ -214,7 +214,10 @@ struct ToastStyle {
         return times[static_cast<std::size_t>(kind)];
     }
     /// Time from the appearance of a toast of this kind to the end of its exit.
-    [[nodiscard]] float getLifetime(ToastKind kind) const { return getFadeIn(kind) + duration + getFadeOut(kind); }
+    [[nodiscard]] float getLifetime(ToastKind kind) const
+    {
+        return getFadeIn(kind) + duration + getFadeOut(kind);
+    }
     /// How many toasts of this kind are shown at once.
     [[nodiscard]] std::size_t getMaxVisible(ToastKind kind) const
     {
@@ -222,15 +225,12 @@ struct ToastStyle {
         return maximums[static_cast<std::size_t>(kind)];
     }
 
-
-
     [[nodiscard]] render::Color getAccent(ToastType type) const
     {
         // One colour per type, in the order of ToastType
         const std::array<render::Color, toastTypeCount> accents{info, success, warning, error};
         return accents[static_cast<std::size_t>(type)];
     }
-
 };
 
 /// Look of the titles (InterfaceBuilder::title()): capitals in chrome, lit from above and below with a dark
@@ -250,8 +250,8 @@ struct TitleStyle {
     float glowBlur = 10.0f;
 };
 
-/// Look of the sliders (InterfaceBuilder::slider()): a fine rail, its filled part in light, and a ring open on
-/// its sides for the handle, which grows when pointed at and when dragged. Sizes are in game units.
+/// Look of the sliders (InterfaceBuilder::slider()): a fine rail, its filled part in light, and a ring open
+/// on its sides for the handle, which grows when pointed at and when dragged. Sizes are in game units.
 struct SliderStyle {
     render::FontId font;
     float captionSize = 24.0f;
@@ -295,9 +295,9 @@ struct SliderStyle {
     }
 };
 
-/// Look of the switches (InterfaceBuilder::toggle()): its caption on the left, then on the right "OFF", a short
-/// link with a dot on it, and "ON". The dot slides to the side that is on, and the label of that side lights
-/// up. Sizes are in game units.
+/// Look of the switches (InterfaceBuilder::toggle()): its caption on the left, then on the right "OFF", a
+/// short link with a dot on it, and "ON". The dot slides to the side that is on, and the label of that side
+/// lights up. Sizes are in game units.
 struct SwitchStyle {
     render::FontId font;
     float captionSize = 24.0f;
@@ -311,8 +311,9 @@ struct SwitchStyle {
     float linkWidth = 80.0f;
     float linkThickness = 2.0f;
     float dotRadius = 7.0f;
-    /// How far the area that lights up goes beyond the labels and the link: on each side, and above and below.
-    /// It is no larger than what is drawn, so the switch does not light up when the pointer is only near it.
+    /// How far the area that lights up goes beyond the labels and the link: on each side, and above and
+    /// below. It is no larger than what is drawn, so the switch does not light up when the pointer is only
+    /// near it.
     float hoverMargin = 8.0f;
     float hoverMarginY = 4.0f;
     /// The label of the side that is on, at rest and lit; the label of the other side.
@@ -333,8 +334,8 @@ struct SwitchStyle {
     float slideDuration = 0.18f;
 };
 
-/// Look of the gauges (InterfaceBuilder::gauge()): a fine rail, lit from its start, from transparent to white,
-/// up to its value, where a spark shines. Sizes are in game units.
+/// Look of the gauges (InterfaceBuilder::gauge()): a fine rail, lit from its start, from transparent to
+/// white, up to its value, where a spark shines. Sizes are in game units.
 struct GaugeStyle {
     render::FontId font;
     float captionSize = 24.0f;

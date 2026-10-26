@@ -58,8 +58,8 @@ float ToastSystem::computeLifetime(const Toast &toast) const
 float ToastSystem::computeOpacity(const Toast &toast) const
 {
     const float fadeIn = toast.time / std::max(_style.toast.getFadeIn(toast.kind), minimumFade);
-    const float fadeOut = (computeLifetime(toast) - toast.time) /
-                          std::max(_style.toast.getFadeOut(toast.kind), minimumFade);
+    const float fadeOut =
+        (computeLifetime(toast) - toast.time) / std::max(_style.toast.getFadeOut(toast.kind), minimumFade);
     return std::clamp(std::min(fadeIn, fadeOut), 0.0f, 1.0f);
 }
 
@@ -85,8 +85,9 @@ float ToastSystem::computeAnnouncementWidth(const Toast &toast) const
     const ToastStyle &style = _style.toast;
     // As wide as its line of light, or wider if its words need it
     const float title = style.iconSize + style.gap +
-                        _metrics.measureText(style.nameFont, toast.getHeadline(), style.announcementTitleSize,
-                                             style.announcementTitleSpacing)
+                        _metrics
+                            .measureText(style.nameFont, toast.getHeadline(), style.announcementTitleSize,
+                                         style.announcementTitleSpacing)
                             .x;
     const float detail =
         _metrics.measureText(style.messageFont, toast.getBody(), style.announcementDetailSize, 0.0f).x;
@@ -144,7 +145,8 @@ render::Vector2 ToastSystem::computeBannerPosition(const Toast &toast, float /*o
     const float height = style.getHeight(ToastKind::Banner);
     return computeAnchoredPosition(
         screen,
-        {AnchorPoint::Top, 0.0f, (style.bannerCentre * screen.height) - (height / 2.0f) + computeStacked(toast)},
+        {AnchorPoint::Top, 0.0f,
+         (style.bannerCentre * screen.height) - (height / 2.0f) + computeStacked(toast)},
         {toast.width, height});
 }
 
@@ -157,7 +159,6 @@ render::Vector2 ToastSystem::computePosition(const Toast &toast, float opacity) 
                                                        &ToastSystem::computeBannerPosition};
     return (this->*places[static_cast<std::size_t>(toast.kind)])(toast, opacity);
 }
-
 
 void ToastSystem::advance(Toast &toast, float target, bool isTooMany, float elapsed) const
 {
@@ -193,6 +194,5 @@ void ToastSystem::update(float elapsed)
         _drawables.emplace(entity, Layer::Interface, toastOrder);
     }
 }
-
 
 } // namespace rtype::engine

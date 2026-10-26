@@ -523,7 +523,8 @@ void Renderer::drawArc(Vector2 center, float radius, float thickness, float star
     _impl->requireFrame();
     if (thickness > 0.0f && radius > 0.0f && endAngle > startAngle) {
         constexpr float degreesPerSegment = 4.0f;
-        const int segments = std::max(2, static_cast<int>(std::ceil((endAngle - startAngle) / degreesPerSegment)));
+        const int segments =
+            std::max(2, static_cast<int>(std::ceil((endAngle - startAngle) / degreesPerSegment)));
         DrawRing(toRaylib(center), std::max(radius - thickness, 0.0f), radius, startAngle, endAngle, segments,
                  toRaylib(color));
     }
@@ -668,12 +669,14 @@ void Renderer::drawGradientText(FontId font, const std::string &text, Vector2 po
         if (codepoint != ' ' && codepoint != '\t') {
             const ::Rectangle source{rectangle.x - padding, rectangle.y - padding,
                                      rectangle.width + (2.0f * padding), rectangle.height + (2.0f * padding)};
-            const ::Rectangle destination{position.x + offset + ((static_cast<float>(glyph.offsetX) - padding) * scale),
-                                          position.y + ((static_cast<float>(glyph.offsetY) - padding) * scale),
-                                          source.width * scale, source.height * scale};
+            const ::Rectangle destination{
+                position.x + offset + ((static_cast<float>(glyph.offsetX) - padding) * scale),
+                position.y + ((static_cast<float>(glyph.offsetY) - padding) * scale), source.width * scale,
+                source.height * scale};
             addGradientGlyph(stops, source, destination, position.y, size, textureWidth, textureHeight);
         }
-        const float advance = glyph.advanceX == 0 ? rectangle.width * scale : static_cast<float>(glyph.advanceX) * scale;
+        const float advance =
+            glyph.advanceX == 0 ? rectangle.width * scale : static_cast<float>(glyph.advanceX) * scale;
         offset += advance + spacing;
     }
     rlEnd();

@@ -331,8 +331,8 @@ TEST_CASE("A slider with a rail is as big as its rail and handle", "[engine][int
 {
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
-    const entity_t slider = ui.slider(
-        "Volume", [] { return 0.5f; }, [](float) {}, 0.1f, {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    const entity_t slider =
+        ui.slider("Volume", [] { return 0.5f; }, [](float) {}, 0.1f, {AnchorPoint::TopLeft, 100.0f, 100.0f});
     world.update();
 
     const Hitbox &box = world.ecs.getComponent<Hitbox>(slider);
@@ -618,7 +618,6 @@ TEST_CASE("A pressed flare button shines brighter for a moment, then stays lit",
     world.update(world.style.flare.fadeDuration);
     CHECK(std::abs(highlightOf() - 1.0f) < 1e-6f);
 }
-
 
 TEST_CASE("A header puts the title after the back button", "[engine][interface]")
 {
@@ -1521,7 +1520,8 @@ TEST_CASE("A toast reads as a line: its subject, its message, its actor, then it
                (style.letterSpacing * static_cast<float>(letters - 1));
     };
     const float message = 0.5f * style.messageSize * 8.0f;
-    CHECK(isNear(line.width, names(14) + style.gap + message + style.gap + names(4) + style.gap + style.iconSize));
+    CHECK(isNear(line.width,
+                 names(14) + style.gap + message + style.gap + names(4) + style.gap + style.iconSize));
 
     // A message alone is shown as the subject
     const Toast &single = world.ecs.getComponent<Toast>(alone);
@@ -1634,8 +1634,8 @@ TEST_CASE("A switch lights up only over what is drawn of it, not over the rest o
 {
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
-    const entity_t entity = ui.toggle(
-        "Vibration", [] { return false; }, [](bool) {}, {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    const entity_t entity =
+        ui.toggle("Vibration", [] { return false; }, [](bool) {}, {AnchorPoint::TopLeft, 100.0f, 100.0f});
     world.update();
     const SwitchStyle &style = world.style.toggle;
     const SwitchTrack &track = world.ecs.getComponent<SwitchTrack>(entity);
@@ -1672,7 +1672,8 @@ TEST_CASE("A switch lights up only over what is drawn of it, not over the rest o
     CHECK(layout.hoverArea.height < style.height);
 }
 
-TEST_CASE("A gauge shows the value it reads, takes no focus, and is placed by its size", "[engine][interface][gauge]")
+TEST_CASE("A gauge shows the value it reads, takes no focus, and is placed by its size",
+          "[engine][interface][gauge]")
 {
     World world;
     float charge = 0.25f;
@@ -1717,7 +1718,8 @@ TEST_CASE("Announcements and banners are toasts of their own kind, with a stack 
 
     // An announcement is centred at the top of the screen, a banner across the whole screen
     CHECK(isNear(positionOf(world, announcement).x, 960.0f));
-    CHECK(isNear(positionOf(world, announcement).y, style.announcementTop + (style.getHeight(ToastKind::Announcement) / 2.0f)));
+    CHECK(isNear(positionOf(world, announcement).y,
+                 style.announcementTop + (style.getHeight(ToastKind::Announcement) / 2.0f)));
     CHECK(isNear(world.ecs.getComponent<Toast>(banner).width, 1920.0f));
     CHECK(isNear(positionOf(world, banner).x, 960.0f));
     CHECK(isNear(positionOf(world, banner).y, style.bannerCentre * 1080.0f));

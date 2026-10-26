@@ -24,8 +24,9 @@ InterfaceSystem::InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, Sc
       _navigation(std::move(navigation)), _focusables(use<Focusable>(caches)), _focused(use<Focused>(caches)),
       _hitboxes(use<Hitbox>(caches)), _positions(use<ecs::Position>(caches)), _scales(use<Scale>(caches)),
       _tweens(use<Tween>(caches)), _panels(use<Panel>(caches)), _buttons(use<Button>(caches)),
-      _toggles(use<Toggle>(caches)), _sliders(use<Slider>(caches)), _tracks(use<SliderTrack>(caches)), _switches(use<SwitchTrack>(caches)), _texts(use<Text>(caches)),
-      _choices(use<Choice>(caches)), _fields(use<TextField>(caches)), _sounds(use<SoundEffect>(caches))
+      _toggles(use<Toggle>(caches)), _sliders(use<Slider>(caches)), _tracks(use<SliderTrack>(caches)),
+      _switches(use<SwitchTrack>(caches)), _texts(use<Text>(caches)), _choices(use<Choice>(caches)),
+      _fields(use<TextField>(caches)), _sounds(use<SoundEffect>(caches))
 {
 }
 
@@ -69,8 +70,8 @@ void InterfaceSystem::setFocus(const std::vector<ecs::entity_t> &widgets, ecs::e
     animateFocus(widget);
 }
 
-/// Widgets with a Panel light up instead (see lightPanels()); a slider grows its handle; a console field stays
-/// still, as a command line.
+/// Widgets with a Panel light up instead (see lightPanels()); a slider grows its handle; a console field
+/// stays still, as a command line.
 bool InterfaceSystem::keepsSize(ecs::entity_t widget) const
 {
     return _panels.has(widget) || _tracks.has(widget) || _switches.has(widget) ||
@@ -308,7 +309,8 @@ void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
             SwitchTrack &track = _switches.get(widget);
             const Toggle &toggle = _toggles.get(widget);
             const float slide = elapsed / std::max(_style.toggle.slideDuration, 0.001f);
-            track.hover = approach(track.hover, _pointerMode && isOverSwitch(widget, pointer) ? 1.0f : 0.0f, step);
+            track.hover =
+                approach(track.hover, _pointerMode && isOverSwitch(widget, pointer) ? 1.0f : 0.0f, step);
             track.focus = approach(track.focus, isLit(widget, hovered) ? 1.0f : 0.0f, step);
             playLightingSound(widget, track.lit, isLit(widget, hovered), appeared);
             track.position = approach(track.position, toggle.get && toggle.get() ? 1.0f : 0.0f, slide);
@@ -338,11 +340,11 @@ bool InterfaceSystem::isOverSwitch(ecs::entity_t widget, render::Vector2 pointer
     }
     // The group on the right of the row: "OFF", the link, "ON", and only a small margin around them
     const render::FontId font = _texts.get(widget).font;
-    const SwitchLayout layout = computeSwitchLayout(
-        _style.toggle, {_positions.get(widget).x, _positions.get(widget).y},
-        [&](const char *label, float size, float spacing) {
-            return _metrics.measureText(font, label, size, spacing);
-        });
+    const SwitchLayout layout =
+        computeSwitchLayout(_style.toggle, {_positions.get(widget).x, _positions.get(widget).y},
+                            [&](const char *label, float size, float spacing) {
+                                return _metrics.measureText(font, label, size, spacing);
+                            });
     return layout.contains(pointer);
 }
 

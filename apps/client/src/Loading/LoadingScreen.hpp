@@ -14,8 +14,8 @@ struct LoadingScreen {
     ecs::entity_t logo;
     /// Time since the screen opened, in seconds.
     float time = 0.0f;
-    /// How full the bar is, from 0 to 1: it follows the part of the assets loaded, without going faster than a
-    /// steady speed, so that it fills smoothly even when the assets load in jumps.
+    /// How full the bar is, from 0 to 1: it follows the part of the assets loaded, without going faster than
+    /// a steady speed, so that it fills smoothly even when the assets load in jumps.
     float progress = 0.0f;
     /// Time since the bar became full, in seconds, once the assets are loaded: empty until then.
     std::optional<float> leaving = std::nullopt;

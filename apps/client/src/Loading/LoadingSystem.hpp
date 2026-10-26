@@ -11,9 +11,9 @@ namespace rtype::client
 {
 
 /// Plays the LoadingScreen while its AssetPreload loads: fades the logo and the bar in, while the assets are
-/// read in the background, then finishes the loads and fills the bar as they end, at most at a steady speed, waits until it is full and the logo fully
-/// shown, holds it full for a moment, then fades the bar out and is finished. The logo stays, for the scene
-/// that comes next.
+/// read in the background, then finishes the loads and fills the bar as they end, at most at a steady speed,
+/// waits until it is full and the logo fully shown, holds it full for a moment, then fades the bar out and is
+/// finished. The logo stays, for the scene that comes next.
 class LoadingSystem : public ecs::System
 {
     AssetPreload &_preload;

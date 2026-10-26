@@ -36,7 +36,6 @@ render::Color mix(render::Color from, render::Color to, float amount)
     return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a)};
 }
 
-
 /// The colour more or less opaque, as much as a light more or less strong: brighter beyond 1.
 render::Color brightened(render::Color color, float strength)
 {
@@ -128,9 +127,10 @@ void drawTextGlow(render::Renderer &renderer, render::FontId font, const std::st
             const float angle = (2.0f * std::numbers::pi_v<float> * (static_cast<float>(direction) + turn)) /
                                 static_cast<float>(directions);
             const float distance = (blur / 2.0f) * ring;
-            renderer.drawText(font, text,
-                              {topLeft.x + (std::cos(angle) * distance), topLeft.y + (std::sin(angle) * distance)},
-                              size, layer, spacing);
+            renderer.drawText(
+                font, text,
+                {topLeft.x + (std::cos(angle) * distance), topLeft.y + (std::sin(angle) * distance)}, size,
+                layer, spacing);
         }
     }
 }
@@ -191,10 +191,10 @@ void drawToastIcon(render::Renderer &renderer, ToastType type, render::Vector2 c
 {
     // One icon per type, in the order of ToastType: a warning and an error share theirs
     using Icon = void (*)(render::Renderer &, render::Vector2, float, float, render::Color);
-    constexpr std::array<Icon, toastTypeCount> icons{drawInfoIcon, drawGainIcon, drawAlertIcon, drawAlertIcon};
+    constexpr std::array<Icon, toastTypeCount> icons{drawInfoIcon, drawGainIcon, drawAlertIcon,
+                                                     drawAlertIcon};
     icons[static_cast<std::size_t>(type)](renderer, centre, size, thickness, color);
 }
-
 
 // A line of light: its colour fades in from the left end to the middle and out to the right end, with a glow
 // along its middle part
@@ -496,8 +496,8 @@ void SceneRenderer::drawFlare(render::Renderer &renderer, const Panel &panel, co
                       faded(mix(style.text, style.litText, trace), opacity), style.letterSpacing);
 }
 
-void SceneRenderer::drawTitle(render::Renderer &renderer, const Text &text, render::Vector2 centre, float scale,
-                              float opacity) const
+void SceneRenderer::drawTitle(render::Renderer &renderer, const Text &text, render::Vector2 centre,
+                              float scale, float opacity) const
 {
     const TitleStyle &style = _style.title;
     const float size = text.size * scale;
@@ -528,7 +528,6 @@ void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider,
     const float focus = eased(std::max(track.focus, track.hover));
     const float grab = eased(track.grab);
 
-
     // The caption on its line, then the rail under it, with room for the largest handle
     const float top = centre.y - (style.getHeight() / 2.0f);
     const float left = centre.x - (style.width / 2.0f);
@@ -539,7 +538,8 @@ void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider,
     const float percentageWidth =
         renderer.measureText(text.font, percentage, style.captionSize, style.letterSpacing).x;
     const render::Color caption = faded(mix(style.caption, style.litCaption, focus), opacity);
-    renderer.drawText(text.font, slider.caption, {left, top}, style.captionSize, caption, style.letterSpacing);
+    renderer.drawText(text.font, slider.caption, {left, top}, style.captionSize, caption,
+                      style.letterSpacing);
     renderer.drawText(text.font, percentage, {left + style.width - percentageWidth, top}, style.captionSize,
                       faded(style.litCaption, opacity), style.letterSpacing);
 
@@ -549,7 +549,8 @@ void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider,
     const float filled = handleX - left;
     if (filled > 0.0f) {
         // Two fainter lines around the filled part give it its light, stronger when pointed at or dragged
-        const render::Color light = faded(brightened(style.fillGlow, 1.0f + (1.5f * lit) + (1.0f * grab)), opacity);
+        const render::Color light =
+            faded(brightened(style.fillGlow, 1.0f + (1.5f * lit) + (1.0f * grab)), opacity);
         for (const float spread : {3.0f, 1.7f}) {
             const float thickness = style.fillThickness * spread;
             renderer.drawRoundedRectangle({left, y - (thickness / 2.0f), filled, thickness}, thickness / 2.0f,
@@ -595,8 +596,8 @@ void SceneRenderer::drawSwitch(render::Renderer &renderer, const Toggle &toggle,
                       faded(mix(style.caption, style.litCaption, focus), opacity), style.letterSpacing);
 
     // "OFF", the link, "ON", aligned on the right: the same places as the area that lights up
-    const SwitchLayout layout = computeSwitchLayout(
-        style, centre, [&](const char *label, float size, float spacing) {
+    const SwitchLayout layout =
+        computeSwitchLayout(style, centre, [&](const char *label, float size, float spacing) {
             return renderer.measureText(text.font, label, size, spacing);
         });
     const float offX = layout.offX;
@@ -617,14 +618,15 @@ void SceneRenderer::drawSwitch(render::Renderer &renderer, const Toggle &toggle,
                  faded(brightened(style.labelGlow, offLight), opacity), style.labelGlowBlur);
     drawTextGlow(renderer, text.font, "ON", onTop, style.labelSize, style.labelSpacing,
                  faded(brightened(style.labelGlow, position), opacity), style.labelGlowBlur);
-    renderer.drawText(text.font, "OFF", offTop, style.labelSize, faded(offColor, opacity), style.labelSpacing);
+    renderer.drawText(text.font, "OFF", offTop, style.labelSize, faded(offColor, opacity),
+                      style.labelSpacing);
     renderer.drawText(text.font, "ON", onTop, style.labelSize, faded(onColor, opacity), style.labelSpacing);
 
-    // The link, lit between the OFF label and the dot once on, and from the dot to the ON label when pointed at
-    renderer.drawRoundedRectangle({linkLeft, centre.y - (style.linkThickness / 2.0f), style.linkWidth,
-                                   style.linkThickness},
-                                  style.linkThickness / 2.0f, faded(style.link, opacity),
-                                  faded(style.link, opacity));
+    // The link, lit between the OFF label and the dot once on, and from the dot to the ON label when pointed
+    // at
+    renderer.drawRoundedRectangle(
+        {linkLeft, centre.y - (style.linkThickness / 2.0f), style.linkWidth, style.linkThickness},
+        style.linkThickness / 2.0f, faded(style.link, opacity), faded(style.link, opacity));
     const auto drawLit = [&](float from, float to, float amount) {
         if (to > from && amount > 0.0f) {
             render::Color lit = style.litLink;
@@ -686,8 +688,8 @@ void SceneRenderer::drawAnnouncement(render::Renderer &renderer, const Toast &to
     render::Color glow = accent;
     glow.a = style.glow.a;
 
-    // The entrance: the icon pops, the title fades in while its letters tighten, the line of light draws itself
-    // from the middle with a flash, then the detail rises
+    // The entrance: the icon pops, the title fades in while its letters tighten, the line of light draws
+    // itself from the middle with a flash, then the detail rises
     const float iconPop = stage(progress, 0.0f, 0.4f, Easing::EaseOutBack);
     const float iconFade = stage(progress, 0.0f, 0.2f, Easing::Linear);
     const float titleIn = stage(progress, 0.1f, 0.65f);
@@ -708,12 +710,12 @@ void SceneRenderer::drawAnnouncement(render::Renderer &renderer, const Toast &to
     const render::Vector2 titleTopLeft{rowLeft + style.iconSize + style.gap, top + (8.0f * (1.0f - titleIn))};
     drawTextGlow(renderer, style.nameFont, title, titleTopLeft, style.announcementTitleSize, spacing,
                  faded(glow, titleIn), style.glowBlur);
-    renderer.drawText(style.nameFont, title, titleTopLeft, style.announcementTitleSize, faded(accent, titleIn),
-                      spacing);
+    renderer.drawText(style.nameFont, title, titleTopLeft, style.announcementTitleSize,
+                      faded(accent, titleIn), spacing);
 
     // The line of light under it, which shines while it is drawn, then the detail in grey
-    const float lineY = top + style.announcementTitleSize + style.announcementGap +
-                        (style.announcementLineThickness / 2.0f);
+    const float lineY =
+        top + style.announcementTitleSize + style.announcementGap + (style.announcementLineThickness / 2.0f);
     render::Color lineColor = accent;
     lineColor.a = 217;
     render::Color lineGlow = accent;
@@ -725,9 +727,9 @@ void SceneRenderer::drawAnnouncement(render::Renderer &renderer, const Toast &to
     const std::string &detail = toast.getBody();
     const float detailWidth = renderer.measureText(style.messageFont, detail, style.announcementDetailSize).x;
     renderer.drawText(style.messageFont, detail,
-                      {centre.x - (detailWidth / 2.0f),
-                       lineY + (style.announcementLineThickness / 2.0f) + style.announcementGap +
-                           (10.0f * (1.0f - detailIn))},
+                      {centre.x - (detailWidth / 2.0f), lineY + (style.announcementLineThickness / 2.0f) +
+                                                            style.announcementGap +
+                                                            (10.0f * (1.0f - detailIn))},
                       style.announcementDetailSize, faded(style.message, detailIn));
 }
 
@@ -759,7 +761,8 @@ void SceneRenderer::drawBanner(render::Renderer &renderer, const Toast &toast, r
     render::Color veil = accent;
     veil.a = static_cast<std::uint8_t>(style.bannerVeil * 255.0f * spread);
     if (lower - upper > 8.0f) {
-        renderer.drawRoundedRectangle({left, upper + 4.0f, half, lower - upper - 8.0f}, 0.0f, clear(veil), veil);
+        renderer.drawRoundedRectangle({left, upper + 4.0f, half, lower - upper - 8.0f}, 0.0f, clear(veil),
+                                      veil);
         renderer.drawRoundedRectangle({centre.x, upper + 4.0f, half, lower - upper - 8.0f}, 0.0f, veil,
                                       clear(veil));
     }
@@ -767,16 +770,18 @@ void SceneRenderer::drawBanner(render::Renderer &renderer, const Toast &toast, r
     lineColor.a = 178;
     render::Color lineGlow = accent;
     lineGlow.a = 90;
-    for (const float y : {upper + (style.bannerLineThickness / 2.0f), lower - (style.bannerLineThickness / 2.0f)}) {
+    for (const float y :
+         {upper + (style.bannerLineThickness / 2.0f), lower - (style.bannerLineThickness / 2.0f)}) {
         drawLightLine(renderer, left, right, y, style.bannerLineThickness,
                       brightened(lineColor, 1.0f + (0.9f * openFlash)),
                       brightened(lineGlow, 1.0f + (2.0f * openFlash)), 8.0f);
     }
 
-    // The title, with a spark on each side, then the detail under it. The letters are spaced wide at first, then
-    // tighten; the sparks start from the middle and fly to their places
+    // The title, with a spark on each side, then the detail under it. The letters are spaced wide at first,
+    // then tighten; the sparks start from the middle and fly to their places
     const std::string &title = toast.getHeadline();
-    const float titleSpacing = style.bannerTitleSpacing * (1.0f + ((style.spacingIn - 1.0f) * (1.0f - titleIn)));
+    const float titleSpacing =
+        style.bannerTitleSpacing * (1.0f + ((style.spacingIn - 1.0f) * (1.0f - titleIn)));
     const render::Vector2 finalSize =
         renderer.measureText(style.nameFont, title, style.bannerTitleSize, style.bannerTitleSpacing);
     const render::Vector2 measured =
@@ -819,15 +824,13 @@ void SceneRenderer::drawToast(render::Renderer &renderer, const Toast &toast, re
 {
     // One way of drawing each kind of toast, in the order of ToastKind
     using Draw = void (SceneRenderer::*)(render::Renderer &, const Toast &, render::Vector2, float) const;
-    constexpr std::array<Draw, toastKindCount> draws{&SceneRenderer::drawEventLine,
-                                                     &SceneRenderer::drawAnnouncement,
-                                                     &SceneRenderer::drawBanner};
+    constexpr std::array<Draw, toastKindCount> draws{
+        &SceneRenderer::drawEventLine, &SceneRenderer::drawAnnouncement, &SceneRenderer::drawBanner};
     (this->*draws[static_cast<std::size_t>(toast.kind)])(renderer, toast, centre, opacity);
 }
 
-
 void SceneRenderer::drawEventLine(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
-                                 float opacity) const
+                                  float opacity) const
 {
     const ToastStyle &style = _style.toast;
     const render::Color accent = style.getAccent(toast.type);
@@ -936,8 +939,8 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
             continue;
         }
         if (tracks.has(entity) && sliders.has(entity) && texts.has(entity)) {
-            drawSlider(renderer, sliders.get(entity), tracks.get(entity), texts.get(entity), {centre.x, centre.y},
-                       opacity);
+            drawSlider(renderer, sliders.get(entity), tracks.get(entity), texts.get(entity),
+                       {centre.x, centre.y}, opacity);
             continue;
         }
         if (titles.has(entity) && texts.has(entity)) {

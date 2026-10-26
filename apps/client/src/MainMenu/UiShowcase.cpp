@@ -35,7 +35,8 @@ constexpr float buttonsBottom = 150.0f;
 constexpr float buttonsSpacing = 76.0f;
 
 /// A setting that only the widgets of the scene read and write.
-template <typename Value> using Setting = std::shared_ptr<Value>;
+template <typename Value>
+using Setting = std::shared_ptr<Value>;
 
 float rowTop(float top, float spacing, int row)
 {
@@ -46,13 +47,14 @@ void createSliders(engine::InterfaceBuilder &interface, const engine::InterfaceS
 {
     // The area of a slider goes beyond its rail by the handle: the rail starts at the margin, like the others
     const float railOverhang = style.slider.handleDragRadius;
-    constexpr std::array<std::pair<const char *, float>, 3> sliders{{{"VOLUME", 0.65f}, {"MUSIC", 0.25f},
-                                                                      {"EFFECTS", 1.0f}}};
+    constexpr std::array<std::pair<const char *, float>, 3> sliders{
+        {{"VOLUME", 0.65f}, {"MUSIC", 0.25f}, {"EFFECTS", 1.0f}}};
     int row = 0;
     for (const auto &[caption, value] : sliders) {
         const auto setting = std::make_shared<float>(value);
         interface.slider(
-            caption, [setting] { return *setting; }, [setting](float newValue) { *setting = newValue; }, 0.05f,
+            caption, [setting] { return *setting; }, [setting](float newValue) { *setting = newValue; },
+            0.05f,
             {engine::AnchorPoint::TopLeft, screenMargin - railOverhang,
              rowTop(slidersTop, slidersSpacing, row++)});
     }
@@ -60,8 +62,8 @@ void createSliders(engine::InterfaceBuilder &interface, const engine::InterfaceS
 
 void createSwitches(engine::InterfaceBuilder &interface)
 {
-    constexpr std::array<std::pair<const char *, bool>, 3> switches{{{"FULLSCREEN", false}, {"SUBTITLES", true},
-                                                                      {"VIBRATION", false}}};
+    constexpr std::array<std::pair<const char *, bool>, 3> switches{
+        {{"FULLSCREEN", false}, {"SUBTITLES", true}, {"VIBRATION", false}}};
     int row = 0;
     for (const auto &[caption, value] : switches) {
         const auto setting = std::make_shared<bool>(value);
@@ -74,8 +76,8 @@ void createSwitches(engine::InterfaceBuilder &interface)
 /// Three gauges, a quarter, two thirds, and full.
 void createGauges(engine::InterfaceBuilder &interface)
 {
-    constexpr std::array<std::pair<const char *, float>, 3> gauges{{{"SHIELD", 0.25f}, {"ENERGY", 0.65f},
-                                                                     {"CHARGE", 1.0f}}};
+    constexpr std::array<std::pair<const char *, float>, 3> gauges{
+        {{"SHIELD", 0.25f}, {"ENERGY", 0.65f}, {"CHARGE", 1.0f}}};
     int row = 0;
     for (const auto &[caption, value] : gauges) {
         interface.gauge(
@@ -98,10 +100,10 @@ void createNotificationButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface
                               localization::Localization &translations, const std::string &key,
                               std::function<void()> onPress, int rowsBelow)
 {
-    const ecs::entity_t button = interface.button(
-        translations.text(key), std::move(onPress),
-        {engine::AnchorPoint::BottomRight, -screenMargin,
-         -buttonsBottom - (static_cast<float>(rowsBelow) * buttonsSpacing)});
+    const ecs::entity_t button =
+        interface.button(translations.text(key), std::move(onPress),
+                         {engine::AnchorPoint::BottomRight, -screenMargin,
+                          -buttonsBottom - (static_cast<float>(rowsBelow) * buttonsSpacing)});
     ecs.addComponent<engine::BoundText>(button, [&translations, key] { return translations.text(key); });
 }
 
@@ -127,7 +129,8 @@ void createNotificationButtons(engine::Engine &engine, engine::InterfaceBuilder 
     const auto announcements = [&engine, &translations] {
         for (const auto &[name, type] : notificationTypes) {
             const std::string key = std::string("showcase.announcement.") + name;
-            engine.showAnnouncement(translations.text(key + ".title"), translations.text(key + ".detail"), type);
+            engine.showAnnouncement(translations.text(key + ".title"), translations.text(key + ".detail"),
+                                    type);
         }
     };
     // A banner at a time, so that each press shows the next type
@@ -138,13 +141,14 @@ void createNotificationButtons(engine::Engine &engine, engine::InterfaceBuilder 
         const std::string key = std::string("showcase.banner.") + name;
         engine.showBanner(translations.text(key + ".title"), translations.text(key + ".detail"), type);
     };
-    createNotificationButton(ecs, interface, translations, "showcase.all",
-                             [events, announcements, banner] {
-                                 events();
-                                 announcements();
-                                 banner();
-                             },
-                             0);
+    createNotificationButton(
+        ecs, interface, translations, "showcase.all",
+        [events, announcements, banner] {
+            events();
+            announcements();
+            banner();
+        },
+        0);
     createNotificationButton(ecs, interface, translations, "showcase.banner", banner, 1);
     createNotificationButton(ecs, interface, translations, "showcase.announcements", announcements, 2);
     createNotificationButton(ecs, interface, translations, "showcase.events", events, 3);
@@ -155,19 +159,19 @@ void createNotificationButtons(engine::Engine &engine, engine::InterfaceBuilder 
 void createUiShowcaseScene(engine::Engine &engine, const engine::InterfaceStyle &style,
                            localization::Localization &translations)
 {
-    engine.createScene(
-        UiShowcaseScene, {.overlay = true, .hidesInterfaceBelow = true},
-        [&style, &translations](engine::Engine &target, engine::SceneId scene) {
-            engine::InterfaceBuilder interface(target.getEcs(), scene, style);
-            interface.boundHeader([&translations] { return translations.text("showcase.title"); },
-                                  [&target] { target.popScene(); },
-                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            createSliders(interface, style);
-            createSwitches(interface);
-            createGauges(interface);
-            createTitles(target.getEcs(), interface, style);
-            createNotificationButtons(target, interface, translations);
-        });
+    engine.createScene(UiShowcaseScene, {.overlay = true, .hidesInterfaceBelow = true},
+                       [&style, &translations](engine::Engine &target, engine::SceneId scene) {
+                           engine::InterfaceBuilder interface(target.getEcs(), scene, style);
+                           interface.boundHeader(
+                               [&translations] { return translations.text("showcase.title"); },
+                               [&target] { target.popScene(); },
+                               {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
+                           createSliders(interface, style);
+                           createSwitches(interface);
+                           createGauges(interface);
+                           createTitles(target.getEcs(), interface, style);
+                           createNotificationButtons(target, interface, translations);
+                       });
 }
 
 } // namespace rtype::client

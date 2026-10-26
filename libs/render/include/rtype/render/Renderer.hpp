@@ -146,7 +146,8 @@ public:
     /// @param startAngle, endAngle Ends of the arc, in degrees, turning clockwise on the screen from the
     /// right: 0 is on the right of the centre, 90 below it.
     /// @throws std::logic_error if no frame is started.
-    void drawArc(Vector2 center, float radius, float thickness, float startAngle, float endAngle, Color color);
+    void drawArc(Vector2 center, float radius, float thickness, float startAngle, float endAngle,
+                 Color color);
 
     /// Draws a straight line.
     /// @param start First end of the line, in game units.

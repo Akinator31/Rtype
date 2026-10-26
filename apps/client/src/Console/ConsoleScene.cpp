@@ -56,8 +56,8 @@ float ruleTop(const engine::InterfaceStyle &style)
 void createBackground(ecs::Ecs &ecs, engine::InterfaceBuilder &builder, float width,
                       const engine::ConsoleStyle &look)
 {
-    createBox(ecs, builder, width, consoleHeight, look.background,
-              {engine::AnchorPoint::TopLeft, 0.0f, 0.0f}, veilOrder);
+    createBox(ecs, builder, width, consoleHeight, look.background, {engine::AnchorPoint::TopLeft, 0.0f, 0.0f},
+              veilOrder);
     createBox(ecs, builder, width, look.edgeGlowThickness, look.edgeGlow,
               {engine::AnchorPoint::TopLeft, 0.0f,
                consoleHeight - ((look.edgeGlowThickness + look.edgeThickness) / 2.0f)},

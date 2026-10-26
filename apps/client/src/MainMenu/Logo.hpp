@@ -12,8 +12,8 @@ namespace rtype::client
 inline constexpr render::Rectangle logoPicture{0.0f, 0.0f, 1920.0f, 1080.0f};
 inline constexpr float logoWidth = 1500.0f;
 
-/// The logo of the game, in the middle of the screen. The loading screen and the main menu both draw it there,
-/// so that it stays still when the main menu replaces the loading screen.
+/// The logo of the game, in the middle of the screen. The loading screen and the main menu both draw it
+/// there, so that it stays still when the main menu replaces the loading screen.
 ecs::entity_t createLogo(engine::InterfaceBuilder &interface, render::ResourceManager &resources);
 
 } // namespace rtype::client

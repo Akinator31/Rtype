@@ -5,8 +5,8 @@ namespace rtype::engine
 
 HitboxSystem::HitboxSystem(ecs::ComponentCaches &caches, const Metrics &metrics, const InterfaceStyle &style)
     : _metrics(metrics), _style(style), _focusables(use<Focusable>(caches)), _items(use<ColumnItem>(caches)),
-      _texts(use<Text>(caches)), _panels(use<Panel>(caches)), _tracks(use<SliderTrack>(caches)), _switches(use<SwitchTrack>(caches)),
-      _scales(use<Scale>(caches)), _hitboxes(use<Hitbox>(caches))
+      _texts(use<Text>(caches)), _panels(use<Panel>(caches)), _tracks(use<SliderTrack>(caches)),
+      _switches(use<SwitchTrack>(caches)), _scales(use<Scale>(caches)), _hitboxes(use<Hitbox>(caches))
 {
 }
 

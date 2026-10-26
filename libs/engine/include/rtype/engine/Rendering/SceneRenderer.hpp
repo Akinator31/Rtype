@@ -87,17 +87,20 @@ class SceneRenderer
     void drawSlider(render::Renderer &renderer, const Slider &slider, const SliderTrack &track,
                     const Text &text, render::Vector2 centre, float opacity) const;
     /// Draws a switch (see SwitchTrack): its caption, then "OFF", a link with a dot on it, and "ON".
-    void drawSwitch(render::Renderer &renderer, const Toggle &toggle, const SwitchTrack &track, const Text &text,
-                    render::Vector2 centre, float opacity) const;
+    void drawSwitch(render::Renderer &renderer, const Toggle &toggle, const SwitchTrack &track,
+                    const Text &text, render::Vector2 centre, float opacity) const;
     /// Draws a gauge: its caption and value, its rail, and its light up to its value with a spark at the end.
-    void drawGauge(render::Renderer &renderer, const Gauge &gauge, render::Vector2 centre, float opacity) const;
-    /// Draws an announcement: an icon and a title, a line of light under them, and the detail. `progress` goes
-    /// from 0 to 1 while it appears, and back to 0 while it leaves: each part has its moment in this entrance.
+    void drawGauge(render::Renderer &renderer, const Gauge &gauge, render::Vector2 centre,
+                   float opacity) const;
+    /// Draws an announcement: an icon and a title, a line of light under them, and the detail. `progress`
+    /// goes from 0 to 1 while it appears, and back to 0 while it leaves: each part has its moment in this
+    /// entrance.
     void drawAnnouncement(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
                           float progress) const;
     /// Draws a banner: a band across the screen between two lines of light, its title and its detail, with an
     /// entrance in the same way as an announcement.
-    void drawBanner(render::Renderer &renderer, const Toast &toast, render::Vector2 centre, float progress) const;
+    void drawBanner(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
+                    float progress) const;
     /// Draws a line of text with its icon.
     void drawEventLine(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
                        float opacity) const;

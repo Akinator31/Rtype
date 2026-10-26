@@ -40,7 +40,6 @@ class InterfaceBuilder
     ecs::entity_t element(Anchor anchor);
     ecs::entity_t createHeaderTitle(const std::string &text, Anchor backAnchor);
 
-
 public:
     /// @param style It must outlive the builder.
     InterfaceBuilder(ecs::Ecs &ecs, SceneId scene, const InterfaceStyle &style);
@@ -63,9 +62,10 @@ public:
     /// @param source Part of the texture, in texture pixels.
     ecs::entity_t sprite(render::TextureId texture, render::Rectangle source, float width, float height,
                          Anchor anchor);
-    /// A button made of text alone (InterfaceStyle::flare), as wide as its text: a line of light traces itself
-    /// across it while it has the focus. Its action runs a moment after it is pressed, once its burst has been
-    /// seen (FlareStyle::pressDelay). The buttons of a builder get the focus in the order they are created.
+    /// A button made of text alone (InterfaceStyle::flare), as wide as its text: a line of light traces
+    /// itself across it while it has the focus. Its action runs a moment after it is pressed, once its burst
+    /// has been seen (FlareStyle::pressDelay). The buttons of a builder get the focus in the order they are
+    /// created.
     ecs::entity_t button(const std::string &text, std::function<void()> onPress, Anchor anchor);
     /// A value between 0 and 1 the player sets by dragging the handle of a rail, or with Left and Right, the
     /// mouse wheel and the keys (InterfaceStyle::slider): its caption above the rail, its value as a
@@ -73,21 +73,22 @@ public:
     /// centre of the rail.
     /// @param get, set Read and write the setting, so that the slider always shows the real value.
     /// @param step How much a key or a notch of the wheel changes the value.
-    ecs::entity_t slider(const std::string &caption, std::function<float()> get, std::function<void(float)> set,
-                         float step, Anchor anchor);
-    /// An on / off setting drawn as a switch (InterfaceStyle::toggle): its caption, then "OFF", a link with a dot
-    /// that slides to the side that is on, and "ON". A click, Confirm, Left and Right set it, as for every
-    /// Toggle. It gets the focus in the same order as the buttons. The anchor places the centre of its row.
+    ecs::entity_t slider(const std::string &caption, std::function<float()> get,
+                         std::function<void(float)> set, float step, Anchor anchor);
+    /// An on / off setting drawn as a switch (InterfaceStyle::toggle): its caption, then "OFF", a link with a
+    /// dot that slides to the side that is on, and "ON". A click, Confirm, Left and Right set it, as for
+    /// every Toggle. It gets the focus in the same order as the buttons. The anchor places the centre of its
+    /// row.
     /// @param get, set Read and write the setting, so that the switch always shows the real value.
     ecs::entity_t toggle(const std::string &caption, std::function<bool()> get, std::function<void(bool)> set,
                          Anchor anchor);
-    /// A value between 0 and 1 shown as a rail lit up to its value (InterfaceStyle::gauge): a life, a charge. It
-    /// cannot be changed and does not get the focus.
+    /// A value between 0 and 1 shown as a rail lit up to its value (InterfaceStyle::gauge): a life, a charge.
+    /// It cannot be changed and does not get the focus.
     /// @param caption Written above the rail with the value as a percentage; none if empty.
     /// @param get Reads the value, so that the gauge always shows the real one.
     ecs::entity_t gauge(const std::string &caption, std::function<float()> get, Anchor anchor);
-    /// A button with a leftwards arrow, to go back to the previous screen. It gets the focus in the same order
-    /// as the other buttons.
+    /// A button with a leftwards arrow, to go back to the previous screen. It gets the focus in the same
+    /// order as the other buttons.
     ecs::entity_t backButton(std::function<void()> onPress, Anchor anchor);
     /// The top of a secondary screen, such as a submenu: a back button, then the title to its right, written
     /// like the text of a button, but fully bright (FlareStyle::litText), and centred on the same line. The

@@ -59,18 +59,20 @@ struct SliderTrack {
     float hover = 0.0f;
     /// 0 for the look at rest, 1 while the player drags the handle, in between while it changes.
     float grab = 0.0f;
-    /// 0 for the look at rest, 1 while the slider is under the pointer or has the focus: its caption lights up.
+    /// 0 for the look at rest, 1 while the slider is under the pointer or has the focus: its caption lights
+    /// up.
     float focus = 0.0f;
     /// Whether the slider is under the pointer or has the focus, to sound when it lights up.
     bool lit = false;
 };
 
-/// Draws a Toggle as "OFF - dot - ON" (InterfaceStyle::toggle) instead of a text. The Text of the entity gives
-/// the font of its caption. Written by the InterfaceSystem.
+/// Draws a Toggle as "OFF - dot - ON" (InterfaceStyle::toggle) instead of a text. The Text of the entity
+/// gives the font of its caption. Written by the InterfaceSystem.
 struct SwitchTrack {
     /// 0 for the look at rest, 1 while the pointer is over the switch, in between while it changes.
     float hover = 0.0f;
-    /// 0 for the look at rest, 1 while the toggle is under the pointer or has the focus: its caption lights up.
+    /// 0 for the look at rest, 1 while the toggle is under the pointer or has the focus: its caption lights
+    /// up.
     float focus = 0.0f;
     /// Whether the toggle is under the pointer or has the focus, to sound when it lights up.
     bool lit = false;
@@ -79,8 +81,8 @@ struct SwitchTrack {
 };
 
 /// A value between 0 and 1 shown as a rail lit up to its value (InterfaceStyle::gauge): a life, a charge, a
-/// progress. It shows, but cannot be changed: it does not get the focus. The value is read through a function,
-/// so that the gauge always shows the real one.
+/// progress. It shows, but cannot be changed: it does not get the focus. The value is read through a
+/// function, so that the gauge always shows the real one.
 struct Gauge {
     std::string caption;
     std::function<float()> get;

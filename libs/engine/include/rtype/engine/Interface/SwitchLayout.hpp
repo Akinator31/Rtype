@@ -31,10 +31,12 @@ struct SwitchLayout {
     }
 };
 
-/// Places the "OFF", link and "ON" group on the right of a row of the width of the style, centred on `centre`.
+/// Places the "OFF", link and "ON" group on the right of a row of the width of the style, centred on
+/// `centre`.
 /// @param measure Gives the size of a text: measure(text, size, spacing), in game units.
 template <typename Measure>
-[[nodiscard]] SwitchLayout computeSwitchLayout(const SwitchStyle &style, render::Vector2 centre, Measure &&measure)
+[[nodiscard]] SwitchLayout computeSwitchLayout(const SwitchStyle &style, render::Vector2 centre,
+                                               Measure &&measure)
 {
     const render::Vector2 off = measure("OFF", style.labelSize, style.labelSpacing);
     const render::Vector2 on = measure("ON", style.labelSize, style.labelSpacing);

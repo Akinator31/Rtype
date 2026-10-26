@@ -78,11 +78,11 @@ void createLoadingScenes(rtype::engine::Engine &engine, rtype::render::ResourceM
                          const rtype::engine::RendererMetrics &metrics,
                          const rtype::localization::Localization &translations)
 {
-    engine.createScene(rtype::client::LoadingScene, {.onBack = [] {}},
-                       [&resources, &style, &translations](rtype::engine::Engine &target,
-                                                           rtype::engine::SceneId scene) {
-                           rtype::client::buildLoadingScene(target, scene, resources, style, translations);
-                       });
+    engine.createScene(
+        rtype::client::LoadingScene, {.onBack = [] {}},
+        [&resources, &style, &translations](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
+            rtype::client::buildLoadingScene(target, scene, resources, style, translations);
+        });
     engine.createScene(
         rtype::client::ConsoleScene, {.overlay = true},
         [&console, &metrics, &style](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
@@ -101,8 +101,8 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
     engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
                        [&resources, &style, &metrics, &translations, quit](rtype::engine::Engine &target,
                                                                            rtype::engine::SceneId scene) {
-                           rtype::client::buildMainMenu(target, scene, resources, style, metrics, translations,
-                                                        quit);
+                           rtype::client::buildMainMenu(target, scene, resources, style, metrics,
+                                                        translations, quit);
                        });
     rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
         games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));

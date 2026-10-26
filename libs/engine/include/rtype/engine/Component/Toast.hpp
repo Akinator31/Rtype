@@ -52,7 +52,8 @@ struct Toast {
     /// What the message is about, in capitals before it: "VORTEX" in "VORTEX has joined the room". Can be
     /// empty.
     std::string subject;
-    /// Who the message is about, in capitals after it: "KAZE" in "Orbital module taken by KAZE". Can be empty.
+    /// Who the message is about, in capitals after it: "KAZE" in "Orbital module taken by KAZE". Can be
+    /// empty.
     std::string actor;
     ToastKind kind = ToastKind::Line;
     /// Time since it appeared, in seconds. Written by the ToastSystem.

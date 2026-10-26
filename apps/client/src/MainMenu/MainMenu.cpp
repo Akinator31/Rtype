@@ -202,9 +202,8 @@ void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
     const render::Vector2 place{-screenMargin, -buttonsBottom - (rowsBelow * buttonsSpacing)};
     const render::Vector2 entrance{place.x + buttonsEntrance, place.y};
     const float delay = buttonsDelay + (static_cast<float>(row) * buttonsStagger);
-    const ecs::entity_t button =
-        interface.button(toCapitals(translations.text(key)), onPress,
-                              {engine::AnchorPoint::BottomRight, entrance.x, entrance.y});
+    const ecs::entity_t button = interface.button(toCapitals(translations.text(key)), onPress,
+                                                  {engine::AnchorPoint::BottomRight, entrance.x, entrance.y});
     ecs.addComponent<engine::BoundText>(button,
                                         [&translations, key] { return toCapitals(translations.text(key)); });
     ecs.addComponent<engine::Opacity>(button);
