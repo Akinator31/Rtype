@@ -1,9 +1,9 @@
 # 0017 — Asset preparation on a background thread
 
-| | |
-|---|---|
-| **Status** | Superseded by [0020](0020-engine-thread-manager.md) |
-| **Date** | 2026-10-19 |
+|            |                                                     |
+| ---------- | --------------------------------------------------- |
+| **Status** | Superseded by [0022](0022-engine-thread-manager.md) |
+| **Date**   | 2026-10-19                                          |
 
 ## Context
 
@@ -13,13 +13,13 @@ The main menu loads several large models. Synchronous file reads and decoding de
 
 The engine owns one lazily created FIFO worker queue for asset preparation. The client passes it to the render and audio resource managers; direct users of either manager get a private queue by default. The worker reads the file and, where raylib offers a CPU-only operation, decodes it. `ResourceManager::finishPendingLoads()` and `AudioPlayer::finishPendingLoads()` are called by their owning threads. They finalize at most one ready request per asset type on each call. A `std::shared_future<Id>` reports completion or an exception. The caller polls with `wait_for(0)` and may draw a placeholder or loading screen until it is ready; it must not block its own thread with `get()` while a request is pending.
 
-| Asset | Worker | Owning thread |
-|---|---|---|
-| Texture | Read file and decode image in CPU memory | Upload texture and create mipmaps |
-| Font | Read file, decode glyphs and build their atlas in CPU memory | Upload atlas texture |
-| Model | Read model bytes | Parse with raylib and upload meshes, materials and textures |
-| Sound | Read file and decode wave in CPU memory | Create audio buffers and voices |
-| Music | Read file | Create the streaming decoder on the audio owner thread |
+| Asset   | Worker                                                       | Owning thread                                               |
+| ------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
+| Texture | Read file and decode image in CPU memory                     | Upload texture and create mipmaps                           |
+| Font    | Read file, decode glyphs and build their atlas in CPU memory | Upload atlas texture                                        |
+| Model   | Read model bytes                                             | Parse with raylib and upload meshes, materials and textures |
+| Sound   | Read file and decode wave in CPU memory                      | Create audio buffers and voices                             |
+| Music   | Read file                                                    | Create the streaming decoder on the audio owner thread      |
 
 Raylib 6.0 does not expose a CPU-only model loader or a separate model upload operation. Consequently, model parsing still takes time on the render thread after the background file read. This is a remaining limitation of this implementation, visible on unusually large models. No OpenGL call runs on a worker.
 
