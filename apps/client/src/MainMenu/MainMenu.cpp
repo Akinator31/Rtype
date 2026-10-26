@@ -3,6 +3,7 @@
 #include "Assets.hpp"
 #include "MainMenu/Intro.hpp"
 #include "MainMenu/Layout.hpp"
+#include "MainMenu/LogoFlare.hpp"
 #include "MainMenu/Planet.hpp"
 #include "MainMenu/Ships.hpp"
 #include "MainMenu/Station.hpp"
@@ -11,6 +12,7 @@
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 
+#include <cmath>
 #include <string>
 
 namespace rtype::client
@@ -44,6 +46,18 @@ constexpr float logoMenuScale = 0.42f;
 constexpr float logoDelay = 0.2f;
 constexpr float logoDuration = 3.2f;
 
+/// The flare is a picture of the same size as the logo, transparent except for a star, in flarePicture,
+/// whose centre is on the top of the P. It comes from out of the screen and spirals into the ring of the
+/// logo, centred on ringCentre in the picture and ringRadius pixels wide, goes around it and swoops down to
+/// its place (see LogoFlareSystem). flareTrail copies follow it like the tail of a comet, each one
+/// flareTrailLag seconds behind the one before, and fainter.
+constexpr render::Rectangle flarePicture{1240.0f, 245.0f, 420.0f, 420.0f};
+constexpr render::Vector2 ringCentre{958.0f, 538.0f};
+constexpr float ringRadius = 284.0f;
+constexpr int flareTrail = 8;
+constexpr float flareTrailLag = 0.035f;
+constexpr float flareTrailFading = 0.75f;
+
 /// Camera of the main menu: a narrow field of view, so that the planet on the side of the screen is not
 /// distorted by the perspective.
 render::Camera createMainMenuView()
@@ -68,7 +82,7 @@ render::Light createMainMenuSun()
 
 /// Creates the entity that the main menu is seen through and lit by. It starts in the asteroids, and flies
 /// to the view of the menu when the player presses.
-void createMainMenuCamera(ecs::Ecs &ecs, engine::SceneId scene)
+ecs::entity_t createMainMenuCamera(ecs::Ecs &ecs, engine::SceneId scene)
 {
     const render::Camera view = createMainMenuView();
     const render::Camera asteroids = createAsteroidsView(view);
@@ -77,6 +91,7 @@ void createMainMenuCamera(ecs::Ecs &ecs, engine::SceneId scene)
     ecs.addComponent<engine::Camera>(camera, asteroids);
     ecs.addComponent<engine::Light>(camera, createMainMenuSun());
     ecs.addComponent<Intro>(camera, asteroids, view);
+    return camera;
 }
 
 /// The starry sky behind the planet: white stars on black, so that the planet and the ships stand out.
@@ -89,7 +104,8 @@ void createMainMenuSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceMan
 }
 
 /// The logo of the game, in the middle of the screen until the player presses, then at the top.
-void createLogo(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render::ResourceManager &resources)
+ecs::entity_t createLogo(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
+                         render::ResourceManager &resources)
 {
     const float height = logoWidth * logoPicture.height / logoPicture.width;
     const ecs::entity_t logo =
@@ -102,6 +118,47 @@ void createLogo(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render::Reso
                                                   .duration = logoDuration,
                                                   .easing = engine::Easing::EaseOut,
                                                   .toScale = logoMenuScale});
+    return logo;
+}
+
+/// The star of the flare picture, drawn over the logo: the flare itself, or one of its trail if `lag` is
+/// not 0. The ones drawn last are on top.
+void createLogoFlare(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render::TextureId texture,
+                     LogoFlare flare, int order)
+{
+    const float size = flarePicture.width * logoWidth / logoPicture.width;
+    const ecs::entity_t entity = interface.sprite(texture, flarePicture, size, size, {});
+    ecs.getComponent<engine::Drawable>(entity).order += order;
+    ecs.addComponent<engine::Scale>(entity, 0.0f);
+    ecs.addComponent<engine::Opacity>(entity, 0.0f);
+    ecs.addComponent<LogoFlare>(entity, flare);
+}
+
+/// The flare of the logo and its trail. It comes when the intro of `camera` starts, and lands on the
+/// place it has in the full logo.
+void createLogoFlares(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render::ResourceManager &resources,
+                      ecs::entity_t logo, ecs::entity_t camera)
+{
+    const render::TextureId texture =
+        resources.loadTexture(RTYPE_IMAGE_LOGO_FLARE, render::TextureFiltering::Smooth);
+    const float unitsPerPixel = logoWidth / logoPicture.width;
+    const render::Vector2 place{
+        (flarePicture.x + (flarePicture.width / 2.0f) - (logoPicture.width / 2.0f)) * unitsPerPixel,
+        (flarePicture.y + (flarePicture.height / 2.0f) - (logoPicture.height / 2.0f)) * unitsPerPixel};
+    LogoFlare flare{.logo = logo,
+                    .intro = camera,
+                    .ringCentre = {(ringCentre.x - (logoPicture.width / 2.0f)) * unitsPerPixel,
+                                   (ringCentre.y - (logoPicture.height / 2.0f)) * unitsPerPixel},
+                    .ringRadius = ringRadius * unitsPerPixel,
+                    .place = place};
+    for (int copy = flareTrail; copy > 0; --copy) {
+        flare.lag = static_cast<float>(copy) * flareTrailLag;
+        flare.strength = std::pow(flareTrailFading, static_cast<float>(copy));
+        createLogoFlare(ecs, interface, texture, flare, flareTrail - copy + 1);
+    }
+    flare.lag = 0.0f;
+    flare.strength = 1.0f;
+    createLogoFlare(ecs, interface, texture, flare, flareTrail + 1);
 }
 
 /// The text in capitals, like the buttons of the design: the letters of ASCII and the accented letters of
@@ -169,14 +226,15 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
                    const std::function<void()> &quit)
 {
     ecs::Ecs &ecs = engine.getEcs();
-    createMainMenuCamera(ecs, scene);
+    const ecs::entity_t camera = createMainMenuCamera(ecs, scene);
     createMainMenuSky(ecs, scene, resources);
     createPlanetSystem(ecs, scene, resources);
     createStation(ecs, scene, resources);
     createShips(ecs, scene, resources, {createMainMenuView(), getPlanetCentre(), getPlanetRadius()});
 
     engine::InterfaceBuilder interface(ecs, scene, style);
-    createLogo(ecs, interface, resources);
+    const ecs::entity_t logo = createLogo(ecs, interface, resources);
+    createLogoFlares(ecs, interface, resources, logo, camera);
     createButtons(engine, interface, translations, quit);
 }
 

@@ -55,6 +55,8 @@ struct Sprite {
     float width = 0.0f;
     float height = 0.0f;
     render::Color tint = render::colors::White;
+    /// Clockwise rotation around its centre, in degrees.
+    float rotation = 0.0f;
 };
 
 /// A rectangle, filled or outlined, centred on the position of the entity: backgrounds, frames, placeholders.

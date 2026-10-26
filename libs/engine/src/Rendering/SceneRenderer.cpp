@@ -920,7 +920,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                                  {centre.x - sprite.width * scale / 2.0f,
                                   centre.y - sprite.height * scale / 2.0f, sprite.width * scale,
                                   sprite.height * scale},
-                                 0.0f, faded(sprite.tint, opacity));
+                                 sprite.rotation, faded(sprite.tint, opacity));
         }
         if (hasPanel && texts.has(entity)) {
             drawFlare(renderer, panels.get(entity), texts.get(entity), {centre.x, centre.y}, opacity);

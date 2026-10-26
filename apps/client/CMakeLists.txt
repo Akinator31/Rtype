@@ -27,6 +27,7 @@ add_library(r-type_client_core STATIC
     src/Game/ShotLooks.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
+    src/MainMenu/LogoFlareSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
     src/MainMenu/Ships.cpp

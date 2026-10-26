@@ -11,7 +11,8 @@
 
 // Images
 #define RTYPE_IMAGE_STARFIELD "images/starfield.png"
-#define RTYPE_IMAGE_LOGO "images/rtype_logo.png"
+#define RTYPE_IMAGE_LOGO "images/rtpye_logo_without_flare.png"
+#define RTYPE_IMAGE_LOGO_FLARE "images/flare.png"
 #define RTYPE_IMAGE_ENERGY_NOISE "images/fx/energy_noise.png"
 #define RTYPE_IMAGE_GLOW_CORE "images/fx/glow_core.png"
 

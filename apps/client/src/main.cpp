@@ -9,6 +9,7 @@
 #include "Game/LocalSession.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
+#include "MainMenu/LogoFlareSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "Online/OnlineScenes.hpp"
@@ -57,6 +58,7 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     const auto display = resources.loadFontAsync(RTYPE_FONT_DISPLAY, 96);
     const auto sky = resources.loadTextureAsync(RTYPE_IMAGE_STARFIELD, TextureFiltering::Smooth);
     const auto logo = resources.loadTextureAsync(RTYPE_IMAGE_LOGO, TextureFiltering::Smooth);
+    const auto logoFlare = resources.loadTextureAsync(RTYPE_IMAGE_LOGO_FLARE, TextureFiltering::Smooth);
     constexpr std::array modelPaths{
         RTYPE_MODEL_PLANET,
         RTYPE_MODEL_PLANET_DUST,
@@ -77,7 +79,7 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         RTYPE_MODEL_IMPACT_EXPLOSION,
     };
     // The fonts and the textures above
-    constexpr std::size_t otherAssets = 6;
+    constexpr std::size_t otherAssets = 7;
     std::vector<std::shared_future<ModelId>> models;
     for (const char *path : modelPaths) {
         models.push_back(resources.loadModelAsync(path));
@@ -92,7 +94,7 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
             static_cast<std::size_t>(ready(title)) + static_cast<std::size_t>(ready(button)) +
             static_cast<std::size_t>(ready(flare)) + static_cast<std::size_t>(ready(display)) +
             static_cast<std::size_t>(ready(sky)) +
-            static_cast<std::size_t>(ready(logo));
+            static_cast<std::size_t>(ready(logo)) + static_cast<std::size_t>(ready(logoFlare));
         for (const auto &model : models) {
             completed += static_cast<std::size_t>(ready(model));
         }
@@ -114,6 +116,7 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     display.get();
     sky.get();
     logo.get();
+    logoFlare.get();
     for (const auto &model : models) {
         model.get();
     }
@@ -185,6 +188,7 @@ rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
     ecs.registerSystem<rtype::engine::SpinSystem>();
     ecs.registerSystem<rtype::client::FlightSystem>();
     ecs.registerSystem<rtype::client::IntroSystem>(engine.getScenes(), devices);
+    ecs.registerSystem<rtype::client::LogoFlareSystem>();
     ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
     ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);

@@ -161,7 +161,7 @@ the game creates entities with `Position` and `Collider`.
 |---|---|
 | `Drawable` | Required: the layer (`World` or `Interface`) and the order inside it (higher on top). |
 | `Text` | A text, centred on the position. |
-| `Sprite` | A texture or a frame of a sprite sheet, centred on the position. |
+| `Sprite` | A texture or a frame of a sprite sheet, centred on the position, turned by its `rotation`. |
 | `Box` | A rectangle, filled or outlined, centred on the position. |
 | `Scale`, `Opacity` | Size factor and transparency, animated by tweens. |
 
