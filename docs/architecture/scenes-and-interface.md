@@ -76,6 +76,7 @@ renderer.endFrame();
 | 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
 | 8 | `ToastSystem` | Places, fades and destroys the toasts. |
 | 9 | `TransformSystem` | Positions of the children from their parents, last. |
+| 10 | `LoadingSystem` | Client, at startup: the `loading` scene fades the logo in over black with a gauge under it while `AssetPreload` loads the pictures and models in the background, then fades the gauge out. `main.cpp` runs frames until it is finished, builds the other scenes from the cache, then switches to the main menu, which opens on black around the same logo and fades in. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
 and may happen several times per frame (once per eye in VR).

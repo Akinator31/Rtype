@@ -7,6 +7,9 @@
 #include "Game/GameSessionSystem.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
+#include "Loading/AssetPreload.hpp"
+#include "Loading/LoadingScene.hpp"
+#include "Loading/LoadingSystem.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/LogoFlareSystem.hpp"
@@ -29,16 +32,11 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
-#include <array>
-#include <chrono>
 #include <cstdlib>
 #include <exception>
-#include <future>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 namespace
 {
@@ -47,81 +45,6 @@ constexpr float CollisionCellSize = 64.0f;
 /// How loud the buttons are: the hover is heard at each move in a menu, the click file is quiet.
 constexpr float ButtonHoverVolume = 0.4f;
 constexpr float ButtonClickVolume = 1.0f;
-
-bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &renderer,
-                   rtype::render::ResourceManager &resources)
-{
-    using namespace rtype::render;
-    const auto title = resources.loadFontAsync(RTYPE_FONT_TITLE, 160);
-    const auto button = resources.loadFontAsync(RTYPE_FONT_BUTTON, 96);
-    const auto flare = resources.loadFontAsync(RTYPE_FONT_FLARE, 96);
-    const auto display = resources.loadFontAsync(RTYPE_FONT_DISPLAY, 96);
-    const auto sky = resources.loadTextureAsync(RTYPE_IMAGE_STARFIELD, TextureFiltering::Smooth);
-    const auto logo = resources.loadTextureAsync(RTYPE_IMAGE_LOGO, TextureFiltering::Smooth);
-    const auto logoFlare = resources.loadTextureAsync(RTYPE_IMAGE_LOGO_FLARE, TextureFiltering::Smooth);
-    constexpr std::array modelPaths{
-        RTYPE_MODEL_PLANET,
-        RTYPE_MODEL_PLANET_DUST,
-        RTYPE_MODEL_RING_ASTEROIDS_INNER,
-        RTYPE_MODEL_RING_ASTEROIDS_OUTER,
-        RTYPE_MODEL_RING_DUST,
-        RTYPE_MODEL_STATION,
-        RTYPE_MODEL_SHIP_EZNO,
-        RTYPE_MODEL_SHIP_SPACESHIP,
-        RTYPE_MODEL_SHIP_BATTLESTAR,
-        RTYPE_MODEL_SHIP_DROP_SHIP,
-        RTYPE_MODEL_SHOT_BASIC,
-        RTYPE_MODEL_SHOT_SPIRAL,
-        RTYPE_MODEL_ORB_PLASMA,
-        RTYPE_MODEL_IMPACT_SPARK,
-        RTYPE_MODEL_IMPACT_BURST,
-        RTYPE_MODEL_IMPACT_SPLASH,
-        RTYPE_MODEL_IMPACT_EXPLOSION,
-    };
-    // The fonts and the textures above
-    constexpr std::size_t otherAssets = 7;
-    std::vector<std::shared_future<ModelId>> models;
-    for (const char *path : modelPaths) {
-        models.push_back(resources.loadModelAsync(path));
-    }
-
-    const auto ready = [](const auto &future) {
-        return future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-    };
-    while (!window.shouldClose()) {
-        resources.finishPendingLoads();
-        std::size_t completed =
-            static_cast<std::size_t>(ready(title)) + static_cast<std::size_t>(ready(button)) +
-            static_cast<std::size_t>(ready(flare)) + static_cast<std::size_t>(ready(display)) +
-            static_cast<std::size_t>(ready(sky)) +
-            static_cast<std::size_t>(ready(logo)) + static_cast<std::size_t>(ready(logoFlare));
-        for (const auto &model : models) {
-            completed += static_cast<std::size_t>(ready(model));
-        }
-        if (completed == models.size() + otherAssets) {
-            break;
-        }
-        renderer.beginFrame();
-        renderer.drawText("Loading assets " + std::to_string(completed) + "/" +
-                              std::to_string(models.size() + otherAssets),
-                          {80.0f, 90.0f}, 40.0f, colors::White);
-        renderer.endFrame();
-    }
-    if (window.shouldClose()) {
-        return false;
-    }
-    title.get();
-    button.get();
-    flare.get();
-    display.get();
-    sky.get();
-    logo.get();
-    logoFlare.get();
-    for (const auto &model : models) {
-        model.get();
-    }
-    return true;
-}
 
 /// Loads the configuration of the game (ADR 0018), next to the executable. Unlike the server, the client
 /// starts with a configuration that has errors: it goes without it (an offline game has no enemies nor
@@ -142,27 +65,42 @@ rtype::game::GameConfig readGameConfig(rtype::client::Console &console)
     return {};
 }
 
-/// Declares the scenes of the client, but those of a game, which GameScenes declares.
-void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
-                  const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
-                  rtype::client::Console &console, const rtype::engine::RendererMetrics &metrics,
-                  rtype::client::GameScenes &games, const rtype::game::GameConfig &config,
-                  rtype::localization::Localization &translations)
+/// Declares the scenes shown while the assets load: the loading screen, and the console, which opens over
+/// any scene.
+void createLoadingScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
+                         const rtype::engine::InterfaceStyle &style, rtype::client::Console &console,
+                         const rtype::engine::RendererMetrics &metrics,
+                         const rtype::localization::Localization &translations)
 {
-    const auto quit = [&window] { window.requestClose(); };
-    engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
-                       [&resources, &style, &translations, quit](rtype::engine::Engine &target,
-                                                                 rtype::engine::SceneId scene) {
-                           rtype::client::buildMainMenu(target, scene, resources, style, translations, quit);
+    engine.createScene(rtype::client::LoadingScene, {.onBack = [] {}},
+                       [&resources, &style, &translations](rtype::engine::Engine &target,
+                                                           rtype::engine::SceneId scene) {
+                           rtype::client::buildLoadingScene(target, scene, resources, style, translations);
                        });
-    rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
-        games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
-    });
     engine.createScene(
         rtype::client::ConsoleScene, {.overlay = true},
         [&console, &metrics, &style](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
             rtype::client::buildConsole(target, scene, console, metrics, style);
         });
+}
+
+/// Declares the scenes of the client built from the loaded assets, but those of a game, which GameScenes
+/// declares.
+void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
+                  const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
+                  const rtype::engine::RendererMetrics &metrics, rtype::client::GameScenes &games,
+                  const rtype::game::GameConfig &config, rtype::localization::Localization &translations)
+{
+    const auto quit = [&window] { window.requestClose(); };
+    engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
+                       [&resources, &style, &metrics, &translations, quit](rtype::engine::Engine &target,
+                                                                           rtype::engine::SceneId scene) {
+                           rtype::client::buildMainMenu(target, scene, resources, style, metrics, translations,
+                                                        quit);
+                       });
+    rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
+        games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
+    });
 }
 
 /// Registers the systems of the client, in the order they run each frame, after the scenes.
@@ -210,10 +148,6 @@ void run()
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
 
-    if (!preloadAssets(window, renderer, resources)) {
-        return;
-    }
-
     const FontId display = resources.loadFont(RTYPE_FONT_DISPLAY, 96);
     const FontId messageFont = resources.loadFont(RTYPE_FONT_BUTTON, 96);
     const rtype::engine::InterfaceStyle style{
@@ -242,21 +176,16 @@ void run()
     rtype::network::EventLoop network;
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, audio, metrics, style);
-    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
-    rtype::client::OnlineScenes online(engine, network, games, metrics, style,
-                                       applicationDirectory() / "server.pub", translations);
+    rtype::client::AssetPreload preload(resources);
+    // Last: it only writes opacities, read when drawing
+    const auto &loading = engine.getEcs().registerSystem<rtype::client::LoadingSystem>(preload);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
     rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
                                                                CollisionCellSize);
     const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
     bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
     bool debugKeyWasDown = false;
-
-    createScenes(engine, resources, style, window, console, metrics, games, config, translations);
-    rtype::client::registerClientCommands(console, engine, window);
-    engine.switchScene(rtype::client::MainMenuScene);
-
-    while (!window.shouldClose()) {
+    const auto playFrame = [&] {
         const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
         if (debugKeyDown && !debugKeyWasDown) {
             showColliderDebug = !showColliderDebug;
@@ -271,6 +200,26 @@ void run()
         }
         sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
         renderer.endFrame();
+    };
+
+    createLoadingScenes(engine, resources, style, console, metrics, translations);
+    engine.switchScene(rtype::client::LoadingScene);
+    while (!window.shouldClose() && !loading.isFinished()) {
+        playFrame();
+    }
+    if (window.shouldClose()) {
+        return;
+    }
+
+    // The scenes of the game are built from the loaded assets, which they find in the cache
+    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
+    rtype::client::OnlineScenes online(engine, network, games, metrics, style,
+                                       applicationDirectory() / "server.pub", translations);
+    createScenes(engine, resources, style, window, metrics, games, config, translations);
+    rtype::client::registerClientCommands(console, engine, window);
+    engine.switchScene(rtype::client::MainMenuScene);
+    while (!window.shouldClose()) {
+        playFrame();
     }
 }
 

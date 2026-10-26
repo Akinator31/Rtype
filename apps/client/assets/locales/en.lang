@@ -2,6 +2,7 @@ menu.play=Play
 menu.online=Online
 menu.settings=Settings
 menu.quit=Quit
+loading.caption=LOADING
 menu.solo=Solo
 settings.language=Language
 language.english=English

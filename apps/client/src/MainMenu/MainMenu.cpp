@@ -3,12 +3,14 @@
 #include "Assets.hpp"
 #include "MainMenu/Intro.hpp"
 #include "MainMenu/Layout.hpp"
+#include "MainMenu/Logo.hpp"
 #include "MainMenu/LogoFlare.hpp"
 #include "MainMenu/Planet.hpp"
 #include "MainMenu/Ships.hpp"
 #include "MainMenu/Station.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 
@@ -36,11 +38,14 @@ constexpr float buttonsDelay = 1.0f;
 constexpr float buttonsStagger = 0.1f;
 constexpr float buttonsDuration = 0.8f;
 
-/// The logo is a picture of 1920 x 1080 pixels, drawn at logoWidth game units while the camera waits in the
-/// asteroids, in the middle of the screen. When the player presses, it rises by logoRise and shrinks to
-/// logoMenuScale while the camera flies to the menu, to stay at the top of the screen.
-constexpr render::Rectangle logoPicture{0.0f, 0.0f, 1920.0f, 1080.0f};
-constexpr float logoWidth = 1500.0f;
+/// The menu opens on black, around the logo left by the loading screen, then the black fades out in
+/// curtainFade seconds. It is drawn over the world and under the interface.
+constexpr float curtainFade = 2.0f;
+constexpr int curtainOrder = 0;
+
+/// The logo is in the middle of the screen while the camera waits in the asteroids. When the player presses,
+/// it rises by logoRise and shrinks to logoMenuScale while the camera flies to the menu, to stay at the top
+/// of the screen.
 constexpr float logoRise = -400.0f;
 constexpr float logoMenuScale = 0.42f;
 constexpr float logoDelay = 0.2f;
@@ -100,14 +105,29 @@ void createMainMenuSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceMan
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
 }
 
-/// The logo of the game, in the middle of the screen until the player presses, then at the top.
-ecs::entity_t createLogo(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
-                         render::ResourceManager &resources)
+/// A black screen over the whole menu but its interface, which fades out: the menu appears around the logo.
+void createCurtain(ecs::Ecs &ecs, engine::SceneId scene, const engine::Metrics &metrics)
 {
-    const float height = logoWidth * logoPicture.height / logoPicture.width;
-    const ecs::entity_t logo =
-        interface.sprite(resources.loadTexture(RTYPE_IMAGE_LOGO, render::TextureFiltering::Smooth),
-                         logoPicture, logoWidth, height, {engine::AnchorPoint::Center, 0.0f, 0.0f});
+    const render::Rectangle screen = metrics.visibleArea();
+    const ecs::entity_t curtain = ecs.createEntity();
+    ecs.addComponent<engine::SceneMember>(curtain, scene);
+    ecs.addComponent<ecs::Position>(curtain, screen.x + (screen.width / 2.0f),
+                                    screen.y + (screen.height / 2.0f));
+    ecs.addComponent<engine::Drawable>(curtain, engine::Layer::Interface, curtainOrder);
+    ecs.addComponent<engine::Box>(curtain, screen.width, screen.height, render::colors::Black, 0.0f);
+    ecs.addComponent<engine::Opacity>(curtain);
+    ecs.addComponent<engine::Tween>(curtain, engine::Tween{.target = engine::TweenTarget::Opacity,
+                                                           .from = 1.0f,
+                                                           .to = 0.0f,
+                                                           .duration = curtainFade,
+                                                           .easing = engine::Easing::Linear});
+}
+
+/// The logo of the game, in the middle of the screen until the player presses, then at the top.
+ecs::entity_t createMenuLogo(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
+                             render::ResourceManager &resources)
+{
+    const ecs::entity_t logo = createLogo(interface, resources);
     ecs.addComponent<engine::Scale>(logo);
     ecs.addComponent<IntroSlide>(logo, IntroSlide{.from = {0.0f, 0.0f},
                                                   .to = {0.0f, logoRise},
@@ -214,8 +234,8 @@ void createButtons(engine::Engine &engine, engine::InterfaceBuilder &interface,
 } // namespace
 
 void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
-                   const engine::InterfaceStyle &style, localization::Localization &translations,
-                   const std::function<void()> &quit)
+                   const engine::InterfaceStyle &style, const engine::Metrics &metrics,
+                   localization::Localization &translations, const std::function<void()> &quit)
 {
     ecs::Ecs &ecs = engine.getEcs();
     const ecs::entity_t camera = createMainMenuCamera(ecs, scene);
@@ -224,8 +244,9 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
     createStation(ecs, scene, resources);
     createShips(ecs, scene, resources, {createMainMenuView(), getPlanetCentre(), getPlanetRadius()});
 
+    createCurtain(ecs, scene, metrics);
     engine::InterfaceBuilder interface(ecs, scene, style);
-    const ecs::entity_t logo = createLogo(ecs, interface, resources);
+    const ecs::entity_t logo = createMenuLogo(ecs, interface, resources);
     createLogoFlares(ecs, interface, resources, logo, camera);
     createButtons(engine, interface, translations, quit);
 }
