@@ -340,7 +340,9 @@ The client shows all of them, with the toasts, in the *Interface* menu of the se
   gamepad) and when they are pressed, if the style has the sounds (`ButtonStyle::hoverSound`, `clickSound`,
   optional `SoundEffect`): the `InterfaceSystem` gives the `SoundEffect` to the button, and the `SoundSystem`
   plays it in the frame, before the deferred action of the button. A menu that appears lights its first button
-  silently, otherwise every menu opened with the keyboard would sound twice.
+  silently, otherwise every menu opened with the keyboard would sound twice. The sliders and switches (with a
+  `SliderTrack` or a `SwitchTrack`) make the same sounds: the hover sound when they light up, the click sound
+  when a slider is pressed with the mouse and when a switch is set to another value.
 
   ```cpp
   const SoundEffect hover{audio.loadSound("sounds/fx/button/hover.wav"), {.volume = 0.4f}};

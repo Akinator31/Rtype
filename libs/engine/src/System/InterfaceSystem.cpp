@@ -173,6 +173,24 @@ void InterfaceSystem::playSound(ecs::entity_t widget, const std::optional<SoundE
     }
 }
 
+/// A slider or a switch sounds as a button when it lights up, but not when its menu appears.
+void InterfaceSystem::playLightingSound(ecs::entity_t widget, bool &wasLit, bool lit, bool appeared)
+{
+    if (lit && !wasLit && !appeared) {
+        playSound(widget, _style.button.hoverSound);
+    }
+    wasLit = lit;
+}
+
+/// A switch sounds as a pressed button when it is set to another value.
+void InterfaceSystem::playSwitchSound(ecs::entity_t widget, bool value)
+{
+    const Toggle &toggle = _toggles.get(widget);
+    if (_switches.has(widget) && toggle.get && toggle.get() != value) {
+        playSound(widget, _style.button.clickSound);
+    }
+}
+
 void InterfaceSystem::updatePointerMode(bool mouseMoved)
 {
     if (mouseMoved) {
@@ -198,6 +216,7 @@ void InterfaceSystem::activate(ecs::entity_t widget)
         _delayedPresses.push_back({widget, _style.flare.pressDelay, _buttons.get(widget).onPress});
     } else if (_toggles.has(widget)) {
         const Toggle toggle = _toggles.get(widget);
+        playSwitchSound(widget, !toggle.get());
         _ecs.defer([toggle] { toggle.set(!toggle.get()); });
     } else if (_choices.has(widget)) {
         adjust(widget, 1);
@@ -221,6 +240,7 @@ void InterfaceSystem::adjust(ecs::entity_t widget, int direction)
 {
     if (_toggles.has(widget)) {
         const Toggle toggle = _toggles.get(widget);
+        playSwitchSound(widget, direction > 0);
         _ecs.defer([toggle, direction] { toggle.set(direction > 0); });
     } else if (_sliders.has(widget)) {
         const Slider slider = _sliders.get(widget);
@@ -245,7 +265,7 @@ void InterfaceSystem::adjust(ecs::entity_t widget, int direction)
 
 void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
                                     std::optional<ecs::entity_t> hovered, render::Vector2 pointer,
-                                    float elapsed)
+                                    float elapsed, bool appeared)
 {
     const bool isMouseHeld = _input.isMouseButtonDown(input::MouseButton::Left);
     if (!isMouseHeld) {
@@ -253,6 +273,7 @@ void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
     } else if (hovered && _navigation.wasPressed(Navigation::Click) && _sliders.has(*hovered) &&
                _tracks.has(*hovered)) {
         _dragged = *hovered;
+        playSound(*hovered, _style.button.clickSound);
     }
     if (_dragged && (!_ecs.isAlive(*_dragged) || !_sliders.has(*_dragged) || !_positions.has(*_dragged))) {
         _dragged.reset();
@@ -281,6 +302,7 @@ void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
             track.hover = approach(track.hover, isGrabbed || isOver ? 1.0f : 0.0f, step);
             track.grab = approach(track.grab, isGrabbed ? 1.0f : 0.0f, step);
             track.focus = approach(track.focus, isLit(widget, hovered) ? 1.0f : 0.0f, step);
+            playLightingSound(widget, track.lit, isLit(widget, hovered), appeared);
         }
         if (_switches.has(widget) && _toggles.has(widget)) {
             SwitchTrack &track = _switches.get(widget);
@@ -288,6 +310,7 @@ void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
             const float slide = elapsed / std::max(_style.toggle.slideDuration, 0.001f);
             track.hover = approach(track.hover, _pointerMode && isOverSwitch(widget, pointer) ? 1.0f : 0.0f, step);
             track.focus = approach(track.focus, isLit(widget, hovered) ? 1.0f : 0.0f, step);
+            playLightingSound(widget, track.lit, isLit(widget, hovered), appeared);
             track.position = approach(track.position, toggle.get && toggle.get() ? 1.0f : 0.0f, slide);
         }
     }
@@ -394,7 +417,7 @@ void InterfaceSystem::update(float elapsed)
         }
     }
     lightPanels(list, hovered, appeared);
-    updateSliders(list, hovered, pointer, elapsed);
+    updateSliders(list, hovered, pointer, elapsed, appeared);
     // Characters typed while no text field has the focus are lost, not delayed until a field gets it. raylib
     // already drops them every frame; other input sources may keep them, so they are dropped here too.
     (void)_input.takeTypedText();

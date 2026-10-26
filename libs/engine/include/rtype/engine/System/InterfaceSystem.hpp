@@ -35,7 +35,8 @@ namespace rtype::engine
 /// of light traces itself instead, fading to the lit look while the pointer is over it, or while it has the focus once
 /// the keyboard or a gamepad is used.
 /// - The buttons sound (ButtonStyle::hoverSound, clickSound) when their panel lights up and when they are
-///   pressed: they are given a SoundEffect, which the SoundSystem plays.
+///   pressed: they are given a SoundEffect, which the SoundSystem plays. The sliders and switches with a
+///   track make the same sounds when they light up, when a slider is pressed and when a switch changes.
 /// - A slider with a SliderTrack is dragged with the mouse: pressing it sets the value under the pointer, which
 ///   follows the pointer until the button is released. Its track is lit while it is pointed at or has the
 ///   focus, and grows while it is dragged.
@@ -105,6 +106,9 @@ class InterfaceSystem : public ecs::System
     void runDelayedPresses(float elapsed);
     void burstPanel(ecs::entity_t widget);
     void playSound(ecs::entity_t widget, const std::optional<SoundEffect> &sound);
+    /// @param wasLit Whether the slider or switch was lit, updated to `lit`.
+    void playLightingSound(ecs::entity_t widget, bool &wasLit, bool lit, bool appeared);
+    void playSwitchSound(ecs::entity_t widget, bool value);
     void updatePointerMode(bool mouseMoved);
     void activate(ecs::entity_t widget);
     void click(ecs::entity_t widget);
@@ -112,7 +116,7 @@ class InterfaceSystem : public ecs::System
     /// Lights the handle of the slider under the pointer, the caption of the sliders and switches under it or with
     /// the focus, slides the dots of the switches, and moves the handle of the slider being dragged.
     void updateSliders(const std::vector<ecs::entity_t> &widgets, std::optional<ecs::entity_t> hovered,
-                       render::Vector2 pointer, float elapsed);
+                       render::Vector2 pointer, float elapsed, bool appeared);
     /// Whether the pointer is over the handle of a slider, or over the switch of a toggle with a SwitchTrack.
     [[nodiscard]] bool isOverHandle(ecs::entity_t widget, render::Vector2 pointer) const;
     [[nodiscard]] bool isOverSwitch(ecs::entity_t widget, render::Vector2 pointer) const;

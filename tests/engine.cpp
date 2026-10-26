@@ -811,6 +811,58 @@ TEST_CASE("A button sounds when it lights up and when it is pressed, not when it
     CHECK(soundOf(back) == hover);
 }
 
+TEST_CASE("A slider and a switch sound as the buttons when they light up and when they are clicked",
+          "[engine][interface][sound]")
+{
+    World world;
+    const rtype::audio::SoundId hover{1};
+    const rtype::audio::SoundId click{2};
+    world.style.button.hoverSound = SoundEffect{hover, {}};
+    world.style.button.clickSound = SoundEffect{click, {}};
+    float volume = 0.5f;
+    bool vibration = false;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t slider = ui.slider(
+        "Volume", [&] { return volume; }, [&](float value) { volume = value; }, 0.1f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    const entity_t toggle = ui.toggle(
+        "Vibration", [&] { return vibration; }, [&](bool value) { vibration = value; },
+        {AnchorPoint::TopLeft, 100.0f, 300.0f});
+    const auto soundOf = [&](entity_t entity) -> std::optional<rtype::audio::SoundId> {
+        if (!world.ecs.hasComponent<SoundEffect>(entity)) {
+            return std::nullopt;
+        }
+        return world.ecs.getComponent<SoundEffect>(entity).sound;
+    };
+    const auto pointAt = [&](entity_t entity) {
+        const rtype::ecs::Position centre = world.ecs.getComponent<rtype::ecs::Position>(entity);
+        world.input.mouse = {centre.x, centre.y};
+        world.update();
+        return centre;
+    };
+    world.update();
+
+    pointAt(slider);
+    CHECK(soundOf(slider) == hover);
+    const rtype::ecs::Position row = pointAt(toggle);
+    CHECK(soundOf(toggle) == hover);
+
+    world.ecs.removeComponent<SoundEffect>(toggle);
+    world.clickAt(row.x, row.y);
+    CHECK(vibration);
+    CHECK(soundOf(toggle) == click);
+
+    // Set to the value it already has, the switch stays silent
+    world.ecs.removeComponent<SoundEffect>(toggle);
+    world.press({Key::Right});
+    CHECK_FALSE(soundOf(toggle));
+
+    const rtype::ecs::Position rail = pointAt(slider);
+    world.ecs.removeComponent<SoundEffect>(slider);
+    world.clickAt(rail.x, rail.y);
+    CHECK(soundOf(slider) == click);
+}
+
 TEST_CASE("Without sounds in the style, the buttons are silent", "[engine][interface][sound]")
 {
     World world;

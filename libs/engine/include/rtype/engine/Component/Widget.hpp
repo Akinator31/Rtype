@@ -61,6 +61,8 @@ struct SliderTrack {
     float grab = 0.0f;
     /// 0 for the look at rest, 1 while the slider is under the pointer or has the focus: its caption lights up.
     float focus = 0.0f;
+    /// Whether the slider is under the pointer or has the focus, to sound when it lights up.
+    bool lit = false;
 };
 
 /// Draws a Toggle as "OFF - dot - ON" (InterfaceStyle::toggle) instead of a text. The Text of the entity gives
@@ -70,6 +72,8 @@ struct SwitchTrack {
     float hover = 0.0f;
     /// 0 for the look at rest, 1 while the toggle is under the pointer or has the focus: its caption lights up.
     float focus = 0.0f;
+    /// Whether the toggle is under the pointer or has the focus, to sound when it lights up.
+    bool lit = false;
     /// Place of the dot: 0 on the OFF side, 1 on the ON side, in between while it moves.
     float position = 0.0f;
 };
