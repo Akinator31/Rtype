@@ -11,3 +11,11 @@ TEST_CASE("The application directory is an existing absolute directory", "[rende
     REQUIRE(directory.is_absolute());
     REQUIRE(std::filesystem::is_directory(directory));
 }
+
+TEST_CASE("The user data directory is an absolute directory of the game", "[render][paths]")
+{
+    const std::filesystem::path directory = rtype::render::userDataDirectory();
+
+    CHECK(directory.is_absolute());
+    CHECK_FALSE(directory.filename().empty());
+}

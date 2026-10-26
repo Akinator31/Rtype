@@ -62,9 +62,11 @@ private:
     mbedtls_ssl_context _ssl;
     /// Kept alive while the configuration points to its key and certificate (server).
     std::shared_ptr<const ServerIdentity::Impl> _identity;
-    /// The key the server must present (client).
-    std::optional<KeyFingerprint> _pinned;
-    /// The key the server presented (client), for the logs.
+    /// The client side: the session checks the key of the server.
+    bool _client = false;
+    /// The keys the server may present (client): any other one is refused.
+    std::vector<KeyFingerprint> _trusted;
+    /// The key the server presented (client).
     std::optional<KeyFingerprint> _presented;
     bool _pinRejected = false;
 
@@ -88,10 +90,11 @@ private:
     void handshake();
     void encrypt(std::span<const std::byte> bytes);
     void fail(int code);
+    [[nodiscard]] bool trusts(const std::optional<KeyFingerprint> &key) const;
 
 public:
-    /// The client side: the server must present the key of this fingerprint.
-    explicit TlsSession(const KeyFingerprint &pinned);
+    /// The client side: the server must present one of these keys. None: every key is refused.
+    explicit TlsSession(std::vector<KeyFingerprint> trusted);
     /// The server side.
     explicit TlsSession(std::shared_ptr<const ServerIdentity::Impl> identity);
     ~TlsSession();
@@ -119,6 +122,7 @@ public:
     /// The session failed and can no longer be used: why.
     [[nodiscard]] std::error_code error() const { return _error; }
     /// The key the server presented, once received (client).
+    /// @return Nothing before the certificate of the server arrives.
     [[nodiscard]] const std::optional<KeyFingerprint> &presentedKey() const { return _presented; }
     /// The cipher suite agreed on, once secured.
     [[nodiscard]] std::string cipherSuite() const;

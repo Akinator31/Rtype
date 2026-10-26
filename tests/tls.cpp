@@ -351,6 +351,62 @@ TEST_CASE("A client pinning another key refuses the server", "[network]")
     CHECK(server.received.empty());
 }
 
+TEST_CASE("A client trusting several keys accepts a server with any of them", "[network]")
+{
+    EventLoop loop;
+    TcpListener listener(loop, Address::loopbackIpv4(0));
+    const ServerIdentity backup = ServerIdentity::generate();
+    const ServerIdentity main = ServerIdentity::generate();
+    TcpPair tcp;
+    connectPair(loop, listener, tcp);
+    // The server switched to its backup key: the second one trusted
+    TlsConnection server = TlsConnection::server(std::move(*tcp.server), backup);
+    bool untrusted = false;
+    TlsConnection client =
+        TlsConnection::client(std::move(*tcp.client), {main.fingerprint(), backup.fingerprint()},
+                              [&](const KeyFingerprint &) { untrusted = true; });
+    Side serverSide;
+    Side clientSide;
+
+    server.start(serverSide.onReceive(), serverSide.onClose());
+    client.start(clientSide.onReceive(), clientSide.onClose());
+    client.send(bytesOf("HELLO"));
+
+    REQUIRE(pollUntil(loop, [&] { return serverSide.received == bytesOf("HELLO"); }));
+    CHECK_FALSE(clientSide.closed);
+    CHECK_FALSE(untrusted);
+}
+
+TEST_CASE("A client trusting no key tells the key of the server, and sends it nothing", "[network]")
+{
+    EventLoop loop;
+    TcpListener listener(loop, Address::loopbackIpv4(0));
+    const ServerIdentity identity = ServerIdentity::generate();
+    TcpPair tcp;
+    connectPair(loop, listener, tcp);
+    TlsConnection server = TlsConnection::server(std::move(*tcp.server), identity);
+    std::optional<KeyFingerprint> presented;
+    std::optional<std::error_code> closedWhenTold;
+    Side serverSide;
+    Side clientSide;
+    TlsConnection client = TlsConnection::client(std::move(*tcp.client), {}, [&](const KeyFingerprint &key) {
+        presented = key;
+        // Told before the connection ends
+        closedWhenTold = clientSide.closed.value_or(std::error_code{});
+    });
+
+    server.start(serverSide.onReceive(), serverSide.onClose());
+    client.start(clientSide.onReceive(), clientSide.onClose());
+    client.send(bytesOf("secret"));
+
+    REQUIRE(pollUntil(loop, [&] { return clientSide.closed && serverSide.closed; }));
+    CHECK(*clientSide.closed == NetworkError::UntrustedServer);
+    REQUIRE(presented);
+    CHECK(*presented == identity.fingerprint());
+    CHECK_FALSE(*closedWhenTold);
+    CHECK(serverSide.received.empty());
+}
+
 TEST_CASE("Nobody on the path reads the bytes, and a changed byte is detected", "[network]")
 {
     EventLoop loop;

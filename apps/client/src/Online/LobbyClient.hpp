@@ -15,6 +15,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <system_error>
 #include <variant>
 #include <vector>
 
@@ -24,11 +25,11 @@ namespace rtype::client
 /// What an error of the master means, for the player: "The game is full".
 [[nodiscard]] std::string describe(lobby::ErrorCode code);
 
-/// The connection of the client to the lobby of a master (docs/protocol/lobby.md): TCP, TLS with the key of
-/// the server pinned, then HELLO, then the requests of the player.
+/// The connection of the client to the lobby of a master (docs/protocol/lobby.md): TCP, TLS with the keys
+/// trusted for the server pinned, then HELLO, then the requests of the player.
 ///
 /// @code
-/// LobbyClient lobby(loop, server, pinned, "Pavel",
+/// LobbyClient lobby(loop, server, {pinned}, "Pavel",
 ///                   {.onWelcome = [&](std::uint32_t player) { lobby.listGames(...); },
 ///                    .onLeftGame = [&](const lobby::LeftGameMessage &left) { /* back to the list */ },
 ///                    .onClosed = [&](const std::string &reason) { /* toast it */ }});
@@ -36,7 +37,9 @@ namespace rtype::client
 /// @endcode
 ///
 /// - The master answers the requests in order: each reply goes to the callback of its request.
-/// - A server that does not have the pinned key is refused during the handshake (onClosed).
+/// - A server that does not have a trusted key is refused during the handshake, before HELLO leaves:
+/// onUntrusted
+///   tells the key it presented, so that the player can trust it (ADR 0021), or onClosed without it.
 /// - After 10 seconds without sending anything, it sends PING, so that the master keeps the connection.
 /// - Everything runs on the thread that polls the loop: in the client, the game loop.
 class LobbyClient
@@ -54,6 +57,8 @@ public:
         /// The connection ended, or could not be opened, with the reason for the player. Called once; nothing
         /// is called after.
         std::function<void(const std::string &reason)> onClosed;
+        /// The server presented a key that is not trusted, which is given: called instead of onClosed if set.
+        std::function<void(const network::KeyFingerprint &presented)> onUntrusted;
     };
 
     /// Sent PING after this long without sending anything (docs/protocol/lobby.md, PING).
@@ -72,9 +77,12 @@ private:
     std::deque<Pending> _pending;
     std::optional<std::uint32_t> _playerId;
     bool _closed = false;
+    /// The key the server presented, if it was refused.
+    std::optional<network::KeyFingerprint> _untrusted;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
 
-    void connected(network::TcpConnection connection, const network::KeyFingerprint &pinned);
+    void connected(network::TcpConnection connection, std::vector<network::KeyFingerprint> trusted);
+    void connectionClosed(std::error_code reason);
     void received(std::uint8_t type, std::span<const std::byte> payload);
     void request(std::uint8_t type, std::span<const std::byte> payload,
                  std::function<void(std::uint8_t type, std::span<const std::byte> payload)> reply);
@@ -82,9 +90,11 @@ private:
 
 public:
     /// Starts connecting at once, without blocking.
+    /// @param trusted The keys the server may present (KnownServers::trusted()). None: the server is refused,
+    /// and onUntrusted tells its key.
     /// @throws std::invalid_argument if the name cannot be the name of a player (lobby::isValidPlayerName()).
     LobbyClient(network::EventLoop &loop, const network::Address &server,
-                const network::KeyFingerprint &pinned, std::string name, Handlers handlers);
+                std::vector<network::KeyFingerprint> trusted, std::string name, Handlers handlers);
     ~LobbyClient();
 
     LobbyClient(const LobbyClient &) = delete;

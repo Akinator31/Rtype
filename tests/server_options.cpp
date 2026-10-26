@@ -162,6 +162,7 @@ TEST_CASE("An instance needs its id and ports, and refuses the options of the ma
         {"--instance", "--id", "0", "--udp-port", "4251", "--master-port", "5000"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--key", "server.key"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--check"},
+        {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--fingerprint"},
     };
 
     for (const auto &arguments : invalid) {
@@ -185,6 +186,15 @@ TEST_CASE("The standalone mode only exists in debug builds, without a master", "
 
 // --- Help, version, exit codes ---
 
+TEST_CASE("The option --fingerprint shows the key of the master instead of running it", "[server]")
+{
+    const Options options = parse({"--fingerprint", "--key", "/etc/rtype/server.key"});
+
+    CHECK(options.mode == Options::Mode::Fingerprint);
+    CHECK(options.master.key == "/etc/rtype/server.key");
+    CHECK(parse({"--fingerprint"}).master.key == "server.key");
+}
+
 TEST_CASE("--help and --version win over everything else", "[server]")
 {
     CHECK(parse({"--unknown", "--help"}).mode == Options::Mode::Help);
@@ -205,15 +215,6 @@ TEST_CASE("The program shows its help and version, and refuses invalid arguments
     out.str("");
     CHECK(run(std::vector<std::string_view>{"--port", "nope"}, out, in) == InvalidArguments);
     CHECK(out.str().empty());
-}
-
-TEST_CASE("A master without its key does not start", "[server]")
-{
-    std::ostringstream out;
-    std::istringstream in;
-
-    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", "missing-rtype-test.key"}, out,
-              in) == Failure);
 }
 
 TEST_CASE("An instance without a secret on its standard input does not start", "[server]")

@@ -22,6 +22,9 @@ namespace rtype::network
 /// @code
 /// // Client: the server must present the key whose fingerprint is pinned
 /// auto tls = rtype::network::TlsConnection::client(std::move(connection), pinned);
+/// // Or one of several keys, and told which key a refused server presented
+/// auto tls = rtype::network::TlsConnection::client(std::move(connection), {main, backup},
+///     [](const rtype::network::KeyFingerprint &presented) { /* ask the player to trust it? */ });
 /// // Server: presents its identity
 /// auto tls = rtype::network::TlsConnection::server(std::move(connection), identity);
 ///
@@ -34,7 +37,7 @@ namespace rtype::network
 /// start() begins the **handshake**, in which both sides agree on keys and the server proves its identity.
 /// The bytes given to send() before its end wait for it, and are sent encrypted once it is done. If it fails,
 /// the close handler receives the reason:
-/// - NetworkError::UntrustedServer, on the client: the server does not have the pinned key;
+/// - NetworkError::UntrustedServer, on the client: the server does not have a pinned key;
 /// - NetworkError::HandshakeInterrupted: the TCP connection ended during the handshake, closed or reset by
 /// the
 ///   peer;
@@ -53,6 +56,9 @@ public:
     /// Called once when the handshake ends and the connection is secured, on the loop's thread, before the
     /// first bytes received are given: a server can then give the client a delay to speak.
     using SecuredHandler = std::function<void()>;
+    /// Called on the client when the server presented a key it does not trust, with that key, on the loop's
+    /// thread, just before the close handler receives NetworkError::UntrustedServer.
+    using UntrustedHandler = std::function<void(const KeyFingerprint &presented)>;
 
     struct Impl;
 
@@ -67,6 +73,12 @@ public:
     /// The client side of a connection: the handshake fails unless the server presents the key of this
     /// fingerprint.
     [[nodiscard]] static TlsConnection client(TcpConnection connection, const KeyFingerprint &server);
+    /// The client side of a connection: the handshake fails unless the server presents one of these keys.
+    /// With none, it always fails, which tells the key of a server not trusted yet without sending it
+    /// anything (docs/decisions/0021-server-generated-key-trust-on-first-use.md).
+    /// @param onUntrusted Called with the key the server presented, if it is not trusted.
+    [[nodiscard]] static TlsConnection client(TcpConnection connection, std::vector<KeyFingerprint> trusted,
+                                              UntrustedHandler onUntrusted = {});
     /// The server side of a connection, which proves it is the server with this identity.
     [[nodiscard]] static TlsConnection server(TcpConnection connection, const ServerIdentity &identity);
 
