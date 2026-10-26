@@ -34,12 +34,9 @@ void createSubmenuScene(engine::Engine &engine, const engine::InterfaceStyle &st
         [&style, &translations, titleKey, buttons = std::move(buttons)](engine::Engine &target,
                                                                         engine::SceneId scene) {
             engine::InterfaceBuilder interface(target.getEcs(), scene, style);
-            interface.backButton([&target] { target.popScene(); },
-                                 {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            interface.boundTitle([&translations, titleKey] { return translations.text(titleKey); },
-                                {engine::AnchorPoint::TopLeft,
-                                 screenMargin + style.flare.height + style.headerSpacing,
-                                 screenMargin + ((style.flare.height - style.textSize) / 2.0f)});
+            interface.boundHeader([&translations, titleKey] { return translations.text(titleKey); },
+                                  [&target] { target.popScene(); },
+                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
             float top = buttonsTop;
             for (const SubmenuButton &button : buttons) {
                 const ecs::entity_t entity =
@@ -59,12 +56,9 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
         SettingsMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
         [&style, &translations](engine::Engine &target, engine::SceneId scene) {
             engine::InterfaceBuilder interface(target.getEcs(), scene, style);
-            interface.backButton([&target] { target.popScene(); },
-                                 {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            interface.boundTitle([&translations] { return translations.text("menu.settings"); },
-                                {engine::AnchorPoint::TopLeft,
-                                 screenMargin + style.flare.height + style.headerSpacing,
-                                 screenMargin + ((style.flare.height - style.textSize) / 2.0f)});
+            interface.boundHeader([&translations] { return translations.text("menu.settings"); },
+                                  [&target] { target.popScene(); },
+                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
             const auto label = [&translations] {
                 const std::string key =
                     translations.language() == "fr" ? "language.french" : "language.english";

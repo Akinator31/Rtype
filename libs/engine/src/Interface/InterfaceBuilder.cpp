@@ -134,10 +134,27 @@ ecs::entity_t InterfaceBuilder::backButton(std::function<void()> onPress, Anchor
 ecs::entity_t InterfaceBuilder::header(const std::string &title, std::function<void()> onBack, Anchor anchor)
 {
     const ecs::entity_t back = backButton(std::move(onBack), anchor);
-    const float titleX = anchor.x + _style.flare.height + _style.headerSpacing;
-    const float titleY = anchor.y + ((_style.flare.height - _style.textSize) / 2.0f);
-    this->title(title, {anchor.point, titleX, titleY});
+    createHeaderTitle(title, anchor);
     return back;
+}
+
+ecs::entity_t InterfaceBuilder::boundHeader(std::function<std::string()> get, std::function<void()> onBack,
+                                            Anchor anchor)
+{
+    const ecs::entity_t back = backButton(std::move(onBack), anchor);
+    const ecs::entity_t title = createHeaderTitle(get ? get() : std::string(), anchor);
+    _ecs.addComponent<BoundText>(title, std::move(get));
+    return back;
+}
+
+ecs::entity_t InterfaceBuilder::createHeaderTitle(const std::string &text, Anchor backAnchor)
+{
+    const FlareStyle &style = _style.flare;
+    const float x = backAnchor.x + style.height + _style.headerSpacing;
+    const float y = backAnchor.y + ((style.height - style.textSize) / 2.0f);
+    const ecs::entity_t entity = element({backAnchor.point, x, y});
+    _ecs.addComponent<Text>(entity, text, style.font, style.textSize, style.litText);
+    return entity;
 }
 
 } // namespace rtype::engine

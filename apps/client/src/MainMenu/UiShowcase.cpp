@@ -159,12 +159,9 @@ void createUiShowcaseScene(engine::Engine &engine, const engine::InterfaceStyle 
         UiShowcaseScene, {.overlay = true, .hidesInterfaceBelow = true},
         [&style, &translations](engine::Engine &target, engine::SceneId scene) {
             engine::InterfaceBuilder interface(target.getEcs(), scene, style);
-            interface.backButton([&target] { target.popScene(); },
-                                 {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            interface.boundTitle([&translations] { return translations.text("showcase.title"); },
-                                 {engine::AnchorPoint::TopLeft,
-                                  screenMargin + style.flare.height + style.headerSpacing,
-                                  screenMargin + ((style.flare.height - style.textSize) / 2.0f)});
+            interface.boundHeader([&translations] { return translations.text("showcase.title"); },
+                                  [&target] { target.popScene(); },
+                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
             createSliders(interface, style);
             createSwitches(interface);
             createGauges(interface);

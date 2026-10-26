@@ -38,6 +38,7 @@ class InterfaceBuilder
     int _count = 0;
 
     ecs::entity_t element(Anchor anchor);
+    ecs::entity_t createHeaderTitle(const std::string &text, Anchor backAnchor);
 
 
 public:
@@ -88,11 +89,15 @@ public:
     /// A button with a leftwards arrow, to go back to the previous screen. It gets the focus in the same order
     /// as the other buttons.
     ecs::entity_t backButton(std::function<void()> onPress, Anchor anchor);
-    /// The top of a secondary screen, such as a submenu: a back button, then the title (see title()) to its right,
-    /// centred on the same line. The anchor places the back button; the title follows it, so the anchor
+    /// The top of a secondary screen, such as a submenu: a back button, then the title to its right, written
+    /// like the text of a button, but fully bright (FlareStyle::litText), and centred on the same line. The
+    /// anchor places the back button; the title follows it, so the anchor
     /// should be on the left side of the screen.
     /// @return The back button.
     ecs::entity_t header(const std::string &title, std::function<void()> onBack, Anchor anchor);
+    /// A header whose title is written from a function every frame, for a title that follows the language.
+    /// @return The back button.
+    ecs::entity_t boundHeader(std::function<std::string()> get, std::function<void()> onBack, Anchor anchor);
 };
 
 } // namespace rtype::engine
