@@ -4,13 +4,13 @@ The render library (`libs/render`, namespace `rtype::render`) is the only part o
 [raylib](../decisions/0002-raylib-graphics-library.md) for graphics. Its public headers contain no raylib
 type: the rest of the client draws through our own classes and types, and does not even link raylib.
 
-| Class / header | Role |
-|---|---|
-| `Window` | Opens the game window and closes it when destroyed. |
+| Class / header    | Role                                                                   |
+| ----------------- | ---------------------------------------------------------------------- |
+| `Window`          | Opens the game window and closes it when destroyed.                    |
 | `ResourceManager` | Loads textures and fonts once, and hands out handles to refer to them. |
-| `Renderer` | Draws textures, text and shapes at a fixed logical resolution. |
-| `Types.hpp` | `Vector2`, `Rectangle`, `Color` and the `colors::` constants. |
-| `Paths.hpp` | `applicationDirectory()`, the directory of the running executable. |
+| `Renderer`        | Draws textures, text and shapes at a fixed logical resolution.         |
+| `Types.hpp`       | `Vector2`, `Rectangle`, `Color` and the `colors::` constants.          |
+| `Paths.hpp`       | `applicationDirectory()`, the directory of the running executable.     |
 
 ## Lifetimes
 
@@ -57,15 +57,15 @@ whether it opens in fullscreen.
 
 Most settings can be changed while the game runs, for instance from an options menu:
 
-| Function | Effect |
-|---|---|
-| `setFullscreen(bool)`, `isFullscreen()` | Switches between a window and fullscreen. |
-| `setSize(width, height)` | Resizes the window, in pixels. Leaves fullscreen first. |
-| `setTitle(title)` | Changes the title of the window. |
-| `setCursorVisible(bool)`, `isCursorVisible()` | Shows or hides the mouse pointer over the window. |
-| `setVsync(bool)` | Turns vertical synchronisation on or off. |
-| `setTargetFps(fps)` | Sets the maximum number of frames per second, 0 for no limit. |
-| `requestClose()` | Asks the window to close, for instance from a *Quit* button: `shouldClose()` then returns true. |
+| Function                                      | Effect                                                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `setFullscreen(bool)`, `isFullscreen()`       | Switches between a window and fullscreen.                                                       |
+| `setSize(width, height)`                      | Resizes the window, in pixels. Leaves fullscreen first.                                         |
+| `setTitle(title)`                             | Changes the title of the window.                                                                |
+| `setCursorVisible(bool)`, `isCursorVisible()` | Shows or hides the mouse pointer over the window.                                               |
+| `setVsync(bool)`                              | Turns vertical synchronisation on or off.                                                       |
+| `setTargetFps(fps)`                           | Sets the maximum number of frames per second, 0 for no limit.                                   |
+| `requestClose()`                              | Asks the window to close, for instance from a _Quit_ button: `shouldClose()` then returns true. |
 
 **Fullscreen** is a borderless window covering the screen it is on, at the resolution of that screen. raylib
 also has an exclusive fullscreen, which changes the video mode of the screen to match the window: it is slow
@@ -98,7 +98,7 @@ const FontId font = resources.loadFont("fonts/FiraSans-Black.ttf", 48);
 
 ### Each file is loaded once
 
-For nonblocking loading, call `loadTextureAsync()`, `loadFontAsync()` or `loadModelAsync()` and keep the returned `std::shared_future`. Call `finishPendingLoads()` once per frame on the main thread. Check `future.wait_for(std::chrono::seconds(0))` before calling `get()`; draw a placeholder while it is pending. A failure is reported by `get()` as an exception. Requests for the same asset and options share one future. Pass `engine.getThreads().getAssetsWorker()` to the manager constructor. The client's startup displays a loading screen while its menu assets are prepared. See [ADR 0020](../decisions/0020-engine-thread-manager.md) for the thread ownership and shutdown.
+For nonblocking loading, call `loadTextureAsync()`, `loadFontAsync()` or `loadModelAsync()` and keep the returned `std::shared_future`. Call `finishPendingLoads()` once per frame on the main thread. Check `future.wait_for(std::chrono::seconds(0))` before calling `get()`; draw a placeholder while it is pending. A failure is reported by `get()` as an exception. Requests for the same asset and options share one future. Pass `engine.getThreads().getAssetsWorker()` to the manager constructor. The client's startup displays a loading screen while its menu assets are prepared. See [ADR 0022](../decisions/0022-engine-thread-manager.md) for the thread ownership and shutdown.
 
 Loading the same path again returns the same handle without reading the file again: fifty enemies sharing
 one sprite share one texture in graphics memory. Fonts are identified by their path **and** their size,
@@ -127,8 +127,12 @@ noticed immediately.
 
 By default, raylib only renders the ASCII characters of a font: any other character is drawn as "?". The
 `ResourceManager` also renders the Latin-1 characters, which cover the accented letters of most Western
-European languages ("é", "ç", "ü", "ß"...), plus "œ", "Œ" and "€". Characters outside of this set, for
+European languages ("é", "ç", "ü", "ß"...), plus "œ", "Œ", "€" and "←". Characters outside of this set, for
 instance from Cyrillic or Asian scripts, are still drawn as "?".
+
+A font is loaded only with the characters of this set that it has: `filterCharactersInFont()` reads its table
+of characters (cmap) first. A display font with few symbols, such as Orbitron (no "«", "©" or "←"), then loads
+without raylib warning about missing glyphs; those characters are drawn as "?" with it.
 
 ### Where assets are found
 
@@ -175,8 +179,8 @@ flowchart LR
     Target -- "endFrame(): colour filter,<br/>copied as is" --> Window["Window<br/>(any size)"]
 ```
 
-*Drawing calls write in game units to an off-screen image at the resolution of the window; `endFrame()`
-copies it into the window.*
+_Drawing calls write in game units to an off-screen image at the resolution of the window; `endFrame()`
+copies it into the window._
 
 1. `beginFrame()` recreates the off-screen image if the window changed size, starts drawing into it, fills it
    with the background colour, and sets a 2D view that maps the visible area onto it.
@@ -189,19 +193,19 @@ The visible area is computed by `computeVisibleArea()` (`Viewport.hpp`), a pure 
 
 ### Drawing functions
 
-| Function | Draws |
-|---|---|
-| `drawTexture(id, position, tint)` | A whole texture at its original size. |
+| Function                                               | Draws                                                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `drawTexture(id, position, tint)`                      | A whole texture at its original size.                                                                                    |
 | `drawTexture(id, source, destination, rotation, tint)` | Part of a texture (one frame of a sprite sheet), stretched to the destination and rotated around its centre, in degrees. |
-| `drawRectangle(rectangle, color)` | A filled rectangle. |
-| `drawCircle(center, radius, color)` | A filled circle, for instance a star or a round projectile. |
-| `drawRectangleOutline(rectangle, thickness, color)` | The outline of a rectangle, for instance a hitbox or a button frame. |
-| `drawCircleOutline(center, radius, thickness, color)` | The outline of a circle, for instance a round hitbox. |
-| `drawLine(start, end, thickness, color)` | A straight line of any thickness, for instance a laser. |
-| `drawTriangle(first, second, third, color)` | A filled triangle, for instance a placeholder ship. |
-| `drawText(font, text, position, size, color)` | Text with a loaded font. |
-| `drawText(text, position, size, color)` | Text with raylib's built-in font, for debugging. |
-| `drawFps(position)` | The number of frames per second, for debugging. |
+| `drawRectangle(rectangle, color)`                      | A filled rectangle.                                                                                                      |
+| `drawCircle(center, radius, color)`                    | A filled circle, for instance a star or a round projectile.                                                              |
+| `drawRectangleOutline(rectangle, thickness, color)`    | The outline of a rectangle, for instance a hitbox or a button frame.                                                     |
+| `drawCircleOutline(center, radius, thickness, color)`  | The outline of a circle, for instance a round hitbox.                                                                    |
+| `drawLine(start, end, thickness, color)`               | A straight line of any thickness, for instance a laser.                                                                  |
+| `drawTriangle(first, second, third, color)`            | A filled triangle, for instance a placeholder ship.                                                                      |
+| `drawText(font, text, position, size, color)`          | Text with a loaded font.                                                                                                 |
+| `drawText(text, position, size, color)`                | Text with raylib's built-in font, for debugging.                                                                         |
+| `drawFps(position)`                                    | The number of frames per second, for debugging.                                                                          |
 
 Outlines are drawn **inside** the shape: the outer edge of the outline is the edge of the rectangle or
 circle. An outline drawn around a hitbox therefore shows exactly the area that collides.
@@ -224,12 +228,12 @@ players with low vision:
 renderer.setColorFilter(ColorFilter::Deuteranopia);
 ```
 
-| Filter | For | Effect |
-|---|---|---|
-| `Protanopia`, `Deuteranopia` | Players who do not perceive red or green (red-green colour blindness, about 8% of men) | Shifts the colours they confuse towards colours they can tell apart. |
-| `Tritanopia` | Players who do not perceive blue (blue-yellow colour blindness, rare) | Same, for blue and yellow. |
-| `SimulateProtanopia`, `SimulateDeuteranopia`, `SimulateTritanopia` | The team | Shows the game as a colour-blind player sees it, to check that sprites stay distinguishable. |
-| `HighContrast` | Players with low vision | Stronger contrast and saturation. |
+| Filter                                                             | For                                                                                    | Effect                                                                                       |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `Protanopia`, `Deuteranopia`                                       | Players who do not perceive red or green (red-green colour blindness, about 8% of men) | Shifts the colours they confuse towards colours they can tell apart.                         |
+| `Tritanopia`                                                       | Players who do not perceive blue (blue-yellow colour blindness, rare)                  | Same, for blue and yellow.                                                                   |
+| `SimulateProtanopia`, `SimulateDeuteranopia`, `SimulateTritanopia` | The team                                                                               | Shows the game as a colour-blind player sees it, to check that sprites stay distinguishable. |
+| `HighContrast`                                                     | Players with low vision                                                                | Stronger contrast and saturation.                                                            |
 
 The filter is a **shader** (a small program run by the graphics card on every pixel) applied in `endFrame()`,
 when the off-screen image is copied to the window: the game keeps drawing with its normal colours, and the

@@ -13,16 +13,17 @@ namespace
 {
 
 /// Average speeds, in world units per second: the ships come in slowly, go down and up more slowly still,
-/// and leave a little faster.
-constexpr float approachSpeed = 1.8f;
-constexpr float verticalSpeed = 0.5f;
-constexpr float departureSpeed = 2.2f;
+/// and leave a little faster. They follow the size of the station (scaled by 0.17): the ships are as big
+/// and as quick next to it whatever its scale.
+constexpr float approachSpeed = 2.8f;
+constexpr float verticalSpeed = 0.78f;
+constexpr float departureSpeed = 3.4f;
 /// The ship that leaves towards the camera has a long way to go: it flies faster, for its trip not to last
 /// too long, and rushes past the camera at the end.
-constexpr float returnSpeed = 4.0f;
+constexpr float returnSpeed = 6.2f;
 
 /// How far from above the dock a ship flies straight along its heading, when it arrives and when it leaves.
-constexpr float runwayLength = 8.0f;
+constexpr float runwayLength = 12.4f;
 
 /// How long a ship stays on its dock, and out of the screen, in seconds.
 constexpr float shortestStay = 4.0f;
@@ -30,25 +31,37 @@ constexpr float longestStay = 10.0f;
 constexpr float shortestAbsence = 2.0f;
 constexpr float longestAbsence = 8.0f;
 
-/// The menu camera is at the origin and looks towards -z with a vertical field of view of 30 degrees: at a
-/// depth d, the screen goes up and down to d * screenHalfHeight, and left and right to d * screenHalfWidth
-/// on the widest screens. A point further than that by outOfScreenMargin, the size of a ship, is not seen.
+/// The points out of the screen are picked in the frame of the view of the menu (convertViewPointToWorld),
+/// whose vertical field of view is 30 degrees: at a depth d, the screen goes up and down to
+/// d * screenHalfHeight, and left and right to d * screenHalfWidth on the widest screens. A point further
+/// than that by outOfScreenMargin, the size of a ship, is not seen.
 constexpr float screenHalfHeight = 0.268f;
 constexpr float screenHalfWidth = 0.48f;
-constexpr float outOfScreenMargin = 4.0f;
+constexpr float outOfScreenMargin = 6.0f;
 
-/// The ships come from close to the camera, under the station, and leave far behind it.
-constexpr float closestArrival = 45.0f;
-constexpr float furthestArrival = 70.0f;
-constexpr float closestExit = 80.0f;
-constexpr float furthestExit = 130.0f;
+/// The ships come from closer to the camera than the station, which is 132 units deep, and leave far behind
+/// it.
+constexpr float closestArrival = 80.0f;
+constexpr float furthestArrival = 125.0f;
+constexpr float closestExit = 145.0f;
+constexpr float furthestExit = 230.0f;
 
-/// Half of the ships come from behind the camera: they start just under it, out of the field of view, rise
-/// into it big on the screen and fly away towards the station. They start in this box, where the ships that
-/// leave towards the camera go back.
-constexpr float fromCameraChance = 0.5f;
+/// Where the ships come from: behind the camera, behind the planet, or else from under the screen. From
+/// behind the camera, they start just under it, out of the field of view, rise into it big on the screen and
+/// fly away towards the station: they start in this box, in the frame of the view, where the ships that leave
+/// towards the camera go back.
+constexpr float fromCameraChance = 0.4f;
+constexpr float fromPlanetChance = 0.35f;
 constexpr render::Vector3 behindCameraLow{-1.8f, -0.6f, 0.5f};
 constexpr render::Vector3 behindCameraHigh{-1.0f, -0.5f, 1.0f};
+
+/// The ships that do not leave towards the camera go behind the planet once in two, else out of the screen.
+constexpr float towardsPlanetChance = 0.5f;
+/// Behind the planet, the ships are on a line from the camera through the planet, which hides them: it passes
+/// at most this far from the centre of the planet, in radii, on the side of the station, and they are this
+/// far behind the planet, in radii, so that they come out from behind its edge.
+constexpr float planetLineSpread = 0.6f;
+constexpr float behindPlanetDistance = 3.0f;
 
 /// How long a ship takes to go from the pose of a stage to the next one, in seconds: they lean forward or
 /// backward when they go down or up.
@@ -184,40 +197,63 @@ float FlightSystem::pickBetween(float low, float high)
 }
 
 /// Under the bottom edge of the screen, or out of its right edge in its lower half.
-render::Vector3 FlightSystem::pickPointBelowScreen()
+render::Vector3 FlightSystem::pickPointBelowScreen(const FlightArea &area)
 {
     const float depth = pickBetween(closestArrival, furthestArrival);
     if (pickBetween(0.0f, 1.0f) < 0.5f) {
-        return {depth * pickBetween(0.05f, screenHalfWidth), -(depth * screenHalfHeight) - outOfScreenMargin,
-                -depth};
+        return convertViewPointToWorld(area.view, {depth * pickBetween(0.05f, screenHalfWidth),
+                                                   -(depth * screenHalfHeight) - outOfScreenMargin, -depth});
     }
-    return {(depth * screenHalfWidth) + outOfScreenMargin, depth * pickBetween(-screenHalfHeight, 0.0f),
-            -depth};
+    return convertViewPointToWorld(area.view, {(depth * screenHalfWidth) + outOfScreenMargin,
+                                               depth * pickBetween(-screenHalfHeight, 0.0f), -depth});
 }
 
 /// Over the top edge of the screen, or out of its right edge in its upper half.
-render::Vector3 FlightSystem::pickPointAboveScreen()
+render::Vector3 FlightSystem::pickPointAboveScreen(const FlightArea &area)
 {
     const float depth = pickBetween(closestExit, furthestExit);
     if (pickBetween(0.0f, 1.0f) < 0.5f) {
-        return {depth * pickBetween(0.1f, screenHalfWidth), (depth * screenHalfHeight) + outOfScreenMargin,
-                -depth};
+        return convertViewPointToWorld(area.view, {depth * pickBetween(0.1f, screenHalfWidth),
+                                                   (depth * screenHalfHeight) + outOfScreenMargin, -depth});
     }
-    return {(depth * screenHalfWidth) + outOfScreenMargin, depth * pickBetween(0.0f, screenHalfHeight),
-            -depth};
+    return convertViewPointToWorld(area.view, {(depth * screenHalfWidth) + outOfScreenMargin,
+                                               depth * pickBetween(0.0f, screenHalfHeight), -depth});
 }
 
-render::Vector3 FlightSystem::pickPointBehindCamera()
+render::Vector3 FlightSystem::pickPointBehindCamera(const FlightArea &area)
 {
-    return {pickBetween(behindCameraLow.x, behindCameraHigh.x),
-            pickBetween(behindCameraLow.y, behindCameraHigh.y),
-            pickBetween(behindCameraLow.z, behindCameraHigh.z)};
+    return convertViewPointToWorld(area.view, {pickBetween(behindCameraLow.x, behindCameraHigh.x),
+                                               pickBetween(behindCameraLow.y, behindCameraHigh.y),
+                                               pickBetween(behindCameraLow.z, behindCameraHigh.z)});
+}
+
+/// Behind the planet as seen from the camera, on the side of the station: the ship comes out from behind the
+/// edge of the planet that faces it.
+render::Vector3 FlightSystem::pickPointBehindPlanet(const FlightArea &area, render::Vector3 station)
+{
+    const render::Vector3 eye = area.view.position;
+    const render::Vector3 towardsPlanet = normalize(area.planetCentre - eye);
+    const render::Vector3 towardsStation = station - area.planetCentre;
+    const render::Vector3 side =
+        normalize(towardsStation - (towardsPlanet * dot(towardsStation, towardsPlanet)));
+    const render::Vector3 across = normalize(cross(towardsPlanet, side));
+    const float sideOffset = pickBetween(0.0f, planetLineSpread);
+    const float acrossOffset = pickBetween(-planetLineSpread, planetLineSpread) * 0.5f;
+    const render::Vector3 hidden = area.planetCentre + (side * (area.planetRadius * sideOffset)) +
+                                   (across * (area.planetRadius * acrossOffset));
+    const float distance = length(area.planetCentre - eye) + (area.planetRadius * behindPlanetDistance);
+    return eye + (normalize(hidden - eye) * distance);
 }
 
 void FlightSystem::startApproach(Flight &flight)
 {
-    const render::Vector3 from =
-        pickBetween(0.0f, 1.0f) < fromCameraChance ? pickPointBehindCamera() : pickPointBelowScreen();
+    const float origin = pickBetween(0.0f, 1.0f);
+    render::Vector3 from = pickPointBelowScreen(flight.area);
+    if (origin < fromCameraChance) {
+        from = pickPointBehindCamera(flight.area);
+    } else if (origin < fromCameraChance + fromPlanetChance) {
+        from = pickPointBehindPlanet(flight.area, flight.hover);
+    }
     const render::Vector3 control = flight.hover - (flight.heading * runwayLength);
     setRoute(flight, FlightStage::Approach, from, control, flight.hover,
              computeRouteLength(from, control, flight.hover) / approachSpeed);
@@ -226,7 +262,12 @@ void FlightSystem::startApproach(Flight &flight)
 void FlightSystem::startDeparture(Flight &flight)
 {
     const render::Vector3 control = flight.hover + (flight.heading * runwayLength);
-    const render::Vector3 to = flight.leavesTowardsCamera ? pickPointBehindCamera() : pickPointAboveScreen();
+    render::Vector3 to = pickPointAboveScreen(flight.area);
+    if (flight.leavesTowardsCamera) {
+        to = pickPointBehindCamera(flight.area);
+    } else if (pickBetween(0.0f, 1.0f) < towardsPlanetChance) {
+        to = pickPointBehindPlanet(flight.area, flight.hover);
+    }
     const float speed = flight.leavesTowardsCamera ? returnSpeed : departureSpeed;
     setRoute(flight, FlightStage::Departure, flight.hover, control, to,
              computeRouteLength(flight.hover, control, to) / speed);

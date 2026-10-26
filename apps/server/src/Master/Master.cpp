@@ -5,6 +5,7 @@
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "Master/Process.hpp"
+#include "Master/ServerKey.hpp"
 #include "rtype/log/Log.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
@@ -52,17 +53,11 @@ int runMaster(const MasterOptions &options)
 
     // Everything that can fail is done before running: a server that cannot work stops at once, with the
     // reason
-    std::optional<rtype::network::ServerIdentity> identity;
-    try {
-        identity = rtype::network::ServerIdentity::load(options.key);
-    } catch (const std::system_error &error) {
-        logger.error("Cannot read the key {}: {}. Make one with r-type_keygen, or give its path with --key",
-                     options.key.string(), error.code().message());
-        return Failure;
-    } catch (const std::invalid_argument &error) {
-        logger.error("{} is not a key of the server: {}", options.key.string(), error.what());
+    const std::optional<ServerKey> key = loadOrCreateKey(options.key, logger);
+    if (!key) {
         return Failure;
     }
+    const rtype::network::ServerIdentity &identity = key->identity;
     // The instances load it again: checked here, a server with a broken configuration does not start
     const std::filesystem::path config = std::filesystem::absolute(getConfigDirectory(options.config));
     if (!readGameConfig(config, logger)) {
@@ -81,7 +76,7 @@ int runMaster(const MasterOptions &options)
     const unsigned maxGames = options.lastGamePort - options.firstGamePort + 1U;
     logger.info("Lobby on TCP {}, games on UDP {}-{} ({} at most)", listener->localAddress(),
                 options.firstGamePort, options.lastGamePort, maxGames);
-    logger.info("Server key {}", identity->fingerprint().toHex());
+    logger.info("Server key {}", identity.fingerprint().toHex());
     if (options.check) {
         logger.info("Check passed: the server can start");
         return Success;
@@ -101,7 +96,7 @@ int runMaster(const MasterOptions &options)
         logger.error("Cannot prepare the games: {}", error.what());
         return Failure;
     }
-    Lobby lobby(loop, std::move(*listener), *identity, *games);
+    Lobby lobby(loop, std::move(*listener), identity, *games);
     // Until every instance has exited, then the time for the last frames to leave
     rtype::network::Timer stopping(loop);
     logger.info("Master started: Ctrl+C to stop");
@@ -117,6 +112,21 @@ int runMaster(const MasterOptions &options)
     });
     logger.info("Master stopped");
     return clean ? Success : Failure;
+}
+
+int showFingerprint(const MasterOptions &options, std::ostream &out)
+{
+    const rtype::log::Logger logger("master");
+    try {
+        out << rtype::network::ServerIdentity::load(options.key).fingerprint().toHex() << '\n';
+        return Success;
+    } catch (const std::system_error &error) {
+        logger.error("Cannot read the key {}: {}. The server generates it at its first start",
+                     options.key.string(), error.code().message());
+    } catch (const std::invalid_argument &error) {
+        logger.error("{} is not a key of the server: {}", options.key.string(), error.what());
+    }
+    return Failure;
 }
 
 } // namespace rtype::server

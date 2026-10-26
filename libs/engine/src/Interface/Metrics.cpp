@@ -5,9 +5,10 @@
 namespace rtype::engine
 {
 
-render::Vector2 RendererMetrics::measureText(render::FontId font, const std::string &text, float size) const
+render::Vector2 RendererMetrics::measureText(render::FontId font, const std::string &text, float size,
+                                             float spacing) const
 {
-    return _renderer.measureText(font, text, size);
+    return _renderer.measureText(font, text, size, spacing);
 }
 
 render::Vector2 RendererMetrics::gameSize() const

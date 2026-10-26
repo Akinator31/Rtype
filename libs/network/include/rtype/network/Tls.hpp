@@ -18,8 +18,8 @@ class TlsConnection;
 ///
 /// Written as 64 lowercase hexadecimal digits, the form shown to people and logged:
 /// @code
-/// const auto pinned = rtype::network::KeyFingerprint::loadPublicKey("server.pub");
-/// logger.info("Server key {}", pinned.toHex());
+/// const auto key = rtype::network::ServerIdentity::load("server.key").fingerprint();
+/// logger.info("Server key {}", key.toHex());
 /// @endcode
 class KeyFingerprint
 {

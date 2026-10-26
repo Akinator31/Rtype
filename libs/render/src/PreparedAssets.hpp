@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/core/AssetFile.hpp"
+#include "rtype/render/FontCharacters.hpp"
 
 #include <raylib.h>
 
@@ -46,7 +47,10 @@ public:
     [[nodiscard]] Image image() const { return _image; }
 };
 
-inline std::vector<int> fontCharacters()
+/// The characters a font is loaded with: ASCII, Latin-1 (without the soft hyphen), œ, Œ, € and ←, those
+/// of them the font has (see filterCharactersInFont()).
+/// @param file The content of the font file.
+inline std::vector<int> fontCharacters(const std::vector<unsigned char> &file)
 {
     constexpr int softHyphen = 0xAD;
     std::vector<int> characters;
@@ -59,7 +63,7 @@ inline std::vector<int> fontCharacters()
         }
     }
     characters.insert(characters.end(), {0x152, 0x153, 0x20AC, 0x2190});
-    return characters;
+    return filterCharactersInFont(file, characters);
 }
 
 class PreparedFont
@@ -81,7 +85,7 @@ public:
     {
         try {
             const std::vector<unsigned char> bytes = core::readAssetFile(file);
-            const std::vector<int> characters = fontCharacters();
+            const std::vector<int> characters = fontCharacters(bytes);
             _font.baseSize = size;
             _font.glyphPadding = 4;
             _font.glyphs = LoadFontData(bytes.data(), static_cast<int>(bytes.size()), size, characters.data(),

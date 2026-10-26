@@ -1,6 +1,7 @@
 # The code of the client is a library of its own, so that the tests can use it, like the server's:
 #   Commands/, Console/  the console and its commands
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
+#   Loading/             the loading screen, shown while the assets load at startup
 #   MainMenu/            the home screen and its submenus
 #   Online/              playing online: the lobby of a server, and its scenes
 #   ShipModel            the ship models and their animations, flown by the menu and by the game
@@ -26,13 +27,20 @@ add_library(r-type_client_core STATIC
     src/Game/RemoteSession.cpp
     src/Game/ShipLooks.cpp
     src/Game/ShotLooks.cpp
+    src/Loading/AssetPreload.cpp
+    src/Loading/LoadingScene.cpp
+    src/Loading/LoadingSystem.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
+    src/MainMenu/Logo.cpp
+    src/MainMenu/LogoFlareSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
     src/MainMenu/Ships.cpp
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
+    src/MainMenu/UiShowcase.cpp
+    src/Online/KnownServers.cpp
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
     src/ShipModel.cpp
@@ -40,7 +48,7 @@ add_library(r-type_client_core STATIC
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
     PUBLIC rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network
-           rtype::physics rtype::render
+           rtype::physics rtype::render rtype::save
     PRIVATE rtype_options)
 
 add_executable(r-type_client

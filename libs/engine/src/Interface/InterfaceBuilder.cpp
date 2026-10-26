@@ -3,6 +3,7 @@
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 
 #include <utility>
@@ -16,8 +17,8 @@ namespace
 // Drawing order inside the interface layer, over the background of a menu
 constexpr int contentOrder = 1;
 
-// "←" in UTF-8
-constexpr const char *leftwardsArrow = "\xE2\x86\x90";
+// ASCII: the font of the buttons (Orbitron) has no "←", which would be drawn as "?"
+constexpr const char *backArrow = "<";
 
 } // namespace
 
@@ -51,6 +52,52 @@ ecs::entity_t InterfaceBuilder::boundText(std::function<std::string()> get, Anch
     return entity;
 }
 
+ecs::entity_t InterfaceBuilder::title(const std::string &text, Anchor anchor)
+{
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, text, _style.title.font, _style.textSize, _style.text);
+    _ecs.addComponent<Title>(entity);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::boundTitle(std::function<std::string()> get, Anchor anchor)
+{
+    const ecs::entity_t entity = title(get ? get() : std::string(), anchor);
+    _ecs.addComponent<BoundText>(entity, std::move(get));
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::slider(const std::string &caption, std::function<float()> get,
+                                       std::function<void(float)> set, float step, Anchor anchor)
+{
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, caption, _style.slider.font, _style.slider.captionSize, _style.text);
+    _ecs.addComponent<Slider>(entity, Slider{caption, std::move(get), std::move(set), step});
+    _ecs.addComponent<SliderTrack>(entity);
+    _ecs.addComponent<Focusable>(entity, _count++);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::toggle(const std::string &caption, std::function<bool()> get,
+                                       std::function<void(bool)> set, Anchor anchor)
+{
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, caption, _style.toggle.font, _style.toggle.captionSize, _style.text);
+    _ecs.addComponent<Toggle>(entity, Toggle{caption, std::move(get), std::move(set)});
+    _ecs.addComponent<SwitchTrack>(entity);
+    _ecs.addComponent<Focusable>(entity, _count++);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::gauge(const std::string &caption, std::function<float()> get, Anchor anchor)
+{
+    const GaugeStyle &style = _style.gauge;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Gauge>(entity, Gauge{caption, std::move(get)});
+    _ecs.addComponent<Extent>(entity, style.width, style.getHeight());
+    return entity;
+}
+
 ecs::entity_t InterfaceBuilder::box(float width, float height, render::Color color, Anchor anchor,
                                     float outline)
 {
@@ -67,35 +114,47 @@ ecs::entity_t InterfaceBuilder::sprite(render::TextureId texture, render::Rectan
     return entity;
 }
 
-ecs::entity_t InterfaceBuilder::createButton(const std::string &text, float width,
-                                             std::function<void()> onPress, Anchor anchor)
+ecs::entity_t InterfaceBuilder::button(const std::string &text, std::function<void()> onPress, Anchor anchor)
 {
+    const FlareStyle &style = _style.flare;
     const ecs::entity_t entity = element(anchor);
-    _ecs.addComponent<Text>(entity, text, _style.button.font, _style.button.textSize, _style.text);
-    _ecs.addComponent<Panel>(entity, width, _style.button.height);
+    _ecs.addComponent<Text>(entity, text, style.font, style.textSize, style.text);
+    _ecs.addComponent<Panel>(entity, style.height);
     _ecs.addComponent<Focusable>(entity, _count++);
     _ecs.addComponent<Scale>(entity);
     _ecs.addComponent<Button>(entity, std::move(onPress));
     return entity;
 }
 
-ecs::entity_t InterfaceBuilder::button(const std::string &text, std::function<void()> onPress, Anchor anchor)
-{
-    return createButton(text, _style.button.width, std::move(onPress), anchor);
-}
-
 ecs::entity_t InterfaceBuilder::backButton(std::function<void()> onPress, Anchor anchor)
 {
-    return createButton(leftwardsArrow, _style.button.height, std::move(onPress), anchor);
+    return button(backArrow, std::move(onPress), anchor);
 }
 
 ecs::entity_t InterfaceBuilder::header(const std::string &title, std::function<void()> onBack, Anchor anchor)
 {
     const ecs::entity_t back = backButton(std::move(onBack), anchor);
-    const float titleX = anchor.x + _style.button.height + _style.headerSpacing;
-    const float titleY = anchor.y + ((_style.button.height - _style.textSize) / 2.0f);
-    text(title, {anchor.point, titleX, titleY});
+    createHeaderTitle(title, anchor);
     return back;
+}
+
+ecs::entity_t InterfaceBuilder::boundHeader(std::function<std::string()> get, std::function<void()> onBack,
+                                            Anchor anchor)
+{
+    const ecs::entity_t back = backButton(std::move(onBack), anchor);
+    const ecs::entity_t title = createHeaderTitle(get ? get() : std::string(), anchor);
+    _ecs.addComponent<BoundText>(title, std::move(get));
+    return back;
+}
+
+ecs::entity_t InterfaceBuilder::createHeaderTitle(const std::string &text, Anchor backAnchor)
+{
+    const FlareStyle &style = _style.flare;
+    const float x = backAnchor.x + style.height + _style.headerSpacing;
+    const float y = backAnchor.y + ((style.height - style.textSize) / 2.0f);
+    const ecs::entity_t entity = element({backAnchor.point, x, y});
+    _ecs.addComponent<Text>(entity, text, style.font, style.textSize, style.litText);
+    return entity;
 }
 
 } // namespace rtype::engine

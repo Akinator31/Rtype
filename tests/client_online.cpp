@@ -65,6 +65,7 @@ struct Events {
             .onWelcome = [this](std::uint32_t player) { welcomed = player; },
             .onLeftGame = [this](const lobby::LeftGameMessage &message) { left.push_back(message); },
             .onClosed = [this](const std::string &reason) { closed = reason; },
+            .onUntrusted = {},
         };
     }
 };
@@ -160,9 +161,9 @@ TEST_CASE("A client is welcomed, creates a game, and another one lists it and jo
     Master master;
     Events aliceEvents;
     Events bobEvents;
-    LobbyClient alice(master.loop, master.lobby.localAddress(), master.identity.fingerprint(), "Alice",
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
                       aliceEvents.handlers());
-    LobbyClient bob(master.loop, master.lobby.localAddress(), master.identity.fingerprint(), "Bob",
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
                     bobEvents.handlers());
 
     REQUIRE(waitUntil(master.loop, [&] { return aliceEvents.welcomed && bobEvents.welcomed; }));
@@ -199,12 +200,34 @@ TEST_CASE("A client refuses a server that does not have the pinned key", "[onlin
     Events events;
     const ServerIdentity other = ServerIdentity::generate();
 
-    LobbyClient client(master.loop, master.lobby.localAddress(), other.fingerprint(), "Pavel",
+    LobbyClient client(master.loop, master.lobby.localAddress(), {other.fingerprint()}, "Pavel",
                        events.handlers());
 
     REQUIRE(waitUntil(master.loop, [&] { return events.closed.has_value(); }));
     CHECK(events.closed->find("not the expected server") != std::string::npos);
     CHECK_FALSE(events.welcomed);
+}
+
+TEST_CASE("A client trusting no key learns the key of the server, then joins once it trusts it", "[online]")
+{
+    Master master;
+    Events events;
+    std::optional<rtype::network::KeyFingerprint> presented;
+    LobbyClient::Handlers handlers = events.handlers();
+    handlers.onUntrusted = [&](const rtype::network::KeyFingerprint &key) { presented = key; };
+
+    LobbyClient first(master.loop, master.lobby.localAddress(), {}, "Pavel", std::move(handlers));
+
+    REQUIRE(waitUntil(master.loop, [&] { return presented.has_value(); }));
+    CHECK(*presented == master.identity.fingerprint());
+    // Told instead of closed: the player is asked, not shown an error
+    CHECK_FALSE(events.closed);
+    CHECK_FALSE(first.welcomed());
+
+    // The player trusts it: connected again, pinning it
+    Events trusted;
+    LobbyClient second(master.loop, master.lobby.localAddress(), {*presented}, "Pavel", trusted.handlers());
+    CHECK(waitUntil(master.loop, [&] { return second.welcomed(); }));
 }
 
 TEST_CASE("A client tells why it could not join the lobby", "[online]")
@@ -219,7 +242,7 @@ TEST_CASE("A client tells why it could not join the lobby", "[online]")
         }
         loop.poll();
         Events events;
-        LobbyClient client(loop, Address::loopbackIpv4(port), ServerIdentity::generate().fingerprint(),
+        LobbyClient client(loop, Address::loopbackIpv4(port), {ServerIdentity::generate().fingerprint()},
                            "Pavel", events.handlers());
         REQUIRE(waitUntil(loop, [&] { return events.closed.has_value(); }));
         CHECK(events.closed->find("Cannot reach") != std::string::npos);
@@ -228,7 +251,7 @@ TEST_CASE("A client tells why it could not join the lobby", "[online]")
     {
         EventLoop loop;
         Events events;
-        const auto pinned = ServerIdentity::generate().fingerprint();
+        const std::vector pinned{ServerIdentity::generate().fingerprint()};
         CHECK_THROWS_AS(
             LobbyClient(loop, Address::loopbackIpv4(4242), pinned, std::string(17, 'p'), events.handlers()),
             std::invalid_argument);
@@ -243,10 +266,10 @@ TEST_CASE("Two clients play the same game online, each moving its own ship", "[o
 {
     Master master;
     Events events;
-    LobbyClient alice(master.loop, master.lobby.localAddress(), master.identity.fingerprint(), "Alice",
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
                       events.handlers());
     Events bobEvents;
-    LobbyClient bob(master.loop, master.lobby.localAddress(), master.identity.fingerprint(), "Bob",
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
                     bobEvents.handlers());
     REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed() && bob.welcomed(); }));
     const lobby::GameJoinedMessage aliceGame = create(master.loop, alice, "Duo");
@@ -311,7 +334,7 @@ TEST_CASE("A client is told when its game crashes", "[online]")
 {
     Master master;
     Events events;
-    LobbyClient alice(master.loop, master.lobby.localAddress(), master.identity.fingerprint(), "Alice",
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
                       events.handlers());
     REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed(); }));
     const lobby::GameJoinedMessage game = create(master.loop, alice, "Fragile");
@@ -328,7 +351,7 @@ TEST_CASE("A game that stops ends the session of its players", "[online]")
 {
     Master master;
     Events events;
-    LobbyClient alice(master.loop, master.lobby.localAddress(), master.identity.fingerprint(), "Alice",
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
                       events.handlers());
     REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed(); }));
     const lobby::GameJoinedMessage game = create(master.loop, alice, "Short");

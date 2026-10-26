@@ -37,9 +37,20 @@ class ToastSystem : public ecs::System
     ecs::ComponentCache<Drawable> &_drawables;
 
     [[nodiscard]] std::vector<ecs::entity_t> getToastsNewestFirst() const;
-    /// Time from its appearance to the end of its fade out.
-    [[nodiscard]] float computeLifetime() const;
+    /// Time from its appearance to the end of its exit, which depends on its kind.
+    [[nodiscard]] float computeLifetime(const Toast &toast) const;
     [[nodiscard]] float computeOpacity(const Toast &toast) const;
+    /// The width of a toast, by kind: what its words need, or the line of light of an announcement, or the
+    /// whole screen for a banner.
+    [[nodiscard]] float computeLineWidth(const Toast &toast) const;
+    [[nodiscard]] float computeAnnouncementWidth(const Toast &toast) const;
+    [[nodiscard]] float computeBannerWidth(const Toast &toast) const;
+    /// How far from its edge of the screen a toast is, from its place in the stack of its kind.
+    [[nodiscard]] float computeStacked(const Toast &toast) const;
+    /// The centre of a toast, by kind.
+    [[nodiscard]] render::Vector2 computeLinePosition(const Toast &toast, float opacity) const;
+    [[nodiscard]] render::Vector2 computeAnnouncementPosition(const Toast &toast, float opacity) const;
+    [[nodiscard]] render::Vector2 computeBannerPosition(const Toast &toast, float opacity) const;
     [[nodiscard]] float computeWidth(const Toast &toast) const;
     [[nodiscard]] render::Vector2 computePosition(const Toast &toast, float opacity) const;
     void advance(Toast &toast, float target, bool isTooMany, float elapsed) const;

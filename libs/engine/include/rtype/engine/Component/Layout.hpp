@@ -40,6 +40,13 @@ struct Anchor {
     float y = 0.0f;
 };
 
+/// The size of an entity that draws itself without a Text, Sprite, Box or Hitbox (a gauge), so that it can be
+/// placed by an Anchor.
+struct Extent {
+    float width = 0.0f;
+    float height = 0.0f;
+};
+
 /// Where the point is, from 0 (left or top) to 1 (right or bottom), in each direction.
 [[nodiscard]] render::Vector2 getAnchorFraction(AnchorPoint point);
 

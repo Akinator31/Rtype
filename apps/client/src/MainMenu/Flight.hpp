@@ -24,6 +24,14 @@ enum class FlightStage {
     Away,
 };
 
+/// What the ships of the menu fly around: the view of the menu, whose screen they come from and leave out of,
+/// and the planet they hide behind.
+struct FlightArea {
+    render::Camera view;
+    render::Vector3 planetCentre;
+    float planetRadius = 0.0f;
+};
+
 /// A ship of the menu going back and forth between its dock on the station and the space out of the screen.
 /// The FlightSystem moves its Model along the route of the stage: nose forward while it flies, along
 /// `heading` while it goes down, stays and goes up. Each stage plays its animation on the ModelAnimation of
@@ -33,6 +41,7 @@ enum class FlightStage {
 /// A route is a curve from `from` to `to`, pulled towards `control`: the ship leaves `from` heading towards
 /// `control`, and reaches `to` coming from it.
 struct Flight {
+    FlightArea area;
     /// Where the ship lands on the station, in world units.
     render::Vector3 dock;
     /// Where it stops above the dock before going down, and goes up to before leaving.

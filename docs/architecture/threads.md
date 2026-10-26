@@ -24,10 +24,10 @@ main thread.
 
 ## The threads
 
-| Thread | Owns (only this thread touches it) | Work |
-|---|---|---|
-| **Main** | window, raylib (graphics, input, audio), `Renderer`, `ResourceManager`, `AudioPlayer`, `Ecs`, scenes, events, game systems, `network::EventLoop` | the frame loop: input, `network.poll()`, `engine.update()`, finishing the loads, drawing |
-| **Assets** | nothing persistent | reads asset files and decodes them in CPU memory, one request at a time |
+| Thread     | Owns (only this thread touches it)                                                                                                               | Work                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **Main**   | window, raylib (graphics, input, audio), `Renderer`, `ResourceManager`, `AudioPlayer`, `Ecs`, scenes, events, game systems, `network::EventLoop` | the frame loop: input, `network.poll()`, `engine.update()`, finishing the loads, drawing |
+| **Assets** | nothing persistent                                                                                                                               | reads asset files and decodes them in CPU memory, one request at a time                  |
 
 Why nothing else gets a thread:
 
@@ -104,13 +104,13 @@ sequenceDiagram
     R-->>G: the future is ready
 ```
 
-| Asset | Assets worker | Main thread |
-|---|---|---|
-| Texture | read, decode image | upload, mipmaps |
-| Font | read, decode glyphs, build atlas | upload atlas |
-| Model | read bytes | parse and upload (raylib has no CPU-only model loader) |
-| Sound | read, decode wave | create the audio buffer |
-| Music | read | create the stream |
+| Asset   | Assets worker                    | Main thread                                            |
+| ------- | -------------------------------- | ------------------------------------------------------ |
+| Texture | read, decode image               | upload, mipmaps                                        |
+| Font    | read, decode glyphs, build atlas | upload atlas                                           |
+| Model   | read bytes                       | parse and upload (raylib has no CPU-only model loader) |
+| Sound   | read, decode wave                | create the audio buffer                                |
+| Music   | read                             | create the stream                                      |
 
 Requests for the same path and options share their future; a failed request reports its exception through
 it and can be retried (ADR 0017).
@@ -238,11 +238,11 @@ The worker stops before anything is freed, so no prepared data arrives for a man
 
 ## What changes in the current code
 
-| Kept | Changed | Dropped |
-|---|---|---|
+| Kept                                                                         | Changed                                                               | Dropped                                                                                                |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `BackgroundLoader`, `AsyncResourceRequests`, the prepare/finish split (#116) | `AssetLoadingService` becomes `ThreadManager` (`engine.getThreads()`) | the default private `BackgroundLoader` of `ResourceManager`, `AudioPlayer` and `AsyncResourceRequests` |
-| `finishPendingLoads()` pumped by Main | `BackgroundLoader` drops pending requests on stop | #117 (render thread: `RenderCommands`, `InputMailbox`, `RenderQueries`) |
-| `network.poll()` on Main | | #118 (logic thread, mutexes in `Ecs` and engine events) |
+| `finishPendingLoads()` pumped by Main                                        | `BackgroundLoader` drops pending requests on stop                     | #117 (render thread: `RenderCommands`, `InputMailbox`, `RenderQueries`)                                |
+| `network.poll()` on Main                                                     |                                                                       | #118 (logic thread, mutexes in `Ecs` and engine events)                                                |
 
 ## Migration plan
 

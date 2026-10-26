@@ -7,7 +7,9 @@
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 
+#include <algorithm>
 #include <array>
+#include <random>
 #include <vector>
 
 namespace rtype::client
@@ -21,8 +23,9 @@ namespace
 constexpr std::array shipModelPaths{RTYPE_MODEL_SHIP_EZNO, RTYPE_MODEL_SHIP_SPACESHIP,
                                     RTYPE_MODEL_SHIP_BATTLESTAR, RTYPE_MODEL_SHIP_DROP_SHIP};
 
-/// The ship models are 15 to 25 units wide: much smaller than the station.
-constexpr float shipScale = 0.07f;
+/// The ship models are 15 to 25 units wide: much smaller than the station. In the same proportion to the
+/// station as its pads: 0.07 for a station scaled by 0.11.
+constexpr float shipScale = 0.1086f;
 
 /// The ship models point their nose to +x, their top to +y. A quarter turn around its vertical axis, before
 /// its rotation, points the nose of a ship to +z, as the FlightSystem expects.
@@ -53,9 +56,9 @@ constexpr float hoverHeight = 18.0f;
 constexpr render::Vector3 stationLength{1.0f, 0.0f, 0.0f};
 constexpr render::Vector3 stationTop{0.0f, 1.0f, 0.0f};
 
-/// The ships wait there at first, under the screen: none is seen when the menu opens, they arrive one after
-/// the other.
-constexpr render::Vector3 waitingPoint{30.0f, -40.0f, -60.0f};
+/// The ships wait there at first, under the screen, in the frame of the view of the menu: none is seen when
+/// the menu opens, they arrive one after the other.
+constexpr render::Vector3 waitingPoint{30.0f, -60.0f, -80.0f};
 
 std::vector<ShipModel> loadShipModels(render::ResourceManager &resources)
 {
@@ -66,9 +69,18 @@ std::vector<ShipModel> loadShipModels(render::ResourceManager &resources)
     return models;
 }
 
-Flight createFlight(const Dock &dock, const std::vector<ShipModel> &models, const ShipModel &model)
+/// The models in a random order: each ship starts as one of them, not the same one at each launch.
+std::vector<ShipModel> shuffleShipModels(std::vector<ShipModel> models)
+{
+    std::shuffle(models.begin(), models.end(), std::mt19937(std::random_device{}()));
+    return models;
+}
+
+Flight createFlight(const FlightArea &area, const Dock &dock, const std::vector<ShipModel> &models,
+                    const ShipModel &model)
 {
     Flight flight;
+    flight.area = area;
     flight.models = models;
     flight.animations = model.animations;
     flight.leavesTowardsCamera = dock.leavesTowardsCamera;
@@ -78,9 +90,9 @@ Flight createFlight(const Dock &dock, const std::vector<ShipModel> &models, cons
     flight.up = convertStationDirectionToWorld(stationTop);
     flight.stage = FlightStage::Away;
     flight.duration = dock.delay;
-    flight.from = waitingPoint;
-    flight.control = waitingPoint;
-    flight.to = waitingPoint;
+    flight.from = convertViewPointToWorld(area.view, waitingPoint);
+    flight.control = flight.from;
+    flight.to = flight.from;
     return flight;
 }
 
@@ -88,12 +100,14 @@ static_assert(docks.size() <= shipModelPaths.size(), "each ship starts with its 
 
 } // namespace
 
-void createShips(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
+void createShips(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources,
+                 const FlightArea &area)
 {
     const std::vector<ShipModel> models = loadShipModels(resources);
+    const std::vector<ShipModel> firstModels = shuffleShipModels(models);
     for (std::size_t index = 0; index < docks.size(); ++index) {
-        const ShipModel &model = models[index];
-        const Flight flight = createFlight(docks[index], models, model);
+        const ShipModel &model = firstModels[index];
+        const Flight flight = createFlight(area, docks[index], models, model);
         const ecs::entity_t ship = ecs.createEntity();
         ecs.addComponent<engine::SceneMember>(ship, scene);
         ecs.addComponent<engine::Drawable>(ship, engine::Layer::World, 1);

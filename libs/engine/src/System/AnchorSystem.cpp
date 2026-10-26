@@ -6,7 +6,7 @@ namespace rtype::engine
 AnchorSystem::AnchorSystem(ecs::ComponentCaches &caches, const Metrics &metrics)
     : _metrics(metrics), _anchors(use<Anchor>(caches)), _positions(use<ecs::Position>(caches)),
       _hitboxes(use<Hitbox>(caches)), _texts(use<Text>(caches)), _sprites(use<Sprite>(caches)),
-      _boxes(use<Box>(caches))
+      _boxes(use<Box>(caches)), _extents(use<Extent>(caches))
 {
 }
 
@@ -18,13 +18,16 @@ std::optional<render::Vector2> AnchorSystem::sizeOf(ecs::entity_t entity) const
     }
     if (_texts.has(entity)) {
         const Text &text = _texts.get(entity);
-        return _metrics.measureText(text.font, text.text, text.size);
+        return _metrics.measureText(text.font, text.text, text.size, 0.0f);
     }
     if (_sprites.has(entity)) {
         return render::Vector2{_sprites.get(entity).width, _sprites.get(entity).height};
     }
     if (_boxes.has(entity)) {
         return render::Vector2{_boxes.get(entity).width, _boxes.get(entity).height};
+    }
+    if (_extents.has(entity)) {
+        return render::Vector2{_extents.get(entity).width, _extents.get(entity).height};
     }
     return std::nullopt;
 }

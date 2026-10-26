@@ -1,9 +1,9 @@
-# 0020 — Engine owned asset worker
+# 0022 — Engine owned asset worker
 
-| | |
-|---|---|
-| **Status** | Accepted |
-| **Date** | 2026-10-22 |
+|                |                                       |
+| -------------- | ------------------------------------- |
+| **Status**     | Accepted                              |
+| **Date**       | 2026-10-22                            |
 | **Supersedes** | [0017](0017-asset-loading-threads.md) |
 
 ## Context

@@ -10,9 +10,8 @@ namespace rtype::client
 namespace
 {
 
-/// How long the camera takes to fly out of the asteroids, and an element to slide to its place, in seconds.
+/// How long the camera takes to fly out of the asteroids, in seconds.
 constexpr float cameraFlight = 4.0f;
-constexpr float slideDuration = 1.0f;
 
 /// The gamepads checked for a press.
 constexpr int gamepadCount = 4;
@@ -53,6 +52,7 @@ IntroSystem::IntroSystem(ecs::ComponentCaches &caches, const engine::Scenes &sce
                          const input::InputSource &input)
     : _scenes(scenes), _input(input), _intros(use<Intro>(caches)), _cameras(use<engine::Camera>(caches)),
       _slides(use<IntroSlide>(caches)), _anchors(use<engine::Anchor>(caches)),
+      _scales(use<engine::Scale>(caches)), _opacities(use<engine::Opacity>(caches)),
       _hidden(use<ecs::Hidden>(caches))
 {
 }
@@ -109,10 +109,16 @@ void IntroSystem::placeSlides(const Intro &intro)
         }
         const IntroSlide &slide = _slides.get(entity);
         const float time = intro.started ? intro.time - slide.delay : 0.0f;
-        const float progress = engine::ease(slide.easing, std::clamp(time / slideDuration, 0.0f, 1.0f));
+        const float progress = engine::ease(slide.easing, std::clamp(time / slide.duration, 0.0f, 1.0f));
         engine::Anchor &anchor = _anchors.get(entity);
         anchor.x = mix(slide.from.x, slide.to.x, progress);
         anchor.y = mix(slide.from.y, slide.to.y, progress);
+        if (_scales.has(entity)) {
+            _scales.get(entity).value = mix(slide.fromScale, slide.toScale, progress);
+        }
+        if (_opacities.has(entity)) {
+            _opacities.get(entity).value = mix(slide.fromOpacity, 1.0f, std::clamp(progress, 0.0f, 1.0f));
+        }
     }
 }
 

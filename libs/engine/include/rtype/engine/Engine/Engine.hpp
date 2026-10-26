@@ -182,6 +182,26 @@ public:
     /// @endcode
     /// @return The entity of the toast, destroyed once it has faded out.
     ecs::entity_t showToast(const std::string &text, ToastType type = ToastType::Info);
+    /// Shows a toast that reads as a line: the subject, the message, the actor, then the icon of its type.
+    /// @code
+    /// engine.showToast("VORTEX", "has joined the room", "", ToastType::Info);
+    /// engine.showToast("ORBITAL MODULE", "taken by", "KAZE", ToastType::Success);
+    /// @endcode
+    ecs::entity_t showToast(const std::string &subject, const std::string &message, const std::string &actor,
+                            ToastType type = ToastType::Info);
+    /// Shows an announcement, centred at the top of the screen: a title with an icon, a line of light, and a
+    /// line of detail. It has the timing of the toasts, and stacks with the other announcements.
+    /// @code
+    /// engine.showAnnouncement("PLAYER 2 JOINED", "Room - 2 / 4 pilots");
+    /// @endcode
+    ecs::entity_t showAnnouncement(const std::string &title, const std::string &detail,
+                                   ToastType type = ToastType::Info);
+    /// Shows a banner across the whole screen, for what the player must not miss: a title and a detail.
+    /// @code
+    /// engine.showBanner("BOSS APPROACHING", "GET THE BEAM READY", ToastType::Error);
+    /// @endcode
+    ecs::entity_t showBanner(const std::string &title, const std::string &detail,
+                             ToastType type = ToastType::Info);
 
     /// Runs one frame: updates the controls from the input source, if any, so that the whole frame reads the
     /// same state; destroys the entities of the closed scenes and applies the scene requests (which

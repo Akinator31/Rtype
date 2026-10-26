@@ -91,6 +91,63 @@ Color mix(Color from, Color to, float amount)
     return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a)};
 }
 
+// Colour of a gradient at a place of it: the first colour before its first stop, the last one after its last
+Color gradientAt(const std::vector<ColorStop> &stops, float position)
+{
+    if (position <= stops.front().position) {
+        return stops.front().color;
+    }
+    for (std::size_t index = 1; index < stops.size(); ++index) {
+        if (position <= stops[index].position) {
+            const float span = stops[index].position - stops[index - 1].position;
+            const float amount = span > 0.0f ? (position - stops[index - 1].position) / span : 1.0f;
+            return mix(stops[index - 1].color, stops[index].color, amount);
+        }
+    }
+    return stops.back().color;
+}
+
+// A glyph, from the top of its line to the bottom of it, drawn in strips so that each stop of the gradient
+// is a corner: the colour changes linearly between two corners
+void addGradientGlyph(const std::vector<ColorStop> &stops, ::Rectangle source, ::Rectangle destination,
+                      float lineTop, float lineHeight, float textureWidth, float textureHeight)
+{
+    std::vector<float> cuts{destination.y, destination.y + destination.height};
+    for (const ColorStop &stop : stops) {
+        const float y = lineTop + (stop.position * lineHeight);
+        if (y > destination.y && y < destination.y + destination.height) {
+            cuts.push_back(y);
+        }
+    }
+    std::ranges::sort(cuts);
+
+    const float left = source.x / textureWidth;
+    const float right = (source.x + source.width) / textureWidth;
+    const auto textureV = [&](float y) {
+        return (source.y + (((y - destination.y) / destination.height) * source.height)) / textureHeight;
+    };
+    const auto colorAt = [&](float y) {
+        const Color color = gradientAt(stops, (y - lineTop) / lineHeight);
+        rlColor4ub(color.r, color.g, color.b, color.a);
+    };
+    for (std::size_t index = 1; index < cuts.size(); ++index) {
+        const float top = cuts[index - 1];
+        const float bottom = cuts[index];
+        colorAt(top);
+        rlTexCoord2f(left, textureV(top));
+        rlVertex2f(destination.x, top);
+        colorAt(bottom);
+        rlTexCoord2f(left, textureV(bottom));
+        rlVertex2f(destination.x, bottom);
+        colorAt(bottom);
+        rlTexCoord2f(right, textureV(bottom));
+        rlVertex2f(destination.x + destination.width, bottom);
+        colorAt(top);
+        rlTexCoord2f(right, textureV(top));
+        rlVertex2f(destination.x + destination.width, top);
+    }
+}
+
 // Points along the edge of a rounded rectangle, clockwise on screen from the left end of the top-left corner.
 // Every rectangle gets the same number of points, so that two edges can be joined point by point.
 std::vector<Vector2> getRoundedEdge(Rectangle rectangle, float radius)
@@ -460,6 +517,19 @@ void Renderer::drawCircleOutline(Vector2 center, float radius, float thickness, 
     }
 }
 
+void Renderer::drawArc(Vector2 center, float radius, float thickness, float startAngle, float endAngle,
+                       Color color)
+{
+    _impl->requireFrame();
+    if (thickness > 0.0f && radius > 0.0f && endAngle > startAngle) {
+        constexpr float degreesPerSegment = 4.0f;
+        const int segments =
+            std::max(2, static_cast<int>(std::ceil((endAngle - startAngle) / degreesPerSegment)));
+        DrawRing(toRaylib(center), std::max(radius - thickness, 0.0f), radius, startAngle, endAngle, segments,
+                 toRaylib(color));
+    }
+}
+
 void Renderer::drawLine(Vector2 start, Vector2 end, float thickness, Color color)
 {
     _impl->requireFrame();
@@ -563,10 +633,54 @@ void Renderer::blendModelAnimations(ModelId model, int from, float fromTime, int
     _impl->models.get(model).blendAnimations(from, fromTime, to, toTime, amount);
 }
 
-void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color)
+void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color,
+                        float spacing)
 {
     _impl->requireFrame();
-    DrawTextEx(_impl->fonts.get(font).get(), text.c_str(), toRaylib(position), size, 0.0f, toRaylib(color));
+    DrawTextEx(_impl->fonts.get(font).get(), text.c_str(), toRaylib(position), size, spacing,
+               toRaylib(color));
+}
+
+void Renderer::drawGradientText(FontId font, const std::string &text, Vector2 position, float size,
+                                const std::vector<ColorStop> &stops, float spacing)
+{
+    _impl->requireFrame();
+    if (stops.empty() || text.empty()) {
+        return;
+    }
+    // The glyphs are placed as DrawTextEx() does, but each one is drawn with a colour per corner
+    const ::Font &face = _impl->fonts.get(font).get();
+    const float scale = size / static_cast<float>(face.baseSize);
+    const float padding = static_cast<float>(face.glyphPadding);
+    const auto textureWidth = static_cast<float>(face.texture.width);
+    const auto textureHeight = static_cast<float>(face.texture.height);
+    float offset = 0.0f;
+
+    rlSetTexture(face.texture.id);
+    rlBegin(RL_QUADS);
+    rlNormal3f(0.0f, 0.0f, 1.0f);
+    for (std::size_t byte = 0; byte < text.size();) {
+        int length = 0;
+        const int codepoint = GetCodepointNext(text.c_str() + byte, &length);
+        byte += static_cast<std::size_t>(std::max(length, 1));
+        const int index = GetGlyphIndex(face, codepoint);
+        const ::Rectangle &rectangle = face.recs[index];
+        const ::GlyphInfo &glyph = face.glyphs[index];
+        if (codepoint != ' ' && codepoint != '\t') {
+            const ::Rectangle source{rectangle.x - padding, rectangle.y - padding,
+                                     rectangle.width + (2.0f * padding), rectangle.height + (2.0f * padding)};
+            const ::Rectangle destination{
+                position.x + offset + ((static_cast<float>(glyph.offsetX) - padding) * scale),
+                position.y + ((static_cast<float>(glyph.offsetY) - padding) * scale), source.width * scale,
+                source.height * scale};
+            addGradientGlyph(stops, source, destination, position.y, size, textureWidth, textureHeight);
+        }
+        const float advance =
+            glyph.advanceX == 0 ? rectangle.width * scale : static_cast<float>(glyph.advanceX) * scale;
+        offset += advance + spacing;
+    }
+    rlEnd();
+    rlSetTexture(0);
 }
 
 void Renderer::drawText(const std::string &text, Vector2 position, float size, Color color)
@@ -588,9 +702,9 @@ Vector2 Renderer::textureSize(TextureId texture) const
     return {static_cast<float>(raw.width), static_cast<float>(raw.height)};
 }
 
-Vector2 Renderer::measureText(FontId font, const std::string &text, float size) const
+Vector2 Renderer::measureText(FontId font, const std::string &text, float size, float spacing) const
 {
-    return fromRaylib(MeasureTextEx(_impl->fonts.get(font).get(), text.c_str(), size, 0.0f));
+    return fromRaylib(MeasureTextEx(_impl->fonts.get(font).get(), text.c_str(), size, spacing));
 }
 
 Vector2 Renderer::measureText(const std::string &text, float size) const
