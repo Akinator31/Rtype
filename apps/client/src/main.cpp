@@ -47,6 +47,12 @@ constexpr float CollisionCellSize = 64.0f;
 constexpr float ButtonHoverVolume = 0.4f;
 constexpr float ButtonClickVolume = 1.0f;
 
+struct StopWorkers {
+    rtype::engine::ThreadManager &threads;
+
+    ~StopWorkers() { threads.stopAll(); }
+};
+
 bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &renderer,
                    rtype::render::ResourceManager &resources)
 {
@@ -202,11 +208,13 @@ void run()
     using namespace rtype::render;
 
     Window window({.fullscreen = true});
-    const rtype::audio::AudioDevice audioDevice;
-    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets");
     rtype::engine::Engine engine;
-    readSave(engine.getSave());
-    ResourceManager resources(window, applicationDirectory() / "assets", engine.assetLoading().queue());
+    const rtype::audio::AudioDevice audioDevice;
+    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
+                                    engine.getThreads().getAssetsWorker());
+    ResourceManager resources(window, applicationDirectory() / "assets",
+                              engine.getThreads().getAssetsWorker());
+    StopWorkers stopWorkers{engine.getThreads()};
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
 

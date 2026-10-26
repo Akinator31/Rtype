@@ -1,9 +1,9 @@
 # Threads
 
-!!! note "Status: proposal"
-    This page describes the target design. It replaces the threads added piece by piece in #116 (asset
-    loading), #117 (render thread) and #118 (logic thread). Once agreed, an ADR records it and supersedes
-    ADR 0017.
+!!! note "Status: partially implemented"
+    [ADR 0020](../decisions/0020-engine-thread-manager.md) records the worker ownership and shutdown design
+    and supersedes ADR 0017. Scene asset manifests and automatic loading remain proposed work. The render and
+    logic threads of #117 and #118 were not merged.
 
 ## Why change
 

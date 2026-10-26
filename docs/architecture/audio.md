@@ -10,8 +10,10 @@ Like the render library, it wraps raylib: its public headers contain no raylib t
 
 ```cpp
 Window window;
+Engine engine;
 AudioDevice device;                                           // after the window, see below
-AudioPlayer audio(device, applicationDirectory() / "assets");
+AudioPlayer audio(device, applicationDirectory() / "assets",
+                  engine.getThreads().getAssetsWorker());
 
 const SoundId shot = audio.loadSound("sounds/shot.wav");
 const MusicId stage = audio.loadMusic("music/stage1.ogg");
@@ -56,7 +58,7 @@ AudioDevice device({.enabled = false});   // tests, servers, or a "no sound" opt
 Each file is loaded once: loading the same path again returns the same handle (`SoundId`, `MusicId`), like
 textures in the render library. Both use the same `ResourceCache`, from the [core library](index.md#libraries).
 
-`loadSoundAsync()` and `loadMusicAsync()` return shared futures. Call `finishPendingLoads()` on the audio owner's thread each frame, then use the handle once its future is ready. Sound files are decoded on a worker; audio buffers are created on the owner thread. Pass `engine.assetLoading().queue()` to the player constructor to share the engine's worker with rendering. See [ADR 0017](../decisions/0017-asset-loading-threads.md).
+`loadSoundAsync()` and `loadMusicAsync()` return shared futures. Call `finishPendingLoads()` on the audio owner's thread each frame, then use the handle once its future is ready. Sound files are decoded on the engine's assets worker; audio buffers are created on the main thread. Pass `engine.getThreads().getAssetsWorker()` to the player constructor. See [ADR 0020](../decisions/0020-engine-thread-manager.md).
 
 ### Playing a sound several times at once
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Superseded by [0020](0020-engine-thread-manager.md) |
 | **Date** | 2026-10-19 |
 
 ## Context
