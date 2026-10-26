@@ -1,0 +1,162 @@
+#include "rtype/engine/Engine/Engine.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <map>
+#include <stdexcept>
+#include <string>
+
+namespace
+{
+
+using namespace rtype::engine;
+
+struct AssetState {
+    bool ready = false;
+    bool failed = false;
+    int requests = 0;
+    int completed = 0;
+    int released = 0;
+};
+
+class FakeAssets final : public SceneAssetLoader
+{
+public:
+    std::map<SceneAsset, AssetState> states;
+
+    SceneAssetRequest request(const SceneAsset &asset) override
+    {
+        AssetState &state = states[asset];
+        ++state.requests;
+        return {
+            [&state] { return state.ready; },
+            [&state] {
+                if (state.failed) {
+                    throw std::runtime_error("missing asset");
+                }
+                ++state.completed;
+            },
+            [&state] { ++state.released; },
+        };
+    }
+};
+
+void configure(Engine &engine, FakeAssets &assets)
+{
+    engine.createScene("loading");
+    engine.setSceneAssetLoader(assets, "loading");
+}
+
+}
+
+TEST_CASE("Scene assets load automatically without blocking the scene update", "[engine][assets]")
+{
+    Engine engine;
+    FakeAssets assets;
+    configure(engine, assets);
+    const SceneAsset ship{AssetType::Model, "ship.glb"};
+    engine.createScene("game", {.assets = {ship}});
+
+    engine.switchScene("game");
+    engine.update(0.016f);
+    CHECK(engine.sceneLoadState() == SceneLoadState::Loading);
+    CHECK(engine.isSceneOpen("loading"));
+    CHECK_FALSE(engine.isSceneOpen("game"));
+    CHECK(assets.states[ship].requests == 1);
+
+    assets.states[ship].ready = true;
+    engine.update(0.016f);
+    CHECK(engine.sceneLoadState() == SceneLoadState::Idle);
+    CHECK_FALSE(engine.isSceneOpen("loading"));
+    CHECK(engine.isSceneOpen("game"));
+    CHECK(assets.states[ship].completed == 1);
+
+    engine.createScene("menu");
+    engine.switchScene("menu");
+    engine.update(0.016f);
+    CHECK(assets.states[ship].released == 1);
+}
+
+TEST_CASE("Ready scene assets open without a loading frame", "[engine][assets]")
+{
+    Engine engine;
+    FakeAssets assets;
+    configure(engine, assets);
+    const SceneAsset ship{AssetType::Model, "ship.glb"};
+    assets.states[ship].ready = true;
+    engine.createScene("game", {.assets = {ship, ship}});
+    engine.switchScene("game");
+    engine.update(0.016f);
+    CHECK(engine.isSceneOpen("game"));
+    CHECK_FALSE(engine.isSceneOpen("loading"));
+    CHECK(assets.states[ship].requests == 1);
+}
+
+TEST_CASE("Open scenes share assets until their last use closes", "[engine][assets]")
+{
+    Engine engine;
+    FakeAssets assets;
+    configure(engine, assets);
+    const SceneAsset ship{AssetType::Model, "ship.glb"};
+    assets.states[ship].ready = true;
+    engine.createScene("game", {.assets = {ship}});
+    engine.createScene("pause", {.assets = {ship}});
+    engine.switchScene("game");
+    engine.update(0.016f);
+    engine.pushScene("pause");
+    engine.update(0.016f);
+    CHECK(assets.states[ship].requests == 1);
+    engine.popScene();
+    engine.update(0.016f);
+    CHECK(assets.states[ship].released == 0);
+    engine.popScene();
+    engine.update(0.016f);
+    CHECK(assets.states[ship].released == 1);
+}
+
+TEST_CASE("A failed scene asset can be retried", "[engine][assets]")
+{
+    Engine engine;
+    FakeAssets assets;
+    configure(engine, assets);
+    const SceneAsset ship{AssetType::Model, "ship.glb"};
+    assets.states[ship].ready = true;
+    assets.states[ship].failed = true;
+    engine.createScene("game", {.assets = {ship}});
+    engine.switchScene("game");
+    engine.update(0.016f);
+    CHECK(engine.sceneLoadState() == SceneLoadState::Failed);
+    CHECK(engine.sceneLoadError() == "missing asset");
+    CHECK(engine.isSceneOpen("loading"));
+    CHECK_FALSE(engine.isSceneOpen("game"));
+
+    assets.states[ship].failed = false;
+    engine.retrySceneLoad();
+    engine.update(0.016f);
+    CHECK(engine.sceneLoadState() == SceneLoadState::Idle);
+    CHECK(engine.isSceneOpen("game"));
+    CHECK(assets.states[ship].requests == 2);
+}
+
+TEST_CASE("A later scene request cancels the pending scene", "[engine][assets]")
+{
+    Engine engine;
+    FakeAssets assets;
+    configure(engine, assets);
+    const SceneAsset ship{AssetType::Model, "ship.glb"};
+    engine.createScene("game", {.assets = {ship}});
+    engine.createScene("menu");
+    engine.switchScene("game");
+    engine.update(0.016f);
+    engine.switchScene("menu");
+    engine.update(0.016f);
+    CHECK(engine.sceneLoadState() == SceneLoadState::Idle);
+    CHECK(engine.isSceneOpen("menu"));
+    CHECK_FALSE(engine.isSceneOpen("loading"));
+    CHECK_FALSE(engine.isSceneOpen("game"));
+
+    assets.states[ship].ready = true;
+    engine.update(0.016f);
+    CHECK(assets.states[ship].released == 1);
+    CHECK_FALSE(engine.isSceneOpen("game"));
+}

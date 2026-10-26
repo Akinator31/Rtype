@@ -72,6 +72,12 @@ public:
             }
         }
     }
+
+    void forget(const std::string &key)
+    {
+        std::lock_guard lock(_mutex);
+        _requests.erase(key);
+    }
 };
 
 } // namespace rtype::core

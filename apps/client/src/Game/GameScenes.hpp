@@ -49,8 +49,10 @@ class GameScenes
     /// The game ends: once.
     void end();
 
-    void build(engine::SceneId scene, render::ResourceManager &resources, const engine::Metrics &metrics,
+    void build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
+               const engine::Metrics &metrics,
                const engine::InterfaceStyle &style);
+    void buildHud(engine::SceneId scene, const engine::InterfaceStyle &style);
 
 public:
     /// Declares the scenes. Everything given must outlive the engine.

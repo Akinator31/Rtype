@@ -9,6 +9,8 @@
 #include "rtype/save/Save/Save.hpp"
 
 #include <functional>
+#include <map>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -60,6 +62,19 @@ class Engine
     struct NamedScene {
         SceneId id;
         std::string name;
+        std::vector<SceneAsset> assets;
+    };
+
+    struct AssetLease {
+        SceneAssetRequest request;
+        std::size_t references = 0;
+    };
+
+    struct PendingScene {
+        SceneRequest request;
+        std::vector<SceneAsset> assets{};
+        SceneLoadState state = SceneLoadState::Loading;
+        std::string error{};
     };
 
     rtype::ecs::Ecs _ecs;
@@ -74,9 +89,21 @@ class Engine
     input::InputSource *_inputSource = nullptr;
     ThreadManager _threads;
     save::Save _save;
+    SceneAssetLoader *_assetLoader = nullptr;
+    std::string _loadingScene;
+    std::map<SceneAsset, AssetLease> _assetLeases;
+    std::optional<PendingScene> _pendingScene;
 
     void applySceneRequests();
-    void openScene(const std::string &name);
+    void openScene(const std::string &name, std::vector<SceneAsset> assets = {});
+    void beginSceneRequest(const SceneRequest &request);
+    void acquireSceneAssets(PendingScene &pending, const std::vector<SceneAsset> &assets);
+    void finishPendingScene();
+    void applyReadyScene(const SceneRequest &request, std::vector<SceneAsset> assets);
+    void cancelPendingScene();
+    void closeLoadingScene();
+    void releaseAssets(const std::vector<SceneAsset> &assets);
+    void collectUnusedAssets();
     void destroyClosedScenes();
     void applyPendingReactions();
     void restoreOnceReactions();
@@ -97,6 +124,12 @@ public:
     [[nodiscard]] const ThreadManager &getThreads() const { return _threads; }
     /// The save starts empty, without a file: the client gives it one with Save::setPath(), then reads it.
     [[nodiscard]] save::Save &getSave();
+
+    void setSceneAssetLoader(SceneAssetLoader &loader, const std::string &loadingScene);
+    [[nodiscard]] SceneLoadState sceneLoadState() const;
+    [[nodiscard]] const std::string &sceneLoadError() const;
+    void retrySceneLoad();
+    void unloadSceneAssets();
 
     /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without
     /// a source, the controls are never updated and stay released.

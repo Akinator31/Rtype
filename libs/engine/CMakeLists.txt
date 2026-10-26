@@ -7,6 +7,7 @@ add_library(rtype_engine
     src/Component/Widget.cpp
     src/Control/Controls.cpp
     src/Engine/Engine.cpp
+    src/Engine/SceneAssets.cpp
     src/Event/Event.cpp
     src/Interface/InterfaceBuilder.cpp
     src/Interface/MenuBuilder.cpp

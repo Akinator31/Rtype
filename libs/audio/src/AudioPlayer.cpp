@@ -19,6 +19,14 @@ namespace rtype::audio
 namespace
 {
 
+template <typename Id>
+std::shared_future<Id> readyFuture(Id id)
+{
+    std::promise<Id> result;
+    result.set_value(id);
+    return result.get_future().share();
+}
+
 class PreparedSound
 {
     Wave _wave{};
@@ -238,6 +246,9 @@ MusicId AudioPlayer::loadMusic(const std::string &path)
 
 std::shared_future<SoundId> AudioPlayer::loadSoundAsync(const std::string &path)
 {
+    if (const auto loaded = _impl->sounds.find(path)) {
+        return readyFuture(*loaded);
+    }
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
     return impl->pendingSounds.request(
@@ -257,6 +268,9 @@ std::shared_future<SoundId> AudioPlayer::loadSoundAsync(const std::string &path)
 
 std::shared_future<MusicId> AudioPlayer::loadMusicAsync(const std::string &path)
 {
+    if (const auto loaded = _impl->musics.find(path)) {
+        return readyFuture(*loaded);
+    }
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
     return impl->pendingMusics.request(
@@ -271,6 +285,21 @@ void AudioPlayer::finishPendingLoads()
 {
     _impl->pendingSounds.pump();
     _impl->pendingMusics.pump();
+}
+
+bool AudioPlayer::releaseSound(const std::string &path)
+{
+    _impl->pendingSounds.forget(path);
+    return _impl->sounds.release(path);
+}
+
+bool AudioPlayer::releaseMusic(const std::string &path)
+{
+    _impl->pendingMusics.forget(path);
+    if (const auto id = _impl->musics.find(path); id && id == _impl->currentMusic) {
+        stopMusic();
+    }
+    return _impl->musics.release(path);
 }
 
 void AudioPlayer::play(SoundId sound, const PlaySettings &settings)

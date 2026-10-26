@@ -8,6 +8,19 @@
 namespace rtype::render
 {
 
+namespace
+{
+
+template <typename Id>
+std::shared_future<Id> readyFuture(Id id)
+{
+    std::promise<Id> result;
+    result.set_value(id);
+    return result.get_future().share();
+}
+
+}
+
 // The window is only required to make sure that one is open: graphics resources cannot exist without it
 ResourceManager::ResourceManager(const Window & /*window*/, std::filesystem::path assetsDirectory,
                                  std::shared_ptr<core::BackgroundLoader> loader)
@@ -42,6 +55,9 @@ std::shared_future<TextureId> ResourceManager::loadTextureAsync(const std::strin
 {
     const std::filesystem::path file = _impl->assetsDirectory / path;
     const std::string key = filtering == TextureFiltering::Smooth ? path + "@smooth" : path;
+    if (const auto loaded = _impl->textures.find(key)) {
+        return readyFuture(*loaded);
+    }
     Impl *impl = _impl.get();
     return impl->pendingTextures.request(
         key, [file] { return detail::PreparedTexture(file); },
@@ -54,6 +70,9 @@ std::shared_future<FontId> ResourceManager::loadFontAsync(const std::string &pat
 {
     const std::filesystem::path file = _impl->assetsDirectory / path;
     const std::string key = path + '@' + std::to_string(size);
+    if (const auto loaded = _impl->fonts.find(key)) {
+        return readyFuture(*loaded);
+    }
     Impl *impl = _impl.get();
     return impl->pendingFonts.request(
         key, [file, size] { return detail::PreparedFont(file, size); },
@@ -65,6 +84,9 @@ std::shared_future<FontId> ResourceManager::loadFontAsync(const std::string &pat
 std::shared_future<ModelId> ResourceManager::loadModelAsync(const std::string &path)
 {
     const std::filesystem::path file = _impl->assetsDirectory / path;
+    if (const auto loaded = _impl->models.find(path)) {
+        return readyFuture(*loaded);
+    }
     Impl *impl = _impl.get();
     return impl->pendingModels.request(
         path, [file] { return core::readAssetFile(file).size(); },
@@ -78,6 +100,26 @@ void ResourceManager::finishPendingLoads()
     _impl->pendingTextures.pump();
     _impl->pendingFonts.pump();
     _impl->pendingModels.pump();
+}
+
+bool ResourceManager::releaseTexture(const std::string &path, TextureFiltering filtering)
+{
+    const std::string key = filtering == TextureFiltering::Smooth ? path + "@smooth" : path;
+    _impl->pendingTextures.forget(key);
+    return _impl->textures.release(key);
+}
+
+bool ResourceManager::releaseFont(const std::string &path, int size)
+{
+    const std::string key = path + '@' + std::to_string(size);
+    _impl->pendingFonts.forget(key);
+    return _impl->fonts.release(key);
+}
+
+bool ResourceManager::releaseModel(const std::string &path)
+{
+    _impl->pendingModels.forget(path);
+    return _impl->models.release(path);
 }
 
 int ResourceManager::getModelAnimation(ModelId model, const std::string &name) const

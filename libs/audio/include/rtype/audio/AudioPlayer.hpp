@@ -89,6 +89,9 @@ public:
     [[nodiscard]] std::shared_future<MusicId> loadMusicAsync(const std::string &path);
     void finishPendingLoads();
 
+    bool releaseSound(const std::string &path);
+    bool releaseMusic(const std::string &path);
+
     /// Plays a sound effect from its start. If all its voices are busy, the oldest one is restarted.
     void play(SoundId sound, const PlaySettings &settings = {});
 

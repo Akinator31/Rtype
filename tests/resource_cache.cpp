@@ -83,3 +83,19 @@ TEST_CASE("A handle that does not come from the cache is rejected", "[render][re
 
     REQUIRE_THROWS_AS(cache.get(FakeId{42}), std::out_of_range);
 }
+
+TEST_CASE("Released resources free their key without reusing a stale handle", "[render][resources]")
+{
+    FakeCache cache;
+    const FakeId old = cache.load("ship.glb", [] { return makeResource("old"); });
+    REQUIRE(cache.find("ship.glb") == old);
+    REQUIRE(cache.release("ship.glb"));
+    CHECK(cache.size() == 0);
+    CHECK_FALSE(cache.find("ship.glb"));
+    CHECK_THROWS_AS(cache.get(old), std::out_of_range);
+
+    const FakeId fresh = cache.load("ship.glb", [] { return makeResource("fresh"); });
+    CHECK_FALSE(fresh == old);
+    CHECK(*cache.get(fresh) == "fresh");
+    CHECK_FALSE(cache.release("missing.glb"));
+}

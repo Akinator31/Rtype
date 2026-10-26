@@ -12,6 +12,7 @@
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "SceneAssetLoader.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
@@ -28,7 +29,6 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
-#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <exception>
@@ -53,6 +53,12 @@ struct StopWorkers {
     ~StopWorkers() { threads.stopAll(); }
 };
 
+struct UnloadScenes {
+    rtype::engine::Engine &engine;
+
+    ~UnloadScenes() { engine.unloadSceneAssets(); }
+};
+
 bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &renderer,
                    rtype::render::ResourceManager &resources)
 {
@@ -60,30 +66,6 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     const auto title = resources.loadFontAsync(RTYPE_FONT_TITLE, 160);
     const auto button = resources.loadFontAsync(RTYPE_FONT_BUTTON, 96);
     const auto sky = resources.loadTextureAsync(RTYPE_IMAGE_STARFIELD, TextureFiltering::Smooth);
-    constexpr std::array modelPaths{
-        RTYPE_MODEL_PLANET,
-        RTYPE_MODEL_PLANET_DUST,
-        RTYPE_MODEL_RING_ASTEROIDS_INNER,
-        RTYPE_MODEL_RING_ASTEROIDS_OUTER,
-        RTYPE_MODEL_RING_DUST,
-        RTYPE_MODEL_STATION,
-        RTYPE_MODEL_SHIP_EZNO,
-        RTYPE_MODEL_SHIP_SPACESHIP,
-        RTYPE_MODEL_SHIP_BATTLESTAR,
-        RTYPE_MODEL_SHIP_DROP_SHIP,
-        RTYPE_MODEL_SHOT_BASIC,
-        RTYPE_MODEL_SHOT_SPIRAL,
-        RTYPE_MODEL_ORB_PLASMA,
-        RTYPE_MODEL_IMPACT_SPARK,
-        RTYPE_MODEL_IMPACT_BURST,
-        RTYPE_MODEL_IMPACT_SPLASH,
-        RTYPE_MODEL_IMPACT_EXPLOSION,
-    };
-    std::vector<std::shared_future<ModelId>> models;
-    for (const char *path : modelPaths) {
-        models.push_back(resources.loadModelAsync(path));
-    }
-
     const auto ready = [](const auto &future) {
         return future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
     };
@@ -92,15 +74,11 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         std::size_t completed = static_cast<std::size_t>(ready(title)) +
                                 static_cast<std::size_t>(ready(button)) +
                                 static_cast<std::size_t>(ready(sky));
-        for (const auto &model : models) {
-            completed += static_cast<std::size_t>(ready(model));
-        }
-        if (completed == models.size() + 3) {
+        if (completed == 3) {
             break;
         }
         renderer.beginFrame();
-        renderer.drawText("Loading assets " + std::to_string(completed) + "/" +
-                              std::to_string(models.size() + 3),
+        renderer.drawText("Loading assets " + std::to_string(completed) + "/3",
                           {80.0f, 90.0f}, 40.0f, colors::White);
         renderer.endFrame();
     }
@@ -110,9 +88,6 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     title.get();
     button.get();
     sky.get();
-    for (const auto &model : models) {
-        model.get();
-    }
     return true;
 }
 
@@ -135,6 +110,23 @@ rtype::game::GameConfig readGameConfig(rtype::client::Console &console)
     return {};
 }
 
+std::vector<rtype::engine::SceneAsset> mainMenuAssets()
+{
+    using rtype::engine::AssetType;
+    return {
+        {AssetType::Model, RTYPE_MODEL_PLANET},
+        {AssetType::Model, RTYPE_MODEL_PLANET_DUST},
+        {AssetType::Model, RTYPE_MODEL_RING_ASTEROIDS_INNER},
+        {AssetType::Model, RTYPE_MODEL_RING_ASTEROIDS_OUTER},
+        {AssetType::Model, RTYPE_MODEL_RING_DUST},
+        {AssetType::Model, RTYPE_MODEL_STATION},
+        {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
+        {AssetType::Model, RTYPE_MODEL_SHIP_SPACESHIP},
+        {AssetType::Model, RTYPE_MODEL_SHIP_BATTLESTAR},
+        {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
+    };
+}
+
 /// Declares the scenes of the client, but those of a game, which GameScenes declares.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
                   const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
@@ -143,7 +135,8 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
                   rtype::localization::Localization &translations)
 {
     const auto quit = [&window] { window.requestClose(); };
-    engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
+    engine.createScene(rtype::client::MainMenuScene,
+                       {.updatesWhenCovered = true, .onBack = [] {}, .assets = mainMenuAssets()},
                        [&resources, &style, &translations, quit](rtype::engine::Engine &target,
                                                                  rtype::engine::SceneId scene) {
                            rtype::client::buildMainMenu(target, scene, resources, style, translations, quit);
@@ -190,6 +183,17 @@ rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
     return sessions;
 }
 
+void drawSceneLoadStatus(rtype::render::Renderer &renderer, const rtype::engine::Engine &engine)
+{
+    using rtype::engine::SceneLoadState;
+    if (engine.sceneLoadState() == SceneLoadState::Loading) {
+        renderer.drawText("Loading scene...", {80.0f, 90.0f}, 40.0f, rtype::render::colors::White);
+    } else if (engine.sceneLoadState() == SceneLoadState::Failed) {
+        renderer.drawText("Asset load failed: " + engine.sceneLoadError() + "  Press R to retry",
+                          {80.0f, 90.0f}, 30.0f, rtype::render::colors::White);
+    }
+}
+
 void run()
 {
     using namespace rtype::render;
@@ -230,6 +234,8 @@ void run()
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, audio, metrics, style);
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
+    rtype::client::SceneAssetLoader sceneAssets(resources, audio);
+    UnloadScenes unloadScenes{engine};
     rtype::client::OnlineScenes online(engine, network, games, metrics, style,
                                        applicationDirectory() / "server.pub", translations);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
@@ -238,8 +244,11 @@ void run()
     const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
     bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
     bool debugKeyWasDown = false;
+    bool retryKeyWasDown = false;
 
     createScenes(engine, resources, style, window, console, metrics, games, config, translations);
+    engine.createScene("loading");
+    engine.setSceneAssetLoader(sceneAssets, "loading");
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 
@@ -249,6 +258,12 @@ void run()
             showColliderDebug = !showColliderDebug;
         }
         debugKeyWasDown = debugKeyDown;
+        const bool retryKeyDown = devices.isKeyDown(rtype::input::Key::R);
+        if (retryKeyDown && !retryKeyWasDown &&
+            engine.sceneLoadState() == rtype::engine::SceneLoadState::Failed) {
+            engine.retrySceneLoad();
+        }
+        retryKeyWasDown = retryKeyDown;
         network.poll();
         engine.update(window.frameTime());
         resources.finishPendingLoads();
@@ -260,6 +275,7 @@ void run()
             colliderDebugRenderer.draw(renderer);
         }
         sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
+        drawSceneLoadStatus(renderer, engine);
         renderer.endFrame();
     }
 }

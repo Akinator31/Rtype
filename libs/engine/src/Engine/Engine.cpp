@@ -127,21 +127,30 @@ void Engine::update(float elapsed)
 void Engine::applySceneRequests()
 {
     destroyClosedScenes();
+    collectUnusedAssets();
 
     std::vector<SceneRequest> requests = std::move(_sceneRequests);
     _sceneRequests.clear();
 
+    if (_pendingScene && !requests.empty()) {
+        cancelPendingScene();
+    } else if (_pendingScene) {
+        finishPendingScene();
+    }
+
     for (const SceneRequest &request : requests) {
         switch (request.change) {
         case SceneChange::Switch:
-            _scenes.clear();
-            destroyClosedScenes();
-            openScene(request.name);
-            break;
         case SceneChange::Push:
-            openScene(request.name);
+            if (_pendingScene) {
+                cancelPendingScene();
+            }
+            beginSceneRequest(request);
             break;
         case SceneChange::Pop:
+            if (_pendingScene) {
+                cancelPendingScene();
+            }
             _scenes.close();
             destroyClosedScenes();
             break;
@@ -149,13 +158,19 @@ void Engine::applySceneRequests()
     }
 }
 
-void Engine::openScene(const std::string &name)
+void Engine::openScene(const std::string &name, std::vector<SceneAsset> assets)
 {
     const SceneDefinition &definition = _sceneDefinitions.at(name);
     const SceneId id = _scenes.open(definition.settings);
-    _namedScenes.push_back({id, name});
-    if (definition.build) {
-        definition.build(*this, id);
+    _namedScenes.push_back({id, name, std::move(assets)});
+    try {
+        if (definition.build) {
+            definition.build(*this, id);
+        }
+    } catch (...) {
+        _scenes.close(id);
+        destroyClosedScenes();
+        throw;
     }
     triggerEvent(name + ":open");
 }
@@ -172,9 +187,11 @@ void Engine::destroyClosedScenes()
         const auto named = std::ranges::find(_namedScenes, scene, &NamedScene::id);
         if (named != _namedScenes.end()) {
             triggerEvent(named->name + ":close");
+            releaseAssets(named->assets);
             _namedScenes.erase(named);
         }
     }
+    collectUnusedAssets();
 }
 
 void Engine::applyPendingReactions()

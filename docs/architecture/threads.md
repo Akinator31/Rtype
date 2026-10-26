@@ -2,8 +2,8 @@
 
 !!! note "Status: partially implemented"
     [ADR 0020](../decisions/0020-engine-thread-manager.md) records the worker ownership and shutdown design
-    and supersedes ADR 0017. Scene asset manifests and automatic loading remain proposed work. The render and
-    logic threads of #117 and #118 were not merged.
+    and supersedes ADR 0017. Scene asset manifests and automatic loading are implemented in #225. The render
+    and logic threads of #117 and #118 were not merged.
 
 ## Why change
 
@@ -164,6 +164,15 @@ stateDiagram-v2
   the futures at each update with `wait_for(0)`. When all are ready, it pops it and applies the switch.
 - Each asset counts the open scenes using it. At zero, it is freed. A memory budget with LRU eviction can come
   later.
+- `SceneSettings::assets` holds a type and path for each resource. The client also distinguishes smooth
+  textures with `AssetType::SmoothTexture`; other textures use the default filtering.
+- The client registers its `SceneAssetLoader` with the engine and pumps `ResourceManager` and `AudioPlayer`
+  after every update. The worker prepares files; the main thread creates and frees graphics and audio
+  resources.
+- A failed request keeps the loading scene visible. The client displays the error and retries when R is
+  pressed. A new scene request cancels the pending transition.
+- Resource handles are stable while loaded. Releasing a resource invalidates its old handle; reopening the
+  scene loads it again and assigns a new handle. Game scene handles are rebuilt when the scene opens.
 
 ## API sketch
 

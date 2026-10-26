@@ -48,6 +48,7 @@ add_executable(rtype_tests
     reliability.cpp
     resource_cache.cpp
     save.cpp
+    scene_assets.cpp
     scenes.cpp
     scripting.cpp
     serialization.cpp

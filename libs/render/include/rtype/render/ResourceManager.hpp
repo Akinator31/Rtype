@@ -92,6 +92,10 @@ public:
 
     void finishPendingLoads();
 
+    bool releaseTexture(const std::string &path, TextureFiltering filtering = TextureFiltering::Sharp);
+    bool releaseFont(const std::string &path, int size = 32);
+    bool releaseModel(const std::string &path);
+
     /// Returns the index of an animation of a loaded model, given to Renderer::animateModel().
     /// @param name Name of the animation in the model file, for instance "Idle".
     /// @throws std::out_of_range if the model has no animation by this name, or if the handle does not come
