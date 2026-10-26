@@ -263,6 +263,9 @@ void run()
         debugKeyWasDown = debugKeyDown;
         network.poll();
         engine.update(window.frameTime());
+        resources.finishPendingLoads();
+        audio.finishPendingLoads();
+        audio.update();
         renderer.beginFrame();
         sceneRenderer.draw(renderer, rtype::engine::Layer::World);
         if (showColliderDebug) {

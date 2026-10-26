@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -59,6 +59,7 @@ jobs:
 
       - name: Push to mirror
         run: |
+          git remote remove mirror 2>/dev/null || true
           git remote add -f mirror ${{ vars.MIRROR_URL }}
           git push mirror --mirror --prune --force
           echo "Successfully mirrored to ${{ vars.MIRROR_URL }}"
