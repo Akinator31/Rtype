@@ -32,7 +32,7 @@ std::string reasonOf(std::error_code reason)
         return "The server closed the connection";
     }
     if (reason == network::NetworkError::UntrustedServer) {
-        return "This is not the expected server: its key differs from server.pub";
+        return "This is not the expected server: its key is not trusted";
     }
     return std::format("Connection lost: {}", reason.message());
 }
@@ -70,7 +70,7 @@ std::string describe(ErrorCode code)
 }
 
 LobbyClient::LobbyClient(network::EventLoop &loop, const network::Address &server,
-                         const network::KeyFingerprint &pinned, std::string name, Handlers handlers)
+                         std::vector<network::KeyFingerprint> trusted, std::string name, Handlers handlers)
     : _name(std::move(name)), _handlers(std::move(handlers)), _ping(loop)
 {
     // Checked now: HELLO is written once connected, in a handler of the loop, where it must not throw
@@ -78,18 +78,19 @@ LobbyClient::LobbyClient(network::EventLoop &loop, const network::Address &serve
         throw std::invalid_argument("A player name is 1 to 16 characters of text");
     }
     logger().info("Connecting to {}", server);
-    network::TcpConnection::connect(loop, server,
-                                    [this, alive = std::weak_ptr<bool>(_alive), pinned, server](
-                                        std::error_code error, std::optional<network::TcpConnection> tcp) {
-                                        if (alive.expired() || _closed) {
-                                            return;
-                                        }
-                                        if (error || !tcp) {
-                                            fail(std::format("Cannot reach {}: {}", server, error.message()));
-                                            return;
-                                        }
-                                        connected(std::move(*tcp), pinned);
-                                    });
+    network::TcpConnection::connect(
+        loop, server,
+        [this, alive = std::weak_ptr<bool>(_alive), trusted = std::move(trusted),
+         server](std::error_code error, std::optional<network::TcpConnection> tcp) {
+            if (alive.expired() || _closed) {
+                return;
+            }
+            if (error || !tcp) {
+                fail(std::format("Cannot reach {}: {}", server, error.message()));
+                return;
+            }
+            connected(std::move(*tcp), trusted);
+        });
 }
 
 LobbyClient::~LobbyClient()
@@ -97,12 +98,14 @@ LobbyClient::~LobbyClient()
     close();
 }
 
-void LobbyClient::connected(network::TcpConnection connection, const network::KeyFingerprint &pinned)
+void LobbyClient::connected(network::TcpConnection connection, std::vector<network::KeyFingerprint> trusted)
 {
-    _connection.emplace(network::TlsConnection::client(std::move(connection), pinned));
+    _connection.emplace(network::TlsConnection::client(
+        std::move(connection), std::move(trusted),
+        [this](const network::KeyFingerprint &presented) { _untrusted = presented; }));
     _connection->start(
         [this](std::uint8_t type, std::span<const std::byte> payload) { received(type, payload); },
-        [this](std::error_code reason) { fail(reasonOf(reason)); });
+        [this](std::error_code reason) { connectionClosed(reason); });
     // Sent at once: it waits for the end of the handshake
     request(message_type::Hello, lobby::encode(lobby::HelloMessage{lobby::ProtocolVersion, _name}),
             [this](std::uint8_t type, std::span<const std::byte> payload) {
@@ -122,6 +125,18 @@ void LobbyClient::connected(network::TcpConnection connection, const network::Ke
                 }
                 fail("The server answered HELLO with something else");
             });
+}
+
+void LobbyClient::connectionClosed(std::error_code reason)
+{
+    if (reason != network::NetworkError::UntrustedServer || !_untrusted || !_handlers.onUntrusted ||
+        _closed) {
+        fail(reasonOf(reason));
+        return;
+    }
+    logger().info("The server presented the key {}, not trusted", _untrusted->toHex());
+    close();
+    _handlers.onUntrusted(*_untrusted);
 }
 
 void LobbyClient::request(std::uint8_t type, std::span<const std::byte> payload,

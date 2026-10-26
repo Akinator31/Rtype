@@ -27,7 +27,7 @@ add_executable(rtype_tests
     game_config.cpp
     game_messages.cpp
     game_simulation.cpp
-    keygen.cpp
+    known_servers.cpp
     lobby_messages.cpp
     log.cpp
     localization.cpp
@@ -53,6 +53,7 @@ add_executable(rtype_tests
     scripting.cpp
     serialization.cpp
     server_instance.cpp
+    server_key.cpp
     server_lifecycle.cpp
     server_games.cpp
     server_lobby.cpp
@@ -67,7 +68,7 @@ add_executable(rtype_tests
 )
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render rtype::save
-    rtype::scripting rtype::shaders r-type_client_core r-type_keygen_core r-type_server_core
+    rtype::scripting rtype::shaders r-type_client_core r-type_server_core
     Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
 add_executable(rtype_test_child helpers/process_child.cpp)
@@ -86,11 +87,6 @@ catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 add_test(NAME smoke.server_help COMMAND r-type_server --help)
 add_test(NAME smoke.server_invalid_arguments COMMAND r-type_server --unknown)
 set_tests_properties(smoke.server_invalid_arguments PROPERTIES WILL_FAIL TRUE)
-# The server only starts with a key: one is made for the check
-add_test(NAME smoke.server_keys
-    COMMAND r-type_keygen --out ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys --force)
-set_tests_properties(smoke.server_keys PROPERTIES FIXTURES_SETUP server_keys)
+# The server makes its key at its first start: the check makes it there, then reads it
 add_test(NAME smoke.server_check
     COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key)
-set_tests_properties(smoke.server_check PROPERTIES FIXTURES_REQUIRED server_keys)
-add_test(NAME smoke.keygen_help COMMAND r-type_keygen --help)

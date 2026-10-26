@@ -21,7 +21,9 @@ Master options:
   -p, --port <port>          TCP port of the lobby (default: 4242; 0: any free port)
       --bind <ip>            Address to listen on (default: 0.0.0.0, every interface)
       --game-ports <a>-<b>   UDP ports of the games, one per game (default: 4243-4299)
-  -k, --key <file>           Private key of the server (default: server.key), made with r-type_keygen
+  -k, --key <file>           Private key of the server (default: server.key), generated there if the
+                             file does not exist. Keep it: the players refuse the server with another key
+      --fingerprint          Show the fingerprint of the key, for the players to check, then exit
       --check                Check that the server can start (key, port, configuration), then exit
 
 Instance options (given by the master):
@@ -93,6 +95,7 @@ Options parseOptions(std::span<const std::string_view> arguments)
     std::vector<std::string_view> masterOnly;
     std::vector<std::string_view> instanceOnly;
     bool instance = false;
+    bool fingerprint = false;
     std::optional<std::uint16_t> port;
     std::optional<std::string_view> bind;
     bool idGiven = false;
@@ -146,6 +149,9 @@ Options parseOptions(std::span<const std::string_view> arguments)
         } else if (argument == "-k" || argument == "--key") {
             options.master.key = std::filesystem::path(std::string(value()));
             masterOnly.push_back(argument);
+        } else if (argument == "--fingerprint") {
+            fingerprint = true;
+            masterOnly.push_back(argument);
         } else if (argument == "--check") {
             options.master.check = true;
             masterOnly.push_back(argument);
@@ -185,7 +191,7 @@ Options parseOptions(std::span<const std::string_view> arguments)
         } else if (port) {
             options.master.listen = rtype::network::Address::anyIpv4(*port);
         }
-        options.mode = Options::Mode::Master;
+        options.mode = fingerprint ? Options::Mode::Fingerprint : Options::Mode::Master;
         return options;
     }
 

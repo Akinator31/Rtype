@@ -45,7 +45,8 @@ struct PlaySettings {
 /// outlives it; if the device is not available, everything still works but nothing is heard.
 /// @code
 /// AudioDevice device;
-/// AudioPlayer audio(device, applicationDirectory() / "assets");
+/// AudioPlayer audio(device, applicationDirectory() / "assets",
+///                   engine.getThreads().getAssetsWorker());
 /// const SoundId shot = audio.loadSound("sounds/shot.wav");
 /// const MusicId stage = audio.loadMusic("music/stage1.ogg");
 ///
@@ -67,7 +68,7 @@ public:
     /// @param device The audio output. It must outlive the player.
     /// @param assetsDirectory Directory that the paths given to the load functions are relative to.
     AudioPlayer(const AudioDevice &device, std::filesystem::path assetsDirectory,
-                std::shared_ptr<core::BackgroundLoader> loader = {});
+                std::shared_ptr<core::BackgroundLoader> loader);
     ~AudioPlayer();
 
     AudioPlayer(const AudioPlayer &) = delete;

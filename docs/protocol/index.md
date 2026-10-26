@@ -84,7 +84,7 @@ sequenceDiagram
 keys of the game. It then talks to the game directly, over encrypted datagrams.*
 
 1. The client opens a TCP connection to the master and runs a TLS 1.3 handshake. It checks that the server's
-   public key is the pinned one ([lobby, section 2](lobby.md#2-tls)).
+   public key is one it trusts ([lobby, section 2](lobby.md#2-tls)).
 2. Inside TLS, the client and the master exchange framed lobby messages: the client says hello, lists the
    games, creates or joins one ([lobby](lobby.md)).
 3. When the client joins a game, the master draws a session id and two keys, gives them to the game process

@@ -134,7 +134,6 @@ apps/       executables, one subdirectory per program
     assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
 config/     the Lua configuration of the game: enemies, weapons... (client and server)
-  keygen/   generates the keys of the server (r-type_keygen)
 libs/       libraries shared by the programs, one subdirectory per library
   audio/    sound effects and music (client)
   core/     handles and resource caches (all)

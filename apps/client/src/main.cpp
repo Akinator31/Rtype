@@ -46,6 +46,12 @@ constexpr float CollisionCellSize = 64.0f;
 constexpr float ButtonHoverVolume = 0.4f;
 constexpr float ButtonClickVolume = 1.0f;
 
+struct StopWorkers {
+    rtype::engine::ThreadManager &threads;
+
+    ~StopWorkers() { threads.stopAll(); }
+};
+
 /// Loads the configuration of the game (ADR 0018), next to the executable. Unlike the server, the client
 /// starts with a configuration that has errors: it goes without it (an offline game has no enemies nor
 /// weapons), and says why in the console and in the logs.
@@ -141,10 +147,13 @@ void run()
     using namespace rtype::render;
 
     Window window({.fullscreen = true});
-    const rtype::audio::AudioDevice audioDevice;
-    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets");
     rtype::engine::Engine engine;
-    ResourceManager resources(window, applicationDirectory() / "assets", engine.assetLoading().queue());
+    const rtype::audio::AudioDevice audioDevice;
+    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
+                                    engine.getThreads().getAssetsWorker());
+    ResourceManager resources(window, applicationDirectory() / "assets",
+                              engine.getThreads().getAssetsWorker());
+    StopWorkers stopWorkers{engine.getThreads()};
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
 
@@ -193,6 +202,9 @@ void run()
         debugKeyWasDown = debugKeyDown;
         network.poll();
         engine.update(window.frameTime());
+        resources.finishPendingLoads();
+        audio.finishPendingLoads();
+        audio.update();
         renderer.beginFrame();
         sceneRenderer.draw(renderer, rtype::engine::Layer::World);
         if (showColliderDebug) {
@@ -213,8 +225,7 @@ void run()
 
     // The scenes of the game are built from the loaded assets, which they find in the cache
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
-    rtype::client::OnlineScenes online(engine, network, games, metrics, style,
-                                       applicationDirectory() / "server.pub", translations);
+    rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations);
     createScenes(engine, resources, style, window, metrics, games, config, translations);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
