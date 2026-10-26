@@ -52,14 +52,11 @@ class BackgroundLoader
     }
 
     template <typename Result, typename Function>
-    static Task makeTask(std::shared_ptr<Function> callable,
-                         std::shared_ptr<std::promise<Result>> promise)
+    static Task makeTask(std::shared_ptr<Function> callable, std::shared_ptr<std::promise<Result>> promise)
     {
         return {
             [callable, promise] { complete<Result>(callable, promise); },
-            [promise] {
-                promise->set_exception(std::make_exception_ptr(BackgroundLoaderCancelled()));
-            },
+            [promise] { promise->set_exception(std::make_exception_ptr(BackgroundLoaderCancelled())); },
         };
     }
 

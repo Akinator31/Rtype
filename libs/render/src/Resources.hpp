@@ -272,9 +272,8 @@ struct ResourceManager::Impl {
     core::AsyncResourceRequests<ModelId> pendingModels;
 
     Impl(std::filesystem::path directory, std::shared_ptr<core::BackgroundLoader> worker)
-        : assetsDirectory(std::move(directory)),
-          loader(std::move(worker)),
-          pendingTextures(loader), pendingFonts(loader), pendingModels(loader)
+        : assetsDirectory(std::move(directory)), loader(std::move(worker)), pendingTextures(loader),
+          pendingFonts(loader), pendingModels(loader)
     {
     }
 };

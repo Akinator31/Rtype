@@ -13,4 +13,4 @@ void ThreadManager::stopAll()
     _assets->stop();
 }
 
-}
+} // namespace rtype::engine

@@ -24,4 +24,4 @@ public:
     void stopAll();
 };
 
-}
+} // namespace rtype::engine

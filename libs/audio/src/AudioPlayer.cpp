@@ -200,8 +200,7 @@ struct AudioPlayer::Impl {
     float effectsVolume = 1.0f;
 
     Impl(bool audioAvailable, std::filesystem::path assets, std::shared_ptr<core::BackgroundLoader> worker)
-        : available(audioAvailable), assetsDirectory(std::move(assets)),
-          loader(std::move(worker)),
+        : available(audioAvailable), assetsDirectory(std::move(assets)), loader(std::move(worker)),
           pendingSounds(loader), pendingMusics(loader)
     {
     }
