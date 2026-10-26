@@ -195,9 +195,10 @@ void run()
     using namespace rtype::render;
 
     Window window({.fullscreen = true});
-    const rtype::audio::AudioDevice audioDevice;
-    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets");
     rtype::engine::Engine engine;
+    const rtype::audio::AudioDevice audioDevice;
+    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
+                                   engine.getThreads().getAssetsWorker());
     ResourceManager resources(window, applicationDirectory() / "assets",
                               engine.getThreads().getAssetsWorker());
     StopWorkers stopWorkers{engine.getThreads()};

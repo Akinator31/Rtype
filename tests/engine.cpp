@@ -1370,8 +1370,8 @@ TEST_CASE("The sound system plays each sound effect once, then takes it from its
     std::ofstream(assets / "shot.wav") << "fake";
     {
         const rtype::audio::AudioDevice device({.enabled = false});
-        rtype::audio::AudioPlayer audio(device, assets);
         Engine engine;
+        rtype::audio::AudioPlayer audio(device, assets, engine.getThreads().getAssetsWorker());
         rtype::ecs::Ecs &ecs = engine.getEcs();
         ecs.registerSystem<SoundSystem>(audio);
         const entity_t shot = ecs.createEntity();
