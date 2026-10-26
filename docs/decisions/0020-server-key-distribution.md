@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Superseded by [0021](0021-server-generated-key-trust-on-first-use.md) |
 | **Date** | 2026-10-25 |
 
 ## Context

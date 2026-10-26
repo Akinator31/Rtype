@@ -77,6 +77,7 @@ nav = [
     "decisions/0018-lua-game-config.md",
     "decisions/0019-luabridge3-scripting-library.md",
     "decisions/0020-server-key-distribution.md",
+    "decisions/0021-server-generated-key-trust-on-first-use.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
