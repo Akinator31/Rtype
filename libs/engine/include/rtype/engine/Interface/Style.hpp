@@ -80,20 +80,23 @@ struct FlareStyle {
     }
 };
 
-/// Look of the console: a dark band over the game, its lines, and the command line where commands are typed
-/// (a TextFieldType::Console field).
+/// Look of the console, like the rest of the interface: a dark veil over the game with no frame, a fine line of
+/// light along its bottom edge, grey lines of text, and above the command line (a TextFieldType::Console field)
+/// a fine rule. Sizes are in game units.
 struct ConsoleStyle {
-    float textSize = 28.0f;
-    /// The band behind the console.
-    render::Color background{8, 10, 20, 230};
-    /// Line along the bottom edge of the band.
-    render::Color edge{120, 200, 255, 140};
-    /// The lines written in the console.
-    render::Color text{200, 210, 225, 255};
-    /// Behind the command line.
-    render::Color field{255, 255, 255, 16};
-    /// The prompt and the cursor of the command line.
-    render::Color prompt{120, 200, 255, 255};
+    float textSize = 26.0f;
+    float margin = 48.0f;
+    render::Color background{0, 0, 0, 215};
+    render::Color edge{255, 255, 255, 170};
+    render::Color edgeGlow{255, 255, 255, 28};
+    float edgeThickness = 1.5f;
+    float edgeGlowThickness = 8.0f;
+    render::Color text{138, 144, 151, 255};
+    render::Color command{255, 255, 255, 255};
+    render::Color rule{46, 49, 53, 255};
+    float ruleThickness = 2.0f;
+    float ruleGap = 14.0f;
+    render::Color prompt{255, 255, 255, 255};
     float cursorWidth = 2.0f;
 };
 
