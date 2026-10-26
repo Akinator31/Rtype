@@ -40,7 +40,7 @@ add_library(r-type_client_core STATIC
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
     PUBLIC rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network
-           rtype::physics rtype::render rtype::save rtype::development_key
+           rtype::physics rtype::render rtype::save
     PRIVATE rtype_options)
 
 add_executable(r-type_client

@@ -38,40 +38,10 @@ std::string serverAddress(const std::string &host, std::uint16_t port)
     return std::format("{}:{}", lower, port);
 }
 
-KnownServers::KnownServers(save::Save &save, std::span<const OfficialServer> officials,
-                           bool trustDevelopmentKey)
-    : _save(save), _trustDevelopmentKey(trustDevelopmentKey)
-{
-    for (const OfficialServer &server : officials) {
-        Official official{serverAddress(std::string(server.host), server.port), {}};
-        for (const std::string_view key : server.keys) {
-            if (const auto fingerprint = network::KeyFingerprint::parse(key)) {
-                official.keys.push_back(*fingerprint);
-            } else {
-                logger().error("The official server {} has an invalid key fingerprint: {}", official.address,
-                               key);
-            }
-        }
-        _officials.push_back(std::move(official));
-    }
-}
-
-const KnownServers::Official *KnownServers::official(const std::string &address) const
-{
-    const auto found = std::ranges::find(_officials, address, &Official::address);
-    return found != _officials.end() ? &*found : nullptr;
-}
-
-bool KnownServers::isOfficial(const std::string &address) const
-{
-    return official(address) != nullptr;
-}
+KnownServers::KnownServers(save::Save &save) : _save(save) {}
 
 std::optional<network::KeyFingerprint> KnownServers::remembered(const std::string &address) const
 {
-    if (isOfficial(address)) {
-        return std::nullopt;
-    }
     const std::optional<std::string> hex = _save.getString(saveKey(address));
     return hex ? network::KeyFingerprint::parse(*hex) : std::nullopt;
 }
@@ -79,27 +49,15 @@ std::optional<network::KeyFingerprint> KnownServers::remembered(const std::strin
 std::vector<network::KeyFingerprint> KnownServers::trusted(const std::string &address) const
 {
     std::vector<network::KeyFingerprint> result;
-    if (const Official *server = official(address)) {
-        result = server->keys;
-    } else if (const auto key = remembered(address)) {
+    if (const auto key = remembered(address)) {
         result.push_back(*key);
-    }
-    if (_trustDevelopmentKey) {
-        result.push_back(keys::developmentFingerprint());
     }
     return result;
 }
 
-KnownServers::Verdict KnownServers::judge(const std::string &address,
-                                          const network::KeyFingerprint &presented) const
+KnownServers::Verdict KnownServers::judge(const std::string &address) const
 {
-    if (!_trustDevelopmentKey && presented == keys::developmentFingerprint()) {
-        return Verdict::DevelopmentKey;
-    }
-    if (isOfficial(address) || remembered(address)) {
-        return Verdict::Changed;
-    }
-    return Verdict::FirstUse;
+    return remembered(address) ? Verdict::Changed : Verdict::FirstUse;
 }
 
 bool KnownServers::trust(const std::string &address, const network::KeyFingerprint &key)
@@ -117,7 +75,7 @@ bool KnownServers::trust(const std::string &address, const network::KeyFingerpri
 
 bool KnownServers::forget(const std::string &address)
 {
-    if (isOfficial(address) || !_save.hasKey(saveKey(address))) {
+    if (!_save.hasKey(saveKey(address))) {
         return false;
     }
     _save.removeKey(saveKey(address));

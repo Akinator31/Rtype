@@ -37,10 +37,10 @@ inline constexpr const char *ChangedKeyScene = "online_changed_key";
 [[nodiscard]] std::optional<std::pair<std::string, std::uint16_t>>
 splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 
-/// Playing online (docs/architecture/client-online.md): the Online menu, where the player picks an official
-/// server or gives another one, and its name, then the lobby of the server, with its games.
+/// Playing online (docs/architecture/client-online.md): the Online menu, where the player gives a server and
+/// its name, then the lobby of the server, with its games.
 ///
-/// - **Connect** opens a LobbyClient to the server, trusting the keys KnownServers knows for it (ADR 0020).
+/// - **Connect** opens a LobbyClient to the server, trusting the key KnownServers knows for it (ADR 0021).
 ///   A server never met shows its key, which the player may trust: it is remembered, and the client connects
 ///   again. A known server with another key is refused, with a warning, until the player forgets its key
 ///   (**Forget the server key**).

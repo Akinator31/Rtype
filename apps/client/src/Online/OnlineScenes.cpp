@@ -111,40 +111,32 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
                            localization::Localization &translations)
     : _engine(engine), _loop(loop), _games(games), _translations(translations), _known(engine.getSave())
 {
-    engine.createScene(
-        OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
-        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
-                                     _translations.text("menu.online"), true);
-            const ecs::entity_t name =
-                menu.textField(_translations.text("online.name"), _name, {}, lobby::MaxPlayerNameLength);
-            const auto readName = [this, &target, name] {
-                _name = target.getEcs().getComponent<engine::TextField>(name).input.text();
-            };
-            for (const OfficialServer &official : OfficialServers) {
-                menu.button(std::format("{} {}", _translations.text("online.official"), official.name),
-                            [this, readName, &official] {
-                                readName();
-                                _serverText = std::format("{}:{}", official.host, official.port);
-                                connect();
-                            });
-            }
-            const ecs::entity_t server =
-                menu.textField(_translations.text("online.server"), _serverText, {}, 64);
-            const auto readServer = [this, &target, server] {
-                _serverText = target.getEcs().getComponent<engine::TextField>(server).input.text();
-            };
-            menu.button(_translations.text("online.connect"), [this, readName, readServer] {
-                readName();
-                readServer();
-                connect();
-            });
-            menu.button(_translations.text("online.forget"), [this, readServer] {
-                readServer();
-                forgetServer();
-            });
-            menu.button(_translations.text("online.back"), [&target] { target.popScene(); });
-        });
+    engine.createScene(OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
+                       [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
+                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
+                                                    _translations.text("menu.online"), true);
+                           const ecs::entity_t name = menu.textField(_translations.text("online.name"), _name,
+                                                                     {}, lobby::MaxPlayerNameLength);
+                           const auto readName = [this, &target, name] {
+                               _name = target.getEcs().getComponent<engine::TextField>(name).input.text();
+                           };
+                           const ecs::entity_t server =
+                               menu.textField(_translations.text("online.server"), _serverText, {}, 64);
+                           const auto readServer = [this, &target, server] {
+                               _serverText =
+                                   target.getEcs().getComponent<engine::TextField>(server).input.text();
+                           };
+                           menu.button(_translations.text("online.connect"), [this, readName, readServer] {
+                               readName();
+                               readServer();
+                               connect();
+                           });
+                           menu.button(_translations.text("online.forget"), [this, readServer] {
+                               readServer();
+                               forgetServer();
+                           });
+                           menu.button(_translations.text("online.back"), [&target] { target.popScene(); });
+                       });
 
     engine.createScene(TrustServerScene, {.overlay = true, .hidesInterfaceBelow = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
@@ -273,17 +265,13 @@ void OnlineScenes::untrusted(const network::KeyFingerprint &presented)
 {
     forgetLobby();
     _presented = presented;
-    switch (_known.judge(_address, presented)) {
+    switch (_known.judge(_address)) {
     case KnownServers::Verdict::FirstUse:
         _engine.pushScene(TrustServerScene);
         return;
     case KnownServers::Verdict::Changed:
         logger().error("{} presented the key {}, not the one trusted: refused", _address, presented.toHex());
         _engine.pushScene(ChangedKeyScene);
-        return;
-    case KnownServers::Verdict::DevelopmentKey:
-        logger().error("{} presented the public development key: refused", _address);
-        _engine.showToast("This server uses the public development key: refused", engine::ToastType::Error);
         return;
     }
 }
@@ -296,9 +284,7 @@ void OnlineScenes::forgetServer()
         return;
     }
     const std::string address = serverAddress(parts->first, parts->second);
-    if (_known.isOfficial(address)) {
-        _engine.showToast("The keys of an official server cannot be forgotten", engine::ToastType::Error);
-    } else if (_known.forget(address)) {
+    if (_known.forget(address)) {
         _engine.showToast(
             std::format("Key of {} forgotten: it is asked again at the next connection", address));
     } else {

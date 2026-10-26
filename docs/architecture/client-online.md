@@ -43,10 +43,9 @@ sequenceDiagram
 
 *The client goes through the master to get a game, then talks to its instance directly.*
 
-1. **Online** asks for the name of the player, and offers the official servers in one click; any other server
-   is typed (`host:port`, the port 4242 by default, `[::1]:4242` for IPv6). An IP address is used as it is; a
+1. **Online** asks for the name of the player and the server (`host:port`, the port 4242 by default, `[::1]:4242` for IPv6). An IP address is used as it is; a
    host name is looked up when Connect is pressed.
-2. **The keys of the server** are those `KnownServers` trusts for it ([Trusted servers](#trusted-servers)). A
+2. **The key of the server** is the one `KnownServers` trusts for it ([Trusted servers](#trusted-servers)). A
    server that does not hold a matching private key is refused during the handshake, before `HELLO` leaves: the
    player is asked to trust it if it was never met, warned otherwise.
 3. **The lobby** lists the games of the server: Create a game (for 4 players, named after the player), Join one,
@@ -59,15 +58,12 @@ game that crashed, the connection lost. A lobby connection lost brings the playe
 
 ## Trusted servers
 
-Players never handle a key file ([ADR 0020](../decisions/0020-server-key-distribution.md)). `KnownServers`
-(`Online/KnownServers.hpp`) gives the keys the client trusts for a server, known by its address in lowercase
-(`serverAddress()`: `rtype.example.org:4242`, `[::1]:4242`):
-
-| Server | Keys trusted | Where they come from |
-|---|---|---|
-| Official | Its main key and its backup key | `OfficialServers`, in `Online/OfficialServers.hpp`: changing them is a commit |
-| Trusted by the player | The key shown at the first connection | The save, under `servers.known.<address>` |
-| Any, in a **Debug** build | The development key | `keys/development/`, built in as a header (`rtype::keys::developmentFingerprint()`) |
+Players never handle a key file: each server makes its key at its first start, and the player trusts it at
+the first connection, as with SSH ([ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)).
+`KnownServers` (`Online/KnownServers.hpp`) gives the key the client trusts for a server: the one the player
+trusted, kept in the save under `servers.known.<address>`, or none for a server never met. A server is known by
+its address in lowercase (`serverAddress()`: `rtype.example.org:4242`, `[::1]:4242`): the same server under
+another name or IP address is a new server.
 
 When the server presents a key it does not trust, the LobbyClient calls `onUntrusted` with it, and
 `KnownServers::judge()` tells what it means:
@@ -75,8 +71,7 @@ When the server presents a key it does not trust, the LobbyClient calls `onUntru
 | Verdict | The client |
 |---|---|
 | `FirstUse`: a server never met | Shows its fingerprint (`fingerprintLines()`, in groups of 4 digits) in the scene `online_trust`. **Trust and connect** remembers it (`trust()`, which writes the save) and connects again |
-| `Changed`: an official server, or one trusted with another key | Refuses it, and shows the key expected and the key presented in the scene `online_changed_key`. No button accepts the new key: the player must **Forget the server key** in the Online menu first (`forget()`), which an official server cannot |
-| `DevelopmentKey`: the development key, in a Release build | Refuses it, with a toast: its private key is public |
+| `Changed`: a server trusted with another key | Refuses it, and shows the key expected and the key presented in the scene `online_changed_key`. No button accepts the new key: the player must **Forget the server key** in the Online menu first (`forget()`) |
 
 The save is in the data directory of the player (`rtype::render::userDataDirectory()`: `%APPDATA%\R-Type` on
 Windows, `~/.local/share/r-type` elsewhere), read when the client starts. A save that cannot be written keeps
@@ -193,10 +188,9 @@ them, through the interpolation.
 - a game that crashes reported to its player, who can create another one, and a game that stops ending the
   session of its player.
 
-`tests/known_servers.cpp` (tag `[online]`) checks the keys trusted for each server: the official ones with
-their backup key, never asked nor forgotten; a server trusted on first use, kept in the save, then refused with
-another key until forgotten; the development key trusted by Debug builds only, and the one committed; the
-fingerprints built into the client valid; a fingerprint shown in groups of 4 digits.
+`tests/known_servers.cpp` (tag `[online]`) checks the key trusted for each server: a server trusted on first
+use, kept in the save, then refused with another key until forgotten; a save holding something else than a
+fingerprint, which trusts nothing; a fingerprint shown in groups of 4 digits.
 
 `tests/client_interpolation.cpp` (tag `[interpolation]`) plays a server sending 30 snapshots per second to a
 client drawing 144 frames per second: the world drawn 100 ms behind, an entity moving a little at every frame,

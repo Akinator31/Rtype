@@ -129,7 +129,7 @@ rtype::game::GameConfig readGameConfig(rtype::client::Console &console)
     return {};
 }
 
-/// Reads the save of the player, in its data directory: the servers it trusts, for now (ADR 0020). A save
+/// Reads the save of the player, in its data directory: the servers it trusts, for now (ADR 0021). A save
 /// that cannot be read is logged, and the client starts without it.
 void readSave(rtype::save::Save &save)
 {

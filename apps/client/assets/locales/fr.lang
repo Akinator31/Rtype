@@ -20,7 +20,6 @@ online.join=Rejoindre
 online.empty=Aucune partie : créez-en une
 online.refresh=Actualiser
 online.disconnect=Déconnexion
-online.official=Jouer sur
 online.forget=Oublier la clé du serveur
 trust.title=Nouveau serveur
 trust.first=Première connexion à

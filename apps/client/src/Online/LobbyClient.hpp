@@ -39,7 +39,7 @@ namespace rtype::client
 /// - The master answers the requests in order: each reply goes to the callback of its request.
 /// - A server that does not have a trusted key is refused during the handshake, before HELLO leaves:
 /// onUntrusted
-///   tells the key it presented, so that the player can trust it (ADR 0020), or onClosed without it.
+///   tells the key it presented, so that the player can trust it (ADR 0021), or onClosed without it.
 /// - After 10 seconds without sending anything, it sends PING, so that the master keeps the connection.
 /// - Everything runs on the thread that polls the loop: in the client, the game loop.
 class LobbyClient
