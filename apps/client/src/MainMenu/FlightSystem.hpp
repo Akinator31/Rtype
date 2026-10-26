@@ -13,10 +13,11 @@ namespace rtype::client
 {
 
 /// Flies the ships of the menu: moves each entity with a Flight and a Model along the route of its stage, and
-/// starts the next stage when one ends. The ships arrive from under the screen, from its right edge or from
-/// behind the camera. Each new trip takes a random route and lasts a random time, so that the ships do not
-/// land and leave all together. A ship that leaves towards the camera turns back and passes under it. While
-/// it is out of the screen, a ship becomes another of its models, one that no other ship flies.
+/// starts the next stage when one ends. The ships arrive from under the screen, from its right edge, from
+/// behind the camera or from behind the planet, and leave the same ways. Each new trip takes a random route
+/// and lasts a random time, so that the ships do not land and leave all together. A ship that leaves towards
+/// the camera turns back and passes under it. While it is out of the screen, a ship becomes another of its
+/// models, one that no other ship flies.
 class FlightSystem : public ecs::System
 {
     ecs::ComponentCache<Flight> &_flights;
@@ -25,9 +26,10 @@ class FlightSystem : public ecs::System
     std::mt19937 _random;
 
     [[nodiscard]] float pickBetween(float low, float high);
-    [[nodiscard]] render::Vector3 pickPointBelowScreen();
-    [[nodiscard]] render::Vector3 pickPointAboveScreen();
-    [[nodiscard]] render::Vector3 pickPointBehindCamera();
+    [[nodiscard]] render::Vector3 pickPointBelowScreen(const FlightArea &area);
+    [[nodiscard]] render::Vector3 pickPointAboveScreen(const FlightArea &area);
+    [[nodiscard]] render::Vector3 pickPointBehindCamera(const FlightArea &area);
+    [[nodiscard]] render::Vector3 pickPointBehindPlanet(const FlightArea &area, render::Vector3 station);
     void startNextStage(Flight &flight);
     void startApproach(Flight &flight);
     void startDeparture(Flight &flight);

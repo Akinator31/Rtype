@@ -113,6 +113,28 @@ ecs::entity_t Engine::showToast(const std::string &text, ToastType type)
     return toast;
 }
 
+ecs::entity_t Engine::showToast(const std::string &subject, const std::string &message,
+                                const std::string &actor, ToastType type)
+{
+    const ecs::entity_t toast = _ecs.createEntity();
+    _ecs.addComponent<Toast>(toast, message, type, subject, actor);
+    return toast;
+}
+
+ecs::entity_t Engine::showAnnouncement(const std::string &title, const std::string &detail, ToastType type)
+{
+    const ecs::entity_t toast = _ecs.createEntity();
+    _ecs.addComponent<Toast>(toast, detail, type, title, std::string(), ToastKind::Announcement);
+    return toast;
+}
+
+ecs::entity_t Engine::showBanner(const std::string &title, const std::string &detail, ToastType type)
+{
+    const ecs::entity_t toast = _ecs.createEntity();
+    _ecs.addComponent<Toast>(toast, detail, type, title, std::string(), ToastKind::Banner);
+    return toast;
+}
+
 void Engine::update(float elapsed)
 {
     if (_inputSource != nullptr) {

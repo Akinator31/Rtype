@@ -75,6 +75,17 @@ struct Rotation {
            (axis * (dot(axis, vector) * (1.0f - cosine)));
 }
 
+/// A point given in the frame of a view, in world units: x to the right of the screen, y to its top, z
+/// towards the viewer, so that the view looks towards -z from the origin.
+[[nodiscard]] inline render::Vector3 convertViewPointToWorld(const render::Camera &view,
+                                                             render::Vector3 point)
+{
+    const render::Vector3 forward = normalize(view.target - view.position);
+    const render::Vector3 right = normalize(cross(forward, view.up));
+    const render::Vector3 top = cross(right, forward);
+    return view.position + (right * point.x) + (top * point.y) - (forward * point.z);
+}
+
 /// The rotation that turns a model whose nose points to +z and top to +y so that its nose points to
 /// `forward` and its top as close as possible to `up`. Both must be unit vectors, not parallel.
 [[nodiscard]] inline Rotation computeRotationTowards(render::Vector3 forward, render::Vector3 up)

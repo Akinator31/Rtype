@@ -76,6 +76,7 @@ renderer.endFrame();
 | 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
 | 8 | `ToastSystem` | Places, fades and destroys the toasts. |
 | 9 | `TransformSystem` | Positions of the children from their parents, last. |
+| 10 | `LoadingSystem` | Client, at startup: the `loading` scene fades the logo in over black with a gauge under it while `AssetPreload` loads the pictures and models in the background, then fades the gauge out. `main.cpp` runs frames until it is finished, builds the other scenes from the cache, then switches to the main menu, which opens on black around the same logo and fades in. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
 and may happen several times per frame (once per eye in VR).
@@ -161,7 +162,7 @@ the game creates entities with `Position` and `Collider`.
 |---|---|
 | `Drawable` | Required: the layer (`World` or `Interface`) and the order inside it (higher on top). |
 | `Text` | A text, centred on the position. |
-| `Sprite` | A texture or a frame of a sprite sheet, centred on the position. |
+| `Sprite` | A texture or a frame of a sprite sheet, centred on the position, turned by its `rotation`. |
 | `Box` | A rectangle, filled or outlined, centred on the position. |
 | `Scale`, `Opacity` | Size factor and transparency, animated by tweens. |
 
@@ -242,8 +243,8 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 | `boundText` | A `Text` rewritten every frame from a function by the `BoundTextSystem` (score, lives, ping) |
 | `box` | A filled or outlined `Box` |
 | `sprite` | A `Sprite`: a texture or a part of it |
-| `button` | A focusable `Button`; the buttons of a builder get the focus in the order they are created |
-| `backButton` | A small square `Button` with a leftwards arrow (←), as high as the other buttons, to go back |
+| `button` | A focusable `Button` of text alone (`InterfaceStyle::flare`), as wide as its spaced letters and its star: when lit, a line of light traces itself across the text and a star flares after it; when pressed, the star bursts, a pulse runs along the line, and the action runs `pressDelay` later. The buttons of a builder get the focus in the order they are created |
+| `backButton` | A `Button` with a "<", to go back (the font of the buttons has no "←") |
 | `header` | The top of a secondary screen: a `backButton`, then the title to its right on the same line |
 
 A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
@@ -251,15 +252,39 @@ A `BoundText` can also be added to any entity with a `Text`, outside of the buil
 ### Toasts
 
 A toast is a short message shown in a corner of the screen for a few seconds, over every scene and across
-scene switches. Showing one takes only its text, and optionally its type, which sets the colour of its accent:
+scene switches. A toast is a line of light with no panel: its subject and its actor in bright capitals, its
+message in grey between them, and an icon at the end. The type sets the colour and the icon: a circled "i"
+for `Info`, a star for `Success`, a triangle for `Warning` and `Error`, in red.
 
 ```cpp
-engine.showToast("Settings saved");
+engine.showToast("Settings saved");                    // a message alone is shown as the subject
 engine.showToast("Connection lost", ToastType::Error); // Info, Success, Warning or Error
+engine.showToast("ORBITAL MODULE", "taken by", "KAZE", ToastType::Success); // subject, message, actor
 ```
 
-The toast entity holds only a `Toast` (its text and type). Everything about its look lives in one place,
-`InterfaceStyle::toast` (`ToastStyle`): corner, margin, sizes, colours, accent of each type, durations, slide,
+Two other kinds of notifications are shown with their own calls, and each kind has its own stack, with its own
+maximum (`maxVisible`, `maxAnnouncements`, `maxBanners`):
+
+```cpp
+engine.showAnnouncement("PLAYER 2 JOINED", "Room · 2 / 4 pilots");     // title, line of light, detail
+engine.showBanner("BOSS APPROACHING", "GET THE BEAM READY", ToastType::Error); // across the whole screen
+```
+
+An announcement is centred at the top of the screen: its icon and title, a line of light under them, and its
+detail in grey. A banner is a band across the whole screen, between two lines of light that open from the
+middle, with a veil of light, its title in large capitals between two sparks and its detail under it. Their
+look is in `ToastStyle` too (`announcement...` and `banner...`).
+
+Both play an entrance made of parts that each have their moment, and play it backwards when they leave
+(`announcementIn` / `announcementOut`, `bannerIn` / `bannerOut` in the style). An announcement: its icon pops, its
+title fades in while its letters tighten (`spacingIn`), its line of light draws itself from the middle with a
+flash, then its detail rises. A banner: a line of light draws itself from the middle, the band opens around it as
+the two lines move apart, the sparks fly out from the middle, the title tightens its letters, then the detail
+rises. The `ToastSystem` writes the progress of the entrance as the `Opacity` of the toast, and the
+`SceneRenderer` splits it into parts (`stage()`).
+
+The toast entity holds only a `Toast` (its words and type). Everything about its look lives in one place,
+`InterfaceStyle::toast` (`ToastStyle`): corner, margin, fonts, sizes, colours of each type, durations, slide,
 maximum number shown. The `SceneRenderer` draws it from that style (`drawToast`), and the `ToastSystem` places,
 fades and destroys it. To change how every toast looks, change the style, or `drawToast` for its shape; the
 calls stay the same.
@@ -267,6 +292,35 @@ calls stay the same.
 Toasts are stacked from the corner, the newest nearest to it; the others glide to their new place. Beyond
 `maxVisible`, the oldest fade out early. In the client, the console command `toast [info|success|warning|error]
 <text>` shows one.
+
+### Titles and sliders
+
+`InterfaceBuilder::title()` (and `boundTitle()`, for a title that follows the language) makes a text that the
+`SceneRenderer` draws in chrome with a light around it, from `InterfaceStyle::title` (`TitleStyle`): the colour
+goes from the top of the line to its bottom through the stops of `chrome` (`Renderer::drawGradientText()`).
+`MenuBuilder` titles and the headers of the submenus use it.
+
+`InterfaceBuilder::slider()` makes a value between 0 and 1 drawn as a fine rail with a ring open on its sides
+for the handle, from `InterfaceStyle::slider` (`SliderStyle`). The handle grows when the slider is pointed at
+or has the focus, and more while it is dragged: the `InterfaceSystem` writes the `SliderTrack` of the slider,
+and moves the value to the pointer while the mouse button is held. Left, Right and the wheel step the value as
+for every `Slider`.
+
+`InterfaceBuilder::toggle()` makes an on / off setting drawn as "OFF - dot - ON" (`InterfaceStyle::toggle`,
+`SwitchStyle`): the dot slides to the side that is on, and the label of that side lights up. The switch lights
+up only while the pointer is over what is drawn of it, the labels and the link with a small margin
+(`SwitchStyle::hoverMargin`; `computeSwitchLayout()` places the parts, for the drawing and for the pointer alike); a click anywhere on the row, Confirm, Left and Right
+set it, as for every `Toggle`.
+
+`InterfaceBuilder::gauge()` makes a value between 0 and 1 drawn as a rail lit from its start (transparent) to
+its value, with a spark at the end (`InterfaceStyle::gauge`, `GaugeStyle`; a full gauge shines more). A gauge
+shows only: it gets no focus. An `Extent` gives its size to the `AnchorSystem`.
+
+The handle of a slider lights up only while the pointer is over it (or it is dragged); its caption lights up
+while the slider is under the pointer or has the focus.
+
+The client shows all of them, with the toasts, in the *Interface* menu of the settings
+(`MainMenu/UiShowcase.cpp`).
 
 ### Navigation
 
@@ -283,17 +337,25 @@ Toasts are stacked from the corner, the newest nearest to it; the others glide t
 - The mouse focuses a widget only when it moves, so that a still pointer does not fight the keyboard.
 - A click activates the widget under the pointer, not the focused one.
 - Characters typed while no text field has the focus are dropped.
-- The buttons sound when their panel lights up (under the pointer, or given the focus by the keyboard or a
+- The buttons sound when they light up (under the pointer, or given the focus by the keyboard or a
   gamepad) and when they are pressed, if the style has the sounds (`ButtonStyle::hoverSound`, `clickSound`,
   optional `SoundEffect`): the `InterfaceSystem` gives the `SoundEffect` to the button, and the `SoundSystem`
   plays it in the frame, before the deferred action of the button. A menu that appears lights its first button
-  silently, otherwise every menu opened with the keyboard would sound twice.
+  silently, otherwise every menu opened with the keyboard would sound twice. The sliders and switches (with a
+  `SliderTrack` or a `SwitchTrack`) make the same sounds: the hover sound when they light up, the click sound
+  when a slider is pressed with the mouse and when a switch is set to another value.
 
   ```cpp
   const SoundEffect hover{audio.loadSound("sounds/fx/button/hover.wav"), {.volume = 0.4f}};
   const SoundEffect click{audio.loadSound("sounds/fx/button/click.wav"), {}};
   const InterfaceStyle style{.button = {.font = buttonFont, .hoverSound = hover, .clickSound = click}};
   ```
+
+- A `Panel` (the mark of a button) has a `highlight`: 0 for its normal look, 1 for its lit one, faded by a
+  `Highlight` tween. It is how far the line is traced (`traceDuration` to light up, `fadeDuration` to go out);
+  it goes above 1 when the button is pressed (`FlareStyle::pressedHighlight`), then back to 1 in
+  `pressDuration`: the burst. Its action waits `pressDelay`, so that the burst is seen before a menu covers
+  it; pressing again meanwhile does nothing.
 
 ## Testing
 

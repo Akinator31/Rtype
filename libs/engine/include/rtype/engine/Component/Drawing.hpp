@@ -42,6 +42,10 @@ struct BoundText {
     std::function<std::string()> get;
 };
 
+/// Makes the Text of the entity a title: capitals in chrome with a light around them, drawn with
+/// InterfaceStyle::title instead of the colour of the text. The size of the text is kept.
+struct Title {};
+
 /// A texture or a part of it (one frame of a sprite sheet), centred on the position of the entity.
 struct Sprite {
     render::TextureId texture;
@@ -51,6 +55,8 @@ struct Sprite {
     float width = 0.0f;
     float height = 0.0f;
     render::Color tint = render::colors::White;
+    /// Clockwise rotation around its centre, in degrees.
+    float rotation = 0.0f;
 };
 
 /// A rectangle, filled or outlined, centred on the position of the entity: backgrounds, frames, placeholders.
@@ -62,12 +68,12 @@ struct Box {
     float outline = 0.0f;
 };
 
-/// A rounded glass panel, centred on the position of the entity, behind its text: the frame of a button. It
-/// is drawn with the ButtonStyle of the interface, between its normal and its focused look.
+/// What makes the text of a button a button: no frame, the text alone, crossed by a line of light with a star
+/// after it while the button is lit, drawn with InterfaceStyle::flare. The button is as wide as its text.
 struct Panel {
-    float width = 0.0f;
     float height = 0.0f;
-    /// 0 for the normal look, 1 for the focused one, in between while the button fades from one to the other.
+    /// 0 for the normal look, 1 for the lit one, in between while the button fades from one to the other. It
+    /// goes above 1 for a moment when the button is pressed, up to FlareStyle::pressedHighlight.
     float highlight = 0.0f;
 };
 

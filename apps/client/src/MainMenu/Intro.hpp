@@ -18,14 +18,19 @@ struct Intro {
     float time = 0.0f;
 };
 
-/// An element of the interface that moves when the intro starts: its Anchor offset goes from `from` to `to`.
-/// A Hidden element shows up when the intro starts: it waits for the player to press.
+/// An element of the interface that moves when the intro starts: its Anchor offset goes from `from` to `to`,
+/// its Scale, if it has one, from `fromScale` to `toScale`, and its Opacity, if it has one, from
+/// `fromOpacity` to 1. A Hidden element shows up when the intro starts: it waits for the player to press.
 struct IntroSlide {
     render::Vector2 from;
     render::Vector2 to;
-    /// Time between the press and the start of the move, in seconds.
+    /// Time between the press and the start of the move, and how long the move lasts, in seconds.
     float delay = 0.0f;
+    float duration = 1.0f;
     engine::Easing easing = engine::Easing::EaseOut;
+    float fromScale = 1.0f;
+    float toScale = 1.0f;
+    float fromOpacity = 1.0f;
 };
 
 } // namespace rtype::client

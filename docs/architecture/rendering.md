@@ -127,8 +127,12 @@ noticed immediately.
 
 By default, raylib only renders the ASCII characters of a font: any other character is drawn as "?". The
 `ResourceManager` also renders the Latin-1 characters, which cover the accented letters of most Western
-European languages ("é", "ç", "ü", "ß"...), plus "œ", "Œ" and "€". Characters outside of this set, for
+European languages ("é", "ç", "ü", "ß"...), plus "œ", "Œ", "€" and "←". Characters outside of this set, for
 instance from Cyrillic or Asian scripts, are still drawn as "?".
+
+A font is loaded only with the characters of this set that it has: `filterCharactersInFont()` reads its table
+of characters (cmap) first. A display font with few symbols, such as Orbitron (no "«", "©" or "←"), then loads
+without raylib warning about missing glyphs; those characters are drawn as "?" with it.
 
 ### Where assets are found
 

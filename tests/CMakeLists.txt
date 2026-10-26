@@ -22,6 +22,7 @@ add_executable(rtype_tests
     ecs.cpp
     ecs_world.cpp
     engine.cpp
+    font_characters.cpp
     framing.cpp
     game_config.cpp
     game_messages.cpp
@@ -76,7 +77,8 @@ add_dependencies(rtype_tests rtype_test_child r-type_server)
 target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
     RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"
-    RTYPE_TEST_CONFIG="${PROJECT_SOURCE_DIR}/config")
+    RTYPE_TEST_CONFIG="${PROJECT_SOURCE_DIR}/config"
+    RTYPE_TEST_FONTS="${PROJECT_SOURCE_DIR}/apps/client/assets/fonts")
 # The helpers the tests share
 target_include_directories(rtype_tests PRIVATE helpers)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)

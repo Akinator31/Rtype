@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/localization/Localization.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -16,12 +17,14 @@ inline constexpr const char *MainMenuScene = "main_menu";
 /// Fills the main menu: a desert planet on the left, seen from orbit, a space station far on the right with
 /// ships landing on it and leaving, and a column of buttons in the bottom left corner: Play, Online and
 /// Settings, which open their submenu (see createSubmenuScenes()), and Quit. The ships need a FlightSystem.
-/// The scene must keep updating when covered, so that the ships keep flying behind the submenus.
+/// The scene must keep updating when covered, so that the ships keep flying behind the submenus. It opens on
+/// black, around the logo, then fades in.
 /// @param resources Where the models are loaded from. It must outlive the scene.
 /// @param style Look of the buttons. It must outlive the scene.
+/// @param metrics Gives the size of the screen that the black covers.
 /// @param quit Called when the player presses the quit button.
 void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
-                   const engine::InterfaceStyle &style, localization::Localization &translations,
-                   const std::function<void()> &quit);
+                   const engine::InterfaceStyle &style, const engine::Metrics &metrics,
+                   localization::Localization &translations, const std::function<void()> &quit);
 
 } // namespace rtype::client

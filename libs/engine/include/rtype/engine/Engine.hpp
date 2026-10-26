@@ -24,6 +24,7 @@
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Navigation.hpp"
 #include "rtype/engine/Interface/Style.hpp"
+#include "rtype/engine/Interface/SwitchLayout.hpp"
 #include "rtype/engine/Rendering/ColliderDebugRenderer.hpp"
 #include "rtype/engine/Rendering/SceneRenderer.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
