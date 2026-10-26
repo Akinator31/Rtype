@@ -25,7 +25,8 @@ class Window;
 /// Everything is drawn between beginFrame() and endFrame(), in order: what is drawn last is on top.
 /// @code
 /// Window window;
-/// ResourceManager resources(window, applicationDirectory() / "assets");
+/// ResourceManager resources(window, applicationDirectory() / "assets",
+///                           engine.getThreads().getAssetsWorker());
 /// Renderer renderer(window, resources);
 ///
 /// const TextureId ship = resources.loadTexture("sprites/ship.png");

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "rtype/ecs/Ecs.hpp"
-#include "rtype/engine/AssetLoadingService.hpp"
 #include "rtype/engine/Component/Toast.hpp"
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Event/Event.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
+#include "rtype/engine/ThreadManager.hpp"
 #include "rtype/save/Save/Save.hpp"
 
 #include <functional>
@@ -72,7 +72,7 @@ class Engine
     std::vector<NamedScene> _namedScenes;
     Controls _controls;
     input::InputSource *_inputSource = nullptr;
-    AssetLoadingService _assetLoading;
+    ThreadManager _threads;
     save::Save _save;
 
     void applySceneRequests();
@@ -93,9 +93,10 @@ public:
     [[nodiscard]] rtype::ecs::Ecs &getEcs();
     [[nodiscard]] Scenes &getScenes();
     [[nodiscard]] Controls &getControls();
+    [[nodiscard]] ThreadManager &getThreads() { return _threads; }
+    [[nodiscard]] const ThreadManager &getThreads() const { return _threads; }
     /// The save starts empty, without a file: the client gives it one with Save::setPath(), then reads it.
     [[nodiscard]] save::Save &getSave();
-    [[nodiscard]] AssetLoadingService &assetLoading() { return _assetLoading; }
 
     /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without
     /// a source, the controls are never updated and stay released.

@@ -22,9 +22,10 @@ technical and comparative study of the project.
 | [0014](0014-encryption.md)                         | Encryption of the client/server traffic                  | Accepted |
 | [0015](0015-one-game-scene-local-or-remote-session.md) | One game scene, fed by a local or a remote session | Accepted |
 | [0016](0016-replication.md) | Full snapshots, explicit destructions and redundant inputs | Proposed |
-| [0017](0017-asset-loading-threads.md) | Asset preparation on a background thread | Accepted |
+| [0017](0017-asset-loading-threads.md) | Asset preparation on a background thread | Superseded by [0020](0020-engine-thread-manager.md) |
 | [0018](0018-lua-game-config.md) | Lua for the configuration of enemies and weapons | Accepted, partly superseded by [0019](0019-luabridge3-scripting-library.md) |
 | [0019](0019-luabridge3-scripting-library.md) | LuaBridge3 and a scripting library for Lua behaviors | Accepted |
+| [0020](0020-engine-thread-manager.md) | Engine owned asset worker | Accepted |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

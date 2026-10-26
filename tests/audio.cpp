@@ -3,6 +3,7 @@
 
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
+#include "rtype/engine/ThreadManager.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -59,7 +60,8 @@ TEST_CASE("Only one audio device can exist at a time", "[audio]")
 TEST_CASE("Volumes are clamped between 0 and 1", "[audio]")
 {
     AudioDevice device({.enabled = false});
-    AudioPlayer player(device, ".");
+    rtype::engine::ThreadManager threads;
+    AudioPlayer player(device, ".", threads.getAssetsWorker());
 
     device.setMasterVolume(2.0f);
     player.setMusicVolume(-1.0f);
@@ -74,7 +76,8 @@ TEST_CASE("Without audio, sounds are loaded once and play silently", "[audio]")
 {
     const FakeAssets assets;
     const AudioDevice device({.enabled = false});
-    AudioPlayer player(device, assets.directory());
+    rtype::engine::ThreadManager threads;
+    AudioPlayer player(device, assets.directory(), threads.getAssetsWorker());
 
     const SoundId first = player.loadSound("sounds/shot.wav");
     const SoundId second = player.loadSound("sounds/shot.wav");
@@ -87,7 +90,8 @@ TEST_CASE("A missing file is reported even without audio", "[audio]")
 {
     const FakeAssets assets;
     const AudioDevice device({.enabled = false});
-    AudioPlayer player(device, assets.directory());
+    rtype::engine::ThreadManager threads;
+    AudioPlayer player(device, assets.directory(), threads.getAssetsWorker());
 
     REQUIRE_THROWS_AS(player.loadSound("sounds/missing.wav"), std::runtime_error);
     REQUIRE_THROWS_AS(player.loadMusic("music/missing.ogg"), std::runtime_error);
@@ -97,7 +101,8 @@ TEST_CASE("Without audio, the music state follows the calls", "[audio]")
 {
     const FakeAssets assets;
     const AudioDevice device({.enabled = false});
-    AudioPlayer player(device, assets.directory());
+    rtype::engine::ThreadManager threads;
+    AudioPlayer player(device, assets.directory(), threads.getAssetsWorker());
     const MusicId music = player.loadMusic("sounds/music.ogg");
 
     REQUIRE_FALSE(player.isMusicPlaying());
@@ -118,7 +123,8 @@ TEST_CASE("Audio assets load asynchronously and share cached handles", "[audio][
 {
     const FakeAssets assets;
     const AudioDevice device({.enabled = false});
-    AudioPlayer player(device, assets.directory());
+    rtype::engine::ThreadManager threads;
+    AudioPlayer player(device, assets.directory(), threads.getAssetsWorker());
 
     const auto sound = player.loadSoundAsync("sounds/shot.wav");
     const auto sameSound = player.loadSoundAsync("sounds/shot.wav");
@@ -142,7 +148,8 @@ TEST_CASE("An asynchronous audio load reports a missing file", "[audio][assets]"
 {
     const FakeAssets assets;
     const AudioDevice device({.enabled = false});
-    AudioPlayer player(device, assets.directory());
+    rtype::engine::ThreadManager threads;
+    AudioPlayer player(device, assets.directory(), threads.getAssetsWorker());
     const auto missing = player.loadMusicAsync("sounds/missing.ogg");
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
     while (missing.wait_for(std::chrono::seconds(0)) != std::future_status::ready &&

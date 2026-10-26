@@ -26,7 +26,6 @@ class AsyncResourceRequests
     std::vector<std::function<bool()>> _pending;
 
 public:
-    AsyncResourceRequests() : _loader(std::make_shared<BackgroundLoader>()) {}
     explicit AsyncResourceRequests(std::shared_ptr<BackgroundLoader> loader) : _loader(std::move(loader))
     {
         if (!_loader) {

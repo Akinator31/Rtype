@@ -21,12 +21,15 @@ parameters:
 
 ```cpp
 const Window window;                                                   // 1. opens the window
-ResourceManager resources(window, applicationDirectory() / "assets");  // 2. needs an open window
+Engine engine;
+ResourceManager resources(window, applicationDirectory() / "assets",
+                          engine.getThreads().getAssetsWorker());
 Renderer renderer(window, resources);                                  // 3. needs the window and the resources
 ```
 
 C++ destroys local objects in the reverse order of their declaration, so this order is all it takes: the
-renderer and the resources are freed before the window closes.
+renderer and the resources are freed before the window closes. Call
+`engine.getThreads().stopAll()` when the frame loop ends, before destroying the resource manager.
 
 !!! warning "Declaration order"
 
@@ -95,7 +98,7 @@ const FontId font = resources.loadFont("fonts/FiraSans-Black.ttf", 48);
 
 ### Each file is loaded once
 
-For nonblocking loading, call `loadTextureAsync()`, `loadFontAsync()` or `loadModelAsync()` and keep the returned `std::shared_future`. Call `finishPendingLoads()` once per frame on the render thread. Check `future.wait_for(std::chrono::seconds(0))` before calling `get()`; draw a placeholder while it is pending. A failure is reported by `get()` as an exception. Requests for the same asset and options share one future. Pass `engine.assetLoading().queue()` to the manager constructor to share the engine's worker with audio. The client's startup displays a loading screen while its menu assets are prepared. See [ADR 0017](../decisions/0017-asset-loading-threads.md) for the thread boundaries and the model-loading limitation.
+For nonblocking loading, call `loadTextureAsync()`, `loadFontAsync()` or `loadModelAsync()` and keep the returned `std::shared_future`. Call `finishPendingLoads()` once per frame on the main thread. Check `future.wait_for(std::chrono::seconds(0))` before calling `get()`; draw a placeholder while it is pending. A failure is reported by `get()` as an exception. Requests for the same asset and options share one future. Pass `engine.getThreads().getAssetsWorker()` to the manager constructor. The client's startup displays a loading screen while its menu assets are prepared. See [ADR 0020](../decisions/0020-engine-thread-manager.md) for the thread ownership and shutdown.
 
 Loading the same path again returns the same handle without reading the file again: fifty enemies sharing
 one sprite share one texture in graphics memory. Fonts are identified by their path **and** their size,
