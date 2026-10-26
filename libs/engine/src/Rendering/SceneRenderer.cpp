@@ -68,9 +68,15 @@ void drawBlurred(render::Renderer &renderer, render::Rectangle area, float radiu
     }
 }
 
-// Poses the model at the time of its animation, between the previous and the current one while it fades
-void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
+// Poses the model at the time of its animation, between the previous and the current one while it fades, or
+// mixed with its blended animation
+void applyPose(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
 {
+    if (animation.time >= animation.fadeDuration && animation.blendAmount > 0.0f) {
+        renderer.blendModelAnimations(model, animation.animation, animation.time, animation.blendedAnimation,
+                                      animation.time, animation.blendAmount);
+        return;
+    }
     if (animation.time >= animation.fadeDuration) {
         renderer.animateModel(model, animation.animation, animation.time);
         return;
@@ -185,6 +191,20 @@ void SceneRenderer::drawBackdrop(render::Renderer &renderer)
     }
 }
 
+void SceneRenderer::poseModel(render::Renderer &renderer, render::ModelId model,
+                              const ModelAnimation &animation)
+{
+    const auto posed = std::ranges::find(_poses, model, &Pose::model);
+    if (posed == _poses.end()) {
+        _poses.push_back({model, animation});
+    } else if (posed->animation == animation) {
+        return;
+    } else {
+        posed->animation = animation;
+    }
+    applyPose(renderer, model, animation);
+}
+
 void SceneRenderer::drawModels(render::Renderer &renderer)
 {
     const Camera *camera = findCamera();
@@ -203,9 +223,18 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
         if (animations.has(entity)) {
             poseModel(renderer, model.model, animations.get(entity));
         }
-        renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
-                           model.rotationAngle, model.scale, model.tint, model.spinAngle);
+        if (model.energy) {
+            renderer.drawEnergyModel(model.model, camera->view, *model.energy, model.position,
+                                     model.rotationAxis, model.rotationAngle, model.scale, model.tint,
+                                     model.spinAngle);
+        } else {
+            renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
+                               model.rotationAngle, model.scale, model.tint, model.spinAngle,
+                               model.hiddenMeshes);
+        }
     }
+    // The light of the energy models spreads over the world, under the 2D entities and the interface
+    renderer.drawGlow();
 }
 
 void SceneRenderer::drawPanel(render::Renderer &renderer, const Panel &panel, render::Vector2 centre,

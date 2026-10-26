@@ -15,7 +15,7 @@ constexpr double Tick = 1.0 / game::TickRate;
 
 } // namespace
 
-LocalSession::LocalSession(game::Rules rules) : _simulation(rules)
+LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config) : _simulation(rules, config)
 {
     _simulation.addPlayer(localSlot());
 }

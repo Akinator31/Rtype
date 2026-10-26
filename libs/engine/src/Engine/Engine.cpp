@@ -24,6 +24,11 @@ Controls &Engine::getControls()
     return _controls;
 }
 
+save::Save &Engine::getSave()
+{
+    return _save;
+}
+
 void Engine::setInputSource(input::InputSource &source)
 {
     _inputSource = &source;

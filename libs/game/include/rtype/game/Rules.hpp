@@ -13,19 +13,10 @@ struct Rules {
 
     /// Speed of a ship, in every direction (diagonals included).
     float shipSpeed = 600.0f;
-    /// Half the size of a ship: it stays entirely in the game area.
-    float shipHalfWidth = 48.0f;
-    float shipHalfHeight = 24.0f;
-    /// Hit points of a ship.
-    std::uint8_t shipHealth = 1;
-
-    /// Speed of a shot, to the right.
-    float shotSpeed = 1500.0f;
-    /// Half the size of a shot.
-    float shotHalfWidth = 12.0f;
-    float shotHalfHeight = 4.0f;
-    /// Ticks between two shots while Fire is held: 10 is 6 shots per second.
-    std::uint32_t fireInterval = 10;
+    /// Half the size of a ship: it stays entirely in the game area. The proportions of the hull of its model,
+    /// as the client draws it.
+    float shipHalfWidth = 84.0f;
+    float shipHalfHeight = 49.0f;
 
     /// A missile speeds up by this fraction of its launch speed per tick, up to missileMaxBoost times it.
     float missileBoostPerTick = 0.02f;
@@ -39,6 +30,13 @@ struct Rules {
     std::uint32_t respawnDelay = 90;
     /// Ticks a new ship cannot be hit.
     std::uint32_t invulnerableTicks = 120;
+    /// Ticks a ship that was hit, and survived, cannot be hit again.
+    std::uint32_t hitInvulnerableTicks = 60;
+
+    /// Ticks before the first wave, once a player is in the game.
+    std::uint32_t firstWaveDelay = 120;
+    /// Ticks between the end of a wave and the start of the next one.
+    std::uint32_t wavePause = 180;
 
     /// Seed of the random numbers of a game: the same seed and the same inputs give the same game.
     std::uint32_t seed = 1;

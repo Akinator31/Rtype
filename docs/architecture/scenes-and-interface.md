@@ -16,9 +16,11 @@ libs/engine/include/rtype/engine/
     Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
     Layout.hpp      Column, ColumnItem, AnchorPoint, Anchor
     Toast.hpp       ToastType, Toast
+    Sound.hpp       SoundEffect
   System/       the systems, one per file
     InterfaceSystem.hpp  WidgetTextSystem.hpp  BoundTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp
     ColumnLayoutSystem.hpp  AnchorSystem.hpp  ToastSystem.hpp  SpinSystem.hpp  ModelAnimationSystem.hpp
+    SoundSystem.hpp
   Interface/    what the interface is built with
     MenuBuilder.hpp  InterfaceBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
@@ -40,6 +42,7 @@ Scenes &scenes = engine.getScenes();
 ecs.registerSystem<ConsoleSystem>(engine, devices);
 ecs.registerSystem<InterfaceSystem>(ecs, scenes, devices, metrics, style);
 ecs.registerSystem<GameSessionSystem>(ecs, scenes, engine.getControls());
+ecs.registerSystem<SoundSystem>(audio);
 ecs.registerSystem<WidgetTextSystem>();
 ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
@@ -66,10 +69,10 @@ renderer.endFrame();
 |---|---|---|
 | 1 | `Scenes` | Records which scene receives input for the whole update. |
 | 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation; they read the input before the game. |
-| 3 | `GameSessionSystem` | The game: the input of the player to its session, the snapshots to the entities of the game scene ([A game in the client](client-game.md)). |
+| 3 | `GameSessionSystem`, `SoundSystem` | The game: the input of the player to its session, the snapshots to the entities of the game scene ([A game in the client](client-game.md)). Then the sounds: the `SoundSystem` plays each `SoundEffect` given to an entity and removes it, in the frame the game gave it ([Audio](audio.md#in-the-engine)). |
 | 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem` | Texts of the widgets and bound texts, tweens, spinning models. |
 | 5 | `FlightSystem`, `IntroSystem` | Client systems of the main menu: the ships flying around the station, the intro. |
-| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`. |
+| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`, unless the model already has this pose (entities sharing a model and an animation at the same time are posed once). `ModelAnimation::speed` 0 holds the pose; `blendedAnimation` and `blendAmount` mix a second animation in, in step. |
 | 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
 | 8 | `ToastSystem` | Places, fades and destroys the toasts. |
 | 9 | `TransformSystem` | Positions of the children from their parents, last. |
@@ -280,9 +283,21 @@ Toasts are stacked from the corner, the newest nearest to it; the others glide t
 - The mouse focuses a widget only when it moves, so that a still pointer does not fight the keyboard.
 - A click activates the widget under the pointer, not the focused one.
 - Characters typed while no text field has the focus are dropped.
+- The buttons sound when their panel lights up (under the pointer, or given the focus by the keyboard or a
+  gamepad) and when they are pressed, if the style has the sounds (`ButtonStyle::hoverSound`, `clickSound`,
+  optional `SoundEffect`): the `InterfaceSystem` gives the `SoundEffect` to the button, and the `SoundSystem`
+  plays it in the frame, before the deferred action of the button. A menu that appears lights its first button
+  silently, otherwise every menu opened with the keyboard would sound twice.
+
+  ```cpp
+  const SoundEffect hover{audio.loadSound("sounds/fx/button/hover.wav"), {.volume = 0.4f}};
+  const SoundEffect click{audio.loadSound("sounds/fx/button/click.wav"), {}};
+  const InterfaceStyle style{.button = {.font = buttonFont, .hoverSound = hover, .clickSound = click}};
+  ```
 
 ## Testing
 
 The ECS has its own tests (see [ECS](ecs.md#testing)). `tests/scenes.cpp` tests the scenes, and
 `tests/engine.cpp` builds menus with `MenuBuilder` and drives them with the `FakeInput` and fake text
-measures, without a window: focus, every widget, layout, mouse, scenes, and the bounce of the focused widget.
+measures, without a window: focus, every widget, layout, mouse, scenes, the bounce of the focused widget, and
+the sounds of the buttons.

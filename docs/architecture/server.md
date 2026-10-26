@@ -14,6 +14,7 @@ apps/server/src/
   main.cpp                 reads the environment, then calls run()
   Server.cpp               run(): the options, then the master or an instance
   Common/                  what both modes share
+    GameConfig.cpp         the configuration of the game: where it is, loaded and logged
     InstanceMessages.cpp   the messages between the master and its instances
     Options.cpp            the command line of both modes, the exit codes
     Lifecycle.cpp          runUntilStopped(): the event loop and the stop signals
@@ -43,8 +44,8 @@ flowchart TB
     Main["main()"] --> Parse["parseOptions()"]
     Parse -- "invalid" --> Exit2["exit 2"]
     Parse -- "--help, --version" --> Show["shows it, exit 0"]
-    Parse -- "master" --> Master["runMaster()<br/>loads the key, opens the port"]
-    Parse -- "--instance" --> Instance["runInstance()<br/>reads the secret"]
+    Parse -- "master" --> Master["runMaster()<br/>loads the key and the configuration, opens the port"]
+    Parse -- "--instance" --> Instance["runInstance()<br/>loads the configuration, reads the secret"]
     Master -- "fails" --> Exit1["exit 1"]
     Instance -- "fails" --> Exit1
     Master --> Run["runUntilStopped()"]
@@ -62,11 +63,13 @@ a server that cannot work stops at once with the reason.*
 | `--bind <ip>` | `0.0.0.0` | Address to listen on: every interface by default, `127.0.0.1` for this machine only |
 | `--game-ports <first>-<last>` | 4243–4299 | UDP ports of the games, one per game: their number is the most games at once |
 | `-k`, `--key <file>` | `server.key` | Private key of the server ([Generate the server keys](../guides/generate-the-server-keys.md)) |
-| `--check` | | Loads the key and opens the port, then exits: checks a configuration without running it |
+| `--check` | | Loads the key and the game configuration and opens the port, then exits: checks a configuration without running it |
 
-The master loads its key (`ServerIdentity::load()`) and opens its port before anything else, and logs both:
+The master loads its key (`ServerIdentity::load()`), checks the configuration of the game and opens its port
+before anything else, and logs them:
 
 ```
+INFO  master   Game configuration /opt/r-type/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
 INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
 INFO  master   Server key 4026de0635ae89391bff98b7b9ddc0689fa8529f9804e4c4721eadce94d92dff
 INFO  master   Master started: Ctrl+C to stop
@@ -86,6 +89,7 @@ never by hand:
 | `--id <id>` | Id of the game, from 1 |
 | `--udp-port <port>` | UDP port of the game |
 | `--master-port <port>` | Port where the master listens for its instances, on `127.0.0.1` |
+| `--config <dir>` | The configuration the master checked, as an absolute path |
 
 It then writes the **secret** on the instance's standard input: 64 hexadecimal digits and a line feed. The
 instance reads it before anything else (`readSecret()`), and stops with code 1 without it. The secret proves to
@@ -100,9 +104,20 @@ public test keys, for development, the tests, the measures and the fuzzing. It o
 
 | Option | Meaning |
 |---|---|
+| `--config <dir>` | The configuration of the game, the Lua files of the enemies and weapons ([ADR 0018](../decisions/0018-lua-game-config.md), [guide](../guides/configure-enemies-and-weapons.md)); `config/` next to the executable by default |
 | `--log-level <level>` | `trace`, `debug`, `info`, `warning` or `error`; wins over `RTYPE_LOG_LEVEL` ([Logging](logging.md)) |
 | `-h`, `--help` | Shows the usage |
 | `--version` | Shows the version, the one of the project |
+
+**The configuration of the game** is read by `readGameConfig()` (`Common/GameConfig.hpp`), with
+`loadGameConfig()` of `libs/game`. The master reads it only to check it, the instance reads it again and gives
+it to the `GameThread`, which makes its `Simulation` with it. With an error, neither starts (exit 1), as
+ADR 0018 says, and each error is logged with its file and its field:
+
+```
+ERROR master   Configuration: enemies/bydo_scout.lua: health: expected an integer from 1 to 255
+ERROR master   The game configuration in /opt/r-type/config is not valid: fix it, or give another one with --config
+```
 
 The options of one mode are refused in the other (`--key` with `--instance`, `--id` without it), as are unknown
 options: a typo never goes unnoticed.
@@ -479,7 +494,8 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 
 - **The limits of the lobby are not options yet**: `LobbyLimits` has the defaults of the protocol; options can
   come when a host needs others.
-- **No waves yet**: there are no Bydos in the game for now, so `WAVE_STARTED` is never sent.
+- **The waves are sent, not shown**: the instance sends `WAVE_STARTED` at the start of each wave, but the client
+  does not decode it yet (no HUD).
 - **The client draws the latest snapshot**: drawing in the past between two snapshots (interpolation) and
   predicting the ship of the player come on the side of the client, and make the game online as smooth as
   offline.

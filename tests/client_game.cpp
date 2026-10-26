@@ -2,20 +2,32 @@
 // drawing the world of a session in a scene, without a window (ADR 0015, docs/architecture/client-game.md).
 
 #include "FakeInput.hpp"
+#include "Game/EntityLook.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
+#include "Game/GameView.hpp"
+#include "Game/ImpactLooks.hpp"
+#include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
+#include "Game/ShotLooks.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Sound.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/engine/System/ModelAnimationSystem.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Constants.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
+#include <numbers>
 #include <optional>
+#include <utility>
 #include <vector>
 
 using namespace rtype::client;
@@ -53,6 +65,20 @@ public:
 };
 
 /// The engine of the client without a window: a fake keyboard, and the system that plays the games.
+/// The players with a cannon firing every 10 ticks at 1500 units per second.
+rtype::game::GameConfig armedConfig()
+{
+    rtype::game::GameConfig config;
+    config.projectiles.push_back({"shot",
+                                  "",
+                                  rtype::game::ProjectileCategory::Bullet,
+                                  {rtype::physics::Aabb{{}, {12.0f, 4.0f, 0.0f}}, {}, false}});
+    config.weapons.push_back({"cannon", "shot"});
+    config.ships.push_back({"fighter", "models/fighter.glb", {}});
+    config.player = {"fighter", "cannon", 100};
+    return config;
+}
+
 struct Client {
     FakeInput input;
     rtype::engine::Engine engine;
@@ -62,13 +88,13 @@ struct Client {
     rtype::engine::SceneId scene;
     LocalSession *session = nullptr;
 
-    explicit Client(rtype::game::Rules rules = {})
+    explicit Client(rtype::game::Rules rules = {}, const rtype::game::GameConfig &config = {})
         : sessions(engine.getEcs().registerSystem<GameSessionSystem>(engine.getEcs(), engine.getScenes(),
                                                                      engine.getControls()))
     {
         engine.setInputSource(input);
         scene = scenes.open({.updatesWhenCovered = true});
-        auto created = std::make_unique<LocalSession>(rules);
+        auto created = std::make_unique<LocalSession>(rules, config);
         session = created.get();
         sessions.start(std::move(created), scene);
     }
@@ -81,13 +107,15 @@ struct Client {
         }
     }
 
+    /// The boxes narrower than a ship.
     [[nodiscard]] std::size_t countShots()
     {
+        const float shipWidth = rtype::game::Rules{}.shipHalfWidth * 2.0f;
         std::size_t shots = 0;
         auto &replicated = ecs.cache<Replicated>();
         auto &boxes = ecs.cache<rtype::engine::Box>();
         for (rtype::ecs::entity_t entity = 0; entity < replicated.size(); ++entity) {
-            if (replicated.has(entity) && ecs.isAlive(entity) && boxes.get(entity).width < 50.0f) {
+            if (replicated.has(entity) && ecs.isAlive(entity) && boxes.get(entity).width < shipWidth) {
                 ++shots;
             }
         }
@@ -171,7 +199,7 @@ TEST_CASE("The controls of the engine become the input of the player", "[client]
     CHECK(inputFrom(controls).buttons == 0);
 }
 
-TEST_CASE("Each entity of the game has the size of the rules, the ships the colour of their player",
+TEST_CASE("Each entity of the game has its size, the ships of the players the colour of their player",
           "[client]")
 {
     const rtype::game::Rules rules;
@@ -183,8 +211,19 @@ TEST_CASE("Each entity of the game has the size of the rules, the ships the colo
     CHECK(shipLook.box.height == Approx(rules.shipHalfHeight * 2.0f));
     CHECK(shipLook.box.color.r == playerColor(2).r);
     CHECK(shipLook.box.color.g == playerColor(2).g);
-    CHECK(lookOf(shot).box.width == Approx(rules.shotHalfWidth * 2.0f));
+    CHECK(lookOf(shot).box.width < shipLook.box.width);
+    CHECK(lookOf(shot).box.color.r == playerColor(2).r);
     CHECK(lookOf(shot).order < shipLook.order);
+    // The Bydos have a look of their own, not the grey box of the unknown kinds
+    const EntityLook bydo = lookOf({3, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner});
+    const EntityLook bydoShot = lookOf({4, rtype::game::EntityKind::BydoShot, rtype::game::NoOwner});
+    CHECK(bydo.box.color.r != rtype::render::colors::Gray.r);
+    CHECK(bydo.order == shipLook.order);
+    CHECK(bydoShot.order < bydo.order);
+    // Its plasma orbs too, round
+    const EntityLook orb = lookOf({5, rtype::game::EntityKind::BydoPlasmaShot, rtype::game::NoOwner});
+    CHECK(orb.box.color.r != rtype::render::colors::Gray.r);
+    CHECK(orb.box.width == Approx(orb.box.height));
     // The four players have four colours
     for (std::uint8_t first = 0; first < 4; ++first) {
         for (std::uint8_t second = first + 1; second < 4; ++second) {
@@ -192,6 +231,23 @@ TEST_CASE("Each entity of the game has the size of the rules, the ships the colo
                    playerColor(first).g != playerColor(second).g));
         }
     }
+}
+
+TEST_CASE("The camera of the game sees the game plane as the screen sees the game", "[client]")
+{
+    // A 16:10 screen shows more of the game above and under it
+    const rtype::render::Camera view = computeGameView({0.0f, -60.0f, 1920.0f, 1200.0f});
+
+    CHECK(view.projection == rtype::render::Projection::Orthographic);
+    CHECK(view.fieldOfView == Approx(1200.0f));
+    CHECK(view.target.x == Approx(960.0f));
+    CHECK(view.target.y == Approx(540.0f));
+    CHECK(view.target.z == Approx(0.0f));
+    CHECK(view.position.x == Approx(960.0f));
+    CHECK(view.position.y == Approx(540.0f));
+    // In front of the plane, y pointing down on the screen, as in the game
+    CHECK(view.position.z < 0.0f);
+    CHECK(view.up.y == Approx(-1.0f));
 }
 
 // --- The world in the scene ---
@@ -218,10 +274,144 @@ TEST_CASE("The world of the session is drawn in the scene, and follows it", "[cl
     CHECK(client.ecs.getComponent<rtype::ecs::Position>(*ship).x > start + 100.0f);
 }
 
+TEST_CASE("A kind of ship given a look is a 3D model, its hull on the box of the ship", "[client]")
+{
+    Client client;
+    client.ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
+    // A hull 4 units long, centred 1 unit right of the origin of the model and 1 unit above it
+    const ShipLook look{{{}, {0, 1, 2, 3}}, {-1.0f, -2.0f, 4.0f, 2.0f}, false, {4, 5}};
+    client.sessions.setShipLook(rtype::game::EntityKind::PlayerShip, look);
+    const rtype::game::Rules rules;
+
+    client.run(1);
+    const rtype::game::EntityState &state = client.session->simulation().snapshot().entities[0];
+    const std::optional<rtype::ecs::entity_t> ship = client.sessions.entityOf(state.id);
+    REQUIRE(ship);
+    REQUIRE(client.ecs.hasComponent<rtype::engine::Model>(*ship));
+    CHECK_FALSE(client.ecs.hasComponent<rtype::engine::Box>(*ship));
+    const rtype::engine::Model &model = client.ecs.getComponent<rtype::engine::Model>(*ship);
+    // As long as the box of the ship, the centre of its hull on the ship
+    CHECK(model.scale == Approx(rules.shipHalfWidth * 2.0f / 4.0f));
+    CHECK(model.position.x == Approx(state.x - (1.0f * model.scale)));
+    CHECK(model.position.y == Approx(state.y + (1.0f * model.scale)));
+    // A little flame, halfway between Idle and Move, whatever it does, and no trails
+    const auto animationOf = [&]() -> const rtype::engine::ModelAnimation & {
+        return client.ecs.getComponent<rtype::engine::ModelAnimation>(*ship);
+    };
+    CHECK(animationOf().animation == look.model.animations.idle);
+    CHECK(animationOf().blendedAnimation == look.model.animations.move);
+    CHECK(animationOf().blendAmount == 0.5f);
+    CHECK(model.hiddenMeshes == look.trailMeshes);
+    client.input.keys = {Key::Right};
+    client.run(17);
+    CHECK(animationOf().animation == look.model.animations.idle);
+    CHECK(animationOf().blendAmount == 0.5f);
+    client.input.keys = {Key::Left};
+    client.run(17);
+    CHECK(animationOf().blendAmount == 0.5f);
+
+    // Climbing: the ship rolls its belly towards the camera little by little, its hull staying on it
+    client.input.keys = {Key::Up};
+    client.run(1);
+    const auto rollOf = [&] { return client.ecs.getComponent<ShipAttitude>(*ship).roll; };
+    CHECK(rollOf() < 0.0f);
+    CHECK(rollOf() > -12.0f);
+    client.run(12);
+    CHECK(rollOf() < -28.0f);
+    CHECK(rollOf() >= -40.0f);
+    // Its flame keeps flickering while it climbs
+    const auto timeOf = [&] { return client.ecs.getComponent<rtype::engine::ModelAnimation>(*ship).time; };
+    const float before = timeOf();
+    client.run(3);
+    CHECK(timeOf() > before);
+    CHECK(animationOf().blendAmount == 0.5f);
+    CHECK(model.hiddenMeshes == look.trailMeshes);
+    // Around its length, the axis of its tilt
+    CHECK(model.rotationAxis.x == Approx(1.0f));
+    CHECK(model.rotationAngle == Approx(200.0f + rollOf()));
+    const rtype::ecs::Position &position = client.ecs.getComponent<rtype::ecs::Position>(*ship);
+    const float roll = rollOf() * std::numbers::pi_v<float> / 180.0f;
+    CHECK(model.position.x == Approx(position.x - (1.0f * model.scale)));
+    CHECK(model.position.y == Approx(position.y + (1.0f * model.scale * std::cos(roll))));
+
+    // Diving: its top towards the camera, less far; then flying straight again
+    client.input.keys = {Key::Down};
+    client.run(30);
+    CHECK(rollOf() > 18.0f);
+    CHECK(rollOf() <= 25.0f);
+    client.input.keys.clear();
+    client.run(60);
+    CHECK(rollOf() == Approx(0.0f).margin(0.1f));
+    CHECK(animationOf().blendAmount == 0.5f);
+}
+
+TEST_CASE("A kind of shot given a look is a 3D model of energy, its core on the box of the shot", "[client]")
+{
+    Client client({}, armedConfig());
+    // A core 4 units long, centred 1 unit right of the origin of the model
+    const ShotLook look{{}, {-1.0f, -0.5f, 4.0f, 1.0f}, false, {{}, 2.0f}};
+    client.sessions.setShotLook(rtype::game::EntityKind::PlayerShot, look);
+
+    client.input.keys = {Key::Space};
+    client.run(1);
+    std::optional<rtype::game::EntityState> fired;
+    for (const rtype::game::EntityState &state : client.session->simulation().snapshot().entities) {
+        if (state.kind == rtype::game::EntityKind::PlayerShot) {
+            fired = state;
+        }
+    }
+    REQUIRE(fired);
+    const std::optional<rtype::ecs::entity_t> shot = client.sessions.entityOf(fired->id);
+    REQUIRE(shot);
+    REQUIRE(client.ecs.hasComponent<rtype::engine::Model>(*shot));
+    CHECK_FALSE(client.ecs.hasComponent<rtype::engine::Box>(*shot));
+    const rtype::engine::Model &model = client.ecs.getComponent<rtype::engine::Model>(*shot);
+    REQUIRE(model.energy);
+    CHECK(model.energy->boost == Approx(2.0f));
+    // As long as the box of the shot, the centre of its core on the shot
+    CHECK(model.scale == Approx(lookOf(*fired).box.width / 4.0f));
+    CHECK(model.position.x == Approx(fired->x - (1.0f * model.scale)));
+    CHECK(model.position.y == Approx(fired->y));
+}
+
+TEST_CASE("A shot fired askew turns its model the way it flies, its core still on the shot", "[client]")
+{
+    rtype::ecs::Ecs ecs;
+    ShotLooks looks;
+    // A model that faces left, its core 4 units long, centred 1 unit right of its origin when straight
+    looks.setLook(rtype::game::EntityKind::BydoShot, {{}, {-1.0f, -0.5f, 4.0f, 1.0f}, true, {}});
+    rtype::game::EntityState state{7, rtype::game::EntityKind::BydoShot, rtype::game::NoOwner};
+    state.x = 500.0f;
+    state.y = 300.0f;
+    // Where the nose of the model points after its turns: a half turn around its vertical axis to face left,
+    // then a half turn around the axis of the model
+    const auto noseOf = [](const rtype::engine::Model &model) {
+        const rtype::render::Vector3 &axis = model.rotationAxis;
+        return rtype::render::Vector2{1.0f - (2.0f * axis.x * axis.x), -2.0f * axis.x * axis.y};
+    };
+
+    state.velocityX = -600.0f;
+    const rtype::ecs::entity_t straight = ecs.createEntity();
+    looks.addModel(ecs, straight, state, lookOf(state));
+    const rtype::engine::Model &ahead = ecs.getComponent<rtype::engine::Model>(straight);
+    CHECK(noseOf(ahead).x == Approx(-1.0f));
+    CHECK(noseOf(ahead).y == Approx(0.0f).margin(1e-6));
+    CHECK(ahead.position.x == Approx(500.0f - (1.0f * ahead.scale)));
+
+    // Down and to the left, at 45 degrees
+    state.velocityY = 600.0f;
+    const rtype::ecs::entity_t askew = ecs.createEntity();
+    looks.addModel(ecs, askew, state, lookOf(state));
+    const rtype::engine::Model &turned = ecs.getComponent<rtype::engine::Model>(askew);
+    CHECK(noseOf(turned).x == Approx(-std::numbers::sqrt2_v<float> / 2.0f));
+    CHECK(noseOf(turned).y == Approx(std::numbers::sqrt2_v<float> / 2.0f));
+    CHECK(turned.position.x == Approx(500.0f - (std::numbers::sqrt2_v<float> / 2.0f * turned.scale)));
+    CHECK(turned.position.y == Approx(300.0f + (std::numbers::sqrt2_v<float> / 2.0f * turned.scale)));
+}
+
 TEST_CASE("Shots appear when fired, and their entities go when they leave the game", "[client]")
 {
-    rtype::game::Rules rules;
-    Client client(rules);
+    Client client({}, armedConfig());
 
     client.input.keys = {Key::Space};
     client.run(30);
@@ -234,6 +424,35 @@ TEST_CASE("Shots appear when fired, and their entities go when they leave the ga
     client.run(120);
     CHECK(client.countShots() == 0);
     CHECK(client.sessions.entityCount() == 1);
+}
+
+TEST_CASE("A shot of a kind given a sound appears with it, for the sound system of the engine", "[client]")
+{
+    Client client({}, armedConfig());
+    const rtype::audio::SoundId fire{7};
+    client.sessions.setShotSound(rtype::game::EntityKind::PlayerShot, {fire, 0.5f});
+
+    client.input.keys = {Key::Space};
+    client.run(30);
+    std::size_t shots = 0;
+    auto &replicated = client.ecs.cache<Replicated>();
+    for (rtype::ecs::entity_t entity = 0; entity < replicated.size(); ++entity) {
+        if (!replicated.has(entity) || !client.ecs.isAlive(entity)) {
+            continue;
+        }
+        if (replicated.get(entity).kind != rtype::game::EntityKind::PlayerShot) {
+            CHECK_FALSE(client.ecs.hasComponent<rtype::engine::SoundEffect>(entity));
+            continue;
+        }
+        ++shots;
+        REQUIRE(client.ecs.hasComponent<rtype::engine::SoundEffect>(entity));
+        const auto &effect = client.ecs.getComponent<rtype::engine::SoundEffect>(entity);
+        CHECK(effect.sound == fire);
+        CHECK(effect.settings.volume == 0.5f);
+        // Fired from the left of the game area: heard on the left
+        CHECK(effect.settings.pan < 0.0f);
+    }
+    CHECK(shots >= 2);
 }
 
 TEST_CASE("The game stops while a menu is over its scene", "[client]")
@@ -289,4 +508,170 @@ TEST_CASE("The session stops when its scene closes", "[client]")
     for (rtype::ecs::entity_t entity = 0; entity < replicated.size(); ++entity) {
         CHECK_FALSE(replicated.has(entity));
     }
+}
+
+// --- Impacts ---
+
+namespace
+{
+
+/// A session that gives the snapshots written by the test.
+class ScriptedSession final : public GameSession
+{
+public:
+    std::vector<rtype::game::Snapshot> snapshots;
+
+    [[nodiscard]] std::uint8_t localSlot() const override { return 0; }
+    void setInput(rtype::game::PlayerInput /*input*/) override {}
+    void update(float /*elapsed*/) override {}
+    [[nodiscard]] std::vector<rtype::game::Snapshot> takeSnapshots() override
+    {
+        return std::exchange(snapshots, {});
+    }
+    void setPaused(bool /*paused*/) override {}
+    [[nodiscard]] bool isOver() const override { return false; }
+};
+
+/// The engine of the client playing a scripted session, its impacts played.
+struct ImpactClient {
+    rtype::engine::Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    GameSessionSystem &sessions;
+    rtype::engine::SceneId scene;
+    ScriptedSession *session = nullptr;
+
+    ImpactClient()
+        : sessions(engine.getEcs().registerSystem<GameSessionSystem>(engine.getEcs(), engine.getScenes(),
+                                                                     engine.getControls()))
+    {
+        ecs.registerSystem<ImpactSystem>(ecs);
+        scene = engine.getScenes().open({});
+        auto created = std::make_unique<ScriptedSession>();
+        session = created.get();
+        sessions.start(std::move(created), scene);
+    }
+
+    /// One frame that receives a snapshot.
+    void receive(rtype::game::Snapshot snapshot)
+    {
+        session->snapshots.push_back(std::move(snapshot));
+        engine.update(Tick);
+    }
+
+    [[nodiscard]] std::vector<rtype::ecs::entity_t> impacts()
+    {
+        std::vector<rtype::ecs::entity_t> found;
+        auto &impacts = ecs.cache<Impact>();
+        for (rtype::ecs::entity_t entity = 0; entity < impacts.size(); ++entity) {
+            if (impacts.has(entity) && ecs.isAlive(entity)) {
+                found.push_back(entity);
+            }
+        }
+        return found;
+    }
+};
+
+rtype::game::EntityState shotAt(std::uint32_t id, float x, float y)
+{
+    rtype::game::EntityState shot{id, rtype::game::EntityKind::PlayerShot, 0};
+    shot.x = x;
+    shot.y = y;
+    return shot;
+}
+
+const ImpactLook SparkLook{{}, 2, 0.4f, 3.0f, {10, 20, 30, 200}, {}};
+
+rtype::game::Snapshot snapshotOf(std::uint32_t tick, std::vector<rtype::game::EntityState> entities,
+                                 std::vector<rtype::game::DestroyedEntity> destroyed = {})
+{
+    rtype::game::Snapshot snapshot;
+    snapshot.tick = tick;
+    snapshot.entities = std::move(entities);
+    snapshot.destroyed = std::move(destroyed);
+    return snapshot;
+}
+
+} // namespace
+
+TEST_CASE("A shot killed in the game leaves its impact where it was last drawn, played once", "[client]")
+{
+    ImpactClient client;
+    client.sessions.setImpactLook(rtype::game::EntityKind::PlayerShot, SparkLook);
+    client.receive(snapshotOf(1, {shotAt(5, 300.0f, 200.0f)}));
+
+    // Online, the destruction comes first, while the shot is still drawn
+    client.receive(snapshotOf(2, {shotAt(5, 310.0f, 200.0f)}, {{5, rtype::game::DestroyCause::Killed}}));
+    CHECK(client.impacts().empty());
+    client.receive(snapshotOf(3, {}));
+
+    const std::vector<rtype::ecs::entity_t> impacts = client.impacts();
+    REQUIRE(impacts.size() == 1);
+    const rtype::ecs::entity_t impact = impacts[0];
+    CHECK(client.ecs.getComponent<rtype::engine::SceneMember>(impact).scene == client.scene);
+    const rtype::engine::Model &model = client.ecs.getComponent<rtype::engine::Model>(impact);
+    CHECK(model.position.x == Approx(310.0f));
+    CHECK(model.position.y == Approx(200.0f));
+    // In front of the game, towards the camera
+    CHECK(model.position.z < 0.0f);
+    CHECK(model.scale == Approx(3.0f));
+    CHECK(model.tint.r == 10);
+    CHECK(model.energy);
+    const auto &animation = client.ecs.getComponent<rtype::engine::ModelAnimation>(impact);
+    CHECK(animation.animation == 2);
+    CHECK(animation.speed == 0.0f);
+    CHECK(animation.time == Approx(Tick));
+
+    // Opaque, then fading out in the last quarter of its animation, then gone before it loops
+    client.receive(snapshotOf(4, {}));
+    CHECK(client.ecs.getComponent<rtype::engine::Model>(impact).tint.a == 200);
+    for (int frame = 0; frame < 17; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(5 + frame), {}));
+    }
+    REQUIRE(client.ecs.isAlive(impact));
+    const std::uint8_t fading = client.ecs.getComponent<rtype::engine::Model>(impact).tint.a;
+    CHECK(fading < 200);
+    CHECK(fading > 0);
+    for (int frame = 0; frame < 6; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(22 + frame), {}));
+    }
+    CHECK(client.impacts().empty());
+}
+
+TEST_CASE("An entity removed without effect, or of a kind without an impact, leaves none", "[client]")
+{
+    ImpactClient client;
+    client.sessions.setImpactLook(rtype::game::EntityKind::PlayerShot, SparkLook);
+    rtype::game::EntityState bydoShot{7, rtype::game::EntityKind::BydoShot, rtype::game::NoOwner};
+    client.receive(snapshotOf(1, {shotAt(5, 300.0f, 200.0f), bydoShot}));
+
+    client.receive(
+        snapshotOf(2, {}, {{5, rtype::game::DestroyCause::Removed}, {7, rtype::game::DestroyCause::Killed}}));
+
+    CHECK(client.sessions.entityCount() == 0);
+    CHECK(client.impacts().empty());
+}
+
+TEST_CASE("A ship killed in the game sounds with its impact, on its side of the screen", "[client]")
+{
+    ImpactClient client;
+    const rtype::audio::SoundId destruction{4};
+    client.sessions.setImpactLook(rtype::game::EntityKind::BydoFlyer, SparkLook);
+    client.sessions.setDestructionSound(rtype::game::EntityKind::BydoFlyer, {destruction, 0.8f});
+    rtype::game::EntityState bydo{5, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner};
+    bydo.x = 1700.0f;
+    rtype::game::EntityState fled{6, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner};
+    client.receive(snapshotOf(1, {bydo, fled}));
+    CHECK_FALSE(client.ecs.hasComponent<rtype::engine::SoundEffect>(*client.sessions.entityOf(5)));
+
+    client.receive(
+        snapshotOf(2, {}, {{5, rtype::game::DestroyCause::Killed}, {6, rtype::game::DestroyCause::Removed}}));
+
+    const std::vector<rtype::ecs::entity_t> impacts = client.impacts();
+    REQUIRE(impacts.size() == 1);
+    REQUIRE(client.ecs.hasComponent<rtype::engine::SoundEffect>(impacts[0]));
+    const auto &effect = client.ecs.getComponent<rtype::engine::SoundEffect>(impacts[0]);
+    CHECK(effect.sound == destruction);
+    CHECK(effect.settings.volume == 0.8f);
+    // On the right of the game area: heard on the right
+    CHECK(effect.settings.pan > 0.0f);
 }

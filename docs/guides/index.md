@@ -10,6 +10,8 @@ Step-by-step guides for common tasks in the client and the server. They assume t
 | [Add a menu](add-a-menu.md) | Build a menu with widgets, open it and close it. |
 | [Add a player action](add-a-player-action.md) | Add a new action, bind it to keys and buttons, and react to it. |
 | [Add a network message](add-a-network-message.md) | Specify a message, encode and decode it, and test it. |
+| [Configure enemies and weapons](configure-enemies-and-weapons.md) | Add a projectile, a weapon, a ship, an enemy and a wave with Lua files, and check them. |
+| [Script the behavior of an enemy](script-enemy-behaviors.md) | Write in Lua when an enemy moves, where it goes and when it fires, and try it. |
 | [Generate the server keys](generate-the-server-keys.md) | Make the key pair the server proves its identity with, and put each key where it belongs. |
 | [Run a server](run-a-server.md) | Check the configuration, open the ports, start the server and stop it. |
 | [Play online](play-online.md) | Give the key of the server to the clients, connect, create and join a game. |

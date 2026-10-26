@@ -2,6 +2,7 @@
 
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Style.hpp"
+#include "rtype/localization/Localization.hpp"
 
 #include <functional>
 
@@ -19,6 +20,6 @@ inline constexpr const char *SettingsMenuScene = "settings_menu";
 /// @param style Look of the interface. It must outlive the engine.
 /// @param playSolo Starts a game offline.
 void createSubmenuScenes(engine::Engine &engine, const engine::InterfaceStyle &style,
-                         std::function<void()> playSolo);
+                         localization::Localization &translations, std::function<void()> playSolo);
 
 } // namespace rtype::client

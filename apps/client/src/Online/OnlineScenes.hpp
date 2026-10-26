@@ -6,6 +6,7 @@
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/lobby/Messages.hpp"
+#include "rtype/localization/Localization.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 
@@ -41,6 +42,7 @@ class OnlineScenes
     engine::Engine &_engine;
     network::EventLoop &_loop;
     GameScenes &_games;
+    localization::Localization &_translations;
     std::filesystem::path _publicKey;
     std::string _serverText = "127.0.0.1:4242";
     std::string _name = "Player";
@@ -64,7 +66,7 @@ public:
     /// @param publicKey The public key of the server that the client pins.
     OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                  const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                 std::filesystem::path publicKey);
+                 std::filesystem::path publicKey, localization::Localization &translations);
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;

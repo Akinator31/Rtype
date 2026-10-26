@@ -33,8 +33,10 @@ struct MasterOptions {
     std::uint16_t lastGamePort = 4299;
     /// The private key the master proves its identity with (docs/guides/generate-the-server-keys.md).
     std::filesystem::path key = "server.key";
-    /// Only check that the server can start (key, ports), then exit.
+    /// Only check that the server can start (key, ports, configuration), then exit.
     bool check = false;
+    /// The configuration of the game, given to the instances; empty: config/ next to the executable.
+    std::filesystem::path config{};
 };
 
 /// The options of an instance: one game, started by the master (docs/protocol/instances.md, section 1).
@@ -47,6 +49,8 @@ struct InstanceOptions {
     std::uint16_t masterPort = 0;
     /// A game without a master, with a fixed test key (debug builds only, ADR 0013).
     bool standalone = false;
+    /// The configuration of the game; empty: config/ next to the executable.
+    std::filesystem::path config{};
 };
 
 struct Options {

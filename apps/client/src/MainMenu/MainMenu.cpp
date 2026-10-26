@@ -75,34 +75,40 @@ void createMainMenuSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceMan
 
 /// The button at `row` of the column, counted from the top, hidden until the player presses, then coming
 /// from the left edge.
-void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, const std::string &text,
+void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
+                  localization::Localization &translations, const std::string &key,
                   const std::function<void()> &onPress, int row)
 {
     const auto rowsBelow = static_cast<float>(buttonsCount - 1 - row);
     const render::Vector2 place{screenMargin, -screenMargin - (rowsBelow * buttonsSpacing)};
     const render::Vector2 entrance{place.x - buttonsEntrance, place.y};
     const float delay = buttonsDelay + (static_cast<float>(row) * buttonsStagger);
-    const ecs::entity_t button =
-        interface.button(text, onPress, {engine::AnchorPoint::BottomLeft, entrance.x, entrance.y});
+    const ecs::entity_t button = interface.button(translations.text(key), onPress,
+                                                  {engine::AnchorPoint::BottomLeft, entrance.x, entrance.y});
+    ecs.addComponent<engine::BoundText>(button, [&translations, key] { return translations.text(key); });
     ecs.addComponent<ecs::Hidden>(button);
     ecs.addComponent<IntroSlide>(button, entrance, place, delay, engine::Easing::EaseOutBack);
 }
 
 /// The buttons of the menu: Play, Online and Settings open their submenu.
 void createButtons(engine::Engine &engine, engine::InterfaceBuilder &interface,
-                   const std::function<void()> &quit)
+                   localization::Localization &translations, const std::function<void()> &quit)
 {
     ecs::Ecs &ecs = engine.getEcs();
-    createButton(ecs, interface, "Play", [&engine] { engine.pushScene(PlayMenuScene); }, 0);
-    createButton(ecs, interface, "Online", [&engine] { engine.pushScene(OnlineMenuScene); }, 1);
-    createButton(ecs, interface, "Settings", [&engine] { engine.pushScene(SettingsMenuScene); }, 2);
-    createButton(ecs, interface, "Quit", quit, 3);
+    createButton(
+        ecs, interface, translations, "menu.play", [&engine] { engine.pushScene(PlayMenuScene); }, 0);
+    createButton(
+        ecs, interface, translations, "menu.online", [&engine] { engine.pushScene(OnlineMenuScene); }, 1);
+    createButton(
+        ecs, interface, translations, "menu.settings", [&engine] { engine.pushScene(SettingsMenuScene); }, 2);
+    createButton(ecs, interface, translations, "menu.quit", quit, 3);
 }
 
 } // namespace
 
 void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
-                   const engine::InterfaceStyle &style, const std::function<void()> &quit)
+                   const engine::InterfaceStyle &style, localization::Localization &translations,
+                   const std::function<void()> &quit)
 {
     ecs::Ecs &ecs = engine.getEcs();
     createMainMenuCamera(ecs, scene);
@@ -112,7 +118,7 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
     createShips(ecs, scene, resources);
 
     engine::InterfaceBuilder interface(ecs, scene, style);
-    createButtons(engine, interface, quit);
+    createButtons(engine, interface, translations, quit);
 }
 
 } // namespace rtype::client

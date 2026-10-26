@@ -20,13 +20,14 @@ enum class EntityKind : std::uint8_t {
     BydoTank = 0x12,
     BydoBoss = 0x1F,
     BydoShot = 0x40,
+    BydoPlasmaShot = 0x41,
 };
 
 /// Why an entity was destroyed, for what the client shows.
 enum class DestroyCause : std::uint8_t {
     /// Removed without effect: it left the game area, or its player left.
     Removed = 0,
-    /// Destroyed in the game: the client draws an explosion.
+    /// Destroyed in the game, a ship killed or a shot that hit: the client draws an explosion or an impact.
     Killed = 1,
 };
 

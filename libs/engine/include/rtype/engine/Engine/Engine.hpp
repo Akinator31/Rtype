@@ -6,6 +6,7 @@
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Event/Event.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
+#include "rtype/save/Save/Save.hpp"
 
 #include <functional>
 #include <string>
@@ -15,7 +16,8 @@
 namespace rtype::engine
 {
 
-/// Owns the ECS, the events (ADR 0008), the scenes (ADR 0009) and the controls (the virtual gamepad).
+/// Owns the ECS, the events (ADR 0008), the scenes (ADR 0009), the controls (the virtual gamepad) and the
+/// save (the values kept from one run to the next).
 ///
 /// At the start of each update, the engine destroys the entities of the scenes closed since the previous one,
 /// whoever closed them (a scene request, a menu button calling Scenes::close(), Back).
@@ -71,6 +73,7 @@ class Engine
     Controls _controls;
     input::InputSource *_inputSource = nullptr;
     ThreadManager _threads;
+    save::Save _save;
 
     void applySceneRequests();
     void openScene(const std::string &name);
@@ -92,6 +95,8 @@ public:
     [[nodiscard]] Controls &getControls();
     [[nodiscard]] ThreadManager &getThreads() { return _threads; }
     [[nodiscard]] const ThreadManager &getThreads() const { return _threads; }
+    /// The save starts empty, without a file: the client gives it one with Save::setPath(), then reads it.
+    [[nodiscard]] save::Save &getSave();
 
     /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without
     /// a source, the controls are never updated and stay released.

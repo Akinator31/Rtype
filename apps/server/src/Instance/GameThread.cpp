@@ -26,8 +26,10 @@ struct Overloaded : Visitors... {
 
 } // namespace
 
-GameThread::GameThread(rtype::game::Rules rules, PublishFunction publish, FailureFunction onFailure)
-    : _rules(rules), _publish(std::move(publish)), _onFailure(std::move(onFailure))
+GameThread::GameThread(rtype::game::Rules rules, rtype::game::GameConfig config, PublishFunction publish,
+                       FailureFunction onFailure)
+    : _rules(rules), _config(std::move(config)), _publish(std::move(publish)),
+      _onFailure(std::move(onFailure))
 {
 }
 
@@ -80,7 +82,7 @@ void GameThread::run()
     using Clock = std::chrono::steady_clock;
 
     try {
-        rtype::game::Simulation simulation(_rules);
+        rtype::game::Simulation simulation(_rules, _config);
         std::array<InputBuffer, rtype::game::MaxPlayers> buffers{};
         std::vector<Command> commands;
         Clock::time_point next = Clock::now();

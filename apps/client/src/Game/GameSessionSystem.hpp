@@ -1,9 +1,12 @@
 #pragma once
 
+#include "Game/EntitySounds.hpp"
 #include "Game/GameSession.hpp"
+#include "Game/ImpactLooks.hpp"
+#include "Game/ShipLooks.hpp"
+#include "Game/ShotLooks.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/System/System.hpp"
-#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/game/PlayerInput.hpp"
@@ -14,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace rtype::client
@@ -23,20 +27,8 @@ namespace rtype::client
 struct Replicated {
     /// Its id in the snapshots.
     std::uint32_t networkId = 0;
+    game::EntityKind kind = game::EntityKind::PlayerShip;
 };
-
-/// How an entity of the game is drawn, for now: a coloured box of its size, the ships in the colour of
-/// their player. Sprites can replace the boxes without changing the rest.
-struct EntityLook {
-    engine::Box box;
-    int order = 0;
-};
-
-/// The look of an entity of the game.
-[[nodiscard]] EntityLook lookOf(const game::EntityState &entity);
-
-/// The colour of a player: blue, red, green, yellow for the slots 0 to 3.
-[[nodiscard]] render::Color playerColor(std::uint8_t slot);
 
 /// The input of the local player, from the virtual gamepad of the engine: the directions, and FaceDown
 /// (Space, A on a gamepad) to fire.
@@ -48,7 +40,12 @@ struct EntityLook {
 ///    not receive the input (a menu is over it);
 /// 2. the session updates, paused while a menu is over the scene;
 /// 3. each snapshot becomes entities of the scene: one per entity of the game, created when it appears,
-///    moved, and destroyed when it is no longer in the world.
+///    moved, and destroyed when it is no longer in the world. The kinds given a ShipLook are 3D models, which
+///    roll around their length, smoothly, as their ship climbs or dives; those given a ShotLook are models of
+///    energy; the others are boxes. An entity killed in the game (a ship shot down, a shot that hit) leaves
+///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. The sounds are
+///    engine::SoundEffect given to entities, which the engine::SoundSystem plays: a shot that appears has the
+///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens
@@ -65,10 +62,27 @@ class GameSessionSystem : public ecs::System
     std::function<void()> _onOver;
     /// The entity of the scene of each entity of the game, by id.
     std::unordered_map<std::uint32_t, ecs::EntityRef> _entities;
+    ShipLooks _shipLooks;
+    ShotLooks _shotLooks;
+    ImpactLooks _impactLooks;
+    EntitySounds _shotSounds;
+    EntitySounds _destructionSounds;
+    /// The entities drawn that the game killed: they leave an impact when they go.
+    std::unordered_set<std::uint32_t> _killed;
     std::vector<game::PlayerState> _players;
     std::uint32_t _tick = 0;
+    /// Seconds the session has been played: the time of the animations of the ships.
+    float _clock = 0.0f;
 
     void apply(const game::Snapshot &snapshot);
+    /// Online, an entity is still drawn for a while after the game tells its destruction: the entities killed
+    /// are remembered until they go.
+    void rememberKilled(const std::vector<game::DestroyedEntity> &destroyed);
+    void createEntity(const game::EntityState &state);
+    /// Destroys the entity of an entity of the game gone, which leaves its impact if it was killed.
+    void removeEntity(std::uint32_t networkId, const ecs::EntityRef &entity);
+    void moveEntity(ecs::entity_t entity, const game::EntityState &state);
+    void placeShipModels(float elapsed);
 
 public:
     GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, engine::Scenes &scenes,
@@ -80,6 +94,17 @@ public:
                std::function<void()> onOver = {});
     /// Stops the session. Its entities stay until their scene closes.
     void stop();
+    /// Draws the ships of this kind with a 3D model from now on, instead of a box.
+    void setShipLook(game::EntityKind kind, const ShipLook &look);
+    /// Draws the shots of this kind with a 3D model of energy from now on, instead of a box.
+    void setShotLook(game::EntityKind kind, const ShotLook &look);
+    /// Leaves an impact where the game kills an entity of this kind from now on.
+    void setImpactLook(game::EntityKind kind, const ImpactLook &look);
+    /// Plays a sound when a shot of this kind appears from now on.
+    void setShotSound(game::EntityKind kind, const EntitySound &sound);
+    /// Plays a sound where the game kills an entity of this kind from now on, with its impact: a kind without
+    /// an ImpactLook makes no sound.
+    void setDestructionSound(game::EntityKind kind, const EntitySound &sound);
 
     void update(float elapsed) override;
 

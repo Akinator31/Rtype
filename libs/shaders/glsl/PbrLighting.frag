@@ -1,0 +1,107 @@
+#version 330
+
+// Fragment stage of the lighting of shiny 3D models (missiles, bombs, debris): the lighting of Lighting.frag
+// plus a specular highlight driven by the glTF metal/roughness map. The renderer sets lightDirection
+// (normalised, the direction the light travels in), lightColor and ambientColor (sRGB, 0 to 1), useNormalMap
+// (0 or 1) and viewPosition (world space).
+//
+// metalRoughnessMap is the glTF metallicRoughness texture, that raylib loads in MATERIAL_MAP_ROUGHNESS: green
+// is the roughness, blue the metalness. Only for materials that have one: without it, the sampler reads
+// whatever texture is bound. A normalised Blinn-Phong highlight with a Schlick Fresnel stands in for a full
+// PBR model. Metals take the colour of the texture in their reflection and have no diffuse light.
+//
+// As in Lighting.frag, colours are computed linear and the emission map (emissionMap) glows whatever the
+// light; materials without one get a black texture.
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+in vec3 fragPosition;
+in vec3 fragNormal;
+in vec4 fragTangent;
+
+uniform sampler2D texture0;
+uniform sampler2D texture2;
+uniform sampler2D metalRoughnessMap;
+uniform sampler2D emissionMap;
+uniform vec4 colDiffuse;
+uniform int useNormalMap;
+uniform vec3 lightDirection;
+uniform vec3 lightColor;
+uniform vec3 ambientColor;
+uniform vec3 viewPosition;
+
+out vec4 finalColor;
+
+vec3 toLinear(vec3 color)
+{
+    return pow(color, vec3(2.2));
+}
+
+vec3 toSrgb(vec3 color)
+{
+    return pow(color, vec3(1.0 / 2.2));
+}
+
+// The normal of the surface bent by the relief of the normal map, which is given in tangent space
+vec3 applyNormalMap(vec3 surface)
+{
+    vec3 tangent = normalize(fragTangent.xyz - surface * dot(surface, fragTangent.xyz));
+    vec3 bitangent = cross(surface, tangent) * fragTangent.w;
+    vec3 relief = texture(texture2, fragTexCoord).rgb * 2.0 - 1.0;
+    return normalize(mat3(tangent, bitangent, surface) * relief);
+}
+
+// How much the shape of the model faces the light, from 0 to 1: the relief does not light the night side
+float computeDaylight(vec3 surface)
+{
+    return smoothstep(-0.05, 0.2, dot(surface, -lightDirection));
+}
+
+// Light reflected towards the camera, for a reflectance at normal incidence of f0
+vec3 computeSpecular(vec3 normal, vec3 toView, vec3 f0, float roughness)
+{
+    vec3 toLight = -lightDirection;
+    vec3 halfway = normalize(toLight + toView);
+    float shininess = mix(512.0, 8.0, roughness);
+    float highlight = pow(max(dot(normal, halfway), 0.0), shininess) * (shininess + 8.0) / 25.13;
+    vec3 fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(halfway, toView), 0.0), 5.0);
+    return fresnel * highlight * max(dot(normal, toLight), 0.0);
+}
+
+// The colour and opacity that, blended over the background, give the lit surface over it plus the emitted
+// light (see Lighting.frag)
+vec4 addEmission(vec3 lit, float alpha, vec3 emission)
+{
+    float glow = max(emission.r, max(emission.g, emission.b));
+    float opacity = clamp(alpha + glow, 0.0, 1.0);
+    if (opacity <= 0.0) {
+        return vec4(0.0);
+    }
+    return vec4((lit * alpha + emission) / opacity, opacity);
+}
+
+void main()
+{
+    vec4 texel = texture(texture0, fragTexCoord) * colDiffuse;
+    vec3 albedo = toLinear(texel.rgb) * fragColor.rgb;
+    vec3 metalRoughness = texture(metalRoughnessMap, fragTexCoord).rgb;
+    float roughness = clamp(metalRoughness.g, 0.05, 1.0);
+    float metalness = metalRoughness.b;
+
+    vec3 surface = normalize(fragNormal);
+    vec3 normal = useNormalMap == 1 ? applyNormalMap(surface) : surface;
+    vec3 toView = normalize(viewPosition - fragPosition);
+    vec3 ambient = toLinear(ambientColor);
+    vec3 sun = toLinear(lightColor) * computeDaylight(surface);
+
+    vec3 f0 = mix(vec3(0.04), albedo, metalness);
+    vec3 diffuse = albedo * (1.0 - metalness);
+    vec3 lit = diffuse * (ambient + sun * max(dot(normal, -lightDirection), 0.0))
+             + f0 * ambient * 0.5
+             + sun * computeSpecular(normal, toView, f0, roughness)
+             + ambient * 0.6 * pow(1.0 - max(dot(normal, toView), 0.0), 4.0);
+
+    vec3 emission = toLinear(texture(emissionMap, fragTexCoord).rgb);
+    vec4 color = addEmission(lit, texel.a * fragColor.a, emission);
+    finalColor = vec4(toSrgb(color.rgb), color.a);
+}

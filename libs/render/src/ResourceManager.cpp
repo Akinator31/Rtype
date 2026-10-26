@@ -89,4 +89,9 @@ int ResourceManager::getModelAnimation(ModelId model, const std::string &name) c
     return animation;
 }
 
+float ResourceManager::getModelAnimationDuration(ModelId model, int animation) const
+{
+    return _impl->models.get(model).getAnimationDuration(animation);
+}
+
 } // namespace rtype::render

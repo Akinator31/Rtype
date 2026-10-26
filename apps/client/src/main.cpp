@@ -5,16 +5,21 @@
 #include "Console/ConsoleSystem.hpp"
 #include "Game/GameScenes.hpp"
 #include "Game/GameSessionSystem.hpp"
+#include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "rtype/audio/AudioDevice.hpp"
+#include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/input/Devices.hpp"
+#include "rtype/localization/Localization.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/physics/Physics.hpp"
@@ -31,12 +36,16 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace
 {
 
 constexpr float CollisionCellSize = 64.0f;
+/// How loud the buttons are: the hover is heard at each move in a menu, the click file is quiet.
+constexpr float ButtonHoverVolume = 0.4f;
+constexpr float ButtonClickVolume = 1.0f;
 
 struct StopWorkers {
     rtype::engine::ThreadManager &threads;
@@ -62,6 +71,13 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
         RTYPE_MODEL_SHIP_SPACESHIP,
         RTYPE_MODEL_SHIP_BATTLESTAR,
         RTYPE_MODEL_SHIP_DROP_SHIP,
+        RTYPE_MODEL_SHOT_BASIC,
+        RTYPE_MODEL_SHOT_SPIRAL,
+        RTYPE_MODEL_ORB_PLASMA,
+        RTYPE_MODEL_IMPACT_SPARK,
+        RTYPE_MODEL_IMPACT_BURST,
+        RTYPE_MODEL_IMPACT_SPLASH,
+        RTYPE_MODEL_IMPACT_EXPLOSION,
     };
     std::vector<std::shared_future<ModelId>> models;
     for (const char *path : modelPaths) {
@@ -100,20 +116,41 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
     return true;
 }
 
+/// Loads the configuration of the game (ADR 0018), next to the executable. Unlike the server, the client
+/// starts with a configuration that has errors: it goes without it (an offline game has no enemies nor
+/// weapons), and says why in the console and in the logs.
+rtype::game::GameConfig readGameConfig(rtype::client::Console &console)
+{
+    const rtype::log::Logger logger("client");
+    rtype::game::LoadedGameConfig loaded =
+        rtype::game::loadGameConfig(rtype::render::applicationDirectory() / "config");
+    if (loaded.isValid()) {
+        return std::move(loaded.config);
+    }
+    console.print("The game configuration has errors: the game runs without it");
+    for (const std::string &error : loaded.errors) {
+        console.print(error);
+        logger.warning("Configuration: {}", error);
+    }
+    return {};
+}
+
 /// Declares the scenes of the client, but those of a game, which GameScenes declares.
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
                   const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
                   rtype::client::Console &console, const rtype::engine::RendererMetrics &metrics,
-                  rtype::client::GameScenes &games)
+                  rtype::client::GameScenes &games, const rtype::game::GameConfig &config,
+                  rtype::localization::Localization &translations)
 {
     const auto quit = [&window] { window.requestClose(); };
-    engine.createScene(
-        rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
-        [&resources, &style, quit](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
-            rtype::client::buildMainMenu(target, scene, resources, style, quit);
-        });
-    rtype::client::createSubmenuScenes(
-        engine, style, [&games] { games.play(std::make_unique<rtype::client::LocalSession>()); });
+    engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
+                       [&resources, &style, &translations, quit](rtype::engine::Engine &target,
+                                                                 rtype::engine::SceneId scene) {
+                           rtype::client::buildMainMenu(target, scene, resources, style, translations, quit);
+                       });
+    rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
+        games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
+    });
     engine.createScene(
         rtype::client::ConsoleScene, {.overlay = true},
         [&console, &metrics, &style](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
@@ -125,6 +162,7 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
 /// @return The system that plays the games.
 rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
                                                   rtype::input::Devices &devices,
+                                                  rtype::audio::AudioPlayer &audio,
                                                   const rtype::engine::RendererMetrics &metrics,
                                                   const rtype::engine::InterfaceStyle &style)
 {
@@ -134,6 +172,9 @@ rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
     // After the menus, which read the input first: Escape opens the pause menu before the game reads it
     auto &sessions =
         ecs.registerSystem<rtype::client::GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
+    ecs.registerSystem<rtype::client::ImpactSystem>(ecs);
+    // After the menus and the game, to play their sounds in the frame they give them
+    ecs.registerSystem<rtype::engine::SoundSystem>(audio);
     ecs.registerSystem<rtype::engine::WidgetTextSystem>();
     ecs.registerSystem<rtype::engine::BoundTextSystem>();
     ecs.registerSystem<rtype::engine::TweenSystem>();
@@ -154,6 +195,8 @@ void run()
     using namespace rtype::render;
 
     Window window({.fullscreen = true});
+    const rtype::audio::AudioDevice audioDevice;
+    rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets");
     rtype::engine::Engine engine;
     ResourceManager resources(window, applicationDirectory() / "assets",
                               engine.getThreads().getAssetsWorker());
@@ -167,18 +210,27 @@ void run()
 
     const rtype::engine::InterfaceStyle style{
         .font = resources.loadFont(RTYPE_FONT_TITLE, 160),
-        .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96)},
+        .button = {.font = resources.loadFont(RTYPE_FONT_BUTTON, 96),
+                   .hoverSound = rtype::engine::SoundEffect{audio.loadSound(RTYPE_SOUND_BUTTON_HOVER),
+                                                            {.volume = ButtonHoverVolume}},
+                   .clickSound = rtype::engine::SoundEffect{audio.loadSound(RTYPE_SOUND_BUTTON_CLICK),
+                                                            {.volume = ButtonClickVolume}}},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
+    rtype::localization::Localization translations("en");
+    const auto localeDirectory = applicationDirectory() / "assets" / "locales";
+    translations.load("en", localeDirectory / "en.lang");
+    translations.load("fr", localeDirectory / "fr.lang");
 
     rtype::client::Console console;
+    const rtype::game::GameConfig config = readGameConfig(console);
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
     engine.setInputSource(devices);
-    rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, metrics, style);
-    rtype::client::GameScenes games(engine, resources, metrics, style, sessions);
+    rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, audio, metrics, style);
+    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style,
-                                       applicationDirectory() / "server.pub");
+                                       applicationDirectory() / "server.pub", translations);
     rtype::engine::SceneRenderer sceneRenderer(engine.getEcs(), engine.getScenes(), style);
     rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
                                                                CollisionCellSize);
@@ -186,7 +238,7 @@ void run()
     bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
     bool debugKeyWasDown = false;
 
-    createScenes(engine, resources, style, window, console, metrics, games);
+    createScenes(engine, resources, style, window, console, metrics, games, config, translations);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
 

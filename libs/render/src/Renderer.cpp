@@ -1,17 +1,21 @@
 #include "rtype/render/Renderer.hpp"
 
+#include "EnergyShader.hpp"
 #include "FilterShader.hpp"
+#include "GlowPass.hpp"
 #include "LightingShader.hpp"
 #include "Resources.hpp"
 #include "rtype/render/Viewport.hpp"
 
 #include <raylib.h>
+#include <raymath.h>
 #include <rlgl.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
@@ -50,8 +54,10 @@ constexpr float builtinFontSize = 10.0f;
 
 Camera3D toRaylib(const Camera &camera)
 {
+    const int projection =
+        camera.projection == Projection::Orthographic ? CAMERA_ORTHOGRAPHIC : CAMERA_PERSPECTIVE;
     return {toRaylib(camera.position), toRaylib(camera.target), toRaylib(camera.up), camera.fieldOfView,
-            CAMERA_PERSPECTIVE};
+            projection};
 }
 
 Vector2 fromRaylib(::Vector2 vector)
@@ -157,9 +163,62 @@ Vector2 getWindowSize()
     return {static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
 }
 
+// The colour with its alpha multiplied by `opacity`, from 0 to 1
+::Color fade(Color color, float opacity)
+{
+    const float alpha = static_cast<float>(color.a) * std::clamp(opacity, 0.0f, 1.0f);
+    color.a = static_cast<std::uint8_t>(std::lround(alpha));
+    return toRaylib(color);
+}
+
+// Where a point of a model ends up in the world when the model is drawn like DrawModelEx(), after turning by
+// spinAngle around its own vertical axis
+::Vector3 placePoint(Vector3 point, ::Vector3 position, ::Vector3 rotationAxis, float rotationAngle,
+                     float spinAngle, float scale)
+{
+    ::Vector3 placed = Vector3RotateByAxisAngle(toRaylib(point), {0.0f, 1.0f, 0.0f}, spinAngle * DEG2RAD);
+    placed = Vector3RotateByAxisAngle(Vector3Scale(placed, scale), rotationAxis, rotationAngle * DEG2RAD);
+    return Vector3Add(placed, position);
+}
+
+// Draws the halo of an energy model, facing the camera, added to what is behind it. Neither hidden by nor
+// hiding the models around: a flat picture crossing a ship would otherwise be cut along a straight line.
+// Must be called in 3D mode.
+void drawHalo(const Camera3D &camera, const Texture2D &texture, const Energy::Halo &halo, ::Vector3 centre,
+              float scale, float opacity)
+{
+    const ::Vector2 size{halo.size.x * scale, halo.size.y * scale};
+    const ::Rectangle source{0.0f, 0.0f, static_cast<float>(texture.width),
+                             static_cast<float>(texture.height)};
+    BeginBlendMode(BLEND_ADDITIVE);
+    rlDisableDepthMask();
+    rlDisableDepthTest();
+    DrawBillboardPro(camera, texture, source, centre, camera.up, size, {size.x / 2.0f, size.y / 2.0f}, 0.0f,
+                     fade(halo.color, opacity));
+    // The billboard is batched: draw it before the depth test comes back
+    rlDrawRenderBatchActive();
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    EndBlendMode();
+}
+
 } // namespace
 
 struct Renderer::Impl {
+    /// An energy model drawn in the frame, to draw again in its glow (drawGlow())
+    struct GlowDraw {
+        ModelId model;
+        Camera3D camera;
+        Energy energy;
+        ::Vector3 position;
+        ::Vector3 rotationAxis;
+        float rotationAngle;
+        float scale;
+        float spinAngle;
+        ::Color tint;
+        std::optional<detail::Model::Pose> pose;
+    };
+
     const core::ResourceCache<detail::Texture, TextureId> &textures;
     const core::ResourceCache<detail::Font, FontId> &fonts;
     const core::ResourceCache<detail::Model, ModelId> &models;
@@ -168,6 +227,9 @@ struct Renderer::Impl {
     std::optional<RenderTarget> target;
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
+    detail::EnergyShader energyShader;
+    detail::GlowPass glowPass;
+    std::vector<GlowDraw> glowQueue;
     ColorFilter colorFilter = ColorFilter::None;
     bool inFrame = false;
 
@@ -263,6 +325,7 @@ void Renderer::beginFrame(Color background)
         throw std::logic_error("A frame is already started: call endFrame() first");
     }
     _impl->fitTargetToWindow();
+    _impl->glowQueue.clear();
     BeginTextureMode(_impl->target->get());
     ClearBackground(toRaylib(background));
     _impl->beginGameView();
@@ -415,14 +478,77 @@ void Renderer::drawTriangle(Vector2 first, Vector2 second, Vector2 third, Color 
 }
 
 void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
-                         Vector3 rotationAxis, float rotationAngle, float scale, Color tint, float spinAngle)
+                         Vector3 rotationAxis, float rotationAngle, float scale, Color tint, float spinAngle,
+                         const std::vector<int> &hiddenMeshes)
 {
     _impl->requireFrame();
     BeginMode3D(toRaylib(camera));
     _impl->lightingShader.draw(_impl->models.get(model).get(), light, toRaylib(position),
-                               toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint));
+                               toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint),
+                               hiddenMeshes);
     // EndMode3D() resets the view to window pixels: go back to game units for what is drawn next
     EndMode3D();
+    _impl->beginGameView();
+}
+
+void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
+                               Vector3 rotationAxis, float rotationAngle, float scale, Color tint,
+                               float spinAngle)
+{
+    _impl->requireFrame();
+    const Camera3D view = toRaylib(camera);
+    const ::Vector3 origin = toRaylib(position);
+    const ::Vector3 axis = toRaylib(rotationAxis);
+    BeginMode3D(view);
+    _impl->energyShader.draw(_impl->models.get(model).get(), energy, _impl->textures.get(energy.noise).get(),
+                             view.position, origin, axis, rotationAngle, spinAngle, scale, toRaylib(tint));
+    if (energy.halo) {
+        const ::Vector3 centre =
+            placePoint(energy.halo->centre, origin, axis, rotationAngle, spinAngle, scale);
+        drawHalo(view, _impl->textures.get(energy.halo->texture).get(), *energy.halo, centre, scale,
+                 static_cast<float>(tint.a) / 255.0f);
+    }
+    EndMode3D();
+    _impl->beginGameView();
+    if (energy.bloom > 0.0f) {
+        _impl->glowQueue.push_back({model, view, energy, origin, axis, rotationAngle, scale, spinAngle,
+                                    fade(tint, energy.bloom), _impl->models.get(model).getPose()});
+    }
+}
+
+void Renderer::drawGlow()
+{
+    _impl->requireFrame();
+    if (_impl->glowQueue.empty()) {
+        return;
+    }
+    // The glow is drawn in images of its own: leave the frame, then come back to it, keeping what it holds
+    EndMode2D();
+    EndTextureMode();
+    const Texture2D *glow = _impl->glowPass.render(toRaylib(_impl->target->resolution()), [this] {
+        for (const Impl::GlowDraw &draw : _impl->glowQueue) {
+            const detail::Model &model = _impl->models.get(draw.model);
+            if (draw.pose) {
+                model.applyPose(*draw.pose);
+            }
+            BeginMode3D(draw.camera);
+            _impl->energyShader.draw(model.get(), draw.energy, _impl->textures.get(draw.energy.noise).get(),
+                                     draw.camera.position, draw.position, draw.rotationAxis,
+                                     draw.rotationAngle, draw.spinAngle, draw.scale, draw.tint);
+            EndMode3D();
+        }
+    });
+    _impl->glowQueue.clear();
+
+    BeginTextureMode(_impl->target->get());
+    if (glow != nullptr) {
+        const Vector2 resolution = _impl->target->resolution();
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTexturePro(*glow,
+                       {0.0f, 0.0f, static_cast<float>(glow->width), -static_cast<float>(glow->height)},
+                       {0.0f, 0.0f, resolution.x, resolution.y}, {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
+        EndBlendMode();
+    }
     _impl->beginGameView();
 }
 

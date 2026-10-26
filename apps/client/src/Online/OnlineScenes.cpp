@@ -88,30 +88,34 @@ std::optional<std::pair<std::string, std::uint16_t>> splitServer(const std::stri
 
 OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                            const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                           std::filesystem::path publicKey)
-    : _engine(engine), _loop(loop), _games(games), _publicKey(std::move(publicKey))
+                           std::filesystem::path publicKey, localization::Localization &translations)
+    : _engine(engine), _loop(loop), _games(games), _translations(translations),
+      _publicKey(std::move(publicKey))
 {
     engine.createScene(OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style, "Online", true);
-                           const ecs::entity_t server = menu.textField("Server", _serverText, {}, 64);
-                           const ecs::entity_t name =
-                               menu.textField("Name", _name, {}, lobby::MaxPlayerNameLength);
-                           menu.button("Connect", [this, &target, server, name] {
+                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
+                                                    _translations.text("menu.online"), true);
+                           const ecs::entity_t server =
+                               menu.textField(_translations.text("online.server"), _serverText, {}, 64);
+                           const ecs::entity_t name = menu.textField(_translations.text("online.name"), _name,
+                                                                     {}, lobby::MaxPlayerNameLength);
+                           menu.button(_translations.text("online.connect"), [this, &target, server, name] {
                                _serverText =
                                    target.getEcs().getComponent<engine::TextField>(server).input.text();
                                _name = target.getEcs().getComponent<engine::TextField>(name).input.text();
                                connect();
                            });
-                           menu.button("Back", [&target] { target.popScene(); });
+                           menu.button(_translations.text("online.back"), [&target] { target.popScene(); });
                        });
 
     engine.createScene(
         LobbyScene, {.onBack = [this] { disconnect(); }},
         [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style, "Online");
+            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
+                                     _translations.text("menu.online"));
             menu.label(std::format("{} on {}", _name, _serverText));
-            menu.button("Create a game", [this] {
+            menu.button(_translations.text("online.create"), [this] {
                 if (_lobby) {
                     const std::string game =
                         std::string(_name).append("'s game").substr(0, lobby::MaxGameNameLength);
@@ -121,7 +125,8 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
             });
             for (std::size_t i = 0; i < std::min(_list.size(), MaxGamesShown); ++i) {
                 const lobby::GameInfo &game = _list[i];
-                menu.button(std::format("Join {} ({}/{})", game.name, game.players, game.maxPlayers),
+                menu.button(std::format("{} {} ({}/{})", _translations.text("online.join"), game.name,
+                                        game.players, game.maxPlayers),
                             [this, id = game.id] {
                                 if (_lobby) {
                                     _lobby->joinGame(id, [this](const LobbyClient::JoinResult &result) {
@@ -131,10 +136,10 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
                             });
             }
             if (_list.empty()) {
-                menu.label("No game yet: create one");
+                menu.label(_translations.text("online.empty"));
             }
-            menu.button("Refresh", [this] { refresh(); });
-            menu.button("Disconnect", [this] { disconnect(); });
+            menu.button(_translations.text("online.refresh"), [this] { refresh(); });
+            menu.button(_translations.text("online.disconnect"), [this] { disconnect(); });
         });
 }
 

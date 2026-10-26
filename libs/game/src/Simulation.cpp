@@ -5,8 +5,10 @@
 #include "rtype/game/Entities.hpp"
 #include "rtype/game/System/AreaSystem.hpp"
 #include "rtype/game/System/CombatSystem.hpp"
+#include "rtype/game/System/EnemySystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
+#include "rtype/game/System/WaveSystem.hpp"
 #include "rtype/game/System/WeaponSystem.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/physics/Component/Motion.hpp"
@@ -32,19 +34,56 @@ const rtype::log::Logger &logger()
 
 } // namespace
 
-Simulation::Simulation(Rules rules)
+Simulation::Simulation(Rules rules, const GameConfig &config)
 {
     _context.rules = rules;
     _context.seedRandom();
-    // The order of a tick: the inputs, the weapons, the projectiles, the movement, the walls, the hits, then
-    // what left the area
+    registerConfig(config);
+    // The order of a tick: the inputs, the waves, the Bydos, the weapons, the projectiles, the movement, the
+    // walls, the hits, then what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
+    _ecs.registerSystem<WaveSystem>(_ecs, _context);
+    _ecs.registerSystem<EnemySystem>(_ecs, _context);
     _ecs.registerSystem<WeaponSystem>(_ecs, _context);
     _ecs.registerSystem<ProjectileSystem>(_ecs, _context);
     _ecs.registerSystem<physics::MovementSystem>();
     _ecs.registerSystem<physics::BoundsSystem>(_ecs);
     _ecs.registerSystem<CombatSystem>(_ecs, _context);
     _ecs.registerSystem<AreaSystem>(_ecs, _context);
+}
+
+void Simulation::registerConfig(const GameConfig &config)
+{
+    for (const ProjectileDefinition &projectile : config.projectiles) {
+        _context.projectiles.addDefinition(projectile);
+    }
+    for (const WeaponDefinition &weapon : config.weapons) {
+        _context.weapons.addDefinition(weapon);
+    }
+    for (const ShipDefinition &ship : config.ships) {
+        _context.ships.addDefinition(ship);
+    }
+    for (const EnemyDefinition &enemy : config.enemies) {
+        _context.enemies.addDefinition(enemy);
+    }
+    for (const WaveDefinition &wave : config.waves) {
+        _context.waves.addDefinition(wave, _context.enemies);
+    }
+    registerPlayer(config.player);
+}
+
+void Simulation::registerPlayer(const PlayerDefinition &player)
+{
+    if (!player.ship.empty() && !_context.ships.hasDefinition(player.ship)) {
+        throw std::invalid_argument(std::format("the player uses the unknown ship '{}'", player.ship));
+    }
+    if (!player.weapon.empty() && !_context.weapons.hasDefinition(player.weapon)) {
+        throw std::invalid_argument(std::format("the player uses the unknown weapon '{}'", player.weapon));
+    }
+    if (player.health == 0) {
+        throw std::invalid_argument("the player needs health");
+    }
+    _context.player = player;
 }
 
 void Simulation::addPlayer(std::uint8_t slot)

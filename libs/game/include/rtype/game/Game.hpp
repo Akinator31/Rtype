@@ -9,15 +9,20 @@
 /// - Standalone.hpp: the public sessions of a game without a master, for development.
 /// - ShipMovement.hpp: how a ship moves, shared with the prediction of the client.
 /// - Rules.hpp, Constants.hpp: the numbers of the gameplay and of the game area.
+/// - Config/: the definitions of a game (enemies, weapons...), loaded from the Lua files (ADR 0018).
 /// - Component/, System/, Entities.hpp, GameContext.hpp: the rules themselves, to add gameplay.
 
 #include "rtype/game/Component/Components.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
+#include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Enemy/EnemyDefinition.hpp"
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
 #include "rtype/game/Entities.hpp"
 #include "rtype/game/GameContext.hpp"
+#include "rtype/game/Hitbox.hpp"
 #include "rtype/game/Messages.hpp"
+#include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Projectile/ProjectileBehavior.hpp"
 #include "rtype/game/Projectile/ProjectileCategory.hpp"
@@ -34,11 +39,14 @@
 #include "rtype/game/Standalone.hpp"
 #include "rtype/game/System/AreaSystem.hpp"
 #include "rtype/game/System/CombatSystem.hpp"
+#include "rtype/game/System/EnemySystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
+#include "rtype/game/System/WaveSystem.hpp"
 #include "rtype/game/System/WeaponSystem.hpp"
 #include "rtype/game/Wave/WaveArea.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/game/Wave/WavePlacement.hpp"
+#include "rtype/game/Wave/WaveProgress.hpp"
 #include "rtype/game/Wave/WaveRegistry.hpp"
 #include "rtype/game/Wave/WaveSpawn.hpp"

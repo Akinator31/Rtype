@@ -97,6 +97,11 @@ public:
     /// @throws std::out_of_range if the model has no animation by this name, or if the handle does not come
     /// from this manager.
     [[nodiscard]] int getModelAnimation(ModelId model, const std::string &name) const;
+    /// Returns the length of an animation of a loaded model, in seconds: Renderer::animateModel() loops back
+    /// to its start past it.
+    /// @throws std::out_of_range if the model has no such animation, or if the handle does not come from this
+    /// manager.
+    [[nodiscard]] float getModelAnimationDuration(ModelId model, int animation) const;
 };
 
 } // namespace rtype::render

@@ -1,5 +1,6 @@
 #include "rtype/game/Wave/WaveRegistry.hpp"
 
+#include <algorithm>
 #include <format>
 #include <stdexcept>
 #include <utility>
@@ -57,6 +58,10 @@ void checkDefinition(const WaveDefinition &definition, const EnemyRegistry &enem
     if (definition.quantity == 0) {
         throw std::invalid_argument(std::format("the wave '{}' needs at least one enemy", definition.name));
     }
+    if (definition.difficulty < MinWaveDifficulty || definition.difficulty > MaxWaveDifficulty) {
+        throw std::invalid_argument(std::format("the wave '{}' needs a difficulty from {} to {}",
+                                                definition.name, MinWaveDifficulty, MaxWaveDifficulty));
+    }
     if (!(definition.spawnInterval >= 0.0f)) {
         throw std::invalid_argument(
             std::format("the wave '{}' needs a positive spawn interval", definition.name));
@@ -92,6 +97,18 @@ const WaveDefinition &WaveRegistry::getDefinition(const std::string &name) const
         throw std::out_of_range(std::format("unknown wave '{}'", name));
     }
     return found->second;
+}
+
+std::vector<std::string> WaveRegistry::listWavesOfDifficulty(std::uint8_t difficulty) const
+{
+    std::vector<std::string> names;
+    for (const auto &[name, definition] : _definitions) {
+        if (definition.difficulty == difficulty) {
+            names.push_back(name);
+        }
+    }
+    std::ranges::sort(names);
+    return names;
 }
 
 } // namespace rtype::game

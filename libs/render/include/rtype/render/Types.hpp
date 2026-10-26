@@ -18,7 +18,15 @@ struct Vector3 {
     float z = 0.0f;
 };
 
-/// A perspective camera that 3D models are seen through.
+/// How a camera projects the 3D models on the screen.
+enum class Projection {
+    /// What is far looks smaller, as with an eye.
+    Perspective,
+    /// Every model keeps its size whatever its distance, as on a plan: the world seen by a game in 2D.
+    Orthographic,
+};
+
+/// A camera that 3D models are seen through.
 struct Camera {
     /// Where the camera is.
     Vector3 position;
@@ -26,8 +34,9 @@ struct Camera {
     Vector3 target{0.0f, 0.0f, -1.0f};
     /// Which direction is up on screen.
     Vector3 up{0.0f, 1.0f, 0.0f};
-    /// Vertical field of view, in degrees.
+    /// Vertical field of view, in degrees; for an orthographic camera, the height it sees, in world units.
     float fieldOfView = 45.0f;
+    Projection projection = Projection::Perspective;
 };
 
 /// An axis-aligned rectangle: its top-left corner and its size.

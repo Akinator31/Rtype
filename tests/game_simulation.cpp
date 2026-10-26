@@ -12,6 +12,7 @@
 #include <optional>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 using namespace rtype::game;
@@ -42,12 +43,31 @@ std::optional<EntityState> shipOf(const Snapshot &snapshot, std::uint8_t slot)
     return std::nullopt;
 }
 
+std::vector<EntityState> entitiesOf(const Snapshot &snapshot, EntityKind kind)
+{
+    std::vector<EntityState> entities;
+    std::ranges::copy_if(snapshot.entities, std::back_inserter(entities),
+                         [kind](const EntityState &entity) { return entity.kind == kind; });
+    return entities;
+}
+
 std::vector<EntityState> shotsOf(const Snapshot &snapshot)
 {
-    std::vector<EntityState> shots;
-    std::ranges::copy_if(snapshot.entities, std::back_inserter(shots),
-                         [](const EntityState &entity) { return entity.kind == EntityKind::PlayerShot; });
-    return shots;
+    return entitiesOf(snapshot, EntityKind::PlayerShot);
+}
+
+/// What the players fly: a ship with 100 hit points and a cannon firing "shot" every 10 ticks, at 1500
+/// units per second, 10 damage a shot.
+GameConfig playerConfig()
+{
+    GameConfig config;
+    config.projectiles.push_back(
+        {"shot", "", ProjectileCategory::Bullet, {rtype::physics::Aabb{{}, {12.0f, 4.0f, 0.0f}}, {}, false}});
+    config.weapons.push_back(
+        {"cannon", "shot", ProjectileCategory::Bullet, 1500.0f, 10, 0.0f, InfiniteAmmo, 0, 10});
+    config.ships.push_back({"fighter", "models/fighter.glb", {}});
+    config.player = {"fighter", "cannon", 100};
+    return config;
 }
 
 } // namespace
@@ -86,9 +106,10 @@ TEST_CASE("A new simulation is empty, and counts its ticks from 1", "[game]")
     CHECK(simulation.snapshot().entities.empty());
 }
 
-TEST_CASE("A player gets a ship in the game area, with the lives of the rules", "[game]")
+TEST_CASE("A player gets a ship in the game area, with the lives of the rules and the health of the player",
+          "[game]")
 {
-    Simulation simulation;
+    Simulation simulation({}, playerConfig());
     simulation.addPlayer(2);
     simulation.step();
 
@@ -102,7 +123,7 @@ TEST_CASE("A player gets a ship in the game area, with the lives of the rules", 
     CHECK(ship->x < GameWidth);
     CHECK(ship->y > 0.0f);
     CHECK(ship->y < GameHeight);
-    CHECK(ship->health == simulation.rules().shipHealth);
+    CHECK(ship->health == 100);
     CHECK(simulation.hasPlayer(2));
     CHECK(simulation.playerCount() == 1);
 }
@@ -224,9 +245,9 @@ TEST_CASE("The input of an empty slot is ignored", "[game]")
 
 // --- Shots ---
 
-TEST_CASE("Holding Fire shoots at the interval of the rules, from the nose of the ship", "[game]")
+TEST_CASE("Holding Fire shoots with the weapon of the players, from the nose of the ship", "[game]")
 {
-    Simulation simulation;
+    Simulation simulation({}, playerConfig());
     simulation.addPlayer(0);
     simulation.setInput(0, held(PlayerInput::Fire));
 
@@ -237,17 +258,28 @@ TEST_CASE("Holding Fire shoots at the interval of the rules, from the nose of th
     CHECK(first[0].owner == 0);
     CHECK(first[0].x > ship.x);
     CHECK(first[0].y == Approx(ship.y));
-    CHECK(first[0].velocityX == Approx(simulation.rules().shotSpeed));
+    CHECK(first[0].velocityX == Approx(1500.0f));
 
-    run(simulation, static_cast<int>(simulation.rules().fireInterval) - 1);
+    run(simulation, 10 - 1);
     CHECK(shotsOf(simulation.snapshot()).size() == 1);
     simulation.step();
     CHECK(shotsOf(simulation.snapshot()).size() == 2);
 }
 
-TEST_CASE("A shot that leaves the area is removed, and its id is never given again", "[game]")
+TEST_CASE("Without a weapon, a ship does not fire", "[game]")
 {
     Simulation simulation;
+    simulation.addPlayer(0);
+    simulation.setInput(0, held(PlayerInput::Fire));
+
+    run(simulation, 30);
+
+    CHECK(shotsOf(simulation.snapshot()).empty());
+}
+
+TEST_CASE("A shot that leaves the area is removed, and its id is never given again", "[game]")
+{
+    Simulation simulation({}, playerConfig());
     simulation.addPlayer(0);
     simulation.setInput(0, held(PlayerInput::Fire));
     simulation.step();
@@ -278,8 +310,8 @@ TEST_CASE("A shot that leaves the area is removed, and its id is never given aga
 
 TEST_CASE("The same inputs give exactly the same game", "[game]")
 {
-    Simulation first;
-    Simulation second;
+    Simulation first({}, playerConfig());
+    Simulation second({}, playerConfig());
     std::mt19937 random(2026);
     std::uniform_int_distribution<int> buttons(0, 0x1F);
     for (std::uint8_t slot = 0; slot < 3; ++slot) {
@@ -304,7 +336,7 @@ TEST_CASE("The same inputs give exactly the same game", "[game]")
 
 TEST_CASE("Every entity stays where the protocol can encode it, and ids are unique", "[game]")
 {
-    Simulation simulation;
+    Simulation simulation({}, playerConfig());
     std::mt19937 random(7);
     std::uniform_int_distribution<int> buttons(0, 0x1F);
     for (std::uint8_t slot = 0; slot < MaxPlayers; ++slot) {
@@ -333,7 +365,7 @@ TEST_CASE("Every entity stays where the protocol can encode it, and ids are uniq
 namespace
 {
 
-/// An entity put in the world by hand, without velocity: it stays where it is.
+/// An entity put in the world by hand, without velocity: it stays where it is. It destroys any ship it hits.
 void place(Simulation &simulation, EntityKind kind, std::uint8_t owner, float x, float y,
            std::uint32_t networkId)
 {
@@ -344,6 +376,7 @@ void place(Simulation &simulation, EntityKind kind, std::uint8_t owner, float x,
     ecs.addComponent<Owner>(entity, owner);
     ecs.addComponent<rtype::ecs::Position>(entity, x, y);
     ecs.addComponent<Health>(entity, std::uint8_t{1});
+    ecs.addComponent<Damage>(entity, std::uint8_t{255});
     ecs.addComponent<rtype::physics::Collider>(entity, rtype::physics::Aabb{{}, {10.0f, 10.0f, 0.0f}},
                                                rtype::physics::Vec3{}, false);
 }
@@ -367,6 +400,8 @@ TEST_CASE("A shot of a Bydo destroys a ship, which comes back invulnerable after
     simulation.step();
 
     CHECK(wasDestroyed(simulation.snapshot(), ship.id, DestroyCause::Killed));
+    // The shot is spent on the ship
+    CHECK(wasDestroyed(simulation.snapshot(), 1000, DestroyCause::Killed));
     CHECK(!shipOf(simulation.snapshot(), 0));
     CHECK(simulation.snapshot().players[0].lives == rules.lives - 1);
     CHECK(!simulation.snapshot().gameOver);
@@ -513,6 +548,28 @@ TEST_CASE(
     CHECK(simulation.snapshot().entities.empty());
 }
 
+TEST_CASE("A projectile of a Bydo is a plasma shot for the clients if it is plasma, a Bydo shot otherwise",
+          "[game]")
+{
+    Simulation simulation{Rules{}};
+    GameContext &context = simulation.context();
+    context.projectiles.addDefinition(pulse());
+    ProjectileDefinition laser = pulse();
+    laser.id = "laser";
+    laser.category = ProjectileCategory::Laser;
+    context.projectiles.addDefinition(laser);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    const auto kindOf = [&](const std::string &id, std::uint8_t owner) {
+        const rtype::ecs::entity_t projectile =
+            spawnProjectile(ecs, context, id, owner, 500.0f, 300.0f, 0.0f, 0.0f);
+        return ecs.getComponent<Kind>(projectile).value;
+    };
+
+    CHECK(kindOf("pulse", NoOwner) == EntityKind::BydoPlasmaShot);
+    CHECK(kindOf("laser", NoOwner) == EntityKind::BydoShot);
+    CHECK(kindOf("pulse", 1) == EntityKind::PlayerShot);
+}
+
 TEST_CASE("Each category moves its projectiles its own way", "[game]")
 {
     const Rules rules;
@@ -576,7 +633,8 @@ void arm(Simulation &simulation, const WeaponDefinition &weapon)
 
 } // namespace
 
-TEST_CASE("A weapon registry gives back the weapons, and refuses doubles, unknown ids and no fire interval",
+TEST_CASE("A weapon registry gives back the weapons, and refuses doubles, unknown ids, no fire interval or "
+          "no damage",
           "[game]")
 {
     WeaponRegistry registry;
@@ -590,6 +648,10 @@ TEST_CASE("A weapon registry gives back the weapons, and refuses doubles, unknow
     still.id = "still";
     still.fireInterval = 0;
     CHECK_THROWS_AS(registry.addDefinition(still), std::invalid_argument);
+    WeaponDefinition harmless = blaster();
+    harmless.id = "harmless";
+    harmless.damage = 0;
+    CHECK_THROWS_AS(registry.addDefinition(harmless), std::invalid_argument);
     CHECK_THROWS_AS(registry.getDefinition("nope"), std::out_of_range);
 }
 
@@ -810,6 +872,7 @@ WaveDefinition randomWave()
     wave.name = "scouts_random";
     wave.label = "Scouts";
     wave.description = "Five scouts from the right";
+    wave.difficulty = 2;
     wave.quantity = 5;
     wave.spawnInterval = 0.5f;
     wave.placement = WavePlacement::Random;
@@ -841,6 +904,7 @@ TEST_CASE("A wave registry gives back the waves of both placements, and refuses 
 
     const WaveDefinition &random = registry.getDefinition("scouts_random");
     CHECK(random.label == "Scouts");
+    CHECK(random.difficulty == 2);
     CHECK(random.quantity == 5);
     CHECK(random.spawnInterval == Approx(0.5f));
     CHECK(random.placement == WavePlacement::Random);
@@ -868,6 +932,14 @@ TEST_CASE("A wave registry refuses a wave that is not valid", "[game]")
     SECTION("no enemy")
     {
         wave.quantity = 0;
+    }
+    SECTION("a difficulty of 0")
+    {
+        wave.difficulty = 0;
+    }
+    SECTION("a difficulty above 5")
+    {
+        wave.difficulty = MaxWaveDifficulty + 1;
     }
     SECTION("a negative interval")
     {
@@ -917,4 +989,496 @@ TEST_CASE("A game context keeps the waves", "[game]")
     simulation.context().waves.addDefinition(randomWave(), simulation.context().enemies);
 
     CHECK(simulation.context().waves.hasDefinition("scouts_random"));
+}
+
+TEST_CASE("The waves of a difficulty are listed in alphabetical order", "[game]")
+{
+    const EnemyRegistry enemies = scoutEnemies();
+    WaveRegistry registry;
+    CHECK(registry.isEmpty());
+    for (const char *name : {"c", "a", "b"}) {
+        WaveDefinition wave = randomWave();
+        wave.name = name;
+        registry.addDefinition(wave, enemies);
+    }
+    WaveDefinition other = randomWave();
+    other.name = "other";
+    other.difficulty = 4;
+    registry.addDefinition(other, enemies);
+
+    CHECK_FALSE(registry.isEmpty());
+    CHECK(registry.listWavesOfDifficulty(2) == std::vector<std::string>{"a", "b", "c"});
+    CHECK(registry.listWavesOfDifficulty(4) == std::vector<std::string>{"other"});
+    CHECK(registry.listWavesOfDifficulty(1).empty());
+}
+
+// --- The Bydos in the game ---
+
+namespace
+{
+
+/// playerConfig() and the Bydo scouts (30 hit points, 100 points, 20 damage when run into, a blaster of 10
+/// damage), with some waves.
+GameConfig battleConfig(std::vector<WaveDefinition> waves = {})
+{
+    GameConfig config = playerConfig();
+    config.projectiles.push_back(pulse());
+    config.weapons.push_back(blaster());
+    config.ships.push_back(scoutShip());
+    config.enemies.push_back(scout());
+    config.waves = std::move(waves);
+    return config;
+}
+
+std::optional<EntityState> findEntity(const Snapshot &snapshot, std::uint32_t id)
+{
+    const auto found = std::ranges::find(snapshot.entities, id, &EntityState::id);
+    return found != snapshot.entities.end() ? std::optional(*found) : std::nullopt;
+}
+
+/// The id in the snapshots of an entity of the ECS.
+std::uint32_t networkIdOf(Simulation &simulation, rtype::ecs::entity_t entity)
+{
+    return simulation.ecs().getComponent<NetworkId>(entity).value;
+}
+
+void destroyEnemies(Simulation &simulation)
+{
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    rtype::ecs::ComponentCache<Enemy> &enemies = ecs.cache<Enemy>();
+    for (rtype::ecs::entity_t entity = 0; entity < enemies.size(); ++entity) {
+        if (enemies.has(entity) && ecs.isAlive(entity)) {
+            destroyEntity(ecs, simulation.context(), entity, DestroyCause::Killed);
+        }
+    }
+}
+
+/// Steps until a wave starts, at most `ticks` times. Returns its number.
+std::optional<std::uint16_t> runUntilWave(Simulation &simulation, int ticks)
+{
+    for (int tick = 0; tick < ticks; ++tick) {
+        simulation.step();
+        if (simulation.snapshot().waveStarted) {
+            return simulation.snapshot().waveStarted;
+        }
+    }
+    return std::nullopt;
+}
+
+WaveDefinition waveOf(const std::string &name, std::uint8_t difficulty)
+{
+    WaveDefinition wave = manualWave();
+    wave.name = name;
+    wave.difficulty = difficulty;
+    return wave;
+}
+
+} // namespace
+
+TEST_CASE("A Simulation refuses a player with an unknown ship or weapon", "[game]")
+{
+    GameConfig config = playerConfig();
+
+    SECTION("an unknown ship")
+    {
+        config.player.ship = "nope";
+    }
+    SECTION("an unknown weapon")
+    {
+        config.player.weapon = "nope";
+    }
+    SECTION("no health")
+    {
+        config.player.health = 0;
+    }
+
+    CHECK_THROWS_AS(Simulation({}, config), std::invalid_argument);
+}
+
+TEST_CASE("spawnEnemy() makes a Bydo of its definition, and refuses an unknown one", "[game]")
+{
+    Simulation simulation({}, battleConfig());
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+
+    const rtype::ecs::entity_t enemy = spawnEnemy(ecs, simulation.context(), "bydo_scout", 2000.0f, 300.0f);
+
+    CHECK(ecs.getComponent<Kind>(enemy).value == EntityKind::BydoFlyer);
+    CHECK(ecs.getComponent<Owner>(enemy).slot == NoOwner);
+    CHECK(ecs.getComponent<Health>(enemy).points == 30);
+    CHECK(ecs.getComponent<Damage>(enemy).points == 20);
+    CHECK(ecs.getComponent<Armed>(enemy).weapon == "blaster");
+    CHECK(halfSizeOf(ecs.getComponent<rtype::physics::Collider>(enemy)).x == Approx(48.0f));
+    CHECK_THROWS_AS(spawnEnemy(ecs, simulation.context(), "nope", 0.0f, 0.0f), std::out_of_range);
+}
+
+TEST_CASE("A Bydo speeds up to the left, and fires to the left once in the game area", "[game]")
+{
+    Simulation simulation({}, battleConfig());
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 2000.0f, 300.0f);
+
+    // Out of the area: it does not fire yet. 720 units per second squared: 12 units per second a tick
+    simulation.step();
+    const EntityState first = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    CHECK(first.velocityX == Approx(-12.0f));
+    // The pulse of these tests is a plasma projectile
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoPlasmaShot).empty());
+
+    // Its top speed is 240 units per second, reached in a third of a second
+    run(simulation, 60);
+    const EntityState later = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    CHECK(later.velocityX == Approx(-240.0f));
+    const std::vector<EntityState> shots = entitiesOf(simulation.snapshot(), EntityKind::BydoPlasmaShot);
+    REQUIRE_FALSE(shots.empty());
+    CHECK(shots[0].velocityX < 0.0f);
+    CHECK(shots[0].x < later.x);
+    CHECK(shots[0].owner == NoOwner);
+}
+
+TEST_CASE("The shots of a player take the damage of its weapon from a Bydo, and the kill scores", "[game]")
+{
+    Simulation simulation({}, battleConfig());
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x + 400.0f, ship.y);
+    const std::uint32_t enemy = networkIdOf(simulation, spawned);
+    simulation.setInput(0, held(PlayerInput::Fire));
+    simulation.step();
+    REQUIRE(findEntity(simulation.snapshot(), enemy));
+
+    // 10 damage a shot: 30 hit points take three
+    bool hurt = false;
+    for (int tick = 0; tick < 120 && findEntity(simulation.snapshot(), enemy); ++tick) {
+        simulation.step();
+        const std::optional<EntityState> state = findEntity(simulation.snapshot(), enemy);
+        hurt = hurt || (state && state->health == 20);
+    }
+
+    CHECK(hurt);
+    CHECK(wasDestroyed(simulation.snapshot(), enemy, DestroyCause::Killed));
+    CHECK(simulation.snapshot().players[0].score == 100);
+}
+
+TEST_CASE("A shot that hits is killed, for the client to draw its impact", "[game]")
+{
+    Simulation simulation({}, battleConfig());
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x + 400.0f, ship.y);
+    simulation.setInput(0, held(PlayerInput::Fire));
+    simulation.step();
+    simulation.setInput(0, {});
+    const std::vector<EntityState> fired = entitiesOf(simulation.snapshot(), EntityKind::PlayerShot);
+    REQUIRE(fired.size() == 1);
+
+    std::optional<DestroyCause> cause;
+    for (int tick = 0; tick < 60 && !cause; ++tick) {
+        simulation.step();
+        for (const DestroyedEntity &destroyed : simulation.snapshot().destroyed) {
+            if (destroyed.id == fired[0].id) {
+                cause = destroyed.cause;
+            }
+        }
+    }
+    CHECK(cause == DestroyCause::Killed);
+}
+
+TEST_CASE("A Bydo that runs into a ship hurts it and keeps going; the ship is safe for a while", "[game]")
+{
+    Rules rules;
+    rules.hitInvulnerableTicks = 30;
+    Simulation simulation(rules, battleConfig());
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x, ship.y);
+    const std::uint32_t enemy = networkIdOf(simulation, spawned);
+
+    simulation.step();
+    const EntityState hit = *shipOf(simulation.snapshot(), 0);
+    CHECK(hit.health == 80);
+    CHECK((hit.flags & EntityState::Invulnerable) != 0);
+    CHECK(findEntity(simulation.snapshot(), enemy));
+
+    // Still on it, and its shots too: nothing more while it is safe
+    run(simulation, 10);
+    CHECK(shipOf(simulation.snapshot(), 0)->health == 80);
+}
+
+TEST_CASE("Nothing comes without a player, nor without waves", "[game]")
+{
+    Rules rules;
+    rules.firstWaveDelay = 1;
+
+    Simulation empty(rules, battleConfig({waveOf("line", 1)}));
+    CHECK_FALSE(runUntilWave(empty, 100));
+    CHECK(empty.snapshot().entities.empty());
+
+    Simulation calm(rules, battleConfig());
+    calm.addPlayer(0);
+    CHECK_FALSE(runUntilWave(calm, 100));
+    CHECK(entitiesOf(calm.snapshot(), EntityKind::BydoFlyer).empty());
+    CHECK_FALSE(calm.snapshot().gameOver);
+
+    empty.addPlayer(0);
+    CHECK(runUntilWave(empty, 2) == 1);
+}
+
+TEST_CASE("The waves go by difficulty, a difficulty without a wave is skipped, and the last one wins",
+          "[game]")
+{
+    Rules rules;
+    rules.firstWaveDelay = 10;
+    rules.wavePause = 5;
+    Simulation simulation(rules, battleConfig({waveOf("first", 1), waveOf("third", 3)}));
+    simulation.addPlayer(0);
+
+    CHECK(runUntilWave(simulation, 100) == 1);
+    CHECK(simulation.tick() == 10);
+    CHECK(simulation.context().wave.name == "first");
+    // Its two enemies come at once, created after the systems of the tick
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).size() == 2);
+
+    // Not over while an enemy is left
+    run(simulation, 3);
+    CHECK(simulation.context().wave.name == "first");
+    destroyEnemies(simulation);
+    simulation.step();
+    CHECK(simulation.context().wave.name.empty());
+    const std::uint32_t ended = simulation.tick();
+
+    // No wave of difficulty 2: the third comes after the pause
+    CHECK(runUntilWave(simulation, 100) == 3);
+    CHECK(simulation.tick() == ended + rules.wavePause);
+    CHECK_FALSE(simulation.snapshot().gameOver);
+
+    // No wave of difficulty 4 nor 5: the end of the third wins the game, and it is told once
+    destroyEnemies(simulation);
+    std::optional<GameOutcome> outcome;
+    for (int tick = 0; tick < 100 && !outcome; ++tick) {
+        simulation.step();
+        outcome = simulation.snapshot().gameOver;
+    }
+    CHECK(outcome == GameOutcome::Victory);
+    run(simulation, 10);
+    CHECK_FALSE(simulation.snapshot().gameOver);
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).empty());
+}
+
+TEST_CASE("A wave sends its enemies at its interval, in its area when it is random", "[game]")
+{
+    Rules rules;
+    rules.firstWaveDelay = 0;
+    WaveDefinition wave = randomWave();
+    wave.difficulty = 1;
+    wave.quantity = 3;
+    wave.area = {1950.0f, 2000.0f, 100.0f, 200.0f};
+    Simulation simulation(rules, battleConfig({wave}));
+    simulation.addPlayer(0);
+
+    // One every half second: every 30 ticks
+    simulation.step();
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).size() == 1);
+    run(simulation, 29);
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).size() == 1);
+    simulation.step();
+    const std::vector<EntityState> enemies = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer);
+    REQUIRE(enemies.size() == 2);
+    const EntityState &latest = enemies.back();
+    CHECK(latest.x >= 1950.0f);
+    CHECK(latest.x <= 2000.0f);
+    CHECK(latest.y >= 100.0f);
+    CHECK(latest.y <= 200.0f);
+    run(simulation, 30);
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).size() == 3);
+    run(simulation, 60);
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).size() == 3);
+}
+
+TEST_CASE("The wave of a difficulty is drawn from the seed of the rules", "[game]")
+{
+    const auto drawWave = [](std::uint32_t seed) {
+        Rules rules;
+        rules.seed = seed;
+        rules.firstWaveDelay = 0;
+        Simulation simulation(rules, battleConfig({waveOf("a", 1), waveOf("b", 1)}));
+        simulation.addPlayer(0);
+        simulation.step();
+        return simulation.context().wave.name;
+    };
+
+    std::vector<std::string> drawn;
+    for (std::uint32_t seed = 1; seed <= 20; ++seed) {
+        drawn.push_back(drawWave(seed));
+        CHECK(drawWave(seed) == drawn.back());
+    }
+    CHECK(std::ranges::count(drawn, "a") > 0);
+    CHECK(std::ranges::count(drawn, "b") > 0);
+}
+
+// --- The behaviors of the Bydos ---
+
+namespace
+{
+
+/// battleConfig() with scouts moved by a behavior.
+GameConfig scriptedConfig(const std::string &code)
+{
+    GameConfig config = battleConfig();
+    config.enemies.front().behavior = EnemyBehavior{"enemies/test.lua", code};
+    return config;
+}
+
+std::vector<EntityState> enemyShotsOf(const Snapshot &snapshot)
+{
+    return entitiesOf(snapshot, EntityKind::BydoPlasmaShot);
+}
+
+} // namespace
+
+TEST_CASE("A behavior flies its Bydo to a point, where it stops, and fires only when it says so", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game)\n"
+                                             "    enemy:moveTo(1500, 300)\n"
+                                             "    if enemy.arrived then enemy:fire() end\n"
+                                             "end }"));
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1700.0f, 300.0f);
+    CHECK(simulation.ecs().hasComponent<EnemyOrders>(spawned));
+
+    // At its top speed at once, 240 units per second: 200 units in 50 ticks, in the area but not fired
+    simulation.step();
+    const EntityState flying = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    CHECK(flying.velocityX == Approx(-240.0f));
+    CHECK(flying.velocityY == Approx(0.0f).margin(1e-4));
+    run(simulation, 45);
+    CHECK(enemyShotsOf(simulation.snapshot()).empty());
+
+    run(simulation, 10);
+    const EntityState stopped = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    CHECK(stopped.x == Approx(1500.0f));
+    CHECK(stopped.y == Approx(300.0f));
+    CHECK(stopped.velocityX == Approx(0.0f).margin(1e-4));
+    const std::vector<EntityState> shots = enemyShotsOf(simulation.snapshot());
+    REQUIRE_FALSE(shots.empty());
+    CHECK(shots[0].velocityX < 0.0f);
+}
+
+TEST_CASE("A behavior aims at a player, with what it sees of the players and of its weapon", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game)\n"
+                                             "    local player = game.players[1]\n"
+                                             "    local weapon = enemy.weapon\n"
+                                             "    if player and weapon.ready and weapon.ammo == 3\n"
+                                             "       and weapon.id == 'blaster' then\n"
+                                             "        enemy:fireAt(player.x, player.y)\n"
+                                             "    end\n"
+                                             "end }"));
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 700.0f);
+
+    run(simulation, 2);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    std::vector<rtype::physics::Velocity> launches;
+    rtype::ecs::ComponentCache<Projectile> &projectiles = ecs.cache<Projectile>();
+    for (rtype::ecs::entity_t entity = 0; entity < projectiles.size(); ++entity) {
+        if (projectiles.has(entity) && ecs.isAlive(entity)) {
+            launches.push_back(projectiles.get(entity).launch);
+        }
+    }
+    // Only with a full magazine: one shot, towards the ship, at the speed of the blaster
+    REQUIRE(launches.size() == 1);
+    const float noseX = 1500.0f - 48.0f;
+    CHECK(launches[0].y / launches[0].x == Approx((ship.y - 700.0f) / (ship.x - noseX)));
+    CHECK(launches[0].x < 0.0f);
+    CHECK(std::hypot(launches[0].x, launches[0].y) == Approx(1000.0f));
+}
+
+TEST_CASE("Each Bydo of a behavior remembers its own values, and sees its age and the time", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game)\n"
+                                             "    enemy.memory.ticks = (enemy.memory.ticks or 0) + 1\n"
+                                             "    enemy:setVelocity(enemy.age * 60, enemy.memory.ticks)\n"
+                                             "end }"));
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 300.0f);
+    run(simulation, 10);
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 700.0f);
+    run(simulation, 5);
+
+    const std::vector<EntityState> enemies = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer);
+    REQUIRE(enemies.size() == 2);
+    CHECK(enemies[0].velocityY == Approx(15.0f));
+    CHECK(enemies[0].velocityX == Approx(14.0f));
+    CHECK(enemies[1].velocityY == Approx(5.0f));
+    CHECK(enemies[1].velocityX == Approx(4.0f));
+}
+
+TEST_CASE("The random numbers of a behavior come from the seed of the rules", "[game]")
+{
+    const auto drawSpeed = [](std::uint32_t seed) {
+        Rules rules;
+        rules.seed = seed;
+        Simulation simulation(rules, scriptedConfig("return { update = function(enemy, game)\n"
+                                                    "    enemy:setVelocity(-game:randomNumber(100, 200),\n"
+                                                    "                      game:randomInteger(3, 1))\n"
+                                                    "end }"));
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 300.0f);
+        simulation.step();
+        return entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    };
+
+    const EntityState first = drawSpeed(7);
+    CHECK(first.velocityX == drawSpeed(7).velocityX);
+    CHECK(first.velocityX <= -100.0f);
+    CHECK(first.velocityX >= -200.0f);
+    CHECK(first.velocityY >= 1.0f);
+    CHECK(first.velocityY <= 3.0f);
+}
+
+TEST_CASE("A behavior that fails or never ends is stopped: its Bydos fly and fire as if they had none",
+          "[game]")
+{
+    std::string code;
+    SECTION("an error")
+    {
+        code = "return { update = function(enemy, game) error('boom') end }";
+    }
+    SECTION("an endless loop")
+    {
+        code = "return { update = function(enemy, game) while true do end end }";
+    }
+    SECTION("a read-only value written")
+    {
+        code = "return { update = function(enemy, game) enemy.x = 0 end }";
+    }
+    SECTION("no update function")
+    {
+        code = "return { speed = 3 }";
+    }
+    Simulation simulation({}, scriptedConfig(code));
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 300.0f);
+
+    simulation.step();
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0).velocityX == Approx(-12.0f));
+    CHECK_FALSE(simulation.ecs().hasComponent<EnemyOrders>(spawned));
+    run(simulation, 2);
+    CHECK_FALSE(enemyShotsOf(simulation.snapshot()).empty());
+}
+
+TEST_CASE("A Bydo of a behavior that gives no order keeps still and does not fire", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game) end }"));
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 300.0f);
+
+    run(simulation, 30);
+    const EntityState enemy = entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0);
+    CHECK(enemy.x == Approx(1500.0f));
+    CHECK(enemy.velocityX == Approx(0.0f));
+    CHECK(enemyShotsOf(simulation.snapshot()).empty());
 }
