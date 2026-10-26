@@ -50,8 +50,7 @@ class GameScenes
     void end();
 
     void build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
-               const engine::Metrics &metrics,
-               const engine::InterfaceStyle &style);
+               const engine::Metrics &metrics, const engine::InterfaceStyle &style);
     void buildHud(engine::SceneId scene, const engine::InterfaceStyle &style);
 
 public:

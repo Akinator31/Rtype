@@ -19,7 +19,7 @@ std::shared_future<Id> readyFuture(Id id)
     return result.get_future().share();
 }
 
-}
+} // namespace
 
 // The window is only required to make sure that one is open: graphics resources cannot exist without it
 ResourceManager::ResourceManager(const Window & /*window*/, std::filesystem::path assetsDirectory,

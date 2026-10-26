@@ -78,8 +78,8 @@ bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &rende
             break;
         }
         renderer.beginFrame();
-        renderer.drawText("Loading assets " + std::to_string(completed) + "/3",
-                          {80.0f, 90.0f}, 40.0f, colors::White);
+        renderer.drawText("Loading assets " + std::to_string(completed) + "/3", {80.0f, 90.0f}, 40.0f,
+                          colors::White);
         renderer.endFrame();
     }
     if (window.shouldClose()) {
@@ -155,14 +155,14 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
                   const rtype::game::GameConfig &config, rtype::localization::Localization &translations)
 {
     const auto quit = [&window] { window.requestClose(); };
-engine.createScene(
-    rtype::client::MainMenuScene,
-    {.updatesWhenCovered = true, .onBack = [] {}, .assets = mainMenuAssets()},
-    [&resources, &style, &metrics, &translations, quit](rtype::engine::Engine &target,
-                                                        rtype::engine::SceneId scene) {
-        rtype::client::buildMainMenu(target, scene, resources, style, metrics, translations, quit);
-    });
-  
+    engine.createScene(rtype::client::MainMenuScene,
+                       {.updatesWhenCovered = true, .onBack = [] {}, .assets = mainMenuAssets()},
+                       [&resources, &style, &metrics, &translations, quit](rtype::engine::Engine &target,
+                                                                           rtype::engine::SceneId scene) {
+                           rtype::client::buildMainMenu(target, scene, resources, style, metrics,
+                                                        translations, quit);
+                       });
+
     rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
         games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
     });

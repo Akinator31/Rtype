@@ -25,4 +25,4 @@ public:
     engine::SceneAssetRequest request(const engine::SceneAsset &asset) override;
 };
 
-}
+} // namespace rtype::client

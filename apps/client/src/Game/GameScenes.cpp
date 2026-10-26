@@ -164,9 +164,8 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
 {
     sessions.setShipLook(game::EntityKind::PlayerShip,
                          {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoTrails});
-    sessions.setShipLook(game::EntityKind::BydoFlyer,
-                         {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP), DropShipHull, true,
-                          DropShipTrails});
+    sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
+                                                       DropShipHull, true, DropShipTrails});
     const render::Energy energy{
         resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
     const render::TextureId light =

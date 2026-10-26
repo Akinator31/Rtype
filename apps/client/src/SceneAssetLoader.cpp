@@ -24,7 +24,7 @@ engine::SceneAssetRequest ticket(std::shared_future<Id> future, Release release)
     };
 }
 
-}
+} // namespace
 
 SceneAssetLoader::SceneAssetLoader(render::ResourceManager &resources, audio::AudioPlayer &audio)
     : _resources(resources), _audio(audio)
@@ -38,10 +38,9 @@ engine::SceneAssetRequest SceneAssetLoader::request(const engine::SceneAsset &as
         return ticket(_resources.loadTextureAsync(asset.path),
                       [this, path = asset.path] { _resources.releaseTexture(path); });
     case engine::AssetType::SmoothTexture:
-        return ticket(_resources.loadTextureAsync(asset.path, render::TextureFiltering::Smooth),
-                      [this, path = asset.path] {
-                          _resources.releaseTexture(path, render::TextureFiltering::Smooth);
-                      });
+        return ticket(
+            _resources.loadTextureAsync(asset.path, render::TextureFiltering::Smooth),
+            [this, path = asset.path] { _resources.releaseTexture(path, render::TextureFiltering::Smooth); });
     case engine::AssetType::Font:
         return ticket(_resources.loadFontAsync(asset.path),
                       [this, path = asset.path] { _resources.releaseFont(path); });
@@ -58,4 +57,4 @@ engine::SceneAssetRequest SceneAssetLoader::request(const engine::SceneAsset &as
     throw std::invalid_argument("Unknown scene asset type");
 }
 
-}
+} // namespace rtype::client

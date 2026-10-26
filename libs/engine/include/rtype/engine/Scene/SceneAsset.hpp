@@ -31,4 +31,4 @@ public:
 
 enum class SceneLoadState { Idle, Loading, Failed };
 
-}
+} // namespace rtype::engine

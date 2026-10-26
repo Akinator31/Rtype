@@ -47,7 +47,7 @@ void configure(Engine &engine, FakeAssets &assets)
     engine.setSceneAssetLoader(assets, "loading");
 }
 
-}
+} // namespace
 
 TEST_CASE("Scene assets load automatically without blocking the scene update", "[engine][assets]")
 {

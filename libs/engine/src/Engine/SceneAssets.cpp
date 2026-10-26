@@ -22,7 +22,7 @@ std::string errorMessage(std::exception_ptr error)
     }
 }
 
-}
+} // namespace
 
 void Engine::setSceneAssetLoader(SceneAssetLoader &loader, const std::string &loadingScene)
 {
@@ -196,4 +196,4 @@ void Engine::unloadSceneAssets()
     _assetLeases.clear();
 }
 
-}
+} // namespace rtype::engine
