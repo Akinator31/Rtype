@@ -201,7 +201,7 @@ struct AudioPlayer::Impl {
 
     Impl(bool audioAvailable, std::filesystem::path assets, std::shared_ptr<core::BackgroundLoader> worker)
         : available(audioAvailable), assetsDirectory(std::move(assets)),
-          loader(worker ? std::move(worker) : std::make_shared<core::BackgroundLoader>()),
+          loader(std::move(worker)),
           pendingSounds(loader), pendingMusics(loader)
     {
     }

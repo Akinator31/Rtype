@@ -42,7 +42,7 @@ enum class TextureFiltering {
 /// be destroyed before it. Declare the manager after the window:
 /// @code
 /// Window window;
-/// ResourceManager resources(window, "assets");
+/// ResourceManager resources(window, "assets", engine.getThreads().getAssetsWorker());
 /// const TextureId player = resources.loadTexture("sprites/player.png");
 /// @endcode
 class ResourceManager
@@ -59,7 +59,7 @@ public:
     /// @param window The open window. It must outlive the manager.
     /// @param assetsDirectory Directory that the paths given to the load functions are relative to.
     ResourceManager(const Window &window, std::filesystem::path assetsDirectory,
-                    std::shared_ptr<core::BackgroundLoader> loader = {});
+                    std::shared_ptr<core::BackgroundLoader> loader);
     ~ResourceManager();
 
     ResourceManager(const ResourceManager &) = delete;

@@ -38,6 +38,12 @@ namespace
 
 constexpr float CollisionCellSize = 64.0f;
 
+struct StopWorkers {
+    rtype::engine::ThreadManager &threads;
+
+    ~StopWorkers() { threads.stopAll(); }
+};
+
 bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &renderer,
                    rtype::render::ResourceManager &resources)
 {
@@ -149,7 +155,9 @@ void run()
 
     Window window({.fullscreen = true});
     rtype::engine::Engine engine;
-    ResourceManager resources(window, applicationDirectory() / "assets", engine.assetLoading().queue());
+    ResourceManager resources(window, applicationDirectory() / "assets",
+                              engine.getThreads().getAssetsWorker());
+    StopWorkers stopWorkers{engine.getThreads()};
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
 

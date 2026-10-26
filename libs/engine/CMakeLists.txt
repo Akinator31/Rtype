@@ -1,6 +1,7 @@
 # Game engine built on the ECS: events, plus the client side connecting the ECS to the rendering, the input and
 # the interface (menus as entities, see ADR 0007).
 add_library(rtype_engine
+    src/ThreadManager.cpp
     src/Component/Animation.cpp
     src/Component/Layout.cpp
     src/Component/Widget.cpp

@@ -34,7 +34,8 @@ bool finishWithin(rtype::core::AsyncResourceRequests<Id> &requests, const Future
 
 TEST_CASE("Assets prepare on a worker and finish on the requesting thread", "[assets][async]")
 {
-    rtype::core::AsyncResourceRequests<Id> requests;
+    rtype::engine::Engine engine;
+    rtype::core::AsyncResourceRequests<Id> requests(engine.getThreads().getAssetsWorker());
     const std::thread::id owner = std::this_thread::get_id();
     std::thread::id worker;
     std::thread::id finisher;
@@ -66,7 +67,8 @@ TEST_CASE("Assets prepare on a worker and finish on the requesting thread", "[as
 
 TEST_CASE("A failed asset request reports its error and can be retried", "[assets][async]")
 {
-    rtype::core::AsyncResourceRequests<Id> requests;
+    rtype::engine::Engine engine;
+    rtype::core::AsyncResourceRequests<Id> requests(engine.getThreads().getAssetsWorker());
     const auto failed = requests.request(
         "missing", []() -> int { throw std::runtime_error("missing"); }, [](int) { return Id{0}; });
     REQUIRE(finishWithin(requests, failed));
@@ -106,8 +108,8 @@ TEST_CASE("Concurrent cache requests for one asset share one stable handle", "[a
 TEST_CASE("The engine shares one worker across asset categories", "[assets][async]")
 {
     rtype::engine::Engine engine;
-    auto worker = engine.assetLoading().queue();
-    REQUIRE(worker == engine.assetLoading().queue());
+    auto worker = engine.getThreads().getAssetsWorker();
+    REQUIRE(worker == engine.getThreads().getAssetsWorker());
 
     rtype::core::AsyncResourceRequests<Id> textures(worker);
     rtype::core::AsyncResourceRequests<Id> sounds(worker);
@@ -134,4 +136,53 @@ TEST_CASE("The engine shares one worker across asset categories", "[assets][asyn
     CHECK(sound.get() == Id{2});
     CHECK(textureThread == soundThread);
     CHECK(textureThread != std::this_thread::get_id());
+}
+
+TEST_CASE("Stopping the assets worker cancels pending requests and waits for the running one",
+          "[assets][async]")
+{
+    rtype::engine::Engine engine;
+    auto worker = engine.getThreads().getAssetsWorker();
+    std::promise<void> started;
+    std::promise<void> release;
+    const std::shared_future<void> proceed = release.get_future().share();
+    std::atomic<bool> pendingRan = false;
+    auto running = worker->submit([&] {
+        started.set_value();
+        proceed.wait();
+        return 7;
+    });
+    started.get_future().wait();
+    auto pending = worker->submit([&] {
+        pendingRan = true;
+        return 8;
+    });
+
+    std::thread stopper([&] { engine.getThreads().stopAll(); });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (pending.wait_for(std::chrono::seconds(0)) != std::future_status::ready &&
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    const bool cancelledBeforeRunningFinished =
+        pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+    release.set_value();
+    stopper.join();
+
+    CHECK(cancelledBeforeRunningFinished);
+    CHECK(running.get() == 7);
+    CHECK_THROWS_AS(pending.get(), rtype::core::BackgroundLoaderCancelled);
+    CHECK_FALSE(pendingRan);
+    engine.getThreads().stopAll();
+    CHECK_THROWS_AS(worker->submit([] { return 9; }), rtype::core::BackgroundLoaderCancelled);
+}
+
+TEST_CASE("The thread manager identifies its owning thread", "[assets][async]")
+{
+    rtype::engine::Engine engine;
+    CHECK(engine.getThreads().isMainThread());
+    bool otherThreadIsMain = true;
+    std::thread other([&] { otherThreadIsMain = engine.getThreads().isMainThread(); });
+    other.join();
+    CHECK_FALSE(otherThreadIsMain);
 }

@@ -72,6 +72,7 @@ nav = [
     "decisions/0017-asset-loading-threads.md",
     "decisions/0018-lua-game-config.md",
     "decisions/0019-luabridge3-scripting-library.md",
+    "decisions/0020-engine-thread-manager.md",
   ] },
   { "Accessibility" = "accessibility.md" },
   { "Contributing" = [
