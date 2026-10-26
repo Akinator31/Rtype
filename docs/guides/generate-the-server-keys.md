@@ -1,145 +1,84 @@
-# How to generate the server keys
+# How to manage the server key
 
-This guide makes the key pair the server proves its identity with, and puts each key where it belongs. It is
-for anyone who runs a server: the official one, or another.
+This guide shows where the key the server proves its identity with comes from, how to give its fingerprint to
+the players, and how to keep or replace it. It is for anyone who runs a server.
 
-The client only talks to a server that has the **private key** matching a **public key** it trusts: another
-server, or an attacker between them, is refused
+The client only talks to a server that has the **private key** matching a key it trusts: another server, or
+an attacker between them, is refused
 ([ADR 0014](../decisions/0014-encryption.md#tcp-tls-13-server-key-pinned),
-[TLS](../architecture/networking.md#tls)). Players never handle a key file: the client trusts the keys of the
-official servers, built into it, and asks the player at the first connection to any other server
-([ADR 0020](../decisions/0020-server-key-distribution.md)).
-
-!!! tip "For development, no key is needed"
-
-    A Debug server without `server.key` uses the development key pair committed in `keys/development/`, which
-    Debug clients trust. Release builds refuse it: a release server does not start with it, and a release
-    client never connects to a server that presents it.
+[TLS](../architecture/networking.md#tls)). Each server makes its own key at its first start, and each player
+trusts it at the first connection, as with SSH
+([ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)). Players never handle a key file.
 
 ## Prerequisites
 
-- The project builds: see [Build](../getting-started/build.md). The tool, `r-type_keygen`, is built with the
-  server and packaged with it.
+- A server that runs: see [Run a server](run-a-server.md).
 
 ## Steps
 
-1. **Generate the keys on the machine of the server**, in the directory of your choice (created if missing).
-   The private key never has to travel:
-
-    === "Linux"
-
-        ```sh
-        ./build/bin/r-type_keygen --out keys
-        ```
-
-    === "Windows"
-
-        ```powershell
-        .\build\bin\Release\r-type_keygen.exe --out keys
-        ```
+1. **Start the server.** If the file of its `--key` option (`server.key` in the current directory by
+   default) does not exist, the server generates a key there, and says so:
 
     ```
-    Private key: keys/server.key  (keep it on the server only, never share it)
-    Public key:  keys/server.pub  (public: its fingerprint is what the clients trust)
-    Fingerprint: 5b61c7a9ce1a44bfc64fec2013a4a09b6b4d5a8db4129eff890a1462c7ea1f1c
+    [WARN] [master] No key in server.key: a new one was generated there. Keep this file: with another key, the players who trusted this server refuse it
+    [INFO] [master] Server key 5b61c7a9ce1a44bfc64fec2013a4a09b6b4d5a8db4129eff890a1462c7ea1f1c
     ```
 
-    The tool does not replace keys that already exist: see [Replacing the keys](#replacing-the-keys).
+    The next starts load the same key, and only log its fingerprint. A file that exists is never replaced,
+    even if it holds no key: the server stops and says why.
 
-2. **Keep `server.key` on the server**, which loads it with its `--key` option
-   ([Run a server](run-a-server.md)). On Linux, the file is only readable by the user who made it (`rw-------`): run the server as
-   that user. On Windows, the file gets the access rights of its directory, so put it in a directory only the
-   server's account can read.
+2. **Keep `server.key`** where the server finds it at each start. On Linux, the file is only readable by the
+   user who started the server (`rw-------`): run the server as that user. On Windows, the file gets the
+   access rights of its directory, so put it in a directory only the server's account can read.
 
     Never commit it, never send it, never put it in an environment variable or a Docker image: anyone who has
-    it can pretend to be the server. Git ignores `*.key` files, except the development key.
+    it can pretend to be the server. Git ignores `*.key` files.
 
-3. **Tell the clients its fingerprint**, which depends on the server:
+    !!! warning "In a container"
 
-    === "The official server"
+        Put the key in a **persistent volume** (`--key /data/server.key`). A container that starts without
+        its key makes a new one, and every player who trusted the server refuses it. A server that logs
+        *a new one was generated* at each start has lost its key each time.
 
-        Make a **backup key pair** too, in another directory, and keep its private key **offline** (an
-        encrypted USB key, a password manager), with a copy of `server.key`. It is never installed on the
-        server.
-
-        ```sh
-        ./build/bin/r-type_keygen --out backup-keys
-        ```
-
-        Then write the address of the server and both fingerprints in `apps/client/src/Online/OfficialServers.hpp`,
-        and commit it: the next release of the client trusts both keys, without asking the players.
-
-        ```cpp
-        inline constexpr std::array<OfficialServer, 1> OfficialServers{{
-            {.name = "Official server", .host = "rtype.example.org", .port = 4242,
-             .keys = {"<fingerprint of keys/server.key>", "<fingerprint of backup-keys/server.key>"}},
-        }};
-        ```
-
-    === "Another server"
-
-        Nothing to install on the clients: at their first connection, they show the fingerprint of the server
-        and ask the player to trust it. Give the fingerprint to the players by another way (a message, a
-        website), so that they can check that it is the same.
-
-4. **Check a fingerprint** at any time:
+3. **Give its fingerprint to the players**, by another way than the game (a message, a website):
 
     ```sh
-    r-type_keygen --fingerprint keys/server.key   # or server.pub, which gives the same fingerprint
+    ./build/bin/r-type_server --fingerprint --key server.key
     ```
 
-    Without the tool, OpenSSL gives the same value:
+    At the first connection, the client shows the fingerprint of the server and asks the player to trust it:
+    a player who checks that both are the same is sure to talk to your server. `--fingerprint` never
+    generates a key. OpenSSL gives the same value:
 
     ```sh
-    openssl pkey -pubin -in server.pub -outform DER | sha256sum
+    openssl pkey -in server.key -pubout -outform DER | sha256sum
     ```
 
 ## Result
 
-The server has `server.key`, the clients trust its fingerprint. When a client connects, the server proves in
-the TLS handshake that it has the private key, and the client checks that its public key is one it trusts.
-Otherwise, the client refuses the server before sending it anything, with `NetworkError::UntrustedServer` and
-the fingerprint it presented in the logs. A player who trusted another key for this server sees a warning
-naming both.
+The server has its key, and each player trusts its fingerprint after the first connection, kept in the save
+of the client. When a client connects, the server proves in the TLS handshake that it has the private key, and
+the client checks that its public key is the one it trusts. Otherwise, the client refuses the server before
+sending it anything, and a player who trusted another key for this server sees a warning naming both.
 
-## Replacing the keys
+## Replacing the key
 
-Replace the keys only if they must change.
-
-```sh
-r-type_keygen --out keys --force
-```
-
-- **The official server** switches to its backup key: install the backup `server.key` on the server, and the
-  clients already out keep working. Then make a new backup key pair and release a client that trusts the new
-  pair of keys.
-- **Another server**: the players who trusted the old key are warned that it changed, and must forget it
-  (**Forget the server key**, in the Online menu) before trusting the new one. Tell them beforehand.
+Replace the key only if it must change: stop the server, move `server.key` away, and start the server, which
+makes a new one. The players who trusted the old key are warned that it changed, and must forget it
+(**Forget the server key**, in the Online menu) before trusting the new one. Tell them beforehand, with the
+new fingerprint.
 
 **If `server.key` leaked** (committed, sent, copied to a machine you do not trust), replace it at once:
-whoever has the old private key can pretend to be the server to the clients that still trust it. Removing
-the file from git is not enough, since it stays in the history.
+whoever has the old private key can pretend to be the server to the players who still trust it. Removing the
+file from git is not enough, since it stays in the history.
 
 ## Reference
 
-```
-r-type_keygen [--out <directory>] [--force]
-r-type_keygen --fingerprint <file>
-```
-
-| Option | Effect |
+| Command | Effect |
 |---|---|
-| `-o`, `--out <directory>` | Where to write `server.key` and `server.pub`, created if missing. The current directory by default. |
-| `-f`, `--force` | Replace the keys already there. Without it, nothing is written if either file exists. |
-| `--fingerprint <file>` | Show the fingerprint of `server.key` or `server.pub`, and write nothing. |
-| `-h`, `--help` | Show the usage. |
+| `r-type_server [--key <file>]` | Starts the master with the key of the file, generated there if the file does not exist. The directories of the path are created if missing. |
+| `r-type_server --check [--key <file>]` | The same check as a start, key generation included, then exits. |
+| `r-type_server --fingerprint [--key <file>]` | Shows the fingerprint of the key, and exits: `1` if the file cannot be read or holds no key. |
 
-| Exit code | Meaning |
-|---|---|
-| `0` | Done |
-| `1` | The keys could not be written (they exist, or the directory cannot be written) or read |
-| `2` | Invalid arguments |
-
-Errors go to the logs, on the error output; set `RTYPE_LOG_LEVEL=debug` for more detail
-([Logging](../architecture/logging.md)). The keys are ECDSA P-256 keys in PEM, which OpenSSL and other tools
-read.
+The key is an ECDSA P-256 private key in PEM, which OpenSSL and other tools read. Errors go to the logs, on
+the error output ([Logging](../architecture/logging.md)).

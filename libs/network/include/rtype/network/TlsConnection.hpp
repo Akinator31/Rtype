@@ -75,7 +75,7 @@ public:
     [[nodiscard]] static TlsConnection client(TcpConnection connection, const KeyFingerprint &server);
     /// The client side of a connection: the handshake fails unless the server presents one of these keys.
     /// With none, it always fails, which tells the key of a server not trusted yet without sending it
-    /// anything (docs/decisions/0020-server-key-distribution.md).
+    /// anything (docs/decisions/0021-server-generated-key-trust-on-first-use.md).
     /// @param onUntrusted Called with the key the server presented, if it is not trusted.
     [[nodiscard]] static TlsConnection client(TcpConnection connection, std::vector<KeyFingerprint> trusted,
                                               UntrustedHandler onUntrusted = {});

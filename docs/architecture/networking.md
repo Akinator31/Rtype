@@ -257,26 +257,25 @@ middle. `TlsConnection` adds it on top of a `TcpConnection`, and works the same 
 The server has a key pair (ECDSA P-256). It keeps the **private key** secret, in a file given to it, and the
 clients know its **public key**. They do not compare the whole key, only its **fingerprint**: the SHA-256 of
 the key, 64 hexadecimal digits, like SSH's `known_hosts`
-([ADR 0014](../decisions/0014-encryption.md#tcp-tls-13-server-key-pinned)). The key pair is made with
-`r-type_keygen`: see [Generate the server keys](../guides/generate-the-server-keys.md). Which keys the client
-trusts for which server, official, trusted on first use or for development, is the client's business
-([ADR 0020](../decisions/0020-server-key-distribution.md), [Playing online](client-online.md#trusted-servers)).
+([ADR 0014](../decisions/0014-encryption.md#tcp-tls-13-server-key-pinned)). The server makes its key at its
+first start: see [Manage the server key](../guides/generate-the-server-keys.md). Which key the client trusts
+for which server, the one the player trusted at the first connection, is the client's business
+([ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md),
+[Playing online](client-online.md#trusted-servers)).
 
 ```cpp
 // Server: its private key, the --key option
 const auto identity = rtype::network::ServerIdentity::load("server.key");
 logger.info("Server key {}", identity.fingerprint().toHex());
 
-// Client: the fingerprint of the server's public key, from its file...
-const auto pinned = rtype::network::KeyFingerprint::loadPublicKey("server.pub");
-// ... or built into the client, or kept in a save, as 64 hexadecimal digits
-const std::optional<rtype::network::KeyFingerprint> fromText = rtype::network::KeyFingerprint::parse(text);
+// Client: the fingerprint of the server's public key, kept in the save as 64 hexadecimal digits
+const std::optional<rtype::network::KeyFingerprint> pinned = rtype::network::KeyFingerprint::parse(text);
 ```
 
 | Function | Gives | Throws |
 |---|---|---|
 | `ServerIdentity::load(path)`, `fromPrivateKey(pem)` | The identity of the server, from an ECDSA P-256 private key in PEM | `std::system_error` (file), `std::invalid_argument` (not such a key) |
-| `ServerIdentity::generate()` | A new key pair, for the tests and the key generation tool | — |
+| `ServerIdentity::generate()` | A new key pair, for the tests and the first start of a server | — |
 | `identity.privateKeyPem()`, `publicKeyPem()`, `fingerprint()` | The keys in PEM, to write them to files, and the fingerprint | — |
 | `KeyFingerprint::loadPublicKey(path)`, `ofPublicKey(pem)` | The fingerprint of a public key in PEM | `std::system_error` (file), `std::invalid_argument` (not a key) |
 | `KeyFingerprint::parse(hex)`, `toHex()` | The fingerprint from and to 64 hexadecimal digits | — (`parse` returns `std::nullopt`) |
@@ -284,7 +283,7 @@ const std::optional<rtype::network::KeyFingerprint> fromText = rtype::network::K
 The fingerprint is the one OpenSSL computes, so it can be checked by hand:
 
 ```sh
-openssl pkey -pubin -in server.pub -outform DER | sha256sum
+openssl pkey -in server.key -pubout -outform DER | sha256sum
 ```
 
 The certificate a TLS server must present is made from the private key when the identity is created: it is
@@ -329,7 +328,7 @@ code above does not change.
   ended, before the first bytes received. The lobby uses it to time the handshake and `HELLO` apart
   (`start(onFrame, onClose, onSecured)` on a `FramedConnection` over TLS; never called over plain TCP).
 - **The client checks the key.** It trusts one key (`client(connection, pinned)`), or several
-  (`client(connection, {main, backup}, onUntrusted)`). If the server presents another key, the handshake fails,
+  (`client(connection, trusted, onUntrusted)`). If the server presents another key, the handshake fails,
   a warning is logged with the fingerprint presented, `onUntrusted` receives that fingerprint, then the close
   handler receives `NetworkError::UntrustedServer`. Nothing the client sent is ever delivered to that server.
 - **Trusting no key** makes every handshake fail: that is how the client learns the key of a server it never

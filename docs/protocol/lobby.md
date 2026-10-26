@@ -62,11 +62,12 @@ encoding of the `SubjectPublicKeyInfo` of the certificate, 32 bytes, written as 
 - The client MUST NOT rely on certificate authorities, host names or validity dates: the pinned key replaces
   them.
 
-The fingerprint of a certificate, or of a public key in PEM, can be computed with OpenSSL:
+The fingerprint of a certificate, of a public key or of a private key in PEM can be computed with OpenSSL:
 
 ```sh
 openssl x509 -in server.crt -pubkey -noout | openssl pkey -pubin -outform DER | sha256sum
 openssl pkey -pubin -in server.pub -outform DER | sha256sum
+openssl pkey -in server.key -pubout -outform DER | sha256sum
 ```
 
 ## 3. Framing

@@ -70,7 +70,7 @@ into a graphical client, a multithreaded server, and the engine they both rely o
 
 | | |
 |---|---|
-| **Binaries** | `r-type_server`, `r-type_client`, `r-type_keygen` (server keys) |
+| **Binaries** | `r-type_server`, `r-type_client` |
 | **Language** | C++20 |
 | **Build** | CMake ≥ 3.25, dependencies fetched by [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) |
 | **Platforms** | Linux (GCC, Clang), Windows (MSVC) |
