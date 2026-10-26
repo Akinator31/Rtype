@@ -47,13 +47,10 @@ constexpr float logoDelay = 0.2f;
 constexpr float logoDuration = 3.2f;
 
 /// The flare is a picture of the same size as the logo, transparent except for a star, in flarePicture,
-/// whose centre is on the top of the P. It comes from out of the screen and spirals into the ring of the
-/// logo, centred on ringCentre in the picture and ringRadius pixels wide, goes around it and swoops down to
-/// its place (see LogoFlareSystem). flareTrail copies follow it like the tail of a comet, each one
+/// whose centre is on the top of the P. It is thrown from the left of the screen and falls on its place
+/// along a parabola (see LogoFlareSystem). flareTrail copies follow it like the tail of a comet, each one
 /// flareTrailLag seconds behind the one before, and fainter.
 constexpr render::Rectangle flarePicture{1240.0f, 245.0f, 420.0f, 420.0f};
-constexpr render::Vector2 ringCentre{958.0f, 538.0f};
-constexpr float ringRadius = 284.0f;
 constexpr int flareTrail = 8;
 constexpr float flareTrailLag = 0.035f;
 constexpr float flareTrailFading = 0.75f;
@@ -134,7 +131,7 @@ void createLogoFlare(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render:
     ecs.addComponent<LogoFlare>(entity, flare);
 }
 
-/// The flare of the logo and its trail. It comes when the intro of `camera` starts, and lands on the
+/// The flare of the logo and its trail. It starts when the intro of `camera` starts, and lands on the
 /// place it has in the full logo.
 void createLogoFlares(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render::ResourceManager &resources,
                       ecs::entity_t logo, ecs::entity_t camera)
@@ -145,12 +142,7 @@ void createLogoFlares(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render
     const render::Vector2 place{
         (flarePicture.x + (flarePicture.width / 2.0f) - (logoPicture.width / 2.0f)) * unitsPerPixel,
         (flarePicture.y + (flarePicture.height / 2.0f) - (logoPicture.height / 2.0f)) * unitsPerPixel};
-    LogoFlare flare{.logo = logo,
-                    .intro = camera,
-                    .ringCentre = {(ringCentre.x - (logoPicture.width / 2.0f)) * unitsPerPixel,
-                                   (ringCentre.y - (logoPicture.height / 2.0f)) * unitsPerPixel},
-                    .ringRadius = ringRadius * unitsPerPixel,
-                    .place = place};
+    LogoFlare flare{.logo = logo, .intro = camera, .place = place};
     for (int copy = flareTrail; copy > 0; --copy) {
         flare.lag = static_cast<float>(copy) * flareTrailLag;
         flare.strength = std::pow(flareTrailFading, static_cast<float>(copy));

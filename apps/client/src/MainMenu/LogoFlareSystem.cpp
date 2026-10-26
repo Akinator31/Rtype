@@ -12,24 +12,18 @@ namespace
 
 constexpr float fullTurn = 2.0f * std::numbers::pi_v<float>;
 
-/// The flare comes from out of the screen, spiralStart seconds after the press: spiralStartRadius times the
-/// radius of the ring away from its centre, spiralStartAngle radians clockwise from its top (on the bottom
-/// left). It spirals clockwise into the ring, faster and faster, rolling on it, lands on it after
-/// spiralLanding of the spiral, and goes on around it to its top. It shrinks from spiralStartScale to
-/// orbitScale on the way.
-constexpr float spiralStart = 0.2f;
-constexpr float spiralDuration = 2.4f;
-constexpr float spiralStartRadius = 7.0f;
-constexpr float spiralStartAngle = -0.75f * std::numbers::pi_v<float>;
-constexpr float spiralLanding = 0.55f;
-constexpr float spiralStartScale = 1.6f;
-constexpr float orbitScale = 0.9f;
-
-/// On the top of the ring, it leaves it towards the right and swoops down to its place, slowing down. The
-/// curve passes near a point at swoopBend of the way from the top of the ring to the place, at the height of
-/// the top: it leaves the ring along it.
-constexpr float swoopDuration = 0.8f;
-constexpr float swoopBend = 0.7f;
+/// The flare is thrown throwStart seconds after the press from throwFrom, in game units on the screen from
+/// the centre of the logo: out of the left of a 16:9 screen, under the height of its place. Like a thrown
+/// stone, it moves to the right at constant speed while it rises then falls, along a parabola whose top is
+/// throwHeight game units above the middle of the line from the start to the place, and lands after
+/// throwDuration seconds. On the way, it shrinks from throwScale to its size and spins throwTurns times
+/// clockwise at constant speed, to land straight.
+constexpr float throwStart = 0.2f;
+constexpr float throwDuration = 1.6f;
+constexpr render::Vector2 throwFrom{-1200.0f, 250.0f};
+constexpr float throwHeight = 380.0f;
+constexpr float throwScale = 1.4f;
+constexpr float throwTurns = 2.0f;
 
 /// When it lands, it flashes: it grows to flashScale and twists by flashTwist degrees in the first
 /// flashPeak of the flash, then comes back to its size and to straight.
@@ -42,13 +36,14 @@ constexpr float flashPeak = 0.15f;
 constexpr float twinkleAmount = 0.06f;
 constexpr float twinklePeriod = 2.4f;
 
-/// A trail fades out over the end of the swoop, from this part of it.
-constexpr float trailFadeFrom = 0.4f;
+/// A trail fades out over the end of the throw, from this part of it.
+constexpr float trailFadeFrom = 0.6f;
 
-constexpr float swoopStart = spiralStart + spiralDuration;
-constexpr float flashStart = swoopStart + swoopDuration;
+constexpr float flashStart = throwStart + throwDuration;
 constexpr float twinkleStart = flashStart + flashDuration;
 
+/// Where the flare is and how it looks: `offset` from the centre of the logo in game units, on the screen
+/// (the points that belong to the logo are already shrunk with it), and `scale` compared with the logo.
 struct FlarePose {
     render::Vector2 offset;
     float scale = 1.0f;
@@ -72,93 +67,62 @@ struct FlarePose {
     return std::clamp((time - start) / duration, 0.0f, 1.0f);
 }
 
-/// The point `distance` away from the centre of the ring, at `angle` radians clockwise from its top.
-[[nodiscard]] render::Vector2 getPointAroundRing(const LogoFlare &flare, float angle, float distance)
+/// The point at `progress` of the parabola from the left of the screen to the place.
+[[nodiscard]] render::Vector2 getThrowPoint(const LogoFlare &flare, float progress, float logoScale)
 {
-    return {flare.ringCentre.x + (distance * std::sin(angle)),
-            flare.ringCentre.y - (distance * std::cos(angle))};
+    const render::Vector2 place{flare.place.x * logoScale, flare.place.y * logoScale};
+    const render::Vector2 line = mix(throwFrom, place, progress);
+    const float rise = 4.0f * throwHeight * progress * (1.0f - progress);
+    return {line.x, line.y - rise};
 }
 
-[[nodiscard]] render::Vector2 getRingPoint(const LogoFlare &flare, float angle)
+[[nodiscard]] FlarePose computeThrow(const LogoFlare &flare, float time, float logoScale)
 {
-    return getPointAroundRing(flare, angle, flare.ringRadius);
-}
-
-/// The point at `progress` of the curve from the top of the ring to the place.
-[[nodiscard]] render::Vector2 getSwoopPoint(const LogoFlare &flare, float progress)
-{
-    const render::Vector2 top = getRingPoint(flare, 0.0f);
-    const render::Vector2 bend{mix(top.x, flare.place.x, swoopBend), top.y};
-    return mix(mix(top, bend, progress), mix(bend, flare.place, progress), progress);
-}
-
-/// The distance from the centre of the ring shrinks more and more slowly, so that the flare lands on the ring
-/// along it.
-[[nodiscard]] float computeSpiralDistance(const LogoFlare &flare, float progress)
-{
-    const float remaining = 1.0f - std::min(progress / spiralLanding, 1.0f);
-    return flare.ringRadius * mix(1.0f, spiralStartRadius, remaining * remaining);
-}
-
-[[nodiscard]] FlarePose computeSpiral(const LogoFlare &flare, float time)
-{
-    const float progress = getProgress(time, spiralStart, spiralDuration);
-    const float turning = (progress + (progress * progress)) / 2.0f;
-    const float angle = mix(spiralStartAngle, fullTurn, turning);
-    return {.offset = getPointAroundRing(flare, angle, computeSpiralDistance(flare, progress)),
-            .scale = mix(spiralStartScale, orbitScale, progress),
+    const float progress = getProgress(time, throwStart, throwDuration);
+    return {.offset = getThrowPoint(flare, progress, logoScale),
+            .scale = mix(throwScale, 1.0f, progress),
             .opacity = 1.0f,
-            .rotation = angle * 180.0f / std::numbers::pi_v<float>};
+            .rotation = throwTurns * 360.0f * (1.0f - progress)};
 }
 
-[[nodiscard]] FlarePose computeSwoop(const LogoFlare &flare, float time)
-{
-    const float progress = getProgress(time, swoopStart, swoopDuration);
-    const float slowing = 1.0f - ((1.0f - progress) * (1.0f - progress));
-    return {.offset = getSwoopPoint(flare, slowing),
-            .scale = mix(orbitScale, 1.0f, progress),
-            .opacity = 1.0f,
-            .rotation = 0.0f};
-}
-
-[[nodiscard]] FlarePose computeFlash(const LogoFlare &flare, float time)
+[[nodiscard]] FlarePose computeFlash(const LogoFlare &flare, float time, float logoScale)
 {
     const float progress = getProgress(time, flashStart, flashDuration);
     const float fall = 1.0f - ((progress - flashPeak) / (1.0f - flashPeak));
     const float burst = progress < flashPeak ? progress / flashPeak : fall * fall;
-    return {.offset = flare.place,
+    return {.offset = {flare.place.x * logoScale, flare.place.y * logoScale},
             .scale = mix(1.0f, flashScale, burst),
             .opacity = 1.0f,
             .rotation = flashTwist * burst};
 }
 
-[[nodiscard]] FlarePose computeTwinkle(const LogoFlare &flare, float time)
+[[nodiscard]] FlarePose computeTwinkle(const LogoFlare &flare, float time, float logoScale)
 {
     const float wave = std::sin(fullTurn * (time - twinkleStart) / twinklePeriod);
-    return {.offset = flare.place, .scale = 1.0f + (twinkleAmount * wave), .opacity = 1.0f, .rotation = 0.0f};
+    return {.offset = {flare.place.x * logoScale, flare.place.y * logoScale},
+            .scale = 1.0f + (twinkleAmount * wave),
+            .opacity = 1.0f,
+            .rotation = 0.0f};
 }
 
-[[nodiscard]] FlarePose computeFlarePose(const LogoFlare &flare, float time)
+[[nodiscard]] FlarePose computeFlarePose(const LogoFlare &flare, float time, float logoScale)
 {
-    if (time < swoopStart) {
-        return computeSpiral(flare, time);
-    }
     if (time < flashStart) {
-        return computeSwoop(flare, time);
+        return computeThrow(flare, time, logoScale);
     }
     if (time < twinkleStart) {
-        return computeFlash(flare, time);
+        return computeFlash(flare, time, logoScale);
     }
-    return computeTwinkle(flare, time);
+    return computeTwinkle(flare, time, logoScale);
 }
 
 /// A trail is the flare `lag` seconds earlier, smaller and fainter, gone once the flare has landed.
-[[nodiscard]] FlarePose computeTrailPose(const LogoFlare &flare, float time)
+[[nodiscard]] FlarePose computeTrailPose(const LogoFlare &flare, float time, float logoScale)
 {
     const float trailTime = time - flare.lag;
-    FlarePose pose = computeFlarePose(flare, trailTime);
-    const float fade = 1.0f - getProgress(trailTime, swoopStart + (trailFadeFrom * swoopDuration),
-                                          (1.0f - trailFadeFrom) * swoopDuration);
+    FlarePose pose = computeFlarePose(flare, trailTime, logoScale);
+    const float fade = 1.0f - getProgress(trailTime, throwStart + (trailFadeFrom * throwDuration),
+                                          (1.0f - trailFadeFrom) * throwDuration);
     pose.scale *= flare.strength;
     pose.opacity *= flare.strength * fade;
     return pose;
@@ -184,12 +148,13 @@ float LogoFlareSystem::getIntroTime(const LogoFlare &flare) const
 void LogoFlareSystem::placeFlare(ecs::entity_t entity, const LogoFlare &flare)
 {
     const float time = getIntroTime(flare);
-    const FlarePose pose = flare.lag > 0.0f ? computeTrailPose(flare, time) : computeFlarePose(flare, time);
-    const engine::Anchor &logo = _anchors.get(flare.logo);
     const float logoScale = _scales.has(flare.logo) ? _scales.get(flare.logo).value : 1.0f;
+    const FlarePose pose = flare.lag > 0.0f ? computeTrailPose(flare, time, logoScale)
+                                            : computeFlarePose(flare, time, logoScale);
+    const engine::Anchor &logo = _anchors.get(flare.logo);
     engine::Anchor &anchor = _anchors.get(entity);
-    anchor.x = logo.x + (pose.offset.x * logoScale);
-    anchor.y = logo.y + (pose.offset.y * logoScale);
+    anchor.x = logo.x + pose.offset.x;
+    anchor.y = logo.y + pose.offset.y;
     _scales.emplace(entity, logoScale * pose.scale);
     _opacities.emplace(entity, pose.opacity);
     _sprites.get(entity).rotation = pose.rotation;
