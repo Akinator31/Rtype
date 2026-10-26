@@ -5,7 +5,6 @@
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
 #include "Server.hpp"
-#include "rtype/keys/DevelopmentKey.hpp"
 #include "rtype/network/Tls.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -42,7 +41,6 @@ TEST_CASE("Without arguments, the server is a master with the default settings",
     CHECK(options.master.firstGamePort == 4243);
     CHECK(options.master.lastGamePort == 4299);
     CHECK(options.master.key == "server.key");
-    CHECK_FALSE(options.master.keyGiven);
     CHECK_FALSE(options.master.check);
     CHECK(options.master.config.empty());
     CHECK(options.instance.config.empty());
@@ -112,7 +110,6 @@ TEST_CASE("Every option of the master is read", "[server]")
     CHECK(options.master.firstGamePort == 6000);
     CHECK(options.master.lastGamePort == 6009);
     CHECK(options.master.key == "/etc/rtype/server.key");
-    CHECK(options.master.keyGiven);
     CHECK(options.master.check);
     CHECK(options.logLevel == rtype::log::Level::Debug);
     CHECK(parse({"-p", "0", "-k", "a.key"}).master.listen == Address::anyIpv4(0));
@@ -165,6 +162,7 @@ TEST_CASE("An instance needs its id and ports, and refuses the options of the ma
         {"--instance", "--id", "0", "--udp-port", "4251", "--master-port", "5000"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--key", "server.key"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--check"},
+        {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--fingerprint"},
     };
 
     for (const auto &arguments : invalid) {
@@ -188,6 +186,15 @@ TEST_CASE("The standalone mode only exists in debug builds, without a master", "
 
 // --- Help, version, exit codes ---
 
+TEST_CASE("The option --fingerprint shows the key of the master instead of running it", "[server]")
+{
+    const Options options = parse({"--fingerprint", "--key", "/etc/rtype/server.key"});
+
+    CHECK(options.mode == Options::Mode::Fingerprint);
+    CHECK(options.master.key == "/etc/rtype/server.key");
+    CHECK(parse({"--fingerprint"}).master.key == "server.key");
+}
+
 TEST_CASE("--help and --version win over everything else", "[server]")
 {
     CHECK(parse({"--unknown", "--help"}).mode == Options::Mode::Help);
@@ -208,39 +215,6 @@ TEST_CASE("The program shows its help and version, and refuses invalid arguments
     out.str("");
     CHECK(run(std::vector<std::string_view>{"--port", "nope"}, out, in) == InvalidArguments);
     CHECK(out.str().empty());
-}
-
-TEST_CASE("A master without its key does not start", "[server]")
-{
-    std::ostringstream out;
-    std::istringstream in;
-
-    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", "missing-rtype-test.key"}, out,
-              in) == Failure);
-}
-
-TEST_CASE("Only a Debug master starts with the public development key", "[server]")
-{
-    std::ostringstream out;
-    std::istringstream in;
-    const int expected = rtype::keys::DevelopmentKeyTrusted ? Success : Failure;
-
-    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--config", RTYPE_TEST_CONFIG, "--key",
-                                            RTYPE_TEST_DEVELOPMENT_KEYS "/server.key"},
-              out, in) == expected);
-}
-
-TEST_CASE("A Debug master without a key uses the development key, a Release master does not start",
-          "[server]")
-{
-    if (std::filesystem::exists("server.key")) {
-        SKIP("A server.key is in the working directory");
-    }
-    std::ostringstream out;
-    std::istringstream in;
-
-    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--config", RTYPE_TEST_CONFIG}, out,
-              in) == (rtype::keys::DevelopmentKeyTrusted ? Success : Failure));
 }
 
 TEST_CASE("An instance without a secret on its standard input does not start", "[server]")

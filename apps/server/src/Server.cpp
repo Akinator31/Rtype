@@ -43,6 +43,8 @@ int run(std::span<const std::string_view> arguments, std::ostream &out, std::ist
         case Options::Mode::Version:
             out << "r-type_server " << version() << '\n';
             return Success;
+        case Options::Mode::Fingerprint:
+            return showFingerprint(options.master, out);
         case Options::Mode::Instance:
             return runInstance(options.instance, in);
         case Options::Mode::Master:

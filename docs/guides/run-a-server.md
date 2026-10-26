@@ -7,12 +7,12 @@ on their own machine for development or on a machine on the Internet.
 
 - The project builds: see [Build](../getting-started/build.md). The server is `build/bin/r-type_server`
   (`build\bin\Release\r-type_server.exe` on Windows), or the one of the server archive of a release.
-- The server keys: see [Generate the server keys](generate-the-server-keys.md). A Debug server without them
-  uses the public development key, which only Debug clients trust: fine on your machine, never for players.
+- Somewhere to keep the key of the server, which it makes at its first start: `server.key` in the current
+  directory by default, or `--key <file>`. See [Manage the server key](generate-the-server-keys.md).
 
 ## Steps
 
-1. **Check the configuration.** `--check` loads the key and the game configuration (the `config/` folder next
+1. **Check the configuration.** `--check` loads the key, or makes it the first time, and the game configuration (the `config/` folder next
    to the server, or `--config <dir>`, see [Configure enemies and weapons](configure-enemies-and-weapons.md))
    and opens the port, then exits, without running the server:
 
@@ -27,9 +27,8 @@ on their own machine for development or on a machine on the Internet.
     INFO  master   Check passed: the server can start
     ```
 
-    The server key is the fingerprint the clients trust: the one built into them for the official server, the
-    one players are shown at their first connection for another one. A Release server refuses to start with
-    the development key.
+    The server key is the fingerprint the players are shown at their first connection, and trust. Keep
+    `keys/server.key`: with another key, they refuse the server.
 
 2. **Open the ports** if players come from another machine: the TCP port of the lobby (4242), and the UDP
    range of the games (4243 to 4299), in the firewall of the machine and, at home, as port forwarding on the
@@ -71,8 +70,9 @@ and exits with code 1:
 
 | Message | Fix |
 |---|---|
-| `Cannot read the key server.key: No such file or directory` | Give the path with `--key`, or [make the keys](generate-the-server-keys.md) |
-| `... is not a key of the server` | The file is not an ECDSA P-256 private key: give `server.key`, not `server.pub` |
+| `Cannot write the key keys/server.key: Permission denied` | The server cannot write its first key there: give a path it can write with `--key` |
+| `Cannot read the key keys/server.key: Permission denied` | Run the server as the user who owns the key |
+| `... is not a key of the server` | The file is not an ECDSA P-256 private key: give the right file, or move it away and the server makes a new key |
 | `Configuration: enemies/x.lua: ...`, then `The game configuration in ... is not valid` | Fix the file and the field it names ([fields](configure-enemies-and-weapons.md#fields)), or give another folder with `--config` |
 | `Cannot listen on 0.0.0.0:4242: Address already in use` | Another server runs on that port: stop it, or choose another with `--port` |
 

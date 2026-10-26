@@ -31,11 +31,9 @@ struct MasterOptions {
     /// The UDP ports given to the games, one per game: their number is the most games at once.
     std::uint16_t firstGamePort = 4243;
     std::uint16_t lastGamePort = 4299;
-    /// The private key the master proves its identity with (docs/guides/generate-the-server-keys.md).
+    /// The private key the master proves its identity with, generated there at its first start
+    /// (docs/guides/generate-the-server-keys.md).
     std::filesystem::path key = "server.key";
-    /// `key` was given with --key: a Debug master without it, and without server.key, uses the development
-    /// key instead (ADR 0020).
-    bool keyGiven = false;
     /// Only check that the server can start (key, ports, configuration), then exit.
     bool check = false;
     /// The configuration of the game, given to the instances; empty: config/ next to the executable.
@@ -64,6 +62,8 @@ struct Options {
         Help,
         /// --version: show the version and exit.
         Version,
+        /// --fingerprint: show the fingerprint of the key of the master and exit.
+        Fingerprint,
     };
 
     Mode mode = Mode::Master;

@@ -62,10 +62,12 @@ a server that cannot work stops at once with the reason.*
 | `-p`, `--port <port>` | 4242 | TCP port of the lobby; 0 lets the system choose |
 | `--bind <ip>` | `0.0.0.0` | Address to listen on: every interface by default, `127.0.0.1` for this machine only |
 | `--game-ports <first>-<last>` | 4243–4299 | UDP ports of the games, one per game: their number is the most games at once |
-| `-k`, `--key <file>` | `server.key` | Private key of the server ([Generate the server keys](../guides/generate-the-server-keys.md)). Without it nor `server.key`, a Debug server uses the development key |
-| `--check` | | Loads the key and the game configuration and opens the port, then exits: checks a configuration without running it |
+| `-k`, `--key <file>` | `server.key` | Private key of the server, generated there if the file does not exist ([Manage the server key](../guides/generate-the-server-keys.md)) |
+| `--fingerprint` | | Shows the fingerprint of the key, for the players to check, then exits. Never generates a key |
+| `--check` | | Loads the key, or generates it, and the game configuration, and opens the port, then exits: checks a configuration without running it |
 
-The master loads its key (`ServerIdentity::load()`), checks the configuration of the game and opens its port
+The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
+[ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game and opens its port
 before anything else, and logs them:
 
 ```
@@ -75,15 +77,12 @@ INFO  master   Server key 4026de0635ae89391bff98b7b9ddc0689fa8529f9804e4c4721ead
 INFO  master   Master started: Ctrl+C to stop
 ```
 
-The fingerprint is the one the clients trust: compare it with `r-type_keygen --fingerprint server.pub` when
-something looks wrong.
+The fingerprint is the one the players trust at their first connection. The key file:
 
-The development key pair, committed in `keys/development/`, is built into the server as a header
-([ADR 0020](../decisions/0020-server-key-distribution.md)):
-
-- a **Debug** master given no `--key` and finding no `server.key` uses it, with a warning;
-- a **Release** master refuses to start with it, whatever the file: its private key is public, so anyone
-  could pretend to be the server. Its private key is not even in Release binaries.
+- **does not exist**: a key is generated, written there only readable by its owner (`O_EXCL`, mode `0600` on
+  Unix, the directories created if missing), with a warning, since it should only happen once per server;
+- **exists**: it is loaded. If it cannot be read or holds no key, the master stops: it never replaces a key,
+  which would make every player refuse the server.
 
 ### Instance
 
@@ -494,8 +493,11 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   start, exits at once or never gets ready, and its port given back; an impostor with an unknown id or a wrong
   secret; a crash reported as `GAME_CRASHED`; a silent client reported as `TIMED_OUT`; the master stopping its
   games; and the real binary run as a master, which starts the instance of a game created by a client.
-- The smoke tests of CTest run `r-type_server --help`, refuse an unknown argument, and run `--check` with a key
-  made by `r-type_keygen` for the occasion.
+- `tests/server_key.cpp` (tag `[server]`): a key generated where none exists, then the same one loaded; only
+  its owner can read it; a file that is not a key, or cannot be written, stops the master and is never
+  replaced; `--fingerprint` shows the key and never makes one.
+- The smoke tests of CTest run `r-type_server --help`, refuse an unknown argument, and run `--check`, which
+  makes its key in the build directory the first time.
 
 ## Limits and next steps
 
