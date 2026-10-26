@@ -1,7 +1,6 @@
 # Executables: each subdirectory builds one program
 add_subdirectory(client)
 add_subdirectory(server)
-add_subdirectory(keygen)
 
 # The configuration of the game (enemies, weapons..., ADR 0018), read by the client and the server from a config/
 # folder next to their executable. Copied again on every build, after removing the old copy, so that a file

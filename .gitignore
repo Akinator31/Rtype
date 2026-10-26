@@ -18,10 +18,8 @@ CMakeUserPresets.json
 .DS_Store
 Thumbs.db
 
-# Private keys of the server (docs/guides/generate-the-server-keys.md)
+# Private keys of the server, generated at its first start (docs/guides/generate-the-server-keys.md)
 *.key
-# Except the development key, public by design (ADR 0020)
-!keys/development/server.key
 
 # Documentation output
 site/
