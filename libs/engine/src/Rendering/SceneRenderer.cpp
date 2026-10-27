@@ -486,6 +486,17 @@ void SceneRenderer::drawFlare(render::Renderer &renderer, const Panel &panel, co
     const float trace = std::clamp(panel.highlight, 0.0f, 1.0f);
     const render::Vector2 measured =
         renderer.measureText(text.font, text.text, text.size, style.letterSpacing);
+    if (panel.plain) {
+        // Eased, so that the text neither jumps nor stops suddenly
+        const float eased = trace * trace * (3.0f - (2.0f * trace));
+        const render::Vector2 corner{centre.x - (measured.x / 2.0f), centre.y - (measured.y / 2.0f)};
+        const render::Rectangle area{corner.x, corner.y, measured.x, measured.y};
+        drawBlurred(renderer, area, area.height / 2.0f, style.textGlowBlur,
+                    faded(style.textGlow, opacity * eased));
+        renderer.drawText(text.font, text.text, corner, text.size,
+                          faded(mix(style.text, style.litText, eased), opacity), style.letterSpacing);
+        return;
+    }
     const render::Vector2 topLeft{centre.x - (style.computeWidth(measured.x) / 2.0f) + style.padding,
                                   centre.y - (measured.y / 2.0f)};
     const render::Vector2 star{topLeft.x + measured.x + style.starGap + style.starSize, centre.y};

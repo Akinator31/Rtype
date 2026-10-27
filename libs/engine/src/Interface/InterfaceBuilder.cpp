@@ -126,6 +126,14 @@ ecs::entity_t InterfaceBuilder::button(const std::string &text, std::function<vo
     return entity;
 }
 
+ecs::entity_t InterfaceBuilder::arrowButton(const std::string &text, std::function<void()> onPress,
+                                            Anchor anchor)
+{
+    const ecs::entity_t entity = button(text, std::move(onPress), anchor);
+    _ecs.getComponent<Panel>(entity).plain = true;
+    return entity;
+}
+
 ecs::entity_t InterfaceBuilder::backButton(std::function<void()> onPress, Anchor anchor)
 {
     return button(backArrow, std::move(onPress), anchor);

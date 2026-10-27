@@ -67,6 +67,9 @@ public:
     /// has been seen (FlareStyle::pressDelay). The buttons of a builder get the focus in the order they are
     /// created.
     ecs::entity_t button(const std::string &text, std::function<void()> onPress, Anchor anchor);
+    /// A button like button(), but with no line of light nor star: its text, centred, fades smoothly to its lit
+    /// look and glows while it has the focus. For an arrow of a carousel.
+    ecs::entity_t arrowButton(const std::string &text, std::function<void()> onPress, Anchor anchor);
     /// A value between 0 and 1 the player sets by dragging the handle of a rail, or with Left and Right, the
     /// mouse wheel and the keys (InterfaceStyle::slider): its caption above the rail, its value as a
     /// percentage on the right. It gets the focus in the same order as the buttons. The anchor places the
