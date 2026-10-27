@@ -1,7 +1,7 @@
 # Threads
 
 !!! note "Status: partially implemented"
-    [ADR 0020](../decisions/0020-engine-thread-manager.md) records the worker ownership and shutdown design
+    [ADR 0022](../decisions/0022-engine-thread-manager.md) records the worker ownership and shutdown design
     and supersedes ADR 0017. Scene asset manifests and automatic loading are implemented in #225. The render
     and logic threads of #117 and #118 were not merged.
 
