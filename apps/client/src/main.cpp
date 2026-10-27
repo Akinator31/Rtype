@@ -200,6 +200,8 @@ void run()
     const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
     bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
     bool debugKeyWasDown = false;
+    bool assetsLoaded = false;
+
     const auto playFrame = [&] {
         const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
         if (debugKeyDown && !debugKeyWasDown) {
@@ -208,7 +210,9 @@ void run()
         debugKeyWasDown = debugKeyDown;
         network.poll();
         engine.update(window.frameTime());
-        resources.finishPendingLoads();
+        if (assetsLoaded) {
+            resources.finishPendingLoads();
+        }
         audio.finishPendingLoads();
         audio.update();
         renderer.beginFrame();
@@ -229,6 +233,7 @@ void run()
         return;
     }
 
+    assetsLoaded = true;
     // The scenes of the game are built from the loaded assets, which they find in the cache
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations);
