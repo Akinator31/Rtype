@@ -137,8 +137,7 @@ rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
     ecs.registerSystem<rtype::client::FlightSystem>();
     ecs.registerSystem<rtype::client::IntroSystem>(engine.getScenes(), devices);
     ecs.registerSystem<rtype::client::LogoFlareSystem>();
-    ecs.registerSystem<rtype::client::ShipSelectorSystem>(engine.getScenes(), engine.getControls(),
-                                                          devices);
+    ecs.registerSystem<rtype::client::ShipSelectorSystem>(engine.getScenes(), engine.getControls(), devices);
     ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
     ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);

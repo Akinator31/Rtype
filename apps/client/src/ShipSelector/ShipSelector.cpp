@@ -1,8 +1,8 @@
 #include "ShipSelector/ShipSelector.hpp"
 
 #include "Assets.hpp"
-#include "ShipModel.hpp"
 #include "MainMenu/Layout.hpp"
+#include "ShipModel.hpp"
 #include "ShipSelector/ShipCarousel.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -103,7 +103,7 @@ ecs::entity_t createShip(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceM
 /// The carousel that runs the ships, which start at rest on the one looked at, a little turned so that their
 /// nose comes towards the player.
 ecs::entity_t createCarousel(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources,
-                    ShipSelection &selection)
+                             ShipSelection &selection)
 {
     selection.slide = static_cast<float>(selection.focused);
     const ecs::entity_t entity = ecs.createEntity();
@@ -121,14 +121,14 @@ ecs::entity_t createCarousel(ecs::Ecs &ecs, engine::SceneId scene, render::Resou
 void createArrows(engine::InterfaceBuilder &interface, ShipSelection &selection)
 {
     interface.arrowButton("<", [&selection] { selection.step(-1); },
-                           {engine::AnchorPoint::Left, screenMargin, arrowsHeight});
+                          {engine::AnchorPoint::Left, screenMargin, arrowsHeight});
     interface.arrowButton(">", [&selection] { selection.step(1); },
-                           {engine::AnchorPoint::Right, -screenMargin, arrowsHeight});
+                          {engine::AnchorPoint::Right, -screenMargin, arrowsHeight});
 }
 
 /// The code and the name of the ship looked at, in the title style, under the pedestal.
 ecs::entity_t createShipName(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
-                    localization::Localization &translations, const ShipSelection &selection)
+                             localization::Localization &translations, const ShipSelection &selection)
 {
     const ecs::entity_t name = interface.boundTitle(
         [&translations, &selection] {
@@ -152,11 +152,11 @@ std::string getEquipText(localization::Localization &translations, const ShipSel
 }
 
 ecs::entity_t createEquipButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
-                       localization::Localization &translations, ShipSelection &selection)
+                                localization::Localization &translations, ShipSelection &selection)
 {
-    const ecs::entity_t button = interface.button(
-        getEquipText(translations, selection), [&selection] { selection.equipFocused(); },
-        {engine::AnchorPoint::Bottom, 0.0f, equipBottom});
+    const ecs::entity_t button =
+        interface.button(getEquipText(translations, selection), [&selection] { selection.equipFocused(); },
+                         {engine::AnchorPoint::Bottom, 0.0f, equipBottom});
     ecs.addComponent<engine::BoundText>(
         button, [&translations, &selection] { return getEquipText(translations, selection); });
     ecs.addComponent<engine::Opacity>(button);
@@ -180,15 +180,15 @@ std::vector<ecs::entity_t> createDots(engine::InterfaceBuilder &interface)
 void createStatGauges(engine::InterfaceBuilder &interface, localization::Localization &translations,
                       const ShipSelection &selection)
 {
-    interface.gauge(
-        translations.text("ship.speed"), [&selection] { return selection.getBlend(&ShipEntry::speed); },
-        {engine::AnchorPoint::Bottom, -gaugesSpacing, gaugesBottom});
-    interface.gauge(
-        translations.text("ship.power"), [&selection] { return selection.getBlend(&ShipEntry::power); },
-        {engine::AnchorPoint::Bottom, 0.0f, gaugesBottom});
-    interface.gauge(
-        translations.text("ship.armor"), [&selection] { return selection.getBlend(&ShipEntry::armor); },
-        {engine::AnchorPoint::Bottom, gaugesSpacing, gaugesBottom});
+    interface.gauge(translations.text("ship.speed"),
+                    [&selection] { return selection.getBlend(&ShipEntry::speed); },
+                    {engine::AnchorPoint::Bottom, -gaugesSpacing, gaugesBottom});
+    interface.gauge(translations.text("ship.power"),
+                    [&selection] { return selection.getBlend(&ShipEntry::power); },
+                    {engine::AnchorPoint::Bottom, 0.0f, gaugesBottom});
+    interface.gauge(translations.text("ship.armor"),
+                    [&selection] { return selection.getBlend(&ShipEntry::armor); },
+                    {engine::AnchorPoint::Bottom, gaugesSpacing, gaugesBottom});
 }
 
 } // namespace
