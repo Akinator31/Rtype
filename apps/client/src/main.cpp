@@ -33,12 +33,13 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
-#include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace
 {
@@ -58,38 +59,6 @@ struct UnloadScenes {
 
     ~UnloadScenes() { engine.unloadSceneAssets(); }
 };
-
-bool preloadAssets(rtype::render::Window &window, rtype::render::Renderer &renderer,
-                   rtype::render::ResourceManager &resources)
-{
-    using namespace rtype::render;
-    const auto title = resources.loadFontAsync(RTYPE_FONT_TITLE, 160);
-    const auto button = resources.loadFontAsync(RTYPE_FONT_BUTTON, 96);
-    const auto sky = resources.loadTextureAsync(RTYPE_IMAGE_STARFIELD, TextureFiltering::Smooth);
-    const auto ready = [](const auto &future) {
-        return future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-    };
-    while (!window.shouldClose()) {
-        resources.finishPendingLoads();
-        std::size_t completed = static_cast<std::size_t>(ready(title)) +
-                                static_cast<std::size_t>(ready(button)) +
-                                static_cast<std::size_t>(ready(sky));
-        if (completed == 3) {
-            break;
-        }
-        renderer.beginFrame();
-        renderer.drawText("Loading assets " + std::to_string(completed) + "/3", {80.0f, 90.0f}, 40.0f,
-                          colors::White);
-        renderer.endFrame();
-    }
-    if (window.shouldClose()) {
-        return false;
-    }
-    title.get();
-    button.get();
-    sky.get();
-    return true;
-}
 
 /// Loads the configuration of the game (ADR 0018), next to the executable. Unlike the server, the client
 /// starts with a configuration that has errors: it goes without it (an offline game has no enemies nor
@@ -127,7 +96,6 @@ std::vector<rtype::engine::SceneAsset> mainMenuAssets()
     };
 }
 
-/// Declares the scenes of the client, but those of a game, which GameScenes declares.
 /// Declares the scenes shown while the assets load: the loading screen, and the console, which opens over
 /// any scene.
 void createLoadingScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
@@ -255,11 +223,8 @@ void run()
     rtype::network::EventLoop network;
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, audio, metrics, style);
-    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
     rtype::client::SceneAssetLoader sceneAssets(resources, audio);
     UnloadScenes unloadScenes{engine};
-    rtype::client::OnlineScenes online(engine, network, games, metrics, style,
-                                       applicationDirectory() / "server.pub", translations);
     rtype::client::AssetPreload preload(resources);
     // Last: it only writes opacities, read when drawing
     const auto &loading = engine.getEcs().registerSystem<rtype::client::LoadingSystem>(preload);
@@ -298,6 +263,7 @@ void run()
     };
 
     createLoadingScenes(engine, resources, style, console, metrics, translations);
+    engine.setSceneAssetLoader(sceneAssets, rtype::client::LoadingScene);
     engine.switchScene(rtype::client::LoadingScene);
     while (!window.shouldClose() && !loading.isFinished()) {
         playFrame();
