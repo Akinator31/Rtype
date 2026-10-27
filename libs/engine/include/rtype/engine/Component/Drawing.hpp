@@ -75,6 +75,9 @@ struct Panel {
     /// 0 for the normal look, 1 for the lit one, in between while the button fades from one to the other. It
     /// goes above 1 for a moment when the button is pressed, up to FlareStyle::pressedHighlight.
     float highlight = 0.0f;
+    /// No line of light nor star: the text alone fades smoothly from its normal look to the lit one, with a
+    /// halo, and is centred on the button. For the arrows of a carousel.
+    bool plain = false;
 };
 
 /// A 3D model, seen through the Camera of the scenes. It is drawn in the World layer, before the 2D entities,
