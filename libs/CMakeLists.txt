@@ -13,6 +13,8 @@ CPMAddPackage(
         "BUILD_EXAMPLES OFF"
         "BUILD_SHARED_LIBS OFF"
 )
+# raylib reads no JPEG by default, and some models (the pedestal of the hangar) have JPEG textures
+target_compile_definitions(raylib PRIVATE SUPPORT_FILEFORMAT_JPG=1)
 
 add_subdirectory(audio)
 add_subdirectory(core)
