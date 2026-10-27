@@ -16,6 +16,8 @@
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "ShipSelector/ShipSelector.hpp"
+#include "ShipSelector/ShipSelectorSystem.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
@@ -95,7 +97,8 @@ void createLoadingScenes(rtype::engine::Engine &engine, rtype::render::ResourceM
 void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
                   const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
                   const rtype::engine::RendererMetrics &metrics, rtype::client::GameScenes &games,
-                  const rtype::game::GameConfig &config, rtype::localization::Localization &translations)
+                  const rtype::game::GameConfig &config, rtype::localization::Localization &translations,
+                  rtype::client::ShipSelection &ships)
 {
     const auto quit = [&window] { window.requestClose(); };
     engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
@@ -107,6 +110,7 @@ void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager 
     rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
         games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
     });
+    rtype::client::createShipSelectorScene(engine, resources, style, translations, ships);
 }
 
 /// Registers the systems of the client, in the order they run each frame, after the scenes.
@@ -133,6 +137,8 @@ rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
     ecs.registerSystem<rtype::client::FlightSystem>();
     ecs.registerSystem<rtype::client::IntroSystem>(engine.getScenes(), devices);
     ecs.registerSystem<rtype::client::LogoFlareSystem>();
+    ecs.registerSystem<rtype::client::ShipSelectorSystem>(engine.getScenes(), engine.getControls(),
+                                                          devices);
     ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
     ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
@@ -226,7 +232,8 @@ void run()
     // The scenes of the game are built from the loaded assets, which they find in the cache
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations);
-    createScenes(engine, resources, style, window, metrics, games, config, translations);
+    rtype::client::ShipSelection ships;
+    createScenes(engine, resources, style, window, metrics, games, config, translations, ships);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
