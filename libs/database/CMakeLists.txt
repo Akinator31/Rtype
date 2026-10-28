@@ -2,11 +2,12 @@
 # libpq; SOCI is in its public headers, since the code that writes the queries uses its session.
 
 # PostgreSQL needs libpq from the system (libpq-dev, postgresql-libs, or the PostgreSQL installer on Windows).
-# AUTO builds it when libpq is found; without it, a postgresql:// address is refused, saying why
+# AUTO builds it when libpq is found, on Linux; without it, a postgresql:// address is refused, saying why. On
+# Windows, AUTO leaves it out: the programs would need libpq.dll and its own DLLs beside them, which ON asks for
 set(RTYPE_WITH_POSTGRESQL AUTO CACHE STRING "Build the PostgreSQL engine of the database: ON, OFF or AUTO")
 set_property(CACHE RTYPE_WITH_POSTGRESQL PROPERTY STRINGS AUTO ON OFF)
 set(RTYPE_DATABASE_POSTGRESQL OFF)
-if(NOT RTYPE_WITH_POSTGRESQL STREQUAL "OFF")
+if(RTYPE_WITH_POSTGRESQL STREQUAL "ON" OR (RTYPE_WITH_POSTGRESQL STREQUAL "AUTO" AND NOT WIN32))
     if(RTYPE_WITH_POSTGRESQL STREQUAL "ON")
         find_package(PostgreSQL REQUIRED)
     else()

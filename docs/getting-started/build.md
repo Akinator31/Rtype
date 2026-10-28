@@ -30,8 +30,9 @@ system-wide besides a compiler and, on Linux, the X11/OpenGL development package
 
 libpq (`libpq-dev`, `postgresql-libs`) is optional: with it, the server can keep its data in a PostgreSQL
 database; without it, in SQLite only. The configure says which: `Database engines: SQLite, PostgreSQL`. On
-Windows, it comes with the [PostgreSQL installer](https://www.postgresql.org/download/windows/);
-`-DRTYPE_WITH_POSTGRESQL=ON` makes it required, `OFF` leaves it out ([Database](../architecture/database.md)).
+Windows, PostgreSQL is left out unless asked: it comes with the
+[PostgreSQL installer](https://www.postgresql.org/download/windows/), then `-DRTYPE_WITH_POSTGRESQL=ON`
+([Database](../architecture/database.md#building-with-postgresql)).
 
 ## Configure and build
 

@@ -48,8 +48,8 @@ chooses:
 
 | Value | Effect |
 |---|---|
-| `AUTO` (default) | Built when libpq is found |
-| `ON` | Required: the configure fails without libpq |
+| `AUTO` (default) | Built when libpq is found, on Linux. Left out on Windows |
+| `ON` | Required: the configure fails without libpq. On Windows, `libpq.dll` and the DLLs it needs (from the `bin` folder of PostgreSQL) must be beside the programs or on the `PATH` |
 | `OFF` | Left out: SQLite only |
 
 The configure says what it built: `Database engines: SQLite, PostgreSQL (libpq 18.6)`. A program built with it
