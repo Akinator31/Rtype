@@ -82,7 +82,7 @@ class OnlineScenes
 
 public:
     /// Declares the Online menu and the lobby. Everything given must outlive the engine.
-    /// The servers trusted are kept in the save of the engine.
+    /// The servers trusted are kept in the settings of the engine.
     OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                  const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                  localization::Localization &translations);

@@ -1,4 +1,4 @@
-#include "rtype/save/Save/Save.hpp"
+#include "rtype/engine/Settings/Settings.hpp"
 
 #include <array>
 #include <charconv>
@@ -7,7 +7,7 @@
 #include <system_error>
 #include <utility>
 
-namespace rtype::save
+namespace rtype::engine
 {
 namespace
 {
@@ -82,19 +82,19 @@ std::optional<Number> parseNumber(std::string_view text)
 
 } // namespace
 
-Save::Save(std::filesystem::path path) : _path(std::move(path)) {}
+Settings::Settings(std::filesystem::path path) : _path(std::move(path)) {}
 
-void Save::setPath(std::filesystem::path path)
+void Settings::setPath(std::filesystem::path path)
 {
     _path = std::move(path);
 }
 
-const std::filesystem::path &Save::getPath() const
+const std::filesystem::path &Settings::getPath() const
 {
     return _path;
 }
 
-void Save::readFile()
+void Settings::readFile()
 {
     _values.clear();
     if (!std::filesystem::exists(_path)) {
@@ -102,7 +102,7 @@ void Save::readFile()
     }
     std::ifstream file(_path, std::ios::binary);
     if (!file) {
-        throw std::runtime_error("Cannot open save file: " + _path.string());
+        throw std::runtime_error("Cannot open the settings file: " + _path.string());
     }
     std::string line;
     while (std::getline(file, line)) {
@@ -111,11 +111,11 @@ void Save::readFile()
         }
     }
     if (file.bad()) {
-        throw std::runtime_error("Cannot read save file: " + _path.string());
+        throw std::runtime_error("Cannot read the settings file: " + _path.string());
     }
 }
 
-void Save::writeFile() const
+void Settings::writeFile() const
 {
     if (_path.has_parent_path()) {
         std::filesystem::create_directories(_path.parent_path());
@@ -128,17 +128,17 @@ void Save::writeFile() const
     }
     file.close();
     if (!file) {
-        throw std::runtime_error("Cannot write save file: " + temporary.string());
+        throw std::runtime_error("Cannot write the settings file: " + temporary.string());
     }
     std::filesystem::rename(temporary, _path);
 }
 
-bool Save::hasKey(std::string_view key) const
+bool Settings::hasKey(std::string_view key) const
 {
     return _values.contains(key);
 }
 
-void Save::removeKey(std::string_view key)
+void Settings::removeKey(std::string_view key)
 {
     const auto entry = _values.find(key);
     if (entry != _values.end()) {
@@ -146,29 +146,29 @@ void Save::removeKey(std::string_view key)
     }
 }
 
-void Save::setString(std::string_view key, std::string_view value)
+void Settings::setString(std::string_view key, std::string_view value)
 {
     _values.insert_or_assign(std::string(key), std::string(value));
 }
 
-void Save::setInt(std::string_view key, int value)
+void Settings::setInt(std::string_view key, int value)
 {
     setString(key, std::to_string(value));
 }
 
-void Save::setFloat(std::string_view key, float value)
+void Settings::setFloat(std::string_view key, float value)
 {
     std::array<char, 32> buffer{};
     const auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
     setString(key, std::string_view(buffer.data(), end));
 }
 
-void Save::setBool(std::string_view key, bool value)
+void Settings::setBool(std::string_view key, bool value)
 {
     setString(key, value ? "true" : "false");
 }
 
-std::optional<std::string> Save::getString(std::string_view key) const
+std::optional<std::string> Settings::getString(std::string_view key) const
 {
     const auto entry = _values.find(key);
     if (entry == _values.end()) {
@@ -177,7 +177,7 @@ std::optional<std::string> Save::getString(std::string_view key) const
     return entry->second;
 }
 
-std::optional<int> Save::getInt(std::string_view key) const
+std::optional<int> Settings::getInt(std::string_view key) const
 {
     const auto entry = _values.find(key);
     if (entry == _values.end()) {
@@ -186,7 +186,7 @@ std::optional<int> Save::getInt(std::string_view key) const
     return parseNumber<int>(entry->second);
 }
 
-std::optional<float> Save::getFloat(std::string_view key) const
+std::optional<float> Settings::getFloat(std::string_view key) const
 {
     const auto entry = _values.find(key);
     if (entry == _values.end()) {
@@ -195,7 +195,7 @@ std::optional<float> Save::getFloat(std::string_view key) const
     return parseNumber<float>(entry->second);
 }
 
-std::optional<bool> Save::getBool(std::string_view key) const
+std::optional<bool> Settings::getBool(std::string_view key) const
 {
     const auto entry = _values.find(key);
     if (entry == _values.end()) {
@@ -210,4 +210,4 @@ std::optional<bool> Save::getBool(std::string_view key) const
     return std::nullopt;
 }
 
-} // namespace rtype::save
+} // namespace rtype::engine

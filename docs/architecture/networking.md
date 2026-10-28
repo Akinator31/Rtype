@@ -268,7 +268,7 @@ for which server, the one the player trusted at the first connection, is the cli
 const auto identity = rtype::network::ServerIdentity::load("server.key");
 logger.info("Server key {}", identity.fingerprint().toHex());
 
-// Client: the fingerprint of the server's public key, kept in the save as 64 hexadecimal digits
+// Client: the fingerprint of the server's public key, kept in the settings as 64 hexadecimal digits
 const std::optional<rtype::network::KeyFingerprint> pinned = rtype::network::KeyFingerprint::parse(text);
 ```
 

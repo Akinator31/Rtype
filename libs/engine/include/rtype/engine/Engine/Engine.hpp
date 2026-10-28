@@ -5,8 +5,8 @@
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Event/Event.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
+#include "rtype/engine/Settings/Settings.hpp"
 #include "rtype/engine/ThreadManager.hpp"
-#include "rtype/save/Save/Save.hpp"
 
 #include <functional>
 #include <string>
@@ -73,7 +73,7 @@ class Engine
     Controls _controls;
     input::InputSource *_inputSource = nullptr;
     ThreadManager _threads;
-    save::Save _save;
+    Settings _settings;
 
     void applySceneRequests();
     void openScene(const std::string &name);
@@ -95,8 +95,9 @@ public:
     [[nodiscard]] Controls &getControls();
     [[nodiscard]] ThreadManager &getThreads() { return _threads; }
     [[nodiscard]] const ThreadManager &getThreads() const { return _threads; }
-    /// The save starts empty, without a file: the client gives it one with Save::setPath(), then reads it.
-    [[nodiscard]] save::Save &getSave();
+    /// The settings start empty, without a file: the client gives them one with Settings::setPath(), then
+    /// reads it.
+    [[nodiscard]] Settings &getSettings();
 
     /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without
     /// a source, the controls are never updated and stay released.

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "rtype/engine/Settings/Settings.hpp"
 #include "rtype/network/Tls.hpp"
-#include "rtype/save/Save/Save.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -17,10 +17,10 @@ namespace rtype::client
 
 /// The key the client trusts for each server
 /// (docs/decisions/0021-server-generated-key-trust-on-first-use.md): the one the player trusted at its first
-/// connection, kept in the save under `servers.known.<address>`.
+/// connection, kept in the settings under `servers.known.<address>`.
 ///
 /// @code
-/// KnownServers known(engine.getSave());
+/// KnownServers known(engine.getSettings());
 /// LobbyClient lobby(loop, server, known.trusted(address), name, {
 ///     .onUntrusted = [&](const network::KeyFingerprint &presented) {
 ///         if (known.judge(address) == KnownServers::Verdict::FirstUse) {
@@ -41,14 +41,14 @@ public:
         Changed,
     };
 
-    /// Where the keys of the servers trusted by the player are kept in the save.
-    static constexpr std::string_view SaveKeyPrefix = "servers.known.";
+    /// Where the keys of the servers trusted by the player are kept in the settings.
+    static constexpr std::string_view SettingsKeyPrefix = "servers.known.";
 
 private:
-    save::Save &_save;
+    engine::Settings &_settings;
 
 public:
-    explicit KnownServers(save::Save &save);
+    explicit KnownServers(engine::Settings &settings);
 
     /// The keys the server at this address may present, to give to the LobbyClient: the one remembered, or
     /// none for a server never met.
@@ -59,10 +59,11 @@ public:
     /// The key the player trusted for this server, if any.
     [[nodiscard]] std::optional<network::KeyFingerprint> remembered(const std::string &address) const;
 
-    /// Trusts this key for this server from now on, and writes the save.
-    /// @return False if the save could not be written: the key is then only trusted until the client closes.
+    /// Trusts this key for this server from now on, and writes the settings.
+    /// @return False if the settings could not be written: the key is then only trusted until the client
+    /// closes.
     bool trust(const std::string &address, const network::KeyFingerprint &key);
-    /// Forgets the key trusted for this server, and writes the save: its next connection is a first use.
+    /// Forgets the key trusted for this server, and writes the settings: its next connection is a first use.
     /// @return A key was forgotten.
     bool forget(const std::string &address);
 };

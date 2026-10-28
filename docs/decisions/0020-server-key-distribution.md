@@ -78,7 +78,7 @@ The player types the address of the server, as today.
 3. The client shows that fingerprint and asks the player to trust it. The player can compare it with the one
    the owner of the server gives (`r-type_keygen --fingerprint`).
 4. If the player trusts it, the client stores it in the save, under the address of the server
-   (`servers.known.<host>:<port>`, see [Save](../architecture/save.md)), and connects again, pinning it.
+   (`servers.known.<host>:<port>`, see [Save](../architecture/settings.md)), and connects again, pinning it.
 5. **A known server that presents another key** is refused, with a warning that names both fingerprints: it
    is either a new key or an attack, and the client cannot tell. The player must explicitly forget the server
    before trusting it again; the warning itself offers no way to accept the new key.

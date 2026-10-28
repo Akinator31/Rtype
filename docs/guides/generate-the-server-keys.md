@@ -56,7 +56,7 @@ trusts it at the first connection, as with SSH
 
 ## Result
 
-The server has its key, and each player trusts its fingerprint after the first connection, kept in the save
+The server has its key, and each player trusts its fingerprint after the first connection, kept in the settings
 of the client. When a client connects, the server proves in the TLS handshake that it has the private key, and
 the client checks that its public key is the one it trusts. Otherwise, the client refuses the server before
 sending it anything, and a player who trusted another key for this server sees a warning naming both.

@@ -3,8 +3,8 @@
 
 #include "Online/KnownServers.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "rtype/engine/Settings/Settings.hpp"
 #include "rtype/network/Tls.hpp"
-#include "rtype/save/Save/Save.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -21,18 +21,20 @@ using Verdict = KnownServers::Verdict;
 namespace
 {
 
-/// A save in a file of its own, removed after the test: a directory per test, since CTest runs them at once.
-struct TemporarySave {
+/// Settings in a file of their own, removed after the test: a directory per test, since CTest runs them at
+/// once.
+struct TemporarySettings {
     std::filesystem::path path;
-    rtype::save::Save save;
+    rtype::engine::Settings settings;
 
-    explicit TemporarySave(const std::string &test)
-        : path(std::filesystem::temp_directory_path() / ("rtype_tests_known_servers_" + test) / "save.txt"),
-          save(path)
+    explicit TemporarySettings(const std::string &test)
+        : path(std::filesystem::temp_directory_path() / ("rtype_tests_known_servers_" + test) /
+               "settings.txt"),
+          settings(path)
     {
         std::filesystem::remove_all(path.parent_path());
     }
-    ~TemporarySave() { std::filesystem::remove_all(path.parent_path()); }
+    ~TemporarySettings() { std::filesystem::remove_all(path.parent_path()); }
 };
 
 } // namespace
@@ -46,8 +48,8 @@ TEST_CASE("A server is known by its host in lowercase and its port, an IPv6 addr
 
 TEST_CASE("A server never met is trusted on first use, then only with that key", "[online]")
 {
-    TemporarySave file("first_use");
-    KnownServers known(file.save);
+    TemporarySettings file("first_use");
+    KnownServers known(file.settings);
     const std::string address = serverAddress("10.0.0.7", 4242);
     const KeyFingerprint key = ServerIdentity::generate().fingerprint();
 
@@ -61,9 +63,9 @@ TEST_CASE("A server never met is trusted on first use, then only with that key",
     // Another key afterwards: refused, never asked again
     CHECK(known.judge(address) == Verdict::Changed);
 
-    SECTION("The key trusted is kept in the save, for the next runs")
+    SECTION("The key trusted is kept in the settings, for the next runs")
     {
-        rtype::save::Save next(file.path);
+        rtype::engine::Settings next(file.path);
         next.readFile();
         CHECK(next.getString("servers.known.10.0.0.7:4242") == key.toHex());
         const KnownServers again(next);
@@ -75,17 +77,17 @@ TEST_CASE("A server never met is trusted on first use, then only with that key",
         CHECK_FALSE(known.remembered(address));
         CHECK(known.judge(address) == Verdict::FirstUse);
         CHECK_FALSE(known.forget(address));
-        rtype::save::Save next(file.path);
+        rtype::engine::Settings next(file.path);
         next.readFile();
         CHECK_FALSE(next.hasKey("servers.known.10.0.0.7:4242"));
     }
 }
 
-TEST_CASE("A key in the save that is not a fingerprint trusts nothing", "[online]")
+TEST_CASE("A key in the settings that is not a fingerprint trusts nothing", "[online]")
 {
-    TemporarySave file("garbage");
-    file.save.setString("servers.known.10.0.0.7:4242", "garbage");
-    const KnownServers known(file.save);
+    TemporarySettings file("garbage");
+    file.settings.setString("servers.known.10.0.0.7:4242", "garbage");
+    const KnownServers known(file.settings);
 
     CHECK(known.trusted("10.0.0.7:4242").empty());
     CHECK_FALSE(known.remembered("10.0.0.7:4242"));
