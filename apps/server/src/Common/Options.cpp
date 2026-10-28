@@ -24,7 +24,11 @@ Master options:
   -k, --key <file>           Private key of the server (default: server.key), generated there if the
                              file does not exist. Keep it: the players refuse the server with another key
       --fingerprint          Show the fingerprint of the key, for the players to check, then exit
-      --check                Check that the server can start (key, port, configuration), then exit
+      --database <address>   Where the data is kept (default: sqlite:rtype.db): sqlite:<file>, or
+                             postgresql://<user>@<host>:<port>/<database> (password: ~/.pgpass)
+      --database-file <file> Read the address of the database from this file, for one with a password
+      --check                Check that the server can start (key, port, configuration, database), then
+                             exit
 
 Instance options (given by the master):
       --id <id>              Id of the game, from 1
@@ -96,6 +100,7 @@ Options parseOptions(std::span<const std::string_view> arguments)
     std::vector<std::string_view> instanceOnly;
     bool instance = false;
     bool fingerprint = false;
+    bool databaseGiven = false;
     std::optional<std::uint16_t> port;
     std::optional<std::string_view> bind;
     bool idGiven = false;
@@ -149,6 +154,17 @@ Options parseOptions(std::span<const std::string_view> arguments)
         } else if (argument == "-k" || argument == "--key") {
             options.master.key = std::filesystem::path(std::string(value()));
             masterOnly.push_back(argument);
+        } else if (argument == "--database") {
+            try {
+                options.master.database = rtype::database::Address::parse(value());
+            } catch (const std::invalid_argument &error) {
+                throw std::invalid_argument(std::format("--database: {}", error.what()));
+            }
+            databaseGiven = true;
+            masterOnly.push_back(argument);
+        } else if (argument == "--database-file") {
+            options.master.databaseFile = std::filesystem::path(std::string(value()));
+            masterOnly.push_back(argument);
         } else if (argument == "--fingerprint") {
             fingerprint = true;
             masterOnly.push_back(argument);
@@ -177,6 +193,9 @@ Options parseOptions(std::span<const std::string_view> arguments)
     }
 
     if (!instance) {
+        if (databaseGiven && !options.master.databaseFile.empty()) {
+            throw std::invalid_argument("--database and --database-file both give the database: choose one");
+        }
         if (!instanceOnly.empty()) {
             throw std::invalid_argument(
                 std::format("{} is an option of an instance: add --instance", instanceOnly[0]));

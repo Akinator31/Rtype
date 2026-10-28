@@ -45,9 +45,9 @@ ignored for this check (`v1.2.0-beta.1` matches `1.2.0`).
 | File | Content |
 |---|---|
 | `r-type-<version>-Linux-client.tar.gz` | `r-type_client` for Linux |
-| `r-type-<version>-Linux-server.tar.gz` | `r-type_server` for Linux |
+| `r-type-<version>-Linux-server.tar.gz` | `r-type_server` for Linux, with SQLite and PostgreSQL: it needs libpq on the machine (`libpq5` on Debian and Ubuntu) |
 | `r-type-<version>-Windows-client.zip` | `r-type_client.exe` for Windows |
-| `r-type-<version>-Windows-server.zip` | `r-type_server.exe` for Windows |
+| `r-type-<version>-Windows-server.zip` | `r-type_server.exe` for Windows, with SQLite only |
 | `SHA256SUMS.txt` | Checksums of the archives |
 
 To check a download:

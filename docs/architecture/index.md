@@ -117,6 +117,7 @@ The programs are built on twelve libraries:
 | `libs/lobby` | The messages of the lobby protocol, between a client and the master: hello, list, create and join games. Shared by the client and the server. | [Server](server.md#the-lobby) |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
+| `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
@@ -137,6 +138,7 @@ config/     the Lua configuration of the game: enemies, weapons... (client and s
 libs/       libraries shared by the programs, one subdirectory per library
   audio/    sound effects and music (client)
   core/     handles and resource caches (all)
+  database/ SQLite and PostgreSQL through SOCI, migrations (server)
   ecs/      entity component system, hierarchy (client and server)
   engine/   client systems: drawing, animations, menus (client)
   game/     rules of the R-Type, the Simulation (server and client offline)

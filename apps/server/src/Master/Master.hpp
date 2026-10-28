@@ -7,9 +7,9 @@
 namespace rtype::server
 {
 
-/// Runs the master: loads the key of the server, or generates it at the first start (ADR 0021), listens for
-/// the clients, and runs until Ctrl+C or SIGTERM. With `check`, stops once the key is loaded and the port
-/// open.
+/// Runs the master: loads the key of the server, or generates it at the first start (ADR 0021), opens its
+/// database and brings its schema up to date (ADR 0023), listens for the clients, and runs until Ctrl+C or
+/// SIGTERM. With `check`, stops once the key is loaded, the database open and the port open.
 /// @return The exit code of the program.
 [[nodiscard]] int runMaster(const MasterOptions &options);
 

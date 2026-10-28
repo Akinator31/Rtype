@@ -402,6 +402,9 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
     const ServerIdentity identity = ServerIdentity::generate();
     const std::filesystem::path key = std::filesystem::temp_directory_path() / "rtype_tests_games_master.key";
     std::ofstream(key) << identity.privateKeyPem();
+    const std::filesystem::path database =
+        std::filesystem::temp_directory_path() / "rtype_tests_games_master.db";
+    std::filesystem::remove(database);
     std::uint16_t lobbyPort = 0;
     {
         const TcpListener probe(loop, Address::loopbackIpv4(0));
@@ -414,6 +417,7 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
         "--bind",       "127.0.0.1",
         "--game-ports", std::to_string(gamePort) + "-" + std::to_string(gamePort),
         "--key",        key.string(),
+        "--database",   "sqlite:" + database.string(),
         "--log-level",  "warning"};
     Process server(RTYPE_TEST_SERVER, arguments, {.input = {}, .stopGrace = testing::Patience});
 
@@ -448,4 +452,5 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
     CHECK(client.end->reason == DisconnectReason::Shutdown);
     CHECK(server.wait(testing::Patience) == Success);
     std::filesystem::remove(key);
+    std::filesystem::remove(database);
 }

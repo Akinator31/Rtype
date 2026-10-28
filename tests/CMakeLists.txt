@@ -18,6 +18,8 @@ add_executable(rtype_tests
     color_filter.cpp
     collider_debug_renderer.cpp
     controls.cpp
+    database.cpp
+    database_thread.cpp
     datagram.cpp
     ecs.cpp
     ecs_world.cpp
@@ -51,6 +53,7 @@ add_executable(rtype_tests
     scenes.cpp
     scripting.cpp
     serialization.cpp
+    server_database.cpp
     server_instance.cpp
     server_key.cpp
     server_lifecycle.cpp
@@ -67,7 +70,7 @@ add_executable(rtype_tests
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
-    rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
+    rtype_options rtype::audio rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
     rtype::scripting rtype::shaders r-type_client_core r-type_server_core
     Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
@@ -89,4 +92,5 @@ add_test(NAME smoke.server_invalid_arguments COMMAND r-type_server --unknown)
 set_tests_properties(smoke.server_invalid_arguments PROPERTIES WILL_FAIL TRUE)
 # The server makes its key at its first start: the check makes it there, then reads it
 add_test(NAME smoke.server_check
-    COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key)
+    COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key
+        --database sqlite:${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/rtype.db)

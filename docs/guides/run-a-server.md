@@ -9,10 +9,14 @@ on their own machine for development or on a machine on the Internet.
   (`build\bin\Release\r-type_server.exe` on Windows), or the one of the server archive of a release.
 - Somewhere to keep the key of the server, which it makes at its first start: `server.key` in the current
   directory by default, or `--key <file>`. See [Manage the server key](generate-the-server-keys.md).
+- Somewhere to keep its data: `rtype.db` in the current directory by default, a SQLite file it creates at its
+  first start, or a PostgreSQL database with `--database-file` ([Use an external database](use-an-external-database.md)).
+  On Linux, a server built with PostgreSQL needs libpq to run, even with SQLite: `libpq5` on Debian and
+  Ubuntu, `postgresql-libs` on Arch.
 
 ## Steps
 
-1. **Check the configuration.** `--check` loads the key, or makes it the first time, and the game configuration (the `config/` folder next
+1. **Check the configuration.** `--check` loads the key and the database, or makes them the first time, and the game configuration (the `config/` folder next
    to the server, or `--config <dir>`, see [Configure enemies and weapons](configure-enemies-and-weapons.md))
    and opens the port, then exits, without running the server:
 
@@ -22,6 +26,7 @@ on their own machine for development or on a machine on the Internet.
 
     ```
     INFO  master   Game configuration /home/me/Rtype/build/bin/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
+    INFO  master   Database sqlite:rtype.db, schema 0
     INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
     INFO  master   Server key 5b61c7a9ce1a44bfc64fec2013a4a09b6b4d5a8db4129eff890a1462c7ea1f1c
     INFO  master   Check passed: the server can start
@@ -74,6 +79,8 @@ and exits with code 1:
 | `Cannot read the key keys/server.key: Permission denied` | Run the server as the user who owns the key |
 | `... is not a key of the server` | The file is not an ECDSA P-256 private key: give the right file, or move it away and the server makes a new key |
 | `Configuration: enemies/x.lua: ...`, then `The game configuration in ... is not valid` | Fix the file and the field it names ([fields](configure-enemies-and-weapons.md#fields)), or give another folder with `--config` |
+| `Cannot open the database sqlite:rtype.db: ...` | The file is not a database, or its directory cannot be written: give another one with `--database sqlite:<file>` |
+| `... has migration N (...), which this program does not know` | A newer server changed this database: run that version, or give this one another database |
 | `Cannot listen on 0.0.0.0:4242: Address already in use` | Another server runs on that port: stop it, or choose another with `--port` |
 
 Once it runs, the games it starts show in its logs. Players who create a game and get `GAME_START_FAILED` point

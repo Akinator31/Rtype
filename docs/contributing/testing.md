@@ -105,6 +105,16 @@ ctest --test-dir build -C Release -R smoke
 
 Tests are built by default; configure with `-DRTYPE_BUILD_TESTS=OFF` to skip them.
 
+The tests of the database run on SQLite, and on PostgreSQL too when `RTYPE_TEST_POSTGRESQL_URL` gives a server
+they can create schemas on, for instance in Docker:
+
+```sh
+docker run -d --name rtype-test-postgres -e POSTGRES_USER=rtype -e POSTGRES_PASSWORD=rtype \
+    -e POSTGRES_DB=rtype -p 127.0.0.1:55432:5432 postgres:18
+export RTYPE_TEST_POSTGRESQL_URL=postgresql://rtype:rtype@127.0.0.1:55432/rtype
+ctest --test-dir build -C Release --output-on-failure
+```
+
 ### Formatting
 
 Nothing to install: on pull requests, the *Format* workflow **formats the code automatically**. When a file
@@ -129,7 +139,7 @@ clang-format -i path/to/file.cpp
 
 | Workflow | Runs | Checks |
 |---|---|---|
-| *Build* | Every push and pull request, Linux and Windows | Compilation, all CTest tests, packaging |
+| *Build* | Every push and pull request, Linux and Windows | Compilation, all CTest tests, packaging. On Linux, the tests of the database also run on a PostgreSQL in Docker, when the runner has Docker |
 | *Format* | Every pull request, and pushes to `main` that change C++ files | Formats tracked C++ files; on pull requests the bot commits the fixes, elsewhere unformatted code fails the job |
 
 ## Roadmap

@@ -26,6 +26,7 @@ nav = [
         "architecture/input.md",
         "architecture/localization.md",
         "architecture/settings.md",
+        "architecture/database.md",
         "architecture/logging.md",
         "architecture/networking.md",
         "architecture/server.md",
@@ -47,6 +48,7 @@ nav = [
         "guides/script-enemy-behaviors.md",
         "guides/generate-the-server-keys.md",
         "guides/run-a-server.md",
+    "guides/use-an-external-database.md",
         "guides/play-online.md",
     ] },
     { "Network protocol" = [
@@ -79,6 +81,7 @@ nav = [
         "decisions/0020-server-key-distribution.md",
         "decisions/0021-server-generated-key-trust-on-first-use.md",
         "decisions/0022-engine-thread-manager.md",
+        "decisions/0023-server-database.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

@@ -89,13 +89,15 @@ TEST_CASE("A master with a configuration that has errors does not start", "[serv
     std::ofstream(key) << rtype::network::ServerIdentity::generate().privateKeyPem();
     const std::string keyArgument = key.string();
     const std::string configArgument = directory.string();
+    const std::string databaseArgument = "sqlite:" + (directory / "rtype.db").string();
     std::ostringstream out;
     std::istringstream in;
 
-    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument}, out, in) ==
-          Success);
+    CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument, "--database",
+                                            databaseArgument},
+              out, in) == Success);
     CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument, "--config",
-                                            configArgument},
+                                            configArgument, "--database", databaseArgument},
               out, in) == Failure);
     std::filesystem::remove_all(directory);
 }

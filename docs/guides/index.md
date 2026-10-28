@@ -14,7 +14,8 @@ Step-by-step guides for common tasks in the client and the server. They assume t
 | [Script the behavior of an enemy](script-enemy-behaviors.md) | Write in Lua when an enemy moves, where it goes and when it fires, and try it. |
 | [Manage the server key](generate-the-server-keys.md) | Keep the key the server makes at its first start, give its fingerprint to the players, replace it. |
 | [Run a server](run-a-server.md) | Check the configuration, open the ports, start the server and stop it. |
-| [Play online](play-online.md) | Give the key of the server to the clients, connect, create and join a game. |
+| [Use an external database](use-an-external-database.md) | Give a server a PostgreSQL database hosted elsewhere, without its password on the command line. |
+| [Play online](play-online.md) | Start a server, connect to it, trust its key, create and join a game. |
 
 For how the systems used here work, see [Scenes and interface](../architecture/scenes-and-interface.md),
 [Rendering](../architecture/rendering.md), [Input](../architecture/input.md) and

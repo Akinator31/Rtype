@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/database/Address.hpp"
 #include "rtype/log/Log.hpp"
 #include "rtype/network/Address.hpp"
 
@@ -34,7 +35,13 @@ struct MasterOptions {
     /// The private key the master proves its identity with, generated there at its first start
     /// (docs/guides/generate-the-server-keys.md).
     std::filesystem::path key = "server.key";
-    /// Only check that the server can start (key, ports, configuration), then exit.
+    /// Where the master keeps its data (ADR 0023): a SQLite file in the current directory by default, like
+    /// the key, or a PostgreSQL server.
+    rtype::database::Address database = {rtype::database::Engine::Sqlite, "rtype.db"};
+    /// A file that holds the address of the database, read at start in place of `database`: an address with
+    /// a password is never on the command line, where every user of the machine sees it.
+    std::filesystem::path databaseFile{};
+    /// Only check that the server can start (key, ports, configuration, database), then exit.
     bool check = false;
     /// The configuration of the game, given to the instances; empty: config/ next to the executable.
     std::filesystem::path config{};
