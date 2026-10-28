@@ -1,0 +1,74 @@
+name: Sanitizers
+
+# The whole suite under AddressSanitizer and UndefinedBehaviorSanitizer on every pull request. The nightly
+# ThreadSanitizer (tsan.yml) runs this workflow too, with "thread"
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      sanitizers:
+        description: Sanitizers of the build
+        type: choice
+        options: ["address,undefined", "thread"]
+        default: "address,undefined"
+  workflow_call:
+    inputs:
+      sanitizers:
+        description: Sanitizers of the build, as RTYPE_SANITIZERS
+        type: string
+        required: true
+
+concurrency:
+  group: sanitizers-${{ inputs.sanitizers || 'address,undefined' }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Optimized as the release, with what the reports need to name the lines
+  BUILD_TYPE: RelWithDebInfo
+  SANITIZERS: ${{ inputs.sanitizers || 'address,undefined' }}
+
+jobs:
+  sanitizers:
+    name: Sanitizers (${{ inputs.sanitizers || 'address,undefined' }})
+    runs-on: [self-hosted, linux]
+
+    env:
+      CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install system libraries (X11 / OpenGL, libpq)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libpq-dev
+
+      - name: Start PostgreSQL for the tests
+        uses: ./.github/actions/start-postgresql
+
+      - name: Restore dependency cache
+        uses: actions/cache@v6
+        with:
+          path: .cpm-cache
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/**', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
+      - name: Configure
+        run: >
+          cmake -S . -B build-sanitizers -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DRTYPE_BUILD_TESTS=ON -DRTYPE_SANITIZERS=${{ env.SANITIZERS }}
+
+      - name: Build
+        run: cmake --build build-sanitizers --parallel
+
+      # Without the randomization of the addresses: ThreadSanitizer refuses the layouts of the recent kernels
+      - name: Test
+        run: setarch "$(uname -m)" -R ctest --test-dir build-sanitizers --output-on-failure
+
+      - name: Stop PostgreSQL
+        if: always() && env.POSTGRES_CONTAINER != ''
+        run: docker rm -f "${{ env.POSTGRES_CONTAINER }}"

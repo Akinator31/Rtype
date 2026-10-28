@@ -11,6 +11,9 @@ jobs:
   check-version:
     name: Check version
     runs-on: [self-hosted, linux]
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -30,6 +33,20 @@ jobs:
             exit 1
           fi
           echo "Releasing version $tag_version"
+
+      # A ThreadSanitizer night that failed blocks the release until a run on main passes again: the race fixed,
+      # or explained by a suppression in cmake/Sanitizers.cpp
+      - name: Check the last ThreadSanitizer run on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow tsan.yml --branch main --limit 20 \
+            --json conclusion --jq 'map(select(.conclusion == "success" or .conclusion == "failure"))[0].conclusion // ""')
+          if [ "$conclusion" = "failure" ]; then
+            echo "::error::The last ThreadSanitizer run on main failed. Fix the race or explain it, then run the Thread sanitizer workflow on main again."
+            exit 1
+          fi
+          echo "Last ThreadSanitizer run on main: ${conclusion:-none yet}"
 
   build:
     name: Build

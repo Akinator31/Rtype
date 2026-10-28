@@ -42,6 +42,11 @@ target_include_directories(rtype_lua SYSTEM PUBLIC ${lua_SOURCE_DIR}/src)
 # to the next. lstate.c calls luai_makeseed(L): this turns it into 0U * sizeof(L), a fixed seed, so that the
 # same scripts run the same everywhere
 target_compile_definitions(rtype_lua PRIVATE "luai_makeseed=0U*sizeof")
+# As Lua's own makefile does on Linux and macOS: its errors jump with _setjmp/_longjmp, without the signal mask.
+# ThreadSanitizer does not see the setjmp of recent glibc versions (2.44): with it, a Lua error stops the program
+if(NOT WIN32)
+  target_compile_definitions(rtype_lua PRIVATE LUA_USE_POSIX)
+endif()
 
 # LuaBridge3, header-only: the bindings between C++ and Lua
 CPMAddPackage(

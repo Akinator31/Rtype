@@ -43,27 +43,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libpq-dev
 
-      # A PostgreSQL of its own for the tests of the database, on a free port, removed at the end. Without Docker
-      # on the runner, those tests run on SQLite only
+      # The tests of the database run on SQLite and on this PostgreSQL. Windows tests SQLite only
       - name: Start PostgreSQL for the tests
         if: runner.os == 'Linux'
-        run: |
-          if ! command -v docker >/dev/null || ! docker info >/dev/null 2>&1; then
-            echo "::notice::No Docker on this runner: the database is tested on SQLite only"
-            exit 0
-          fi
-          name="rtype-ci-postgres-${{ github.run_id }}-${{ github.run_attempt }}"
-          docker run -d --name "$name" -e POSTGRES_USER=rtype -e POSTGRES_PASSWORD=rtype -e POSTGRES_DB=rtype \
-            -p 127.0.0.1::5432 postgres:18
-          # Over TCP: while it initializes, the image runs a server on its Unix socket only, then restarts it
-          for attempt in $(seq 1 30); do
-            docker exec "$name" pg_isready -h 127.0.0.1 -U rtype -d rtype >/dev/null 2>&1 && break
-            sleep 1
-          done
-          docker exec "$name" pg_isready -h 127.0.0.1 -U rtype -d rtype
-          port=$(docker port "$name" 5432/tcp | head -n 1 | sed 's/.*://')
-          echo "POSTGRES_CONTAINER=$name" >> "$GITHUB_ENV"
-          echo "RTYPE_TEST_POSTGRESQL_URL=postgresql://rtype:rtype@127.0.0.1:$port/rtype" >> "$GITHUB_ENV"
+        uses: ./.github/actions/start-postgresql
 
       - name: Restore dependency cache
         uses: actions/cache@v6

@@ -94,3 +94,23 @@ set_tests_properties(smoke.server_invalid_arguments PROPERTIES WILL_FAIL TRUE)
 add_test(NAME smoke.server_check
     COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key
         --database sqlite:${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/rtype.db)
+
+# The sanitizers find a bug made on purpose: a build where they would miss it fails here
+if(NOT RTYPE_SANITIZERS STREQUAL "")
+  add_executable(rtype_sanitizer_canary helpers/sanitizer_canary.cpp)
+  if(RTYPE_SANITIZERS STREQUAL "thread")
+    set(canaries "race=ThreadSanitizer: data race")
+  else()
+    set(canaries
+        "leak=LeakSanitizer: detected memory leaks"
+        "freed=AddressSanitizer: heap-use-after-free"
+        "undefined=runtime error: signed integer overflow")
+  endif()
+  foreach(canary IN LISTS canaries)
+    string(REPLACE "=" ";" canary "${canary}")
+    list(GET canary 0 bug)
+    list(GET canary 1 report)
+    add_test(NAME sanitizers.${bug} COMMAND rtype_sanitizer_canary ${bug})
+    set_tests_properties(sanitizers.${bug} PROPERTIES PASS_REGULAR_EXPRESSION "${report}")
+  endforeach()
+endif()

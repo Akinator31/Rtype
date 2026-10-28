@@ -19,6 +19,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 option(RTYPE_BUILD_TESTS "Build the unit and integration tests" ON)
 
 include(cmake/CPM.cmake)
+# Before any target: the sanitizers apply to the dependencies too
+include(cmake/Sanitizers.cmake)
 
 add_library(rtype_options INTERFACE)
 if(MSVC)
