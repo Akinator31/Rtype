@@ -1,0 +1,18 @@
+name: Thread sanitizer
+
+# The whole suite under ThreadSanitizer, every night and on demand: too slow for every pull request. A night that
+# fails blocks the next release (release.yml) until a run on main passes again
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  thread:
+    name: Thread sanitizer
+    uses: ./.github/workflows/sanitizers.yml
+    with:
+      sanitizers: thread
