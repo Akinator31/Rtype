@@ -4,6 +4,7 @@
 #   Loading/             the loading screen, shown while the assets load at startup
 #   MainMenu/            the home screen and its submenus
 #   Online/              playing online: the lobby of a server, and its scenes
+#   ShipSelector/        the hangar: the catalog of ships and the scene where the player picks one
 #   ShipModel            the ship models and their animations, flown by the menu and by the game
 add_library(r-type_client_core STATIC
     src/Commands/Commands.cpp
@@ -44,6 +45,10 @@ add_library(r-type_client_core STATIC
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
     src/ShipModel.cpp
+    src/ShipSelector/ShipCatalog.cpp
+    src/ShipSelector/ShipSelection.cpp
+    src/ShipSelector/ShipSelector.cpp
+    src/ShipSelector/ShipSelectorSystem.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
