@@ -8,6 +8,7 @@
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/TcpListener.hpp"
+#include "TempDirectory.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -45,22 +46,11 @@ Process child(std::vector<std::string> arguments, ProcessOptions options = {})
     return {Child, arguments, std::move(options)};
 }
 
-struct TempDirectory {
-    std::filesystem::path path;
-
+struct TempDirectory : testing::TempDirectory {
     explicit TempDirectory(std::string_view name)
-        : path(std::filesystem::temp_directory_path() / std::string("rtype_tests_process_").append(name))
+        : testing::TempDirectory(std::string("rtype_tests_process_").append(name))
     {
-        std::filesystem::remove_all(path);
-        std::filesystem::create_directories(path);
     }
-    ~TempDirectory()
-    {
-        std::error_code ignored;
-        std::filesystem::remove_all(path, ignored);
-    }
-    TempDirectory(const TempDirectory &) = delete;
-    TempDirectory &operator=(const TempDirectory &) = delete;
 };
 
 /// Waits for a file the child creates once ready.
