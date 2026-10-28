@@ -249,5 +249,6 @@ Each step is one PR that builds without warnings and keeps the tests green.
 
 ## Server
 
-The server does not link the engine and keeps its own threads: the network loop and the game thread
-([Server](server.md)).
+The server does not link the engine and keeps its own threads ([Server](server.md)): the master runs its
+network loop and its database thread ([Database](database.md#the-database-thread)), each instance its network
+loop and its game thread.

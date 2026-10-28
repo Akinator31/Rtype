@@ -24,6 +24,8 @@ apps/server/src/
     Lobby.cpp              the lobby: the TLS connections of the clients and their requests
     Games.cpp              the games: one instance each, started, connected back, watched
     Process.cpp            Process: starts a program and stops it, on Linux and Windows
+    ServerKey.cpp          the key of the master: loaded, or generated at its first start
+    ServerDatabase.cpp     the database of the master: its address, its migrations
   Instance/                an instance: one game
     Instance.cpp           runInstance(): the life of the instance, with or without a master
     MasterLink.cpp         the connection to the master
@@ -32,8 +34,8 @@ apps/server/src/
 ```
 
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
-(`tests/server_options.cpp`, `tests/server_lifecycle.cpp`, `tests/process.cpp`, `tests/server_instance.cpp`,
-`tests/server_lobby.cpp`, `tests/server_games.cpp`). Includes are written from `src/`, like in the client:
+(`tests/server_options.cpp`, `tests/server_key.cpp`, `tests/server_database.cpp`, `tests/server_lifecycle.cpp`,
+`tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -64,14 +66,17 @@ a server that cannot work stops at once with the reason.*
 | `--game-ports <first>-<last>` | 4243–4299 | UDP ports of the games, one per game: their number is the most games at once |
 | `-k`, `--key <file>` | `server.key` | Private key of the server, generated there if the file does not exist ([Manage the server key](../guides/generate-the-server-keys.md)) |
 | `--fingerprint` | | Shows the fingerprint of the key, for the players to check, then exits. Never generates a key |
-| `--check` | | Loads the key, or generates it, and the game configuration, and opens the port, then exits: checks a configuration without running it |
+| `--database <address>` | `sqlite:rtype.db` | Where the master keeps its data: `sqlite:<file>`, or `postgresql://<user>@<host>:<port>/<database>` ([The database](#the-database)) |
+| `--database-file <file>` | | Reads the address of the database from the first line of the file: for an address with a password, which the command line would show to every user of the machine |
+| `--check` | | Loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, and opens the port, then exits: checks a configuration without running it |
 
 The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
-[ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game and opens its port
-before anything else, and logs them:
+[ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game,
+opens its database and opens its port before anything else, and logs them:
 
 ```
 INFO  master   Game configuration /opt/r-type/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
+INFO  master   Database sqlite:rtype.db, schema 0
 INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
 INFO  master   Server key 4026de0635ae89391bff98b7b9ddc0689fa8529f9804e4c4721eadce94d92dff
 INFO  master   Master started: Ctrl+C to stop
@@ -127,6 +132,28 @@ ERROR master   The game configuration in /opt/r-type/config is not valid: fix it
 
 The options of one mode are refused in the other (`--key` with `--instance`, `--id` without it), as are unknown
 options: a typo never goes unnoticed.
+
+## The database
+
+The master keeps its data in a database ([ADR 0023](../decisions/0023-server-database.md)), through
+`libs/database` ([Database](database.md)). Only the master opens it: the instances report to it, so a game
+that crashes cannot damage the data.
+
+| Step | What happens |
+|---|---|
+| Its address | `--database`, by default `sqlite:rtype.db` in the current directory, like the key; or the first line of the file of `--database-file`, whose content is never logged, since it may hold a password. A password given on the command line is warned about, and never logged |
+| At start | `openServerDatabase()` opens it, a SQLite file being created with its directories, and applies the migrations of the master it does not have yet (`ServerMigrations`, in `Master/ServerDatabase.hpp`). A database that cannot be opened, or that a newer server changed, stops the master before it opens its port |
+| Running | A `DatabaseThread` owns it: the features that keep data will give it their tasks, which run on its thread, and get their results back on the event loop. It is destroyed before the loop, after the tasks already given are done |
+
+`ServerMigrations` is empty for now: the first feature that keeps data adds the first migration, and its
+queries.
+
+```
+INFO  master   Database postgresql://rtype:***@db.example.org/rtype, schema 0
+ERROR master   The database sqlite:rtype.db has migration 3 (create the scores table), which this program does not know: it was made by a newer one
+```
+
+To use a PostgreSQL server, see [Use an external database](../guides/use-an-external-database.md).
 
 ## The lobby
 
@@ -459,6 +486,13 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 - `tests/server_options.cpp` (tag `[server]`): the defaults, every option of both modes, every invalid
   combination, `--help` and `--version` first, the standalone mode refused in release, the exit codes of
   `run()`, a master without its key, an instance without a secret, and the secret itself.
+- `tests/server_key.cpp` (tag `[server]`): the key generated at the first start, then loaded, only readable by
+  its owner, never replaced, and `--fingerprint`.
+- `tests/server_database.cpp` (tag `[server]`): `sqlite:rtype.db` by default, `--database`, `--database-file`
+  with a Windows line end, the invalid combinations; a database created at start, then opened again; a file
+  without an address, empty or missing, stopping the master without its content logged; a password on the
+  command line warned about and never logged; a file that is not a database, and a database of a newer server,
+  stopping it; and the master started on every engine of the tests.
 - `tests/server_lifecycle.cpp` (tag `[server]`): `SIGINT` and `SIGTERM`, sent to the test process itself, call
   the shutdown once; a second signal and the grace period force the stop; a server whose work ends stops
   properly.
