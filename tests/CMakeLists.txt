@@ -19,6 +19,7 @@ add_executable(rtype_tests
     collider_debug_renderer.cpp
     controls.cpp
     database.cpp
+    database_thread.cpp
     datagram.cpp
     ecs.cpp
     ecs_world.cpp
