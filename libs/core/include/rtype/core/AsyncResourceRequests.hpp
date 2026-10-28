@@ -73,7 +73,10 @@ public:
         }
     }
 
-    void forget(const std::string &key)
+    /// Forgets the request for this key, once its resource is unloaded: otherwise, the next request() for the
+    /// key would give back the old future, whose handle is no longer valid. A load still in progress is not
+    /// cancelled: wait for its future before unloading.
+    void forgetRequest(const std::string &key)
     {
         std::lock_guard lock(_mutex);
         _requests.erase(key);

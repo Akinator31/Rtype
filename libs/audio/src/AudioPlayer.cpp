@@ -3,6 +3,7 @@
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/core/AssetFile.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
+#include "rtype/core/ReadyFuture.hpp"
 #include "rtype/core/ResourceCache.hpp"
 
 #include <raylib.h>
@@ -18,14 +19,6 @@ namespace rtype::audio
 
 namespace
 {
-
-template <typename Id>
-std::shared_future<Id> readyFuture(Id id)
-{
-    std::promise<Id> result;
-    result.set_value(id);
-    return result.get_future().share();
-}
 
 class PreparedSound
 {
@@ -246,8 +239,8 @@ MusicId AudioPlayer::loadMusic(const std::string &path)
 
 std::shared_future<SoundId> AudioPlayer::loadSoundAsync(const std::string &path)
 {
-    if (const auto loaded = _impl->sounds.find(path)) {
-        return readyFuture(*loaded);
+    if (const auto loaded = _impl->sounds.findId(path)) {
+        return core::makeReadyFuture(*loaded);
     }
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
@@ -268,8 +261,8 @@ std::shared_future<SoundId> AudioPlayer::loadSoundAsync(const std::string &path)
 
 std::shared_future<MusicId> AudioPlayer::loadMusicAsync(const std::string &path)
 {
-    if (const auto loaded = _impl->musics.find(path)) {
-        return readyFuture(*loaded);
+    if (const auto loaded = _impl->musics.findId(path)) {
+        return core::makeReadyFuture(*loaded);
     }
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
@@ -287,19 +280,19 @@ void AudioPlayer::finishPendingLoads()
     _impl->pendingMusics.pump();
 }
 
-bool AudioPlayer::releaseSound(const std::string &path)
+bool AudioPlayer::unloadSound(const std::string &path)
 {
-    _impl->pendingSounds.forget(path);
-    return _impl->sounds.release(path);
+    _impl->pendingSounds.forgetRequest(path);
+    return _impl->sounds.unload(path);
 }
 
-bool AudioPlayer::releaseMusic(const std::string &path)
+bool AudioPlayer::unloadMusic(const std::string &path)
 {
-    _impl->pendingMusics.forget(path);
-    if (const auto id = _impl->musics.find(path); id && id == _impl->currentMusic) {
+    _impl->pendingMusics.forgetRequest(path);
+    if (const auto music = _impl->musics.findId(path); music && music == _impl->currentMusic) {
         stopMusic();
     }
-    return _impl->musics.release(path);
+    return _impl->musics.unload(path);
 }
 
 void AudioPlayer::play(SoundId sound, const PlaySettings &settings)

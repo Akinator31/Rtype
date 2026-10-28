@@ -1,34 +1,22 @@
 #pragma once
 
 #include <compare>
-#include <functional>
 #include <string>
 
 namespace rtype::engine
 {
 
+/// The kinds of assets that a scene can need.
 enum class AssetType { Texture, SmoothTexture, Font, Model, Sound, Music };
 
+/// An asset that a scene needs (see SceneSettings::assets): the engine has it loaded before the scene opens,
+/// and unloaded once no open scene needs it.
 struct SceneAsset {
     AssetType type;
+    /// Path of the file, relative to the assets directory, for instance "models/ship.glb".
     std::string path;
 
     auto operator<=>(const SceneAsset &) const = default;
 };
-
-struct SceneAssetRequest {
-    std::function<bool()> ready;
-    std::function<void()> complete;
-    std::function<void()> release;
-};
-
-class SceneAssetLoader
-{
-public:
-    virtual ~SceneAssetLoader() = default;
-    virtual SceneAssetRequest request(const SceneAsset &asset) = 0;
-};
-
-enum class SceneLoadState { Idle, Loading, Failed };
 
 } // namespace rtype::engine

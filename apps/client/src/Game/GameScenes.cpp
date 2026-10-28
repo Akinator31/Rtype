@@ -22,6 +22,28 @@ namespace rtype::client
 namespace
 {
 
+using engine::AssetType;
+
+/// The models, textures and sounds of the ships, the shots and the impacts, loaded before the game opens.
+const std::vector<engine::SceneAsset> GameAssets{
+    {AssetType::SmoothTexture, RTYPE_IMAGE_ENERGY_NOISE},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_GLOW_CORE},
+    {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
+    {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
+    {AssetType::Model, RTYPE_MODEL_SHOT_BASIC},
+    {AssetType::Model, RTYPE_MODEL_SHOT_SPIRAL},
+    {AssetType::Model, RTYPE_MODEL_ORB_PLASMA},
+    {AssetType::Model, RTYPE_MODEL_IMPACT_SPARK},
+    {AssetType::Model, RTYPE_MODEL_IMPACT_BURST},
+    {AssetType::Model, RTYPE_MODEL_IMPACT_SPLASH},
+    {AssetType::Model, RTYPE_MODEL_IMPACT_EXPLOSION},
+    {AssetType::Sound, RTYPE_SOUND_BASICAL_BLASTER},
+    {AssetType::Sound, RTYPE_SOUND_LOW_BLASTER},
+    {AssetType::Sound, RTYPE_SOUND_BIG_BLASTER},
+    {AssetType::Sound, RTYPE_SOUND_DESTRUCTION},
+    {AssetType::Sound, RTYPE_SOUND_COLLISION},
+};
+
 /// Distance of the HUD from the top left corner of the screen, and between two lines.
 constexpr float HudMargin = 40.0f;
 constexpr float HudLineSpacing = 56.0f;
@@ -159,6 +181,7 @@ void setCollisionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
     }
 }
 
+/// Gives each kind of entity of the game its look and its sounds, from the GameAssets, loaded by then.
 void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
                         audio::AudioPlayer &audio)
 {
@@ -185,29 +208,6 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
     setCollisionSounds(sessions, audio);
 }
 
-std::vector<engine::SceneAsset> gameAssets()
-{
-    using engine::AssetType;
-    return {
-        {AssetType::SmoothTexture, RTYPE_IMAGE_ENERGY_NOISE},
-        {AssetType::SmoothTexture, RTYPE_IMAGE_GLOW_CORE},
-        {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
-        {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
-        {AssetType::Model, RTYPE_MODEL_SHOT_BASIC},
-        {AssetType::Model, RTYPE_MODEL_SHOT_SPIRAL},
-        {AssetType::Model, RTYPE_MODEL_ORB_PLASMA},
-        {AssetType::Model, RTYPE_MODEL_IMPACT_SPARK},
-        {AssetType::Model, RTYPE_MODEL_IMPACT_BURST},
-        {AssetType::Model, RTYPE_MODEL_IMPACT_SPLASH},
-        {AssetType::Model, RTYPE_MODEL_IMPACT_EXPLOSION},
-        {AssetType::Sound, RTYPE_SOUND_BASICAL_BLASTER},
-        {AssetType::Sound, RTYPE_SOUND_LOW_BLASTER},
-        {AssetType::Sound, RTYPE_SOUND_BIG_BLASTER},
-        {AssetType::Sound, RTYPE_SOUND_DESTRUCTION},
-        {AssetType::Sound, RTYPE_SOUND_COLLISION},
-    };
-}
-
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
@@ -219,7 +219,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         GameScene,
         {.updatesWhenCovered = true,
          .onBack = [&engine] { engine.pushScene(PauseScene); },
-         .assets = gameAssets()},
+         .assets = GameAssets},
         [this, &resources, &audio, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {
             build(scene, resources, audio, metrics, style);
         });

@@ -16,12 +16,30 @@
 
 #include <cmath>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace rtype::client
 {
 
 namespace
 {
+
+using engine::AssetType;
+
+/// The models of the planet, the station and the ships, loaded before the main menu opens.
+const std::vector<engine::SceneAsset> MainMenuAssets{
+    {AssetType::Model, RTYPE_MODEL_PLANET},
+    {AssetType::Model, RTYPE_MODEL_PLANET_DUST},
+    {AssetType::Model, RTYPE_MODEL_RING_ASTEROIDS_INNER},
+    {AssetType::Model, RTYPE_MODEL_RING_ASTEROIDS_OUTER},
+    {AssetType::Model, RTYPE_MODEL_RING_DUST},
+    {AssetType::Model, RTYPE_MODEL_STATION},
+    {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
+    {AssetType::Model, RTYPE_MODEL_SHIP_SPACESHIP},
+    {AssetType::Model, RTYPE_MODEL_SHIP_BATTLESTAR},
+    {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
+};
 
 /// The buttons are in a column on the right of the screen, under the station, Play at the top and Quit at
 /// the bottom: the centre of Quit is buttonsBottom above the bottom of the screen, and the centres of two
@@ -230,8 +248,6 @@ void createButtons(engine::Engine &engine, engine::InterfaceBuilder &interface,
     createButton(ecs, interface, translations, "menu.quit", quit, 3);
 }
 
-} // namespace
-
 void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
                    const engine::InterfaceStyle &style, const engine::Metrics &metrics,
                    localization::Localization &translations, const std::function<void()> &quit)
@@ -248,6 +264,19 @@ void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::Resour
     const ecs::entity_t logo = createMenuLogo(ecs, interface, resources);
     createLogoFlares(ecs, interface, resources, logo, camera);
     createButtons(engine, interface, translations, quit);
+}
+
+} // namespace
+
+void createMainMenuScene(engine::Engine &engine, render::ResourceManager &resources,
+                         const engine::InterfaceStyle &style, const engine::Metrics &metrics,
+                         localization::Localization &translations, std::function<void()> quit)
+{
+    engine.createScene(MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}, .assets = MainMenuAssets},
+                       [&resources, &style, &metrics, &translations,
+                        quit = std::move(quit)](engine::Engine &target, engine::SceneId scene) {
+                           buildMainMenu(target, scene, resources, style, metrics, translations, quit);
+                       });
 }
 
 } // namespace rtype::client

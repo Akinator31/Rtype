@@ -7,7 +7,6 @@ add_library(rtype_engine
     src/Component/Widget.cpp
     src/Control/Controls.cpp
     src/Engine/Engine.cpp
-    src/Engine/SceneAssets.cpp
     src/Event/Event.cpp
     src/Interface/InterfaceBuilder.cpp
     src/Interface/MenuBuilder.cpp
@@ -15,6 +14,7 @@ add_library(rtype_engine
     src/Interface/Navigation.cpp
     src/Rendering/SceneRenderer.cpp
     src/Rendering/ColliderDebugRenderer.cpp
+    src/Scene/SceneAssets.cpp
     src/Scene/Scenes.cpp
     src/Settings/Settings.cpp
     src/System/AnchorSystem.cpp

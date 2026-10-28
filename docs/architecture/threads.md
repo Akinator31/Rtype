@@ -162,7 +162,7 @@ stateDiagram-v2
   missing, the scene opens at the next update, as today.
 - Otherwise the engine pushes the `"loading"` scene (an ordinary named scene chosen by the client) and checks
   the futures at each update with `wait_for(0)`. When all are ready, it pops it and applies the switch.
-- Each asset counts the open scenes using it. At zero, it is freed. A memory budget with LRU eviction can come
+- `SceneAssets` counts the open scenes using each asset. At zero, it is unloaded. A memory budget with LRU eviction can come
   later.
 - `SceneSettings::assets` holds a type and path for each resource. The client also distinguishes smooth
   textures with `AssetType::SmoothTexture`; other textures use the default filtering.
@@ -171,7 +171,7 @@ stateDiagram-v2
   resources.
 - A failed request keeps the loading scene visible. The client displays the error and retries when R is
   pressed. A new scene request cancels the pending transition.
-- Resource handles are stable while loaded. Releasing a resource invalidates its old handle; reopening the
+- Resource handles are stable while loaded. Unloading a resource invalidates its old handle; reopening the
   scene loads it again and assigns a new handle. Game scene handles are rebuilt when the scene opens.
 
 ## API sketch

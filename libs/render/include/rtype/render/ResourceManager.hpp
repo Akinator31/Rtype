@@ -85,6 +85,8 @@ public:
     /// @throws std::runtime_error if the file is missing or is not a supported model.
     [[nodiscard]] ModelId loadModel(const std::string &path);
 
+    /// Like loadTexture(), loadFont() and loadModel(), but the file is read on the assets worker: the resource
+    /// is ready once finishPendingLoads() has finished it. A resource already loaded gives a ready future.
     [[nodiscard]] std::shared_future<TextureId>
     loadTextureAsync(const std::string &path, TextureFiltering filtering = TextureFiltering::Sharp);
     [[nodiscard]] std::shared_future<FontId> loadFontAsync(const std::string &path, int size = 32);
@@ -92,9 +94,14 @@ public:
 
     void finishPendingLoads();
 
-    bool releaseTexture(const std::string &path, TextureFiltering filtering = TextureFiltering::Sharp);
-    bool releaseFont(const std::string &path, int size = 32);
-    bool releaseModel(const std::string &path);
+    /// Frees a texture loaded with this filtering, to save memory once no scene uses it. Its handle becomes
+    /// invalid; loading it again gives a new one. Its asynchronous load, if any, must be finished.
+    /// @return false if it is not loaded.
+    bool unloadTexture(const std::string &path, TextureFiltering filtering = TextureFiltering::Sharp);
+    /// Frees a font loaded at this size, like unloadTexture().
+    bool unloadFont(const std::string &path, int size = 32);
+    /// Frees a model, like unloadTexture().
+    bool unloadModel(const std::string &path);
 
     /// Returns the index of an animation of a loaded model, given to Renderer::animateModel().
     /// @param name Name of the animation in the model file, for instance "Idle".

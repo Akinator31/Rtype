@@ -1,12 +1,16 @@
 # The code of the client is a library of its own, so that the tests can use it, like the server's:
+#   App/                 what the program puts together: its configuration, its systems and its scenes
 #   Commands/, Console/  the console and its commands
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
-#   Loading/             the loading screen, shown while the assets load at startup
+#   Loading/             the loading screen at startup, and the loading of the assets of the scenes
 #   MainMenu/            the home screen and its submenus
 #   Online/              playing online: the lobby of a server, and its scenes
 #   ShipSelector/        the hangar: the catalog of ships and the scene where the player picks one
 #   ShipModel            the ship models and their animations, flown by the menu and by the game
 add_library(r-type_client_core STATIC
+    src/App/Configuration.cpp
+    src/App/Scenes.cpp
+    src/App/Systems.cpp
     src/Commands/Commands.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
@@ -14,7 +18,6 @@ add_library(r-type_client_core STATIC
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
-    src/SceneAssetLoader.cpp
     src/Game/EntityLook.cpp
     src/Game/EntitySounds.cpp
     src/Game/GameScenes.cpp
@@ -31,6 +34,8 @@ add_library(r-type_client_core STATIC
     src/Loading/AssetPreload.cpp
     src/Loading/LoadingScene.cpp
     src/Loading/LoadingSystem.cpp
+    src/Loading/SceneAssetLoader.cpp
+    src/Loading/SceneLoadStatus.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
     src/MainMenu/Logo.cpp
