@@ -22,6 +22,10 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+/// Tells whether this program has the engine: SQLite always, PostgreSQL if libpq was found when it was built
+/// (RTYPE_WITH_POSTGRESQL).
+[[nodiscard]] bool isBuiltWith(Engine engine);
+
 /// One change of the schema of a program: the tables it adds or changes, in SQL that SQLite and PostgreSQL
 /// both understand (docs/architecture/database.md#portable-sql).
 struct Migration {
@@ -56,7 +60,9 @@ public:
     /// Where the version of the schema is kept: one row per migration applied.
     static constexpr std::string_view MigrationsTable = "schema_migrations";
 
-    /// Connects to the database. A SQLite file is created with its directories if missing.
+    /// Connects to the database. A SQLite file is created with its directories if missing. A PostgreSQL
+    /// server that does not answer within 10 seconds fails, unless the address gives its own
+    /// `connect_timeout`.
     /// @throws Error if it cannot be opened, or its engine is not built into this program.
     [[nodiscard]] static Database open(const Address &address);
 
@@ -64,6 +70,12 @@ public:
     [[nodiscard]] Engine engine() const { return _address.engine; }
     /// The SOCI session, to run queries: `database.session() << "SELECT ...", soci::into(value);`
     [[nodiscard]] soci::session &session() { return *_session; }
+
+    /// Connects again, after the connection was lost.
+    /// @throws soci::soci_error if the database cannot be reached.
+    void reconnect();
+    /// Tells whether the connection works: PostgreSQL is asked, SQLite always works once open.
+    [[nodiscard]] bool connected() const { return _session->is_connected(); }
 
     /// The version of the schema: the last migration applied, 0 for a new database.
     /// @throws Error if it cannot be read.

@@ -4,6 +4,11 @@
 
 #include <soci/sqlite3/soci-sqlite3.h>
 
+#ifdef RTYPE_DATABASE_POSTGRESQL
+#include <libpq-fe.h>
+#include <soci/postgresql/soci-postgresql.h>
+#endif
+
 #include <chrono>
 #include <filesystem>
 #include <format>
@@ -49,6 +54,42 @@ std::unique_ptr<soci::session> openSqlite(const Address &address)
     return session;
 }
 
+#ifdef RTYPE_DATABASE_POSTGRESQL
+/// How long libpq tries to reach the server, in seconds, unless the address says otherwise: without it, an
+/// unreachable server would block the program until the system gives up.
+constexpr std::string_view PostgresqlConnectTimeout = "10";
+
+/// The notices of the server ("relation already exists, skipping"...) go to the logs, in debug, rather than
+/// to the error output where libpq writes them.
+void logNotices(soci::session &session)
+{
+    auto *backend = static_cast<soci::postgresql_session_backend *>(session.get_backend());
+    PQsetNoticeProcessor(
+        backend->conn_,
+        [](void *, const char *message) {
+            std::string_view text(message);
+            while (!text.empty() && (text.back() == '\n' || text.back() == ' ')) {
+                text.remove_suffix(1);
+            }
+            logger().debug("PostgreSQL: {}", text);
+        },
+        nullptr);
+}
+
+std::unique_ptr<soci::session> openPostgresql(const Address &address)
+{
+    std::string target = address.target;
+    if (target.find("connect_timeout=") == std::string::npos) {
+        target.append(target.find('?') == std::string::npos ? "?" : "&")
+            .append("connect_timeout=")
+            .append(PostgresqlConnectTimeout);
+    }
+    auto session = std::make_unique<soci::session>(soci::postgresql, target);
+    logNotices(*session);
+    return session;
+}
+#endif
+
 long long nowMilliseconds()
 {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -82,6 +123,21 @@ void checkNumbering(std::span<const Migration> migrations)
 
 } // namespace
 
+bool isBuiltWith(Engine engine)
+{
+    switch (engine) {
+    case Engine::Sqlite:
+        return true;
+    case Engine::Postgresql:
+#ifdef RTYPE_DATABASE_POSTGRESQL
+        return true;
+#else
+        return false;
+#endif
+    }
+    return false;
+}
+
 Database::Database(Address address, std::unique_ptr<soci::session> session)
     : _address(std::move(address)), _session(std::move(session))
 {
@@ -94,13 +150,27 @@ Database Database::open(const Address &address)
         case Engine::Sqlite:
             return Database(address, openSqlite(address));
         case Engine::Postgresql:
+#ifdef RTYPE_DATABASE_POSTGRESQL
+            return Database(address, openPostgresql(address));
+#else
             break;
+#endif
         }
     } catch (const soci::soci_error &error) {
         throw Error(std::format("Cannot open the database {}: {}", address.toString(), error.what()));
     }
     throw Error(std::format("Cannot open the database {}: this program is built without PostgreSQL",
                             address.toString()));
+}
+
+void Database::reconnect()
+{
+    _session->reconnect();
+#ifdef RTYPE_DATABASE_POSTGRESQL
+    if (_address.engine == Engine::Postgresql) {
+        logNotices(*_session);
+    }
+#endif
 }
 
 int Database::schemaVersion()

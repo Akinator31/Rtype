@@ -1,5 +1,26 @@
-# The data of the server (ADR 0023): SOCI, one API over SQLite and PostgreSQL. Only this library sees SQLite;
-# SOCI is in its public headers, since the code that writes the queries uses its session.
+# The data of the server (ADR 0023): SOCI, one API over SQLite and PostgreSQL. Only this library sees SQLite and
+# libpq; SOCI is in its public headers, since the code that writes the queries uses its session.
+
+# PostgreSQL needs libpq from the system (libpq-dev, postgresql-libs, or the PostgreSQL installer on Windows).
+# AUTO builds it when libpq is found; without it, a postgresql:// address is refused, saying why
+set(RTYPE_WITH_POSTGRESQL AUTO CACHE STRING "Build the PostgreSQL engine of the database: ON, OFF or AUTO")
+set_property(CACHE RTYPE_WITH_POSTGRESQL PROPERTY STRINGS AUTO ON OFF)
+set(RTYPE_DATABASE_POSTGRESQL OFF)
+if(NOT RTYPE_WITH_POSTGRESQL STREQUAL "OFF")
+    if(RTYPE_WITH_POSTGRESQL STREQUAL "ON")
+        find_package(PostgreSQL REQUIRED)
+    else()
+        find_package(PostgreSQL QUIET)
+    endif()
+    if(PostgreSQL_FOUND)
+        set(RTYPE_DATABASE_POSTGRESQL ON)
+    endif()
+endif()
+if(RTYPE_DATABASE_POSTGRESQL)
+    message(STATUS "Database engines: SQLite, PostgreSQL (libpq ${PostgreSQL_VERSION_STRING})")
+else()
+    message(STATUS "Database engines: SQLite only (RTYPE_WITH_POSTGRESQL=${RTYPE_WITH_POSTGRESQL}, libpq not used)")
+endif()
 
 # SOCI formats its messages with fmt, which its release archive does not contain (a submodule)
 CPMAddPackage(
@@ -38,7 +59,7 @@ CPMAddPackage(
         "SOCI_SQLITE3 ON"
         "SOCI_SQLITE3_BUILTIN ON"
         "SOCI_SQLITE3_DIRECTORY ${sqlite_SOURCE_DIR}"
-        "SOCI_POSTGRESQL OFF"
+        "SOCI_POSTGRESQL ${RTYPE_DATABASE_POSTGRESQL}"
         "SOCI_DB2 OFF"
         "SOCI_EMPTY OFF"
         "SOCI_FIREBIRD OFF"
@@ -57,3 +78,7 @@ add_library(rtype_database
 add_library(rtype::database ALIAS rtype_database)
 target_include_directories(rtype_database PUBLIC include)
 target_link_libraries(rtype_database PUBLIC SOCI::Core Threads::Threads PRIVATE SOCI::SQLite3 rtype::log rtype_options)
+if(RTYPE_DATABASE_POSTGRESQL)
+    target_link_libraries(rtype_database PRIVATE SOCI::PostgreSQL)
+    target_compile_definitions(rtype_database PRIVATE RTYPE_DATABASE_POSTGRESQL)
+endif()
