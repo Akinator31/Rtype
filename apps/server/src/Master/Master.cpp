@@ -5,7 +5,9 @@
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "Master/Process.hpp"
+#include "Master/ServerDatabase.hpp"
 #include "Master/ServerKey.hpp"
+#include "rtype/database/DatabaseThread.hpp"
 #include "rtype/log/Log.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
@@ -15,10 +17,12 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace rtype::server
@@ -63,6 +67,14 @@ int runMaster(const MasterOptions &options)
     if (!readGameConfig(config, logger)) {
         return Failure;
     }
+    const std::optional<rtype::database::Address> databaseAt = databaseAddress(options, logger);
+    if (!databaseAt) {
+        return Failure;
+    }
+    std::optional<rtype::database::Database> database = openServerDatabase(*databaseAt, logger);
+    if (!database) {
+        return Failure;
+    }
 
     rtype::network::EventLoop loop;
     std::optional<rtype::network::TcpListener> listener;
@@ -81,6 +93,11 @@ int runMaster(const MasterOptions &options)
         logger.info("Check passed: the server can start");
         return Success;
     }
+
+    // Its queries run on a thread of their own, their results come back on the loop. Declared after the loop,
+    // it is destroyed before it: the tasks given until then are done (docs/architecture/database.md)
+    rtype::database::DatabaseThread databaseThread(
+        std::move(*database), [&loop](std::function<void()> function) { loop.post(std::move(function)); });
 
     std::optional<Games> games;
     try {

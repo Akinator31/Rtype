@@ -20,6 +20,11 @@ Thumbs.db
 
 # Private keys of the server, generated at its first start (docs/guides/generate-the-server-keys.md)
 *.key
+# The data of a server run from the repository, SQLite by default (docs/architecture/server.md#the-database)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Documentation output
 site/
