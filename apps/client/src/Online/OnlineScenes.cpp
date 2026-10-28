@@ -109,7 +109,7 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
 OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                            const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                            localization::Localization &translations)
-    : _engine(engine), _loop(loop), _games(games), _translations(translations), _known(engine.getSave())
+    : _engine(engine), _loop(loop), _games(games), _translations(translations), _known(engine.getSettings())
 {
     engine.createScene(OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
@@ -154,7 +154,7 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
                                target.popScene();
                                if (_presented && !_known.trust(_address, *_presented)) {
                                    _engine.showToast("The key is only trusted until the game closes: cannot "
-                                                     "write the save",
+                                                     "write the settings",
                                                      engine::ToastType::Error);
                                }
                                connect();
