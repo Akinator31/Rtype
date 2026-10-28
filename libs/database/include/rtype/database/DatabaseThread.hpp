@@ -77,7 +77,8 @@ private:
     void loop();
     /// Connects again until it works, or the thread is stopping. True if connected.
     bool reconnect();
-    void execute(Job &job);
+    /// Runs the task: what delivers its result, or its failure.
+    std::function<void()> execute(Job &job);
     /// Fails the tasks still waiting: the thread stops without a connection.
     void failRemaining();
 

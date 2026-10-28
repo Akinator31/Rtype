@@ -77,13 +77,19 @@ void DatabaseThread::loop()
             _jobs.pop_front();
             _running = true;
         }
-        execute(job);
-        const std::lock_guard lock(_mutex);
-        _running = false;
+        std::function<void()> deliver = execute(job);
+        {
+            const std::lock_guard lock(_mutex);
+            _running = false;
+        }
+        // Once it no longer counts as pending: whoever gets the result sees the task finished
+        if (deliver) {
+            _post(std::move(deliver));
+        }
     }
 }
 
-void DatabaseThread::execute(Job &job)
+std::function<void()> DatabaseThread::execute(Job &job)
 {
     std::function<void()> deliver;
     try {
@@ -92,11 +98,9 @@ void DatabaseThread::execute(Job &job)
         logger().error("Database {}: \"{}\" failed: {}", _database.address().toString(), job.description,
                        error.what());
         deliver = job.failed;
-        _disconnected = !_database.session().is_connected();
+        _disconnected = !_database.connected();
     }
-    if (deliver) {
-        _post(std::move(deliver));
-    }
+    return deliver;
 }
 
 bool DatabaseThread::reconnect()
@@ -106,8 +110,8 @@ bool DatabaseThread::reconnect()
     std::chrono::milliseconds delay = _settings.firstRetryDelay;
     while (true) {
         try {
-            _database.session().reconnect();
-            if (_database.session().is_connected()) {
+            _database.reconnect();
+            if (_database.connected()) {
                 logger().info("Database {}: connected again", address);
                 _disconnected = false;
                 return true;
