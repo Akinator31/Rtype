@@ -19,6 +19,7 @@ apps/server/src/
     Options.cpp            the command line of both modes, the exit codes
     Lifecycle.cpp          runUntilStopped(): the event loop and the stop signals
     Secret.cpp             the secret the master gives to its instances
+    Settings.cpp           the settings file of the master (--settings) and its secret files
   Master/                  the master: the lobby, and the instances it starts
     Master.cpp             runMaster()
     Lobby.cpp              the lobby: the TLS connections of the clients and their requests
@@ -35,7 +36,8 @@ apps/server/src/
 
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
 (`tests/server_options.cpp`, `tests/server_key.cpp`, `tests/server_database.cpp`, `tests/server_lifecycle.cpp`,
-`tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`). Includes are written from `src/`, like in the client:
+`tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`,
+`tests/server_settings.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -68,7 +70,8 @@ a server that cannot work stops at once with the reason.*
 | `--fingerprint` | | Shows the fingerprint of the key, for the players to check, then exits. Never generates a key |
 | `--database <address>` | `sqlite:rtype.db` | Where the master keeps its data: `sqlite:<file>`, or `postgresql://<user>@<host>:<port>/<database>` ([The database](#the-database)) |
 | `--database-file <file>` | | Reads the address of the database from the first line of the file: for an address with a password, which the command line would show to every user of the machine |
-| `--check` | | Loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, and opens the port, then exits: checks a configuration without running it |
+| `--settings <file>` | | Reads the settings file of the master ([Configure a server](../guides/configure-a-server.md)): the options above in `[server]`, and the sections of the panel and the accounts. The command line wins over the file |
+| `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, and opens the port, then exits: checks a configuration without running it |
 
 The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
 [ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game,
@@ -486,6 +489,12 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 - `tests/server_options.cpp` (tag `[server]`): the defaults, every option of both modes, every invalid
   combination, `--help` and `--version` first, the standalone mode refused in release, the exit codes of
   `run()`, a master without its key, an instance without a secret, and the secret itself.
+- `tests/server_settings.cpp` (tags `[server]`, `[settings]`): every key of the settings file and their
+  defaults, an unknown key or section, a wrong type, a TOML error, each with its line and column; invalid
+  values, the rules between the sections (accounts without mail, Discord without accounts or `public_url`, the
+  panel off the loopback without accounts), an administrator named by username; relative paths from the folder
+  of the file; the secret files, missing, empty, readable by everyone, never logged; the command line winning;
+  and `--settings --check`.
 - `tests/server_key.cpp` (tag `[server]`): the key generated at the first start, then loaded, only readable by
   its owner, never replaced, and `--fingerprint`.
 - `tests/server_database.cpp` (tag `[server]`): `sqlite:rtype.db` by default, `--database`, `--database-file`

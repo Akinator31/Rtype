@@ -48,6 +48,7 @@ nav = [
         "guides/script-enemy-behaviors.md",
         "guides/generate-the-server-keys.md",
         "guides/run-a-server.md",
+        "guides/configure-a-server.md",
     "guides/use-an-external-database.md",
         "guides/play-online.md",
     ] },
