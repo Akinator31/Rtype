@@ -1,5 +1,6 @@
 # The code of the server is a library of its own, so that the tests can use it (ADR 0013):
-#   Common/    what both modes share: the command line, the lifecycle, the secret of the instances
+#   Common/    what both modes share: the command line, the settings file, the lifecycle, the secret of the
+#              instances
 #   Master/    the master: the lobby, and the instances it starts
 #   Instance/  an instance: one game
 
@@ -19,6 +20,16 @@ CPMAddPackage(
         "REPROC_EXAMPLES OFF"
 )
 
+# toml++ reads the settings file of the master (docs/guides/configure-a-server.md). Header-only, behind
+# Common/Settings.hpp
+CPMAddPackage(
+    NAME tomlplusplus
+    VERSION 3.4.0
+    URL https://github.com/marzer/tomlplusplus/archive/refs/tags/v3.4.0.tar.gz
+    URL_HASH SHA256=8517f65938a4faae9ccf8ebb36631a38c1cadfb5efa85d9a72e15b9e97d25155
+    DOWNLOAD_ONLY YES
+)
+
 add_library(r-type_server_core STATIC
     src/Server.cpp
     src/Common/GameConfig.cpp
@@ -26,6 +37,7 @@ add_library(r-type_server_core STATIC
     src/Common/Lifecycle.cpp
     src/Common/Options.cpp
     src/Common/Secret.cpp
+    src/Common/Settings.cpp
     src/Instance/GameHost.cpp
     src/Instance/GameThread.cpp
     src/Instance/InputBuffer.cpp
@@ -39,6 +51,8 @@ add_library(r-type_server_core STATIC
     src/Master/ServerKey.cpp
 )
 target_include_directories(r-type_server_core PUBLIC src)
+# SYSTEM: the warnings of toml++'s headers are not ours
+target_include_directories(r-type_server_core SYSTEM PRIVATE ${tomlplusplus_SOURCE_DIR}/include)
 target_link_libraries(r-type_server_core PUBLIC rtype::database rtype::game rtype::lobby rtype::log rtype::network PRIVATE rtype_options reproc)
 target_compile_definitions(r-type_server_core PRIVATE
     RTYPE_VERSION="${PROJECT_VERSION}"
