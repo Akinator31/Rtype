@@ -73,6 +73,19 @@ rtype::game::GameConfig readGameConfig(rtype::client::Console &console)
     return {};
 }
 
+/// Reads the settings of the player, in its data directory: the servers it trusts, for now. Settings that
+/// cannot be read are logged, and the client starts without them.
+void readSettings(rtype::engine::Settings &settings)
+{
+    const rtype::log::Logger logger("client");
+    settings.setPath(rtype::render::userDataDirectory() / "settings.txt");
+    try {
+        settings.readFile();
+    } catch (const std::exception &error) {
+        logger.warning("Cannot read the settings {}: {}", settings.getPath().string(), error.what());
+    }
+}
+
 /// Declares the scenes shown while the assets load: the loading screen, and the console, which opens over
 /// any scene.
 void createLoadingScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
@@ -153,6 +166,7 @@ void run()
 
     Window window({.fullscreen = true});
     rtype::engine::Engine engine;
+    readSettings(engine.getSettings());
     const rtype::audio::AudioDevice audioDevice;
     rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
                                     engine.getThreads().getAssetsWorker());
