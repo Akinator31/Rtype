@@ -10,7 +10,7 @@ session to run queries. The server is its user; the settings of the client are a
 |---|---|
 | Engines | SQLite 3.54.1, built from its single C file, on every platform. PostgreSQL: not built yet. |
 | Dependencies | SOCI 4.1.4 (public: its session is in the API), fmt 12.2.0 (SOCI's), SQLite: all through CPM, with a hash |
-| Threads | A `Database` is used by one thread at a time |
+| Threads | A `Database` is used by one thread at a time; a `DatabaseThread` gives it a thread of its own |
 
 ## Opening a database
 
@@ -119,6 +119,49 @@ SOCI runs the SQL it is given: it does not translate it. Write the SQL both engi
 
 The tests of the queries run on every engine available ([Tests](#tests)): what one engine refuses fails there.
 
+## The database thread
+
+A query can take a while: a remote PostgreSQL answers in milliseconds, or in seconds when the network is slow.
+The thread of the master runs the lobby and must not wait for it. `DatabaseThread` owns a `Database` and runs
+its tasks on a thread of its own, then hands their result back to the thread that asked, through the `post`
+function given to it: the `post()` of the event loop, so that a result is handled like a message received.
+
+```mermaid
+sequenceDiagram
+    participant L as Event loop (master)
+    participant D as Database thread
+    L->>D: run("record game 4", task, done)
+    Note over L: goes on with the lobby
+    D->>D: task(database): the queries
+    D->>L: post(done(result))
+    Note over L: done(result), on the loop
+```
+
+```cpp
+rtype::database::DatabaseThread thread(std::move(database),
+                                       [&](std::function<void()> function) { loop.post(std::move(function)); });
+
+thread.run("read the best score of Pavel",
+    [id](rtype::database::Database &database) {   // on the database thread
+        long long best = 0;
+        database.session() << "SELECT MAX(score) FROM games WHERE player_id = :id", soci::use(id), soci::into(best);
+        return best;
+    },
+    [](std::optional<long long> best) { /* on the loop: empty if the task failed */ });
+
+thread.run("record game 4", [game](rtype::database::Database &database) { record(database, game); });
+```
+
+| | |
+|---|---|
+| Order | The tasks run one at a time, in the order they were given. |
+| Result | `done` receives `std::optional<Result>`, or `bool` for a task that returns nothing: empty or `false` if the task threw. Without `done`, a failure is only logged. |
+| Failure | A task that throws is logged with its description, and the next tasks run. |
+| What a task touches | The `Database` it is given, and copies of what it needs: never the objects of the loop, which the loop thread changes meanwhile. |
+| Full queue | At most `maxPending` tasks wait (1024): `run()` returns `false` beyond, logs it, and never calls `done`. |
+| Lost connection | The task that found it fails: it is not run twice, since it may have been done. Before the next one, the thread connects again, 0.5 s after a failed attempt, then 1 s, 2 s... up to 30 s; the tasks wait meanwhile. |
+| Destruction | The tasks already given run, then the thread stops. Without a connection, it stops at once, and the tasks left fail. `post` must stay valid until then: destroy the `DatabaseThread` before the event loop. |
+
 ## Tests
 
 `tests/database.cpp` (tag `[database]`) runs on SQLite, in a directory of its own per test:
@@ -130,3 +173,9 @@ The tests of the queries run on every engine available ([Tests](#tests)): what o
   database refused, a migration known by another description refused, a numbering error;
 - transactions: committed, or rolled back by an exception;
 - portable SQL: `RETURNING`, `ON CONFLICT`, 64-bit dates, foreign keys checked, a `NULL` read with an indicator.
+
+`tests/database_thread.cpp` (tag `[database]`) gives the thread a queue of functions in place of the event loop:
+tasks run in order on another thread and their results come back on the thread of the test; a task that fails
+gives an empty result and the next ones run; a full queue refuses a task; the tasks given run before the thread
+stops; a lost connection is opened again, the next task waiting while the database cannot be reached; and a
+thread destroyed while it cannot connect stops at once and fails the tasks left.
