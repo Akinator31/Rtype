@@ -48,7 +48,6 @@ add_executable(rtype_tests
     physics_step.cpp
     reliability.cpp
     resource_cache.cpp
-    save.cpp
     scene_assets.cpp
     scenes.cpp
     scripting.cpp
@@ -61,6 +60,7 @@ add_executable(rtype_tests
     server_options.cpp
     server_replication.cpp
     session.cpp
+    settings.cpp
     shaders.cpp
     text_input.cpp
     timer.cpp
@@ -68,7 +68,7 @@ add_executable(rtype_tests
     viewport.cpp
 )
 target_link_libraries(rtype_tests PRIVATE
-    rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render rtype::save
+    rtype_options rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
     rtype::scripting rtype::shaders r-type_client_core r-type_server_core
     Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself

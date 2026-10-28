@@ -61,7 +61,7 @@ game that crashed, the connection lost. A lobby connection lost brings the playe
 Players never handle a key file: each server makes its key at its first start, and the player trusts it at
 the first connection, as with SSH ([ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)).
 `KnownServers` (`Online/KnownServers.hpp`) gives the key the client trusts for a server: the one the player
-trusted, kept in the save under `servers.known.<address>`, or none for a server never met. A server is known by
+trusted, kept in the [settings](settings.md) under `servers.known.<address>`, or none for a server never met. A server is known by
 its address in lowercase (`serverAddress()`: `rtype.example.org:4242`, `[::1]:4242`): the same server under
 another name or IP address is a new server.
 
@@ -70,12 +70,12 @@ When the server presents a key it does not trust, the LobbyClient calls `onUntru
 
 | Verdict | The client |
 |---|---|
-| `FirstUse`: a server never met | Shows its fingerprint (`fingerprintLines()`, in groups of 4 digits) in the scene `online_trust`. **Trust and connect** remembers it (`trust()`, which writes the save) and connects again |
+| `FirstUse`: a server never met | Shows its fingerprint (`fingerprintLines()`, in groups of 4 digits) in the scene `online_trust`. **Trust and connect** remembers it (`trust()`, which writes the settings) and connects again |
 | `Changed`: a server trusted with another key | Refuses it, and shows the key expected and the key presented in the scene `online_changed_key`. No button accepts the new key: the player must **Forget the server key** in the Online menu first (`forget()`) |
 
-The save is in the data directory of the player (`rtype::render::userDataDirectory()`: `%APPDATA%\R-Type` on
-Windows, `~/.local/share/r-type` elsewhere), read when the client starts. A save that cannot be written keeps
-the key trusted until the client closes, and says so.
+The settings are in the data directory of the player (`rtype::render::userDataDirectory()`: `%APPDATA%\R-Type` on
+Windows, `~/.local/share/r-type` elsewhere), read when the client starts. Settings that cannot be written keep
+the key trusted until the client closes, and the client says so.
 
 ## LobbyClient
 
@@ -189,7 +189,7 @@ them, through the interpolation.
   session of its player.
 
 `tests/known_servers.cpp` (tag `[online]`) checks the key trusted for each server: a server trusted on first
-use, kept in the save, then refused with another key until forgotten; a save holding something else than a
+use, kept in the settings, then refused with another key until forgotten; settings holding something else than a
 fingerprint, which trusts nothing; a fingerprint shown in groups of 4 digits.
 
 `tests/client_interpolation.cpp` (tag `[interpolation]`) plays a server sending 30 snapshots per second to a

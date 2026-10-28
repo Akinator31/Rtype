@@ -19,9 +19,9 @@ const log::Logger &logger()
     return instance;
 }
 
-std::string saveKey(const std::string &address)
+std::string settingsKey(const std::string &address)
 {
-    return std::string(KnownServers::SaveKeyPrefix).append(address);
+    return std::string(KnownServers::SettingsKeyPrefix).append(address);
 }
 
 } // namespace
@@ -38,11 +38,11 @@ std::string serverAddress(const std::string &host, std::uint16_t port)
     return std::format("{}:{}", lower, port);
 }
 
-KnownServers::KnownServers(save::Save &save) : _save(save) {}
+KnownServers::KnownServers(engine::Settings &settings) : _settings(settings) {}
 
 std::optional<network::KeyFingerprint> KnownServers::remembered(const std::string &address) const
 {
-    const std::optional<std::string> hex = _save.getString(saveKey(address));
+    const std::optional<std::string> hex = _settings.getString(settingsKey(address));
     return hex ? network::KeyFingerprint::parse(*hex) : std::nullopt;
 }
 
@@ -62,12 +62,12 @@ KnownServers::Verdict KnownServers::judge(const std::string &address) const
 
 bool KnownServers::trust(const std::string &address, const network::KeyFingerprint &key)
 {
-    _save.setString(saveKey(address), key.toHex());
+    _settings.setString(settingsKey(address), key.toHex());
     logger().info("Key {} trusted for {}", key.toHex(), address);
     try {
-        _save.writeFile();
+        _settings.writeFile();
     } catch (const std::exception &error) {
-        logger().error("Cannot write the save {}: {}", _save.getPath().string(), error.what());
+        logger().error("Cannot write the settings {}: {}", _settings.getPath().string(), error.what());
         return false;
     }
     return true;
@@ -75,15 +75,15 @@ bool KnownServers::trust(const std::string &address, const network::KeyFingerpri
 
 bool KnownServers::forget(const std::string &address)
 {
-    if (!_save.hasKey(saveKey(address))) {
+    if (!_settings.hasKey(settingsKey(address))) {
         return false;
     }
-    _save.removeKey(saveKey(address));
+    _settings.removeKey(settingsKey(address));
     logger().info("Key of {} forgotten", address);
     try {
-        _save.writeFile();
+        _settings.writeFile();
     } catch (const std::exception &error) {
-        logger().error("Cannot write the save {}: {}", _save.getPath().string(), error.what());
+        logger().error("Cannot write the settings {}: {}", _settings.getPath().string(), error.what());
     }
     return true;
 }

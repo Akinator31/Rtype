@@ -24,9 +24,9 @@ Controls &Engine::getControls()
     return _controls;
 }
 
-save::Save &Engine::getSave()
+Settings &Engine::getSettings()
 {
-    return _save;
+    return _settings;
 }
 
 void Engine::setInputSource(input::InputSource &source)

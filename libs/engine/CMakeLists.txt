@@ -16,6 +16,7 @@ add_library(rtype_engine
     src/Rendering/SceneRenderer.cpp
     src/Rendering/ColliderDebugRenderer.cpp
     src/Scene/Scenes.cpp
+    src/Settings/Settings.cpp
     src/System/AnchorSystem.cpp
     src/System/BoundTextSystem.cpp
     src/System/ColumnLayoutSystem.cpp
@@ -31,4 +32,4 @@ add_library(rtype_engine
 add_library(rtype::engine ALIAS rtype_engine)
 target_include_directories(rtype_engine PUBLIC include)
 # Public: the public headers use their types
-target_link_libraries(rtype_engine PUBLIC rtype::audio rtype::ecs rtype::input rtype::render rtype::save PRIVATE rtype::physics rtype_options)
+target_link_libraries(rtype_engine PUBLIC rtype::audio rtype::ecs rtype::input rtype::render PRIVATE rtype::physics rtype_options)
