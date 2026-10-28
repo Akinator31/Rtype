@@ -18,6 +18,7 @@ target_compile_definitions(raylib PRIVATE SUPPORT_FILEFORMAT_JPG=1)
 
 add_subdirectory(audio)
 add_subdirectory(core)
+add_subdirectory(database)
 add_subdirectory(ecs)
 add_subdirectory(engine)
 add_subdirectory(game)
