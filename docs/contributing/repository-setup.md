@@ -82,7 +82,8 @@ Pack).
 Recommended: **Settings → Rules → Rulesets → New branch ruleset**, targeting the default branch, with:
 
 - **Require a pull request before merging**, with at least one approval;
-- **Require status checks to pass**: `Build (linux)`, `Build (windows)`, `clang-format`;
+- **Require status checks to pass**: `Build (linux)`, `Build (windows)`, `Sanitizers (address,undefined)`,
+  `clang-format`;
 - **Block force pushes**.
 
 Status checks can be selected only after they have run once, so add them after the first pull request.

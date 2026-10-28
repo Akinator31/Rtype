@@ -37,8 +37,8 @@ ignored for this check (`v1.2.0-beta.1` matches `1.2.0`).
     git push origin v1.0.0
     ```
 
-3. **Follow the workflow** in the *Actions* tab: *Check version*, then *Build* on Linux and Windows (tests
-   included), then *Publish release*. The release appears in the *Releases* section of the repository.
+3. **Follow the workflow** in the *Actions* tab: *Check version* (with the last ThreadSanitizer night on
+   `main`), then *Build* on Linux and Windows (tests included), then *Publish release*. The release appears in the *Releases* section of the repository.
 
 ## Release contents
 
@@ -67,6 +67,13 @@ sha256sum --check --ignore-missing SHA256SUMS.txt
     git push origin --delete v1.0.0
     git tag -d v1.0.0
     ```
+
+??? question "The workflow fails at *Check the last ThreadSanitizer run on main*"
+
+    The last night of the *Thread sanitizer* workflow on `main` failed: a data race may ship. Fix it through a
+    pull request, or, when the report is not our bug, add its suppression with the reason to
+    `cmake/Sanitizers.cpp`, see [Sanitizers](testing.md#sanitizers). Then run the workflow on `main` from the
+    *Actions* tab, and tag again once it passes.
 
 ??? question "The build or the tests fail"
 
