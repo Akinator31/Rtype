@@ -123,6 +123,18 @@ public test keys, for development, the tests, the measures and the fuzzing. It o
 | `-h`, `--help` | Shows the usage |
 | `--version` | Shows the version, the one of the project |
 
+**The settings file** of the master, given with `--settings`, is read by `loadSettings()` (`Common/Settings.hpp`),
+with toml++, before anything else: `run()` reads the command line once to find the file, then again over what the
+file gives, so that the command line wins. Its `[server]` section holds the options above; the other sections
+(`[web]`, `[accounts]`, `[mail]`, `[discord]`, `[admin]`) are checked and kept in `MasterOptions::settings`, for
+the panel and the accounts. A file with a mistake stops the master (exit 1), with its line and its column; the
+secrets are in files of their own, read by `readSecretFile()` and never logged
+([Configure a server](../guides/configure-a-server.md)):
+
+```
+ERROR server   server.toml:12:5: [admin] admins: "pavel" is neither an email nor discord:<id>; an administrator is never named by username
+```
+
 **The configuration of the game** is read by `readGameConfig()` (`Common/GameConfig.hpp`), with
 `loadGameConfig()` of `libs/game`. The master reads it only to check it, the instance reads it again and gives
 it to the `GameThread`, which makes its `Simulation` with it. With an error, neither starts (exit 1), as
@@ -478,7 +490,7 @@ lobby.
 | Code | When |
 |---|---|
 | `0` | Stopped properly: after a stop signal, after `--help`, `--version` or `--check`, or at the end of its game for an instance |
-| `1` | Could not start (key missing or invalid, port in use, no secret), stopped on an unexpected error, or stop forced |
+| `1` | Could not start (settings file refused, key missing or invalid, port in use, no secret), stopped on an unexpected error, or stop forced |
 | `2` | Invalid arguments |
 
 The master reads the exit code of its instances: anything but 0 is a crash, which it reports to the players
