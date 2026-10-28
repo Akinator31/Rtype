@@ -61,6 +61,7 @@ add_executable(rtype_tests
     server_lobby.cpp
     server_options.cpp
     server_replication.cpp
+    server_settings.cpp
     session.cpp
     settings.cpp
     shaders.cpp
