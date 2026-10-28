@@ -47,10 +47,13 @@ CPMAddPackage(
         "SOCI_ORACLE OFF"
 )
 
+find_package(Threads REQUIRED)
+
 add_library(rtype_database
     src/Address.cpp
     src/Database.cpp
+    src/DatabaseThread.cpp
 )
 add_library(rtype::database ALIAS rtype_database)
 target_include_directories(rtype_database PUBLIC include)
-target_link_libraries(rtype_database PUBLIC SOCI::Core PRIVATE SOCI::SQLite3 rtype::log rtype_options)
+target_link_libraries(rtype_database PUBLIC SOCI::Core Threads::Threads PRIVATE SOCI::SQLite3 rtype::log rtype_options)
