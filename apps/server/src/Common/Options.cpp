@@ -27,8 +27,10 @@ Master options:
       --database <address>   Where the data is kept (default: sqlite:rtype.db): sqlite:<file>, or
                              postgresql://<user>@<host>:<port>/<database> (password: ~/.pgpass)
       --database-file <file> Read the address of the database from this file, for one with a password
-      --check                Check that the server can start (key, port, configuration, database), then
-                             exit
+      --settings <file>      Settings file (TOML) of the master: the options above, the panel, the
+                             accounts; the command line wins over it
+      --check                Check that the server can start (settings, key, port, configuration,
+                             database), then exit
 
 Instance options (given by the master):
       --id <id>              Id of the game, from 1
@@ -83,7 +85,22 @@ std::string_view usage()
 
 Options parseOptions(std::span<const std::string_view> arguments)
 {
+    return parseOptions(arguments, ServerSettings{});
+}
+
+Options parseOptions(std::span<const std::string_view> arguments, const ServerSettings &settings)
+{
     Options options;
+    // The settings file first, so that the command line wins over it
+    if (settings.port) {
+        options.master.listen = options.master.listen.withPort(*settings.port);
+    }
+    options.master.firstGamePort = settings.firstGamePort.value_or(options.master.firstGamePort);
+    options.master.lastGamePort = settings.lastGamePort.value_or(options.master.lastGamePort);
+    options.master.key = settings.key.value_or(options.master.key);
+    options.master.database = settings.database.value_or(options.master.database);
+    options.master.databaseFile = settings.databaseFile.value_or(options.master.databaseFile);
+    options.master.settings = settings;
     // --help and --version win over everything else, even invalid arguments
     for (const std::string_view argument : arguments) {
         if (argument == "-h" || argument == "--help") {
@@ -101,6 +118,7 @@ Options parseOptions(std::span<const std::string_view> arguments)
     bool instance = false;
     bool fingerprint = false;
     bool databaseGiven = false;
+    bool databaseFileGiven = false;
     std::optional<std::uint16_t> port;
     std::optional<std::string_view> bind;
     bool idGiven = false;
@@ -160,10 +178,16 @@ Options parseOptions(std::span<const std::string_view> arguments)
             } catch (const std::invalid_argument &error) {
                 throw std::invalid_argument(std::format("--database: {}", error.what()));
             }
+            // Over a database_file of the settings file
+            options.master.databaseFile.clear();
             databaseGiven = true;
             masterOnly.push_back(argument);
         } else if (argument == "--database-file") {
             options.master.databaseFile = std::filesystem::path(std::string(value()));
+            databaseFileGiven = true;
+            masterOnly.push_back(argument);
+        } else if (argument == "--settings") {
+            options.master.settingsFile = std::filesystem::path(std::string(value()));
             masterOnly.push_back(argument);
         } else if (argument == "--fingerprint") {
             fingerprint = true;
@@ -193,7 +217,7 @@ Options parseOptions(std::span<const std::string_view> arguments)
     }
 
     if (!instance) {
-        if (databaseGiven && !options.master.databaseFile.empty()) {
+        if (databaseGiven && databaseFileGiven) {
             throw std::invalid_argument("--database and --database-file both give the database: choose one");
         }
         if (!instanceOnly.empty()) {
@@ -208,7 +232,7 @@ Options parseOptions(std::span<const std::string_view> arguments)
             }
             options.master.listen = *address;
         } else if (port) {
-            options.master.listen = rtype::network::Address::anyIpv4(*port);
+            options.master.listen = options.master.listen.withPort(*port);
         }
         options.mode = fingerprint ? Options::Mode::Fingerprint : Options::Mode::Master;
         return options;

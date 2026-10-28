@@ -34,6 +34,20 @@ int run(std::span<const std::string_view> arguments, std::ostream &out, std::ist
     if (options.logLevel) {
         rtype::log::setLevel(*options.logLevel);
     }
+    if (!options.master.settingsFile.empty() && options.mode != Options::Mode::Help &&
+        options.mode != Options::Mode::Version) {
+        // Read again over the settings file, for the command line to win over it
+        try {
+            options = parseOptions(arguments, loadSettings(options.master.settingsFile, logger));
+        } catch (const SettingsError &error) {
+            logger.error("{}", error.what());
+            return Failure;
+        } catch (const std::invalid_argument &error) {
+            logger.error("{} (see --help)", error.what());
+            return InvalidArguments;
+        }
+        logger.info("Settings {}", options.master.settingsFile.string());
+    }
 
     try {
         switch (options.mode) {
