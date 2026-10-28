@@ -8,8 +8,8 @@ session to run queries. The server is its user; the settings of the client are a
 
 | | |
 |---|---|
-| Engines | SQLite 3.54.1, built from its single C file, on every platform. PostgreSQL: not built yet. |
-| Dependencies | SOCI 4.1.4 (public: its session is in the API), fmt 12.2.0 (SOCI's), SQLite: all through CPM, with a hash |
+| Engines | SQLite 3.54.1, built from its single C file, on every platform. PostgreSQL, through the libpq of the system, when it is found ([Building with PostgreSQL](#building-with-postgresql)). |
+| Dependencies | SOCI 4.1.4 (public: its session is in the API), fmt 12.2.0 (SOCI's), SQLite: all through CPM, with a hash. libpq: from the system, optional |
 | Threads | A `Database` is used by one thread at a time; a `DatabaseThread` gives it a thread of its own |
 
 ## Opening a database
@@ -19,7 +19,7 @@ A database is given by its address, as the user writes it:
 | Address | Engine |
 |---|---|
 | `sqlite:rtype.db`, `sqlite:/data/rtype.db` | A SQLite file, created with its directories if missing. A file name may contain spaces. |
-| `postgresql://rtype@db.example.org:5432/rtype?sslmode=verify-full`, `postgres://...` | A PostgreSQL server, in the format libpq reads. Refused for now: this build has no PostgreSQL. |
+| `postgresql://rtype@db.example.org:5432/rtype?sslmode=verify-full`, `postgres://...` | A PostgreSQL server, in the [format libpq reads](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS). Refused, saying why, by a program built without PostgreSQL. |
 
 ```cpp
 #include "rtype/database/Database.hpp"
@@ -33,9 +33,27 @@ logger.info("Database {}", address.toString()); // without its password, if it h
 ```
 
 `Database::open()` throws `rtype::database::Error`, whose message is for the user, if the database cannot be
-opened: a directory that cannot be created, a file that is not a SQLite database (it is left as it is), an
-engine this program is built without. A SQLite database waits 5 seconds for a lock held by another connection,
-and checks foreign keys, as PostgreSQL does.
+opened: a directory that cannot be created, a file that is not a SQLite database (it is left as it is), a
+server that does not answer or refuses the user, an engine this program is built without
+(`rtype::database::isBuiltWith(engine)` tells). A SQLite database waits 5 seconds for a lock held by another
+connection, and checks foreign keys, as PostgreSQL does. A PostgreSQL server that does not answer within 10
+seconds fails, unless the address gives its own `connect_timeout`; its notices ("relation already exists,
+skipping"...) go to the logs, in debug.
+
+## Building with PostgreSQL
+
+The PostgreSQL engine uses libpq, the client library of PostgreSQL, from the system: `libpq-dev` on Debian and
+Ubuntu, `postgresql-libs` on Arch, the PostgreSQL installer on Windows. The CMake option `RTYPE_WITH_POSTGRESQL`
+chooses:
+
+| Value | Effect |
+|---|---|
+| `AUTO` (default) | Built when libpq is found |
+| `ON` | Required: the configure fails without libpq |
+| `OFF` | Left out: SQLite only |
+
+The configure says what it built: `Database engines: SQLite, PostgreSQL (libpq 18.6)`. A program built with it
+needs libpq to run (`libpq5` on Debian and Ubuntu).
 
 ## Migrations
 
@@ -164,11 +182,17 @@ thread.run("record game 4", [game](rtype::database::Database &database) { record
 
 ## Tests
 
-`tests/database.cpp` (tag `[database]`) runs on SQLite, in a directory of its own per test:
+The tests of the database run on every engine available: SQLite always, PostgreSQL when this program has it and
+`RTYPE_TEST_POSTGRESQL_URL` gives a server, on which each test gets a schema of its own
+(`tests/helpers/TestDatabase.hpp`). The [testing policy](../contributing/testing.md#running-the-tests) shows how
+to run one in Docker; the CI does it on Linux.
+
+`tests/database.cpp` (tag `[database]`):
 
 - addresses: the forms accepted, those refused, a password never shown;
-- opening: a file created with its directories, a name with spaces, a file that is not a database refused and
-  left as it is, PostgreSQL refused by this build without showing the password;
+- opening (SQLite): a file created with its directories, a name with spaces, a file that is not a database
+  refused and left as it is; a PostgreSQL server that refuses the connection, without showing the password, or
+  this build without PostgreSQL;
 - migrations: applied in order and once, a new one applied alone, one that fails leaving nothing, a newer
   database refused, a migration known by another description refused, a numbering error;
 - transactions: committed, or rolled back by an exception;
@@ -177,5 +201,6 @@ thread.run("record game 4", [game](rtype::database::Database &database) { record
 `tests/database_thread.cpp` (tag `[database]`) gives the thread a queue of functions in place of the event loop:
 tasks run in order on another thread and their results come back on the thread of the test; a task that fails
 gives an empty result and the next ones run; a full queue refuses a task; the tasks given run before the thread
-stops; a lost connection is opened again, the next task waiting while the database cannot be reached; and a
-thread destroyed while it cannot connect stops at once and fails the tasks left.
+stops; a lost connection is opened again; on PostgreSQL, a connection the server ends
+(`pg_terminate_backend`) is opened again; and on SQLite, whose directory a test moves away, the next task waits
+while the database cannot be reached, and a thread destroyed meanwhile stops at once and fails the tasks left.

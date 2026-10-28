@@ -14,19 +14,24 @@ system-wide besides a compiler and, on Linux, the X11/OpenGL development package
 
     ```sh
     sudo apt install build-essential cmake \
-        libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+        libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libpq-dev
     ```
 
 === "Arch Linux"
 
     ```sh
-    sudo pacman -S base-devel cmake libx11 libxrandr libxinerama libxcursor libxi mesa
+    sudo pacman -S base-devel cmake libx11 libxrandr libxinerama libxcursor libxi mesa postgresql-libs
     ```
 
 === "Windows"
 
     Install [Visual Studio 2022](https://visualstudio.microsoft.com/) with the
     **Desktop development with C++** workload, which includes CMake.
+
+libpq (`libpq-dev`, `postgresql-libs`) is optional: with it, the server can keep its data in a PostgreSQL
+database; without it, in SQLite only. The configure says which: `Database engines: SQLite, PostgreSQL`. On
+Windows, it comes with the [PostgreSQL installer](https://www.postgresql.org/download/windows/);
+`-DRTYPE_WITH_POSTGRESQL=ON` makes it required, `OFF` leaves it out ([Database](../architecture/database.md)).
 
 ## Configure and build
 
