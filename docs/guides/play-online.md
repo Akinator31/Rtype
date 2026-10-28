@@ -22,7 +22,7 @@ Run a server and play the same game from several machines, or from several clien
 
 3. **Trust the server**, the first time only. A server the client does not know yet shows its fingerprint:
    compare it with the one its owner gives (`r-type_server --fingerprint`), then **Trust and connect**. The
-   client remembers it in its save, and connects at once the next times.
+   client remembers it in its settings, and connects at once the next times.
 
 4. **Do not trust a key that changed.** A known server that presents another key is refused, with a warning
    that shows both: someone may be pretending to be it. If its owner did change its key, **Forget the server
