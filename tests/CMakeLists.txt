@@ -53,6 +53,7 @@ add_executable(rtype_tests
     scenes.cpp
     scripting.cpp
     serialization.cpp
+    server_database.cpp
     server_instance.cpp
     server_key.cpp
     server_lifecycle.cpp
@@ -91,4 +92,5 @@ add_test(NAME smoke.server_invalid_arguments COMMAND r-type_server --unknown)
 set_tests_properties(smoke.server_invalid_arguments PROPERTIES WILL_FAIL TRUE)
 # The server makes its key at its first start: the check makes it there, then reads it
 add_test(NAME smoke.server_check
-    COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key)
+    COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key
+        --database sqlite:${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/rtype.db)

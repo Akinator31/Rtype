@@ -60,8 +60,10 @@ int check(const std::filesystem::path &key)
     std::ostringstream out;
     std::istringstream in;
     const std::string keyArgument = key.string();
+    // In the directory of the key, rather than rtype.db in the working directory of the tests
+    const std::string databaseArgument = "sqlite:" + (key.parent_path() / "rtype.db").string();
     return run(std::vector<std::string_view>{"--check", "--port", "0", "--config", RTYPE_TEST_CONFIG, "--key",
-                                             keyArgument},
+                                             keyArgument, "--database", databaseArgument},
                out, in);
 }
 

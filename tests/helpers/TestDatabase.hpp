@@ -116,6 +116,11 @@ public:
     TestDatabase &operator=(const TestDatabase &) = delete;
 
     [[nodiscard]] const database::Address &address() const { return _address; }
+    /// The address as a user writes it, with its password: for a command line.
+    [[nodiscard]] std::string addressText() const
+    {
+        return _engine == database::Engine::Sqlite ? "sqlite:" + _address.target : _address.target;
+    }
     /// The directory of the SQLite file.
     [[nodiscard]] const std::filesystem::path &directory() const { return _directory; }
     [[nodiscard]] database::Database open() const { return database::Database::open(_address); }
