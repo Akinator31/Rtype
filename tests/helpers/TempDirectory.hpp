@@ -20,7 +20,7 @@ struct TempDirectory {
         for (;;) {
             const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
             path = std::filesystem::temp_directory_path() /
-                (std::string(name) + '_' + std::to_string(stamp) + '_' + std::to_string(next++));
+                   (std::string(name) + '_' + std::to_string(stamp) + '_' + std::to_string(next++));
             std::error_code error;
             if (std::filesystem::create_directory(path, error)) {
                 return;

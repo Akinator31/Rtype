@@ -5,10 +5,10 @@
 
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
+#include "TempDirectory.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/TcpListener.hpp"
-#include "TempDirectory.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

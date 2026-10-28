@@ -1,8 +1,8 @@
 // Tests of the configuration of the game: Lua files read into definitions (ADR 0018,
 // docs/guides/configure-enemies-and-weapons.md).
 
-#include "rtype/game/Game.hpp"
 #include "TempDirectory.hpp"
+#include "rtype/game/Game.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
