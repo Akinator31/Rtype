@@ -14,7 +14,8 @@ namespace rtype::client
 
 void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resources,
                          const engine::InterfaceStyle &style, Console &console,
-                         const engine::RendererMetrics &metrics, const localization::Localization &translations)
+                         const engine::RendererMetrics &metrics,
+                         const localization::Localization &translations)
 {
     engine.createScene(LoadingScene, {.onBack = [] {}},
                        [&resources, &style, &translations](engine::Engine &target, engine::SceneId scene) {
@@ -28,10 +29,12 @@ void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resour
 
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
                       const engine::InterfaceStyle &style, render::Window &window,
-                      const engine::RendererMetrics &metrics, GameScenes &games, const game::GameConfig &config,
-                      localization::Localization &translations, ShipSelection &ships)
+                      const engine::RendererMetrics &metrics, GameScenes &games,
+                      const game::GameConfig &config, localization::Localization &translations,
+                      ShipSelection &ships)
 {
-    createMainMenuScene(engine, resources, style, metrics, translations, [&window] { window.requestClose(); });
+    createMainMenuScene(engine, resources, style, metrics, translations,
+                        [&window] { window.requestClose(); });
     createSubmenuScenes(engine, style, translations, [&games, &config] {
         games.play(std::make_unique<LocalSession>(game::Rules{}, config));
     });

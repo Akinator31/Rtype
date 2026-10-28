@@ -15,8 +15,8 @@ namespace rtype::engine
 /// first scene acquires it, and unloaded once every scene that acquired it has released it.
 ///
 /// The Engine acquires the assets of a scene before opening it, waits until they are ready, checks that they
-/// loaded, and releases them when the scene closes. A released asset is only unloaded by unloadUnusedAssets(),
-/// once its load is over.
+/// loaded, and releases them when the scene closes. A released asset is only unloaded by
+/// unloadUnusedAssets(), once its load is over.
 class SceneAssets
 {
     struct Lease {
@@ -36,8 +36,8 @@ public:
     void setLoader(SceneAssetLoader &loader);
     [[nodiscard]] bool hasLoader() const;
 
-    /// Acquires each asset, requesting it from the loader unless another scene already acquired it. The loader
-    /// must be set.
+    /// Acquires each asset, requesting it from the loader unless another scene already acquired it. The
+    /// loader must be set.
     /// @throws Anything thrown by the loader. No asset is acquired then.
     void acquireAssets(const std::vector<SceneAsset> &assets);
     /// Tells whether the loads of these acquired assets are all over, successfully or not.

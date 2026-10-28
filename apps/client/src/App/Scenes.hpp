@@ -18,14 +18,16 @@ namespace rtype::client
 /// any scene. Everything given must outlive the engine.
 void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resources,
                          const engine::InterfaceStyle &style, Console &console,
-                         const engine::RendererMetrics &metrics, const localization::Localization &translations);
+                         const engine::RendererMetrics &metrics,
+                         const localization::Localization &translations);
 
 /// Declares the scenes of the client built from the loaded assets: the main menu, its submenus and the
 /// hangar. Those of a game are declared by GameScenes, those of online play by OnlineScenes. Everything given
 /// must outlive the engine.
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
                       const engine::InterfaceStyle &style, render::Window &window,
-                      const engine::RendererMetrics &metrics, GameScenes &games, const game::GameConfig &config,
-                      localization::Localization &translations, ShipSelection &ships);
+                      const engine::RendererMetrics &metrics, GameScenes &games,
+                      const game::GameConfig &config, localization::Localization &translations,
+                      ShipSelection &ships);
 
 } // namespace rtype::client

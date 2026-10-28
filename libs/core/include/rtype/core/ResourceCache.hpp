@@ -52,7 +52,8 @@ public:
     }
 
     /// Returns the resource with this handle. The reference stays valid until the resource is unloaded.
-    /// @throws std::out_of_range if the handle does not come from this cache, or if its resource was unloaded.
+    /// @throws std::out_of_range if the handle does not come from this cache, or if its resource was
+    /// unloaded.
     [[nodiscard]] const Resource &get(Id id) const
     {
         std::lock_guard lock(_mutex);
@@ -63,7 +64,8 @@ public:
         return *resource;
     }
     /// Returns the resource with this handle, to modify it.
-    /// @throws std::out_of_range if the handle does not come from this cache, or if its resource was unloaded.
+    /// @throws std::out_of_range if the handle does not come from this cache, or if its resource was
+    /// unloaded.
     [[nodiscard]] Resource &get(Id id)
     {
         std::lock_guard lock(_mutex);

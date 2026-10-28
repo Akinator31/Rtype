@@ -6,8 +6,8 @@
 namespace rtype::engine
 {
 
-/// Loads the assets of the scenes for the engine (see Engine::setSceneAssetLoader()), which does not know how:
-/// the client loads them with its ResourceManager and its AudioPlayer.
+/// Loads the assets of the scenes for the engine (see Engine::setSceneAssetLoader()), which does not know
+/// how: the client loads them with its ResourceManager and its AudioPlayer.
 class SceneAssetLoader
 {
 public:

@@ -85,8 +85,9 @@ public:
     /// @throws std::runtime_error if the file is missing or is not a supported model.
     [[nodiscard]] ModelId loadModel(const std::string &path);
 
-    /// Like loadTexture(), loadFont() and loadModel(), but the file is read on the assets worker: the resource
-    /// is ready once finishPendingLoads() has finished it. A resource already loaded gives a ready future.
+    /// Like loadTexture(), loadFont() and loadModel(), but the file is read on the assets worker: the
+    /// resource is ready once finishPendingLoads() has finished it. A resource already loaded gives a ready
+    /// future.
     [[nodiscard]] std::shared_future<TextureId>
     loadTextureAsync(const std::string &path, TextureFiltering filtering = TextureFiltering::Sharp);
     [[nodiscard]] std::shared_future<FontId> loadFontAsync(const std::string &path, int size = 32);

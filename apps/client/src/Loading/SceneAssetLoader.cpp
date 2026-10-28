@@ -34,8 +34,9 @@ engine::SceneAssetRequest requestTexture(render::ResourceManager &resources, aud
 engine::SceneAssetRequest requestSmoothTexture(render::ResourceManager &resources,
                                                audio::AudioPlayer & /*audio*/, const std::string &path)
 {
-    return createRequest(resources.loadTextureAsync(path, render::TextureFiltering::Smooth),
-                         [&resources, path] { resources.unloadTexture(path, render::TextureFiltering::Smooth); });
+    return createRequest(
+        resources.loadTextureAsync(path, render::TextureFiltering::Smooth),
+        [&resources, path] { resources.unloadTexture(path, render::TextureFiltering::Smooth); });
 }
 
 engine::SceneAssetRequest requestFont(render::ResourceManager &resources, audio::AudioPlayer & /*audio*/,
