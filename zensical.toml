@@ -82,6 +82,8 @@ nav = [
         "decisions/0021-server-generated-key-trust-on-first-use.md",
         "decisions/0022-engine-thread-manager.md",
         "decisions/0023-server-database.md",
+        "decisions/0024-player-accounts.md",
+        "decisions/0025-server-administration.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [
