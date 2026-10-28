@@ -1,6 +1,7 @@
 // Tests of the configuration of the game: Lua files read into definitions (ADR 0018,
 // docs/guides/configure-enemies-and-weapons.md).
 
+#include "TempDirectory.hpp"
 #include "rtype/game/Game.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -13,7 +14,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <variant>
 
 using namespace rtype::game;
@@ -24,22 +24,11 @@ namespace
 {
 
 // A configuration directory of its own for each test, removed at the end
-struct ConfigDirectory {
-    std::filesystem::path path;
-
+struct ConfigDirectory : testing::TempDirectory {
     explicit ConfigDirectory(std::string_view name)
-        : path(std::filesystem::temp_directory_path() / std::string("rtype_tests_config_").append(name))
+        : testing::TempDirectory(std::string("rtype_tests_config_").append(name))
     {
-        std::filesystem::remove_all(path);
-        std::filesystem::create_directories(path);
     }
-    ~ConfigDirectory()
-    {
-        std::error_code ignored;
-        std::filesystem::remove_all(path, ignored);
-    }
-    ConfigDirectory(const ConfigDirectory &) = delete;
-    ConfigDirectory &operator=(const ConfigDirectory &) = delete;
 
     void write(const std::string &file, const std::string &code) const
     {

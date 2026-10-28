@@ -85,9 +85,18 @@ public:
     /// @throws std::runtime_error if the file is missing or is not a supported music.
     [[nodiscard]] MusicId loadMusic(const std::string &path);
 
+    /// Like loadSound() and loadMusic(), but the file is read on the assets worker: the sound is ready once
+    /// finishPendingLoads() has finished it. A sound already loaded gives a ready future.
     [[nodiscard]] std::shared_future<SoundId> loadSoundAsync(const std::string &path);
     [[nodiscard]] std::shared_future<MusicId> loadMusicAsync(const std::string &path);
     void finishPendingLoads();
+
+    /// Frees a sound effect, to save memory once no scene uses it. Its handle becomes invalid; loading it
+    /// again gives a new one. Its asynchronous load, if any, must be finished.
+    /// @return false if it is not loaded.
+    bool unloadSound(const std::string &path);
+    /// Frees a music, like unloadSound(). It stops first if it is the current music.
+    bool unloadMusic(const std::string &path);
 
     /// Plays a sound effect from its start. If all its voices are busy, the oldest one is restarted.
     void play(SoundId sound, const PlaySettings &settings = {});

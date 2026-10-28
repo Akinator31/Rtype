@@ -4,10 +4,12 @@
 #include "rtype/ecs/Component/ComponentCaches.hpp"
 #include "rtype/ecs/Entity/Entity.hpp"
 #include "rtype/ecs/System/System.hpp"
+#include "rtype/engine/Scene/SceneAsset.hpp"
 
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rtype::engine
@@ -38,6 +40,8 @@ struct SceneSettings {
     bool updatesWhenCovered = false;
     /// Called when the player goes back (Escape) while the scene is at the top. Empty: the scene closes.
     std::function<void()> onBack{};
+    /// Loaded before the scene opens, while the loading scene is shown: see Engine::setSceneAssetLoader().
+    std::vector<SceneAsset> assets{};
 };
 
 /// The stack of open scenes: home screen, game, pause menu over the game...

@@ -8,6 +8,7 @@
 #include "rtype/engine/Engine.hpp"
 
 #include "FakeInput.hpp"
+#include "TempDirectory.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/ecs/Ecs.hpp"
@@ -19,7 +20,6 @@
 
 #include <cmath>
 #include <cstddef>
-#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <set>
@@ -1847,13 +1847,12 @@ TEST_CASE("Switching a model animation fades from the previous one", "[engine][a
 TEST_CASE("The sound system plays each sound effect once, then takes it from its entity", "[engine][sound]")
 {
     // Audio is disabled: the sound file is only checked to exist, and nothing is heard
-    const std::filesystem::path assets = std::filesystem::temp_directory_path() / "rtype_engine_sounds";
-    std::filesystem::create_directories(assets);
-    std::ofstream(assets / "shot.wav") << "fake";
+    const testing::TempDirectory assets("rtype_engine_sounds");
+    std::ofstream(assets.path / "shot.wav") << "fake";
     {
         const rtype::audio::AudioDevice device({.enabled = false});
         Engine engine;
-        rtype::audio::AudioPlayer audio(device, assets, engine.getThreads().getAssetsWorker());
+        rtype::audio::AudioPlayer audio(device, assets.path, engine.getThreads().getAssetsWorker());
         rtype::ecs::Ecs &ecs = engine.getEcs();
         ecs.registerSystem<SoundSystem>(audio);
         const entity_t shot = ecs.createEntity();
@@ -1866,5 +1865,4 @@ TEST_CASE("The sound system plays each sound effect once, then takes it from its
         engine.update(0.016f);
         CHECK_FALSE(ecs.hasComponent<SoundEffect>(shot));
     }
-    std::filesystem::remove_all(assets);
 }

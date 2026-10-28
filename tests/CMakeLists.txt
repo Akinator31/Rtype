@@ -50,6 +50,7 @@ add_executable(rtype_tests
     physics_step.cpp
     reliability.cpp
     resource_cache.cpp
+    scene_assets.cpp
     scenes.cpp
     scripting.cpp
     serialization.cpp

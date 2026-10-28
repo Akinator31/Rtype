@@ -1,34 +1,27 @@
+#include "App/Configuration.hpp"
+#include "App/Scenes.hpp"
+#include "App/Systems.hpp"
 #include "Assets.hpp"
 #include "Commands/Commands.hpp"
 #include "Console/Console.hpp"
-#include "Console/ConsoleScene.hpp"
-#include "Console/ConsoleSystem.hpp"
 #include "Game/GameScenes.hpp"
 #include "Game/GameSessionSystem.hpp"
-#include "Game/ImpactSystem.hpp"
-#include "Game/LocalSession.hpp"
 #include "Loading/AssetPreload.hpp"
 #include "Loading/LoadingScene.hpp"
 #include "Loading/LoadingSystem.hpp"
-#include "MainMenu/FlightSystem.hpp"
-#include "MainMenu/IntroSystem.hpp"
-#include "MainMenu/LogoFlareSystem.hpp"
+#include "Loading/SceneAssetLoader.hpp"
+#include "Loading/SceneLoadStatus.hpp"
 #include "MainMenu/MainMenu.hpp"
-#include "MainMenu/Submenus.hpp"
 #include "Online/OnlineScenes.hpp"
-#include "ShipSelector/ShipSelector.hpp"
-#include "ShipSelector/ShipSelectorSystem.hpp"
+#include "ShipSelector/ShipSelection.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
-#include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
-#include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/input/Devices.hpp"
 #include "rtype/localization/Localization.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
-#include "rtype/physics/Physics.hpp"
 #include "rtype/render/Paths.hpp"
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -36,8 +29,6 @@
 
 #include <cstdlib>
 #include <exception>
-#include <memory>
-#include <string>
 #include <string_view>
 
 namespace
@@ -54,111 +45,12 @@ struct StopWorkers {
     ~StopWorkers() { threads.stopAll(); }
 };
 
-/// Loads the configuration of the game (ADR 0018), next to the executable. Unlike the server, the client
-/// starts with a configuration that has errors: it goes without it (an offline game has no enemies nor
-/// weapons), and says why in the console and in the logs.
-rtype::game::GameConfig readGameConfig(rtype::client::Console &console)
-{
-    const rtype::log::Logger logger("client");
-    rtype::game::LoadedGameConfig loaded =
-        rtype::game::loadGameConfig(rtype::render::applicationDirectory() / "config");
-    if (loaded.isValid()) {
-        return std::move(loaded.config);
-    }
-    console.print("The game configuration has errors: the game runs without it");
-    for (const std::string &error : loaded.errors) {
-        console.print(error);
-        logger.warning("Configuration: {}", error);
-    }
-    return {};
-}
+/// Unloads the assets of the scenes before the ResourceManager and the AudioPlayer that hold them.
+struct UnloadSceneAssets {
+    rtype::engine::Engine &engine;
 
-/// Reads the settings of the player, in its data directory: the servers it trusts, for now. Settings that
-/// cannot be read are logged, and the client starts without them.
-void readSettings(rtype::engine::Settings &settings)
-{
-    const rtype::log::Logger logger("client");
-    settings.setPath(rtype::render::userDataDirectory() / "settings.txt");
-    try {
-        settings.readFile();
-    } catch (const std::exception &error) {
-        logger.warning("Cannot read the settings {}: {}", settings.getPath().string(), error.what());
-    }
-}
-
-/// Declares the scenes shown while the assets load: the loading screen, and the console, which opens over
-/// any scene.
-void createLoadingScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
-                         const rtype::engine::InterfaceStyle &style, rtype::client::Console &console,
-                         const rtype::engine::RendererMetrics &metrics,
-                         const rtype::localization::Localization &translations)
-{
-    engine.createScene(
-        rtype::client::LoadingScene, {.onBack = [] {}},
-        [&resources, &style, &translations](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
-            rtype::client::buildLoadingScene(target, scene, resources, style, translations);
-        });
-    engine.createScene(
-        rtype::client::ConsoleScene, {.overlay = true},
-        [&console, &metrics, &style](rtype::engine::Engine &target, rtype::engine::SceneId scene) {
-            rtype::client::buildConsole(target, scene, console, metrics, style);
-        });
-}
-
-/// Declares the scenes of the client built from the loaded assets, but those of a game, which GameScenes
-/// declares.
-void createScenes(rtype::engine::Engine &engine, rtype::render::ResourceManager &resources,
-                  const rtype::engine::InterfaceStyle &style, rtype::render::Window &window,
-                  const rtype::engine::RendererMetrics &metrics, rtype::client::GameScenes &games,
-                  const rtype::game::GameConfig &config, rtype::localization::Localization &translations,
-                  rtype::client::ShipSelection &ships)
-{
-    const auto quit = [&window] { window.requestClose(); };
-    engine.createScene(rtype::client::MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}},
-                       [&resources, &style, &metrics, &translations, quit](rtype::engine::Engine &target,
-                                                                           rtype::engine::SceneId scene) {
-                           rtype::client::buildMainMenu(target, scene, resources, style, metrics,
-                                                        translations, quit);
-                       });
-    rtype::client::createSubmenuScenes(engine, style, translations, [&games, &config] {
-        games.play(std::make_unique<rtype::client::LocalSession>(rtype::game::Rules{}, config));
-    });
-    rtype::client::createShipSelectorScene(engine, resources, style, translations, ships);
-}
-
-/// Registers the systems of the client, in the order they run each frame, after the scenes.
-/// @return The system that plays the games.
-rtype::client::GameSessionSystem &registerSystems(rtype::engine::Engine &engine,
-                                                  rtype::input::Devices &devices,
-                                                  rtype::audio::AudioPlayer &audio,
-                                                  const rtype::engine::RendererMetrics &metrics,
-                                                  const rtype::engine::InterfaceStyle &style)
-{
-    rtype::ecs::Ecs &ecs = engine.getEcs();
-    ecs.registerSystem<rtype::client::ConsoleSystem>(engine, devices);
-    ecs.registerSystem<rtype::engine::InterfaceSystem>(ecs, engine.getScenes(), devices, metrics, style);
-    // After the menus, which read the input first: Escape opens the pause menu before the game reads it
-    auto &sessions =
-        ecs.registerSystem<rtype::client::GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
-    ecs.registerSystem<rtype::client::ImpactSystem>(ecs);
-    // After the menus and the game, to play their sounds in the frame they give them
-    ecs.registerSystem<rtype::engine::SoundSystem>(audio);
-    ecs.registerSystem<rtype::engine::WidgetTextSystem>();
-    ecs.registerSystem<rtype::engine::BoundTextSystem>();
-    ecs.registerSystem<rtype::engine::TweenSystem>();
-    ecs.registerSystem<rtype::engine::SpinSystem>();
-    ecs.registerSystem<rtype::client::FlightSystem>();
-    ecs.registerSystem<rtype::client::IntroSystem>(engine.getScenes(), devices);
-    ecs.registerSystem<rtype::client::LogoFlareSystem>();
-    ecs.registerSystem<rtype::client::ShipSelectorSystem>(engine.getScenes(), engine.getControls(), devices);
-    ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
-    ecs.registerSystem<rtype::engine::HitboxSystem>(metrics, style);
-    ecs.registerSystem<rtype::engine::ColumnLayoutSystem>(ecs);
-    ecs.registerSystem<rtype::engine::AnchorSystem>(metrics);
-    ecs.registerSystem<rtype::engine::ToastSystem>(ecs, metrics, style);
-    ecs.registerSystem<rtype::ecs::TransformSystem>(ecs);
-    return sessions;
-}
+    ~UnloadSceneAssets() { engine.unloadSceneAssets(); }
+};
 
 void run()
 {
@@ -166,7 +58,7 @@ void run()
 
     Window window({.fullscreen = true});
     rtype::engine::Engine engine;
-    readSettings(engine.getSettings());
+    rtype::client::readSettings(engine.getSettings());
     const rtype::audio::AudioDevice audioDevice;
     rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
                                     engine.getThreads().getAssetsWorker());
@@ -199,11 +91,14 @@ void run()
     translations.load("fr", localeDirectory / "fr.lang");
 
     rtype::client::Console console;
-    const rtype::game::GameConfig config = readGameConfig(console);
+    const rtype::game::GameConfig config = rtype::client::readGameConfig(console);
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
     engine.setInputSource(devices);
-    rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, audio, metrics, style);
+    rtype::client::GameSessionSystem &sessions =
+        rtype::client::registerClientSystems(engine, devices, audio, metrics, style);
+    rtype::client::SceneAssetLoader sceneAssets(resources, audio);
+    UnloadSceneAssets unloadSceneAssets{engine};
     rtype::client::AssetPreload preload(resources);
     // Last: it only writes opacities, read when drawing
     const auto &loading = engine.getEcs().registerSystem<rtype::client::LoadingSystem>(preload);
@@ -213,6 +108,7 @@ void run()
     const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
     bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
     bool debugKeyWasDown = false;
+    rtype::client::SceneLoadStatus sceneLoadStatus(engine, devices);
     bool assetsLoaded = false;
 
     const auto playFrame = [&] {
@@ -221,6 +117,7 @@ void run()
             showColliderDebug = !showColliderDebug;
         }
         debugKeyWasDown = debugKeyDown;
+        sceneLoadStatus.update();
         network.poll();
         engine.update(window.frameTime());
         if (assetsLoaded) {
@@ -234,10 +131,12 @@ void run()
             colliderDebugRenderer.draw(renderer);
         }
         sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
+        sceneLoadStatus.draw(renderer);
         renderer.endFrame();
     };
 
-    createLoadingScenes(engine, resources, style, console, metrics, translations);
+    rtype::client::createLoadingScenes(engine, resources, style, console, metrics, translations);
+    engine.setSceneAssetLoader(sceneAssets, rtype::client::LoadingScene);
     engine.switchScene(rtype::client::LoadingScene);
     while (!window.shouldClose() && !loading.isFinished()) {
         playFrame();
@@ -251,7 +150,8 @@ void run()
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations);
     rtype::client::ShipSelection ships;
-    createScenes(engine, resources, style, window, metrics, games, config, translations, ships);
+    rtype::client::createMenuScenes(engine, resources, style, window, metrics, games, config, translations,
+                                    ships);
     rtype::client::registerClientCommands(console, engine, window);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {

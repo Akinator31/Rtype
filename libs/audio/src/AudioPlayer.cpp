@@ -3,6 +3,7 @@
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/core/AssetFile.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
+#include "rtype/core/ReadyFuture.hpp"
 #include "rtype/core/ResourceCache.hpp"
 
 #include <raylib.h>
@@ -238,6 +239,9 @@ MusicId AudioPlayer::loadMusic(const std::string &path)
 
 std::shared_future<SoundId> AudioPlayer::loadSoundAsync(const std::string &path)
 {
+    if (const auto loaded = _impl->sounds.findId(path)) {
+        return core::makeReadyFuture(*loaded);
+    }
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
     return impl->pendingSounds.request(
@@ -257,6 +261,9 @@ std::shared_future<SoundId> AudioPlayer::loadSoundAsync(const std::string &path)
 
 std::shared_future<MusicId> AudioPlayer::loadMusicAsync(const std::string &path)
 {
+    if (const auto loaded = _impl->musics.findId(path)) {
+        return core::makeReadyFuture(*loaded);
+    }
     const std::filesystem::path file = _impl->assetsDirectory / path;
     Impl *impl = _impl.get();
     return impl->pendingMusics.request(
@@ -271,6 +278,21 @@ void AudioPlayer::finishPendingLoads()
 {
     _impl->pendingSounds.pump();
     _impl->pendingMusics.pump();
+}
+
+bool AudioPlayer::unloadSound(const std::string &path)
+{
+    _impl->pendingSounds.forgetRequest(path);
+    return _impl->sounds.unload(path);
+}
+
+bool AudioPlayer::unloadMusic(const std::string &path)
+{
+    _impl->pendingMusics.forgetRequest(path);
+    if (const auto music = _impl->musics.findId(path); music && music == _impl->currentMusic) {
+        stopMusic();
+    }
+    return _impl->musics.unload(path);
 }
 
 void AudioPlayer::play(SoundId sound, const PlaySettings &settings)

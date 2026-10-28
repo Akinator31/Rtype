@@ -22,6 +22,28 @@ namespace rtype::client
 namespace
 {
 
+using engine::AssetType;
+
+/// The models, textures and sounds of the ships, the shots and the impacts, loaded before the game opens.
+const std::vector<engine::SceneAsset> GameAssets{
+    {AssetType::SmoothTexture, RTYPE_IMAGE_ENERGY_NOISE},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_GLOW_CORE},
+    {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
+    {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
+    {AssetType::Model, RTYPE_MODEL_SHOT_BASIC},
+    {AssetType::Model, RTYPE_MODEL_SHOT_SPIRAL},
+    {AssetType::Model, RTYPE_MODEL_ORB_PLASMA},
+    {AssetType::Model, RTYPE_MODEL_IMPACT_SPARK},
+    {AssetType::Model, RTYPE_MODEL_IMPACT_BURST},
+    {AssetType::Model, RTYPE_MODEL_IMPACT_SPLASH},
+    {AssetType::Model, RTYPE_MODEL_IMPACT_EXPLOSION},
+    {AssetType::Sound, RTYPE_SOUND_BASICAL_BLASTER},
+    {AssetType::Sound, RTYPE_SOUND_LOW_BLASTER},
+    {AssetType::Sound, RTYPE_SOUND_BIG_BLASTER},
+    {AssetType::Sound, RTYPE_SOUND_DESTRUCTION},
+    {AssetType::Sound, RTYPE_SOUND_COLLISION},
+};
+
 /// Distance of the HUD from the top left corner of the screen, and between two lines.
 constexpr float HudMargin = 40.0f;
 constexpr float HudLineSpacing = 56.0f;
@@ -159,12 +181,9 @@ void setCollisionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
     }
 }
 
-} // namespace
-
-GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
-                       const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                       GameSessionSystem &sessions, localization::Localization &translations)
-    : _engine(engine), _sessions(sessions), _translations(translations)
+/// Gives each kind of entity of the game its look and its sounds, from the GameAssets, loaded by then.
+void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                        audio::AudioPlayer &audio)
 {
     sessions.setShipLook(game::EntityKind::PlayerShip,
                          {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoTrails});
@@ -187,10 +206,22 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     setShotSounds(sessions, audio);
     setDestructionSounds(sessions, audio);
     setCollisionSounds(sessions, audio);
+}
+
+} // namespace
+
+GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
+                       const engine::Metrics &metrics, const engine::InterfaceStyle &style,
+                       GameSessionSystem &sessions, localization::Localization &translations)
+    : _engine(engine), _sessions(sessions), _translations(translations)
+{
     engine.createScene(
-        GameScene, {.updatesWhenCovered = true, .onBack = [&engine] { engine.pushScene(PauseScene); }},
-        [this, &resources, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {
-            build(scene, resources, metrics, style);
+        GameScene,
+        {.updatesWhenCovered = true,
+         .onBack = [&engine] { engine.pushScene(PauseScene); },
+         .assets = GameAssets},
+        [this, &resources, &audio, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {
+            build(scene, resources, audio, metrics, style);
         });
     engine.createScene(PauseScene, {.overlay = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
@@ -219,9 +250,11 @@ void GameScenes::end()
     }
 }
 
-void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources,
+void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
+    configureGameLooks(_sessions, resources, audio);
+
     ecs::Ecs &ecs = _engine.getEcs();
 
     const ecs::entity_t sky = ecs.createEntity();
@@ -231,6 +264,15 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
     ecs.addComponent<engine::Light>(sky, GameLight);
 
+    buildHud(scene, style);
+
+    _onEnd = std::exchange(_nextEnd, nullptr);
+    _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
+}
+
+void GameScenes::buildHud(engine::SceneId scene, const engine::InterfaceStyle &style)
+{
+    ecs::Ecs &ecs = _engine.getEcs();
     // One line per player, in its colour, empty while the slot is free
     engine::InterfaceBuilder hud(ecs, scene, style);
     for (std::uint8_t slot = 0; slot < game::MaxPlayers; ++slot) {
@@ -249,9 +291,6 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
              HudMargin + (static_cast<float>(slot) * HudLineSpacing)});
         ecs.getComponent<engine::Text>(line).color = playerColor(slot);
     }
-
-    _onEnd = std::exchange(_nextEnd, nullptr);
-    _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
 }
 
 } // namespace rtype::client
