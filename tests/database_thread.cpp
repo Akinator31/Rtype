@@ -2,10 +2,13 @@
 // left at destruction, and a lost connection opened again
 // (docs/architecture/database.md#the-database-thread).
 
+#include "TestDatabase.hpp"
 #include "rtype/database/Database.hpp"
 #include "rtype/database/DatabaseThread.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -28,12 +31,24 @@ using namespace std::chrono_literals;
 using rtype::database::Address;
 using rtype::database::Database;
 using rtype::database::DatabaseThread;
+using rtype::database::Engine;
 using rtype::database::Migration;
+using rtype::test::TestDatabase;
 
 namespace
 {
 
-/// A directory of its own for each test, removed at the end: CTest runs them at once.
+const std::vector<Migration> Migrations{
+    {1, "create the scores table", {"CREATE TABLE scores (id BIGINT PRIMARY KEY, score BIGINT NOT NULL)"}}};
+
+Database openScores(const TestDatabase &test)
+{
+    Database database = test.open();
+    database.migrate(Migrations);
+    return database;
+}
+
+/// A SQLite database in a directory of its own, which a test can move away to make it unreachable.
 struct TempDirectory {
     std::filesystem::path path;
 
@@ -59,10 +74,7 @@ struct TempDirectory {
     [[nodiscard]] Database open() const
     {
         Database database = Database::open(Address::parse("sqlite:" + (path / "rtype.db").string()));
-        database.migrate(
-            std::vector<Migration>{{1,
-                                    "create the scores table",
-                                    {"CREATE TABLE scores (id BIGINT PRIMARY KEY, score BIGINT NOT NULL)"}}});
+        database.migrate(Migrations);
         return database;
     }
 };
@@ -127,10 +139,12 @@ void loseConnection(Database &database)
 
 TEST_CASE("Tasks run in order on the database thread, their results come back through post", "[database]")
 {
-    const TempDirectory directory("order");
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_thread_order");
     Mailbox mailbox;
-    DatabaseThread thread(directory.open(), mailbox.post());
-    const std::thread::id test = std::this_thread::get_id();
+    DatabaseThread thread(openScores(test), mailbox.post());
+    const std::thread::id testThread = std::this_thread::get_id();
     std::vector<std::string> results;
     std::atomic<bool> onDatabaseThread = true;
 
@@ -138,11 +152,11 @@ TEST_CASE("Tasks run in order on the database thread, their results come back th
         REQUIRE(thread.run(
             "insert a score",
             [&, id](Database &database) {
-                onDatabaseThread = onDatabaseThread && std::this_thread::get_id() != test;
+                onDatabaseThread = onDatabaseThread && std::this_thread::get_id() != testThread;
                 insertScore(database, id);
             },
             [&, id](bool done) {
-                CHECK(std::this_thread::get_id() == test);
+                CHECK(std::this_thread::get_id() == testThread);
                 results.push_back(std::format("insert {} {}", id, done));
             }));
     }
@@ -158,9 +172,11 @@ TEST_CASE("Tasks run in order on the database thread, their results come back th
 
 TEST_CASE("A task that fails gives an empty result, and the next ones run", "[database]")
 {
-    const TempDirectory directory("failure");
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_thread_failure");
     Mailbox mailbox;
-    DatabaseThread thread(directory.open(), mailbox.post());
+    DatabaseThread thread(openScores(test), mailbox.post());
     std::optional<std::optional<long long>> missingTable;
     std::optional<bool> duplicate;
     std::optional<std::optional<long long>> count;
@@ -188,9 +204,11 @@ TEST_CASE("A task that fails gives an empty result, and the next ones run", "[da
 
 TEST_CASE("A task given while the queue is full is refused", "[database]")
 {
-    const TempDirectory directory("full");
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_thread_full");
     Mailbox mailbox;
-    DatabaseThread thread(directory.open(), mailbox.post(), {.maxPending = 1});
+    DatabaseThread thread(openScores(test), mailbox.post(), {.maxPending = 1});
     std::promise<void> release;
     std::shared_future<void> released = release.get_future().share();
     std::atomic<bool> started = false;
@@ -217,24 +235,28 @@ TEST_CASE("A task given while the queue is full is refused", "[database]")
 
 TEST_CASE("Destroying the thread runs the tasks already given", "[database]")
 {
-    const TempDirectory directory("destroyed");
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_thread_destroyed");
     Mailbox mailbox;
     {
-        DatabaseThread thread(directory.open(), mailbox.post());
+        DatabaseThread thread(openScores(test), mailbox.post());
         for (long long id = 1; id <= 50; ++id) {
             thread.run("insert a score", [id](Database &database) { insertScore(database, id); });
         }
     }
 
-    Database database = directory.open();
+    Database database = openScores(test);
     CHECK(countScores(database) == 50);
 }
 
 TEST_CASE("A lost connection is opened again before the next task", "[database]")
 {
-    const TempDirectory directory("reconnect");
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_thread_reconnect");
     Mailbox mailbox;
-    DatabaseThread thread(directory.open(), mailbox.post(), {.firstRetryDelay = 10ms, .maxRetryDelay = 20ms});
+    DatabaseThread thread(openScores(test), mailbox.post(), {.firstRetryDelay = 10ms, .maxRetryDelay = 20ms});
     std::optional<bool> lost;
     std::optional<std::optional<long long>> count;
 
@@ -245,6 +267,30 @@ TEST_CASE("A lost connection is opened again before the next task", "[database]"
     REQUIRE(mailbox.runUntil([&] { return count.has_value(); }));
     // The task that lost it fails, not run again; the next one runs on the same database
     CHECK(lost == false);
+    CHECK(count == 1);
+}
+
+TEST_CASE("A connection the PostgreSQL server ends is opened again", "[database]")
+{
+    if (!rtype::database::isBuiltWith(Engine::Postgresql) || !rtype::test::testPostgresqlUrl()) {
+        SKIP("No PostgreSQL server for the tests: set RTYPE_TEST_POSTGRESQL_URL");
+    }
+    const TestDatabase test(Engine::Postgresql, "database_thread_terminated");
+    Mailbox mailbox;
+    DatabaseThread thread(openScores(test), mailbox.post(), {.firstRetryDelay = 10ms, .maxRetryDelay = 20ms});
+    std::optional<bool> ended;
+    std::optional<std::optional<long long>> count;
+
+    thread.run("insert a score", [](Database &database) { insertScore(database, 1); });
+    // As an administrator, or a restart of the server, would
+    thread.run(
+        "end the connection",
+        [](Database &database) { database.session() << "SELECT pg_terminate_backend(pg_backend_pid())"; },
+        [&](bool done) { ended = done; });
+    thread.run("count the scores", countScores, [&](std::optional<long long> value) { count = value; });
+
+    REQUIRE(mailbox.runUntil([&] { return count.has_value(); }));
+    CHECK(ended == false);
     CHECK(count == 1);
 }
 

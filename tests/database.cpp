@@ -3,9 +3,12 @@
 
 #include "rtype/database/Database.hpp"
 
+#include "TestDatabase.hpp"
 #include "rtype/database/Address.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -21,32 +24,11 @@ using rtype::database::Database;
 using rtype::database::Engine;
 using rtype::database::Error;
 using rtype::database::Migration;
+using rtype::test::tableExists;
+using rtype::test::TestDatabase;
 
 namespace
 {
-
-/// A directory of its own for each test, removed at the end: CTest runs them at once.
-struct TempDirectory {
-    std::filesystem::path path;
-
-    explicit TempDirectory(std::string_view name)
-        : path(std::filesystem::temp_directory_path() / std::string("rtype_tests_database_").append(name))
-    {
-        std::filesystem::remove_all(path);
-    }
-    ~TempDirectory()
-    {
-        std::error_code ignored;
-        std::filesystem::remove_all(path, ignored);
-    }
-    TempDirectory(const TempDirectory &) = delete;
-    TempDirectory &operator=(const TempDirectory &) = delete;
-
-    [[nodiscard]] Address database() const
-    {
-        return Address::parse("sqlite:" + (path / "rtype.db").string());
-    }
-};
 
 const std::vector<Migration> Migrations{
     {1,
@@ -58,14 +40,6 @@ const std::vector<Migration> Migrations{
       "score BIGINT NOT NULL)",
       "CREATE INDEX games_by_player ON games (player_id)"}},
 };
-
-bool tableExists(Database &database, const std::string &table)
-{
-    int count = 0;
-    database.session() << "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = :name",
-        soci::use(table), soci::into(count);
-    return count == 1;
-}
 
 } // namespace
 
@@ -107,12 +81,12 @@ TEST_CASE("An address is shown without its password", "[database]")
 
 TEST_CASE("A SQLite database is created with its directories, empty", "[database]")
 {
-    const TempDirectory directory("created");
-    const Address address = Address::parse("sqlite:" + (directory.path / "nested" / "rtype.db").string());
+    const TestDatabase test(Engine::Sqlite, "database_created");
+    const Address address = Address::parse("sqlite:" + (test.directory() / "nested" / "rtype.db").string());
 
     Database database = Database::open(address);
 
-    CHECK(std::filesystem::exists(directory.path / "nested" / "rtype.db"));
+    CHECK(std::filesystem::exists(test.directory() / "nested" / "rtype.db"));
     CHECK(database.engine() == Engine::Sqlite);
     CHECK(database.address() == address);
     CHECK(database.schemaVersion() == 0);
@@ -120,37 +94,41 @@ TEST_CASE("A SQLite database is created with its directories, empty", "[database
 
 TEST_CASE("A file name with spaces is a file name", "[database]")
 {
-    const TempDirectory directory("spaces");
+    const TestDatabase test(Engine::Sqlite, "database_spaces");
 
     Database database =
-        Database::open(Address::parse("sqlite:" + (directory.path / "my games" / "r type.db").string()));
+        Database::open(Address::parse("sqlite:" + (test.directory() / "my games" / "r type.db").string()));
 
-    CHECK(std::filesystem::exists(directory.path / "my games" / "r type.db"));
+    CHECK(std::filesystem::exists(test.directory() / "my games" / "r type.db"));
 }
 
 TEST_CASE("A file that is not a database is refused, and left as it is", "[database]")
 {
-    const TempDirectory directory("not_a_database");
-    std::filesystem::create_directories(directory.path);
+    const TestDatabase test(Engine::Sqlite, "database_not_a_database");
+    std::filesystem::create_directories(test.directory());
     const std::string content(4096, 'x');
-    std::ofstream(directory.path / "rtype.db", std::ios::binary) << content;
+    std::ofstream(test.directory() / "rtype.db", std::ios::binary) << content;
 
-    CHECK_THROWS_AS(Database::open(directory.database()), Error);
+    CHECK_THROWS_AS(Database::open(test.address()), Error);
 
-    std::ifstream file(directory.path / "rtype.db", std::ios::binary);
+    std::ifstream file(test.directory() / "rtype.db", std::ios::binary);
     const std::string kept((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     CHECK(kept == content);
 }
 
-TEST_CASE("A PostgreSQL database needs a program built with PostgreSQL", "[database]")
+TEST_CASE("A PostgreSQL database that cannot be opened says why, without its password", "[database]")
 {
+    // Nothing listens on port 1: refused at once
+    const Address address = Address::parse("postgresql://rtype:secret@127.0.0.1:1/rtype?connect_timeout=2");
     try {
-        (void)Database::open(Address::parse("postgresql://rtype:secret@db.example.org/rtype"));
+        (void)Database::open(address);
         FAIL("opened");
     } catch (const Error &error) {
         const std::string message = error.what();
-        CHECK(message.find("built without PostgreSQL") != std::string::npos);
+        CAPTURE(message);
         CHECK(message.find("secret") == std::string::npos);
+        CHECK((message.find("built without PostgreSQL") != std::string::npos) ==
+              !rtype::database::isBuiltWith(Engine::Postgresql));
     }
 }
 
@@ -158,10 +136,12 @@ TEST_CASE("A PostgreSQL database needs a program built with PostgreSQL", "[datab
 
 TEST_CASE("Migrations are applied in order, once", "[database]")
 {
-    const TempDirectory directory("migrations");
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_migrations");
 
     {
-        Database database = Database::open(directory.database());
+        Database database = Database::open(test.address());
         CHECK(database.migrate(std::span(Migrations).first(1)) == 1);
         CHECK(database.schemaVersion() == 1);
         CHECK(tableExists(database, "players"));
@@ -169,7 +149,7 @@ TEST_CASE("Migrations are applied in order, once", "[database]")
     }
     {
         // Reopened by a newer program: only the new migration
-        Database database = Database::open(directory.database());
+        Database database = Database::open(test.address());
         CHECK(database.migrate(Migrations) == 1);
         CHECK(database.schemaVersion() == 2);
         CHECK(tableExists(database, "games"));
@@ -177,7 +157,7 @@ TEST_CASE("Migrations are applied in order, once", "[database]")
         CHECK(database.migrate(Migrations) == 0);
     }
 
-    Database database = Database::open(directory.database());
+    Database database = Database::open(test.address());
     std::vector<long long> versions(10);
     std::vector<std::string> descriptions(10);
     database.session() << "SELECT version, description FROM schema_migrations ORDER BY version",
@@ -188,13 +168,15 @@ TEST_CASE("Migrations are applied in order, once", "[database]")
 
 TEST_CASE("A migration that fails leaves the database at the previous one", "[database]")
 {
-    const TempDirectory directory("failing_migration");
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_failing_migration");
     std::vector<Migration> migrations = Migrations;
     migrations.push_back(
         {3,
          "a broken migration",
          {"CREATE TABLE ships (id BIGINT PRIMARY KEY)", "CREATE TABLE ships (id BIGINT PRIMARY KEY)"}});
-    Database database = Database::open(directory.database());
+    Database database = Database::open(test.address());
 
     CHECK_THROWS_AS(database.migrate(migrations), Error);
 
@@ -206,9 +188,11 @@ TEST_CASE("A migration that fails leaves the database at the previous one", "[da
 
 TEST_CASE("A database newer than the program is refused", "[database]")
 {
-    const TempDirectory directory("newer");
-    Database::open(directory.database()).migrate(Migrations);
-    Database database = Database::open(directory.database());
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_newer");
+    Database::open(test.address()).migrate(Migrations);
+    Database database = Database::open(test.address());
 
     CHECK_THROWS_AS(database.migrate(std::span(Migrations).first(1)), Error);
     CHECK(database.schemaVersion() == 2);
@@ -216,11 +200,13 @@ TEST_CASE("A database newer than the program is refused", "[database]")
 
 TEST_CASE("A migration known by another description is refused", "[database]")
 {
-    const TempDirectory directory("other_branch");
-    Database::open(directory.database()).migrate(Migrations);
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_other_branch");
+    Database::open(test.address()).migrate(Migrations);
     std::vector<Migration> other = Migrations;
     other[1].description = "create the scores table";
-    Database database = Database::open(directory.database());
+    Database database = Database::open(test.address());
 
     try {
         database.migrate(other);
@@ -232,8 +218,10 @@ TEST_CASE("A migration known by another description is refused", "[database]")
 
 TEST_CASE("Migrations must be numbered 1, 2, 3..., with a description and statements", "[database]")
 {
-    const TempDirectory directory("numbering");
-    Database database = Database::open(directory.database());
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_numbering");
+    Database database = Database::open(test.address());
     const std::vector<std::vector<Migration>> invalid{
         {{0, "zero", {"SELECT 1"}}},
         {{2, "starts at two", {"SELECT 1"}}},
@@ -253,8 +241,10 @@ TEST_CASE("Migrations must be numbered 1, 2, 3..., with a description and statem
 
 TEST_CASE("A transaction is committed if its function returns, rolled back if it throws", "[database]")
 {
-    const TempDirectory directory("transactions");
-    Database database = Database::open(directory.database());
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_transactions");
+    Database database = Database::open(test.address());
     database.migrate(Migrations);
 
     const int inserted = database.transaction([&] {
@@ -277,8 +267,10 @@ TEST_CASE("A transaction is committed if its function returns, rolled back if it
 
 TEST_CASE("The SQL both engines share works", "[database]")
 {
-    const TempDirectory directory("portable_sql");
-    Database database = Database::open(directory.database());
+    const Engine engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const TestDatabase test(engine, "database_portable_sql");
+    Database database = Database::open(test.address());
     database.migrate(Migrations);
     soci::session &sql = database.session();
 
