@@ -283,6 +283,13 @@ sequenceDiagram
 | It exits, or closes its connection, without `GAME_OVER` | `LEFT_GAME (GAME_CRASHED)` | Killed if still there |
 | `PLAYER_DISCONNECTED (TIMED_OUT)` | `LEFT_GAME (TIMED_OUT)` | — |
 | The master stops | Their UDP sessions get `DISCONNECT (SHUTDOWN)` | `SHUTDOWN (MASTER_STOPPING)` |
+| A malformed or unexpected message, `GAME_STATUS` included | `LEFT_GAME (GAME_CRASHED)` | Killed |
+
+**The status of each game.** Every second, a running instance sends `GAME_STATUS`: its tick, its wave, and for
+each connected player its score, whether it is alive, and its latency. `Games` keeps the last one and when it
+came; `Games::status(id)` gives it with its age, for a running game only. A game without `GAME_STATUS` for 3
+seconds (`GamesSettings::statusTimeout`) is **stale**: shown so, not stopped, since a process that dies is
+already caught by its exit. The administration (step 04 of the accounts plan) reads it from there.
 
 The processes are checked every 50 ms (`exitCode()` never blocks). An instance that does not exit within 5
 seconds of `SHUTDOWN` or `GAME_OVER` is killed. On Ctrl+C, the master closes its lobby, shuts every game down,
@@ -315,6 +322,9 @@ sequenceDiagram
     loop every tick
         C->>I: INPUT
         I->>C: SNAPSHOT (every 2 ticks), ENTITIES_DESTROYED
+    end
+    loop every second
+        I->>M: GAME_STATUS (tick, wave, scores, latencies)
     end
     M->>I: SHUTDOWN
     I->>C: DISCONNECT (SHUTDOWN)
@@ -364,7 +374,11 @@ flowchart LR
   - the game over goes to every client (`GAME_OVER`, with the last snapshot), then to the instance with the
     score of each player; nothing is published after it;
   - a session that closes takes the ship away; the others receive `PLAYER_LEFT`, and the master
-    `PLAYER_DISCONNECTED`, unless it removed the player itself (`REMOVE_PLAYER`).
+    `PLAYER_DISCONNECTED`, unless it removed the player itself (`REMOVE_PLAYER`);
+  - `status()` builds the `GAME_STATUS` sent every second by a `Timer` of the instance: the tick, the wave
+    and the players of the last result published, and the round-trip time each session measures from the
+    acknowledgements. The game thread copies nothing more for it: its numbers already come with each result,
+    and the network thread keeps the last, so no lock is held during a tick.
 - Its `SessionHost` is updated at 60 Hz by a `Timer` of the loop, not by the game thread: the heartbeats and
   resends go on even if the game stalls.
 
