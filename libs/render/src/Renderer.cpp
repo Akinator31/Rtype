@@ -1,5 +1,6 @@
 #include "rtype/render/Renderer.hpp"
 
+#include "AntialiasPass.hpp"
 #include "EnergyShader.hpp"
 #include "FilterShader.hpp"
 #include "GlowPass.hpp"
@@ -200,6 +201,8 @@ public:
             throw std::runtime_error("Cannot create the render target");
         }
         SetTextureFilter(_target.texture, TEXTURE_FILTER_BILINEAR);
+        // The smoothing of the edges reads the pixels around each one: none from the opposite edge
+        SetTextureWrap(_target.texture, TEXTURE_WRAP_CLAMP);
     }
     ~RenderTarget()
     {
@@ -345,6 +348,7 @@ struct Renderer::Impl {
     Vector2 gameSize;
     Rectangle frameArea;
     std::optional<RenderTarget> target;
+    detail::AntialiasPass antialiasPass;
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
     detail::EnergyShader energyShader;
@@ -353,6 +357,7 @@ struct Renderer::Impl {
     std::vector<GlowDraw> glowQueue;
     ColorFilter colorFilter = ColorFilter::None;
     float vignetteStrength = 0.22f;
+    bool antialiasing = true;
     bool inFrame = false;
 
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
@@ -465,6 +470,16 @@ void Renderer::setVignette(float strength)
 float Renderer::vignette() const
 {
     return _impl->vignetteStrength;
+}
+
+void Renderer::setAntialiasing(bool enabled)
+{
+    _impl->antialiasing = enabled;
+}
+
+bool Renderer::antialiasing() const
+{
+    return _impl->antialiasing;
 }
 
 Vector2 Renderer::windowToGame(Vector2 position) const
@@ -700,10 +715,13 @@ void Renderer::drawGlow()
 {
     _impl->requireFrame();
     const Vector2 resolution = _impl->target->resolution();
-    // The glow and the vignette are drawn in pixels of the frame, the glow in images of its own: leave the
-    // game view and the frame, then come back to them, keeping what the frame holds
+    // The smoothing, the glow and the vignette are drawn in pixels of the frame, the first two in images of
+    // their own: leave the game view and the frame, then come back to them, keeping what the frame holds
     EndMode2D();
     EndTextureMode();
+    if (_impl->antialiasing) {
+        _impl->antialiasPass.apply(_impl->target->get());
+    }
     const Texture2D *glow = nullptr;
     if (!_impl->glowQueue.empty()) {
         glow = _impl->glowPass.render(toRaylib(resolution), [this] {

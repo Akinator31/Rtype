@@ -1,0 +1,142 @@
+#version 330
+
+// Fragment shader smoothing the jagged edges of the 3D models (render::Renderer::drawGlow()): FXAA 3.11
+// (Lottes, 2009), quality version. The frame is drawn in an image without multisampling: each edge of a model
+// is a staircase of pixels, which crawls as the model moves. raylib provides the vertex shader and the frame
+// (texture0); the renderer sets texel, the size of one of its pixels in texture coordinates.
+//
+// The edges are found where the brightness changes: along each one, the shader looks for both of its ends,
+// then blends each pixel with its neighbour across the edge by how far it is from them, as a line drawn with
+// coverage would. Pixels alone in their brightness (a sparkle, a thin line) are blended with their neighbours
+// a little too. Flat areas, the most of the frame, stop at the first test.
+
+in vec2 fragTexCoord;
+
+uniform sampler2D texture0;
+uniform vec2 texel;
+
+out vec4 finalColor;
+
+// Smallest change of brightness taken as an edge, in the dark and relative to the brightest neighbour
+const float edgeThresholdMin = 0.0312;
+const float edgeThreshold = 0.125;
+// How much the pixels alone in their brightness are blended: 0 not at all, 1 fully, softer but blurrier
+const float subpixelQuality = 0.5;
+// Steps of the search for the ends of an edge, in pixels: longer and longer, to reach far ends in a few
+// samples
+const int searchSteps = 12;
+const float searchStep[12] = float[](1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 2.0, 2.0, 2.0, 2.0, 4.0, 8.0);
+
+// The perceived brightness of the frame, which is in sRGB
+float brightness(vec2 position)
+{
+    return dot(texture(texture0, position).rgb, vec3(0.299, 0.587, 0.114));
+}
+
+float brightness(vec2 position, vec2 offset)
+{
+    return brightness(position + offset * texel);
+}
+
+void main()
+{
+    vec2 position = fragTexCoord;
+    vec3 colour = texture(texture0, position).rgb;
+    float centre = dot(colour, vec3(0.299, 0.587, 0.114));
+    float down = brightness(position, vec2(0.0, -1.0));
+    float up = brightness(position, vec2(0.0, 1.0));
+    float left = brightness(position, vec2(-1.0, 0.0));
+    float right = brightness(position, vec2(1.0, 0.0));
+
+    float lowest = min(centre, min(min(down, up), min(left, right)));
+    float highest = max(centre, max(max(down, up), max(left, right)));
+    float range = highest - lowest;
+    if (range < max(edgeThresholdMin, highest * edgeThreshold)) {
+        finalColor = vec4(colour, 1.0);
+        return;
+    }
+
+    float downLeft = brightness(position, vec2(-1.0, -1.0));
+    float upRight = brightness(position, vec2(1.0, 1.0));
+    float upLeft = brightness(position, vec2(-1.0, 1.0));
+    float downRight = brightness(position, vec2(1.0, -1.0));
+    float downUp = down + up;
+    float leftRight = left + right;
+    float leftCorners = downLeft + upLeft;
+    float downCorners = downLeft + downRight;
+    float rightCorners = downRight + upRight;
+    float upCorners = upRight + upLeft;
+
+    // Whether the edge runs along x (its pixels are above and below each other) or along y
+    float acrossY = abs(-2.0 * left + leftCorners) + abs(-2.0 * centre + downUp) * 2.0 +
+                    abs(-2.0 * right + rightCorners);
+    float acrossX = abs(-2.0 * up + upCorners) + abs(-2.0 * centre + leftRight) * 2.0 +
+                    abs(-2.0 * down + downCorners);
+    bool horizontal = acrossY >= acrossX;
+
+    // The side of the pixel the edge is on: where the brightness changes the most
+    float before = horizontal ? down : left;
+    float after = horizontal ? up : right;
+    float gradientBefore = before - centre;
+    float gradientAfter = after - centre;
+    bool towardsBefore = abs(gradientBefore) >= abs(gradientAfter);
+    float gradient = 0.25 * max(abs(gradientBefore), abs(gradientAfter));
+    float stepAcross = horizontal ? texel.y : texel.x;
+    float edgeBrightness;
+    if (towardsBefore) {
+        stepAcross = -stepAcross;
+        edgeBrightness = 0.5 * (before + centre);
+    } else {
+        edgeBrightness = 0.5 * (after + centre);
+    }
+
+    // Search both ways along the edge, half a pixel across it, until its brightness changes
+    vec2 onEdge = position;
+    if (horizontal) {
+        onEdge.y += stepAcross * 0.5;
+    } else {
+        onEdge.x += stepAcross * 0.5;
+    }
+    vec2 along = horizontal ? vec2(texel.x, 0.0) : vec2(0.0, texel.y);
+    vec2 end1 = onEdge - along;
+    vec2 end2 = onEdge + along;
+    float change1 = brightness(end1) - edgeBrightness;
+    float change2 = brightness(end2) - edgeBrightness;
+    bool found1 = abs(change1) >= gradient;
+    bool found2 = abs(change2) >= gradient;
+    for (int i = 1; i < searchSteps && !(found1 && found2); ++i) {
+        if (!found1) {
+            end1 -= along * searchStep[i];
+            change1 = brightness(end1) - edgeBrightness;
+            found1 = abs(change1) >= gradient;
+        }
+        if (!found2) {
+            end2 += along * searchStep[i];
+            change2 = brightness(end2) - edgeBrightness;
+            found2 = abs(change2) >= gradient;
+        }
+    }
+
+    // Blend with the pixel across the edge by how far the nearest end is, if the edge ends on this side
+    float distance1 = horizontal ? position.x - end1.x : position.y - end1.y;
+    float distance2 = horizontal ? end2.x - position.x : end2.y - position.y;
+    bool nearer1 = distance1 < distance2;
+    float nearest = min(distance1, distance2);
+    float edgeOffset = 0.5 - nearest / (distance1 + distance2);
+    bool darker = centre < edgeBrightness;
+    bool endsHere = ((nearer1 ? change1 : change2) < 0.0) != darker;
+    float offset = endsHere ? edgeOffset : 0.0;
+
+    // Pixels alone in their brightness are blended too
+    float average = (2.0 * (downUp + leftRight) + leftCorners + rightCorners) / 12.0;
+    float alone = clamp(abs(average - centre) / range, 0.0, 1.0);
+    float smoothAlone = (-2.0 * alone + 3.0) * alone * alone;
+    offset = max(offset, smoothAlone * smoothAlone * subpixelQuality);
+
+    if (horizontal) {
+        position.y += offset * stepAcross;
+    } else {
+        position.x += offset * stepAcross;
+    }
+    finalColor = vec4(texture(texture0, position).rgb, 1.0);
+}

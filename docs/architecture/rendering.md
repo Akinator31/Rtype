@@ -280,16 +280,19 @@ Models emit their emission map multiplied by their emissive colour, or that colo
 (the engine flames of some ships): it shows on the night side and glows (`drawGlow()`). The emissive
 strength of glTF is not applied.
 
-### Glow, vignette and dithering
+### Antialiasing, glow, vignette and dithering
 
 `drawGlow()`, called after the 3D models and before the interface:
 
-1. draws the energy models and the light the lit models emit (engine flames, windows, beacons) again, at a
+1. smooths the jagged edges of what the frame holds (FXAA, `Antialiasing.frag`, `setAntialiasing()`, on by
+   default). The frame is drawn in an image without multisampling: without it, the edges of the models are
+   staircases of pixels that crawl as they move. The interface, drawn afterwards, keeps its sharp text;
+2. draws the energy models and the light the lit models emit (engine flames, windows, beacons) again, at a
    quarter of the resolution. The lit models write their depth there, so that a hull hides the glow of what
    is behind it;
-2. blurs this image, then blurs it again at an eighth of the resolution and adds it back as a wider, fainter
+3. blurs this image, then blurs it again at an eighth of the resolution and adds it back as a wider, fainter
    halo, so that the light fades out slowly instead of stopping at the edge of the blur;
-3. adds the result over the frame, then darkens its corners (`setVignette()`, 0.22 by default, 0 to turn it
+4. adds the result over the frame, then darkens its corners (`setVignette()`, 0.22 by default, 0 to turn it
    off). The interface, drawn afterwards, is not darkened.
 
 `endFrame()` always adds a faint noise of plus or minus one level per channel (dithering) when it copies the
