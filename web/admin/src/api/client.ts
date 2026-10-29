@@ -94,4 +94,6 @@ export const api = {
     request<{ recipients: number }>('POST', '/api/messages', { text, gameId }),
   ban: (address: string, duration: number, reason: string) =>
     request<{ ban: Ban; removed: number }>('POST', '/api/bans', { address, duration, reason }),
+  unban: (address: string, reason: string) =>
+    request<{ address: string }>('POST', '/api/bans/lift', { address, reason }),
 };

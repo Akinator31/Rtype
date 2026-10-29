@@ -42,7 +42,7 @@ export interface Player {
   joinedAt: number;
 }
 
-export type ActionKind = 'kick' | 'end_game' | 'message' | 'ban';
+export type ActionKind = 'kick' | 'end_game' | 'message' | 'ban' | 'unban';
 
 export interface Action {
   id: number;

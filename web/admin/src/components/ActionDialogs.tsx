@@ -83,6 +83,26 @@ export function BanDialog({ address, onClose }: { address: string; onClose: () =
   );
 }
 
+export function UnbanDialog({ address, onClose }: { address: string; onClose: () => void }) {
+  const [reason, setReason] = useState('');
+  return (
+    <ConfirmDialog
+      title={strings.dialog.unbanTitle(address)}
+      body={strings.dialog.unbanBody}
+      confirmLabel={strings.dialog.unbanConfirm}
+      tone="light"
+      ready={byteLength(reason) <= MaxTextBytes}
+      onClose={onClose}
+      onConfirm={async () => {
+        await api.unban(address, reason.trim());
+        notify('bonus', strings.notify.unbanned(address), reason.trim() || undefined);
+      }}
+    >
+      <ReasonField value={reason} onChange={setReason} />
+    </ConfirmDialog>
+  );
+}
+
 export function EndGameDialog({
   game,
   onClose,

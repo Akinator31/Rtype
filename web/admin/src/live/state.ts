@@ -118,6 +118,13 @@ export function describeAction(action: Action): Omit<FeedEntry, 'key' | 'at'> {
         verb: `banned${reason}`,
         object: action.actor,
       };
+    case 'unban':
+      return {
+        tone: 'bonus',
+        subject: action.target.replace('address:', ''),
+        verb: `ban lifted${reason}`,
+        object: action.actor,
+      };
     default:
       return { tone: 'info', subject: action.action, verb: action.target, object: action.actor };
   }

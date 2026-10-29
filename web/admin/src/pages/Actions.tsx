@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ApiError, api } from '../api/client';
 import type { Action, Ban } from '../api/types';
+import { UnbanDialog } from '../components/ActionDialogs';
 import { EventLine } from '../components/EventFeed';
 import { FlareButton } from '../components/Flare';
 import { Empty, PageHeader, Surface } from '../components/Layout';
@@ -24,6 +25,7 @@ export function Actions() {
   const [more, setMore] = useState(false);
   const [bans, setBans] = useState<Ban[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [lifting, setLifting] = useState<string | null>(null);
   const t = strings.actions;
   const latest = live.actions[0]?.id;
 
@@ -131,6 +133,15 @@ export function Actions() {
                     <Table.Cell textAlign="right" color="fg.muted">
                       {t.expires} {dateTime(ban.expiresAt)}
                     </Table.Cell>
+                    <Table.Cell textAlign="right">
+                      <FlareButton
+                        size="sm"
+                        onClick={() => setLifting(ban.address)}
+                        aria-label={`${t.lift} ${ban.address}`}
+                      >
+                        {t.lift}
+                      </FlareButton>
+                    </Table.Cell>
                   </Table.Row>
                 ))}
               </Table.Body>
@@ -138,6 +149,7 @@ export function Actions() {
           </Table.ScrollArea>
         )}
       </Surface>
+      {lifting !== null && <UnbanDialog address={lifting} onClose={() => setLifting(null)} />}
     </>
   );
 }
