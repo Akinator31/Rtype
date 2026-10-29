@@ -4,6 +4,7 @@
 #include "Common/GameConfig.hpp"
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
+#include "Http.hpp"
 #include "Server.hpp"
 #include "rtype/network/Tls.hpp"
 
@@ -90,14 +91,16 @@ TEST_CASE("A master with a configuration that has errors does not start", "[serv
     const std::string keyArgument = key.string();
     const std::string configArgument = directory.string();
     const std::string databaseArgument = "sqlite:" + (directory / "rtype.db").string();
+    const std::string settingsArgument = testing::webOnAnyPort(directory / "web.toml").string();
     std::ostringstream out;
     std::istringstream in;
 
     CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument, "--database",
-                                            databaseArgument},
+                                            databaseArgument, "--settings", settingsArgument},
               out, in) == Success);
     CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument, "--config",
-                                            configArgument, "--database", databaseArgument},
+                                            configArgument, "--database", databaseArgument, "--settings",
+                                            settingsArgument},
               out, in) == Failure);
     std::filesystem::remove_all(directory);
 }

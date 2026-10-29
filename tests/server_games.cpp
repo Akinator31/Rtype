@@ -4,10 +4,12 @@
 
 #include "Common/Options.hpp"
 #include "GameServers.hpp"
+#include "Http.hpp"
 #include "LobbyClient.hpp"
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "Master/Process.hpp"
+#include "Web/LocalAccess.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/Address.hpp"
@@ -405,6 +407,8 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
     const std::filesystem::path database =
         std::filesystem::temp_directory_path() / "rtype_tests_games_master.db";
     std::filesystem::remove(database);
+    const std::filesystem::path settings =
+        testing::webOnAnyPort(std::filesystem::temp_directory_path() / "rtype_tests_games_master.toml");
     std::uint16_t lobbyPort = 0;
     {
         const TcpListener probe(loop, Address::loopbackIpv4(0));
@@ -418,6 +422,7 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
         "--game-ports", std::to_string(gamePort) + "-" + std::to_string(gamePort),
         "--key",        key.string(),
         "--database",   "sqlite:" + database.string(),
+        "--settings",   settings.string(),
         "--log-level",  "warning"};
     Process server(RTYPE_TEST_SERVER, arguments, {.input = {}, .stopGrace = testing::Patience});
 
@@ -453,4 +458,6 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
     CHECK(server.wait(testing::Patience) == Success);
     std::filesystem::remove(key);
     std::filesystem::remove(database);
+    std::filesystem::remove(settings);
+    std::filesystem::remove(std::filesystem::temp_directory_path() / AdminUrlFileName);
 }

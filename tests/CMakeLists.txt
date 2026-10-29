@@ -62,6 +62,7 @@ add_executable(rtype_tests
     server_options.cpp
     server_replication.cpp
     server_settings.cpp
+    server_web.cpp
     session.cpp
     settings.cpp
     shaders.cpp
@@ -73,7 +74,7 @@ add_executable(rtype_tests
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
     rtype::scripting rtype::shaders r-type_client_core r-type_server_core
-    Catch2::Catch2WithMain)
+    CURL::libcurl Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
 add_executable(rtype_test_child helpers/process_child.cpp)
 target_link_libraries(rtype_test_child PRIVATE rtype_options)
@@ -91,10 +92,13 @@ catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 add_test(NAME smoke.server_help COMMAND r-type_server --help)
 add_test(NAME smoke.server_invalid_arguments COMMAND r-type_server --unknown)
 set_tests_properties(smoke.server_invalid_arguments PROPERTIES WILL_FAIL TRUE)
-# The server makes its key at its first start: the check makes it there, then reads it
+# The server makes its key at its first start: the check makes it there, then reads it. Its panel on a free
+# port, as the other tests run beside it
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/web.toml "[web]\nlisten = \"127.0.0.1:0\"\n")
 add_test(NAME smoke.server_check
     COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key
-        --database sqlite:${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/rtype.db)
+        --database sqlite:${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/rtype.db
+        --settings ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/web.toml)
 
 # The sanitizers find a bug made on purpose: a build where they would miss it fails here
 if(NOT RTYPE_SANITIZERS STREQUAL "")
