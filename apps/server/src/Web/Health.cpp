@@ -54,6 +54,8 @@ std::optional<std::string> askHealth(const rtype::network::Address &panel, std::
         std::string response;
         std::optional<std::string> failed;
         bool done = false;
+        /// The check is over: a connection that opens now is dropped at once
+        bool abandoned = false;
     };
     const auto state = std::make_shared<State>();
     const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -62,6 +64,9 @@ std::optional<std::string> askHealth(const rtype::network::Address &panel, std::
     rtype::network::TcpConnection::connect(
         loop, panel,
         [state, panel](std::error_code error, std::optional<rtype::network::TcpConnection> connection) {
+            if (state->abandoned) {
+                return;
+            }
             if (error || !connection) {
                 state->failed = std::format("cannot reach the panel on {}: {}", panel, error.message());
                 state->done = true;
@@ -85,9 +90,11 @@ std::optional<std::string> askHealth(const rtype::network::Address &panel, std::
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
-    if (state->connection) {
-        state->connection->close();
-    }
+    // The connection goes while the loop is still there: its destructor posts its close to the loop, which
+    // runs it. It would otherwise go with the last handler holding the state, after the loop
+    state->abandoned = true;
+    state->connection.reset();
+    loop.poll();
     if (state->failed) {
         return state->failed;
     }
