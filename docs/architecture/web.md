@@ -1,0 +1,170 @@
+# Web server
+
+The master serves HTTP for its administration panel ([ADR 0025](../decisions/0025-server-administration.md)):
+the static files of the panel, `/api/health`, the local access token traded for a session, and the headers of
+security of every response. `WebServer` (`apps/server/src/Web/WebServer.hpp`) runs it on threads of its own,
+beside the event loop of the master. The administration API and the panel itself come later.
+
+To configure it, see the `[web]` section of [Configure a server](../guides/configure-a-server.md).
+
+| | |
+|---|---|
+| Library | [Crow](https://crowcpp.org) 1.3.4, header-only, through CPM with a hash, given the Asio of `libs/network`: one Asio in the binary. A private dependency, behind `Web/WebServer.hpp`, patched ([Responses from the loop](#responses-from-the-loop)) |
+| Listens | `127.0.0.1:8080` by default, `[web] listen`. Without accounts, a loopback address only |
+| Threads | Two of Crow: one accepts the connections, one handles them |
+| Code | `Web/WebServer.cpp` (Crow, the routes, the files, the sessions), `Web/LocalAccess.cpp` (the token, `admin-url.txt`), `Web/Visitor.cpp` (the address of the visitor behind the proxies) |
+| Tests | `tests/server_web.cpp`, tag `[web]` |
+
+## Routes
+
+| Route | Needs | Answer |
+|---|---|---|
+| `GET /api/health` | nothing | `200 {"status":"ok"}`, answered by the event loop of the master: a master whose loop is stuck is not healthy |
+| `GET /api/session` | a session | `204` with a session, `401` without |
+| `/api/...` | a session | `401` without a session, `404` with one: the routes of the administration API, to come |
+| `GET /?token=<64 hex digits>` | the local access token | `303` to `/` with the session cookie; `403` for a wrong token, without a cookie |
+| `GET /<file>` | nothing | The file of the panel, with its `Content-Type` |
+| `GET /<page>` | nothing | `index.html` of the panel, for a path without an extension: the panel routes it itself. A missing file with an extension is `404` |
+| other methods | | `405`, `Allow: GET` |
+
+The files of the panel are served from `[web] panel_dir`, by default `admin/` next to the executable. Without the
+folder, or without its `index.html`, every page of the panel says it is not built: the game builds without
+Node, and a host who has no panel still sees why. A `panel_dir` given in the settings that does not exist stops
+the master at start. A path is decoded, then refused when one of its segments is `..`, or when it holds a `\`
+or a NUL: no address reaches a file out of the folder.
+
+The panel holds no secret: its files are served to anyone who reaches the port. What it shows comes from the
+API, which needs a session.
+
+## Responses from the loop
+
+A request that needs the master, its games or its lobby, is answered on the event loop, the only thread that may
+touch them ([Threads](threads.md#server)). Neither side waits for the other:
+
+```mermaid
+sequenceDiagram
+    participant C as Crow thread
+    participant L as Event loop
+    C->>C: request: kept by id in Pending
+    C->>L: loop.post(work)
+    Note over C: handles other requests
+    L->>L: work, then reply(answer)
+    L->>C: asio::post(answer) to the thread of the connection
+    C->>C: response.end()
+```
+
+*The loop computes the answer; Crow's thread of the connection sends it.*
+
+- The response is ended on Crow's thread of its connection, never on the loop: Crow is not thread-safe.
+- The requests waiting are kept by id, not by response: a connection reuses its response for its next request.
+- `stop()`, called by the shutdown of the master and by the destructor, first answers `503` to the requests
+  still waiting, on Crow's threads, then stops Crow and waits for its threads. A reply that comes later is
+  dropped. The web server stops first, before the lobby and the games, and is destroyed before the loop.
+
+Crow does not support a response ended after its handler has returned (CrowCpp/Crow#843): the closure that
+completes the request holds the last reference to its connection, and clears itself while it runs, which frees
+the connection in the middle. `apps/server/patches/crow-deferred-response.patch`, applied by CPM, calls a copy
+of it instead. The test that answers after the loop has worked fails without it.
+
+## Local access
+
+There are no accounts yet: the panel is opened from the machine of the server, with a token.
+
+1. At each start, the master makes a new token of 256 random bits (`newAccessToken()`), never logged.
+2. It writes the address of the panel with it to `admin-url.txt`, beside its key, readable by its owner only
+   (`0600` on Unix), the file of the previous start replaced, and logs the path of the file, never its content:
+
+    ```
+    INFO  master   Panel on HTTP 127.0.0.1:8080
+    INFO  master   Panel at http://127.0.0.1:8080: open the address written in /data/admin-url.txt
+    ```
+
+3. `GET /?token=…` with that token gives a session cookie, then redirects to `/`, so that the token leaves the
+   address bar and the history:
+
+    ```
+    Set-Cookie: rtype_session=<64 hex digits>; Path=/; Max-Age=43200; HttpOnly; SameSite=Strict
+    Location: /
+    ```
+
+The session lasts 12 hours, in the memory of the master: a restart ends it, as it changes the token. Each
+opening makes a new session, 64 at most, the oldest dropped. The session is not the token: a cookie that leaks
+does not give the token. Tokens and sessions are compared in constant time.
+
+**The token is accepted wherever the panel listens**, not only from this machine. It is as strong as a session,
+and whoever can read `admin-url.txt` already controls the server. No access is ever decided by the address of
+the peer: behind a local nginx or Caddy, every request comes from `127.0.0.1`, the proxy's address.
+
+**Without accounts, the panel listens on a loopback address only**, or the master does not start: the settings
+file refuses another `listen`, and `runMaster()` checks it again. From another machine, the panel is reached
+through an SSH tunnel. With accounts, it will be allowed to listen elsewhere, behind a proxy.
+
+## The proxy
+
+The address of a visitor, for the logs, is read by `visitorAddress()`:
+
+- From a peer that is not in `[web] trusted_proxies`, the peer is the visitor, and its `X-Forwarded-For` is
+  ignored: anyone can write one.
+- From a trusted proxy, `X-Forwarded-For` is read **from right to left**: each proxy appends the address it was
+  reached from, so the first address that is not a trusted proxy is the visitor. What is on its left was written
+  by the visitor and is never read. An entry that is not an address stops at the proxy that wrote it.
+- A request with two `X-Forwarded-For` headers: the order between them is lost, so neither is believed.
+
+```
+X-Forwarded-For: 6.6.6.6, 203.0.113.9        from 172.17.0.2, trusted
+                 ^ written by the visitor     ^ appended by the proxy: the visitor
+```
+
+An IPv4 address seen by a listener on `[::]`, `::ffff:172.17.0.2`, is compared as `172.17.0.2`.
+
+## The headers
+
+Every response of the master carries:
+
+```
+Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+X-Content-Type-Options: nosniff
+Referrer-Policy: no-referrer
+```
+
+- Scripts come from the panel only: no inline script, no other host, no `eval`.
+- Styles allow inline styles: Chakra UI, the components of the panel, inserts its styles at run time.
+- Fonts and images come from the panel too, which serves its own fonts.
+- `frame-ancestors 'none'`: no other site shows the panel in a frame, to make it click.
+- `no-referrer`: no address of the panel leaves in a `Referer`.
+
+The routes of the API add `Cache-Control: no-store`, and `index.html` `Cache-Control: no-cache`, as it names the
+files of each build. A response is given these headers by `Guard`, the middleware of Crow, after its handler: only
+Crow's own `400` to a request without `Host` does not go through it.
+
+## Logs
+
+Crow logs through our logger, `web`: its `Info`, a line per request and per response, is our `Debug`, its
+`Debug` our `Trace`. The query strings are cut from its lines, `GET /?...`, so that no token reaches a log,
+at any level. `Guard` logs each request with its path only, its status and its visitor:
+
+```
+DEBUG web      GET / 303 from 127.0.0.1
+INFO  web      The panel was opened with the local access token, from 127.0.0.1
+WARN  web      A wrong access token was given to the panel, from 127.0.0.1
+```
+
+## Starting and stopping
+
+The master starts the web server after the port of its lobby, and before it runs: a port taken, or an address
+of another machine, stops it with exit code 1, `--check` included, as the port of the lobby does. `--check` opens
+the port, then closes it, and writes no `admin-url.txt`.
+
+```
+ERROR master   Cannot serve the panel on 127.0.0.1:8080: Address already in use
+```
+
+Port 0 takes a free port, written in `admin-url.txt`: the tests give it to every master they run, which would
+otherwise all take 8080.
+
+## libcurl
+
+libcurl 8.23.0 arrives with this web server, through CPM with a hash: the HTTP client of the tests now
+(`tests/helpers/Http.hpp`), the mails of the accounts and Discord later. Its protocols are limited to HTTP(S) and
+SMTP(S); its TLS is OpenSSL on Linux, which is a prerequisite of the build there (`libssl-dev`), and the system's
+(Schannel) on Windows.

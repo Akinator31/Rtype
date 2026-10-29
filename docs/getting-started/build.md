@@ -2,7 +2,7 @@
 
 The project is built with CMake. Third-party libraries are downloaded and built automatically by
 [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) during the first configure: nothing has to be installed
-system-wide besides a compiler and, on Linux, the X11/OpenGL development packages.
+system-wide besides a compiler and, on Linux, the X11/OpenGL and OpenSSL development packages.
 
 ## Requirements
 
@@ -14,19 +14,22 @@ system-wide besides a compiler and, on Linux, the X11/OpenGL development package
 
     ```sh
     sudo apt install build-essential cmake \
-        libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libpq-dev
+        libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev
     ```
 
 === "Arch Linux"
 
     ```sh
-    sudo pacman -S base-devel cmake libx11 libxrandr libxinerama libxcursor libxi mesa postgresql-libs
+    sudo pacman -S base-devel cmake libx11 libxrandr libxinerama libxcursor libxi mesa openssl postgresql-libs
     ```
 
 === "Windows"
 
     Install [Visual Studio 2022](https://visualstudio.microsoft.com/) with the
     **Desktop development with C++** workload, which includes CMake.
+
+OpenSSL (`libssl-dev`, `openssl`) is required on Linux: libcurl, the HTTP client of the tests and of the server,
+takes its TLS from it. Windows uses its own (Schannel).
 
 libpq (`libpq-dev`, `postgresql-libs`) is optional: with it, the server can keep its data in a PostgreSQL
 database; without it, in SQLite only. The configure says which: `Database engines: SQLite, PostgreSQL`. On

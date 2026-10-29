@@ -250,5 +250,8 @@ Each step is one PR that builds without warnings and keeps the tests green.
 ## Server
 
 The server does not link the engine and keeps its own threads ([Server](server.md)): the master runs its
-network loop and its database thread ([Database](database.md#the-database-thread)), each instance its network
-loop and its game thread.
+network loop, its database thread ([Database](database.md#the-database-thread)) and the two threads of its web
+server ([Web server](web.md#responses-from-the-loop)), each instance its network loop and its game thread.
+
+The web threads never touch the lobby or the games: a request that needs them posts its work to the loop, which
+replies, and the reply is sent back by the web thread of the connection. Neither waits for the other.

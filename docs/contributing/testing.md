@@ -181,7 +181,7 @@ The workflows run on the team's self-hosted runners. The Linux runner needs:
 
 - **Docker**, usable by the user of the runner: the tests of the database start their PostgreSQL in it. Without
   Docker, *Build* and *Sanitizers* fail on Linux instead of testing on SQLite only.
-- `sudo` without a password for `apt-get`, which installs the system libraries (X11, OpenGL, libpq).
+- `sudo` without a password for `apt-get`, which installs the system libraries (X11, OpenGL, OpenSSL, libpq).
 - GCC or Clang with their sanitizer runtimes (`libasan`, `libubsan`, `libtsan`), Ninja and CMake 3.25 or newer.
 
 The Windows runner needs Visual Studio 2022 and CMake; it tests the database on SQLite only.

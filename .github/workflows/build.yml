@@ -36,12 +36,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install system libraries (X11 / OpenGL, libpq)
+      - name: Install system libraries (X11 / OpenGL, OpenSSL, libpq)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libpq-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev
 
       # The tests of the database run on SQLite and on this PostgreSQL. Windows tests SQLite only
       - name: Start PostgreSQL for the tests

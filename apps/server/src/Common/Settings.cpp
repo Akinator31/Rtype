@@ -77,16 +77,6 @@ std::optional<Subnet> parseSubnet(std::string_view text)
     return Subnet{*address, static_cast<unsigned>(*prefix)};
 }
 
-bool isLoopback(const rtype::network::Address &address)
-{
-    const std::vector<std::uint8_t> bytes = address.bytes();
-    if (address.isIpv4()) {
-        return bytes[0] == 127;
-    }
-    return std::all_of(bytes.begin(), bytes.end() - 1, [](std::uint8_t byte) { return byte == 0; }) &&
-           bytes.back() == 1;
-}
-
 bool isDigits(std::string_view text, std::size_t maxLength)
 {
     return !text.empty() && text.size() <= maxLength &&
@@ -294,7 +284,8 @@ void readServer(const Reader &reader, const toml::table &root, ServerSettings &s
 
 void readWeb(const Reader &reader, const toml::table &root, ServerSettings &settings)
 {
-    const toml::table *web = reader.section(root, "web", {"listen", "public_url", "trusted_proxies"});
+    const toml::table *web =
+        reader.section(root, "web", {"listen", "public_url", "trusted_proxies", "panel_dir"});
     if (web == nullptr) {
         return;
     }
@@ -329,6 +320,9 @@ void readWeb(const Reader &reader, const toml::table &root, ServerSettings &sett
             }
             settings.web.trustedProxies.push_back(*subnet);
         }
+    }
+    if (const auto folder = reader.string(*web, "web", "panel_dir")) {
+        settings.web.panelDir = reader.resolve(*folder);
     }
 }
 
@@ -457,6 +451,16 @@ void checkSections(const Reader &reader, const toml::table &root, const ServerSe
 }
 
 } // namespace
+
+bool isLoopback(const rtype::network::Address &address)
+{
+    const std::vector<std::uint8_t> bytes = address.bytes();
+    if (address.isIpv4()) {
+        return bytes[0] == 127;
+    }
+    return std::all_of(bytes.begin(), bytes.end() - 1, [](std::uint8_t byte) { return byte == 0; }) &&
+           bytes.back() == 1;
+}
 
 std::string readSecretFile(const std::filesystem::path &path, const rtype::log::Logger &logger)
 {

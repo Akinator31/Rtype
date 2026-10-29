@@ -130,6 +130,7 @@ database_file = "secrets/database_url"
 listen = "0.0.0.0:8080"
 public_url = "https://admin.rtype.example.org/"
 trusted_proxies = ["172.16.0.0/12", "::1"]
+panel_dir = "admin"
 
 [accounts]
 enabled = true
@@ -165,6 +166,7 @@ admins = ["pavel@example.org", "discord:123456789012345678"]
     REQUIRE(settings.web.trustedProxies.size() == 2);
     CHECK(settings.web.trustedProxies[0] == Subnet{*Address::parse("172.16.0.0", 0), 12});
     CHECK(settings.web.trustedProxies[1] == Subnet{*Address::parse("::1", 0), 128});
+    CHECK(settings.web.panelDir == directory.path / "admin");
 
     REQUIRE(settings.accounts);
     CHECK(settings.accountsEnabled());
@@ -198,6 +200,7 @@ TEST_CASE("An empty settings file leaves every default", "[server][settings]")
     CHECK(settings.web.listen == Address::loopbackIpv4(8080));
     CHECK(settings.web.publicUrl.empty());
     CHECK(settings.web.trustedProxies.empty());
+    CHECK(settings.web.panelDir.empty());
     CHECK_FALSE(settings.accounts);
     CHECK_FALSE(settings.accountsEnabled());
     CHECK_FALSE(settings.mail);

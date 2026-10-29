@@ -27,6 +27,10 @@ apps/server/src/
     Process.cpp            Process: starts a program and stops it, on Linux and Windows
     ServerKey.cpp          the key of the master: loaded, or generated at its first start
     ServerDatabase.cpp     the database of the master: its address, its migrations
+  Web/                     the web server of the master, for its panel (Web server page)
+    WebServer.cpp          Crow on two threads: the files of the panel, /api/health, the sessions
+    LocalAccess.cpp        the local access token and admin-url.txt
+    Visitor.cpp            the address of a visitor behind the trusted proxies
   Instance/                an instance: one game
     Instance.cpp           runInstance(): the life of the instance, with or without a master
     MasterLink.cpp         the connection to the master
@@ -37,7 +41,7 @@ apps/server/src/
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
 (`tests/server_options.cpp`, `tests/server_key.cpp`, `tests/server_database.cpp`, `tests/server_lifecycle.cpp`,
 `tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`,
-`tests/server_settings.cpp`). Includes are written from `src/`, like in the client:
+`tests/server_settings.cpp`, `tests/server_web.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -71,19 +75,26 @@ a server that cannot work stops at once with the reason.*
 | `--database <address>` | `sqlite:rtype.db` | Where the master keeps its data: `sqlite:<file>`, or `postgresql://<user>@<host>:<port>/<database>` ([The database](#the-database)) |
 | `--database-file <file>` | | Reads the address of the database from the first line of the file: for an address with a password, which the command line would show to every user of the machine |
 | `--settings <file>` | | Reads the settings file of the master ([Configure a server](../guides/configure-a-server.md)): the options above in `[server]`, and the sections of the panel and the accounts. The command line wins over the file |
-| `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, and opens the port, then exits: checks a configuration without running it |
+| `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, and opens the port of the lobby and the one of the panel, then exits: checks a configuration without running it |
 
 The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
 [ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game,
-opens its database and opens its port before anything else, and logs them:
+opens its database, its port and the one of its panel ([Web server](web.md)) before anything else, and logs
+them:
 
 ```
 INFO  master   Game configuration /opt/r-type/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
 INFO  master   Database sqlite:rtype.db, schema 0
 INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
+INFO  master   Panel on HTTP 127.0.0.1:8080
+INFO  master   The panel is not built: no index.html in /opt/r-type/admin
 INFO  master   Server key 4026de0635ae89391bff98b7b9ddc0689fa8529f9804e4c4721eadce94d92dff
+INFO  master   Panel at http://127.0.0.1:8080: open the address written in admin-url.txt
 INFO  master   Master started: Ctrl+C to stop
 ```
+
+`admin-url.txt`, beside the key, holds the address that opens the panel with the local access token, new at
+each start, readable by its owner only ([Local access](web.md#local-access)).
 
 The fingerprint is the one the players trust at their first connection. The key file:
 
@@ -426,7 +437,7 @@ stateDiagram-v2
 *The first signal starts a proper stop; a second one, or the grace period, cuts it.*
 
 1. **The first signal** calls `shutdown`, which ends the work properly and calls `loop.stop()` once done. An
-   instance sends `DISCONNECT (SHUTDOWN)` to its players. The master closes the lobby, which disconnects its
+   instance sends `DISCONNECT (SHUTDOWN)` to its players. The master stops its web server, closes the lobby, which disconnects its
    clients; with the games, it will also send `SHUTDOWN` to its instances and wait for them.
 2. **A second signal** stops at once: the person who pressed Ctrl+C twice does not want to wait.
 3. **After 10 seconds** (`GracePeriod`) without the loop stopped, the server stops at once too: a stop that
@@ -490,7 +501,7 @@ lobby.
 | Code | When |
 |---|---|
 | `0` | Stopped properly: after a stop signal, after `--help`, `--version` or `--check`, or at the end of its game for an instance |
-| `1` | Could not start (settings file refused, key missing or invalid, port in use, no secret), stopped on an unexpected error, or stop forced |
+| `1` | Could not start (settings file refused, key missing or invalid, port of the lobby or of the panel in use, panel off the loopback without accounts, no secret), stopped on an unexpected error, or stop forced |
 | `2` | Invalid arguments |
 
 The master reads the exit code of its instances: anything but 0 is a crash, which it reports to the players
@@ -509,6 +520,15 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   and `--settings --check`.
 - `tests/server_key.cpp` (tag `[server]`): the key generated at the first start, then loaded, only readable by
   its owner, never replaced, and `--fingerprint`.
+- `tests/server_web.cpp` (tags `[server]`, `[web]`): a real `WebServer` with its loop on a thread, asked with
+  libcurl (`tests/helpers/Http.hpp`). `/api/health` answered after the loop has worked, the others meanwhile;
+  a request waiting for the loop answered `503` at the stop; the files of the panel and their types,
+  `index.html` for its pages, the page "not built", no path out of its folder; the headers of security on every
+  response; the token traded for a session cookie, a wrong token refused, neither in the logs at any level;
+  `X-Forwarded-For` from the right and only from a trusted proxy, in `visitorAddress()` and end to end; a port
+  taken. Real masters: `admin-url.txt` (`0600`) whose address opens the page "not built" with a session, a port
+  taken, a missing `panel_dir`, and a panel off the loopback refused without accounts. Every test that runs a
+  master gives its panel port 0, with `testing::webOnAnyPort()`.
 - `tests/server_database.cpp` (tag `[server]`): `sqlite:rtype.db` by default, `--database`, `--database-file`
   with a Windows line end, the invalid combinations; a database created at start, then opened again; a file
   without an address, empty or missing, stopping the master without its content logged; a password on the

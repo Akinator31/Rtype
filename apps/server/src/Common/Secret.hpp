@@ -15,6 +15,9 @@ namespace rtype::server
 inline constexpr std::size_t SecretSize = 32;
 using Secret = std::array<std::byte, SecretSize>;
 
+/// Compares two secrets in constant time: the time taken tells nothing about where they differ.
+[[nodiscard]] bool sameSecret(const Secret &first, const Secret &second);
+
 /// The secret as the master writes it: 64 lowercase hexadecimal digits, without the line feed.
 [[nodiscard]] std::string formatSecret(const Secret &secret);
 

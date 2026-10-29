@@ -162,7 +162,4 @@ public:
     [[nodiscard]] std::optional<int> processId(std::uint32_t gameId) const;
 };
 
-/// Compares two secrets in constant time: the time taken tells nothing about where they differ.
-[[nodiscard]] bool sameSecret(const Secret &first, const Secret &second);
-
 } // namespace rtype::server

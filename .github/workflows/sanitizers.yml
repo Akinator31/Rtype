@@ -41,11 +41,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install system libraries (X11 / OpenGL, libpq)
+      - name: Install system libraries (X11 / OpenGL, OpenSSL, libpq)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libpq-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev
 
       - name: Start PostgreSQL for the tests
         uses: ./.github/actions/start-postgresql

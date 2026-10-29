@@ -29,6 +29,7 @@ else.
     listen = "127.0.0.1:8080"                     # the default; "0.0.0.0:8080" in a container, behind the proxy
     public_url = "https://admin.rtype.example.org"  # needed by Discord
     trusted_proxies = ["172.16.0.0/12"]           # whose X-Forwarded-For is believed
+    panel_dir = "/opt/r-type/admin"               # the default: admin/ next to the server
 
     [accounts]
     enabled = true
@@ -101,6 +102,7 @@ else.
 | `[web]` | `listen` | `127.0.0.1:8080` | Where the administration panel listens: `<ip>:<port>`, `[<ipv6>]:<port>`. Without accounts, a loopback address only (`127.0.0.1`, `[::1]`): nobody signs in to the panel without them. Port 0 takes a free port |
 | | `public_url` | | Where the panel is reached from outside, `https://...`; needed by Discord |
 | | `trusted_proxies` | `[]` | The proxies whose `X-Forwarded-For` is believed: addresses, or `<ip>/<prefix>` |
+| | `panel_dir` | `admin/` next to the server | The folder of the built panel. Given and missing, the server does not start; by default and missing, the panel says it is not built |
 | `[accounts]` | `enabled` | `true` | Accounts with an email and a password. Needs `[mail]` |
 | | `guests` | `true` | Whether players can still play without an account |
 | `[mail]` | `host` | | The mail server the codes are sent through. Required |
@@ -118,8 +120,9 @@ The sections go together:
   false` keep their `[mail]` without using it.
 - `[discord]` needs `[accounts]`, and `public_url` in `[web]`, where Discord sends the players back.
 
-The panel, the accounts, the mail and Discord come in the next versions of the server: until then, their
-sections are checked, and not used yet.
+The server serves its panel with `[web]` ([Run a server](run-a-server.md#steps), step 4). The accounts, the
+mail and Discord come in the next versions of the server: until then, their sections are checked, and not used
+yet.
 
 ## Result
 
@@ -133,6 +136,8 @@ The server reads its settings at start, `--check` included, and stops with code 
 | `[mail] password_file: cannot read /run/secrets/mail_password` | The secret file is missing, or the server's user cannot read it |
 | `[accounts] needs a [mail] section, to send the codes` | Add `[mail]`, or remove `[accounts]` |
 | `[web] listen must be a loopback address (127.0.0.1, [::1]) without accounts` | Keep the panel on this machine, or enable the accounts |
+| `Cannot serve the panel on 127.0.0.1:8080: Address already in use` | Another program, or another server, uses that port: choose another `listen` |
+| `The folder of the panel /opt/r-type/admin does not exist` | Give the folder of the built panel in `panel_dir`, or remove the key |
 | `[admin] admins: "pavel" is neither an email nor discord:<id>` | Name the administrator by their email or their Discord id |
 
 Every option of the command line is in [Server](../architecture/server.md#master).
