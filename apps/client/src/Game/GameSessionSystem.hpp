@@ -70,7 +70,8 @@ struct Kill {
 ///    its health bar above it when it is hit, except the ship of the local player. The sounds are
 ///    engine::SoundEffect given to entities, which the engine::SoundSystem plays: a shot that appears has the
 ///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind. Each ship
-///    killed, a Bydo or the ship of a player, is told to the kill handler, if any.
+///    killed, a Bydo or the ship of a player, is told to the kill handler, if any, and each wave started to
+///    the wave handler, if any.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens
@@ -86,6 +87,7 @@ class GameSessionSystem : public ecs::System
     std::optional<engine::SceneId> _scene;
     std::function<void()> _onOver;
     std::function<void(const Kill &)> _onKill;
+    std::function<void(std::uint16_t)> _onWave;
     /// The entity of the scene of each entity of the game, by id.
     std::unordered_map<std::uint32_t, ecs::EntityRef> _entities;
     ShipLooks _shipLooks;
@@ -154,6 +156,8 @@ public:
     void setDestructionSound(game::EntityKind kind, const EntitySound &sound);
     /// Calls this for each ship killed in the game while drawn from now on: a Bydo or the ship of a player.
     void setKillHandler(std::function<void(const Kill &)> onKill);
+    /// Calls this with the number of each wave started in the game from now on, from 1.
+    void setWaveHandler(std::function<void(std::uint16_t)> onWave);
 
     void update(float elapsed) override;
 

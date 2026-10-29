@@ -226,6 +226,10 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
     setCollisionSounds(sessions, audio);
 }
 
+/// Time the banner of a wave stays fully shown, in seconds: shorter than the other banners, as it comes back
+/// with each wave.
+constexpr float WaveBannerDuration = 1.5f;
+
 /// The name of a player in the events, as in the HUD: P1 to P4.
 std::string playerName(std::uint8_t slot)
 {
@@ -255,6 +259,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     : _engine(engine), _sessions(sessions), _translations(translations)
 {
     sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
+    sessions.setWaveHandler([this](std::uint16_t wave) { showWave(wave); });
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
@@ -304,6 +309,12 @@ void GameScenes::showKill(const Kill &kill)
         _engine.showToast(_translations.text(bydoNameKey(kill.kind)), _translations.text("event.bydo_down"),
                           playerName(local), engine::ToastType::Success);
     }
+}
+
+void GameScenes::showWave(std::uint16_t wave)
+{
+    _engine.showBanner(std::format("{} {:02}", _translations.text("event.wave"), wave),
+                       _translations.text("event.wave_detail"), engine::ToastType::Info, WaveBannerDuration);
 }
 
 void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,

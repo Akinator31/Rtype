@@ -892,3 +892,22 @@ TEST_CASE("The ship of a player killed is told with its owner, and no killer", "
     CHECK(kills[0].owner == 3);
     CHECK_FALSE(kills[0].killer);
 }
+
+// --- Waves ---
+
+TEST_CASE("Each wave started in the game is told with its number, once", "[client]")
+{
+    ImpactClient client;
+    std::vector<std::uint16_t> waves;
+    client.sessions.setWaveHandler([&waves](std::uint16_t wave) { waves.push_back(wave); });
+    rtype::game::Snapshot first = snapshotOf(1, {});
+    first.waveStarted = 1;
+
+    client.receive(first);
+    client.receive(snapshotOf(2, {}));
+    rtype::game::Snapshot second = snapshotOf(3, {});
+    second.waveStarted = 2;
+    client.receive(second);
+
+    CHECK(waves == std::vector<std::uint16_t>{1, 2});
+}

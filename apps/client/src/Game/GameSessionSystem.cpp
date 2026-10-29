@@ -138,6 +138,11 @@ void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
     _onKill = std::move(onKill);
 }
 
+void GameSessionSystem::setWaveHandler(std::function<void(std::uint16_t)> onWave)
+{
+    _onWave = std::move(onWave);
+}
+
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
 {
     const auto found = _entities.find(networkId);
@@ -194,6 +199,9 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     }
     rememberKilled(snapshot.destroyed);
     reportKills(snapshot.destroyed);
+    if (snapshot.waveStarted && _onWave) {
+        _onWave(*snapshot.waveStarted);
+    }
 
     // Each snapshot holds the whole world: what is not in it any more is gone
     for (auto entry = _entities.begin(); entry != _entities.end();) {

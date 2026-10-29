@@ -268,6 +268,7 @@ maximum (`maxVisible`, `maxAnnouncements`, `maxBanners`):
 ```cpp
 engine.showAnnouncement("PLAYER 2 JOINED", "Room · 2 / 4 pilots");     // title, line of light, detail
 engine.showBanner("BOSS APPROACHING", "GET THE BEAM READY", ToastType::Error); // across the whole screen
+engine.showBanner("WAVE 03", "BYDOS INCOMING", ToastType::Info, 1.5f);        // shown 1.5 s, not the style's
 ```
 
 An announcement is centred at the top of the screen: its icon and title, a line of light under them, and its
@@ -283,7 +284,8 @@ the two lines move apart, the sparks fly out from the middle, the title tightens
 rises. The `ToastSystem` writes the progress of the entrance as the `Opacity` of the toast, and the
 `SceneRenderer` splits it into parts (`stage()`).
 
-The toast entity holds only a `Toast` (its words and type). Everything about its look lives in one place,
+The toast entity holds only a `Toast` (its words and type, and the time a banner stays fully shown when it is
+given one: `Toast::duration`, `ToastStyle::duration` otherwise). Everything about its look lives in one place,
 `InterfaceStyle::toast` (`ToastStyle`): corner, margin, fonts, sizes, colours of each type, durations, slide,
 maximum number shown. The `SceneRenderer` draws it from that style (`drawToast`), and the `ToastSystem` places,
 fades and destroys it. To change how every toast looks, change the style, or `drawToast` for its shape; the

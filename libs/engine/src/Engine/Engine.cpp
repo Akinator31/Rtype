@@ -188,10 +188,11 @@ ecs::entity_t Engine::showAnnouncement(const std::string &title, const std::stri
     return toast;
 }
 
-ecs::entity_t Engine::showBanner(const std::string &title, const std::string &detail, ToastType type)
+ecs::entity_t Engine::showBanner(const std::string &title, const std::string &detail, ToastType type,
+                                 std::optional<float> duration)
 {
     const ecs::entity_t toast = _ecs.createEntity();
-    _ecs.addComponent<Toast>(toast, detail, type, title, std::string(), ToastKind::Banner);
+    _ecs.addComponent<Toast>(toast, detail, type, title, std::string(), ToastKind::Banner, duration);
     return toast;
 }
 

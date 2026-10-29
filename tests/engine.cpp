@@ -1783,6 +1783,24 @@ TEST_CASE("Announcements and banners appear and leave over their own time", "[en
     CHECK(world.ecs.hasComponent<Toast>(banner));
 }
 
+TEST_CASE("A banner given a duration stays fully shown for it, instead of the duration of the style",
+          "[engine][toast]")
+{
+    World world;
+    const ToastStyle &style = world.style.toast;
+    const float duration = style.duration / 2.0f;
+    const entity_t shorter = world.engine.showBanner("WAVE 03", "Detail", ToastType::Info, duration);
+
+    world.update(0.0f);
+    CHECK(world.ecs.getComponent<Toast>(shorter).duration == std::optional<float>{duration});
+
+    // Half way through its exit, after its own duration
+    world.update(style.bannerIn + duration + (style.bannerOut / 2.0f));
+    CHECK(isNear(opacityOf(world, shorter), 0.5f));
+    world.update(style.bannerOut / 2.0f);
+    CHECK_FALSE(world.ecs.hasComponent<Toast>(shorter));
+}
+
 TEST_CASE("A spinning model turns at its speed and stays between 0 and 360 degrees", "[engine][spin]")
 {
     Engine engine;

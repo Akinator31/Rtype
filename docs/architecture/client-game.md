@@ -245,6 +245,15 @@ swap their kills; a Bydo killed by no shot has no killer. The `GameSessionSystem
 drawn, a Bydo or the ship of a player, to its kill handler (`setKillHandler()`, a `Kill`: its kind, its owner,
 its killer), when the game tells its destruction; `GameScenes` turns it into the line.
 
+### Waves
+
+When a wave starts, a banner crosses the screen (`engine::Engine::showBanner()`, `Info`): `WAVE 03` and
+`BYDOS INCOMING` (`event.wave`, `event.wave_detail`), fully shown for 1.5 s instead of the 3 s of the style, as
+it comes back with each wave. Only the number of the wave reaches the client: its name
+stays in the game. Offline, it is `Snapshot::waveStarted`; online, `RemoteSession` keeps the number of
+`WAVE_STARTED` and puts it in the next snapshot it gives. The `GameSessionSystem` tells it to its wave handler
+(`setWaveHandler()`), and `GameScenes` shows the banner.
+
 ## Tests
 
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:
@@ -273,7 +282,8 @@ its killer), when the game tells its destruction; `GameScenes` turns it into the
   of the screen, the other entities with none; a ship killed gives its destruction sound to its impact, one
   removed makes none;
 - the kills: a Bydo killed is told with the owner of the shot of a player killed nearest to it, or no killer
-  without one, a shot or an entity removed is not told, and the ship of a player killed is told with its owner.
+  without one, a shot or an entity removed is not told, and the ship of a player killed is told with its owner;
+- the waves: each wave started is told once, with its number.
 
 ```sh
 ./build/bin/rtype_tests "[client]"

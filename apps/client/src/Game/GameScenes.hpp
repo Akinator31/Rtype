@@ -27,6 +27,7 @@ inline constexpr const char *PauseScene = "pause";
 ///   score of each player, in its colour.
 /// - The events, in the corner of the toasts: a Bydo shot down by the local player, and the ship of a player
 ///   shot down, the local one or an ally.
+/// - A banner across the screen when a wave starts, with its number.
 /// - Escape (or Start on a gamepad) opens the pause menu: Resume, or Leave the game. Offline, the game stops
 ///   while it is open.
 /// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
@@ -56,6 +57,7 @@ class GameScenes
     void buildHud(engine::SceneId scene, const engine::InterfaceStyle &style);
     /// Shows the event of a ship killed, if it is one: a Bydo killed by the local player, or a player ship.
     void showKill(const Kill &kill);
+    void showWave(std::uint16_t wave);
 
 public:
     /// Declares the scenes. Everything given must outlive the engine.
