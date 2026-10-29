@@ -1,7 +1,7 @@
 #pragma once
 
-// Private to the render library: the shader applying the colour filters when the frame is copied to the
-// window.
+// Private to the render library: the shader applying the colour filters and the dithering when the frame is
+// copied to the window.
 
 #include "rtype/render/ColorFilter.hpp"
 
@@ -10,8 +10,9 @@
 namespace rtype::render::detail
 {
 
-/// Owns the colour filter shader. If it cannot be compiled (an old graphics card without OpenGL 3.3, for
-/// instance), a warning is logged and the filters are disabled: the game is drawn without them.
+/// Owns the colour filter shader, which also dithers the frame so that its dark gradients show no steps. If
+/// it cannot be compiled (an old graphics card without OpenGL 3.3, for instance), a warning is logged and the
+/// filters are disabled: the game is drawn without them.
 class FilterShader
 {
 private:
@@ -28,8 +29,8 @@ public:
     FilterShader(FilterShader &&) = delete;
     FilterShader &operator=(FilterShader &&) = delete;
 
-    /// Starts drawing with the filter, if there is one to apply. Returns whether the shader is in use, so
-    /// that the caller ends it with EndShaderMode().
+    /// Starts drawing with the filter (ColorFilter::None only dithers). Returns whether the shader is in use,
+    /// so that the caller ends it with EndShaderMode().
     [[nodiscard]] bool begin(ColorFilter filter);
 };
 
