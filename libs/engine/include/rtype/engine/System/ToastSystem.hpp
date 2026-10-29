@@ -37,7 +37,7 @@ class ToastSystem : public ecs::System
     ecs::ComponentCache<Drawable> &_drawables;
 
     [[nodiscard]] std::vector<ecs::entity_t> getToastsNewestFirst() const;
-    /// Time from its appearance to the end of its exit, which depends on its kind.
+    /// Time from its appearance to the end of its exit, which depends on its kind and its duration.
     [[nodiscard]] float computeLifetime(const Toast &toast) const;
     [[nodiscard]] float computeOpacity(const Toast &toast) const;
     /// The width of a toast, by kind: what its words need, or the line of light of an announcement, or the

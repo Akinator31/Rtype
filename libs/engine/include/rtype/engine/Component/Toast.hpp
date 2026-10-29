@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 
 namespace rtype::engine
@@ -56,6 +57,9 @@ struct Toast {
     /// empty.
     std::string actor;
     ToastKind kind = ToastKind::Line;
+    /// Time it stays fully shown, between its fade in and its fade out, in seconds: ToastStyle::duration
+    /// when empty.
+    std::optional<float> duration;
     /// Time since it appeared, in seconds. Written by the ToastSystem.
     float time = 0.0f;
     /// Place in the stack of toasts, 0 being the nearest to the corner; in between while it glides from one
