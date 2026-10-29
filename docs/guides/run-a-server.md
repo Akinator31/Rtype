@@ -75,9 +75,10 @@ on their own machine for development or on a machine on the Internet.
     ```
 
     Open the address of the file in a browser: the token is traded for a session of 12 hours, then leaves the
-    address bar. Until the panel is built and installed in `admin/` next to the server, the page says it is not
-    built. The panel listens on `127.0.0.1:8080` only: from another machine, go through an SSH tunnel,
-    `ssh -L 8080:127.0.0.1:8080 <server>`, then open the same address. To change its port, see `[web]` in
+    address bar, and the panel shows the server live: [Administer a server](administer-a-server.md). The server
+    archive has the panel, in `admin/` next to the server; a server built from the sources without it says the
+    panel is not built. The panel listens on `127.0.0.1:8080` only: from another machine, go through an SSH
+    tunnel, `ssh -L 8080:127.0.0.1:8080 <server>`, then open the same address. To change its port, see `[web]` in
     [Configure a server](configure-a-server.md).
 
     Without the panel, the same session drives the [administration API](../protocol/admin-api.md) with `curl`:

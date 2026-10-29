@@ -32,6 +32,7 @@ nav = [
         "architecture/server.md",
         "architecture/web.md",
         "architecture/administration.md",
+        "architecture/panel.md",
         "architecture/game.md",
         "architecture/client-game.md",
         "architecture/client-online.md",
@@ -51,6 +52,7 @@ nav = [
         "guides/generate-the-server-keys.md",
         "guides/run-a-server.md",
         "guides/configure-a-server.md",
+        "guides/administer-a-server.md",
     "guides/use-an-external-database.md",
         "guides/play-online.md",
     ] },
@@ -93,6 +95,7 @@ nav = [
     { "Contributing" = [
         "contributing/index.md",
         "contributing/testing.md",
+        "contributing/panel.md",
         "contributing/documentation.md",
         "contributing/releasing.md",
         "contributing/templates.md",

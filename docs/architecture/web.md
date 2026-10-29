@@ -5,7 +5,7 @@ the static files of the panel, `/api/health`, the local access token traded for 
 [administration API](../protocol/admin-api.md) and its WebSocket, and the headers of security of every
 response. `WebServer` (`apps/server/src/Web/WebServer.hpp`) runs it on threads of its own, beside the event loop
 of the master. What the API shows and does lives in the master: [Administration](administration.md). The panel
-itself comes later.
+it serves: [The panel](panel.md).
 
 To configure it, see the `[web]` section of [Configure a server](../guides/configure-a-server.md).
 
@@ -72,6 +72,11 @@ Crow does not support a response ended after its handler has returned (CrowCpp/C
 completes the request holds the last reference to its connection, and clears itself while it runs, which frees
 the connection in the middle. `apps/server/patches/crow-deferred-response.patch`, applied by CPM, calls a copy
 of it instead. The test that answers after the loop has worked fails without it.
+
+Crow ends the response of its catch-all route itself, after the handler, which serves the files of the panel:
+that handler only fills the response. Ended twice, the response stayed completed once sent, and the next request
+on the same connection got Crow's bare `404` without reaching any handler, which a browser, keeping its
+connections alive, hit on its second page. The test of a connection kept alive fails without it.
 
 ## Local access
 

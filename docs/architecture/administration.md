@@ -3,7 +3,7 @@
 Everything an administrator sees of a server and does to it ([ADR 0025](../decisions/0025-server-administration.md)):
 the games, the players of the lobby, live, and the actions on them, each one recorded. It lives in the master,
 on its event loop, independent of what shows it: the web server serves it as the
-[administration API](../protocol/admin-api.md), and the panel is its first client.
+[administration API](../protocol/admin-api.md), and the panel is its first client ([The panel](panel.md)).
 
 | | |
 |---|---|

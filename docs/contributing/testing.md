@@ -28,6 +28,8 @@ The subject sets requirements that are hard to prove without automated tests:
 | Static analysis | clang-tidy | :hourglass: Step 3 |
 | Coverage report | gcovr, published with this documentation | :hourglass: Step 4 |
 | Performance measurements | Catch2 benchmarks | :hourglass: Step 4 |
+| The panel: its store, its components, its pages | Vitest, Testing Library, MSW (`web/admin`) | :white_check_mark: In place |
+| The panel against a real master | Playwright, Chromium (`web/admin/e2e`) | :white_check_mark: In place |
 
 ## Test levels
 
@@ -170,7 +172,7 @@ clang-format -i path/to/file.cpp
 
 | Workflow | Runs | Checks |
 |---|---|---|
-| *Build* | Every push and pull request, Linux and Windows | Compilation, all CTest tests, packaging. On Linux, the tests of the database also run on a PostgreSQL in Docker |
+| *Build* | Every push and pull request, Linux and Windows | First the *Panel* job: lint, format, types, Vitest and build of `web/admin`, its `dist/` kept as an artifact. Then compilation, all CTest tests, packaging with the panel in the server archive. On Linux, the tests of the database also run on a PostgreSQL in Docker, and Playwright runs the panel against the server just built ([Contributing to the panel](panel.md)) |
 | *Sanitizers* | Every pull request, and pushes to `main` | All CTest tests under ASan and UBSan, on SQLite and PostgreSQL (Linux) |
 | *Thread sanitizer* | Every night on `main`, and on demand | All CTest tests under TSan. A failed run blocks the next release until a run on `main` passes again, see [Releasing](releasing.md) |
 | *Format* | Every pull request, and pushes to `main` that change C++ files | Formats tracked C++ files; on pull requests the bot commits the fixes, elsewhere unformatted code fails the job |
@@ -183,6 +185,9 @@ The workflows run on the team's self-hosted runners. The Linux runner needs:
   Docker, *Build* and *Sanitizers* fail on Linux instead of testing on SQLite only.
 - `sudo` without a password for `apt-get`, which installs the system libraries (X11, OpenGL, OpenSSL, libpq).
 - GCC or Clang with their sanitizer runtimes (`libasan`, `libubsan`, `libtsan`), Ninja and CMake 3.25 or newer.
+- **Node** LTS, which `actions/setup-node` provides, and the system libraries **Chromium** needs for Playwright
+  (`npx playwright install-deps chromium`, once, as root): the *Panel* job and the end-to-end tests of the panel.
+  The browser itself is downloaded by the job, into the cache of the user of the runner.
 
 The Windows runner needs Visual Studio 2022 and CMake; it tests the database on SQLite only.
 
