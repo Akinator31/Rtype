@@ -100,7 +100,7 @@ else.
 | | `database` | `sqlite:rtype.db` | Where the master keeps its data, as `--database`; a relative SQLite file is next to the settings file |
 | | `database_file` | | A file holding the address of the database, as `--database-file`. Not with `database` |
 | `[web]` | `listen` | `127.0.0.1:8080` | Where the administration panel listens: `<ip>:<port>`, `[<ipv6>]:<port>`. Without accounts, a loopback address only (`127.0.0.1`, `[::1]`): nobody signs in to the panel without them. Port 0 takes a free port |
-| | `public_url` | | Where the panel is reached from outside, `https://...`; needed by Discord |
+| | `public_url` | | Where the panel is reached from outside, `https://...`; needed by Discord. The live events of the panel accept a page of its origin, beside the address the browser asked |
 | | `trusted_proxies` | `[]` | The proxies whose `X-Forwarded-For` is believed: addresses, or `<ip>/<prefix>` |
 | | `panel_dir` | `admin/` next to the server | The folder of the built panel. Given and missing, the server does not start; by default and missing, the panel says it is not built |
 | `[accounts]` | `enabled` | `true` | Accounts with an email and a password. Needs `[mail]` |

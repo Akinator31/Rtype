@@ -27,8 +27,13 @@ apps/server/src/
     Process.cpp            Process: starts a program and stops it, on Linux and Windows
     ServerKey.cpp          the key of the master: loaded, or generated at its first start
     ServerDatabase.cpp     the database of the master: its address, its migrations
+    Administration.cpp     what an administrator sees and does (Administration page)
+    AdminModel.hpp         its view of the games and the lobby, and the interfaces it acts through
+    AddressBans.cpp        the bans of IP addresses, checked by the lobby at HELLO
+    AdminStore.cpp         its tables: admin_actions, address_bans
   Web/                     the web server of the master, for its panel (Web server page)
-    WebServer.cpp          Crow on two threads: the files of the panel, /api/health, the sessions
+    WebServer.cpp          Crow on two threads: the files of the panel, the sessions, the API, its WebSocket
+    AdminJson.cpp          the JSON of the administration API
     LocalAccess.cpp        the local access token and admin-url.txt
     Visitor.cpp            the address of a visitor behind the trusted proxies
   Instance/                an instance: one game
@@ -41,7 +46,7 @@ apps/server/src/
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
 (`tests/server_options.cpp`, `tests/server_key.cpp`, `tests/server_database.cpp`, `tests/server_lifecycle.cpp`,
 `tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`,
-`tests/server_settings.cpp`, `tests/server_web.cpp`). Includes are written from `src/`, like in the client:
+`tests/server_settings.cpp`, `tests/server_web.cpp`, `tests/server_admin.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -169,10 +174,12 @@ that crashes cannot damage the data.
 |---|---|
 | Its address | `--database`, by default `sqlite:rtype.db` in the current directory, like the key; or the first line of the file of `--database-file`, whose content is never logged, since it may hold a password. A password given on the command line is warned about, and never logged |
 | At start | `openServerDatabase()` opens it, a SQLite file being created with its directories, and applies the migrations of the master it does not have yet (`ServerMigrations`, in `Master/ServerDatabase.hpp`). A database that cannot be opened, or that a newer server changed, stops the master before it opens its port |
-| Running | A `DatabaseThread` owns it: the features that keep data will give it their tasks, which run on its thread, and get their results back on the event loop. It is destroyed before the loop, after the tasks already given are done |
+| Running | A `DatabaseThread` owns it: the features that keep data give it their tasks, which run on its thread, and get their results back on the event loop. It is destroyed before the loop, after the tasks already given are done |
 
-`ServerMigrations` is empty for now: the first feature that keeps data adds the first migration, and its
-queries.
+| Migration | Tables | Used by |
+|---|---|---|
+| 1 | `admin_actions`: the record of the actions of the administrators | [Administration](administration.md) |
+| 2 | `address_bans`: the IP addresses banned for a time, read at start | [Administration](administration.md#bans) |
 
 ```
 INFO  master   Database postgresql://rtype:***@db.example.org/rtype, schema 0
@@ -204,7 +211,7 @@ stateDiagram-v2
 
 | Request | Before `HELLO` | In the lobby | In a game |
 |---|---|---|---|
-| `HELLO` | `WELCOME` with a new player id; `INVALID_NAME`; `UNSUPPORTED_VERSION`, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
+| `HELLO` | `WELCOME` with a new player id; `INVALID_NAME`; `UNSUPPORTED_VERSION` or `BANNED`, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
 | `PING` | `PONG` | `PONG` | `PONG` |
 | `LIST_GAMES` | `HELLO_REQUIRED` | `GAME_LIST` | `GAME_LIST` |
 | `CREATE_GAME` | `HELLO_REQUIRED` | `GAME_JOINED` once the game is ready; `INVALID_NAME`, `SERVER_FULL`, `GAME_START_FAILED` | `ALREADY_IN_GAME` |
@@ -219,9 +226,14 @@ stateDiagram-v2
 - **The state comes first**: a second `HELLO` is `ALREADY_WELCOMED` whatever it holds, a `LIST_GAMES` before
   `HELLO` is `HELLO_REQUIRED` whatever its payload.
 - **A player id** is given by `HELLO`: never 0, never given twice by a master. Names do not have to be unique.
-- **Leaving without asking**: a game over, a crash or a client that timed out send `LEFT_GAME` with their
-  reason, and the player is back in the lobby. A client that closed its UDP session itself (`QUIT`) is back in
+- **Leaving without asking**: a game over, a crash, a client that timed out, or an administrator who removes
+  the player or ends its game, send `LEFT_GAME` with their reason, and the player is back in the lobby. A client that closed its UDP session itself (`QUIT`) is back in
   the lobby without a message: it knows. A lobby connection that closes takes its player out of its game.
+
+- **The administrators** ([Administration](administration.md)) see the players through `AdminLobby`: their
+  name, address and game. They send them `SERVER_MESSAGE`, or remove them: `ERROR (KICKED)`, then the
+  connection closes. An address banned (`setBans()`) is refused at `HELLO` with `ERROR (BANNED)`, and a player
+  connected from it when the ban comes is removed with it.
 
 **Limits** (`LobbyLimits`, the defaults of the [protocol](../protocol/index.md)):
 
@@ -283,13 +295,16 @@ sequenceDiagram
 | It exits, or closes its connection, without `GAME_OVER` | `LEFT_GAME (GAME_CRASHED)` | Killed if still there |
 | `PLAYER_DISCONNECTED (TIMED_OUT)` | `LEFT_GAME (TIMED_OUT)` | — |
 | The master stops | Their UDP sessions get `DISCONNECT (SHUTDOWN)` | `SHUTDOWN (MASTER_STOPPING)` |
+| An administrator removes a player | `LEFT_GAME (KICKED)`, then `ERROR (KICKED)` | `REMOVE_PLAYER (KICKED)` |
+| An administrator ends the game | `LEFT_GAME (ENDED_BY_ADMIN)` | `SHUTDOWN (ENDED_BY_ADMIN)` |
 | A malformed or unexpected message, `GAME_STATUS` included | `LEFT_GAME (GAME_CRASHED)` | Killed |
 
 **The status of each game.** Every second, a running instance sends `GAME_STATUS`: its tick, its wave, and for
 each connected player its score, whether it is alive, and its latency. `Games` keeps the last one and when it
 came; `Games::status(id)` gives it with its age, for a running game only. A game without `GAME_STATUS` for 3
 seconds (`GamesSettings::statusTimeout`) is **stale**: shown so, not stopped, since a process that dies is
-already caught by its exit. The administration (step 04 of the accounts plan) reads it from there.
+already caught by its exit. The [administration](administration.md) reads it from there, through
+`AdminGames`, and is told of each game that starts, changes or ends through its `AdminObserver`.
 
 The processes are checked every 50 ms (`exitCode()` never blocks). An instance that does not exit within 5
 seconds of `SHUTDOWN` or `GAME_OVER` is killed. On Ctrl+C, the master closes its lobby, shuts every game down,
@@ -543,6 +558,9 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   taken. Real masters: `admin-url.txt` (`0600`) whose address opens the page "not built" with a session, a port
   taken, a missing `panel_dir`, and a panel off the loopback refused without accounts. Every test that runs a
   master gives its panel port 0, with `testing::webOnAnyPort()`.
+- `tests/server_admin.cpp` (tags `[server]`, `[admin]`): the administration, alone with fakes of the games and
+  the lobby, then end to end over HTTP and the WebSocket with real clients and instances
+  ([Administration](administration.md#tests)).
 - `tests/server_database.cpp` (tag `[server]`): `sqlite:rtype.db` by default, `--database`, `--database-file`
   with a Windows line end, the invalid combinations; a database created at start, then opened again; a file
   without an address, empty or missing, stopping the master without its content logged; a password on the
@@ -568,7 +586,7 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   scores, acknowledged, nothing after), every failure of `MasterLink`, and whole instances run by `runInstance()` on
   a thread of the test, with a fake master over TCP and real clients over UDP: two players who join, see each
   other and move, one removed by the master, one who quits, then `SHUTDOWN`; the master going away; a full
-  game; a UDP port taken; and the standalone mode with its public keys, stopped by Ctrl+C.
+  game; a UDP port taken; a player removed by an administrator; and the standalone mode with its public keys, stopped by Ctrl+C.
 - `tests/lobby_messages.cpp` (tag `[lobby]`): the `HELLO` frame of the specification, the bytes of the other
   messages, round trips, the names checked apart, every malformed case, and random bytes.
 - `tests/server_lobby.cpp` (tag `[lobby]`): a `Lobby` on the loopback and real TLS clients pinning its key.
