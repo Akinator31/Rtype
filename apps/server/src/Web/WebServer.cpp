@@ -1,9 +1,12 @@
 #include "Web/WebServer.hpp"
 
+#include "Web/AdminJson.hpp"
 #include "Web/LocalAccess.hpp"
 #include "Web/Visitor.hpp"
+#include "rtype/lobby/Messages.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/TcpListener.hpp"
+#include "rtype/network/Text.hpp"
 
 // Crow includes windows.h: without its min and max macros, which break std::min
 #ifdef _WIN32
@@ -18,6 +21,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -26,6 +30,7 @@
 #include <functional>
 #include <future>
 #include <iterator>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -56,6 +61,11 @@ constexpr std::string_view ContentSecurityPolicy =
     "font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 constexpr std::string_view SessionCookie = "rtype_session";
+/// The header every POST of the API carries, with the token GET /api/session gives.
+constexpr std::string_view CsrfHeader = "X-CSRF-Token";
+/// The actions of GET /api/actions, by default and at most.
+constexpr std::size_t DefaultActions = 100;
+constexpr std::size_t MaxActions = 500;
 constexpr std::chrono::hours SessionLifetime{12};
 /// Opening the address of admin-url.txt again makes a new session: the oldest go beyond this many.
 constexpr std::size_t MaxSessions = 64;
@@ -169,6 +179,11 @@ Answer json(int status, std::string body)
 Answer error(int status, std::string_view message)
 {
     return json(status, std::format(R"({{"error":"{}"}})", message));
+}
+
+Answer jsonOf(int status, const crow::json::wvalue &value)
+{
+    return json(status, value.dump());
 }
 
 void apply(crow::response &response, const Answer &answer)
@@ -330,8 +345,105 @@ struct Pending {
 
 struct Session {
     Secret id{};
+    /// What every POST of the API carries in X-CSRF-Token: a page of another site cannot read it.
+    Secret csrf{};
     Clock::time_point expires;
 };
+
+/// The WebSockets of /api/events, shared with the subscriptions on the loop, which can outlive the server.
+struct Subscribers {
+    struct Subscriber {
+        /// Never reused: a new connection can get the address of a closed one.
+        std::uint64_t token = 0;
+        /// The subscription of the administration, 0 until it is made on the loop.
+        std::uint64_t subscription = 0;
+    };
+
+    std::mutex mutex;
+    /// Cleared by stop(): Crow may then free its connections without closing them first.
+    std::unordered_map<crow::websocket::connection *, Subscriber> connections;
+    std::uint64_t lastToken = 0;
+
+    /// Sends a text to a connection if it is still the one of `token`. A connection is in the map until its
+    /// close handler, which takes the lock: it is alive while the lock is held.
+    void send(crow::websocket::connection *connection, std::uint64_t token, std::string text)
+    {
+        const std::lock_guard lock(mutex);
+        const auto found = connections.find(connection);
+        if (found != connections.end() && found->second.token == token) {
+            connection->send_text(std::move(text));
+        }
+    }
+};
+
+/// The origin of an address, `https://admin.example.org` for `https://admin.example.org/panel`.
+std::string originOf(std::string_view url)
+{
+    const std::size_t scheme = url.find("://");
+    if (scheme == std::string_view::npos) {
+        return std::string(url);
+    }
+    return std::string(url.substr(0, url.find('/', scheme + 3)));
+}
+
+/// A number of the query, or `fallback` without it; nothing if it is not one.
+std::optional<std::uint64_t> queryNumber(const crow::request &request, const char *name,
+                                         std::uint64_t fallback)
+{
+    const char *value = request.url_params.get(name);
+    if (value == nullptr) {
+        return fallback;
+    }
+    const std::string_view text(value);
+    std::uint64_t number = 0;
+    const auto [end, problem] = std::from_chars(text.data(), text.data() + text.size(), number);
+    if (problem != std::errc{} || end != text.data() + text.size() || text.empty()) {
+        return std::nullopt;
+    }
+    return number;
+}
+
+/// The body of a POST: a JSON object, or an empty object for an empty body when `optional`.
+std::optional<crow::json::rvalue> body(const crow::request &request, bool optional)
+{
+    if (optional && request.body.empty()) {
+        return crow::json::load("{}");
+    }
+    crow::json::rvalue read = crow::json::load(request.body);
+    if (!read || read.t() != crow::json::type::Object) {
+        return std::nullopt;
+    }
+    return read;
+}
+
+/// A string field of a body, "" without it; nothing if it is not text of at most `maxLength` bytes.
+std::optional<std::string> textField(const crow::json::rvalue &object, const char *name,
+                                     std::size_t maxLength)
+{
+    if (!object.has(name)) {
+        return std::string{};
+    }
+    const crow::json::rvalue &field = object[name];
+    if (field.t() != crow::json::type::String) {
+        return std::nullopt;
+    }
+    std::string text = field.s();
+    if (text.size() > maxLength || !rtype::network::isValidText(text)) {
+        return std::nullopt;
+    }
+    return text;
+}
+
+/// An integer field of a body, nothing without it or if it is not one.
+std::optional<std::int64_t> integerField(const crow::json::rvalue &object, const char *name)
+{
+    if (!object.has(name) || object[name].t() != crow::json::type::Number ||
+        object[name].nt() == crow::json::num_type::Floating_point ||
+        object[name].nt() == crow::json::num_type::Double_precision_floating_point) {
+        return std::nullopt;
+    }
+    return object[name].i();
+}
 
 } // namespace
 
@@ -341,6 +453,9 @@ struct WebServer::Impl {
     std::shared_ptr<Pending> pending = std::make_shared<Pending>();
     std::mutex sessionsMutex;
     std::vector<Session> sessions;
+    std::shared_ptr<Subscribers> subscribers = std::make_shared<Subscribers>();
+    /// The thread of the loop only.
+    Administration *administration = nullptr;
     App app;
     std::future<void> running;
     rtype::network::Address local;
@@ -391,6 +506,11 @@ struct WebServer::Impl {
             return;
         }
         stopped = true;
+        {
+            // Nothing is sent to a WebSocket from now on: Crow closes them, and may free them without telling
+            const std::lock_guard lock(subscribers->mutex);
+            subscribers->connections.clear();
+        }
         std::vector<std::pair<std::uint64_t, asio::io_context *>> left;
         {
             const std::lock_guard lock(pending->mutex);
@@ -428,13 +548,17 @@ struct WebServer::Impl {
         });
         CROW_ROUTE(app, "/api/session")
         ([this](const crow::request &request, crow::response &response) {
-            if (signedIn(request)) {
-                response.code = 204;
+            if (const std::optional<Session> found = session(request)) {
+                crow::json::wvalue body;
+                body["csrfToken"] = formatSecret(found->csrf);
+                apply(response, jsonOf(200, body));
             } else {
                 apply(response, error(401, "no session: open the address in admin-url.txt"));
             }
             response.end();
         });
+        administrationRoutes();
+        eventsRoute();
         CROW_CATCHALL_ROUTE(app)
         ([this](const crow::request &request, crow::response &response) {
             apply(response, serve(request, response));
@@ -474,22 +598,381 @@ struct WebServer::Impl {
         });
     }
 
-    [[nodiscard]] bool signedIn(const crow::request &request)
+    /// The session of the cookie of a request, if it has a valid one.
+    [[nodiscard]] std::optional<Session> session(const crow::request &request)
     {
         const auto value = cookie(request.get_header_value("Cookie"), SessionCookie);
         const auto id = value ? parseSecret(*value) : std::nullopt;
         if (!id) {
-            return false;
+            return std::nullopt;
         }
         const Clock::time_point now = Clock::now();
         const std::lock_guard lock(sessionsMutex);
         std::erase_if(sessions, [&](const Session &session) { return session.expires <= now; });
         // Each one compared in constant time
-        bool found = false;
+        std::optional<Session> found;
         for (const Session &session : sessions) {
-            found = sameSecret(session.id, *id) || found;
+            if (sameSecret(session.id, *id)) {
+                found = session;
+            }
         }
         return found;
+    }
+
+    [[nodiscard]] bool signedIn(const crow::request &request) { return session(request).has_value(); }
+
+    /// The page that opened a WebSocket is the panel's: the origin the browser sends is the one of the
+    /// address it asked, or the public address of the panel. A page of another site sends its own, which it
+    /// cannot change.
+    [[nodiscard]] bool fromPanel(const crow::request &request) const
+    {
+        const std::string origin = request.get_header_value("Origin");
+        if (origin.empty()) {
+            return false;
+        }
+        if (!settings.publicUrl.empty() && origin == originOf(settings.publicUrl)) {
+            return true;
+        }
+        const std::string host = request.get_header_value("Host");
+        return !host.empty() && (origin == "http://" + host || origin == "https://" + host);
+    }
+
+    /// The work of a route of the API, on the loop, with the administration.
+    using AdminWork = std::function<void(Administration &administration, const Reply &reply)>;
+
+    /// A route of the API needs a session, and a change its CSRF token, before anything else is read: answers
+    /// 401 or 403 otherwise.
+    [[nodiscard]] bool authorized(const crow::request &request, crow::response &response, bool change)
+    {
+        const std::optional<Session> found = session(request);
+        if (!found) {
+            apply(response, error(401, "no session: open the address in admin-url.txt"));
+            response.end();
+            return false;
+        }
+        if (change) {
+            const auto token = parseSecret(request.get_header_value(std::string(CsrfHeader)));
+            if (!token || !sameSecret(*token, found->csrf)) {
+                apply(response,
+                      error(403, "no CSRF token, or not the one of this session: see GET /api/session"));
+                response.end();
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Answers a route of the API that reads: a session first, then the work on the loop.
+    void api(const crow::request &request, crow::response &response, AdminWork work)
+    {
+        if (authorized(request, response, false)) {
+            administer(request, response, std::move(work));
+        }
+    }
+
+    /// Runs the work of an authorized route on the loop, with the administration.
+    void administer(const crow::request &request, crow::response &response, AdminWork work)
+    {
+        onLoop(request, response, [this, work = std::move(work)](const Reply &reply) {
+            if (administration == nullptr) {
+                reply(error(503, "the administration is not ready"));
+                return;
+            }
+            work(*administration, reply);
+        });
+    }
+
+    void administrationRoutes()
+    {
+        CROW_ROUTE(app, "/api/server")
+        ([this](const crow::request &request, crow::response &response) {
+            api(request, response, [](Administration &administration, const Reply &reply) {
+                reply(jsonOf(200, toJson(administration.server())));
+            });
+        });
+        CROW_ROUTE(app, "/api/games")
+        ([this](const crow::request &request, crow::response &response) {
+            api(request, response, [](Administration &administration, const Reply &reply) {
+                reply(jsonOf(200, toJsonList(administration.games())));
+            });
+        });
+        CROW_ROUTE(app, "/api/games/<uint>")
+        ([this](const crow::request &request, crow::response &response, std::uint64_t id) {
+            api(request, response, [id](Administration &administration, const Reply &reply) {
+                const auto game = id <= std::numeric_limits<std::uint32_t>::max()
+                                      ? administration.game(static_cast<std::uint32_t>(id))
+                                      : std::nullopt;
+                reply(game ? jsonOf(200, toJson(*game)) : error(404, "no such game"));
+            });
+        });
+        CROW_ROUTE(app, "/api/players")
+        ([this](const crow::request &request, crow::response &response) {
+            api(request, response, [](Administration &administration, const Reply &reply) {
+                reply(jsonOf(200, toJsonList(administration.players())));
+            });
+        });
+        CROW_ROUTE(app, "/api/actions")
+        ([this](const crow::request &request, crow::response &response) {
+            if (!authorized(request, response, false)) {
+                return;
+            }
+            const auto limit = queryNumber(request, "limit", DefaultActions);
+            const auto before = queryNumber(request, "before", 0);
+            if (!limit || *limit == 0 || *limit > MaxActions || !before ||
+                *before > static_cast<std::uint64_t>(std::numeric_limits<long long>::max())) {
+                apply(response, error(400, "limit is 1 to 500, before an id of an action"));
+                response.end();
+                return;
+            }
+            const std::optional<long long> page =
+                *before == 0 ? std::nullopt : std::optional(static_cast<long long>(*before));
+            administer(request, response,
+                       [limit = *limit, page](Administration &administration, const Reply &reply) {
+                           administration.actions(
+                               limit, page, [reply](std::optional<std::vector<AdminAction>> actions) {
+                                   reply(actions ? jsonOf(200, toJsonList(*actions))
+                                                 : error(503, "the database cannot read the actions now"));
+                               });
+                       });
+        });
+        CROW_ROUTE(app, "/api/bans")
+            .methods(crow::HTTPMethod::Get,
+                     crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response) {
+                if (request.method == crow::HTTPMethod::Get) {
+                    api(request, response, [](Administration &administration, const Reply &reply) {
+                        reply(jsonOf(200, toJsonList(administration.bans())));
+                    });
+                    return;
+                }
+                ban(request, response);
+            });
+        CROW_ROUTE(app, "/api/players/<uint>/kick")
+            .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
+                                                    std::uint64_t id) { kick(request, response, id); });
+        CROW_ROUTE(app, "/api/games/<uint>/end")
+            .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
+                                                    std::uint64_t id) { endGame(request, response, id); });
+        CROW_ROUTE(app, "/api/messages")
+            .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response) {
+                message(request, response);
+            });
+    }
+
+    /// Answers 400 for a body the route cannot take.
+    static void refuse(crow::response &response, std::string_view problem)
+    {
+        apply(response, error(400, problem));
+        response.end();
+    }
+
+    void kick(const crow::request &request, crow::response &response, std::uint64_t id)
+    {
+        if (!authorized(request, response, true)) {
+            return;
+        }
+        const auto read = body(request, true);
+        const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
+        if (!reason) {
+            refuse(response, "the body is a JSON object, with an optional reason of at most 200 bytes");
+            return;
+        }
+        const std::string visitor = app.get_context<Guard>(request).visitor.ip();
+        administer(
+            request, response,
+            [id, reason = *reason, visitor](Administration &administration, const Reply &reply) {
+                if (id > std::numeric_limits<std::uint32_t>::max() ||
+                    !administration.kick(static_cast<std::uint32_t>(id), reason, std::string(LocalActor))) {
+                    reply(error(404, "no such player"));
+                    return;
+                }
+                logger().info("Player {} removed from the panel, from {}", id, visitor);
+                crow::json::wvalue done;
+                done["playerId"] = id;
+                reply(jsonOf(200, done));
+            });
+    }
+
+    void endGame(const crow::request &request, crow::response &response, std::uint64_t id)
+    {
+        if (!authorized(request, response, true)) {
+            return;
+        }
+        const auto read = body(request, true);
+        const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
+        if (!reason) {
+            refuse(response, "the body is a JSON object, with an optional reason of at most 200 bytes");
+            return;
+        }
+        administer(request, response,
+                   [id, reason = *reason](Administration &administration, const Reply &reply) {
+                       if (id > std::numeric_limits<std::uint32_t>::max() ||
+                           !administration.endGame(static_cast<std::uint32_t>(id), reason,
+                                                   std::string(LocalActor))) {
+                           reply(error(404, "no such game"));
+                           return;
+                       }
+                       crow::json::wvalue done;
+                       done["gameId"] = id;
+                       reply(jsonOf(200, done));
+                   });
+    }
+
+    void message(const crow::request &request, crow::response &response)
+    {
+        if (!authorized(request, response, true)) {
+            return;
+        }
+        const auto read = body(request, false);
+        const auto text =
+            read ? textField(*read, "text", rtype::lobby::MaxServerMessageLength) : std::nullopt;
+        std::optional<std::uint32_t> gameId;
+        bool valid = text && rtype::lobby::isValidServerMessage(*text);
+        if (valid && read->has("gameId") && read->operator[]("gameId").t() != crow::json::type::Null) {
+            const auto id = integerField(*read, "gameId");
+            valid = id && *id > 0 && *id <= std::numeric_limits<std::uint32_t>::max();
+            if (valid) {
+                gameId = static_cast<std::uint32_t>(*id);
+            }
+        }
+        if (!valid) {
+            refuse(response,
+                   "the body is a JSON object with a text of 1 to 200 bytes, and an optional gameId");
+            return;
+        }
+        administer(
+            request, response, [gameId, text = *text](Administration &administration, const Reply &reply) {
+                const auto recipients = administration.sendMessage(gameId, text, std::string(LocalActor));
+                if (!recipients) {
+                    reply(error(404, "no such game"));
+                    return;
+                }
+                crow::json::wvalue done;
+                done["recipients"] = static_cast<std::uint64_t>(*recipients);
+                reply(jsonOf(200, done));
+            });
+    }
+
+    void ban(const crow::request &request, crow::response &response)
+    {
+        if (!authorized(request, response, true)) {
+            return;
+        }
+        const auto read = body(request, false);
+        const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
+        const auto addressText = read ? textField(*read, "address", 64) : std::nullopt;
+        const auto address = addressText ? rtype::network::Address::parse(*addressText, 0) : std::nullopt;
+        const auto duration = read ? integerField(*read, "duration") : std::nullopt;
+        const auto longest = std::chrono::duration_cast<std::chrono::seconds>(MaxBanDuration).count();
+        if (!reason || !address || !duration || *duration < 1 || *duration > longest) {
+            refuse(response,
+                   "the body is a JSON object with an IP address, a duration of 1 to 604800 seconds, "
+                   "and an optional reason of at most 200 bytes");
+            return;
+        }
+        administer(request, response,
+                   [address = *address, duration = std::chrono::seconds(*duration),
+                    reason = *reason](Administration &administration, const Reply &reply) {
+                       const std::size_t removed =
+                           administration.ban(address, duration, reason, std::string(LocalActor));
+                       const std::optional<AddressBan> ban = [&]() -> std::optional<AddressBan> {
+                           for (const AddressBan &listed : administration.bans()) {
+                               if (listed.address == banKey(address)) {
+                                   return listed;
+                               }
+                           }
+                           return std::nullopt;
+                       }();
+                       crow::json::wvalue done;
+                       done["ban"] = ban ? toJson(*ban) : crow::json::wvalue(nullptr);
+                       done["removed"] = static_cast<std::uint64_t>(removed);
+                       reply(jsonOf(200, done));
+                   });
+    }
+
+    /// `GET /api/events`: the WebSocket of the live events, a snapshot first.
+    void eventsRoute()
+    {
+        CROW_WEBSOCKET_ROUTE(app, "/api/events")
+            .onaccept([this](const crow::request &request, std::optional<crow::response> &response, void **) {
+                // Answered before the upgrade, without the headers of the other responses: nothing is shown
+                if (!signedIn(request)) {
+                    response.emplace(401, R"({"error":"no session: open the address in admin-url.txt"})");
+                } else if (!fromPanel(request)) {
+                    logger().warning("A WebSocket was refused: it was opened by a page of {}",
+                                     request.get_header_value("Origin").empty()
+                                         ? std::string("no origin")
+                                         : request.get_header_value("Origin"));
+                    response.emplace(403, R"({"error":"the WebSocket is opened by the panel only"})");
+                }
+            })
+            .onopen([this](crow::websocket::connection &connection) { subscribe(connection); })
+            .onclose([this](crow::websocket::connection &connection, const std::string &, std::uint16_t) {
+                unsubscribe(connection);
+            })
+            .onmessage([](crow::websocket::connection &, const std::string &, bool) {
+                // The events go one way: what the panel sends is ignored
+            });
+    }
+
+    void subscribe(crow::websocket::connection &opened)
+    {
+        crow::websocket::connection *connection = &opened;
+        std::uint64_t token = 0;
+        {
+            const std::lock_guard lock(subscribers->mutex);
+            token = ++subscribers->lastToken;
+            subscribers->connections[connection] = {token, 0};
+        }
+        loop.post([this, shared = subscribers, connection, token, pending = pending] {
+            {
+                const std::lock_guard lock(pending->mutex);
+                if (pending->stopped) {
+                    return;
+                }
+            }
+            if (administration == nullptr) {
+                return;
+            }
+            const std::uint64_t subscription =
+                administration->subscribe([shared, connection, token](const AdminEvent &event) {
+                    shared->send(connection, token, toJson(event).dump());
+                });
+            const std::lock_guard lock(shared->mutex);
+            const auto found = shared->connections.find(connection);
+            if (found != shared->connections.end() && found->second.token == token) {
+                found->second.subscription = subscription;
+            } else {
+                // Closed meanwhile
+                administration->unsubscribe(subscription);
+            }
+        });
+    }
+
+    void unsubscribe(crow::websocket::connection &closed)
+    {
+        std::uint64_t subscription = 0;
+        {
+            const std::lock_guard lock(subscribers->mutex);
+            const auto found = subscribers->connections.find(&closed);
+            if (found == subscribers->connections.end()) {
+                return;
+            }
+            subscription = found->second.subscription;
+            subscribers->connections.erase(found);
+        }
+        if (subscription != 0) {
+            loop.post([this, subscription, pending = pending] {
+                {
+                    const std::lock_guard lock(pending->mutex);
+                    if (pending->stopped) {
+                        return;
+                    }
+                }
+                if (administration != nullptr) {
+                    administration->unsubscribe(subscription);
+                }
+            });
+        }
     }
 
     Answer serve(const crow::request &request, crow::response &response)
@@ -526,7 +1009,7 @@ struct WebServer::Impl {
             if (sessions.size() >= MaxSessions) {
                 sessions.erase(sessions.begin());
             }
-            sessions.push_back({id, Clock::now() + SessionLifetime});
+            sessions.push_back({id, newAccessToken(), Clock::now() + SessionLifetime});
         }
         logger().info("The panel was opened with the local access token, from {}", visitor);
         response.set_header(
@@ -599,6 +1082,11 @@ rtype::network::Address WebServer::localAddress() const
 void WebServer::stop()
 {
     _impl->stop();
+}
+
+void WebServer::setAdministration(Administration *administration)
+{
+    _impl->administration = administration;
 }
 
 } // namespace rtype::server

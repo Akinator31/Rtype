@@ -36,9 +36,10 @@ struct HttpRequest {
     std::vector<std::string> headers;
 };
 
-/// Sends one request and waits for its response. Never follows a redirection, and sends the path as written,
-/// `..` included.
-inline HttpResponse http(const std::string &url, const HttpRequest &request = {})
+/// Sends one request and waits for its response, with its body if not empty. Never follows a redirection, and
+/// sends the path as written, `..` included.
+inline HttpResponse http(const std::string &url, const HttpRequest &request = {},
+                         const std::string &body = {})
 {
     HttpResponse response;
     CURL *curl = curl_easy_init();
@@ -75,6 +76,10 @@ inline HttpResponse http(const std::string &url, const HttpRequest &request = {}
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, request.method.c_str());
     if (request.method == "HEAD") {
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    }
+    if (!body.empty()) {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
     }
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_PATH_AS_IS, 1L);
