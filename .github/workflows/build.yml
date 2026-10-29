@@ -121,7 +121,11 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
 
+      # The temporary files of the tests in the directory of this runner: the jobs running at once on one
+      # machine would otherwise share /tmp, and the databases and keys the tests name there
       - name: Test
+        env:
+          TMPDIR: ${{ runner.temp }}
         run: ctest --test-dir build -C ${{ env.BUILD_TYPE }} --output-on-failure
 
       # The panel against the master just built and a game of real players. Node comes from setup-node, the
