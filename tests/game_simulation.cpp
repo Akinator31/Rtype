@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <numbers>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -88,7 +89,15 @@ TEST_CASE("An input gives the direction of its buttons, opposite ones cancelling
     input.set(PlayerInput::Up, true);
     input.set(PlayerInput::Up, false);
     CHECK(input.buttons == PlayerInput::Fire);
-    CHECK(PlayerInput::fromByte(0xFF).buttons == 0x1F);
+    CHECK(PlayerInput::fromByte(0xFF).buttons == 0x7F);
+}
+
+TEST_CASE("An input aims up or down, both cancelling", "[game]")
+{
+    CHECK(held(0).aim() == 0);
+    CHECK(held(PlayerInput::AimUp).aim() == -1);
+    CHECK(held(PlayerInput::AimDown).aim() == 1);
+    CHECK(held(PlayerInput::AimUp | PlayerInput::AimDown).aim() == 0);
 }
 
 // --- Players ---
@@ -266,6 +275,35 @@ TEST_CASE("Holding Fire shoots with the weapon of the players, from the nose of 
     CHECK(shotsOf(simulation.snapshot()).size() == 2);
 }
 
+TEST_CASE("Holding AimUp or AimDown turns the ship and fires at the aim angle, from its turned nose",
+          "[game]")
+{
+    const auto aimed = [](std::uint8_t aim, float expectedY) {
+        Simulation simulation({}, playerConfig());
+        simulation.addPlayer(0);
+        simulation.setInput(0, held(PlayerInput::Fire | aim));
+
+        simulation.step();
+        const EntityState ship = *shipOf(simulation.snapshot(), 0);
+        const std::vector<EntityState> shots = shotsOf(simulation.snapshot());
+        REQUIRE(shots.size() == 1);
+        const float angle = Rules{}.aimAngle * std::numbers::pi_v<float> / 180.0f;
+        CHECK(shots[0].velocityX == Approx(1500.0f * std::cos(angle)));
+        CHECK(shots[0].velocityY == Approx(expectedY * 1500.0f * std::sin(angle)));
+        CHECK(shots[0].x > ship.x);
+        CHECK((shots[0].y - ship.y) * expectedY > 0.0f);
+        return ship.flags;
+    };
+    CHECK((aimed(PlayerInput::AimUp, -1.0f) & EntityState::AimingUp) != 0);
+    CHECK((aimed(PlayerInput::AimDown, 1.0f) & EntityState::AimingDown) != 0);
+
+    Simulation simulation({}, playerConfig());
+    simulation.addPlayer(0);
+    simulation.setInput(0, held(PlayerInput::AimUp | PlayerInput::AimDown));
+    simulation.step();
+    CHECK((shipOf(simulation.snapshot(), 0)->flags & (EntityState::AimingUp | EntityState::AimingDown)) == 0);
+}
+
 TEST_CASE("Without a weapon, a ship does not fire", "[game]")
 {
     Simulation simulation;
@@ -313,7 +351,7 @@ TEST_CASE("The same inputs give exactly the same game", "[game]")
     Simulation first({}, playerConfig());
     Simulation second({}, playerConfig());
     std::mt19937 random(2026);
-    std::uniform_int_distribution<int> buttons(0, 0x1F);
+    std::uniform_int_distribution<int> buttons(0, 0x7F);
     for (std::uint8_t slot = 0; slot < 3; ++slot) {
         first.addPlayer(slot);
         second.addPlayer(slot);
@@ -338,7 +376,7 @@ TEST_CASE("Every entity stays where the protocol can encode it, and ids are uniq
 {
     Simulation simulation({}, playerConfig());
     std::mt19937 random(7);
-    std::uniform_int_distribution<int> buttons(0, 0x1F);
+    std::uniform_int_distribution<int> buttons(0, 0x7F);
     for (std::uint8_t slot = 0; slot < MaxPlayers; ++slot) {
         simulation.addPlayer(slot);
     }

@@ -60,6 +60,9 @@ struct EntityState {
         Charging = 1 << 1,
         /// Hit since the previous snapshot: drawn flashing.
         Hit = 1 << 2,
+        /// A ship of a player turned nose up, or nose down, by Rules::aimAngle: it fires that way.
+        AimingUp = 1 << 3,
+        AimingDown = 1 << 4,
     };
 
     /// Never 0, and never reused within a game: a client can keep it to recognize the entity.

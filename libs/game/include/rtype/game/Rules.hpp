@@ -17,6 +17,9 @@ struct Rules {
     /// as the client draws it.
     float shipHalfWidth = 84.0f;
     float shipHalfHeight = 49.0f;
+    /// How far a ship turns its nose, up or down, while its player holds AimUp or AimDown, in degrees: it
+    /// fires that way. Its hitbox does not turn.
+    float aimAngle = 30.0f;
 
     /// A missile speeds up by this fraction of its launch speed per tick, up to missileMaxBoost times it.
     float missileBoostPerTick = 0.02f;

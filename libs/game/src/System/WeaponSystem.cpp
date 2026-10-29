@@ -3,6 +3,9 @@
 #include "rtype/game/Entities.hpp"
 #include "rtype/game/Hitbox.hpp"
 
+#include <cmath>
+#include <numbers>
+
 namespace rtype::game
 {
 
@@ -85,7 +88,21 @@ void WeaponSystem::fire(ecs::entity_t entity, const std::string &weapon)
     const std::uint8_t owner = _ships.has(entity) ? _ships.get(entity).slot : NoOwner;
     const float forward = owner < MaxPlayers ? 1.0f : -1.0f;
     const ecs::Position position = _positions.get(entity);
-    const float noseX = position.x + forward * halfSizeOf(_colliders.get(entity)).x;
+    const float halfWidth = halfSizeOf(_colliders.get(entity)).x;
+    const int aim = owner < MaxPlayers ? _context.players[owner].input.aim() : 0;
+    if (aim != 0) {
+        // The ship turned by the aim angle: its nose, and its shot, that way
+        const float angle =
+            static_cast<float>(aim) * _context.rules.aimAngle * std::numbers::pi_v<float> / 180.0f;
+        const float noseX = position.x + (std::cos(angle) * halfWidth);
+        const float noseY = position.y + (std::sin(angle) * halfWidth);
+        _ecs.defer([this, weapon, owner, noseX, noseY, angle] {
+            spawnAimedShot(_ecs, _context, weapon, owner, noseX, noseY, noseX + std::cos(angle),
+                           noseY + std::sin(angle));
+        });
+        return;
+    }
+    const float noseX = position.x + forward * halfWidth;
     if (_orders.has(entity) && _orders.get(entity).target) {
         const ecs::Position target = *_orders.get(entity).target;
         _ecs.defer([this, weapon, owner, noseX, y = position.y, target] {

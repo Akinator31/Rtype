@@ -186,16 +186,16 @@ TEST_CASE("Unknown reasons, causes and outcomes are read as the specification sa
 
 TEST_CASE("The reserved bits of inputs and flags are dropped", "[game][messages]")
 {
-    CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0x1F);
-    CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0x1F});
+    CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0x7F);
+    CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0x7F});
 
     std::vector<std::byte> payload = ExampleSnapshot;
     payload.back() = std::byte{0xFF};
-    CHECK(decodeSnapshotPart(payload)->entities[0].flags == 0x07);
+    CHECK(decodeSnapshotPart(payload)->entities[0].flags == 0x1F);
 
     SnapshotPart part = examplePart();
     part.entities[0].flags = 0xFF;
-    CHECK(encode(part).back() == std::byte{0x07});
+    CHECK(encode(part).back() == std::byte{0x1F});
 }
 
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")

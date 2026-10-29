@@ -49,6 +49,8 @@ game::PlayerInput inputFrom(const engine::Controls &controls)
     input.set(game::PlayerInput::Left, controls.isDown(engine::Control::Left));
     input.set(game::PlayerInput::Right, controls.isDown(engine::Control::Right));
     input.set(game::PlayerInput::Fire, controls.isDown(engine::Control::FaceDown));
+    input.set(game::PlayerInput::AimUp, controls.isDown(engine::Control::LeftShoulder));
+    input.set(game::PlayerInput::AimDown, controls.isDown(engine::Control::RightShoulder));
     return input;
 }
 
