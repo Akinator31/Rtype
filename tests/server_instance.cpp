@@ -320,10 +320,15 @@ TEST_CASE("The messages of the instances survive a round trip", "[instance]")
     const AddPlayerMessage added = player(42, 5, "Alice");
     CHECK(decodeAddPlayer(encode(added)) == added);
     CHECK(encode(added).size() == 72 + 1 + 5);
-    const RemovePlayerMessage removed{42, RemovePlayerReason::LobbyClosed};
-    CHECK(decodeRemovePlayer(encode(removed)) == removed);
-    CHECK(decodeShutdown(encode(ShutdownMessage{ShutdownReason::MasterStopping})) ==
-          ShutdownMessage{ShutdownReason::MasterStopping});
+    for (const RemovePlayerReason reason :
+         {RemovePlayerReason::Left, RemovePlayerReason::LobbyClosed, RemovePlayerReason::Kicked}) {
+        const RemovePlayerMessage removed{42, reason};
+        CHECK(decodeRemovePlayer(encode(removed)) == removed);
+    }
+    for (const ShutdownReason reason :
+         {ShutdownReason::Empty, ShutdownReason::MasterStopping, ShutdownReason::EndedByAdmin}) {
+        CHECK(decodeShutdown(encode(ShutdownMessage{reason})) == ShutdownMessage{reason});
+    }
 }
 
 TEST_CASE("The messages of the instances are written field by field", "[instance]")
@@ -341,6 +346,8 @@ TEST_CASE("The messages of the instances are written field by field", "[instance
     CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2}));
     CHECK(encode(GameOverReport{{{1, 1500}}}) == bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC}));
     CHECK(encode(ShutdownMessage{ShutdownReason::Empty}) == bytes({0}));
+    CHECK(encode(ShutdownMessage{ShutdownReason::EndedByAdmin}) == bytes({2}));
+    CHECK(encode(RemovePlayerMessage{42, RemovePlayerReason::Kicked}) == bytes({0, 0, 0, 0x2A, 2}));
     CHECK(encode(GameStatusMessage{600, 2, {{42, 1500, true, 35}, {43, 0, false, std::nullopt}}}) ==
           bytes({0, 0, 0x02, 0x58, 0, 2, 2,                            // tick, wave, players
                  0, 0, 0,    0x2A, 0, 0, 0x05, 0xDC, 1, 0,    35,      // 42, 1500, alive, 35 ms
@@ -373,8 +380,8 @@ TEST_CASE("The messages of the instances refuse what the protocol forbids", "[in
     hello[2] = hello[3] = hello[4] = hello[5] = std::byte{0};
     CHECK_FALSE(decodeInstanceHello(hello));                                                      // id 0
     CHECK_FALSE(decodePlayerDisconnected(bytes({0, 0, 0, 1, 2})));                                // reason 2
-    CHECK_FALSE(decodeRemovePlayer(bytes({0, 0, 0, 1, 2})));                                      // reason 2
-    CHECK_FALSE(decodeShutdown(bytes({2})));                                                      // reason 2
+    CHECK_FALSE(decodeRemovePlayer(bytes({0, 0, 0, 1, 3})));                                      // reason 3
+    CHECK_FALSE(decodeShutdown(bytes({3})));                                                      // reason 3
     CHECK_FALSE(decodeConfigure(bytes({1, 'A', 0})));                                             // no player
     CHECK_FALSE(decodeConfigure(bytes({1, 'A', 5})));                                             // 5 players
     CHECK_FALSE(decodeConfigure(bytes({0, 2})));                                                  // no name
@@ -763,6 +770,24 @@ TEST_CASE("An instance runs a game for the players the master gives it", "[insta
     CHECK(bobClient.end->cause == SessionEnd::Cause::Disconnected);
     CHECK(bobClient.end->reason == DisconnectReason::Quit);
     CHECK(aliceClient.left()[0] == rtype::game::PlayerLeftMessage{1, rtype::game::LeaveReason::LobbyClosed});
+
+    // Bob comes back, in a new session, and an administrator removes Bob: the game protocol tells Alice that
+    // Bob quit
+    const AddPlayerMessage bobBack = player(43, 7, "Bob");
+    master.send(instance_message::AddPlayer, bobBack);
+    loop.poll();
+    std::this_thread::sleep_for(20ms);
+    TestClient bobAgain(loop, fixture.udpPort, bobBack);
+    const auto updateAgain = [&] {
+        aliceClient.update();
+        bobAgain.update();
+    };
+    REQUIRE(waitUntil(loop, [&] { return bobAgain.accepted.has_value(); }, updateAgain));
+    master.send(instance_message::RemovePlayer, RemovePlayerMessage{43, RemovePlayerReason::Kicked});
+    REQUIRE(waitUntil(
+        loop, [&] { return bobAgain.end.has_value() && aliceClient.left().size() == 2; }, updateAgain));
+    CHECK(bobAgain.end->reason == DisconnectReason::Quit);
+    CHECK(aliceClient.left()[1] == rtype::game::PlayerLeftMessage{1, rtype::game::LeaveReason::Quit});
 
     // Alice quits: the master is told
     aliceClient.session.close(DisconnectReason::Quit);

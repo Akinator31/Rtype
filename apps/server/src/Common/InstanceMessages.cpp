@@ -260,7 +260,7 @@ std::optional<RemovePlayerMessage> decodeRemovePlayer(std::span<const std::byte>
     RemovePlayerMessage message;
     message.playerId = reader.readU32();
     const std::uint8_t reason = reader.readU8();
-    if (reason > static_cast<std::uint8_t>(RemovePlayerReason::LobbyClosed)) {
+    if (reason > static_cast<std::uint8_t>(RemovePlayerReason::Kicked)) {
         reader.fail();
     }
     message.reason = static_cast<RemovePlayerReason>(reason);
@@ -278,7 +278,7 @@ std::optional<ShutdownMessage> decodeShutdown(std::span<const std::byte> payload
 {
     Reader reader(payload);
     const std::uint8_t reason = reader.readU8();
-    if (reason > static_cast<std::uint8_t>(ShutdownReason::MasterStopping)) {
+    if (reason > static_cast<std::uint8_t>(ShutdownReason::EndedByAdmin)) {
         reader.fail();
     }
     return finished(reader, ShutdownMessage{static_cast<ShutdownReason>(reason)});
