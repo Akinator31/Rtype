@@ -24,7 +24,7 @@ To configure it, see the `[web]` section of [Configure a server](../guides/confi
 | `GET /api/health` | nothing | `200 {"status":"ok"}`, answered by the event loop of the master: a master whose loop is stuck is not healthy |
 | `GET /api/session` | a session | `200 {"csrfToken": "…"}` with a session, `401` without |
 | `GET /api/server`, `/api/games`, `/api/games/{id}`, `/api/players`, `/api/actions`, `/api/bans` | a session | The [administration API](../protocol/admin-api.md#3-reading), answered by the loop |
-| `POST /api/players/{id}/kick`, `/api/games/{id}/end`, `/api/messages`, `/api/bans` | a session and its CSRF token | The [actions](../protocol/admin-api.md#4-acting), done on the loop |
+| `POST /api/players/{id}/kick`, `/api/games/{id}/end`, `/api/messages`, `/api/bans`, `/api/bans/lift` | a session and its CSRF token | The [actions](../protocol/admin-api.md#4-acting), done on the loop |
 | `GET /api/events` | a session, from a page of the panel | The WebSocket of the [live events](../protocol/admin-api.md#5-events) |
 | other `/api/...` | a session | `401` without a session, `404` with one |
 | `GET /?token=<64 hex digits>` | the local access token | `303` to `/` with the session cookie; `403` for a wrong token, without a cookie |

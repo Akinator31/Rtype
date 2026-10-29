@@ -27,7 +27,7 @@ master: what it shows is the state of the master at that moment. How it works in
 | `400` | A body or a query the route cannot take: not JSON, a field missing, of the wrong type or out of its range |
 | `401` | No session, or one that expired: open the address in `admin-url.txt` again |
 | `403` | A `POST` without the CSRF token of its session; a WebSocket opened by a page that is not the panel |
-| `404` | No player, or no game, with this id |
+| `404` | No player, or no game, with this id; no ban of this address |
 | `503` | The master is stopping, or its database cannot answer now |
 
 A request without a session is refused before anything else is read: a `401` says nothing about the body.
@@ -145,6 +145,7 @@ if given, for the next page.
 | `end_game` | `game:<id>` | `name`, `players` (their names), `reason` |
 | `message` | `game:<id>` or `everyone` | `text`, `recipients` |
 | `ban` | `address:<ip>` | `duration` (seconds), `expiresAt`, `reason`, `removed` (the players connected from it) |
+| `unban` | `address:<ip>` | `expiresAt` (when the ban would have ended), `bannedBy` (the actor of the ban), `reason` |
 
 `actor` is `local` for the local access token; the accounts will add theirs. A `reason` not given is `""`.
 
@@ -201,6 +202,17 @@ an address already banned replaces it.
 ```json
 {"ban": {"address": "198.51.100.4", "createdAt": 1798000000123, "expiresAt": 1798003600123, "reason": "flood", "actor": "local"}, "removed": 1}
 ```
+
+### `POST /api/bans/lift`
+
+Body: `{"address": "198.51.100.4", "reason": "…"}`. `reason` is optional.
+
+The ban of the address ends before its time: the lobby welcomes the address again at once, and the next start
+of the master does not read it again. The address is the one of the ban, in any writing (`::ffff:198.51.100.4`
+lifts the ban of `198.51.100.4`).
+
+`200 {"address": "198.51.100.4"}`, or `404` if no ban of this address runs: never banned, lifted already, or
+expired.
 
 ## 5. Events
 

@@ -81,6 +81,7 @@ players), then with each event, in order, on the loop. The web server subscribes
 | `endGame(game, reason, actor)` | `AdminGames::end()`: `SHUTDOWN (ENDED_BY_ADMIN)` to its instance | `LEFT_GAME (ENDED_BY_ADMIN)`, back in the lobby; its UDP session ends with `DISCONNECT (SHUTDOWN)` |
 | `sendMessage(game or everyone, text, actor)` | `AdminLobby::sendMessage()` for each player of the game, or of the lobby | `SERVER_MESSAGE`, shown in a toast |
 | `ban(address, duration, reason, actor)` | `AddressBans::add()`, saved in `address_bans`; each player connected from it removed with `BANNED` | `ERROR (BANNED)`; refused at `HELLO` until it expires |
+| `unban(address, reason, actor)` | `AddressBans::remove()`, deleted from `address_bans` | Welcome again at `HELLO`, at once |
 
 In the game, a player removed by an administrator leaves as one who quit: its session gets
 `DISCONNECT (QUIT)`, and the others `PLAYER_LEFT (QUIT)`. The [game protocol](../protocol/game.md) does not
@@ -97,6 +98,7 @@ INFO  admin    Bob (2) removed by local, because "cheating"
 INFO  admin    Game 1 "Duo" ended by local, because "maintenance"
 INFO  admin    Message from local to everyone (3 players): Restart in 5 minutes
 INFO  admin    198.51.100.4 banned by local for 3600 s, because "flood": 1 players removed
+INFO  admin    The ban of 198.51.100.4 lifted by local, because "a mistake"
 ```
 
 ## Bans
@@ -111,6 +113,7 @@ and changes. The accounts will bring bans of accounts.
 | `address_bans` | The table, one row per address (`address` its primary key, `created_at`, `expires_at`, `reason`, `actor`). Each ban is saved as it is added, on the database thread |
 | At start | `loadAddressBans()` deletes the expired rows, then reads the others, before the database thread takes the database: a ban survives a restart |
 | Every minute | The expired bans are forgotten in memory, and deleted from the table |
+| Lifted | `unban()` forgets the ban in memory and deletes its row, before it expires. A ban that ended already is not lifted: `false`, nothing recorded |
 
 An address is compared without its port, and an IPv4 address seen by a listener on `[::]`
 (`::ffff:203.0.113.9`) as the IPv4 address it holds (`banKey()`). The bans go by the address of the TCP
@@ -123,9 +126,10 @@ connection to the lobby: the lobby has no proxy in front of it, unlike the panel
 - **`Administration` alone**, with fakes of the games and the lobby: the snapshot then the events in order;
   each action, what it asked of the games and the lobby, and its record read back, newest first and page by
   page, on SQLite and PostgreSQL; a ban capped at 7 days.
-- **The bans**: expiry, the port and the IPv6 writing of an address, the table on both engines with its purge.
+- **The bans**: expiry, the port and the IPv6 writing of an address, the table on both engines with its purge;
+  a ban lifted, in memory and in the table, recorded, and lifted once only.
 - **End to end**, with real lobby clients, real instances and the web server on a free port: the WebSocket's
   snapshot then its events, every route; a player removed, seen by the client and by its instance; a game
   ended; a message to a game and to everyone; an address banned, refused at `HELLO`, after a restart too, and
-  welcome again once expired; no session, no CSRF token or another session's, wrong JSON, and a WebSocket opened
+  welcome again once expired; a ban lifted from the panel, the address welcome again at once; no session, no CSRF token or another session's, wrong JSON, and a WebSocket opened
   without a session, without an origin, or from another one.

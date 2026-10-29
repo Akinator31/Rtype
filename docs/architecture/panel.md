@@ -21,7 +21,7 @@ is the master's. To use it: [Administer a server](../guides/administer-a-server.
 | `/games` | The running games, live, filtered by name and by state (stale, with room) |
 | `/games/{id}` | A game: its players, their scores, whether alive, their latency; its wave, tick and port. End it, message it, remove a player |
 | `/players` | The players of the lobby and their game. Remove one, ban its address for an hour, a day or seven days |
-| `/actions` | The record of the actions, newest first, a page of 50 at a time; the addresses banned now |
+| `/actions` | The record of the actions, newest first, a page of 50 at a time; the addresses banned now, each ban lifted from here |
 
 The master answers `index.html` for each of these addresses ([Routes](web.md#routes)), and React Router shows
 the page. Every action opens a dialog first, which says what it does and takes a reason; refused, the dialog
@@ -107,5 +107,5 @@ The end-to-end tests fail on any violation the browser reports.
 - `e2e/panel.spec.ts`: a real `r-type_server` serving the built panel, and `rtype_panel_players`
   (`tests/helpers/panel_players.cpp`), two players in a game. The panel opened with the address of
   `admin-url.txt`, the game seen live with the latency of its players, ended with a reason, its players back in
-  the lobby, the action in the record; a panel without a session told to open `admin-url.txt` again. No CSP
+  the lobby, the action in the record; their address banned, which removes them, then the ban lifted; a panel without a session told to open `admin-url.txt` again. No CSP
   violation, no error in the console.

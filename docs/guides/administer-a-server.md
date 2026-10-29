@@ -55,6 +55,7 @@ with the address the server writes at each start.
     | Send a message | The overview, **Message everyone**; a game, **Message the game** | Each player sees it in the game. One line, 200 bytes at most |
     | Remove a player | Players, or a game, **Remove** | The player leaves its game and the server. It may connect again |
     | Ban an address | Players, **Ban** | For an hour, a day or seven days, across restarts: the server refuses the address, and removes the players connected from it |
+    | Lift a ban | Actions, **Lift**, beside the banned address | The server welcomes the address again at once |
 
     A ban is temporary: an address is shared, by a household or a network, and changes.
 
