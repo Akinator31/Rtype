@@ -12,6 +12,8 @@
 #include "Game/GameView.hpp"
 #include "Game/HealthBarLooks.hpp"
 #include "Game/HealthBarSystem.hpp"
+#include "Game/Hud.hpp"
+#include "Game/HudSystem.hpp"
 #include "Game/ImpactLooks.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
@@ -32,6 +34,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -73,6 +76,7 @@ public:
     [[nodiscard]] std::vector<rtype::game::Snapshot> takeSnapshots() override { return {}; }
     void setPaused(bool paused) override { pauses.push_back(paused); }
     [[nodiscard]] bool isOver() const override { return false; }
+    [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override { return std::nullopt; }
 };
 
 /// The engine of the client without a window: a fake keyboard, and the system that plays the games.
@@ -531,6 +535,7 @@ class ScriptedSession final : public GameSession
 {
 public:
     std::vector<rtype::game::Snapshot> snapshots;
+    std::optional<std::chrono::milliseconds> rtt;
 
     [[nodiscard]] std::uint8_t localSlot() const override { return 0; }
     void setInput(rtype::game::PlayerInput /*input*/) override {}
@@ -541,6 +546,7 @@ public:
     }
     void setPaused(bool /*paused*/) override {}
     [[nodiscard]] bool isOver() const override { return false; }
+    [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override { return rtt; }
 };
 
 /// The engine of the client playing a scripted session, its impacts played.
@@ -1043,4 +1049,119 @@ TEST_CASE("The death screen shows the lives left lit, and puts out the one just 
     client.wait(DeathScreenSystem::LifeOutDelay + DeathScreenSystem::LifeOut);
     CHECK(client.opacityOf(parts.lostLife) == Approx(0.0f));
     CHECK(client.opacityOf(parts.countdown) == Approx(1.0f));
+}
+
+// --- HUD ---
+
+namespace
+{
+
+const HudLook HudPictures{{1}, {2}, {}};
+
+/// The engine of the client playing a scripted session, with its HUD.
+struct HudClient : ImpactClient {
+    GameMetrics metrics;
+    rtype::ecs::entity_t entity;
+
+    HudClient()
+    {
+        ecs.registerSystem<HudSystem>(sessions, metrics);
+        entity = openHud(ecs, scene, HudPictures, 3);
+    }
+
+    [[nodiscard]] const Hud &hud() { return ecs.getComponent<Hud>(entity); }
+
+    [[nodiscard]] const std::string &textOf(rtype::ecs::entity_t part)
+    {
+        return ecs.getComponent<rtype::engine::Text>(part).text;
+    }
+
+    /// The pictures of the lives of the HUD drawn with a texture.
+    [[nodiscard]] std::size_t countLives(rtype::render::TextureId texture)
+    {
+        return static_cast<std::size_t>(std::ranges::count_if(hud().lives, [&](rtype::ecs::entity_t life) {
+            return ecs.getComponent<rtype::engine::Sprite>(life).texture == texture;
+        }));
+    }
+
+    /// The signal bars shown in a colour.
+    [[nodiscard]] std::size_t countBars(rtype::render::Color color)
+    {
+        return static_cast<std::size_t>(std::ranges::count_if(hud().signal, [&](rtype::ecs::entity_t bar) {
+            const rtype::render::Color shown = ecs.getComponent<rtype::engine::Box>(bar).color;
+            return ecs.getComponent<rtype::engine::Opacity>(bar).value > 0.0f && shown.r == color.r &&
+                   shown.g == color.g && shown.b == color.b;
+        }));
+    }
+};
+
+rtype::game::Snapshot snapshotWith(std::uint32_t tick, std::vector<rtype::game::PlayerState> players)
+{
+    rtype::game::Snapshot snapshot = snapshotOf(tick, {});
+    snapshot.players = std::move(players);
+    return snapshot;
+}
+
+} // namespace
+
+TEST_CASE("The HUD shows the lives left of the local player lit, its slot and its score", "[client]")
+{
+    HudClient client;
+    client.engine.update(Tick);
+    // Before the first snapshot, the player has all its lives
+    CHECK(client.countLives(HudPictures.life) == 3);
+    CHECK(client.textOf(client.hud().score) == "0000000");
+
+    client.receive(snapshotWith(1, {{0, 2, 24500}, {1, 3, 98100}}));
+    CHECK(client.countLives(HudPictures.life) == 2);
+    CHECK(client.countLives(HudPictures.lostLife) == 1);
+    CHECK(client.textOf(client.hud().pilot) == "1P");
+    CHECK(client.textOf(client.hud().score) == "0024500");
+    // The shadows go across the screen
+    CHECK(client.ecs.getComponent<rtype::engine::Box>(client.hud().topShadow).width == Approx(1920.0f));
+}
+
+TEST_CASE("The HUD lists the score of each other player, the first line on top", "[client]")
+{
+    HudClient client;
+    client.receive(snapshotWith(1, {{0, 3, 100}, {1, 3, 98100}, {3, 1, 71300}}));
+    const Hud &hud = client.hud();
+    CHECK(client.textOf(hud.allies[0].name) == "P2");
+    CHECK(client.textOf(hud.allies[0].score) == "0098100");
+    CHECK(client.textOf(hud.allies[1].name) == "P4");
+    CHECK(client.textOf(hud.allies[1].score) == "0071300");
+    CHECK(client.textOf(hud.allies[2].name).empty());
+    const auto &anchors = client.ecs.cache<rtype::engine::Anchor>();
+    CHECK(anchors.get(hud.allies[0].score).y < anchors.get(hud.allies[1].score).y);
+    // The name is left of the score
+    CHECK(anchors.get(hud.allies[0].name).x < anchors.get(hud.allies[0].score).x);
+
+    // A player who leaves the game leaves the HUD
+    client.receive(snapshotWith(2, {{0, 3, 100}, {3, 1, 71300}}));
+    CHECK(client.textOf(hud.allies[0].name) == "P4");
+    CHECK(client.textOf(hud.allies[1].name).empty());
+}
+
+TEST_CASE("The HUD shows the ping with its signal bars online, and nothing offline", "[client]")
+{
+    HudClient client;
+    client.receive(snapshotWith(1, {{0, 3, 0}}));
+    CHECK(client.textOf(client.hud().ping).empty());
+    CHECK(client.countBars(rtype::render::colors::White) == 0);
+
+    client.session->rtt = std::chrono::milliseconds(28);
+    client.engine.update(Tick);
+    CHECK(client.textOf(client.hud().ping) == "28 MS");
+    CHECK(client.countBars(rtype::render::colors::White) == 3);
+    CHECK(client.countBars({58, 62, 67, 255}) == 1);
+}
+
+TEST_CASE("The signal bars light up as the ping gets shorter", "[client]")
+{
+    using std::chrono::milliseconds;
+    CHECK(countSignalBars(milliseconds(10)) == 4);
+    CHECK(countSignalBars(HudSystem::FourBars) == 3);
+    CHECK(countSignalBars(milliseconds(90)) == 2);
+    CHECK(countSignalBars(milliseconds(500)) == 1);
+    CHECK(formatScore(42) == "0000042");
 }

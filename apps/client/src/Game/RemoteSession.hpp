@@ -100,6 +100,7 @@ public:
     /// Nothing: online, the game goes on.
     void setPaused(bool /*paused*/) override {}
     [[nodiscard]] bool isOver() const override { return _over; }
+    [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override;
 
     /// The game accepted the player.
     [[nodiscard]] bool accepted() const { return _accepted.has_value(); }

@@ -68,6 +68,9 @@ struct Box {
     render::Color color = render::colors::White;
     /// Width of the outline, drawn inside the box, or 0 for a filled box.
     float outline = 0.0f;
+    /// Colour of the bottom edge of a filled box, which fades from `color` at the top into it: a shadow along
+    /// an edge of the screen. None for a plain box.
+    std::optional<render::Color> bottom = std::nullopt;
 };
 
 /// A circle lit along a part of its length, centred on the position of the entity: a countdown that runs

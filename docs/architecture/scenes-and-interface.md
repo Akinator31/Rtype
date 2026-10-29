@@ -163,7 +163,7 @@ the game creates entities with `Position` and `Collider`.
 | `Drawable` | Required: the layer (`World` or `Interface`) and the order inside it (higher on top). |
 | `Text` | A text, centred on the position. |
 | `Sprite` | A texture or a frame of a sprite sheet, centred on the position, turned by its `rotation`. |
-| `Box` | A rectangle, filled or outlined, centred on the position. |
+| `Box` | A rectangle, filled or outlined, centred on the position. A filled box with a `bottom` colour fades from its colour at the top into it: a shadow along an edge of the screen. |
 | `Scale`, `Opacity` | Size factor and transparency, animated by tweens. |
 
 The HUD is made of entities of the game scene in the `Interface` layer: it is drawn after the world.

@@ -1,13 +1,12 @@
 #include "Game/GameScenes.hpp"
 
 #include "Assets.hpp"
-#include "Game/EntityLook.hpp"
 #include "Game/GameView.hpp"
+#include "Game/Hud.hpp"
 #include "Game/LocalSession.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "ShipModel.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
-#include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Rules.hpp"
@@ -47,10 +46,6 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::Sound, RTYPE_SOUND_DESTRUCTION},
     {AssetType::Sound, RTYPE_SOUND_COLLISION},
 };
-
-/// Distance of the HUD from the top left corner of the screen, and between two lines.
-constexpr float HudMargin = 40.0f;
-constexpr float HudLineSpacing = 56.0f;
 
 /// The hulls of the ship models seen through the camera of the game, flames excluded, in model units:
 /// measured on the models in their Move pose, the ship of the players facing right, the drop ship of the
@@ -369,33 +364,10 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
     ecs.addComponent<engine::Light>(sky, GameLight);
 
-    buildHud(scene, style);
+    openHud(ecs, scene, {_deathLook.life, _deathLook.lostLife, style.toast.nameFont}, game::Rules{}.lives);
 
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
-}
-
-void GameScenes::buildHud(engine::SceneId scene, const engine::InterfaceStyle &style)
-{
-    ecs::Ecs &ecs = _engine.getEcs();
-    // One line per player, in its colour, empty while the slot is free
-    engine::InterfaceBuilder hud(ecs, scene, style);
-    for (std::uint8_t slot = 0; slot < game::MaxPlayers; ++slot) {
-        const ecs::entity_t line = hud.boundText(
-            [this, slot] {
-                for (const game::PlayerState &player : _sessions.players()) {
-                    if (player.slot == slot) {
-                        return std::format("P{}   {} {}   {} {:06}", slot + 1,
-                                           _translations.text("hud.lives"), player.lives,
-                                           _translations.text("hud.score"), player.score);
-                    }
-                }
-                return std::string();
-            },
-            {engine::AnchorPoint::TopLeft, HudMargin,
-             HudMargin + (static_cast<float>(slot) * HudLineSpacing)});
-        ecs.getComponent<engine::Text>(line).color = playerColor(slot);
-    }
 }
 
 } // namespace rtype::client

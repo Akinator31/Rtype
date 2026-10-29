@@ -440,6 +440,14 @@ void Renderer::drawRectangle(Rectangle rectangle, Color color)
     DrawRectangleRec(toRaylib(rectangle), toRaylib(color));
 }
 
+void Renderer::drawGradientRectangle(Rectangle rectangle, Color top, Color bottom)
+{
+    _impl->requireFrame();
+    // The corners go anticlockwise from the top left
+    DrawRectangleGradientEx(toRaylib(rectangle), toRaylib(top), toRaylib(bottom), toRaylib(bottom),
+                            toRaylib(top));
+}
+
 void Renderer::drawCircle(Vector2 center, float radius, Color color)
 {
     _impl->requireFrame();

@@ -25,8 +25,8 @@ inline constexpr const char *PauseScene = "pause";
 /// and the pause menu over it.
 ///
 /// - The game scene shows the starry sky, the world of the session (the ships of the players and the Bydos
-///   in 3D, through an orthographic camera: what is drawn is what collides), and a HUD with the lives and
-///   score of each player, in its colour.
+///   in 3D, through an orthographic camera: what is drawn is what collides), and the HUD (openHud()): the
+///   lives and score of the local player, the score of the others, and the ping online.
 /// - The events, in the corner of the toasts: a Bydo shot down by the local player, and the ship of a player
 ///   shot down, the local one or an ally.
 /// - A banner across the screen when a wave starts, with its number.
@@ -63,7 +63,6 @@ class GameScenes
 
     void build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                const engine::Metrics &metrics, const engine::InterfaceStyle &style);
-    void buildHud(engine::SceneId scene, const engine::InterfaceStyle &style);
     /// Shows the event of a ship killed, if it is one: a Bydo killed by the local player, or a player ship.
     void showKill(const Kill &kill);
     void showWave(std::uint16_t wave);

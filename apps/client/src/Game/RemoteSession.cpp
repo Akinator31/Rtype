@@ -216,6 +216,15 @@ void RemoteSession::update(float elapsed)
     }
 }
 
+std::optional<std::chrono::milliseconds> RemoteSession::ping() const
+{
+    const std::optional<Clock::duration> rtt = _session.rtt();
+    if (!rtt) {
+        return std::nullopt;
+    }
+    return std::chrono::duration_cast<std::chrono::milliseconds>(*rtt);
+}
+
 std::vector<game::Snapshot> RemoteSession::takeSnapshots()
 {
     if (!_interpolation.drawnTick()) {

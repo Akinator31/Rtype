@@ -5,7 +5,9 @@
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Simulation.hpp"
 
+#include <chrono>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace rtype::client
@@ -42,6 +44,8 @@ public:
     [[nodiscard]] std::vector<game::Snapshot> takeSnapshots() override;
     void setPaused(bool paused) override { _paused = paused; }
     [[nodiscard]] bool isOver() const override { return _over; }
+    /// None: the game runs in the client.
+    [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override { return std::nullopt; }
 
     /// The simulation, for the tests.
     [[nodiscard]] const game::Simulation &simulation() const { return _simulation; }

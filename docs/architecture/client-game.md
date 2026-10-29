@@ -24,8 +24,9 @@ apps/client/src/Game/
   DamageLooks.cpp        the damage written above the Bydos hit (DamageNumberSystem shows it)
   HealthBarLooks.cpp     the health bars above the Bydos and the allies hit (HealthBarSystem shows them)
   DeathScreen.cpp        the death screen of the local player (DeathScreenSystem counts it down)
+  Hud.cpp                the HUD of the game scene (HudSystem writes it)
   EntitySounds.cpp       the sound of each kind of entity, for a shot fired, a shot that hits, a ship destroyed
-  GameScenes.cpp         the game scene, its HUD, and the pause menu
+  GameScenes.cpp         the game scene and the pause menu
 ```
 
 The code of the client is the library `r-type_client_core`, and `main.cpp` the program, like the server: the
@@ -66,7 +67,7 @@ the input. When the game scene closes, the engine destroys its entities and the 
 
 | Scene | What it holds |
 |---|---|
-| `game` | The starry sky, the world of the session, and the HUD: one line per player, in its colour, with its lives and score. Escape opens the pause menu. |
+| `game` | The starry sky, the world of the session, and the [HUD](#hud). Escape opens the pause menu. |
 | `pause` | Over the game, dimmed: **Resume**, or **Leave the game**. Offline, the game stops while it is open. |
 
 `GameScenes::play(session, onEnd)` starts a game with a session: the game scene replaces every scene. "Solo"
@@ -225,6 +226,30 @@ sounds play when the shot is drawn and when the ship disappears, about 100 ms af
 is not used yet; the destruction sound of `config/ships/` (`ShipSounds`) is not read by the client, which does not
 know which enemy a Bydo is.
 
+### HUD
+
+The HUD is the one of the Figma design (file `RrrH0ic4ttdyDoc3nRnWBr`, "Rangée 6 · HUD en jeu", node 121:29),
+1440 wide, scaled by 4/3 to the 1920 of the game:
+
+- a shadow along the top of the screen (black at 60 % fading out) and one along the bottom (fading in to 65 %),
+  under the HUD and the toasts: `engine::Box` with a `bottom` colour, a vertical gradient;
+- bottom left, the local player: one picture per life of the start (`images/hud/life.png`, `life_lost.png`, as
+  on the death screen), lit for the lives left; its slot, `1P`; its score on seven digits, in large;
+- bottom right, the other players, one line each from the top in the order of their slots, `P2` then its
+  score; under them, online, the ping (`28 MS`) with four signal bars, lit under 25, 60 and 120 ms
+  (`HudSystem::FourBars`…), one at least. Offline, there is no ping: nothing is shown;
+- top right, the events, which stay the toasts of the engine ([Events](#events)).
+
+`openHud()` creates its entities in the game scene, in the Interface layer under the death screen, and a `Hud`
+that lists them. The `HudSystem` writes them each frame from the players of the latest snapshot
+(`GameSessionSystem::players()`) and the ping of the session (`GameSession::ping()`: the round-trip time of the
+`network::ClientSession` online, none offline), and places them through their `Anchor`: the lines of the other
+players pile up from the ping, and their names follow the width of their score. Before the first snapshot, the
+local player has all its lives and a score of 0.
+
+The design also has a record (`HI`), a Beam gauge and the names of the pilots: the game keeps no record, has no
+charged shot yet, and the HUD names the players by slot, as the events do.
+
 ### Events
 
 The corner of the toasts (top right) tells the deaths of the game, as event lines (`engine::Engine::showToast()`
@@ -309,7 +334,10 @@ prediction. The last life opens no death screen: the event of the ship lost is t
 - the waves: each wave started is told once, with its number;
 - the death screen: the seconds left in the countdown and its ring follow the snapshots, not the frames, each new
   second pops, and the screen goes once the tick of the next ship is reached; the lives left are lit, the one
-  just lost goes out after the veil and the rest have faded in.
+  just lost goes out after the veil and the rest have faded in;
+- the HUD: the lives left of the local player lit, its slot and its score on seven digits, all its lives before
+  the first snapshot; the scores of the other players, the first on top, a player gone leaving its line; the
+  ping with its signal bars when the session has one, nothing offline.
 
 ```sh
 ./build/bin/rtype_tests "[client]"

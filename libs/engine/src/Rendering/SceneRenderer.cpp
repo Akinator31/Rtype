@@ -955,6 +955,8 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                                          box.height * scale};
             if (box.outline > 0.0f) {
                 renderer.drawRectangleOutline(area, box.outline, faded(box.color, opacity));
+            } else if (box.bottom) {
+                renderer.drawGradientRectangle(area, faded(box.color, opacity), faded(*box.bottom, opacity));
             } else {
                 renderer.drawRectangle(area, faded(box.color, opacity));
             }

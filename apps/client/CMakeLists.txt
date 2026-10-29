@@ -29,6 +29,8 @@ add_library(r-type_client_core STATIC
     src/Game/GameView.cpp
     src/Game/HealthBarLooks.cpp
     src/Game/HealthBarSystem.cpp
+    src/Game/Hud.cpp
+    src/Game/HudSystem.cpp
     src/Game/ImpactLooks.cpp
     src/Game/ImpactSystem.cpp
     src/Game/Interpolation.cpp
