@@ -13,3 +13,12 @@ export function useLive(): LiveState {
   }
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 }
+
+/** The store itself, for what acts on the connection: try again now. */
+export function useLiveStore(): LiveStore {
+  const store = useContext(LiveContext);
+  if (store === null) {
+    throw new Error('useLiveStore() needs a LiveProvider');
+  }
+  return store;
+}

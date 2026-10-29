@@ -40,23 +40,38 @@ describe('the live state', () => {
 
     state = apply([{ type: 'player.updated', player: { ...dave, gameId: 3 } }], state);
     expect(state.players.find((player) => player.id === 10)?.gameId).toBe(3);
-    // Moving into a game is not news for the feed
-    expect(state.feed).toHaveLength(1);
+    // Joining a game is news, for the feed of the game too
+    expect(state.feed[0]).toMatchObject({
+      tone: 'bonus',
+      subject: 'Dave',
+      verb: 'joined',
+      object: 'Bydo hunters',
+      gameId: 3,
+    });
+    // An update that does not move the player is not
+    state = apply([{ type: 'player.updated', player: { ...dave, gameId: 3 } }], state);
+    expect(state.feed).toHaveLength(2);
 
     state = apply([{ type: 'player.left', playerId: 10 }], state);
     expect(state.players.map((player) => player.id)).toEqual([7, 8, 9]);
-    expect(state.feed[0]).toMatchObject({ subject: 'Dave', verb: 'left the server' });
+    expect(state.feed[0]).toMatchObject({ subject: 'Dave', verb: 'left the server', gameId: 3 });
   });
 
   it('follows the games: started, updated every second, ended with a reason', () => {
     const second = { ...fixtures.game, id: 4, name: 'Duo', players: [] };
     let state = apply([snapshot, { type: 'game.started', game: second }]);
     expect(state.games.map((game) => game.id)).toEqual([3, 4]);
-    expect(state.feed[0]).toMatchObject({ tone: 'bonus', subject: 'Duo', verb: 'started' });
+    expect(state.feed[0]).toMatchObject({ tone: 'bonus', subject: 'Duo', verb: 'started', gameId: 4 });
 
+    // The status of every second is not news; a new wave is, and an instance stuck
+    state = apply([{ type: 'game.updated', game: { ...second, statusAge: 300 } }], state);
+    expect(state.feed).toHaveLength(1);
     state = apply([{ type: 'game.updated', game: { ...second, wave: 5 } }], state);
     expect(state.games[1]?.wave).toBe(5);
-    expect(state.feed).toHaveLength(1);
+    expect(state.feed[0]).toMatchObject({ tone: 'info', subject: 'Duo', verb: 'wave 5 reached', gameId: 4 });
+    state = apply([{ type: 'game.updated', game: { ...second, wave: 5, stale: true } }], state);
+    expect(state.feed[0]).toMatchObject({ tone: 'alert', subject: 'Duo', verb: 'no status for 3 s' });
+    expect(state.feed).toHaveLength(3);
 
     state = apply([{ type: 'game.ended', gameId: 4, reason: 'crashed' }], state);
     expect(state.games.map((game) => game.id)).toEqual([3]);
@@ -112,7 +127,7 @@ describe('the live state', () => {
       tone: 'alert',
       subject: 'Alice',
       verb: 'removed: cheating',
-      object: 'local',
+      gameId: 3,
     });
     expect(
       describeAction({
@@ -121,7 +136,7 @@ describe('the live state', () => {
         target: 'everyone',
         details: { text: 'hi', recipients: 3 },
       }),
-    ).toMatchObject({ tone: 'bonus', verb: 'to everyone, 3 received it, by' });
+    ).toMatchObject({ tone: 'bonus', verb: 'to everyone, 3 received it' });
     expect(
       describeAction({
         ...fixtures.kick,
@@ -132,7 +147,7 @@ describe('the live state', () => {
     ).toMatchObject({ subject: '198.51.100.4', verb: 'banned' });
     expect(
       describeAction({ ...fixtures.kick, action: 'end_game', target: 'game:3', details: { name: 'Duo' } }),
-    ).toMatchObject({ subject: 'Duo', verb: 'ended' });
+    ).toMatchObject({ subject: 'Duo', verb: 'ended', gameId: 3 });
     expect(
       describeAction({
         ...fixtures.kick,
@@ -140,6 +155,17 @@ describe('the live state', () => {
         target: 'address:198.51.100.4',
         details: { reason: 'a mistake' },
       }),
-    ).toEqual({ tone: 'bonus', subject: '198.51.100.4', verb: 'ban lifted: a mistake', object: 'local' });
+    ).toEqual({ tone: 'bonus', subject: '198.51.100.4', verb: 'ban lifted: a mistake' });
+  });
+
+  it('counts the frames since the snapshot, and knows when the last came', () => {
+    let state = applyEvent(initialState, snapshot, fixtures.now);
+    expect(state).toMatchObject({ snapshotAt: fixtures.now, lastFrameAt: fixtures.now, events: 0 });
+    state = applyEvent(state, { type: 'player.left', playerId: 8 }, fixtures.now + 10);
+    state = applyEvent(state, { type: 'player.left', playerId: 9 }, fixtures.now + 20);
+    expect(state).toMatchObject({ snapshotAt: fixtures.now, lastFrameAt: fixtures.now + 20, events: 2 });
+    // A new snapshot, after a reconnection, counts again
+    state = applyEvent(state, snapshot, fixtures.now + 30);
+    expect(state).toMatchObject({ snapshotAt: fixtures.now + 30, events: 0 });
   });
 });

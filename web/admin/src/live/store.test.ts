@@ -64,6 +64,28 @@ describe('the store of the WebSocket', () => {
     store.stop();
   });
 
+  it('says which attempt comes and when, and tries at once when asked', async () => {
+    const store = fakeStore();
+    store.start();
+    FakeSocket.last().open();
+    FakeSocket.last().close();
+    const delay = ReconnectDelays[0] ?? 0;
+    expect(store.getSnapshot()).toMatchObject({ connection: 'reconnecting', attempt: 1 });
+    expect(store.getSnapshot().retryAt).toBe(Date.now() + delay);
+
+    store.retryNow();
+    expect(FakeSocket.opened).toHaveLength(2);
+    // The attempt asked replaces the one planned
+    await vi.advanceTimersByTimeAsync(delay);
+    expect(FakeSocket.opened).toHaveLength(2);
+    FakeSocket.last().open();
+    expect(store.getSnapshot()).toMatchObject({ connection: 'open', attempt: 0, retryAt: null });
+    // Open, there is nothing to retry
+    store.retryNow();
+    expect(FakeSocket.opened).toHaveLength(2);
+    store.stop();
+  });
+
   it('stops trying once the session is gone', async () => {
     const store = fakeStore({ hasSession: () => Promise.resolve(false) });
     store.start();

@@ -86,7 +86,7 @@ export class LiveStore {
     socket.onopen = () => {
       opened = true;
       this.attempts = 0;
-      this.set({ ...this.state, connection: 'open' });
+      this.set({ ...this.state, connection: 'open', attempt: 0, retryAt: null });
     };
     socket.onmessage = (message: MessageEvent) => {
       if (typeof message.data !== 'string') return;
@@ -117,10 +117,23 @@ export class LiveStore {
     };
   }
 
+  /** Tries again now, without waiting for the delay: the Retry of the host. */
+  retryNow(): void {
+    if (this.stopped || this.timer === null) return;
+    clearTimeout(this.timer);
+    this.timer = null;
+    this.connect();
+  }
+
   private retry(): void {
     const delay = ReconnectDelays[Math.min(this.attempts, ReconnectDelays.length - 1)] ?? 30000;
     this.attempts += 1;
-    this.set({ ...this.state, connection: 'reconnecting' });
+    this.set({
+      ...this.state,
+      connection: 'reconnecting',
+      attempt: this.attempts,
+      retryAt: this.now() + delay,
+    });
     this.timer = setTimeout(() => {
       this.timer = null;
       if (!this.stopped) this.connect();

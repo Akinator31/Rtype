@@ -16,6 +16,8 @@ export interface FeedEntry {
   subject: string;
   verb: string;
   object?: string;
+  /** The game it happened in, for the feed of a game. */
+  gameId?: number;
 }
 
 /** The number of games and players at a moment, for the chart of the overview. */
@@ -27,6 +29,13 @@ export interface Sample {
 
 export interface LiveState {
   connection: Connection;
+  /** The attempts since the WebSocket closed, and when the next one starts: while reconnecting. */
+  attempt: number;
+  retryAt: number | null;
+  /** When the last snapshot, and the last frame, came; the events since the snapshot. */
+  snapshotAt: number | null;
+  lastFrameAt: number | null;
+  events: number;
   server: ServerInfo | null;
   games: Game[];
   players: Player[];
@@ -45,6 +54,11 @@ export const SampleInterval = 5000;
 
 export const initialState: LiveState = {
   connection: 'connecting',
+  attempt: 0,
+  retryAt: null,
+  snapshotAt: null,
+  lastFrameAt: null,
+  events: 0,
   server: null,
   games: [],
   players: [],
@@ -86,29 +100,42 @@ const endings: Record<string, string> = {
   master_stopping: 'ended, the server stops',
 };
 
+/** The game an action was about: its target, or the game of the player it removed. */
+export function gameOf(action: Action): number | undefined {
+  const target = /^game:(\d+)$/.exec(action.target);
+  if (target?.[1] !== undefined) return Number(target[1]);
+  return typeof action.details.gameId === 'number' ? action.details.gameId : undefined;
+}
+
 /** The words of an action of the record: who did what to whom. */
 export function describeAction(action: Action): Omit<FeedEntry, 'key' | 'at'> {
   const details = action.details;
   const name = typeof details.name === 'string' ? details.name : undefined;
   const reason = typeof details.reason === 'string' && details.reason !== '' ? `: ${details.reason}` : '';
+  const gameId = gameOf(action);
   switch (action.action) {
     case 'kick':
       return {
         tone: 'alert',
         subject: name ?? action.target,
         verb: `removed${reason}`,
-        object: action.actor,
+        gameId,
       };
     case 'end_game':
-      return { tone: 'alert', subject: name ?? action.target, verb: `ended${reason}`, object: action.actor };
+      return {
+        tone: 'alert',
+        subject: name ?? action.target,
+        verb: `ended${reason}`,
+        gameId,
+      };
     case 'message': {
       const recipients = typeof details.recipients === 'number' ? details.recipients : 0;
       const target = action.target === 'everyone' ? 'everyone' : action.target.replace('game:', 'game ');
       return {
         tone: 'bonus',
         subject: 'Message',
-        verb: `to ${target}, ${recipients} received it, by`,
-        object: action.actor,
+        verb: `to ${target}, ${recipients} received it`,
+        gameId,
       };
     }
     case 'ban':
@@ -116,17 +143,15 @@ export function describeAction(action: Action): Omit<FeedEntry, 'key' | 'at'> {
         tone: 'alert',
         subject: action.target.replace('address:', ''),
         verb: `banned${reason}`,
-        object: action.actor,
       };
     case 'unban':
       return {
         tone: 'bonus',
         subject: action.target.replace('address:', ''),
         verb: `ban lifted${reason}`,
-        object: action.actor,
       };
     default:
-      return { tone: 'info', subject: action.action, verb: action.target, object: action.actor };
+      return { tone: 'info', subject: action.action, verb: action.target };
   }
 }
 
@@ -140,6 +165,8 @@ export function applyEvent(state: LiveState, event: LiveEvent, now: number): Liv
         server: event.server,
         games: [...event.games].sort((a, b) => a.id - b.id),
         players: [...event.players].sort((a, b) => a.id - b.id),
+        snapshotAt: now,
+        events: -1,
       };
       break;
     case 'player.joined':
@@ -154,16 +181,40 @@ export function applyEvent(state: LiveState, event: LiveEvent, now: number): Liv
         }),
       };
       break;
-    case 'player.updated':
-      next = { ...state, players: upsert(state.players, event.player) };
+    case 'player.updated': {
+      const before = state.players.find((player) => player.id === event.player.id);
+      const gameId = event.player.gameId;
+      const entered = gameId !== null && before?.gameId !== gameId;
+      const game = state.games.find((candidate) => candidate.id === gameId);
+      next = {
+        ...state,
+        players: upsert(state.players, event.player),
+        feed: entered
+          ? withFeed(state, {
+              at: now,
+              tone: 'bonus',
+              subject: event.player.name,
+              verb: 'joined',
+              object: game?.name ?? `game ${gameId}`,
+              gameId,
+            })
+          : state.feed,
+      };
       break;
+    }
     case 'player.left': {
       const left = state.players.find((player) => player.id === event.playerId);
       next = {
         ...state,
         players: state.players.filter((player) => player.id !== event.playerId),
         feed: left
-          ? withFeed(state, { at: now, tone: 'info', subject: left.name, verb: 'left the server' })
+          ? withFeed(state, {
+              at: now,
+              tone: 'info',
+              subject: left.name,
+              verb: 'left the server',
+              gameId: left.gameId ?? undefined,
+            })
           : state.feed,
       };
       break;
@@ -172,12 +223,41 @@ export function applyEvent(state: LiveState, event: LiveEvent, now: number): Liv
       next = {
         ...state,
         games: upsert(state.games, event.game),
-        feed: withFeed(state, { at: now, tone: 'bonus', subject: event.game.name, verb: 'started' }),
+        feed: withFeed(state, {
+          at: now,
+          tone: 'bonus',
+          subject: event.game.name,
+          verb: 'started',
+          gameId: event.game.id,
+        }),
       };
       break;
-    case 'game.updated':
-      next = { ...state, games: upsert(state.games, event.game) };
+    case 'game.updated': {
+      const before = state.games.find((game) => game.id === event.game.id);
+      // Stuck, or its wave reached: worth a line; the status of every second is not
+      const stuck = event.game.stale && before?.stale === false;
+      const waved = event.game.wave !== null && before !== undefined && before.wave !== event.game.wave;
+      let feed = state.feed;
+      if (stuck) {
+        feed = withFeed(state, {
+          at: now,
+          tone: 'alert',
+          subject: event.game.name,
+          verb: 'no status for 3 s',
+          gameId: event.game.id,
+        });
+      } else if (waved) {
+        feed = withFeed(state, {
+          at: now,
+          tone: 'info',
+          subject: event.game.name,
+          verb: `wave ${event.game.wave} reached`,
+          gameId: event.game.id,
+        });
+      }
+      next = { ...state, games: upsert(state.games, event.game), feed };
       break;
+    }
     case 'game.ended': {
       const ended = state.games.find((game) => game.id === event.gameId);
       next = {
@@ -185,9 +265,10 @@ export function applyEvent(state: LiveState, event: LiveEvent, now: number): Liv
         games: state.games.filter((game) => game.id !== event.gameId),
         feed: withFeed(state, {
           at: now,
-          tone: event.reason === 'crashed' ? 'alert' : 'info',
+          tone: event.reason === 'crashed' || event.reason === 'master_stopping' ? 'alert' : 'info',
           subject: ended?.name ?? `Game ${event.gameId}`,
           verb: endings[event.reason] ?? `ended, ${event.reason}`,
+          gameId: event.gameId,
         }),
       };
       break;
@@ -202,7 +283,7 @@ export function applyEvent(state: LiveState, event: LiveEvent, now: number): Liv
     default:
       return state;
   }
-  return { ...next, history: withSample(next, now) };
+  return { ...next, history: withSample(next, now), lastFrameAt: now, events: next.events + 1 };
 }
 
 /** The counts of the server, from the lists kept live rather than the snapshot. */
