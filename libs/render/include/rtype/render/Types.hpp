@@ -76,14 +76,21 @@ inline constexpr Color Transparent{0, 0, 0, 0};
 } // namespace colors
 
 /// The light of the 3D models: a directional light, such as a sun, plus an ambient light so that the side in
-/// the shadow is not completely black.
+/// the shadow is not completely black, and optionally a rim light from behind, which outlines the edges of
+/// the models to cut them out of the background.
 struct Light {
     /// Direction the light travels in, from the light towards the models. Its length does not matter.
     Vector3 direction{-1.0f, -1.0f, -1.0f};
     /// Colour and strength of the directional light.
     Color color = colors::White;
-    /// Light received everywhere, including in the shadow.
+    /// Light received everywhere, including in the shadow. It comes more from the top of the screen than from
+    /// below.
     Color ambient{20, 20, 26, 255};
+    /// Direction the rim light travels in: from behind the models, towards the camera. Its length does not
+    /// matter.
+    Vector3 rimDirection{0.4f, -0.3f, 1.0f};
+    /// Colour and strength of the rim light, black (off) by default.
+    Color rim = colors::Black;
 };
 
 } // namespace rtype::render

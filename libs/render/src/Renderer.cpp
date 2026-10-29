@@ -1,5 +1,6 @@
 #include "rtype/render/Renderer.hpp"
 
+#include "AntialiasPass.hpp"
 #include "EnergyShader.hpp"
 #include "FilterShader.hpp"
 #include "GlowPass.hpp"
@@ -29,6 +30,11 @@ namespace
 
 // Size of raylib's built-in font: its spacing between characters is scaled from this size, like DrawText()
 constexpr float builtinFontSize = 10.0f;
+
+// How much of the light of emission maps (engine flames, windows, beacons) shines in the glow of the frame
+constexpr float emissionBloom = 0.7f;
+// Size of the picture of the vignette, stretched over the frame: smooth enough once filtered
+constexpr int vignetteSize = 256;
 
 // Note: raylib colour macros (BLACK, WHITE...) cannot be used in this namespace, where Color is our type
 
@@ -195,6 +201,8 @@ public:
             throw std::runtime_error("Cannot create the render target");
         }
         SetTextureFilter(_target.texture, TEXTURE_FILTER_BILINEAR);
+        // The smoothing of the edges reads the pixels around each one: none from the opposite edge
+        SetTextureWrap(_target.texture, TEXTURE_WRAP_CLAMP);
     }
     ~RenderTarget()
     {
@@ -259,14 +267,71 @@ void drawHalo(const Camera3D &camera, const Texture2D &texture, const Energy::Ha
     EndBlendMode();
 }
 
+// The darkening of the corners of the frame (Renderer::setVignette()): black, transparent in the middle and
+// more and more opaque towards the corners, more in them than along the edges
+class Vignette
+{
+private:
+    Texture2D _texture{};
+
+public:
+    Vignette()
+    {
+        Image image = GenImageColor(vignetteSize, vignetteSize, ::Color{0, 0, 0, 0});
+        auto *pixels = static_cast<::Color *>(image.data);
+        const auto toCentred = [](int pixel) {
+            return ((static_cast<float>(pixel) + 0.5f) / static_cast<float>(vignetteSize) * 2.0f) - 1.0f;
+        };
+        for (int y = 0; y < vignetteSize; ++y) {
+            for (int x = 0; x < vignetteSize; ++x) {
+                // 0 in the middle, 1 in the corners
+                const float u = toCentred(x);
+                const float v = toCentred(y);
+                const float distance = std::sqrt((u * u) + (v * v)) / std::numbers::sqrt2_v<float>;
+                const float amount = std::clamp((distance - 0.45f) / 0.55f, 0.0f, 1.0f);
+                const float smooth = amount * amount * (3.0f - (2.0f * amount));
+                pixels[(y * vignetteSize) + x].a = static_cast<std::uint8_t>(std::lround(smooth * 255.0f));
+            }
+        }
+        _texture = LoadTextureFromImage(image);
+        UnloadImage(image);
+        SetTextureFilter(_texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(_texture, TEXTURE_WRAP_CLAMP);
+    }
+    ~Vignette()
+    {
+        if (_texture.id > 0) {
+            UnloadTexture(_texture);
+        }
+    }
+
+    Vignette(const Vignette &) = delete;
+    Vignette &operator=(const Vignette &) = delete;
+    Vignette(Vignette &&) = delete;
+    Vignette &operator=(Vignette &&) = delete;
+
+    // Darkens the corners of an image of the given resolution, drawn in its pixels, by up to `strength`
+    void draw(Vector2 resolution, float strength) const
+    {
+        if (_texture.id == 0 || strength <= 0.0f) {
+            return;
+        }
+        const ::Rectangle source{0.0f, 0.0f, static_cast<float>(_texture.width),
+                                 static_cast<float>(_texture.height)};
+        DrawTexturePro(_texture, source, {0.0f, 0.0f, resolution.x, resolution.y}, {0.0f, 0.0f}, 0.0f,
+                       fade(colors::White, strength));
+    }
+};
+
 } // namespace
 
 struct Renderer::Impl {
-    /// An energy model drawn in the frame, to draw again in its glow (drawGlow())
+    /// A model drawn in the frame that shines, to draw again in its glow (drawGlow()): an energy model, or a
+    /// lit model with an emission map
     struct GlowDraw {
         ModelId model;
         Camera3D camera;
-        Energy energy;
+        std::optional<Energy> energy;
         ::Vector3 position;
         ::Vector3 rotationAxis;
         float rotationAngle;
@@ -274,6 +339,7 @@ struct Renderer::Impl {
         float spinAngle;
         ::Color tint;
         std::optional<detail::Model::Pose> pose;
+        std::vector<int> hiddenMeshes;
     };
 
     const core::ResourceCache<detail::Texture, TextureId> &textures;
@@ -282,12 +348,16 @@ struct Renderer::Impl {
     Vector2 gameSize;
     Rectangle frameArea;
     std::optional<RenderTarget> target;
+    detail::AntialiasPass antialiasPass;
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
     detail::EnergyShader energyShader;
     detail::GlowPass glowPass;
+    Vignette vignette;
     std::vector<GlowDraw> glowQueue;
     ColorFilter colorFilter = ColorFilter::None;
+    float vignetteStrength = 0.22f;
+    bool antialiasing = true;
     bool inFrame = false;
 
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
@@ -325,6 +395,27 @@ struct Renderer::Impl {
             target.reset();
             target.emplace(resolution);
         }
+    }
+
+    /// Draws a model again in the glow of the frame: an energy model as it is, a lit model only where it
+    /// emits light. Must be called in the images of the glow (GlowPass::render()).
+    void drawInGlow(const GlowDraw &draw)
+    {
+        const detail::Model &drawn = models.get(draw.model);
+        if (draw.pose) {
+            drawn.applyPose(*draw.pose);
+        }
+        BeginMode3D(draw.camera);
+        if (draw.energy) {
+            energyShader.draw(drawn.get(), *draw.energy, textures.get(draw.energy->noise).get(),
+                              draw.camera.position, draw.position, draw.rotationAxis, draw.rotationAngle,
+                              draw.spinAngle, draw.scale, draw.tint);
+        } else {
+            lightingShader.drawEmission(drawn.get(), draw.camera, draw.position, draw.rotationAxis,
+                                        draw.rotationAngle, draw.spinAngle, draw.scale, draw.tint,
+                                        draw.hiddenMeshes);
+        }
+        EndMode3D();
     }
 
     /// Makes the visible area of the game cover the render target: positions and sizes stay in game units
@@ -369,6 +460,26 @@ void Renderer::setColorFilter(ColorFilter filter)
 ColorFilter Renderer::colorFilter() const
 {
     return _impl->colorFilter;
+}
+
+void Renderer::setVignette(float strength)
+{
+    _impl->vignetteStrength = std::clamp(strength, 0.0f, 1.0f);
+}
+
+float Renderer::vignette() const
+{
+    return _impl->vignetteStrength;
+}
+
+void Renderer::setAntialiasing(bool enabled)
+{
+    _impl->antialiasing = enabled;
+}
+
+bool Renderer::antialiasing() const
+{
+    return _impl->antialiasing;
 }
 
 Vector2 Renderer::windowToGame(Vector2 position) const
@@ -560,13 +671,19 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
                          const std::vector<int> &hiddenMeshes)
 {
     _impl->requireFrame();
-    BeginMode3D(toRaylib(camera));
-    _impl->lightingShader.draw(_impl->models.get(model).get(), light, toRaylib(position),
-                               toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint),
-                               hiddenMeshes);
+    const Camera3D view = toRaylib(camera);
+    const detail::Model &drawn = _impl->models.get(model);
+    BeginMode3D(view);
+    _impl->lightingShader.draw(drawn.get(), light, view, toRaylib(position), toRaylib(rotationAxis),
+                               rotationAngle, spinAngle, scale, toRaylib(tint), hiddenMeshes);
     // EndMode3D() resets the view to window pixels: go back to game units for what is drawn next
     EndMode3D();
     _impl->beginGameView();
+    if (detail::LightingShader::hasEmission(drawn.get())) {
+        _impl->glowQueue.push_back({model, view, std::nullopt, toRaylib(position), toRaylib(rotationAxis),
+                                    rotationAngle, scale, spinAngle, fade(tint, emissionBloom),
+                                    drawn.getPose(), hiddenMeshes});
+    }
 }
 
 void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
@@ -589,44 +706,56 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
     EndMode3D();
     _impl->beginGameView();
     if (energy.bloom > 0.0f) {
-        _impl->glowQueue.push_back({model, view, energy, origin, axis, rotationAngle, scale, spinAngle,
-                                    fade(tint, energy.bloom), _impl->models.get(model).getPose()});
+        _impl->glowQueue.push_back({model,
+                                    view,
+                                    energy,
+                                    origin,
+                                    axis,
+                                    rotationAngle,
+                                    scale,
+                                    spinAngle,
+                                    fade(tint, energy.bloom),
+                                    _impl->models.get(model).getPose(),
+                                    {}});
     }
 }
 
 void Renderer::drawGlow()
 {
     _impl->requireFrame();
-    if (_impl->glowQueue.empty()) {
-        return;
-    }
-    // The glow is drawn in images of its own: leave the frame, then come back to it, keeping what it holds
+    const Vector2 resolution = _impl->target->resolution();
+    // The smoothing, the glow and the vignette are drawn in pixels of the frame, the first two in images of
+    // their own: leave the game view and the frame, then come back to them, keeping what the frame holds
     EndMode2D();
     EndTextureMode();
-    const Texture2D *glow = _impl->glowPass.render(toRaylib(_impl->target->resolution()), [this] {
-        for (const Impl::GlowDraw &draw : _impl->glowQueue) {
-            const detail::Model &model = _impl->models.get(draw.model);
-            if (draw.pose) {
-                model.applyPose(*draw.pose);
+    if (_impl->antialiasing) {
+        _impl->antialiasPass.apply(_impl->target->get());
+    }
+    const Texture2D *glow = nullptr;
+    if (!_impl->glowQueue.empty()) {
+        glow = _impl->glowPass.render(toRaylib(resolution), [this] {
+            // The lit models first: they write their depth, so that they hide the energy behind them
+            for (const bool energy : {false, true}) {
+                for (const Impl::GlowDraw &draw : _impl->glowQueue) {
+                    if (draw.energy.has_value() == energy) {
+                        _impl->drawInGlow(draw);
+                    }
+                }
             }
-            BeginMode3D(draw.camera);
-            _impl->energyShader.draw(model.get(), draw.energy, _impl->textures.get(draw.energy.noise).get(),
-                                     draw.camera.position, draw.position, draw.rotationAxis,
-                                     draw.rotationAngle, draw.spinAngle, draw.scale, draw.tint);
-            EndMode3D();
-        }
-    });
-    _impl->glowQueue.clear();
+        });
+        _impl->glowQueue.clear();
+    }
 
     BeginTextureMode(_impl->target->get());
     if (glow != nullptr) {
-        const Vector2 resolution = _impl->target->resolution();
         BeginBlendMode(BLEND_ADDITIVE);
-        DrawTexturePro(*glow,
-                       {0.0f, 0.0f, static_cast<float>(glow->width), -static_cast<float>(glow->height)},
-                       {0.0f, 0.0f, resolution.x, resolution.y}, {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
+        const auto width = static_cast<float>(glow->width);
+        const auto height = static_cast<float>(glow->height);
+        DrawTexturePro(*glow, {0.0f, 0.0f, width, -height}, {0.0f, 0.0f, resolution.x, resolution.y},
+                       {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
         EndBlendMode();
     }
+    _impl->vignette.draw(resolution, _impl->vignetteStrength);
     _impl->beginGameView();
 }
 

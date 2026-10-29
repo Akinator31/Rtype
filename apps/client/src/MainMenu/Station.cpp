@@ -23,12 +23,15 @@ constexpr Rotation stationTilt{{0.6488686f, 0.5675164f, 0.50684774f}, 53.071587f
 /// The sun of the menu comes from behind the station, which would face the camera with its dark side: its own
 /// light comes from the right of the screen, like the sun on the planet, from above and a little from the
 /// front. It grazes the side seen, so that the arms and the rings cast their relief instead of looking flat.
+/// The real sun is its rim light: it outlines the edges of the station, warm, on the side of the planet.
 render::Light createStationLight()
 {
     render::Light light;
     light.direction = {-0.6f, -0.54f, -0.81f};
     light.color = {220, 208, 186, 255};
     light.ambient = {12, 13, 20, 255};
+    light.rimDirection = {-1.0f, -0.25f, 0.45f};
+    light.rim = {150, 122, 92, 255};
     return light;
 }
 
