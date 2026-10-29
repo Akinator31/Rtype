@@ -1268,6 +1268,20 @@ TEST_CASE("The waves go by difficulty, a difficulty without a wave is skipped, a
     CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).empty());
 }
 
+TEST_CASE("A wave at difficulty five is played before victory", "[game]")
+{
+    Rules rules;
+    rules.firstWaveDelay = 1;
+    Simulation simulation(rules, battleConfig({waveOf("last", 5)}));
+    simulation.addPlayer(0);
+
+    CHECK(runUntilWave(simulation, 5) == 5);
+    CHECK_FALSE(simulation.snapshot().gameOver);
+    destroyEnemies(simulation);
+    simulation.step();
+    CHECK(simulation.snapshot().gameOver == GameOutcome::Victory);
+}
+
 TEST_CASE("A wave sends its enemies at its interval, in its area when it is random", "[game]")
 {
     Rules rules;

@@ -1,0 +1,27 @@
+-- An armed carrier enters behind a screen of fast escorts.
+return {
+    name = "carrier_escort",
+    label = "Carrier escort",
+    description = "Two carriers cross the field with heavy and fast escorts",
+    difficulty = 5,
+    placement = "manual",
+    spawnInterval = 0.5,
+    spawns = {
+        { enemy = "bydo_mosquito", x = 2000, y = 180 },
+        { enemy = "bydo_interceptor", x = 2000, y = 350 },
+        { enemy = "bydo_carrier", x = 2000, y = 540 },
+        { enemy = "bydo_interceptor", x = 2000, y = 730 },
+        { enemy = "bydo_mosquito", x = 2000, y = 900 },
+        { enemy = "bydo_berserker", x = 2000, y = 540 },
+        { enemy = "bydo_interceptor", x = 2000, y = 260 },
+        { enemy = "bydo_heavy", x = 2000, y = 420 },
+        { enemy = "bydo_mosquito", x = 2000, y = 800 },
+        { enemy = "bydo_carrier", x = 2000, y = 720 },
+        { enemy = "bydo_berserker", x = 2000, y = 360 },
+        { enemy = "bydo_heavy", x = 2000, y = 640 },
+        { enemy = "bydo_interceptor", x = 2000, y = 920 },
+        { enemy = "bydo_mosquito", x = 2000, y = 180 },
+        { enemy = "bydo_berserker", x = 2000, y = 540 },
+        { enemy = "bydo_gunner", x = 2000, y = 780 },
+    },
+}
