@@ -141,6 +141,70 @@ TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest p
     CHECK(ecs.getComponent<rtype::ecs::Position>(gunner).x < 1500.0f);
 }
 
+TEST_CASE("The new Bydo behaviors issue their first orders", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    Rules rules;
+    rules.firstWaveDelay = 10000;
+    Simulation simulation(rules, loaded.config);
+    simulation.addPlayer(0);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+
+    for (const char *id : {"bydo_interceptor", "bydo_sporecaster", "bydo_siege", "bydo_carrier",
+                           "bydo_berserker", "bydo_wanderer", "bydo_mosquito", "bydo_raider"}) {
+        const rtype::ecs::entity_t enemy = spawnEnemy(ecs, simulation.context(), id, 2000.0f, 540.0f);
+        simulation.step();
+        INFO(id);
+        CHECK(ecs.isAlive(enemy));
+        CHECK(ecs.hasComponent<EnemyOrders>(enemy));
+    }
+
+    const rtype::ecs::entity_t wounded =
+        spawnEnemy(ecs, simulation.context(), "bydo_berserker", 1600.0f, 216.0f);
+    ecs.getComponent<Health>(wounded).points = 40;
+    simulation.step();
+    CHECK(ecs.getComponent<rtype::physics::Velocity>(wounded).x < -250.0f);
+    CHECK(ecs.getComponent<EnemyOrders>(wounded).target.has_value());
+}
+
+TEST_CASE("The Bydo raider fires at close range and retreats to the right", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    Rules rules;
+    rules.firstWaveDelay = 10000;
+    Simulation simulation(rules, loaded.config);
+    simulation.addPlayer(0);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    const rtype::ecs::entity_t raider = spawnEnemy(ecs, simulation.context(), "bydo_raider", 500.0f, 216.0f);
+
+    simulation.step();
+    CHECK_FALSE(ecs.getComponent<EnemyOrders>(raider).target.has_value());
+    CHECK(ecs.getComponent<rtype::physics::Velocity>(raider).x < 0.0f);
+
+    bool fired = false;
+    for (int tick = 0; tick < 60; ++tick) {
+        simulation.step();
+        if (ecs.getComponent<EnemyOrders>(raider).target.has_value()) {
+            fired = true;
+            break;
+        }
+    }
+    REQUIRE(fired);
+    CHECK(ecs.getComponent<rtype::physics::Velocity>(raider).x > 0.0f);
+    CHECK(ecs.getComponent<Armed>(raider).cooldown > 0);
+
+    simulation.step();
+    CHECK_FALSE(ecs.getComponent<EnemyOrders>(raider).fire);
+    CHECK(ecs.getComponent<rtype::physics::Velocity>(raider).x > 0.0f);
+
+    for (int tick = 0; tick < 240 && ecs.isAlive(raider); ++tick) {
+        simulation.step();
+    }
+    CHECK_FALSE(ecs.isAlive(raider));
+}
+
 TEST_CASE("Each kind of file is read into its definition, with the defaults of the optional fields", "[game]")
 {
     const ConfigDirectory directory("kinds");
