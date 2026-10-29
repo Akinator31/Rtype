@@ -18,6 +18,7 @@ add_executable(rtype_tests
     color_filter.cpp
     collider_debug_renderer.cpp
     controls.cpp
+    crypto.cpp
     database.cpp
     database_thread.cpp
     datagram.cpp

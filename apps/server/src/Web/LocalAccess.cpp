@@ -1,7 +1,7 @@
 #include "Web/LocalAccess.hpp"
 
 #include "Master/ServerKey.hpp"
-#include "rtype/network/Datagram.hpp"
+#include "rtype/network/Crypto.hpp"
 
 #include <format>
 
@@ -10,8 +10,7 @@ namespace rtype::server
 
 Secret newAccessToken()
 {
-    // 32 bytes from the random generator of the cryptography: a key is exactly that
-    return rtype::network::DatagramKey::generate().bytes();
+    return rtype::network::randomBytes<SecretSize>();
 }
 
 rtype::network::Address reachableAddress(const rtype::network::Address &listening)
