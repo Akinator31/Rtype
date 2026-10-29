@@ -23,6 +23,7 @@ apps/client/src/Game/
   ImpactLooks.cpp        the impacts of the shots and the explosions of the ships (ImpactSystem plays them)
   DamageLooks.cpp        the damage written above the Bydos hit (DamageNumberSystem shows it)
   HealthBarLooks.cpp     the health bars above the Bydos and the allies hit (HealthBarSystem shows them)
+  DeathScreen.cpp        the death screen of the local player (DeathScreenSystem counts it down)
   EntitySounds.cpp       the sound of each kind of entity, for a shot fired, a shot that hits, a ship destroyed
   GameScenes.cpp         the game scene, its HUD, and the pause menu
 ```
@@ -254,6 +255,28 @@ stays in the game. Offline, it is `Snapshot::waveStarted`; online, `RemoteSessio
 `WAVE_STARTED` and puts it in the next snapshot it gives. The `GameSessionSystem` tells it to its wave handler
 (`setWaveHandler()`), and `GameScenes` shows the banner.
 
+### Death screen
+
+When the ship of the local player is lost with lives left, `GameScenes` shows the death screen until its next
+ship comes, `Rules::respawnDelay` (180 ticks, 3 s) later:
+
+- a red banner across the screen (`engine::Engine::showBanner()`, `Error`), `SHIP DESTROYED` (`death.title`),
+  fully shown for the time left once its entrance and its exit are taken off, so that it leaves as the ship
+  comes;
+- a black veil at 50 % over the game and the HUD, which fades in at once;
+- in the band of the banner, where its detail would be, `LIVES LEFT` (`death.lives`) and one picture per life of
+  the start (`images/hud/life.png`, `life_lost.png`, from the Figma design): the lives left lit, the others
+  lost. The life just lost is lit over its picture of a life lost, and goes out once seen;
+- under the band, `RESPAWN` (`death.respawn`) and the seconds left in an `engine::Ring` that runs out with them,
+  a spark at the end of its light. Each new second pops.
+
+`openDeathScreen()` creates its entities in the game scene, in the Interface layer, over the HUD and under the
+toasts, and a `DeathScreen` that lists them. The `DeathScreenSystem` plays it in the time of the game: it
+counts down to the tick of the next ship from the tick of the latest snapshot (`GameSessionSystem::tick()`), so
+the countdown stops while the game is paused offline, then fades everything out and destroys it once that tick
+is reached. The client takes the lives at the start and the delay from the default `game::Rules`, like its
+prediction. The last life opens no death screen: the event of the ship lost is told as for any other.
+
 ## Tests
 
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:
@@ -283,7 +306,10 @@ stays in the game. Offline, it is `Snapshot::waveStarted`; online, `RemoteSessio
   removed makes none;
 - the kills: a Bydo killed is told with the owner of the shot of a player killed nearest to it, or no killer
   without one, a shot or an entity removed is not told, and the ship of a player killed is told with its owner;
-- the waves: each wave started is told once, with its number.
+- the waves: each wave started is told once, with its number;
+- the death screen: the seconds left in the countdown and its ring follow the snapshots, not the frames, each new
+  second pops, and the screen goes once the tick of the next ship is reached; the lives left are lit, the one
+  just lost goes out after the veil and the rest have faded in.
 
 ```sh
 ./build/bin/rtype_tests "[client]"

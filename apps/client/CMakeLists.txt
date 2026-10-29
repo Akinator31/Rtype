@@ -20,6 +20,8 @@ add_library(r-type_client_core STATIC
     src/Console/ConsoleSystem.cpp
     src/Game/DamageLooks.cpp
     src/Game/DamageNumberSystem.cpp
+    src/Game/DeathScreen.cpp
+    src/Game/DeathScreenSystem.cpp
     src/Game/EntityLook.cpp
     src/Game/EntitySounds.cpp
     src/Game/GameScenes.cpp

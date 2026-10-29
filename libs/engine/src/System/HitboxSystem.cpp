@@ -37,7 +37,7 @@ render::Vector2 HitboxSystem::measure(ecs::entity_t entity) const
         return {_style.toggle.width, _style.toggle.height};
     }
 
-    const render::Vector2 size = _metrics.measureText(text.font, text.text, text.size, 0.0f);
+    const render::Vector2 size = _metrics.measureText(text.font, text.text, text.size, text.spacing);
     return {size.x + 2.0f * _style.padding, size.y + 2.0f * _style.padding};
 }
 

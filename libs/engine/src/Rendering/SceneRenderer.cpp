@@ -695,6 +695,32 @@ void SceneRenderer::drawGauge(render::Renderer &renderer, const Gauge &gauge, re
               faded(colour, opacity));
 }
 
+void SceneRenderer::drawRing(render::Renderer &renderer, const Ring &ring, render::Vector2 centre,
+                             float opacity) const
+{
+    constexpr int glowLayers = 4;
+    constexpr float glowSpread = 6.0f;
+    renderer.drawArc(centre, ring.radius, ring.thickness, 0.0f, 360.0f, faded(ring.track, opacity));
+    const float value = std::clamp(ring.value, 0.0f, 1.0f);
+    if (value <= 0.0f) {
+        return;
+    }
+    // Angles turn clockwise on the screen: the light goes anticlockwise from the right, so it starts at its end
+    const float end = -360.0f * value;
+    render::Color glow = ring.light;
+    glow.a = static_cast<std::uint8_t>(static_cast<float>(ring.light.a) * 0.12f);
+    for (int layer = 1; layer <= glowLayers; ++layer) {
+        const float spread = glowSpread * static_cast<float>(layer) / static_cast<float>(glowLayers);
+        renderer.drawArc(centre, ring.radius + spread, ring.thickness + (2.0f * spread), end, 0.0f,
+                         faded(glow, opacity));
+    }
+    renderer.drawArc(centre, ring.radius, ring.thickness, end, 0.0f, faded(ring.light, opacity));
+    const float radians = end * std::numbers::pi_v<float> / 180.0f;
+    const float middle = ring.radius - (ring.thickness / 2.0f);
+    drawSpark(renderer, {centre.x + (middle * std::cos(radians)), centre.y + (middle * std::sin(radians))},
+              ring.radius * 0.3f, ring.radius * 0.1f, faded(ring.light, opacity));
+}
+
 void SceneRenderer::drawAnnouncement(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
                                      float progress) const
 {
@@ -904,6 +930,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     auto &switches = _ecs.cache<SwitchTrack>();
     auto &toggles = _ecs.cache<Toggle>();
     auto &gauges = _ecs.cache<Gauge>();
+    auto &rings = _ecs.cache<Ring>();
 
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
@@ -948,6 +975,9 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
             drawGauge(renderer, gauges.get(entity), {centre.x, centre.y}, opacity);
             continue;
         }
+        if (rings.has(entity)) {
+            drawRing(renderer, rings.get(entity), {centre.x, centre.y}, opacity);
+        }
         if (switches.has(entity) && toggles.has(entity) && texts.has(entity)) {
             drawSwitch(renderer, toggles.get(entity), switches.get(entity), texts.get(entity),
                        {centre.x, centre.y}, opacity);
@@ -977,7 +1007,8 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         if (texts.has(entity)) {
             const Text &text = texts.get(entity);
             const float size = text.size * scale;
-            const render::Vector2 measured = renderer.measureText(text.font, text.text, size);
+            const float spacing = text.spacing * scale;
+            const render::Vector2 measured = renderer.measureText(text.font, text.text, size, spacing);
             const render::Vector2 topLeft{centre.x - measured.x / 2.0f, centre.y - measured.y / 2.0f};
 
             // A focused text field: the selection behind the text, the cursor in front of it. Their positions
@@ -1002,7 +1033,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                 drawConsoleField(renderer, text, fields.get(entity), topLeft, size, opacity);
             } else {
                 renderer.drawText(text.font, text.text, topLeft, size,
-                                  faded(showsFocus ? _style.focused : text.color, opacity));
+                                  faded(showsFocus ? _style.focused : text.color, opacity), spacing);
             }
             if (editing) {
                 const float cursor = offsetOf(fields.get(entity).input.cursor());

@@ -2,6 +2,7 @@
 
 #include "Console/ConsoleSystem.hpp"
 #include "Game/DamageNumberSystem.hpp"
+#include "Game/DeathScreenSystem.hpp"
 #include "Game/HealthBarSystem.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "MainMenu/FlightSystem.hpp"
@@ -25,6 +26,8 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
     ecs.registerSystem<ImpactSystem>(ecs);
     ecs.registerSystem<DamageNumberSystem>(ecs);
+    // After the session, which opens the death screens and gives the tick they count down to
+    ecs.registerSystem<DeathScreenSystem>(ecs, sessions);
     ecs.registerSystem<HealthBarSystem>();
     // After the menus and the game, to play their sounds in the frame they give them
     ecs.registerSystem<engine::SoundSystem>(audio);

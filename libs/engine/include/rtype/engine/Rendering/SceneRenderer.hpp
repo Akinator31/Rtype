@@ -22,8 +22,8 @@ class Renderer;
 namespace rtype::engine
 {
 
-/// Draws the entities with the Renderer: those with a Drawable, a Position and a Text, Sprite, Box, Panel or
-/// Toast, and the 3D models (Drawable and Model) seen through the Camera, before the rest of the World layer.
+/// Draws the entities with the Renderer: those with a Drawable, a Position and a Text, Sprite, Box, Panel,
+/// Ring or Toast, and the 3D models (Drawable and Model) seen through the Camera, before the rest of the World layer.
 /// A Backdrop is drawn first, behind the models.
 ///
 /// It is not a system of the Ecs: drawing happens between Renderer::beginFrame() and endFrame(), after the
@@ -92,6 +92,8 @@ class SceneRenderer
     /// Draws a gauge: its caption and value, its rail, and its light up to its value with a spark at the end.
     void drawGauge(render::Renderer &renderer, const Gauge &gauge, render::Vector2 centre,
                    float opacity) const;
+    /// Draws a ring: its dark track, then its light up to its value, with a glow and a spark at its end.
+    void drawRing(render::Renderer &renderer, const Ring &ring, render::Vector2 centre, float opacity) const;
     /// Draws an announcement: an icon and a title, a line of light under them, and the detail. `progress`
     /// goes from 0 to 1 while it appears, and back to 0 while it leaves: each part has its moment in this
     /// entrance.

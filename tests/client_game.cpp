@@ -4,6 +4,8 @@
 #include "FakeInput.hpp"
 #include "Game/DamageLooks.hpp"
 #include "Game/DamageNumberSystem.hpp"
+#include "Game/DeathScreen.hpp"
+#include "Game/DeathScreenSystem.hpp"
 #include "Game/EntityLook.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
@@ -20,6 +22,8 @@
 #include "rtype/engine/Component/Sound.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/engine/Interface/Metrics.hpp"
+#include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/System/ModelAnimationSystem.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Constants.hpp"
@@ -27,11 +31,13 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -910,4 +916,131 @@ TEST_CASE("Each wave started in the game is told with its number, once", "[clien
     client.receive(second);
 
     CHECK(waves == std::vector<std::uint16_t>{1, 2});
+}
+
+// --- Death screen ---
+
+namespace
+{
+
+// Every character is half as wide as the text is high, on a screen of the shape of the game
+class GameMetrics final : public rtype::engine::Metrics
+{
+public:
+    [[nodiscard]] rtype::render::Vector2 measureText(rtype::render::FontId /*font*/, const std::string &text,
+                                                     float size, float spacing) const override
+    {
+        const auto count = static_cast<float>(text.size());
+        return {(0.5f * size * count) + (spacing * std::max(count - 1.0f, 0.0f)), size};
+    }
+    [[nodiscard]] rtype::render::Vector2 gameSize() const override { return {1920.0f, 1080.0f}; }
+    [[nodiscard]] rtype::render::Rectangle visibleArea() const override
+    {
+        return {0.0f, 0.0f, 1920.0f, 1080.0f};
+    }
+    [[nodiscard]] rtype::render::Vector2 windowToGame(rtype::render::Vector2 position) const override
+    {
+        return position;
+    }
+};
+
+const DeathScreenLook DeathLook{{1}, {2}, {}, {}, "LIVES LEFT", "RESPAWN"};
+
+/// The engine of the client playing a scripted session, with its death screens.
+struct DeathClient : ImpactClient {
+    GameMetrics metrics;
+
+    DeathClient() { ecs.registerSystem<DeathScreenSystem>(ecs, sessions); }
+
+    /// Opens the death screen of a ship lost at the tick of the latest snapshot.
+    rtype::ecs::entity_t open(std::uint8_t lives, std::uint32_t respawnDelay)
+    {
+        return openDeathScreen(ecs, scene, metrics, rtype::engine::ToastStyle{}, DeathLook,
+                               {lives, 3, sessions.tick() + respawnDelay, respawnDelay});
+    }
+
+    /// Frames of one tick each, without snapshot: the game is paused, or the network late.
+    void wait(float seconds)
+    {
+        for (float time = 0.0f; time < seconds; time += Tick) {
+            engine.update(Tick);
+        }
+    }
+
+    [[nodiscard]] float opacityOf(rtype::ecs::entity_t entity)
+    {
+        return ecs.getComponent<rtype::engine::Opacity>(entity).value;
+    }
+
+    /// The pictures of the lives drawn with a texture.
+    [[nodiscard]] std::size_t countLives(rtype::render::TextureId texture)
+    {
+        std::size_t count = 0;
+        auto &sprites = ecs.cache<rtype::engine::Sprite>();
+        for (rtype::ecs::entity_t entity = 0; entity < sprites.size(); ++entity) {
+            if (sprites.has(entity) && ecs.isAlive(entity) && sprites.get(entity).texture == texture) {
+                ++count;
+            }
+        }
+        return count;
+    }
+};
+
+} // namespace
+
+TEST_CASE("The death screen counts down the seconds to the next ship in its ring, then goes once it is there",
+          "[client]")
+{
+    DeathClient client;
+    client.receive(snapshotOf(1, {}));
+    const rtype::ecs::entity_t screen = client.open(2, 180);
+    const DeathScreen parts = client.ecs.getComponent<DeathScreen>(screen);
+
+    client.receive(snapshotOf(2, {}));
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(parts.countdown).text == "3");
+    CHECK(client.ecs.getComponent<rtype::engine::Ring>(parts.ring).value == Approx(179.0f / 180.0f));
+    // A new second pops
+    CHECK(client.ecs.hasComponent<rtype::engine::Tween>(parts.countdown));
+
+    // The countdown follows the game: it waits for the snapshots
+    client.wait(2.0f);
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(parts.countdown).text == "3");
+
+    client.receive(snapshotOf(121, {}));
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(parts.countdown).text == "1");
+    CHECK(client.ecs.getComponent<rtype::engine::Ring>(parts.ring).value == Approx(1.0f / 3.0f));
+
+    client.receive(snapshotOf(181, {}));
+    CHECK(client.ecs.isAlive(screen));
+    client.wait(DeathScreenSystem::FadeOut + Tick);
+    CHECK_FALSE(client.ecs.isAlive(screen));
+    CHECK_FALSE(client.ecs.isAlive(parts.veil));
+    CHECK_FALSE(client.ecs.isAlive(parts.countdown));
+    CHECK_FALSE(client.ecs.isAlive(parts.lostLife));
+}
+
+TEST_CASE("The death screen shows the lives left lit, and puts out the one just lost after its entrance",
+          "[client]")
+{
+    DeathClient client;
+    client.receive(snapshotOf(1, {}));
+    const rtype::ecs::entity_t screen = client.open(1, 600);
+    const DeathScreen parts = client.ecs.getComponent<DeathScreen>(screen);
+    client.receive(snapshotOf(2, {}));
+
+    // The life left, and the life just lost over its picture of a life lost; then the other life lost
+    CHECK(client.countLives(DeathLook.life) == 2);
+    CHECK(client.countLives(DeathLook.lostLife) == 2);
+    // The veil darkens the game at once, the rest waits for the band of the banner
+    CHECK(client.opacityOf(parts.veil) > 0.0f);
+    CHECK(client.opacityOf(parts.countdown) == 0.0f);
+
+    client.wait(DeathScreenSystem::ContentDelay + DeathScreenSystem::ContentIn);
+    CHECK(client.opacityOf(parts.veil) == Approx(1.0f));
+    CHECK(client.opacityOf(parts.countdown) == Approx(1.0f));
+    CHECK(client.opacityOf(parts.lostLife) == Approx(1.0f));
+
+    client.wait(DeathScreenSystem::LifeOutDelay + DeathScreenSystem::LifeOut);
+    CHECK(client.opacityOf(parts.lostLife) == Approx(0.0f));
+    CHECK(client.opacityOf(parts.countdown) == Approx(1.0f));
 }

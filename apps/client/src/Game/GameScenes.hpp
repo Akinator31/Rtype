@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Game/DeathScreen.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
@@ -11,6 +12,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace rtype::client
 {
@@ -28,6 +30,8 @@ inline constexpr const char *PauseScene = "pause";
 /// - The events, in the corner of the toasts: a Bydo shot down by the local player, and the ship of a player
 ///   shot down, the local one or an ally.
 /// - A banner across the screen when a wave starts, with its number.
+/// - When the ship of the local player is lost with lives left, the death screen (openDeathScreen()): the red
+///   banner "SHIP DESTROYED" with the lives left in its band, and the countdown to the next ship.
 /// - Escape (or Start on a gamepad) opens the pause menu: Resume, or Leave the game. Offline, the game stops
 ///   while it is open.
 /// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
@@ -41,8 +45,13 @@ inline constexpr const char *PauseScene = "pause";
 class GameScenes
 {
     engine::Engine &_engine;
+    const engine::Metrics &_metrics;
+    const engine::InterfaceStyle &_style;
     GameSessionSystem &_sessions;
     localization::Localization &_translations;
+    /// The game scene open, and the look of its death screen.
+    std::optional<engine::SceneId> _scene;
+    DeathScreenLook _deathLook;
     /// The session of the next game scene opened, and what to do when it ends.
     std::unique_ptr<GameSession> _next;
     std::function<void()> _nextEnd;
@@ -58,6 +67,8 @@ class GameScenes
     /// Shows the event of a ship killed, if it is one: a Bydo killed by the local player, or a player ship.
     void showKill(const Kill &kill);
     void showWave(std::uint16_t wave);
+    /// Shows the death screen of the local player, unless its ship was its last life.
+    void showDeath();
 
 public:
     /// Declares the scenes. Everything given must outlive the engine.

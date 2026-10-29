@@ -321,6 +321,14 @@ own length instead of the one of the style, and `Gauge::low` a value at or below
 red (`GaugeStyle::lowLight`, `lowGlow`). Without a caption, its rail is on the position of the entity: the
 health bars of the game are such gauges, in the World layer.
 
+An `engine::Ring` draws a circle lit along a part of its length, centred on its position: a dark track, then a
+light from the right of the circle anticlockwise over the top, up to `Ring::value`, with a glow and a spark at
+its end. Its owner writes the value: the countdown of the death screen of the game runs out this way. Like a
+gauge, it takes an `Extent` to be placed by an `Anchor`.
+
+`Text::spacing` spaces the letters of a text, as in the widely spaced capitals of the design; the
+`AnchorSystem` and the `HitboxSystem` measure the text with it.
+
 The handle of a slider lights up only while the pointer is over it (or it is dragged); its caption lights up
 while the slider is under the pointer or has the focus.
 

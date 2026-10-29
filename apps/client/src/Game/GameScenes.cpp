@@ -10,7 +10,9 @@
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Rules.hpp"
 
+#include <algorithm>
 #include <format>
 #include <string>
 #include <utility>
@@ -28,6 +30,8 @@ using engine::AssetType;
 const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::SmoothTexture, RTYPE_IMAGE_ENERGY_NOISE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_GLOW_CORE},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE_LOST},
     {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
     {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
     {AssetType::Model, RTYPE_MODEL_SHOT_BASIC},
@@ -236,6 +240,13 @@ std::string playerName(std::uint8_t slot)
     return std::format("P{}", slot + 1);
 }
 
+/// The lives left of the player in a slot, 0 when it is not in the game.
+std::uint8_t livesOf(const std::vector<game::PlayerState> &players, std::uint8_t slot)
+{
+    const auto player = std::ranges::find(players, slot, &game::PlayerState::slot);
+    return player == players.end() ? 0 : player->lives;
+}
+
 /// The translation key of the name of a kind of Bydo in the events.
 const char *bydoNameKey(game::EntityKind kind)
 {
@@ -256,7 +267,7 @@ const char *bydoNameKey(game::EntityKind kind)
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations)
-    : _engine(engine), _sessions(sessions), _translations(translations)
+    : _engine(engine), _metrics(metrics), _style(style), _sessions(sessions), _translations(translations)
 {
     sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
     sessions.setWaveHandler([this](std::uint16_t wave) { showWave(wave); });
@@ -305,6 +316,9 @@ void GameScenes::showKill(const Kill &kill)
     if (kill.kind == game::EntityKind::PlayerShip) {
         _engine.showToast(playerName(kill.owner), _translations.text("event.player_down"), "",
                           kill.owner == local ? engine::ToastType::Error : engine::ToastType::Warning);
+        if (kill.owner == local) {
+            showDeath();
+        }
     } else if (kill.killer == local) {
         _engine.showToast(_translations.text(bydoNameKey(kill.kind)), _translations.text("event.bydo_down"),
                           playerName(local), engine::ToastType::Success);
@@ -317,10 +331,34 @@ void GameScenes::showWave(std::uint16_t wave)
                        _translations.text("event.wave_detail"), engine::ToastType::Info, WaveBannerDuration);
 }
 
+void GameScenes::showDeath()
+{
+    const std::uint8_t lives = livesOf(_sessions.players(), _sessions.session()->localSlot());
+    if (lives == 0 || !_scene) {
+        return;
+    }
+    // The banner leaves as the next ship comes
+    const game::Rules rules;
+    const float respawn = static_cast<float>(rules.respawnDelay) / static_cast<float>(game::TickRate);
+    const float entrances = _style.toast.getFadeIn(engine::ToastKind::Banner) +
+                            _style.toast.getFadeOut(engine::ToastKind::Banner);
+    _engine.showBanner(_translations.text("death.title"), "", engine::ToastType::Error,
+                       std::max(respawn - entrances, 0.0f));
+    openDeathScreen(_engine.getEcs(), *_scene, _metrics, _style.toast, _deathLook,
+                    {lives, rules.lives, _sessions.tick() + rules.respawnDelay, rules.respawnDelay});
+}
+
 void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     configureGameLooks(_sessions, resources, audio);
+    _scene = scene;
+    _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),
+                  resources.loadTexture(RTYPE_IMAGE_LIFE_LOST, render::TextureFiltering::Smooth),
+                  style.toast.messageFont,
+                  style.toast.nameFont,
+                  _translations.text("death.lives"),
+                  _translations.text("death.respawn")};
 
     ecs::Ecs &ecs = _engine.getEcs();
 
