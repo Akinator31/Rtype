@@ -88,12 +88,17 @@ jobs:
           name: admin-panel
           path: web/admin/dist
 
-      - name: Install system libraries (X11 / OpenGL, OpenSSL, libpq)
+      # The second line is what the Chromium of Playwright needs, for the end-to-end tests of the panel: named
+      # here since `playwright install --with-deps` runs `sudo sh`, and knows only the packages of Ubuntu
+      - name: Install system libraries (X11 / OpenGL, OpenSSL, libpq, Chromium)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev \
+            libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 libdbus-1-3 libxkbcommon0 \
+            libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
+            libatspi2.0-0t64
 
       # The tests of the database run on SQLite and on this PostgreSQL. Windows tests SQLite only
       - name: Start PostgreSQL for the tests
@@ -119,8 +124,8 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C ${{ env.BUILD_TYPE }} --output-on-failure
 
-      # The panel against the master just built and a game of real players. Node and the browsers of
-      # Playwright are prerequisites of the Linux runner
+      # The panel against the master just built and a game of real players. Node comes from setup-node, the
+      # libraries of Chromium from the system libraries above, Chromium itself from Playwright
       - name: Set up Node for the end-to-end tests of the panel
         if: runner.os == 'Linux'
         uses: actions/setup-node@v7
