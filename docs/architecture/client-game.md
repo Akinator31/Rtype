@@ -21,6 +21,7 @@ apps/client/src/Game/
   ShipLooks.cpp          the 3D models of the ships: fitted to their box, rolling, flames
   ShotLooks.cpp          the models of energy of the shots
   ImpactLooks.cpp        the impacts of the shots and the explosions of the ships (ImpactSystem plays them)
+  DamageLooks.cpp        the damage written above the Bydos hit (DamageNumberSystem shows it)
   EntitySounds.cpp       the sound of each kind of entity, for a shot fired, a shot that hits, a ship destroyed
   GameScenes.cpp         the game scene, its HUD, and the pause menu
 ```
@@ -164,6 +165,21 @@ Online, `ENTITIES_DESTROYED` arrives while the entity is still drawn, about 100 
 the same model share it in different poses: the renderer poses the model again before drawing each one, in
 the glow of the frame too.
 
+### Damage numbers
+
+A Bydo hit writes the damage it takes above it: a number in warm yellow, in the font of the titles, that pops
+out larger, rises and fades out in 0.8 s. The client does not know the damage of the weapons: it reads the
+hit points of each entity in the snapshots (`EntityState::health`), keeps the latest in `Replicated::health`,
+and a drop from one snapshot to the next is the damage taken. A Bydo killed is no longer in the snapshots: it
+writes the hit points it had left, the damage of the last shot that the game counted. Several hits in the same
+tick, or between two snapshots received online, make one number, their sum.
+
+`DamageLook` (`GameSessionSystem::setDamageLook()`, set by `GameScenes` for the Bydos only) gives the font, the
+size and the colour. The number is an entity of its own (`DamageNumber`, `Text`, `Opacity`, `Scale` with a
+`Tween` for the pop), 30 units above the centre of the Bydo, drawn in the World layer above the 2D entities.
+The `DamageNumberSystem` moves it up at 90 units per second, fades it out during the second half of its time,
+and destroys it at the end.
+
 ### Sounds
 
 A shot that appears in the game plays the sound of the weapon that fired it (`sounds/fx/blaster/`):
@@ -207,6 +223,9 @@ know which enemy a Bydo is.
 - the impacts: an entity killed leaves the impact of its kind where it was last drawn, even when its
   destruction comes first (online), fades out, and is gone at the end of its animation; an entity removed, or
   of a kind without an impact, leaves none;
+- the damage numbers: a drop of the hit points writes the points lost above the entity, which rises, fades
+  out and goes; an entity killed writes the points it had left, one removed or of a kind without a
+  `DamageLook` writes none;
 - the sounds: a shot of a kind given a sound appears with its `SoundEffect`, its volume, and a pan on its side
   of the screen, the other entities with none; a ship killed gives its destruction sound to its impact, one
   removed makes none.

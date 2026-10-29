@@ -2,6 +2,8 @@
 // drawing the world of a session in a scene, without a window (ADR 0015, docs/architecture/client-game.md).
 
 #include "FakeInput.hpp"
+#include "Game/DamageLooks.hpp"
+#include "Game/DamageNumberSystem.hpp"
 #include "Game/EntityLook.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
@@ -545,6 +547,7 @@ struct ImpactClient {
                                                                      engine.getControls()))
     {
         ecs.registerSystem<ImpactSystem>(ecs);
+        ecs.registerSystem<DamageNumberSystem>(ecs);
         scene = engine.getScenes().open({});
         auto created = std::make_unique<ScriptedSession>();
         session = created.get();
@@ -556,6 +559,18 @@ struct ImpactClient {
     {
         session->snapshots.push_back(std::move(snapshot));
         engine.update(Tick);
+    }
+
+    [[nodiscard]] std::vector<rtype::ecs::entity_t> damageNumbers()
+    {
+        std::vector<rtype::ecs::entity_t> found;
+        auto &numbers = ecs.cache<DamageNumber>();
+        for (rtype::ecs::entity_t entity = 0; entity < numbers.size(); ++entity) {
+            if (numbers.has(entity) && ecs.isAlive(entity)) {
+                found.push_back(entity);
+            }
+        }
+        return found;
     }
 
     [[nodiscard]] std::vector<rtype::ecs::entity_t> impacts()
@@ -578,6 +593,17 @@ rtype::game::EntityState shotAt(std::uint32_t id, float x, float y)
     shot.y = y;
     return shot;
 }
+
+rtype::game::EntityState bydoAt(std::uint32_t id, float x, float y, std::uint8_t health)
+{
+    rtype::game::EntityState bydo{id, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner};
+    bydo.x = x;
+    bydo.y = y;
+    bydo.health = health;
+    return bydo;
+}
+
+const DamageLook YellowDamage{{}, 40.0f, {255, 220, 90, 255}};
 
 const ImpactLook SparkLook{{}, 2, 0.4f, 3.0f, {10, 20, 30, 200}, {}};
 
@@ -674,4 +700,61 @@ TEST_CASE("A ship killed in the game sounds with its impact, on its side of the 
     CHECK(effect.settings.volume == 0.8f);
     // On the right of the game area: heard on the right
     CHECK(effect.settings.pan > 0.0f);
+}
+
+TEST_CASE("A hit writes the hit points lost above the entity, which rises, fades out and goes", "[client]")
+{
+    ImpactClient client;
+    client.sessions.setDamageLook(rtype::game::EntityKind::BydoFlyer, YellowDamage);
+    client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 30)}));
+    client.receive(snapshotOf(2, {bydoAt(5, 1195.0f, 400.0f, 30)}));
+    CHECK(client.damageNumbers().empty());
+
+    client.receive(snapshotOf(3, {bydoAt(5, 1190.0f, 400.0f, 20)}));
+
+    const std::vector<rtype::ecs::entity_t> numbers = client.damageNumbers();
+    REQUIRE(numbers.size() == 1);
+    const rtype::ecs::entity_t number = numbers[0];
+    CHECK(client.ecs.getComponent<rtype::engine::SceneMember>(number).scene == client.scene);
+    const rtype::engine::Text &text = client.ecs.getComponent<rtype::engine::Text>(number);
+    CHECK(text.text == "10");
+    CHECK(text.size == Approx(40.0f));
+    CHECK(text.color.g == 220);
+    const rtype::ecs::Position start = client.ecs.getComponent<rtype::ecs::Position>(number);
+    CHECK(start.x == Approx(1190.0f));
+    CHECK(start.y < 400.0f);
+
+    // Rising, opaque for the first half of its time, then fading out, then gone
+    client.receive(snapshotOf(4, {bydoAt(5, 1185.0f, 400.0f, 20)}));
+    CHECK(client.ecs.getComponent<rtype::ecs::Position>(number).y < start.y);
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(number).value == Approx(1.0f));
+    for (int frame = 0; frame < 30; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(5 + frame), {bydoAt(5, 1180.0f, 400.0f, 20)}));
+    }
+    REQUIRE(client.ecs.isAlive(number));
+    const float fading = client.ecs.getComponent<rtype::engine::Opacity>(number).value;
+    CHECK(fading < 1.0f);
+    CHECK(fading > 0.0f);
+    for (int frame = 0; frame < 20; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(35 + frame), {bydoAt(5, 1180.0f, 400.0f, 20)}));
+    }
+    CHECK(client.damageNumbers().empty());
+}
+
+TEST_CASE("A killed entity writes the hit points it had left, one removed or without a look writes none",
+          "[client]")
+{
+    ImpactClient client;
+    client.sessions.setDamageLook(rtype::game::EntityKind::BydoFlyer, YellowDamage);
+    rtype::game::EntityState ship{7, rtype::game::EntityKind::PlayerShip, 0};
+    ship.health = 100;
+    client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 10), bydoAt(6, 1500.0f, 300.0f, 30), ship}));
+    ship.health = 75;
+    client.receive(snapshotOf(2, {ship}, {{5, rtype::game::DestroyCause::Killed},
+                                          {6, rtype::game::DestroyCause::Removed}}));
+
+    const std::vector<rtype::ecs::entity_t> numbers = client.damageNumbers();
+    REQUIRE(numbers.size() == 1);
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(numbers[0]).text == "10");
+    CHECK(client.ecs.getComponent<rtype::ecs::Position>(numbers[0]).x == Approx(1200.0f));
 }

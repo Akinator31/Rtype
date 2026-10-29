@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Game/DamageLooks.hpp"
 #include "Game/EntitySounds.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/ImpactLooks.hpp"
@@ -28,6 +29,8 @@ struct Replicated {
     /// Its id in the snapshots.
     std::uint32_t networkId = 0;
     game::EntityKind kind = game::EntityKind::PlayerShip;
+    /// Its hit points in the latest snapshot: when they drop, it was hit.
+    std::uint8_t health = 0;
 };
 
 /// The input of the local player, from the virtual gamepad of the engine: the directions, and FaceDown
@@ -43,7 +46,9 @@ struct Replicated {
 ///    moved, and destroyed when it is no longer in the world. The kinds given a ShipLook are 3D models, which
 ///    roll around their length, smoothly, as their ship climbs or dives; those given a ShotLook are models of
 ///    energy; the others are boxes. An entity killed in the game (a ship shot down, a shot that hit) leaves
-///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. The sounds are
+///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. An entity whose
+///    kind was given a DamageLook writes the damage it takes where it is hit: the hit points it lost since
+///    the previous snapshot, or those it had left when killed. The sounds are
 ///    engine::SoundEffect given to entities, which the engine::SoundSystem plays: a shot that appears has the
 ///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind.
 ///
@@ -65,6 +70,7 @@ class GameSessionSystem : public ecs::System
     ShipLooks _shipLooks;
     ShotLooks _shotLooks;
     ImpactLooks _impactLooks;
+    DamageLooks _damageLooks;
     EntitySounds _shotSounds;
     EntitySounds _destructionSounds;
     /// The entities drawn that the game killed: they leave an impact when they go.
@@ -82,6 +88,8 @@ class GameSessionSystem : public ecs::System
     /// Destroys the entity of an entity of the game gone, which leaves its impact if it was killed.
     void removeEntity(std::uint32_t networkId, const ecs::EntityRef &entity);
     void moveEntity(ecs::entity_t entity, const game::EntityState &state);
+    /// Writes the damage taken by an entity, at its position, if its kind shows it and it took any.
+    void showDamage(ecs::entity_t entity, std::uint8_t damage);
     void placeShipModels(float elapsed);
 
 public:
@@ -100,6 +108,8 @@ public:
     void setShotLook(game::EntityKind kind, const ShotLook &look);
     /// Leaves an impact where the game kills an entity of this kind from now on.
     void setImpactLook(game::EntityKind kind, const ImpactLook &look);
+    /// Writes the damage taken by the entities of this kind where they are hit from now on.
+    void setDamageLook(game::EntityKind kind, const DamageLook &look);
     /// Plays a sound when a shot of this kind appears from now on.
     void setShotSound(game::EntityKind kind, const EntitySound &sound);
     /// Plays a sound where the game kills an entity of this kind from now on, with its impact: a kind without

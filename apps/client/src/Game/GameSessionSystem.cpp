@@ -38,6 +38,11 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
     use<Impact>(caches);
+    use<engine::Text>(caches);
+    use<engine::Opacity>(caches);
+    use<engine::Scale>(caches);
+    use<engine::Tween>(caches);
+    use<DamageNumber>(caches);
     use<engine::SoundEffect>(caches);
 }
 
@@ -75,6 +80,11 @@ void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
 void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &look)
 {
     _impactLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setDamageLook(game::EntityKind kind, const DamageLook &look)
+{
+    _damageLooks.setLook(kind, look);
 }
 
 void GameSessionSystem::setShotSound(game::EntityKind kind, const EntitySound &sound)
@@ -168,7 +178,7 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     const EntityLook look = lookOf(state);
     const ecs::entity_t entity = _ecs.createEntity();
     _ecs.addComponent<engine::SceneMember>(entity, *_scene);
-    _ecs.addComponent<Replicated>(entity, state.id, state.kind);
+    _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.health);
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
     if (_shipLooks.hasLook(state.kind)) {
@@ -189,6 +199,9 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
         return;
     }
     const game::EntityKind kind = _ecs.getComponent<Replicated>(entity.id).kind;
+    if (killed) {
+        showDamage(entity.id, _ecs.getComponent<Replicated>(entity.id).health);
+    }
     if (killed && _impactLooks.hasLook(kind)) {
         const ecs::Position position = _ecs.getComponent<ecs::Position>(entity.id);
         const ecs::entity_t impact = _impactLooks.createImpact(_ecs, *_scene, kind, position);
@@ -200,10 +213,22 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
 void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState &state)
 {
     _ecs.getComponent<ecs::Position>(entity) = {state.x, state.y};
+    const std::uint8_t health = std::exchange(_ecs.getComponent<Replicated>(entity).health, state.health);
+    if (state.health < health) {
+        showDamage(entity, static_cast<std::uint8_t>(health - state.health));
+    }
     if (_ecs.hasComponent<ShipAttitude>(entity)) {
         _shipLooks.moveModel(_ecs, entity, state, _clock);
     } else if (_ecs.hasComponent<engine::Model>(entity)) {
         _shotLooks.placeModel(_ecs, entity, state);
+    }
+}
+
+void GameSessionSystem::showDamage(ecs::entity_t entity, std::uint8_t damage)
+{
+    const game::EntityKind kind = _ecs.getComponent<Replicated>(entity).kind;
+    if (damage > 0 && _damageLooks.hasLook(kind)) {
+        _damageLooks.createNumber(_ecs, *_scene, kind, _ecs.getComponent<ecs::Position>(entity), damage);
     }
 }
 

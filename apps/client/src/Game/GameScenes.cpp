@@ -76,6 +76,12 @@ constexpr render::Color PlasmaOrbLight{255, 120, 35, 135};
 /// How far the light of a shot spreads around its core, in heights of the core.
 constexpr float ShotLightSpread = 1.5f;
 
+/// The damage taken by the Bydos, written where they are hit: in the font of the titles, loaded at this size
+/// for the whole interface, in a warm yellow that stands out from the blue shots and the purple Bydos.
+constexpr int DamageFontSize = 96;
+constexpr float DamageTextSize = 40.0f;
+constexpr render::Color DamageColor{255, 220, 90, 255};
+
 /// The animation of the impact models, played once.
 constexpr const char *ImpactAnimation = "Impact";
 /// The colours of the impacts of the shots, those of their energy: the impact models are white.
@@ -203,6 +209,8 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
                          {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true,
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
     setImpactLooks(sessions, resources, energy);
+    const render::FontId damageFont = resources.loadFont(RTYPE_FONT_DISPLAY, DamageFontSize);
+    sessions.setDamageLook(game::EntityKind::BydoFlyer, {damageFont, DamageTextSize, DamageColor});
     setShotSounds(sessions, audio);
     setDestructionSounds(sessions, audio);
     setCollisionSounds(sessions, audio);
