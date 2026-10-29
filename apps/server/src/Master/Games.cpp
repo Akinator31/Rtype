@@ -69,6 +69,9 @@ struct Games::Game {
     std::map<std::uint32_t, Member> members;
     std::uint32_t lastSession = 0;
     std::optional<Creator> creator;
+    /// The last GAME_STATUS, and when it came, or when the game got ready before the first.
+    std::optional<GameStatusMessage> status;
+    Clock::time_point statusAt;
 
     explicit Game(rtype::network::EventLoop &loop) : startTimeout(loop) {}
 
@@ -336,6 +339,9 @@ void Games::instanceFrame(std::uint64_t connection, std::uint8_t type, std::span
     case instance_message::GameOver:
         gameOver(*game, payload);
         return;
+    case instance_message::GameStatus:
+        statusReceived(*game, payload);
+        return;
     default:
         break;
     }
@@ -377,6 +383,7 @@ void Games::ready(Game &game, std::span<const std::byte> payload)
         return;
     }
     game.state = Game::State::Running;
+    game.statusAt = Clock::now();
     game.startTimeout.cancel();
     logger().info("{} ready on UDP {}", game.describe(), game.port);
     if (!game.creator) {
@@ -427,6 +434,31 @@ void Games::gameOver(Game &game, std::span<const std::byte> payload)
             _onLeft(playerId, LeftGameMessage{game.id, LeftGameReason::GameOver});
         }
     }
+}
+
+void Games::statusReceived(Game &game, std::span<const std::byte> payload)
+{
+    std::optional<GameStatusMessage> status = decodeGameStatus(payload);
+    if (!status) {
+        fail(game, "malformed GAME_STATUS from its instance");
+        return;
+    }
+    if (game.state != Game::State::Running) {
+        // It ends: nothing more to show
+        return;
+    }
+    game.status = std::move(status);
+    game.statusAt = Clock::now();
+}
+
+std::optional<GameStatus> Games::status(std::uint32_t gameId) const
+{
+    const Game *game = find(gameId);
+    if (game == nullptr || game->state != Game::State::Running) {
+        return std::nullopt;
+    }
+    const Clock::duration age = Clock::now() - game->statusAt;
+    return GameStatus{.last = game->status, .age = age, .stale = age > _settings.statusTimeout};
 }
 
 void Games::send(Game &game, std::uint8_t type, std::span<const std::byte> payload)
