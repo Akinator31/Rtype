@@ -54,6 +54,7 @@ add_executable(rtype_tests
     scenes.cpp
     scripting.cpp
     serialization.cpp
+    server_account_store.cpp
     server_admin.cpp
     server_database.cpp
     server_instance.cpp
