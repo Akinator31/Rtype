@@ -690,7 +690,7 @@ TEST_CASE("Without accounts, a master serves its panel on the loopback only", "[
     CHECK(runMaster(options.master) == Failure);
     options.master.settings.web.listen = *Address::parse("::", 0);
     CHECK(runMaster(options.master) == Failure);
-    // With accounts, the panel has its sign-in: it may listen beyond (step 12 of the plan)
+    // With accounts, the panel has its sign-in: it may listen beyond
     options.master.settings.accounts = AccountsSettings{};
     CHECK(runMaster(options.master) == Success);
 }

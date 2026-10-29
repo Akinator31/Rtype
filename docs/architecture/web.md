@@ -3,8 +3,7 @@
 The master serves HTTP for its administration panel ([ADR 0025](../decisions/0025-server-administration.md)):
 the static files of the panel, `/api/health`, the local access token traded for a session, and the headers of
 security of every response. `WebServer` (`apps/server/src/Web/WebServer.hpp`) runs it on threads of its own,
-beside the event loop of the master. The administration API and the panel itself come in the next steps of the
-[accounts and administration plan](../plan/accounts-admin.md).
+beside the event loop of the master. The administration API and the panel itself come later.
 
 To configure it, see the `[web]` section of [Configure a server](../guides/configure-a-server.md).
 
@@ -22,7 +21,7 @@ To configure it, see the `[web]` section of [Configure a server](../guides/confi
 |---|---|---|
 | `GET /api/health` | nothing | `200 {"status":"ok"}`, answered by the event loop of the master: a master whose loop is stuck is not healthy |
 | `GET /api/session` | a session | `204` with a session, `401` without |
-| `/api/...` | a session | `401` without a session, `404` with one: the API of the next steps |
+| `/api/...` | a session | `401` without a session, `404` with one: the routes of the administration API, to come |
 | `GET /?token=<64 hex digits>` | the local access token | `303` to `/` with the session cookie; `403` for a wrong token, without a cookie |
 | `GET /<file>` | nothing | The file of the panel, with its `Content-Type` |
 | `GET /<page>` | nothing | `index.html` of the panel, for a path without an extension: the panel routes it itself. A missing file with an extension is `404` |
@@ -98,11 +97,11 @@ the peer: behind a local nginx or Caddy, every request comes from `127.0.0.1`, t
 
 **Without accounts, the panel listens on a loopback address only**, or the master does not start: the settings
 file refuses another `listen`, and `runMaster()` checks it again. From another machine, the panel is reached
-through an SSH tunnel. With accounts (step 12 of the plan), it may listen elsewhere, behind a proxy.
+through an SSH tunnel. With accounts, it will be allowed to listen elsewhere, behind a proxy.
 
 ## The proxy
 
-The address of a visitor, for the logs and the limits of the next steps, is read by `visitorAddress()`:
+The address of a visitor, for the logs, is read by `visitorAddress()`:
 
 - From a peer that is not in `[web] trusted_proxies`, the peer is the visitor, and its `X-Forwarded-For` is
   ignored: anyone can write one.
