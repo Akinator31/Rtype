@@ -8,6 +8,7 @@
 #include "Http.hpp"
 #include "Master/Master.hpp"
 #include "Server.hpp"
+#include "Web/Health.hpp"
 #include "Web/LocalAccess.hpp"
 #include "Web/Visitor.hpp"
 #include "Web/WebServer.hpp"
@@ -37,6 +38,7 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 
 using namespace rtype::server;
@@ -261,6 +263,99 @@ TEST_CASE("The health of the master is answered by its loop, without blocking ei
     const HttpResponse late = answer.get();
     CHECK(late.status == 200);
     CHECK(worked);
+}
+
+TEST_CASE("The answer of /api/health says whether the master is healthy", "[server][web]")
+{
+    CHECK_FALSE(
+        healthProblem("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"status\":\"ok\"}"));
+    CHECK_FALSE(healthProblem("HTTP/1.0 200 OK\r\n\r\n{\"status\":\"ok\"}"));
+
+    const std::vector<std::pair<std::string_view, std::string_view>> unhealthy{
+        {"", "without answering"},
+        {"SSH-2.0-OpenSSH_9.9\r\n", "did not answer in HTTP"},
+        {"HTTP/1.1 503 Service Unavailable\r\n\r\n{\"error\":\"stopping\"}",
+         "answered 503 Service Unavailable"},
+        {"HTTP/1.1 404 Not Found\r\n\r\n", "answered 404"},
+        {"HTTP/1.1 200 OK\r\n\r\n<!doctype html>", "without saying it is healthy"},
+        // Cut before its body
+        {"HTTP/1.1 200 OK\r\nContent-Length: 15\r\n", "without saying it is healthy"},
+    };
+    for (const auto &[response, problem] : unhealthy) {
+        CAPTURE(response);
+        const std::optional<std::string> found = healthProblem(response);
+        REQUIRE(found);
+        CHECK_THAT(*found, ContainsSubstring(std::string(problem)));
+    }
+}
+
+TEST_CASE("The health check asks the loop of the master, and gives up on one that is stuck", "[server][web]")
+{
+    Web web;
+    CHECK(askHealth(web.server->localAddress()) == std::nullopt);
+
+    // The loop stuck past the time the check waits: not healthy
+    std::promise<void> release;
+    std::shared_future<void> released = release.get_future().share();
+    web.loop.post([released] { released.wait(); });
+    const std::optional<std::string> stuck = askHealth(web.server->localAddress(), 300ms);
+    release.set_value();
+    REQUIRE(stuck);
+    CHECK_THAT(*stuck, ContainsSubstring("did not answer within"));
+    // Healthy again once it works
+    CHECK(askHealth(web.server->localAddress()) == std::nullopt);
+}
+
+TEST_CASE("The health check of a master that does not run fails at once", "[server][web]")
+{
+    std::uint16_t port = 0;
+    {
+        EventLoop loop;
+        {
+            const rtype::network::TcpListener free(loop, Address::loopbackIpv4(0));
+            port = free.localAddress().port();
+        }
+        loop.poll();
+    }
+    const auto start = std::chrono::steady_clock::now();
+    const std::optional<std::string> problem = askHealth(Address::loopbackIpv4(port));
+    REQUIRE(problem);
+    CHECK_THAT(*problem, ContainsSubstring(std::format("cannot reach the panel on 127.0.0.1:{}", port)));
+    CHECK(std::chrono::steady_clock::now() - start < HealthTimeout);
+}
+
+TEST_CASE("The option --health finds the panel at the address of the settings file", "[server][web]")
+{
+    const TempDirectory directory("health");
+    Web web;
+    const Captured captured;
+    std::ostringstream out;
+    std::istringstream in;
+    const auto health = [&](const std::string &listen) {
+        out.str("");
+        const std::string file =
+            directory.write("server.toml", std::format("[web]\nlisten = \"{}\"\n", listen)).string();
+        return run(std::vector<std::string_view>{"--health", "--settings", file}, out, in);
+    };
+
+    CHECK(health(std::format("{}", web.server->localAddress())) == Success);
+    CHECK(out.str() == "healthy\n");
+    // A panel that listens everywhere, with accounts, is asked on the loopback
+    MasterOptions everywhere;
+    everywhere.settings.web.listen = Address::anyIpv4(web.server->localAddress().port());
+    CHECK(showHealth(everywhere, out) == Success);
+
+    // No port to ask
+    CHECK(health("127.0.0.1:0") == Failure);
+    CHECK_THAT(captured.sink->text(), ContainsSubstring("--health cannot find it"));
+    CHECK(out.str().empty());
+
+    // The master gone
+    const std::string address = std::format("{}", web.server->localAddress());
+    web.server->stop();
+    CHECK(health(address) == Failure);
+    CHECK_THAT(captured.sink->text(), ContainsSubstring("Not healthy: cannot reach the panel on " + address));
+    CHECK(out.str().empty());
 }
 
 TEST_CASE("A request still waiting for the loop when the server stops is answered 503", "[server][web]")
@@ -544,6 +639,9 @@ TEST_CASE("A port taken stops the web server at start", "[server][web]")
 TEST_CASE("The address of the panel in admin-url.txt", "[server][web]")
 {
     const Secret token = newAccessToken();
+    CHECK(reachableAddress(Address::anyIpv4(8080)) == Address::loopbackIpv4(8080));
+    CHECK(reachableAddress(Address::anyIpv6(8080)) == *Address::parse("::1", 8080));
+    CHECK(reachableAddress(*Address::parse("192.0.2.7", 8080)) == *Address::parse("192.0.2.7", 8080));
     CHECK(panelAddress(Address::loopbackIpv4(8080), "") == "http://127.0.0.1:8080");
     CHECK(panelAddress(Address::anyIpv4(8080), "") == "http://127.0.0.1:8080");
     CHECK(panelAddress(Address::anyIpv6(8080), "") == "http://[::1]:8080");
@@ -640,6 +738,9 @@ TEST_CASE("A master writes admin-url.txt beside its key, whose address opens the
     const std::string base = url.substr(0, url.find("/?token="));
     // Answered by the loop: it runs, the stop signals are handled
     REQUIRE(http(base + "/api/health").status == 200);
+    // What the health check of the Docker image asks
+    const auto port = static_cast<std::uint16_t>(std::stoul(base.substr(base.rfind(':') + 1)));
+    CHECK(askHealth(Address::loopbackIpv4(port)) == std::nullopt);
 
     // The done-when of the step: the page "panel not built", with a session cookie
     const HttpResponse opened = http(url);

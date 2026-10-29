@@ -168,6 +168,7 @@ TEST_CASE("An instance needs its id and ports, and refuses the options of the ma
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--key", "server.key"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--check"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--fingerprint"},
+        {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--health"},
     };
 
     for (const auto &arguments : invalid) {
@@ -198,6 +199,16 @@ TEST_CASE("The option --fingerprint shows the key of the master instead of runni
     CHECK(options.mode == Options::Mode::Fingerprint);
     CHECK(options.master.key == "/etc/rtype/server.key");
     CHECK(parse({"--fingerprint"}).master.key == "server.key");
+}
+
+TEST_CASE("The option --health asks the master at the address of its panel instead of running it", "[server]")
+{
+    CHECK(parse({"--health"}).mode == Options::Mode::Health);
+    CHECK(parse({"--health", "--settings", "/config/server.toml"}).master.settingsFile ==
+          "/config/server.toml");
+    // Without settings, the panel of a master without them
+    CHECK(parse({"--health"}).master.settings.web.listen == Address::loopbackIpv4(8080));
+    CHECK_THROWS_AS(parse({"--health", "--fingerprint"}), std::invalid_argument);
 }
 
 TEST_CASE("--help and --version win over everything else", "[server]")
