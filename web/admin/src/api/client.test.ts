@@ -21,10 +21,12 @@ describe('the client of the API', () => {
     );
     await api.kick(7, 'cheating');
     await api.message('Hello', null);
+    expect(await api.unban('198.51.100.4', '')).toEqual({ address: '198.51.100.4' });
     expect(asked).toBe(1);
     expect(sent).toEqual([
       { path: '/api/players/7/kick', csrf: fixtures.csrfToken, body: { reason: 'cheating' } },
       { path: '/api/messages', csrf: fixtures.csrfToken, body: { text: 'Hello', gameId: null } },
+      { path: '/api/bans/lift', csrf: fixtures.csrfToken, body: { address: '198.51.100.4', reason: '' } },
     ]);
   });
 

@@ -59,6 +59,12 @@ export const handlers = [
     '*/api/bans',
     checked(() => HttpResponse.json({ ban: fixtures.ban, removed: 1 })),
   ),
+  http.post(
+    '*/api/bans/lift',
+    checked(async (request) =>
+      HttpResponse.json({ address: ((await request.json()) as { address: string }).address }),
+    ),
+  ),
 ];
 
 export const server = setupServer(...handlers);

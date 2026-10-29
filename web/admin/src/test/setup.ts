@@ -4,6 +4,7 @@ import { cleanup } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 
 import { resetSession } from '../api/client';
+import { toaster } from '../components/notify';
 import { sent, server } from './server';
 
 // What jsdom lacks and Chakra UI asks for
@@ -28,6 +29,8 @@ Element.prototype.scrollTo = () => undefined;
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   cleanup();
+  // One toaster for the whole panel: the notifications of a test would hold the places of the next
+  toaster.remove();
   server.resetHandlers();
   sent.length = 0;
   resetSession();

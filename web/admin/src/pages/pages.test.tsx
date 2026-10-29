@@ -251,6 +251,40 @@ describe('the actions', () => {
     expect(items[0]).toHaveTextContent('Bob');
   });
 
+  it('lifts a ban after its confirmation, and lists the bans again', async () => {
+    const user = userEvent.setup();
+    let bans = [fixtures.ban];
+    server.use(http.get('*/api/bans', () => HttpResponse.json(bans)));
+    const { push } = renderPanel('/actions', [snapshot]);
+    await user.click(await screen.findByRole('button', { name: 'Lift 198.51.100.4' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Lift the ban of 198.51.100.4?')).toBeInTheDocument();
+    await user.type(within(dialog).getByRole('textbox'), 'a mistake');
+    await user.click(within(dialog).getByRole('button', { name: 'Lift the ban' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({
+      path: '/api/bans/lift',
+      csrf: fixtures.csrfToken,
+      body: { address: '198.51.100.4', reason: 'a mistake' },
+    });
+    expect(await screen.findByText('198.51.100.4 welcome again')).toBeInTheDocument();
+
+    // The action recorded comes back on the WebSocket: the list of the bans is asked again
+    bans = [];
+    push({
+      type: 'action',
+      action: {
+        ...fixtures.kick,
+        id: 13,
+        action: 'unban',
+        target: 'address:198.51.100.4',
+        details: { reason: 'a mistake' },
+      },
+    });
+    expect(await screen.findByText('No address is banned.')).toBeInTheDocument();
+    expect(screen.getByText('ban lifted: a mistake')).toBeInTheDocument();
+  });
+
   it('pages the older actions', async () => {
     const user = userEvent.setup();
     const page = Array.from({ length: 50 }, (_, index) => ({ ...fixtures.kick, id: 100 - index }));

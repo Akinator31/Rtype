@@ -133,5 +133,13 @@ describe('the live state', () => {
     expect(
       describeAction({ ...fixtures.kick, action: 'end_game', target: 'game:3', details: { name: 'Duo' } }),
     ).toMatchObject({ subject: 'Duo', verb: 'ended' });
+    expect(
+      describeAction({
+        ...fixtures.kick,
+        action: 'unban',
+        target: 'address:198.51.100.4',
+        details: { reason: 'a mistake' },
+      }),
+    ).toEqual({ tone: 'bonus', subject: '198.51.100.4', verb: 'ban lifted: a mistake', object: 'local' });
   });
 });

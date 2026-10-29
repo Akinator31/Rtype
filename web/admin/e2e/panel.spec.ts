@@ -28,7 +28,9 @@ async function watch(page: Page): Promise<string[]> {
   return problems;
 }
 
-test('a host opens the panel with its token, watches the game live, and ends it', async ({ page }) => {
+test('a host opens the panel with its token, watches the game live, ends it, bans and lifts the ban', async ({
+  page,
+}) => {
   const problems = await watch(page);
 
   // The token traded for a session: the panel, without the token in its address
@@ -66,6 +68,18 @@ test('a host opens the panel with its token, watches the game live, and ends it'
   const record = page.getByRole('list', { name: 'Actions' });
   await expect(record.locator('[data-action="end_game"]')).toContainText('Playwright');
   await expect(record.locator('[data-action="end_game"]')).toContainText('end to end');
+
+  // Their address banned, which removes them, then the ban lifted
+  await page.getByRole('link', { name: 'Players' }).click();
+  await page.getByRole('button', { name: 'Ban 127.0.0.1' }).first().click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Ban' }).click();
+  await expect(page.getByText('No player is connected.')).toBeVisible();
+  await page.getByRole('link', { name: 'Actions' }).click();
+  await page.getByRole('button', { name: 'Lift 127.0.0.1' }).click();
+  await page.getByRole('alertdialog').getByRole('textbox').fill('a mistake');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Lift the ban' }).click();
+  await expect(page.getByText('No address is banned.')).toBeVisible();
+  await expect(record.locator('[data-action="unban"]')).toContainText('ban lifted: a mistake');
 
   expect(await page.evaluate(() => window.cspViolations)).toEqual([]);
   expect(problems).toEqual([]);
