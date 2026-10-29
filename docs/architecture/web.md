@@ -73,6 +73,12 @@ completes the request holds the last reference to its connection, and clears its
 the connection in the middle. `apps/server/patches/crow-deferred-response.patch`, applied by CPM, calls a copy
 of it instead. The test that answers after the loop has worked fails without it.
 
+Crow's empty `request()` leaves `keep_alive`, `close_connection`, `upgrade` and the HTTP version
+uninitialized, and its parser resets its request with one after each response: the copy reads those values,
+which is undefined behavior. UndefinedBehaviorSanitizer stops on it whenever the memory does not hold a 0 or a
+1, so a test of the API failed now and then in the build with the sanitizers.
+`apps/server/patches/crow-request-initialized.patch` gives them a value.
+
 Crow ends the response of its catch-all route itself, after the handler, which serves the files of the panel:
 that handler only fills the response. Ended twice, the response stayed completed once sent, and the next request
 on the same connection got Crow's bare `404` without reaching any handler, which a browser, keeping its
