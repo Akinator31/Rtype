@@ -79,6 +79,13 @@ public:
     /// The colour filter applied to the image, ColorFilter::None by default.
     [[nodiscard]] ColorFilter colorFilter() const;
 
+    /// Darkens the corners of the world, under the interface, to draw the eye to the middle of the screen. It
+    /// is drawn by drawGlow().
+    /// @param strength How dark the corners are, from 0 (no vignette) to 1 (black); 0.22 by default.
+    void setVignette(float strength);
+    /// How dark the vignette makes the corners, from 0 to 1.
+    [[nodiscard]] float vignette() const;
+
     /// Starts a new frame and fills it with the background colour.
     /// @throws std::logic_error if a frame is already started.
     void beginFrame(Color background = colors::Black);
@@ -190,10 +197,11 @@ public:
     void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
                          Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
                          float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
-    /// Makes the energy models drawn since the start of the frame (or the previous call) shine: their light
-    /// is blurred around them and added over everything drawn so far. Call it after the 3D models and before
-    /// the interface, which it would otherwise cover. Does nothing without energy models; if the graphics
-    /// card cannot blur, a warning is logged once and nothing glows.
+    /// Makes the energy models, and the light the models emit (engine flames, windows), drawn since the
+    /// start of the frame (or the previous call) shine: their light is blurred around them and added over
+    /// everything drawn so far. Then darkens the corners (setVignette()). Call it after the 3D models and
+    /// before the interface, which it would otherwise cover. If the graphics card cannot blur, a warning is
+    /// logged once and nothing glows.
     /// @throws std::logic_error if no frame is started.
     void drawGlow();
 

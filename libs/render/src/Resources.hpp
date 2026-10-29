@@ -8,10 +8,12 @@
 #include "rtype/core/ResourceCache.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
+#include <external/cgltf.h>
 #include <raylib.h>
 #include <rlgl.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <optional>
 #include <stdexcept>
@@ -163,6 +165,43 @@ private:
         }
     }
 
+    static unsigned char toChannel(cgltf_float factor)
+    {
+        return static_cast<unsigned char>(std::lround(std::clamp(factor, 0.0f, 1.0f) * 255.0f));
+    }
+
+    // raylib keeps the roughness, metalness and emissive factors of a glTF material only along with their
+    // textures: a plain material would lose its finish, and a plain emissive one, such as an engine flame,
+    // would not glow. They are read again from the file. raylib puts its default material first, then those
+    // of the file in their order.
+    static void restoreMaterialFactors(::Model &model, const std::filesystem::path &file)
+    {
+        const std::string extension = file.extension().string();
+        if (extension != ".glb" && extension != ".gltf") {
+            return;
+        }
+        const cgltf_options options{};
+        cgltf_data *data = nullptr;
+        if (cgltf_parse_file(&options, file.string().c_str(), &data) != cgltf_result_success) {
+            return;
+        }
+        const auto count = std::min(data->materials_count, static_cast<cgltf_size>(model.materialCount - 1));
+        for (cgltf_size index = 0; index < count; ++index) {
+            const cgltf_material &source = data->materials[index];
+            MaterialMap *maps = model.materials[index + 1].maps;
+            if (source.has_pbr_metallic_roughness && maps[MATERIAL_MAP_ROUGHNESS].texture.id == 0) {
+                maps[MATERIAL_MAP_ROUGHNESS].value = source.pbr_metallic_roughness.roughness_factor;
+                maps[MATERIAL_MAP_METALNESS].value = source.pbr_metallic_roughness.metallic_factor;
+            }
+            if (maps[MATERIAL_MAP_EMISSION].texture.id == 0) {
+                const cgltf_float *emissive = source.emissive_factor;
+                maps[MATERIAL_MAP_EMISSION].color = {toChannel(emissive[0]), toChannel(emissive[1]),
+                                                     toChannel(emissive[2]), 255};
+            }
+        }
+        cgltf_free(data);
+    }
+
 public:
     explicit Model(const std::filesystem::path &file) : _model(LoadModel(file.string().c_str()))
     {
@@ -170,9 +209,12 @@ public:
             UnloadModel(_model);
             throw std::runtime_error("Cannot load model " + file.string());
         }
+        restoreMaterialFactors(_model, file);
         for (int index = 0; index < _model.materialCount; ++index) {
-            smoothTexture(_model.materials[index].maps[MATERIAL_MAP_ALBEDO].texture);
-            smoothTexture(_model.materials[index].maps[MATERIAL_MAP_NORMAL].texture);
+            for (const int map : {MATERIAL_MAP_ALBEDO, MATERIAL_MAP_NORMAL, MATERIAL_MAP_METALNESS,
+                                  MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION, MATERIAL_MAP_EMISSION}) {
+                smoothTexture(_model.materials[index].maps[map].texture);
+            }
         }
         if (_model.skeleton.boneCount > 0) {
             _animations = LoadModelAnimations(file.string().c_str(), &_animationCount);

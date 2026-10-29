@@ -66,8 +66,14 @@ constexpr render::Rectangle ShotBasicCore{-1.6f, -0.55f, 4.0f, 1.1f};
 constexpr render::Rectangle ShotSpiralCore{-2.4f, -0.73f, 4.48f, 1.46f};
 constexpr render::Rectangle OrbPlasmaCore{-0.9f, -0.9f, 1.8f, 1.8f};
 
-/// The ships are lit from the top left, in front of them, in the world of the game where y points down.
-constexpr render::Light GameLight{{0.5f, 0.8f, 0.6f}, {255, 248, 240, 255}, {48, 50, 62, 255}};
+/// The ships are lit from the top left, in front of them, in the world of the game where y points down. A
+/// cold rim light from behind, at the top right where the Bydos come from, outlines their hulls against
+/// space.
+constexpr render::Light GameLight{.direction = {0.5f, 0.8f, 0.6f},
+                                  .color = {255, 248, 240, 255},
+                                  .ambient = {48, 50, 62, 255},
+                                  .rimDirection = {-0.6f, 0.35f, -1.0f},
+                                  .rim = {95, 135, 210, 255}};
 
 /// The colours of the light around the shots, those of their energy; the alpha is how bright it is.
 constexpr render::Color PlayerShotLight{80, 200, 255, 130};

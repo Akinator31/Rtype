@@ -44,6 +44,8 @@ render::Light createHangarLight()
     light.direction = {-0.35f, -0.65f, -0.65f};
     light.color = {255, 250, 240, 255};
     light.ambient = {34, 38, 52, 255};
+    light.rimDirection = {0.6f, -0.4f, 1.0f};
+    light.rim = {120, 160, 235, 255};
     return light;
 }
 
