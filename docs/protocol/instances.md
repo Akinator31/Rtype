@@ -4,6 +4,14 @@ The local connection between the master and the game processes it starts
 ([ADR 0013](../decisions/0013-one-process-per-game.md)). Clients never see this protocol. Conventions and types
 are defined in the [overview](index.md#2-conventions).
 
+This page describes **version 2**. Master and instances come from the same build, so a master refuses an
+`INSTANCE_HELLO` of another version.
+
+| Version | Change |
+|---|---|
+| 1 | First version |
+| 2 | `GAME_STATUS`: the instance tells the master where its game stands, every second |
+
 ## 1. Starting an instance
 
 The master starts an instance with its own executable and these arguments:
@@ -42,6 +50,9 @@ sequenceDiagram
     I->>M: READY (UDP port)
     M->>I: ADD_PLAYER (player id, name, session id, keys)
     I->>M: PLAYER_CONNECTED (player id)
+    loop every second
+        I->>M: GAME_STATUS (tick, wave, players)
+    end
     Note over M,I: later, one of:
     M->>I: REMOVE_PLAYER (player id): the player left through the lobby
     I->>M: PLAYER_DISCONNECTED (player id): the player timed out
@@ -50,7 +61,7 @@ sequenceDiagram
 ```
 
 *The instance proves it was started by the master, receives its configuration, opens its port, then receives
-its players and reports their connections until the game is over.*
+its players and reports their connections and the state of the game until the game is over.*
 
 ## 3. Life and death of an instance
 
@@ -78,7 +89,7 @@ An instance exits with code 0 after `GAME_OVER` or `SHUTDOWN`, and with a non-ze
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 1 |
+| 0 | Version | `u16` | Protocol version, 2 |
 | 2 | Instance id | `u32` | The `--id` argument |
 | 6 | Secret | `bytes[32]` | The secret read on the standard input |
 
@@ -139,6 +150,35 @@ not presented itself yet, and that the secret matches, comparing it in constant 
 
 **Receiver behaviour:** the master sends `LEFT_GAME (GAME_OVER)` to the players of the game and frees its
 port.
+
+#### GAME_STATUS (`0x06`)
+
+| | |
+|---|---|
+| **Direction** | Instance → Master |
+| **Sent when** | Every second after `READY`, until the game is over or the instance stops. Since version 2. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Tick | `u32` | The last tick simulated |
+| 4 | Wave | `u16` | The wave under way, from 1; 0 before the first |
+| 6 | Count | `u8` | Number of entries that follow, at most 4 |
+| 7 | Players | | Count entries of 11 bytes, below |
+
+Each entry, for a player whose client connected (`PLAYER_CONNECTED`); a player added but not connected yet is
+not listed. A player id appears once.
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Player id | `u32` | |
+| 4 | Score | `u32` | |
+| 8 | Alive | `u8` | 1 while the player has lives left, 0 once out of the game; any other value is malformed |
+| 9 | Latency | `u16` | Round-trip time to its client in milliseconds, at most 65534; `0xFFFF` while not measured yet |
+
+**Receiver behaviour:** the master keeps the last status of the game and when it came. A running game without
+`GAME_STATUS` for 3 seconds is shown as stale: its instance, or its game thread, is stuck. The master does not
+stop it for that; a process that dies is still detected by its exit. A malformed `GAME_STATUS` is a crash of
+the game, like any malformed message.
 
 ### 4.2 Master to instance
 

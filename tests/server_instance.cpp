@@ -308,6 +308,13 @@ TEST_CASE("The messages of the instances survive a round trip", "[instance]")
     const GameOverReport report{{{1, 1500}, {2, 0}, {3, 0xFFFFFFFF}, {4, 7}}};
     CHECK(decodeGameOverReport(encode(report)) == report);
     CHECK(decodeGameOverReport(encode(GameOverReport{})) == GameOverReport{});
+    const GameStatusMessage status{
+        123456,
+        3,
+        {{1, 1500, true, 42}, {2, 0, false, std::nullopt}, {3, 0xFFFFFFFF, true, MaxStatusLatency}}};
+    CHECK(decodeGameStatus(encode(status)) == status);
+    CHECK(encode(status).size() == 7 + (3 * 11));
+    CHECK(decodeGameStatus(encode(GameStatusMessage{})) == GameStatusMessage{});
     const ConfigureMessage configure{"Bydo hunters", 3};
     CHECK(decodeConfigure(encode(configure)) == configure);
     const AddPlayerMessage added = player(42, 5, "Alice");
@@ -334,6 +341,10 @@ TEST_CASE("The messages of the instances are written field by field", "[instance
     CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2}));
     CHECK(encode(GameOverReport{{{1, 1500}}}) == bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC}));
     CHECK(encode(ShutdownMessage{ShutdownReason::Empty}) == bytes({0}));
+    CHECK(encode(GameStatusMessage{600, 2, {{42, 1500, true, 35}, {43, 0, false, std::nullopt}}}) ==
+          bytes({0, 0, 0x02, 0x58, 0, 2, 2,                            // tick, wave, players
+                 0, 0, 0,    0x2A, 0, 0, 0x05, 0xDC, 1, 0,    35,      // 42, 1500, alive, 35 ms
+                 0, 0, 0,    0x2B, 0, 0, 0,    0,    0, 0xFF, 0xFF})); // 43, 0, out, not measured
 }
 
 TEST_CASE("The messages of the instances refuse what the protocol forbids", "[instance]")
@@ -353,18 +364,26 @@ TEST_CASE("The messages of the instances refuse what the protocol forbids", "[in
     CHECK_THROWS_AS(encode(player(1, 0, "Bob")), std::invalid_argument);
     CHECK_THROWS_AS(encode(player(1, 2, "")), std::invalid_argument);
     CHECK_THROWS_AS(encode(GameOverReport{std::vector<PlayerScore>(5)}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(GameStatusMessage{1, 1, std::vector<PlayerStatus>(5)}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(GameStatusMessage{1, 1, {{1, 0, true, 0xFFFF}}}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(GameStatusMessage{1, 1, {{1, 0, true, 1}, {1, 5, true, 2}}}),
+                    std::invalid_argument);
 
     Bytes hello = encode(InstanceHelloMessage{1, 7, {}});
     hello[2] = hello[3] = hello[4] = hello[5] = std::byte{0};
-    CHECK_FALSE(decodeInstanceHello(hello));                       // id 0
-    CHECK_FALSE(decodePlayerDisconnected(bytes({0, 0, 0, 1, 2}))); // reason 2
-    CHECK_FALSE(decodeRemovePlayer(bytes({0, 0, 0, 1, 2})));       // reason 2
-    CHECK_FALSE(decodeShutdown(bytes({2})));                       // reason 2
-    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 0})));              // no player
-    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 5})));              // 5 players
-    CHECK_FALSE(decodeConfigure(bytes({0, 2})));                   // no name
-    CHECK_FALSE(decodeGameOverReport(bytes({5})));                 // 5 scores
-    CHECK_FALSE(decodeGameOverReport(bytes({1, 0, 0, 0, 1})));     // cut
+    CHECK_FALSE(decodeInstanceHello(hello));                                                      // id 0
+    CHECK_FALSE(decodePlayerDisconnected(bytes({0, 0, 0, 1, 2})));                                // reason 2
+    CHECK_FALSE(decodeRemovePlayer(bytes({0, 0, 0, 1, 2})));                                      // reason 2
+    CHECK_FALSE(decodeShutdown(bytes({2})));                                                      // reason 2
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 0})));                                             // no player
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 5})));                                             // 5 players
+    CHECK_FALSE(decodeConfigure(bytes({0, 2})));                                                  // no name
+    CHECK_FALSE(decodeGameOverReport(bytes({5})));                                                // 5 scores
+    CHECK_FALSE(decodeGameOverReport(bytes({1, 0, 0, 0, 1})));                                    // cut
+    CHECK_FALSE(decodeGameStatus(bytes({0, 0, 0, 1, 0, 1, 5})));                                  // 5 players
+    CHECK_FALSE(decodeGameStatus(bytes({0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0}))); // alive 2
+    CHECK_FALSE(decodeGameStatus(bytes({0, 0, 0, 1, 0, 1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0,     // player 1
+                                        0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0}))); // player 1 again
     Bytes added = encode(player(1, 2, "Bob"));
     added[4] = added[5] = added[6] = added[7] = std::byte{0};
     CHECK_FALSE(decodeAddPlayer(added)); // session 0
@@ -376,6 +395,9 @@ TEST_CASE("The messages of the instances refuse what the protocol forbids", "[in
         {encode(PlayerConnectedMessage{1}), [](auto p) { return decodePlayerConnected(p).has_value(); }},
         {encode(PlayerDisconnectedMessage{1, {}}),
          [](auto p) { return decodePlayerDisconnected(p).has_value(); }},
+        {encode(GameOverReport{{{1, 2}}}), [](auto p) { return decodeGameOverReport(p).has_value(); }},
+        {encode(GameStatusMessage{1, 2, {{1, 2, true, 3}, {4, 5, false, std::nullopt}}}),
+         [](auto p) { return decodeGameStatus(p).has_value(); }},
         {encode(ConfigureMessage{"G", 1}), [](auto p) { return decodeConfigure(p).has_value(); }},
         {encode(player(1, 2, "Bob")), [](auto p) { return decodeAddPlayer(p).has_value(); }},
         {encode(RemovePlayerMessage{1, {}}), [](auto p) { return decodeRemovePlayer(p).has_value(); }},
@@ -407,6 +429,7 @@ TEST_CASE("Random bytes never crash the decoders of the instances", "[instance]"
         (void)decodePlayerConnected(payload);
         (void)decodePlayerDisconnected(payload);
         (void)decodeGameOverReport(payload);
+        (void)decodeGameStatus(payload);
         (void)decodeConfigure(payload);
         (void)decodeAddPlayer(payload);
         (void)decodeRemovePlayer(payload);
@@ -622,6 +645,51 @@ TEST_CASE("A game over is sent to the clients, reported with the scores, and not
     CHECK(received(rtype::game::message_type::GameOver) == 1);
 }
 
+TEST_CASE("The status of a game comes from its last tick and the sessions of its players", "[instance]")
+{
+    EventLoop loop;
+    GameThread game({}, {}, [](TickResult) {});
+    GameHost host(loop, Address::loopbackIpv4(0), 4, game, {});
+    const AddPlayerMessage alice = player(42, 5, "Alice");
+    const AddPlayerMessage bob = player(43, 6, "Bob");
+    REQUIRE(host.addPlayer(alice));
+    REQUIRE(host.addPlayer(bob));
+    CHECK(host.status() == GameStatusMessage{});
+
+    // Only Alice connects: Bob, expected, is not in the game yet
+    TestClient client(loop, host.localAddress().port(), alice);
+    REQUIRE(waitUntil(loop, [&] { return client.accepted.has_value(); }, [&] { client.update(); }));
+
+    TickResult result;
+    result.snapshot.tick = 300;
+    result.snapshot.players = {{0, 2, 700}, {1, 3, 0}};
+    result.snapshot.waveStarted = 2;
+    host.publish(result);
+    GameStatusMessage status = host.status();
+    CHECK(status.tick == 300);
+    CHECK(status.wave == 2);
+    REQUIRE(status.players.size() == 1);
+    CHECK(status.players[0].playerId == 42);
+    CHECK(status.players[0].score == 700);
+    CHECK(status.players[0].alive);
+
+    // The wave stays until the next one starts; a player without lives is out
+    result.snapshot.tick = 301;
+    result.snapshot.players = {{0, 0, 900}};
+    result.snapshot.waveStarted.reset();
+    host.publish(result);
+    status = host.status();
+    CHECK(status.tick == 301);
+    CHECK(status.wave == 2);
+    CHECK(status.players[0].score == 900);
+    CHECK_FALSE(status.players[0].alive);
+
+    // Its round-trip time, once the session measured it from the acknowledgements
+    CHECK(waitUntil(
+        loop, [&] { return host.status().players[0].latency.has_value(); }, [&] { client.update(); }));
+    CHECK(*host.status().players[0].latency < 1000);
+}
+
 TEST_CASE("An instance runs a game for the players the master gives it", "[instance]")
 {
     InstanceFixture fixture;
@@ -706,6 +774,59 @@ TEST_CASE("An instance runs a game for the players the master gives it", "[insta
     // SHUTDOWN: the instance exits with 0
     master.send(instance_message::Shutdown, ShutdownMessage{ShutdownReason::Empty});
     CHECK(fixture.instance->waitForExit(loop) == Success);
+}
+
+TEST_CASE("An instance tells its master every second where its game stands", "[instance]")
+{
+    InstanceFixture fixture;
+    fixture.start();
+    fixture.configure();
+    EventLoop &loop = fixture.loop;
+    FakeMaster &master = fixture.master;
+    const AddPlayerMessage alice = player(42, 5, "Alice");
+    const AddPlayerMessage bob = player(43, 6, "Bob");
+    master.send(instance_message::AddPlayer, alice);
+    master.send(instance_message::AddPlayer, bob);
+    loop.poll();
+    std::this_thread::sleep_for(20ms);
+    TestClient aliceClient(loop, fixture.udpPort, alice);
+    TestClient bobClient(loop, fixture.udpPort, bob);
+    const auto updateBoth = [&] {
+        aliceClient.update();
+        bobClient.update();
+    };
+    REQUIRE(waitUntil(loop, [&] { return aliceClient.accepted && bobClient.accepted; }, updateBoth));
+
+    // The statuses that follow list both players, alive, with their scores and their latencies
+    std::optional<GameStatusMessage> status;
+    std::uint32_t previousTick = 0;
+    int received = 0;
+    const auto start = Clock::now();
+    REQUIRE(waitUntil(
+        loop,
+        [&] {
+            while (const std::optional<Bytes> payload = master.take(instance_message::GameStatus)) {
+                status = decodeGameStatus(*payload);
+                REQUIRE(status);
+                CHECK(status->tick >= previousTick);
+                previousTick = status->tick;
+                ++received;
+            }
+            return status && status->players.size() == 2 && status->players[0].latency &&
+                   status->players[1].latency && received >= 3;
+        },
+        updateBoth));
+    // One a second: three in about two seconds at least, never a flood
+    CHECK(Clock::now() - start >= 1500ms);
+    CHECK(status->tick > 60);
+    std::vector<std::uint32_t> ids;
+    for (const PlayerStatus &entry : status->players) {
+        ids.push_back(entry.playerId);
+        CHECK(entry.alive);
+        CHECK(entry.score == 0);
+    }
+    std::ranges::sort(ids);
+    CHECK(ids == std::vector<std::uint32_t>{42, 43});
 }
 
 TEST_CASE("An instance whose master goes away disconnects its players and fails", "[instance]")

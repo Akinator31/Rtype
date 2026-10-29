@@ -97,8 +97,10 @@ keys of the game. It then talks to the game directly, over encrypted datagrams.*
 
 ## 4. Versioning
 
-The protocol version is a `u16`, currently **1**. It is sent by the client in `HELLO`, by the instance in
-`INSTANCE_HELLO`, and in the header of every datagram (as a `u8`).
+The protocol version is a `u16`, currently **1**. It is sent by the client in `HELLO` and in the header of every
+datagram (as a `u8`). The instances have a version of their own, sent in `INSTANCE_HELLO`, currently **2**
+([master and instances](instances.md)): master and instances come from the same build, so it changes without
+the clients.
 
 - A server MUST refuse a `HELLO` with another version, with the error `UNSUPPORTED_VERSION`, then close the
   connection.

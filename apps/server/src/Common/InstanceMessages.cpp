@@ -3,6 +3,7 @@
 #include "rtype/network/Reader.hpp"
 #include "rtype/network/Writer.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace rtype::server
@@ -134,6 +135,59 @@ std::optional<GameOverReport> decodeGameOverReport(std::span<const std::byte> pa
         score.playerId = reader.readU32();
         score.score = reader.readU32();
         message.scores.push_back(score);
+    }
+    return finished(reader, message);
+}
+
+std::vector<std::byte> encode(const GameStatusMessage &message)
+{
+    require(message.players.size() <= MaxInstancePlayers, "A GAME_STATUS has at most 4 players");
+    for (std::size_t i = 0; i < message.players.size(); ++i) {
+        const PlayerStatus &player = message.players[i];
+        require(!player.latency || *player.latency <= MaxStatusLatency, "A latency is at most 65534 ms");
+        for (std::size_t j = 0; j < i; ++j) {
+            require(message.players[j].playerId != player.playerId, "A player is in a GAME_STATUS once");
+        }
+    }
+    Writer writer(7 + (11 * message.players.size()));
+    writer.writeU32(message.tick);
+    writer.writeU16(message.wave);
+    writer.writeU8(static_cast<std::uint8_t>(message.players.size()));
+    for (const PlayerStatus &player : message.players) {
+        writer.writeU32(player.playerId);
+        writer.writeU32(player.score);
+        writer.writeU8(player.alive ? 1 : 0);
+        writer.writeU16(player.latency.value_or(0xFFFF));
+    }
+    return writer.take();
+}
+
+std::optional<GameStatusMessage> decodeGameStatus(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    GameStatusMessage message;
+    message.tick = reader.readU32();
+    message.wave = reader.readU16();
+    const std::uint8_t count = reader.readU8();
+    if (count > MaxInstancePlayers) {
+        reader.fail();
+    }
+    for (std::uint8_t i = 0; i < count && reader.ok(); ++i) {
+        PlayerStatus player;
+        player.playerId = reader.readU32();
+        player.score = reader.readU32();
+        const std::uint8_t alive = reader.readU8();
+        const std::uint16_t latency = reader.readU16();
+        if (alive > 1 || std::ranges::any_of(message.players, [&](const PlayerStatus &other) {
+                return other.playerId == player.playerId;
+            })) {
+            reader.fail();
+        }
+        player.alive = alive == 1;
+        if (latency != 0xFFFF) {
+            player.latency = latency;
+        }
+        message.players.push_back(player);
     }
     return finished(reader, message);
 }
