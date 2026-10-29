@@ -192,6 +192,11 @@ The workflows run on the team's self-hosted runners. The Linux runner needs:
 
 The Windows runner needs Visual Studio 2022 and CMake; it tests the database on SQLite only.
 
+Several runners can share one machine, and run their jobs at once. The tests name their files in the temporary
+directory (the SQLite databases, keys, settings), the same in every run: the *Test* steps set `TMPDIR` to the
+directory of their runner, so that two jobs never read each other's files. By hand, two builds tested at once
+(`build` and `build-asan`, for instance) need the same: `TMPDIR=$(mktemp -d) ctest --test-dir build`.
+
 ## Roadmap
 
 Steps still to set up, and what triggers each of them. Tick the box and move the tool to *In place* above
