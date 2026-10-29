@@ -7,6 +7,8 @@
 #include "Master/Process.hpp"
 #include "Master/ServerDatabase.hpp"
 #include "Master/ServerKey.hpp"
+#include "Web/LocalAccess.hpp"
+#include "Web/WebServer.hpp"
 #include "rtype/database/DatabaseThread.hpp"
 #include "rtype/log/Log.hpp"
 #include "rtype/log/Logger.hpp"
@@ -85,14 +87,60 @@ int runMaster(const MasterOptions &options)
         return Failure;
     }
 
+    // The panel (docs/architecture/web.md): declared after the loop, it stops before it
+    const WebSettings &webSettings = options.settings.web;
+    if (!options.settings.accountsEnabled() && !isLoopback(webSettings.listen)) {
+        // Without accounts, nobody signs in to the panel: only this machine may reach it
+        logger.error("The panel cannot listen on {} without accounts: only on a loopback address (127.0.0.1, "
+                     "[::1])",
+                     webSettings.listen);
+        return Failure;
+    }
+    std::filesystem::path panelDir = webSettings.panelDir;
+    if (!panelDir.empty() && !std::filesystem::is_directory(panelDir)) {
+        logger.error("The folder of the panel {} does not exist", panelDir.string());
+        return Failure;
+    }
+    const Secret accessToken = newAccessToken();
+    std::optional<WebServer> web;
+    try {
+        if (panelDir.empty()) {
+            panelDir = currentExecutable().parent_path() / "admin";
+        }
+        web.emplace(loop, WebServerSettings{
+                              .listen = webSettings.listen,
+                              .panelDir = panelDir,
+                              .trustedProxies = webSettings.trustedProxies,
+                              .accessToken = accessToken,
+                          });
+    } catch (const std::system_error &error) {
+        logger.error("Cannot serve the panel on {}: {}", webSettings.listen, error.code().message());
+        return Failure;
+    }
+
     const unsigned maxGames = options.lastGamePort - options.firstGamePort + 1U;
     logger.info("Lobby on TCP {}, games on UDP {}-{} ({} at most)", listener->localAddress(),
                 options.firstGamePort, options.lastGamePort, maxGames);
+    logger.info("Panel on HTTP {}", web->localAddress());
+    if (!std::filesystem::is_regular_file(panelDir / "index.html")) {
+        logger.info("The panel is not built: no index.html in {}", panelDir.string());
+    }
     logger.info("Server key {}", identity.fingerprint().toHex());
     if (options.check) {
         logger.info("Check passed: the server can start");
         return Success;
     }
+
+    // A new token at every start, never logged: whoever reads the file controls the server already
+    const std::filesystem::path accessFile = options.key.parent_path() / AdminUrlFileName;
+    const std::string panel = panelAddress(web->localAddress(), webSettings.publicUrl);
+    try {
+        writeAccessUrl(accessFile, accessUrl(panel, accessToken));
+    } catch (const std::filesystem::filesystem_error &error) {
+        logger.error("Cannot write {}: {}", accessFile.string(), error.code().message());
+        return Failure;
+    }
+    logger.info("Panel at {}: open the address written in {}", panel, accessFile.string());
 
     // Its queries run on a thread of their own, their results come back on the loop. Declared after the loop,
     // it is destroyed before it: the tasks given until then are done (docs/architecture/database.md)
@@ -118,6 +166,7 @@ int runMaster(const MasterOptions &options)
     rtype::network::Timer stopping(loop);
     logger.info("Master started: Ctrl+C to stop");
     const bool clean = runUntilStopped(loop, [&] {
+        web->stop();
         lobby.close();
         games->shutdown();
         stopping.startRepeating(std::chrono::milliseconds(100), [&] {
