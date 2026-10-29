@@ -51,7 +51,8 @@ else.
     ```
 
     Relative paths are relative to the folder of the settings file, not to the current directory: `key =
-    "server.key"` is next to `server.toml`.
+    "server.key"` is next to `server.toml`. On Windows, a path that starts with `/` or `\` is kept as written,
+    on the current drive, as on the command line.
 
 2. **Put each secret in a file of its own**, only readable by the server's user. A secret is the first line of
    its file, the spaces at its end cut; it is never logged, and never written in the settings file itself:

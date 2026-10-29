@@ -137,11 +137,12 @@ public:
         return table.get(key)->source();
     }
 
-    /// A path of the file, relative to its folder.
+    /// A path of the file, relative to its folder. One with a root is kept as written: on Windows, `/data/x`
+    /// has no drive, so is_relative() is true, yet it is not relative to the folder.
     [[nodiscard]] std::filesystem::path resolve(const std::string &text) const
     {
         const std::filesystem::path path(text);
-        return path.is_relative() ? _folder / path : path;
+        return path.has_root_path() ? path : _folder / path;
     }
 
     /// The section `name`, with its keys checked; nullptr if the file does not have it.
