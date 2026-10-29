@@ -706,8 +706,17 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
     EndMode3D();
     _impl->beginGameView();
     if (energy.bloom > 0.0f) {
-        _impl->glowQueue.push_back({model, view, energy, origin, axis, rotationAngle, scale, spinAngle,
-                                    fade(tint, energy.bloom), _impl->models.get(model).getPose(), {}});
+        _impl->glowQueue.push_back({model,
+                                    view,
+                                    energy,
+                                    origin,
+                                    axis,
+                                    rotationAngle,
+                                    scale,
+                                    spinAngle,
+                                    fade(tint, energy.bloom),
+                                    _impl->models.get(model).getPose(),
+                                    {}});
     }
 }
 
