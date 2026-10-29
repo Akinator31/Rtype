@@ -18,7 +18,7 @@ The format and its rules are decided in [ADR 0018](../decisions/0018-lua-game-co
 
 ```
 config/
-  projectiles/   what a weapon fires: its shape, how it moves
+  projectiles/   what a weapon fires, grouped by bullet/, missile/, laser/ and plasma/
   weapons/       how fast and how often it fires, its range, its magazine
   ships/         what a ship looks and sounds like, whoever flies it
   enemies/       a kind of Bydo: its ship, its health, its speed, its weapon
@@ -32,12 +32,12 @@ config/
 - The server and the client read the **same files**. The build copies `config/` next to them
   (`build/bin/config/`), and the release archives ship it there; the server takes another folder with
   `--config <dir>`.
-- The files already in `config/` are the game as it is played: three projectiles, three weapons, two ships
-  (one for the players), two enemies, a wave of each difficulty or more, and the player.
+- The files already in `config/` define the game and additional projectile variants, including weapons,
+  ships, enemies, waves and the player's starting equipment.
 
 ## Steps
 
-1. **A projectile.** Create `config/projectiles/spark.lua`:
+1. **A projectile.** Create `config/projectiles/bullet/spark.lua`:
 
     ```lua
     return {
