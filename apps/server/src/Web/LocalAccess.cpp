@@ -14,18 +14,23 @@ Secret newAccessToken()
     return rtype::network::DatagramKey::generate().bytes();
 }
 
+rtype::network::Address reachableAddress(const rtype::network::Address &listening)
+{
+    if (listening == rtype::network::Address::anyIpv4(listening.port())) {
+        return rtype::network::Address::loopbackIpv4(listening.port());
+    }
+    if (listening == rtype::network::Address::anyIpv6(listening.port())) {
+        return *rtype::network::Address::parse("::1", listening.port());
+    }
+    return listening;
+}
+
 std::string panelAddress(const rtype::network::Address &listening, std::string_view publicUrl)
 {
     if (!publicUrl.empty()) {
         return std::string(publicUrl);
     }
-    rtype::network::Address address = listening;
-    if (address == rtype::network::Address::anyIpv4(listening.port())) {
-        address = rtype::network::Address::loopbackIpv4(listening.port());
-    } else if (address == rtype::network::Address::anyIpv6(listening.port())) {
-        address = *rtype::network::Address::parse("::1", listening.port());
-    }
-    return std::format("http://{}", address);
+    return std::format("http://{}", reachableAddress(listening));
 }
 
 std::string accessUrl(std::string_view panel, const Secret &token)

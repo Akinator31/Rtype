@@ -17,6 +17,10 @@ inline constexpr std::string_view AdminUrlFileName = "admin-url.txt";
 /// A new local access token: 256 bits from the random generator of the cryptography, new at every start.
 [[nodiscard]] Secret newAccessToken();
 
+/// The address this machine reaches a server at that listens on `listening`: the loopback for an address that
+/// listens everywhere, `0.0.0.0` or `[::]`.
+[[nodiscard]] rtype::network::Address reachableAddress(const rtype::network::Address &listening);
+
 /// The address a browser opens the panel at, without a trailing slash: `public_url` when the settings give
 /// one, else the address the panel listens on, `127.0.0.1` for an address that listens everywhere.
 [[nodiscard]] std::string panelAddress(const rtype::network::Address &listening, std::string_view publicUrl);

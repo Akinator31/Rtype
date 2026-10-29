@@ -31,6 +31,8 @@ Master options:
                              accounts; the command line wins over it
       --check                Check that the server can start (settings, key, port, configuration,
                              database), then exit
+      --health               Ask the master running on this machine, at the address of its panel in
+                             the settings, whether it is healthy, then exit: 0 if it is
 
 Instance options (given by the master):
       --id <id>              Id of the game, from 1
@@ -117,6 +119,7 @@ Options parseOptions(std::span<const std::string_view> arguments, const ServerSe
     std::vector<std::string_view> instanceOnly;
     bool instance = false;
     bool fingerprint = false;
+    bool health = false;
     bool databaseGiven = false;
     bool databaseFileGiven = false;
     std::optional<std::uint16_t> port;
@@ -192,6 +195,9 @@ Options parseOptions(std::span<const std::string_view> arguments, const ServerSe
         } else if (argument == "--fingerprint") {
             fingerprint = true;
             masterOnly.push_back(argument);
+        } else if (argument == "--health") {
+            health = true;
+            masterOnly.push_back(argument);
         } else if (argument == "--check") {
             options.master.check = true;
             masterOnly.push_back(argument);
@@ -234,7 +240,16 @@ Options parseOptions(std::span<const std::string_view> arguments, const ServerSe
         } else if (port) {
             options.master.listen = options.master.listen.withPort(*port);
         }
-        options.mode = fingerprint ? Options::Mode::Fingerprint : Options::Mode::Master;
+        if (fingerprint && health) {
+            throw std::invalid_argument("--fingerprint and --health both exit at once: choose one");
+        }
+        if (fingerprint) {
+            options.mode = Options::Mode::Fingerprint;
+        } else if (health) {
+            options.mode = Options::Mode::Health;
+        } else {
+            options.mode = Options::Mode::Master;
+        }
         return options;
     }
 
