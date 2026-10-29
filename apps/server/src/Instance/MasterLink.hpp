@@ -74,6 +74,7 @@ public:
     void sendPlayerConnected(std::uint32_t playerId);
     void sendPlayerDisconnected(std::uint32_t playerId, PlayerDisconnectedReason reason);
     void sendGameOver(const GameOverReport &report);
+    void sendGameStatus(const GameStatusMessage &status);
 
     /// Closes the connection after the frames already sent. No handler is called after.
     void close();

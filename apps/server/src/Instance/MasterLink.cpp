@@ -155,6 +155,11 @@ void MasterLink::sendGameOver(const GameOverReport &report)
     send(instance_message::GameOver, encode(report));
 }
 
+void MasterLink::sendGameStatus(const GameStatusMessage &status)
+{
+    send(instance_message::GameStatus, encode(status));
+}
+
 void MasterLink::close()
 {
     if (_closed) {

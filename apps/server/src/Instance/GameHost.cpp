@@ -197,6 +197,9 @@ void GameHost::publish(const TickResult &result)
         return;
     }
     const rtype::game::Snapshot &snapshot = result.snapshot;
+    _tick = snapshot.tick;
+    _wave = snapshot.waveStarted.value_or(_wave);
+    _states = snapshot.players;
     for (const rtype::game::EntitiesDestroyedMessage &message : rtype::game::destroyedMessages(snapshot)) {
         sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
                         Delivery::Reliable);
@@ -245,6 +248,28 @@ void GameHost::gameOver(const TickResult &result)
     if (_handlers.onGameOver) {
         _handlers.onGameOver(report);
     }
+}
+
+GameStatusMessage GameHost::status() const
+{
+    GameStatusMessage status{.tick = _tick, .wave = _wave, .players = {}};
+    for (const auto &[session, player] : _players) {
+        if (!player.connected) {
+            continue;
+        }
+        const auto state = std::ranges::find(_states, player.slot, &rtype::game::PlayerState::slot);
+        PlayerStatus entry{.playerId = player.playerId,
+                           .score = state == _states.end() ? 0 : state->score,
+                           .alive = state != _states.end() && state->lives > 0,
+                           .latency = std::nullopt};
+        if (const std::optional<Clock::duration> rtt = _sessions.rtt(session)) {
+            const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(*rtt).count();
+            entry.latency = static_cast<std::uint16_t>(
+                std::clamp<std::chrono::milliseconds::rep>(milliseconds, 0, MaxStatusLatency));
+        }
+        status.players.push_back(entry);
+    }
+    return status;
 }
 
 bool GameHost::acknowledged() const
