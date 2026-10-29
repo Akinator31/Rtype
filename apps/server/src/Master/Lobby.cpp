@@ -7,8 +7,10 @@
 #include "rtype/network/Timer.hpp"
 #include "rtype/network/TlsConnection.hpp"
 
+#include <chrono>
 #include <deque>
 #include <format>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -48,6 +50,7 @@ struct Lobby::Client {
     State state = State::Handshake;
     std::uint32_t playerId = 0;
     std::string name;
+    std::chrono::system_clock::time_point welcomedAt;
     /// The game the player is in.
     std::optional<std::uint32_t> gameId;
     /// A CREATE_GAME waits for its game.
@@ -277,6 +280,7 @@ void Lobby::handle(Client &client, std::uint8_t type, std::span<const std::byte>
             reply(client, message_type::LeftGame,
                   rtype::lobby::encode(
                       rtype::lobby::LeftGameMessage{gameId, rtype::lobby::LeftGameReason::Requested}));
+            changed(client);
         }
         return;
     default:
@@ -324,6 +328,7 @@ void Lobby::joined(Client &client, std::uint8_t request, const Games::JoinResult
     if (const auto *game = std::get_if<rtype::lobby::GameJoinedMessage>(&result)) {
         client.gameId = game->gameId;
         reply(client, message_type::GameJoined, rtype::lobby::encode(*game));
+        changed(client);
         return;
     }
     fail(client, request, std::get<ErrorCode>(result));
@@ -344,6 +349,7 @@ void Lobby::left(std::uint32_t playerId, const std::optional<rtype::lobby::LeftG
     if (notification) {
         reply(client, message_type::LeftGame, rtype::lobby::encode(*notification));
     }
+    changed(client);
 }
 
 void Lobby::hello(Client &client, std::span<const std::byte> payload)
@@ -359,6 +365,14 @@ void Lobby::hello(Client &client, std::span<const std::byte> payload)
         fail(client, message_type::Hello, ErrorCode::UnsupportedVersion);
         return;
     }
+    if (_bans != nullptr) {
+        if (const std::optional<AddressBan> ban = _bans->find(client.address)) {
+            logger().info("{} refused: its address is banned until {:%F %T} UTC", client.address,
+                          std::chrono::floor<std::chrono::seconds>(ban->expiresAt));
+            fail(client, message_type::Hello, ErrorCode::Banned);
+            return;
+        }
+    }
     if (!rtype::lobby::isValidPlayerName(hello->name)) {
         fail(client, message_type::Hello, ErrorCode::InvalidName);
         return;
@@ -366,12 +380,16 @@ void Lobby::hello(Client &client, std::span<const std::byte> payload)
     // Never 0, never given twice: 4 billion players before it would wrap
     client.playerId = ++_lastPlayerId;
     client.name = hello->name;
+    client.welcomedAt = std::chrono::system_clock::now();
     _players[client.playerId] = client.id;
     client.state = Client::State::Welcomed;
     const std::uint64_t id = client.id;
     client.timeout.start(_limits.idleTimeout, [this, id] { disconnect(id, "silent for too long"); });
     reply(client, message_type::Welcome, rtype::lobby::encode(rtype::lobby::WelcomeMessage{client.playerId}));
     logger().info("{} joined the lobby from {}", client.describe(), client.address);
+    if (_observer != nullptr) {
+        _observer->playerJoined(client.playerId);
+    }
 }
 
 void Lobby::disconnect(std::uint64_t id, const std::string &reason)
@@ -404,6 +422,9 @@ void Lobby::forget(std::uint64_t id)
         _players.erase(client.playerId);
         // Out of its game, or of the game it was creating
         _games.lobbyClosed(client.playerId);
+        if (_observer != nullptr) {
+            _observer->playerLeft(client.playerId);
+        }
     }
     const rtype::network::Address ip = client.address.withPort(0);
     if (--_perAddress[ip] == 0) {
@@ -415,6 +436,59 @@ void Lobby::forget(std::uint64_t id)
             _clients.erase(id);
         }
     });
+}
+
+Lobby::Client *Lobby::player(std::uint32_t playerId) const
+{
+    const auto connection = _players.find(playerId);
+    if (connection == _players.end()) {
+        return nullptr;
+    }
+    const auto found = _clients.find(connection->second);
+    return found == _clients.end() || found->second->closed ? nullptr : found->second.get();
+}
+
+void Lobby::changed(const Client &client)
+{
+    if (_observer != nullptr && !client.closed) {
+        _observer->playerChanged(client.playerId);
+    }
+}
+
+std::vector<AdminPlayer> Lobby::adminPlayers() const
+{
+    std::vector<AdminPlayer> players;
+    players.reserve(_players.size());
+    for (const auto &[playerId, connection] : _players) {
+        if (const Client *client = player(playerId)) {
+            players.push_back({client->playerId, client->name, banKey(client->address), client->gameId,
+                               client->welcomedAt});
+        }
+    }
+    return players;
+}
+
+bool Lobby::disconnect(std::uint32_t playerId, ErrorCode code)
+{
+    Client *client = player(playerId);
+    if (client == nullptr) {
+        return false;
+    }
+    reply(*client, message_type::Error, rtype::lobby::encode(rtype::lobby::ErrorMessage{0, code}));
+    disconnect(client->id,
+               code == ErrorCode::Banned ? "its address was banned" : "removed by an administrator");
+    return true;
+}
+
+bool Lobby::sendMessage(std::uint32_t playerId, const std::string &text)
+{
+    Client *client = player(playerId);
+    if (client == nullptr) {
+        return false;
+    }
+    reply(*client, message_type::ServerMessage,
+          rtype::lobby::encode(rtype::lobby::ServerMessageMessage{text}));
+    return true;
 }
 
 void Lobby::close()

@@ -2,6 +2,7 @@
 
 #include "Common/InstanceMessages.hpp"
 #include "Common/Secret.hpp"
+#include "Master/AdminModel.hpp"
 #include "Master/Process.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/EventLoop.hpp"
@@ -83,7 +84,9 @@ struct LobbyPlayer {
 /// - **Its status** (GAME_STATUS, every second) is kept with its time: status() says where it stands, and
 ///   whether it stopped reporting.
 /// - **Its port is freed** once the process has exited, killed if it does not within the stop timeout.
-class Games
+/// - **The administration** sees the running games and acts on them through AdminGames, and is told what
+///   happens to them through its AdminObserver (docs/architecture/administration.md).
+class Games final : public AdminGames
 {
 public:
     using JoinResult = std::variant<rtype::lobby::GameJoinedMessage, rtype::lobby::ErrorCode>;
@@ -105,6 +108,7 @@ private:
     rtype::network::EventLoop &_loop;
     GamesSettings _settings;
     LeftHandler _onLeft;
+    AdminObserver *_observer = nullptr;
     rtype::network::TcpListener _listener;
     rtype::network::Timer _supervision;
     std::map<std::uint32_t, std::unique_ptr<Game>> _games;
@@ -130,6 +134,9 @@ private:
     void removed(Game &game, std::uint32_t playerId);
     /// Sends SHUTDOWN, then waits for the exit.
     void shutDown(Game &game, ShutdownReason reason);
+    /// A running game ends: the administration is told.
+    void ended(const Game &game, GameEnd reason);
+    void changed(const Game &game);
     /// The game failed or crashed: its players are told, its instance killed.
     void fail(Game &game, const std::string &reason);
     void closeConnection(Game &game);
@@ -142,16 +149,21 @@ public:
     /// @throws std::system_error if it cannot listen.
     /// @throws std::invalid_argument if the port range is empty.
     Games(rtype::network::EventLoop &loop, GamesSettings settings);
-    ~Games();
+    ~Games() override;
 
     Games(const Games &) = delete;
     Games &operator=(const Games &) = delete;
+    Games(Games &&) = delete;
+    Games &operator=(Games &&) = delete;
 
     /// Where the instances are told to connect.
     [[nodiscard]] std::uint16_t instancePort() const { return _listener.localAddress().port(); }
 
     /// Called when a player leaves its game without asking.
     void setLeftHandler(LeftHandler handler) { _onLeft = std::move(handler); }
+    /// Tells the administration what happens to the games; nullptr for nobody. It must outlive the games, or
+    /// be taken away first.
+    void setObserver(AdminObserver *observer) { _observer = observer; }
 
     /// The games ready to be joined, sorted by id: for GAME_LIST.
     [[nodiscard]] std::vector<rtype::lobby::GameInfo> list() const;
@@ -179,6 +191,10 @@ public:
 
     /// The process id of the instance of a game, for the tests and the logs.
     [[nodiscard]] std::optional<int> processId(std::uint32_t gameId) const;
+
+    [[nodiscard]] std::vector<AdminGame> adminGames() const override;
+    bool kick(std::uint32_t playerId) override;
+    bool end(std::uint32_t gameId) override;
 };
 
 } // namespace rtype::server

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Master/AddressBans.hpp"
+#include "Master/AdminModel.hpp"
 #include "Master/Games.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/Address.hpp"
@@ -55,8 +57,11 @@ struct LobbyLimits {
 ///   (UNSUPPORTED_VERSION).
 /// - HELLO gives the player an id, never 0 and never given twice by this master.
 /// - The games are those of Games: LIST_GAMES, CREATE_GAME, JOIN_GAME and LEAVE_GAME go to it, and a player
-///   who leaves its game without asking (game over, crash, timeout) is told with LEFT_GAME.
-class Lobby
+///   who leaves its game without asking (game over, crash, timeout, an administrator) is told with LEFT_GAME.
+/// - An address with a ban (setBans()) is refused at HELLO: ERROR (BANNED), then the connection closes.
+/// - The administration sees the players and acts on them through AdminLobby, and is told who comes and goes
+///   through its AdminObserver (docs/architecture/administration.md).
+class Lobby final : public AdminLobby
 {
     struct Client;
 
@@ -65,6 +70,8 @@ class Lobby
     rtype::network::ServerIdentity _identity;
     Games &_games;
     LobbyLimits _limits;
+    const AddressBans *_bans = nullptr;
+    AdminObserver *_observer = nullptr;
     std::map<std::uint64_t, std::unique_ptr<Client>> _clients;
     /// The connection of each welcomed player.
     std::map<std::uint32_t, std::uint64_t> _players;
@@ -96,16 +103,22 @@ class Lobby
     void disconnect(std::uint64_t id, const std::string &reason);
     /// Forgets a connection, later: it may be the one whose handler runs.
     void forget(std::uint64_t id);
+    /// The connection of a welcomed player, open.
+    [[nodiscard]] Client *player(std::uint32_t playerId) const;
+    /// The administration is told a player entered or left a game.
+    void changed(const Client &client);
 
 public:
     /// Accepts the clients on this listener, and proves to them it is the server with this identity. The
     /// games must outlive the lobby.
     Lobby(rtype::network::EventLoop &loop, rtype::network::TcpListener listener,
           rtype::network::ServerIdentity identity, Games &games, LobbyLimits limits = {});
-    ~Lobby();
+    ~Lobby() override;
 
     Lobby(const Lobby &) = delete;
     Lobby &operator=(const Lobby &) = delete;
+    Lobby(Lobby &&) = delete;
+    Lobby &operator=(Lobby &&) = delete;
 
     [[nodiscard]] const rtype::network::Address &localAddress() const { return _listener.localAddress(); }
 
@@ -114,6 +127,16 @@ public:
 
     /// Stops accepting, and closes every connection after what was sent to it: the master stops.
     void close();
+
+    /// The bans checked at HELLO; nullptr for none. They must outlive the lobby, or be taken away first.
+    void setBans(const AddressBans *bans) { _bans = bans; }
+    /// Tells the administration who comes and goes; nullptr for nobody. It must outlive the lobby, or be
+    /// taken away first.
+    void setObserver(AdminObserver *observer) { _observer = observer; }
+
+    [[nodiscard]] std::vector<AdminPlayer> adminPlayers() const override;
+    bool disconnect(std::uint32_t playerId, rtype::lobby::ErrorCode code) override;
+    bool sendMessage(std::uint32_t playerId, const std::string &text) override;
 };
 
 } // namespace rtype::server
