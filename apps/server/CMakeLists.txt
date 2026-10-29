@@ -1,4 +1,5 @@
 # The code of the server is a library of its own, so that the tests can use it (ADR 0013):
+#   Accounts/  the accounts of the players: their rules, what the database keeps of them, their passwords
 #   Common/    what both modes share: the command line, the settings file, the lifecycle, the secret of the
 #              instances
 #   Master/    the master: the lobby, and the instances it starts
@@ -101,8 +102,31 @@ CPMAddPackage(
         "CURL_DISABLE_WEBSOCKETS ON"
 )
 
+# The reference implementation of Argon2 hashes the passwords of the accounts (ADR 0024). Its C files in a
+# target of ours: the portable code (ref.c, not the SSE of opt.c), without its threads, as a hash uses one lane.
+# A private dependency, behind Accounts/PasswordHasher.hpp
+CPMAddPackage(
+    NAME argon2
+    VERSION 20190702
+    URL https://github.com/P-H-C/phc-winner-argon2/archive/refs/tags/20190702.tar.gz
+    URL_HASH SHA256=daf972a89577f8772602bf2eb38b6a3dd3d922bf5724d45e7f9589b5e830442c
+    DOWNLOAD_ONLY YES
+)
+add_library(rtype_argon2 STATIC
+    ${argon2_SOURCE_DIR}/src/argon2.c
+    ${argon2_SOURCE_DIR}/src/core.c
+    ${argon2_SOURCE_DIR}/src/encoding.c
+    ${argon2_SOURCE_DIR}/src/ref.c
+    ${argon2_SOURCE_DIR}/src/blake2/blake2b.c
+)
+target_include_directories(rtype_argon2 SYSTEM PUBLIC ${argon2_SOURCE_DIR}/include)
+target_compile_definitions(rtype_argon2 PRIVATE ARGON2_NO_THREADS)
+
 add_library(r-type_server_core STATIC
     src/Server.cpp
+    src/Accounts/AccountRules.cpp
+    src/Accounts/AccountStore.cpp
+    src/Accounts/PasswordHasher.cpp
     src/Common/GameConfig.cpp
     src/Common/InstanceMessages.cpp
     src/Common/Lifecycle.cpp
@@ -132,7 +156,7 @@ add_library(r-type_server_core STATIC
 target_include_directories(r-type_server_core PUBLIC src)
 # SYSTEM: the warnings of toml++'s headers are not ours
 target_include_directories(r-type_server_core SYSTEM PRIVATE ${tomlplusplus_SOURCE_DIR}/include)
-target_link_libraries(r-type_server_core PUBLIC rtype::database rtype::game rtype::lobby rtype::log rtype::network PRIVATE rtype_options reproc Crow::Crow)
+target_link_libraries(r-type_server_core PUBLIC rtype::database rtype::game rtype::lobby rtype::log rtype::network PRIVATE rtype_options reproc Crow::Crow rtype_argon2)
 # Crow serves files itself only from CROW_STATIC_DIRECTORY: ours are served by Web/WebServer.cpp, inside the
 # panel folder only
 target_compile_definitions(r-type_server_core PRIVATE CROW_DISABLE_STATIC_DIR)
