@@ -19,7 +19,7 @@ The format and its rules are decided in [ADR 0018](../decisions/0018-lua-game-co
 ```
 config/
   projectiles/   what a weapon fires, grouped by bullet/, missile/, laser/ and plasma/
-  weapons/       how fast and how often it fires, its range, its magazine
+  weapons/       how it fires, grouped by bullet/, missile/, laser/ and plasma/
   ships/         what a ship looks and sounds like, whoever flies it
   enemies/       a kind of Bydo: its ship, its health, its speed, its weapon
   waves/         a group of enemies that appear one after the other
@@ -47,7 +47,7 @@ config/
     }
     ```
 
-2. **A weapon** that fires it, `config/weapons/spark_gun.lua`:
+2. **A weapon** that fires it, `config/weapons/bullet/spark_gun.lua`:
 
     ```lua
     return {
