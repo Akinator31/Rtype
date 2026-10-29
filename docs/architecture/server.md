@@ -13,6 +13,10 @@ To run a server, see [Run a server](../guides/run-a-server.md).
 apps/server/src/
   main.cpp                 reads the environment, then calls run()
   Server.cpp               run(): the options, then the master or an instance
+  Accounts/                the accounts of the players (Accounts page)
+    AccountRules.cpp       what a username, an email and a password must be
+    AccountStore.cpp       their tables: accounts, account_sessions, account_codes
+    PasswordHasher.cpp     Argon2id, on two threads of its own
   Common/                  what both modes share
     GameConfig.cpp         the configuration of the game: where it is, loaded and logged
     InstanceMessages.cpp   the messages between the master and its instances
@@ -47,7 +51,8 @@ apps/server/src/
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
 (`tests/server_options.cpp`, `tests/server_key.cpp`, `tests/server_database.cpp`, `tests/server_lifecycle.cpp`,
 `tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`,
-`tests/server_settings.cpp`, `tests/server_web.cpp`, `tests/server_admin.cpp`). Includes are written from `src/`, like in the client:
+`tests/server_settings.cpp`, `tests/server_web.cpp`, `tests/server_admin.cpp`,
+`tests/server_account_store.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -182,6 +187,9 @@ that crashes cannot damage the data.
 |---|---|---|
 | 1 | `admin_actions`: the record of the actions of the administrators | [Administration](administration.md) |
 | 2 | `address_bans`: the IP addresses banned for a time, read at start | [Administration](administration.md#bans) |
+| 3 | `accounts`: the accounts of the players | [Accounts](accounts.md#the-tables) |
+| 4 | `account_sessions`: their sessions, by the SHA-256 of their token | [Accounts](accounts.md#sessions) |
+| 5 | `account_codes`: the codes sent by email, by their hash | [Accounts](accounts.md#codes) |
 
 ```
 INFO  master   Database postgresql://rtype:***@db.example.org/rtype, schema 0
@@ -568,6 +576,8 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 - `tests/server_admin.cpp` (tags `[server]`, `[admin]`): the administration, alone with fakes of the games and
   the lobby, then end to end over HTTP and the WebSocket with real clients and instances
   ([Administration](administration.md#tests)).
+- `tests/server_account_store.cpp` (tags `[server]`, `[accounts]`): the rules of the accounts, the hasher of
+  the passwords, and their tables on every engine ([Accounts](accounts.md#tests)).
 - `tests/server_database.cpp` (tag `[server]`): `sqlite:rtype.db` by default, `--database`, `--database-file`
   with a Windows line end, the invalid combinations; a database created at start, then opened again; a file
   without an address, empty or missing, stopping the master without its content logged; a password on the

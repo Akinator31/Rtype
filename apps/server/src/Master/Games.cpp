@@ -2,6 +2,7 @@
 
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Address.hpp"
+#include "rtype/network/Crypto.hpp"
 #include "rtype/network/Datagram.hpp"
 #include "rtype/network/TcpConnection.hpp"
 
@@ -26,12 +27,6 @@ const rtype::log::Logger &logger()
 {
     static const rtype::log::Logger instance("games");
     return instance;
-}
-
-/// 32 bytes from the random generator of the cryptography: a key is exactly that.
-std::array<std::byte, 32> randomBytes()
-{
-    return rtype::network::DatagramKey::generate().bytes();
 }
 
 } // namespace
@@ -158,7 +153,7 @@ void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMess
     game.name = request.name;
     game.maxPlayers = request.maxPlayers;
     game.port = *_freePorts.begin();
-    game.secret = randomBytes();
+    game.secret = rtype::network::randomBytes<32>();
 
     std::vector<std::string> arguments = _settings.leadingArguments;
     for (std::string argument :
@@ -195,7 +190,8 @@ rtype::lobby::GameJoinedMessage Games::addPlayer(Game &game, const LobbyPlayer &
 {
     // Never 0, never reused in this instance
     const std::uint32_t session = ++game.lastSession;
-    const AddPlayerMessage added{player.id, session, randomBytes(), randomBytes(), player.name};
+    const AddPlayerMessage added{player.id, session, rtype::network::randomBytes<32>(),
+                                 rtype::network::randomBytes<32>(), player.name};
     // To the instance first: it expects the session before the client connects
     send(game, instance_message::AddPlayer, encode(added));
     game.members[player.id] = Game::Member{session, player.name};

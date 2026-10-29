@@ -360,6 +360,23 @@ the library, so identities can be loaded and connections used from any thread. A
 millisecond: negligible at the scale of a lobby, and a reason to enable the locks of Mbed TLS
 (`MBEDTLS_THREADING_C`) if measurements ever show waiting.
 
+### Random bytes and SHA-256
+
+`rtype/network/Crypto.hpp` gives the programs the cryptography they need outside the protocols, from the same
+TF-PSA-Crypto, without its types in the header: `randomBytes(span)` and `randomBytes<Size>()` draw from its
+random generator, for the keys of the games, the local access token of the panel, the session tokens, salts and
+codes of the [accounts](accounts.md); `sha256(bytes)` and `sha256(text)` hash, for the session tokens and codes
+the database keeps. Both take the lock of the library, from any thread, and throw `std::runtime_error` if the
+cryptography cannot be used. Never `std::rand()` nor `std::random_device` for a secret: they promise nothing an
+attacker cannot guess.
+
+```cpp
+#include "rtype/network/Crypto.hpp"
+
+const auto token = rtype::network::randomBytes<32>();                         // std::array<std::byte, 32>
+const rtype::network::Sha256 kept = rtype::network::sha256(std::span(token)); // what the database keeps
+```
+
 ## Encrypted datagrams
 
 Every datagram of a game is encrypted and authenticated ([game protocol](../protocol/game.md#2-datagram-layout),
@@ -755,6 +772,9 @@ in both directions, bytes sent before the handshake, a server with another key, 
 reads nothing and whose changed byte is detected, peers that do not speak TLS, closing, frames over TLS, the end of the handshake reported once and never
 for a failed one, and
 Mbed TLS used from two threads at once.
+
+The tests in `tests/crypto.cpp` (tags `[network]`, `[crypto]`) check SHA-256 against the digests of FIPS 180-2,
+and that random bytes differ from one draw to the next.
 
 The tests in `tests/datagram.cpp` (same tag) check two datagrams byte for byte against another implementation
 of RFC 8439 (Python's `cryptography` package), the round trip of bodies from 0 to 1168 bytes, that every bit

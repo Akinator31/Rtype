@@ -18,6 +18,7 @@ add_executable(rtype_tests
     color_filter.cpp
     collider_debug_renderer.cpp
     controls.cpp
+    crypto.cpp
     database.cpp
     database_thread.cpp
     datagram.cpp
@@ -53,6 +54,7 @@ add_executable(rtype_tests
     scenes.cpp
     scripting.cpp
     serialization.cpp
+    server_account_store.cpp
     server_admin.cpp
     server_database.cpp
     server_instance.cpp

@@ -32,6 +32,7 @@ nav = [
         "architecture/server.md",
         "architecture/web.md",
         "architecture/administration.md",
+        "architecture/accounts.md",
         "architecture/panel.md",
         "architecture/game.md",
         "architecture/client-game.md",
