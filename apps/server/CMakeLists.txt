@@ -155,3 +155,16 @@ add_executable(r-type_server
 target_link_libraries(r-type_server PRIVATE rtype_options r-type_server_core rtype::ecs rtype::log rtype::physics)
 
 install(TARGETS r-type_server RUNTIME DESTINATION . COMPONENT server)
+
+# The administration panel (web/admin), built by Node apart from the game: given its dist/ folder, the server
+# package holds it as admin/ beside the executable, where the master serves it from by default. Without it, the
+# panel says it is not built; the game builds without Node
+set(RTYPE_ADMIN_PANEL_DIR "" CACHE PATH "The built panel (web/admin/dist) to install beside the server, as admin/")
+if(RTYPE_ADMIN_PANEL_DIR)
+  file(TO_CMAKE_PATH "${RTYPE_ADMIN_PANEL_DIR}" admin_panel_dir)
+  if(NOT EXISTS "${admin_panel_dir}/index.html")
+    message(FATAL_ERROR "RTYPE_ADMIN_PANEL_DIR=${admin_panel_dir} holds no index.html: build the panel first "
+                        "(npm run build in web/admin)")
+  endif()
+  install(DIRECTORY "${admin_panel_dir}/" DESTINATION admin COMPONENT server)
+endif()

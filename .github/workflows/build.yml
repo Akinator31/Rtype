@@ -15,8 +15,53 @@ env:
   BUILD_TYPE: Release
 
 jobs:
+  # The administration panel (web/admin): its own toolchain, Node LTS, apart from the game. Its dist/ goes into
+  # the server package of each system; the game itself builds without Node
+  panel:
+    name: Panel
+    runs-on: [self-hosted, linux]
+    defaults:
+      run:
+        working-directory: web/admin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: |
+          npm run lint
+          npm run format:check
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload the panel
+        uses: actions/upload-artifact@v7
+        with:
+          name: admin-panel
+          path: web/admin/dist
+          if-no-files-found: error
+
   build:
     name: Build (${{ matrix.name }})
+    needs: panel
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -35,6 +80,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # Where the end-to-end tests serve it from, and the package takes it
+      - name: Download the panel
+        uses: actions/download-artifact@v8
+        with:
+          name: admin-panel
+          path: web/admin/dist
 
       - name: Install system libraries (X11 / OpenGL, OpenSSL, libpq)
         if: runner.os == 'Linux'
@@ -59,12 +111,41 @@ jobs:
         run: >
           cmake -S . -B build -G "${{ matrix.generator }}"
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DRTYPE_BUILD_TESTS=ON
+          -DRTYPE_ADMIN_PANEL_DIR="${{ github.workspace }}/web/admin/dist"
 
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
 
       - name: Test
         run: ctest --test-dir build -C ${{ env.BUILD_TYPE }} --output-on-failure
+
+      # The panel against the master just built and a game of real players. Node and the browsers of
+      # Playwright are prerequisites of the Linux runner
+      - name: Set up Node for the end-to-end tests of the panel
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/admin/package-lock.json
+
+      - name: End-to-end tests of the panel
+        if: runner.os == 'Linux'
+        working-directory: web/admin
+        env:
+          RTYPE_BUILD_BIN: ${{ github.workspace }}/build/bin
+        run: |
+          npm ci
+          npx playwright install chromium
+          npx playwright test
+
+      - name: Upload the report of the end-to-end tests
+        if: failure() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: web/admin/playwright-report
+          if-no-files-found: ignore
 
       - name: Stop PostgreSQL
         if: always() && env.POSTGRES_CONTAINER != ''
