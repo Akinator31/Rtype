@@ -775,8 +775,8 @@ TEST_CASE("A killed entity writes the hit points it had left, one removed or wit
     ship.health = 100;
     client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 10), bydoAt(6, 1500.0f, 300.0f, 30), ship}));
     ship.health = 75;
-    client.receive(snapshotOf(2, {ship}, {{5, rtype::game::DestroyCause::Killed},
-                                          {6, rtype::game::DestroyCause::Removed}}));
+    client.receive(snapshotOf(
+        2, {ship}, {{5, rtype::game::DestroyCause::Killed}, {6, rtype::game::DestroyCause::Removed}}));
 
     const std::vector<rtype::ecs::entity_t> numbers = client.damageNumbers();
     REQUIRE(numbers.size() == 1);
@@ -869,9 +869,8 @@ TEST_CASE("A Bydo killed is told with the owner of the shot of a player killed n
     rtype::game::EntityState far = shotAt(11, 600.0f, 400.0f);
     rtype::game::EntityState near = shotAt(12, 1190.0f, 400.0f);
     near.owner = 2;
-    client.receive(snapshotOf(
-        1, {bydoAt(5, 1200.0f, 400.0f, 10), bydoAt(6, 1500.0f, 300.0f, 30), bydoAt(7, 900.0f, 200.0f, 10), far,
-            near}));
+    client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 10), bydoAt(6, 1500.0f, 300.0f, 30),
+                                  bydoAt(7, 900.0f, 200.0f, 10), far, near}));
 
     client.receive(snapshotOf(2, {bydoAt(7, 900.0f, 200.0f, 10)},
                               {{5, rtype::game::DestroyCause::Killed},

@@ -13,11 +13,11 @@
 namespace rtype::client
 {
 
-/// Plays the death screens (see openDeathScreen()), in the time of the game: the countdown follows the ticks of
-/// the session, so it stops while the game is paused. Each frame, it writes the seconds left before the next
-/// ship in the ring, which runs out with them, and pops each new second; the veil fades in at once, the rest
-/// once the banner has opened, then the life just lost goes out. At the tick of the next ship, everything
-/// fades out and is destroyed.
+/// Plays the death screens (see openDeathScreen()), in the time of the game: the countdown follows the ticks
+/// of the session, so it stops while the game is paused. Each frame, it writes the seconds left before the
+/// next ship in the ring, which runs out with them, and pops each new second; the veil fades in at once, the
+/// rest once the banner has opened, then the life just lost goes out. At the tick of the next ship,
+/// everything fades out and is destroyed.
 class DeathScreenSystem : public ecs::System
 {
     ecs::Ecs &_ecs;

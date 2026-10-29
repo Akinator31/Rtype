@@ -111,8 +111,8 @@ ecs::entity_t openHud(ecs::Ecs &ecs, engine::SceneId scene, const HudLook &look,
         ecs.addComponent<engine::Opacity>(bar, 0.0f);
         hud.signal.push_back(bar);
     }
-    hud.ping = createText(ecs, scene, engine::AnchorPoint::BottomRight, look.font, PingSize, PingColor,
-                          PingSpacing);
+    hud.ping =
+        createText(ecs, scene, engine::AnchorPoint::BottomRight, look.font, PingSize, PingColor, PingSpacing);
 
     const ecs::entity_t entity = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(entity, scene);

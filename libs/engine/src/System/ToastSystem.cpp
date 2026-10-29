@@ -53,7 +53,8 @@ std::vector<ecs::entity_t> ToastSystem::getToastsNewestFirst() const
 float ToastSystem::computeLifetime(const Toast &toast) const
 {
     const ToastStyle &style = _style.toast;
-    return style.getFadeIn(toast.kind) + toast.duration.value_or(style.duration) + style.getFadeOut(toast.kind);
+    return style.getFadeIn(toast.kind) + toast.duration.value_or(style.duration) +
+           style.getFadeOut(toast.kind);
 }
 
 float ToastSystem::computeOpacity(const Toast &toast) const

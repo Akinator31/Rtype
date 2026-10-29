@@ -78,8 +78,8 @@ void createLives(ecs::Ecs &ecs, engine::SceneId scene, const engine::Metrics &me
     screen.content.push_back(caption);
 
     for (std::uint8_t index = 0; index < maxLives; ++index) {
-        const float x = left + captionWidth + LivesGap + (static_cast<float>(index) * (LifeWidth + LivesGap)) +
-                        (LifeWidth / 2.0f);
+        const float x = left + captionWidth + LivesGap +
+                        (static_cast<float>(index) * (LifeWidth + LivesGap)) + (LifeWidth / 2.0f);
         const bool isLeft = index < death.lives;
         screen.content.push_back(
             createLife(ecs, scene, isLeft ? look.life : look.lostLife, ContentOrder, {x, y}));

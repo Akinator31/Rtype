@@ -252,7 +252,8 @@ constexpr std::array<std::pair<game::EntityKind, const char *>, 3> BydoNameKeys{
 
 const char *bydoNameKey(game::EntityKind kind)
 {
-    const auto name = std::ranges::find(BydoNameKeys, kind, &std::pair<game::EntityKind, const char *>::first);
+    const auto name =
+        std::ranges::find(BydoNameKeys, kind, &std::pair<game::EntityKind, const char *>::first);
     return name == BydoNameKeys.end() ? "event.flyer" : name->second;
 }
 

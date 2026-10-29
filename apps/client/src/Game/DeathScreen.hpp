@@ -14,8 +14,8 @@
 namespace rtype::client
 {
 
-/// The look of the death screen: the pictures of a life left and of a life lost, its fonts, and its captions in
-/// the language of the player.
+/// The look of the death screen: the pictures of a life left and of a life lost, its fonts, and its captions
+/// in the language of the player.
 struct DeathScreenLook {
     render::TextureId life;
     render::TextureId lostLife;
@@ -56,10 +56,10 @@ struct DeathScreen {
     std::optional<float> closing;
 };
 
-/// Opens the death screen of the local player in a scene (docs/architecture/client-game.md, "Death screen"): a
-/// dark veil over the game, the row of its lives in the band of the banner, the life just lost going out, and
-/// under the band the countdown to its next ship, a ring that runs out around the seconds left. The banner
-/// itself, "SHIP DESTROYED", is a toast of the engine (Engine::showBanner()).
+/// Opens the death screen of the local player in a scene (docs/architecture/client-game.md, "Death screen"):
+/// a dark veil over the game, the row of its lives in the band of the banner, the life just lost going out,
+/// and under the band the countdown to its next ship, a ring that runs out around the seconds left. The
+/// banner itself, "SHIP DESTROYED", is a toast of the engine (Engine::showBanner()).
 /// @param banner The style of the banners, to put the lives in their band.
 /// @return The entity of the DeathScreen.
 ecs::entity_t openDeathScreen(ecs::Ecs &ecs, engine::SceneId scene, const engine::Metrics &metrics,

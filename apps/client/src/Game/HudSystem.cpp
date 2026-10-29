@@ -65,8 +65,7 @@ void HudSystem::update(float /*elapsed*/)
 {
     const GameSession *session = _sessions.session();
     const std::uint8_t local = session != nullptr ? session->localSlot() : 0;
-    const std::optional<std::chrono::milliseconds> ping =
-        session != nullptr ? session->ping() : std::nullopt;
+    const std::optional<std::chrono::milliseconds> ping = session != nullptr ? session->ping() : std::nullopt;
     for (ecs::entity_t entity = 0; entity < _huds.size(); ++entity) {
         if (!_huds.has(entity)) {
             continue;

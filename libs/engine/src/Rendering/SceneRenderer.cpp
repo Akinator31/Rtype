@@ -671,8 +671,9 @@ void SceneRenderer::drawGauge(render::Renderer &renderer, const Gauge &gauge, re
 
     if (!gauge.caption.empty()) {
         const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%";
-        drawCaption(renderer, style.font, gauge.caption, percentage, left, left + width, top, style.captionSize,
-                    style.letterSpacing, faded(style.caption, opacity), faded(style.litCaption, opacity));
+        drawCaption(renderer, style.font, gauge.caption, percentage, left, left + width, top,
+                    style.captionSize, style.letterSpacing, faded(style.caption, opacity),
+                    faded(style.litCaption, opacity));
     }
     renderer.drawRoundedRectangle({left, y - (style.railThickness / 2.0f), width, style.railThickness},
                                   style.railThickness / 2.0f, faded(style.rail, opacity),
@@ -705,7 +706,8 @@ void SceneRenderer::drawRing(render::Renderer &renderer, const Ring &ring, rende
     if (value <= 0.0f) {
         return;
     }
-    // Angles turn clockwise on the screen: the light goes anticlockwise from the right, so it starts at its end
+    // Angles turn clockwise on the screen: the light goes anticlockwise from the right, so it starts at its
+    // end
     const float end = -360.0f * value;
     render::Color glow = ring.light;
     glow.a = static_cast<std::uint8_t>(static_cast<float>(ring.light.a) * 0.12f);
