@@ -18,11 +18,19 @@ add_library(r-type_client_core STATIC
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
+    src/Game/DamageLooks.cpp
+    src/Game/DamageNumberSystem.cpp
+    src/Game/DeathScreen.cpp
+    src/Game/DeathScreenSystem.cpp
     src/Game/EntityLook.cpp
     src/Game/EntitySounds.cpp
     src/Game/GameScenes.cpp
     src/Game/GameSessionSystem.cpp
     src/Game/GameView.cpp
+    src/Game/HealthBarLooks.cpp
+    src/Game/HealthBarSystem.cpp
+    src/Game/Hud.cpp
+    src/Game/HudSystem.cpp
     src/Game/ImpactLooks.cpp
     src/Game/ImpactSystem.cpp
     src/Game/Interpolation.cpp

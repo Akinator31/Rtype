@@ -2,10 +2,18 @@
 // drawing the world of a session in a scene, without a window (ADR 0015, docs/architecture/client-game.md).
 
 #include "FakeInput.hpp"
+#include "Game/DamageLooks.hpp"
+#include "Game/DamageNumberSystem.hpp"
+#include "Game/DeathScreen.hpp"
+#include "Game/DeathScreenSystem.hpp"
 #include "Game/EntityLook.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
 #include "Game/GameView.hpp"
+#include "Game/HealthBarLooks.hpp"
+#include "Game/HealthBarSystem.hpp"
+#include "Game/Hud.hpp"
+#include "Game/HudSystem.hpp"
 #include "Game/ImpactLooks.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
@@ -14,7 +22,10 @@
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Sound.hpp"
+#include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
+#include "rtype/engine/Interface/Metrics.hpp"
+#include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/System/ModelAnimationSystem.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Constants.hpp"
@@ -22,11 +33,14 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -62,6 +76,7 @@ public:
     [[nodiscard]] std::vector<rtype::game::Snapshot> takeSnapshots() override { return {}; }
     void setPaused(bool paused) override { pauses.push_back(paused); }
     [[nodiscard]] bool isOver() const override { return false; }
+    [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override { return std::nullopt; }
 };
 
 /// The engine of the client without a window: a fake keyboard, and the system that plays the games.
@@ -520,6 +535,7 @@ class ScriptedSession final : public GameSession
 {
 public:
     std::vector<rtype::game::Snapshot> snapshots;
+    std::optional<std::chrono::milliseconds> rtt;
 
     [[nodiscard]] std::uint8_t localSlot() const override { return 0; }
     void setInput(rtype::game::PlayerInput /*input*/) override {}
@@ -530,6 +546,7 @@ public:
     }
     void setPaused(bool /*paused*/) override {}
     [[nodiscard]] bool isOver() const override { return false; }
+    [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override { return rtt; }
 };
 
 /// The engine of the client playing a scripted session, its impacts played.
@@ -545,6 +562,8 @@ struct ImpactClient {
                                                                      engine.getControls()))
     {
         ecs.registerSystem<ImpactSystem>(ecs);
+        ecs.registerSystem<DamageNumberSystem>(ecs);
+        ecs.registerSystem<HealthBarSystem>();
         scene = engine.getScenes().open({});
         auto created = std::make_unique<ScriptedSession>();
         session = created.get();
@@ -556,6 +575,25 @@ struct ImpactClient {
     {
         session->snapshots.push_back(std::move(snapshot));
         engine.update(Tick);
+    }
+
+    [[nodiscard]] std::vector<rtype::ecs::entity_t> damageNumbers()
+    {
+        std::vector<rtype::ecs::entity_t> found;
+        auto &numbers = ecs.cache<DamageNumber>();
+        for (rtype::ecs::entity_t entity = 0; entity < numbers.size(); ++entity) {
+            if (numbers.has(entity) && ecs.isAlive(entity)) {
+                found.push_back(entity);
+            }
+        }
+        return found;
+    }
+
+    /// The health bar of an entity of the game, if it has one.
+    [[nodiscard]] std::optional<rtype::ecs::entity_t> healthBarOf(std::uint32_t networkId)
+    {
+        const std::optional<rtype::ecs::entity_t> entity = sessions.entityOf(networkId);
+        return entity ? ecs.getComponent<Replicated>(*entity).healthBar : std::nullopt;
     }
 
     [[nodiscard]] std::vector<rtype::ecs::entity_t> impacts()
@@ -578,6 +616,19 @@ rtype::game::EntityState shotAt(std::uint32_t id, float x, float y)
     shot.y = y;
     return shot;
 }
+
+rtype::game::EntityState bydoAt(std::uint32_t id, float x, float y, std::uint8_t health)
+{
+    rtype::game::EntityState bydo{id, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner};
+    bydo.x = x;
+    bydo.y = y;
+    bydo.health = health;
+    return bydo;
+}
+
+const DamageLook YellowDamage{{}, 40.0f, {255, 220, 90, 255}};
+
+const HealthBarLook BarLook{100.0f, 42.0f, 0.3f};
 
 const ImpactLook SparkLook{{}, 2, 0.4f, 3.0f, {10, 20, 30, 200}, {}};
 
@@ -674,4 +725,442 @@ TEST_CASE("A ship killed in the game sounds with its impact, on its side of the 
     CHECK(effect.settings.volume == 0.8f);
     // On the right of the game area: heard on the right
     CHECK(effect.settings.pan > 0.0f);
+}
+
+TEST_CASE("A hit writes the hit points lost above the entity, which rises, fades out and goes", "[client]")
+{
+    ImpactClient client;
+    client.sessions.setDamageLook(rtype::game::EntityKind::BydoFlyer, YellowDamage);
+    client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 30)}));
+    client.receive(snapshotOf(2, {bydoAt(5, 1195.0f, 400.0f, 30)}));
+    CHECK(client.damageNumbers().empty());
+
+    client.receive(snapshotOf(3, {bydoAt(5, 1190.0f, 400.0f, 20)}));
+
+    const std::vector<rtype::ecs::entity_t> numbers = client.damageNumbers();
+    REQUIRE(numbers.size() == 1);
+    const rtype::ecs::entity_t number = numbers[0];
+    CHECK(client.ecs.getComponent<rtype::engine::SceneMember>(number).scene == client.scene);
+    const rtype::engine::Text &text = client.ecs.getComponent<rtype::engine::Text>(number);
+    CHECK(text.text == "10");
+    CHECK(text.size == Approx(40.0f));
+    CHECK(text.color.g == 220);
+    const rtype::ecs::Position start = client.ecs.getComponent<rtype::ecs::Position>(number);
+    CHECK(start.x == Approx(1190.0f));
+    CHECK(start.y < 400.0f);
+
+    // Rising, opaque for the first half of its time, then fading out, then gone
+    client.receive(snapshotOf(4, {bydoAt(5, 1185.0f, 400.0f, 20)}));
+    CHECK(client.ecs.getComponent<rtype::ecs::Position>(number).y < start.y);
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(number).value == Approx(1.0f));
+    for (int frame = 0; frame < 30; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(5 + frame), {bydoAt(5, 1180.0f, 400.0f, 20)}));
+    }
+    REQUIRE(client.ecs.isAlive(number));
+    const float fading = client.ecs.getComponent<rtype::engine::Opacity>(number).value;
+    CHECK(fading < 1.0f);
+    CHECK(fading > 0.0f);
+    for (int frame = 0; frame < 20; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(35 + frame), {bydoAt(5, 1180.0f, 400.0f, 20)}));
+    }
+    CHECK(client.damageNumbers().empty());
+}
+
+TEST_CASE("A killed entity writes the hit points it had left, one removed or without a look writes none",
+          "[client]")
+{
+    ImpactClient client;
+    client.sessions.setDamageLook(rtype::game::EntityKind::BydoFlyer, YellowDamage);
+    rtype::game::EntityState ship{7, rtype::game::EntityKind::PlayerShip, 0};
+    ship.health = 100;
+    client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 10), bydoAt(6, 1500.0f, 300.0f, 30), ship}));
+    ship.health = 75;
+    client.receive(snapshotOf(
+        2, {ship}, {{5, rtype::game::DestroyCause::Killed}, {6, rtype::game::DestroyCause::Removed}}));
+
+    const std::vector<rtype::ecs::entity_t> numbers = client.damageNumbers();
+    REQUIRE(numbers.size() == 1);
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(numbers[0]).text == "10");
+    CHECK(client.ecs.getComponent<rtype::ecs::Position>(numbers[0]).x == Approx(1200.0f));
+}
+
+TEST_CASE("A hit shows the health bar above the entity, its hit points left from the left, then it fades out",
+          "[client]")
+{
+    ImpactClient client;
+    client.sessions.setHealthBarLook(rtype::game::EntityKind::BydoFlyer, BarLook);
+    client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 40)}));
+    client.receive(snapshotOf(2, {bydoAt(5, 1195.0f, 400.0f, 40)}));
+    CHECK_FALSE(client.healthBarOf(5));
+
+    client.receive(snapshotOf(3, {bydoAt(5, 1190.0f, 400.0f, 30)}));
+
+    REQUIRE(client.healthBarOf(5));
+    const rtype::ecs::entity_t bar = *client.healthBarOf(5);
+    CHECK(client.ecs.getComponent<rtype::engine::SceneMember>(bar).scene == client.scene);
+    CHECK(client.ecs.getComponent<rtype::ecs::Parent>(bar).entity.id == *client.sessions.entityOf(5));
+    CHECK(client.ecs.getComponent<rtype::ecs::LocalPosition>(bar).y == Approx(-42.0f));
+    CHECK(client.ecs.getComponent<HealthBar>(bar).health == Approx(0.75f));
+    // The gauge of the interface, without a caption, red when low
+    const rtype::engine::Gauge &gauge = client.ecs.getComponent<rtype::engine::Gauge>(bar);
+    CHECK(gauge.caption.empty());
+    CHECK(gauge.width == Approx(100.0f));
+    CHECK(gauge.low == Approx(0.3f));
+    // It slides down to the hit points left
+    const float sliding = gauge.get();
+    CHECK(sliding < 1.0f);
+    CHECK(sliding > 0.75f);
+    for (int frame = 0; frame < 60; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(4 + frame), {bydoAt(5, 1190.0f, 400.0f, 30)}));
+    }
+    CHECK(client.ecs.getComponent<rtype::engine::Gauge>(bar).get() == Approx(0.75f));
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(bar).value == Approx(1.0f));
+
+    // Faded out a while after the hit, shown again by the next one, the same bar
+    for (int frame = 0; frame < 90; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(64 + frame), {bydoAt(5, 1190.0f, 400.0f, 30)}));
+    }
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(bar).value == Approx(0.0f));
+    client.receive(snapshotOf(154, {bydoAt(5, 1190.0f, 400.0f, 10)}));
+    CHECK(client.healthBarOf(5) == bar);
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(bar).value == Approx(1.0f));
+    CHECK(client.ecs.getComponent<HealthBar>(bar).health == Approx(0.25f));
+
+    // It goes with its entity
+    client.receive(snapshotOf(155, {}, {{5, rtype::game::DestroyCause::Killed}}));
+    CHECK_FALSE(client.ecs.isAlive(bar));
+}
+
+TEST_CASE("The ships of the other players show their health bar, not the one of the local player", "[client]")
+{
+    ImpactClient client;
+    client.sessions.setHealthBarLook(rtype::game::EntityKind::PlayerShip, BarLook);
+    rtype::game::EntityState local{7, rtype::game::EntityKind::PlayerShip, 0};
+    local.health = 100;
+    rtype::game::EntityState ally{8, rtype::game::EntityKind::PlayerShip, 1};
+    ally.health = 100;
+    client.receive(snapshotOf(1, {local, ally, bydoAt(5, 1200.0f, 400.0f, 40)}));
+
+    local.health = 60;
+    ally.health = 60;
+    client.receive(snapshotOf(2, {local, ally, bydoAt(5, 1200.0f, 400.0f, 20)}));
+
+    CHECK_FALSE(client.healthBarOf(7));
+    // A kind without a look shows none
+    CHECK_FALSE(client.healthBarOf(5));
+    REQUIRE(client.healthBarOf(8));
+    CHECK(client.ecs.getComponent<HealthBar>(*client.healthBarOf(8)).health == Approx(0.6f));
+
+    // Back to all its hit points, respawned: the bar fills up again
+    ally.health = 100;
+    client.receive(snapshotOf(3, {local, ally}));
+    const HealthBar &health = client.ecs.getComponent<HealthBar>(*client.healthBarOf(8));
+    CHECK(health.health == Approx(1.0f));
+    CHECK(health.shown == Approx(1.0f));
+}
+
+// --- Kills ---
+
+TEST_CASE("A Bydo killed is told with the owner of the shot of a player killed nearest to it", "[client]")
+{
+    ImpactClient client;
+    std::vector<Kill> kills;
+    client.sessions.setKillHandler([&kills](const Kill &kill) { kills.push_back(kill); });
+    rtype::game::EntityState far = shotAt(11, 600.0f, 400.0f);
+    rtype::game::EntityState near = shotAt(12, 1190.0f, 400.0f);
+    near.owner = 2;
+    client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 10), bydoAt(6, 1500.0f, 300.0f, 30),
+                                  bydoAt(7, 900.0f, 200.0f, 10), far, near}));
+
+    client.receive(snapshotOf(2, {bydoAt(7, 900.0f, 200.0f, 10)},
+                              {{5, rtype::game::DestroyCause::Killed},
+                               {6, rtype::game::DestroyCause::Removed},
+                               {11, rtype::game::DestroyCause::Killed},
+                               {12, rtype::game::DestroyCause::Killed}}));
+    client.receive(snapshotOf(3, {}, {{7, rtype::game::DestroyCause::Killed}}));
+
+    REQUIRE(kills.size() == 2);
+    CHECK(kills[0].kind == rtype::game::EntityKind::BydoFlyer);
+    CHECK(kills[0].owner == rtype::game::NoOwner);
+    CHECK(kills[0].killer == std::optional<std::uint8_t>{2});
+    // Killed by no shot: by nobody
+    CHECK_FALSE(kills[1].killer);
+}
+
+TEST_CASE("The ship of a player killed is told with its owner, and no killer", "[client]")
+{
+    ImpactClient client;
+    std::vector<Kill> kills;
+    client.sessions.setKillHandler([&kills](const Kill &kill) { kills.push_back(kill); });
+    rtype::game::EntityState ship{7, rtype::game::EntityKind::PlayerShip, 3};
+    client.receive(snapshotOf(1, {ship, shotAt(11, 300.0f, 200.0f)}));
+
+    client.receive(
+        snapshotOf(2, {}, {{7, rtype::game::DestroyCause::Killed}, {11, rtype::game::DestroyCause::Killed}}));
+
+    REQUIRE(kills.size() == 1);
+    CHECK(kills[0].kind == rtype::game::EntityKind::PlayerShip);
+    CHECK(kills[0].owner == 3);
+    CHECK_FALSE(kills[0].killer);
+}
+
+// --- Waves ---
+
+TEST_CASE("Each wave started in the game is told with its number, once", "[client]")
+{
+    ImpactClient client;
+    std::vector<std::uint16_t> waves;
+    client.sessions.setWaveHandler([&waves](std::uint16_t wave) { waves.push_back(wave); });
+    rtype::game::Snapshot first = snapshotOf(1, {});
+    first.waveStarted = 1;
+
+    client.receive(first);
+    client.receive(snapshotOf(2, {}));
+    rtype::game::Snapshot second = snapshotOf(3, {});
+    second.waveStarted = 2;
+    client.receive(second);
+
+    CHECK(waves == std::vector<std::uint16_t>{1, 2});
+}
+
+// --- Death screen ---
+
+namespace
+{
+
+// Every character is half as wide as the text is high, on a screen of the shape of the game
+class GameMetrics final : public rtype::engine::Metrics
+{
+public:
+    [[nodiscard]] rtype::render::Vector2 measureText(rtype::render::FontId /*font*/, const std::string &text,
+                                                     float size, float spacing) const override
+    {
+        const auto count = static_cast<float>(text.size());
+        return {(0.5f * size * count) + (spacing * std::max(count - 1.0f, 0.0f)), size};
+    }
+    [[nodiscard]] rtype::render::Vector2 gameSize() const override { return {1920.0f, 1080.0f}; }
+    [[nodiscard]] rtype::render::Rectangle visibleArea() const override
+    {
+        return {0.0f, 0.0f, 1920.0f, 1080.0f};
+    }
+    [[nodiscard]] rtype::render::Vector2 windowToGame(rtype::render::Vector2 position) const override
+    {
+        return position;
+    }
+};
+
+const DeathScreenLook DeathLook{{1}, {2}, {}, {}, "LIVES LEFT", "RESPAWN"};
+
+/// The engine of the client playing a scripted session, with its death screens.
+struct DeathClient : ImpactClient {
+    GameMetrics metrics;
+
+    DeathClient() { ecs.registerSystem<DeathScreenSystem>(ecs, sessions); }
+
+    /// Opens the death screen of a ship lost at the tick of the latest snapshot.
+    rtype::ecs::entity_t open(std::uint8_t lives, std::uint32_t respawnDelay)
+    {
+        return openDeathScreen(ecs, scene, metrics, rtype::engine::ToastStyle{}, DeathLook,
+                               {lives, 3, sessions.tick() + respawnDelay, respawnDelay});
+    }
+
+    /// Frames of one tick each, without snapshot: the game is paused, or the network late.
+    void wait(float seconds)
+    {
+        for (float time = 0.0f; time < seconds; time += Tick) {
+            engine.update(Tick);
+        }
+    }
+
+    [[nodiscard]] float opacityOf(rtype::ecs::entity_t entity)
+    {
+        return ecs.getComponent<rtype::engine::Opacity>(entity).value;
+    }
+
+    /// The pictures of the lives drawn with a texture.
+    [[nodiscard]] std::size_t countLives(rtype::render::TextureId texture)
+    {
+        std::size_t count = 0;
+        auto &sprites = ecs.cache<rtype::engine::Sprite>();
+        for (rtype::ecs::entity_t entity = 0; entity < sprites.size(); ++entity) {
+            if (sprites.has(entity) && ecs.isAlive(entity) && sprites.get(entity).texture == texture) {
+                ++count;
+            }
+        }
+        return count;
+    }
+};
+
+} // namespace
+
+TEST_CASE("The death screen counts down the seconds to the next ship in its ring, then goes once it is there",
+          "[client]")
+{
+    DeathClient client;
+    client.receive(snapshotOf(1, {}));
+    const rtype::ecs::entity_t screen = client.open(2, 180);
+    const DeathScreen parts = client.ecs.getComponent<DeathScreen>(screen);
+
+    client.receive(snapshotOf(2, {}));
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(parts.countdown).text == "3");
+    CHECK(client.ecs.getComponent<rtype::engine::Ring>(parts.ring).value == Approx(179.0f / 180.0f));
+    // A new second pops
+    CHECK(client.ecs.hasComponent<rtype::engine::Tween>(parts.countdown));
+
+    // The countdown follows the game: it waits for the snapshots
+    client.wait(2.0f);
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(parts.countdown).text == "3");
+
+    client.receive(snapshotOf(121, {}));
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(parts.countdown).text == "1");
+    CHECK(client.ecs.getComponent<rtype::engine::Ring>(parts.ring).value == Approx(1.0f / 3.0f));
+
+    client.receive(snapshotOf(181, {}));
+    CHECK(client.ecs.isAlive(screen));
+    client.wait(DeathScreenSystem::FadeOut + Tick);
+    CHECK_FALSE(client.ecs.isAlive(screen));
+    CHECK_FALSE(client.ecs.isAlive(parts.veil));
+    CHECK_FALSE(client.ecs.isAlive(parts.countdown));
+    CHECK_FALSE(client.ecs.isAlive(parts.lostLife));
+}
+
+TEST_CASE("The death screen shows the lives left lit, and puts out the one just lost after its entrance",
+          "[client]")
+{
+    DeathClient client;
+    client.receive(snapshotOf(1, {}));
+    const rtype::ecs::entity_t screen = client.open(1, 600);
+    const DeathScreen parts = client.ecs.getComponent<DeathScreen>(screen);
+    client.receive(snapshotOf(2, {}));
+
+    // The life left, and the life just lost over its picture of a life lost; then the other life lost
+    CHECK(client.countLives(DeathLook.life) == 2);
+    CHECK(client.countLives(DeathLook.lostLife) == 2);
+    // The veil darkens the game at once, the rest waits for the band of the banner
+    CHECK(client.opacityOf(parts.veil) > 0.0f);
+    CHECK(client.opacityOf(parts.countdown) == 0.0f);
+
+    client.wait(DeathScreenSystem::ContentDelay + DeathScreenSystem::ContentIn);
+    CHECK(client.opacityOf(parts.veil) == Approx(1.0f));
+    CHECK(client.opacityOf(parts.countdown) == Approx(1.0f));
+    CHECK(client.opacityOf(parts.lostLife) == Approx(1.0f));
+
+    client.wait(DeathScreenSystem::LifeOutDelay + DeathScreenSystem::LifeOut);
+    CHECK(client.opacityOf(parts.lostLife) == Approx(0.0f));
+    CHECK(client.opacityOf(parts.countdown) == Approx(1.0f));
+}
+
+// --- HUD ---
+
+namespace
+{
+
+const HudLook HudPictures{{1}, {2}, {}};
+
+/// The engine of the client playing a scripted session, with its HUD.
+struct HudClient : ImpactClient {
+    GameMetrics metrics;
+    rtype::ecs::entity_t entity;
+
+    HudClient()
+    {
+        ecs.registerSystem<HudSystem>(sessions, metrics);
+        entity = openHud(ecs, scene, HudPictures, 3);
+    }
+
+    [[nodiscard]] const Hud &hud() { return ecs.getComponent<Hud>(entity); }
+
+    [[nodiscard]] const std::string &textOf(rtype::ecs::entity_t part)
+    {
+        return ecs.getComponent<rtype::engine::Text>(part).text;
+    }
+
+    /// The pictures of the lives of the HUD drawn with a texture.
+    [[nodiscard]] std::size_t countLives(rtype::render::TextureId texture)
+    {
+        return static_cast<std::size_t>(std::ranges::count_if(hud().lives, [&](rtype::ecs::entity_t life) {
+            return ecs.getComponent<rtype::engine::Sprite>(life).texture == texture;
+        }));
+    }
+
+    /// The signal bars shown in a colour.
+    [[nodiscard]] std::size_t countBars(rtype::render::Color color)
+    {
+        return static_cast<std::size_t>(std::ranges::count_if(hud().signal, [&](rtype::ecs::entity_t bar) {
+            const rtype::render::Color shown = ecs.getComponent<rtype::engine::Box>(bar).color;
+            return ecs.getComponent<rtype::engine::Opacity>(bar).value > 0.0f && shown.r == color.r &&
+                   shown.g == color.g && shown.b == color.b;
+        }));
+    }
+};
+
+rtype::game::Snapshot snapshotWith(std::uint32_t tick, std::vector<rtype::game::PlayerState> players)
+{
+    rtype::game::Snapshot snapshot = snapshotOf(tick, {});
+    snapshot.players = std::move(players);
+    return snapshot;
+}
+
+} // namespace
+
+TEST_CASE("The HUD shows the lives left of the local player lit, its slot and its score", "[client]")
+{
+    HudClient client;
+    client.engine.update(Tick);
+    // Before the first snapshot, the player has all its lives
+    CHECK(client.countLives(HudPictures.life) == 3);
+    CHECK(client.textOf(client.hud().score) == "0000000");
+
+    client.receive(snapshotWith(1, {{0, 2, 24500}, {1, 3, 98100}}));
+    CHECK(client.countLives(HudPictures.life) == 2);
+    CHECK(client.countLives(HudPictures.lostLife) == 1);
+    CHECK(client.textOf(client.hud().pilot) == "1P");
+    CHECK(client.textOf(client.hud().score) == "0024500");
+    // The shadows go across the screen
+    CHECK(client.ecs.getComponent<rtype::engine::Box>(client.hud().topShadow).width == Approx(1920.0f));
+}
+
+TEST_CASE("The HUD lists the score of each other player, the first line on top", "[client]")
+{
+    HudClient client;
+    client.receive(snapshotWith(1, {{0, 3, 100}, {1, 3, 98100}, {3, 1, 71300}}));
+    const Hud &hud = client.hud();
+    CHECK(client.textOf(hud.allies[0].name) == "P2");
+    CHECK(client.textOf(hud.allies[0].score) == "0098100");
+    CHECK(client.textOf(hud.allies[1].name) == "P4");
+    CHECK(client.textOf(hud.allies[1].score) == "0071300");
+    CHECK(client.textOf(hud.allies[2].name).empty());
+    const auto &anchors = client.ecs.cache<rtype::engine::Anchor>();
+    CHECK(anchors.get(hud.allies[0].score).y < anchors.get(hud.allies[1].score).y);
+    // The name is left of the score
+    CHECK(anchors.get(hud.allies[0].name).x < anchors.get(hud.allies[0].score).x);
+
+    // A player who leaves the game leaves the HUD
+    client.receive(snapshotWith(2, {{0, 3, 100}, {3, 1, 71300}}));
+    CHECK(client.textOf(hud.allies[0].name) == "P4");
+    CHECK(client.textOf(hud.allies[1].name).empty());
+}
+
+TEST_CASE("The HUD shows the ping with its signal bars online, and nothing offline", "[client]")
+{
+    HudClient client;
+    client.receive(snapshotWith(1, {{0, 3, 0}}));
+    CHECK(client.textOf(client.hud().ping).empty());
+    CHECK(client.countBars(rtype::render::colors::White) == 0);
+
+    client.session->rtt = std::chrono::milliseconds(28);
+    client.engine.update(Tick);
+    CHECK(client.textOf(client.hud().ping) == "28 MS");
+    CHECK(client.countBars(rtype::render::colors::White) == 3);
+    CHECK(client.countBars({58, 62, 67, 255}) == 1);
+}
+
+TEST_CASE("The signal bars light up as the ping gets shorter", "[client]")
+{
+    using std::chrono::milliseconds;
+    CHECK(countSignalBars(milliseconds(10)) == 4);
+    CHECK(countSignalBars(HudSystem::FourBars) == 3);
+    CHECK(countSignalBars(milliseconds(90)) == 2);
+    CHECK(countSignalBars(milliseconds(500)) == 1);
+    CHECK(formatScore(42) == "0000042");
 }

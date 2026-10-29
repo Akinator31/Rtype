@@ -70,6 +70,8 @@ private:
     Clock::time_point _snapshotReceived;
 
     std::vector<game::DestroyedEntity> _destroyed;
+    /// The wave WAVE_STARTED told, until the next snapshot taken.
+    std::optional<std::uint16_t> _waveStarted;
     bool _over = false;
     std::string _endReason;
 
@@ -98,6 +100,7 @@ public:
     /// Nothing: online, the game goes on.
     void setPaused(bool /*paused*/) override {}
     [[nodiscard]] bool isOver() const override { return _over; }
+    [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override;
 
     /// The game accepted the player.
     [[nodiscard]] bool accepted() const { return _accepted.has_value(); }

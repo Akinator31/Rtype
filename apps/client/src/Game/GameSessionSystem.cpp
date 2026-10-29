@@ -5,14 +5,41 @@
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Sound.hpp"
+#include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Control/Control.hpp"
+#include "rtype/game/Constants.hpp"
 #include "rtype/game/PlayerInput.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <unordered_set>
 #include <utility>
 
 namespace rtype::client
 {
+
+namespace
+{
+
+/// The kinds of the Bydos, shots excluded: 0x10 to 0x3F in the protocol.
+bool isBydoShip(game::EntityKind kind)
+{
+    const auto value = static_cast<std::uint8_t>(kind);
+    return value >= 0x10 && value < 0x40;
+}
+
+bool isPlayerShot(game::EntityKind kind)
+{
+    return kind == game::EntityKind::PlayerShot || kind == game::EntityKind::PlayerChargedShot;
+}
+
+float distanceBetween(const ecs::Position &first, const ecs::Position &second)
+{
+    return std::hypot(first.x - second.x, first.y - second.y);
+}
+
+} // namespace
 
 game::PlayerInput inputFrom(const engine::Controls &controls)
 {
@@ -38,6 +65,15 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
     use<Impact>(caches);
+    use<engine::Text>(caches);
+    use<engine::Opacity>(caches);
+    use<engine::Scale>(caches);
+    use<engine::Tween>(caches);
+    use<DamageNumber>(caches);
+    use<ecs::Parent>(caches);
+    use<ecs::LocalPosition>(caches);
+    use<engine::Gauge>(caches);
+    use<HealthBar>(caches);
     use<engine::SoundEffect>(caches);
 }
 
@@ -77,6 +113,16 @@ void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &l
     _impactLooks.setLook(kind, look);
 }
 
+void GameSessionSystem::setDamageLook(game::EntityKind kind, const DamageLook &look)
+{
+    _damageLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setHealthBarLook(game::EntityKind kind, const HealthBarLook &look)
+{
+    _healthBarLooks.setLook(kind, look);
+}
+
 void GameSessionSystem::setShotSound(game::EntityKind kind, const EntitySound &sound)
 {
     _shotSounds.setSound(kind, sound);
@@ -85,6 +131,16 @@ void GameSessionSystem::setShotSound(game::EntityKind kind, const EntitySound &s
 void GameSessionSystem::setDestructionSound(game::EntityKind kind, const EntitySound &sound)
 {
     _destructionSounds.setSound(kind, sound);
+}
+
+void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
+{
+    _onKill = std::move(onKill);
+}
+
+void GameSessionSystem::setWaveHandler(std::function<void(std::uint16_t)> onWave)
+{
+    _onWave = std::move(onWave);
 }
 
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
@@ -142,6 +198,10 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         moveEntity(found->second.id, state);
     }
     rememberKilled(snapshot.destroyed);
+    reportKills(snapshot.destroyed);
+    if (snapshot.waveStarted && _onWave) {
+        _onWave(*snapshot.waveStarted);
+    }
 
     // Each snapshot holds the whole world: what is not in it any more is gone
     for (auto entry = _entities.begin(); entry != _entities.end();) {
@@ -163,12 +223,59 @@ void GameSessionSystem::rememberKilled(const std::vector<game::DestroyedEntity> 
     }
 }
 
+void GameSessionSystem::reportKills(const std::vector<game::DestroyedEntity> &destroyed)
+{
+    if (!_onKill) {
+        return;
+    }
+    const std::vector<ecs::entity_t> killed = findKilled(destroyed);
+    for (const ecs::entity_t entity : killed) {
+        const Replicated &replicated = _ecs.getComponent<Replicated>(entity);
+        if (replicated.kind == game::EntityKind::PlayerShip) {
+            _onKill({replicated.kind, replicated.owner, std::nullopt});
+        } else if (isBydoShip(replicated.kind)) {
+            _onKill({replicated.kind, replicated.owner, findKiller(entity, killed)});
+        }
+    }
+}
+
+std::vector<ecs::entity_t>
+GameSessionSystem::findKilled(const std::vector<game::DestroyedEntity> &destroyed) const
+{
+    std::vector<ecs::entity_t> killed;
+    for (const game::DestroyedEntity &entity : destroyed) {
+        const auto found = _entities.find(entity.id);
+        if (entity.cause == game::DestroyCause::Killed && found != _entities.end() &&
+            _ecs.isAlive(found->second)) {
+            killed.push_back(found->second.id);
+        }
+    }
+    return killed;
+}
+
+std::optional<std::uint8_t> GameSessionSystem::findKiller(ecs::entity_t bydo,
+                                                          const std::vector<ecs::entity_t> &killed) const
+{
+    const ecs::Position &position = _ecs.getComponent<ecs::Position>(bydo);
+    std::optional<std::uint8_t> killer;
+    float nearest = std::numeric_limits<float>::max();
+    for (const ecs::entity_t entity : killed) {
+        const Replicated &shot = _ecs.getComponent<Replicated>(entity);
+        const float distance = distanceBetween(position, _ecs.getComponent<ecs::Position>(entity));
+        if (isPlayerShot(shot.kind) && shot.owner < game::MaxPlayers && distance < nearest) {
+            nearest = distance;
+            killer = shot.owner;
+        }
+    }
+    return killer;
+}
+
 void GameSessionSystem::createEntity(const game::EntityState &state)
 {
     const EntityLook look = lookOf(state);
     const ecs::entity_t entity = _ecs.createEntity();
     _ecs.addComponent<engine::SceneMember>(entity, *_scene);
-    _ecs.addComponent<Replicated>(entity, state.id, state.kind);
+    _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.owner, state.health, state.health);
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
     if (_shipLooks.hasLook(state.kind)) {
@@ -189,6 +296,9 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
         return;
     }
     const game::EntityKind kind = _ecs.getComponent<Replicated>(entity.id).kind;
+    if (killed) {
+        showDamage(entity.id, _ecs.getComponent<Replicated>(entity.id).health);
+    }
     if (killed && _impactLooks.hasLook(kind)) {
         const ecs::Position position = _ecs.getComponent<ecs::Position>(entity.id);
         const ecs::entity_t impact = _impactLooks.createImpact(_ecs, *_scene, kind, position);
@@ -200,11 +310,54 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
 void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState &state)
 {
     _ecs.getComponent<ecs::Position>(entity) = {state.x, state.y};
+    Replicated &replicated = _ecs.getComponent<Replicated>(entity);
+    const std::uint8_t health = std::exchange(replicated.health, state.health);
+    replicated.maxHealth = std::max(replicated.maxHealth, state.health);
+    if (state.health < health) {
+        showDamage(entity, static_cast<std::uint8_t>(health - state.health));
+    }
+    if (state.health != health) {
+        showHealth(entity, state, state.health < health);
+    }
     if (_ecs.hasComponent<ShipAttitude>(entity)) {
         _shipLooks.moveModel(_ecs, entity, state, _clock);
     } else if (_ecs.hasComponent<engine::Model>(entity)) {
         _shotLooks.placeModel(_ecs, entity, state);
     }
+}
+
+void GameSessionSystem::showDamage(ecs::entity_t entity, std::uint8_t damage)
+{
+    const game::EntityKind kind = _ecs.getComponent<Replicated>(entity).kind;
+    if (damage > 0 && _damageLooks.hasLook(kind)) {
+        _damageLooks.createNumber(_ecs, *_scene, kind, _ecs.getComponent<ecs::Position>(entity), damage);
+    }
+}
+
+void GameSessionSystem::showHealth(ecs::entity_t entity, const game::EntityState &state, bool hit)
+{
+    if (!_healthBarLooks.hasLook(state.kind) || isLocalShip(state)) {
+        return;
+    }
+    std::optional<ecs::entity_t> bar = _ecs.getComponent<Replicated>(entity).healthBar;
+    if (!bar && !hit) {
+        return;
+    }
+    if (!bar) {
+        bar = _healthBarLooks.createBar(_ecs, *_scene, state.kind, entity);
+        _ecs.getComponent<Replicated>(entity).healthBar = bar;
+    }
+    HealthBar &health = _ecs.getComponent<HealthBar>(*bar);
+    const std::uint8_t maxHealth = _ecs.getComponent<Replicated>(entity).maxHealth;
+    health.health = maxHealth > 0 ? static_cast<float>(state.health) / static_cast<float>(maxHealth) : 0.0f;
+    if (hit) {
+        health.time = 0.0f;
+    }
+}
+
+bool GameSessionSystem::isLocalShip(const game::EntityState &state) const
+{
+    return state.kind == game::EntityKind::PlayerShip && _session && state.owner == _session->localSlot();
 }
 
 void GameSessionSystem::placeShipModels(float elapsed)

@@ -663,32 +663,64 @@ void SceneRenderer::drawGauge(render::Renderer &renderer, const Gauge &gauge, re
     const GaugeStyle &style = _style.gauge;
     const float value = std::clamp(gauge.get ? gauge.get() : 0.0f, 0.0f, 1.0f);
     const bool isFull = value >= 0.999f;
+    const bool isLow = value <= gauge.low;
+    const float width = gauge.width > 0.0f ? gauge.width : style.width;
     const float top = centre.y - (style.getHeight() / 2.0f);
-    const float left = centre.x - (style.width / 2.0f);
-    const float y = style.getRailY(centre.y);
+    const float left = centre.x - (width / 2.0f);
+    const float y = gauge.caption.empty() ? centre.y : style.getRailY(centre.y);
 
     if (!gauge.caption.empty()) {
         const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%";
-        drawCaption(renderer, style.font, gauge.caption, percentage, left, left + style.width, top,
+        drawCaption(renderer, style.font, gauge.caption, percentage, left, left + width, top,
                     style.captionSize, style.letterSpacing, faded(style.caption, opacity),
                     faded(style.litCaption, opacity));
     }
-    renderer.drawRoundedRectangle({left, y - (style.railThickness / 2.0f), style.width, style.railThickness},
+    renderer.drawRoundedRectangle({left, y - (style.railThickness / 2.0f), width, style.railThickness},
                                   style.railThickness / 2.0f, faded(style.rail, opacity),
                                   faded(style.rail, opacity));
-    const float length = value * style.width;
+    const float length = value * width;
     if (length <= 0.0f) {
         return;
     }
-    // The light is transparent at the start of the gauge and white at its value; a full gauge shines more
+    // The light is transparent at the start of the gauge and white at its value, red when it is low; a full
+    // gauge shines more
+    const render::Color colour = isLow ? style.lowLight : style.light;
+    const render::Color glow = isLow ? style.lowGlow : style.glow;
     const float thickness = isFull ? style.fullLightThickness : style.lightThickness;
     const render::Rectangle light{left, y - (thickness / 2.0f), length, thickness};
     drawBlurred(renderer, light, thickness / 2.0f, style.glowSpread * (isFull ? 2.0f : 1.0f),
-                faded(brightened(style.glow, isFull ? 1.8f : 1.0f), opacity));
-    renderer.drawRoundedRectangle(light, thickness / 2.0f, faded(clear(style.light), opacity),
-                                  faded(style.light, opacity));
+                faded(brightened(glow, isFull ? 1.8f : 1.0f), opacity));
+    renderer.drawRoundedRectangle(light, thickness / 2.0f, faded(clear(colour), opacity),
+                                  faded(colour, opacity));
     drawSpark(renderer, {left + length, y}, style.sparkLength * (isFull ? 1.3f : 1.0f), style.sparkHeight,
-              faded(style.light, opacity));
+              faded(colour, opacity));
+}
+
+void SceneRenderer::drawRing(render::Renderer &renderer, const Ring &ring, render::Vector2 centre,
+                             float opacity) const
+{
+    constexpr int glowLayers = 4;
+    constexpr float glowSpread = 6.0f;
+    renderer.drawArc(centre, ring.radius, ring.thickness, 0.0f, 360.0f, faded(ring.track, opacity));
+    const float value = std::clamp(ring.value, 0.0f, 1.0f);
+    if (value <= 0.0f) {
+        return;
+    }
+    // Angles turn clockwise on the screen: the light goes anticlockwise from the right, so it starts at its
+    // end
+    const float end = -360.0f * value;
+    render::Color glow = ring.light;
+    glow.a = static_cast<std::uint8_t>(static_cast<float>(ring.light.a) * 0.12f);
+    for (int layer = 1; layer <= glowLayers; ++layer) {
+        const float spread = glowSpread * static_cast<float>(layer) / static_cast<float>(glowLayers);
+        renderer.drawArc(centre, ring.radius + spread, ring.thickness + (2.0f * spread), end, 0.0f,
+                         faded(glow, opacity));
+    }
+    renderer.drawArc(centre, ring.radius, ring.thickness, end, 0.0f, faded(ring.light, opacity));
+    const float radians = end * std::numbers::pi_v<float> / 180.0f;
+    const float middle = ring.radius - (ring.thickness / 2.0f);
+    drawSpark(renderer, {centre.x + (middle * std::cos(radians)), centre.y + (middle * std::sin(radians))},
+              ring.radius * 0.3f, ring.radius * 0.1f, faded(ring.light, opacity));
 }
 
 void SceneRenderer::drawAnnouncement(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
@@ -900,6 +932,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     auto &switches = _ecs.cache<SwitchTrack>();
     auto &toggles = _ecs.cache<Toggle>();
     auto &gauges = _ecs.cache<Gauge>();
+    auto &rings = _ecs.cache<Ring>();
 
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
@@ -924,6 +957,8 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                                          box.height * scale};
             if (box.outline > 0.0f) {
                 renderer.drawRectangleOutline(area, box.outline, faded(box.color, opacity));
+            } else if (box.bottom) {
+                renderer.drawGradientRectangle(area, faded(box.color, opacity), faded(*box.bottom, opacity));
             } else {
                 renderer.drawRectangle(area, faded(box.color, opacity));
             }
@@ -943,6 +978,9 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         if (gauges.has(entity)) {
             drawGauge(renderer, gauges.get(entity), {centre.x, centre.y}, opacity);
             continue;
+        }
+        if (rings.has(entity)) {
+            drawRing(renderer, rings.get(entity), {centre.x, centre.y}, opacity);
         }
         if (switches.has(entity) && toggles.has(entity) && texts.has(entity)) {
             drawSwitch(renderer, toggles.get(entity), switches.get(entity), texts.get(entity),
@@ -973,7 +1011,8 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         if (texts.has(entity)) {
             const Text &text = texts.get(entity);
             const float size = text.size * scale;
-            const render::Vector2 measured = renderer.measureText(text.font, text.text, size);
+            const float spacing = text.spacing * scale;
+            const render::Vector2 measured = renderer.measureText(text.font, text.text, size, spacing);
             const render::Vector2 topLeft{centre.x - measured.x / 2.0f, centre.y - measured.y / 2.0f};
 
             // A focused text field: the selection behind the text, the cursor in front of it. Their positions
@@ -998,7 +1037,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                 drawConsoleField(renderer, text, fields.get(entity), topLeft, size, opacity);
             } else {
                 renderer.drawText(text.font, text.text, topLeft, size,
-                                  faded(showsFocus ? _style.focused : text.color, opacity));
+                                  faded(showsFocus ? _style.focused : text.color, opacity), spacing);
             }
             if (editing) {
                 const float cursor = offsetOf(fields.get(entity).input.cursor());

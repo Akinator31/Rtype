@@ -110,7 +110,7 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 | A Bydo flies to the left, and fires its weapon once in the area | `EnemySystem`, `WeaponSystem` | — (its definition's) |
 | What has `Damage` hurts what it touches: player shots the Bydos, the Bydos and their shots the ships | `CombatSystem` | `hitInvulnerableTicks` 60 |
 | A Bydo with no hit points left is destroyed, its score goes to the player of the shot | `CombatSystem` | — |
-| A ship with no hit points left is destroyed, the player loses a life and gets a new ship, invulnerable for a while | `CombatSystem` | `respawnDelay` 90 ticks, `invulnerableTicks` 120 |
+| A ship with no hit points left is destroyed, the player loses a life and gets a new ship, invulnerable for a while | `CombatSystem` | `respawnDelay` 180 ticks (3 s), `invulnerableTicks` 120 |
 | Every player out of lives ends the game (defeat) | `CombatSystem` | `lives` 3 |
 | What leaves the area is removed | `AreaSystem`, `LeavesArea` | `areaMargin` 128 units |
 | A player who leaves takes its ship away | `Simulation::removePlayer()` | — |

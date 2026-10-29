@@ -1,16 +1,18 @@
 #include "Game/GameScenes.hpp"
 
 #include "Assets.hpp"
-#include "Game/EntityLook.hpp"
 #include "Game/GameView.hpp"
+#include "Game/Hud.hpp"
 #include "Game/LocalSession.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "ShipModel.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
-#include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Rules.hpp"
 
+#include <algorithm>
+#include <array>
 #include <format>
 #include <string>
 #include <utility>
@@ -28,6 +30,8 @@ using engine::AssetType;
 const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::SmoothTexture, RTYPE_IMAGE_ENERGY_NOISE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_GLOW_CORE},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE_LOST},
     {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
     {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
     {AssetType::Model, RTYPE_MODEL_SHOT_BASIC},
@@ -43,10 +47,6 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::Sound, RTYPE_SOUND_DESTRUCTION},
     {AssetType::Sound, RTYPE_SOUND_COLLISION},
 };
-
-/// Distance of the HUD from the top left corner of the screen, and between two lines.
-constexpr float HudMargin = 40.0f;
-constexpr float HudLineSpacing = 56.0f;
 
 /// The hulls of the ship models seen through the camera of the game, flames excluded, in model units:
 /// measured on the models in their Move pose, the ship of the players facing right, the drop ship of the
@@ -75,6 +75,17 @@ constexpr render::Color BydoShotLight{185, 90, 255, 115};
 constexpr render::Color PlasmaOrbLight{255, 120, 35, 135};
 /// How far the light of a shot spreads around its core, in heights of the core.
 constexpr float ShotLightSpread = 1.5f;
+
+/// The damage taken by the Bydos, written where they are hit: in the font of the titles, loaded at this size
+/// for the whole interface, in a warm yellow that stands out from the blue shots and the purple Bydos.
+constexpr int DamageFontSize = 96;
+constexpr float DamageTextSize = 40.0f;
+constexpr render::Color DamageColor{255, 220, 90, 255};
+
+/// The health bars shown above the Bydos hit and above the ships of the other players, over their hull, under
+/// the damage numbers: red under a third of their hit points.
+constexpr HealthBarLook BydoHealthBar{100.0f, 42.0f, 0.3f};
+constexpr HealthBarLook AllyHealthBar{110.0f, 62.0f, 0.3f};
 
 /// The animation of the impact models, played once.
 constexpr const char *ImpactAnimation = "Impact";
@@ -203,9 +214,47 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
                          {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true,
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
     setImpactLooks(sessions, resources, energy);
+    const render::FontId damageFont = resources.loadFont(RTYPE_FONT_DISPLAY, DamageFontSize);
+    sessions.setDamageLook(game::EntityKind::BydoFlyer, {damageFont, DamageTextSize, DamageColor});
+    for (const game::EntityKind kind : {game::EntityKind::BydoFlyer, game::EntityKind::BydoShooter,
+                                        game::EntityKind::BydoTank, game::EntityKind::BydoBoss}) {
+        sessions.setHealthBarLook(kind, BydoHealthBar);
+    }
+    sessions.setHealthBarLook(game::EntityKind::PlayerShip, AllyHealthBar);
     setShotSounds(sessions, audio);
     setDestructionSounds(sessions, audio);
     setCollisionSounds(sessions, audio);
+}
+
+/// Time the banner of a wave stays fully shown, in seconds: shorter than the other banners, as it comes back
+/// with each wave.
+constexpr float WaveBannerDuration = 1.5f;
+
+/// The name of a player in the events, as in the HUD: P1 to P4.
+std::string playerName(std::uint8_t slot)
+{
+    return std::format("P{}", slot + 1);
+}
+
+/// The lives left of the player in a slot, 0 when it is not in the game.
+std::uint8_t livesOf(const std::vector<game::PlayerState> &players, std::uint8_t slot)
+{
+    const auto player = std::ranges::find(players, slot, &game::PlayerState::slot);
+    return player == players.end() ? 0 : player->lives;
+}
+
+/// The translation key of the name of each kind of Bydo in the events, the flyer being the default.
+constexpr std::array<std::pair<game::EntityKind, const char *>, 3> BydoNameKeys{{
+    {game::EntityKind::BydoShooter, "event.shooter"},
+    {game::EntityKind::BydoTank, "event.tank"},
+    {game::EntityKind::BydoBoss, "event.boss"},
+}};
+
+const char *bydoNameKey(game::EntityKind kind)
+{
+    const auto name =
+        std::ranges::find(BydoNameKeys, kind, &std::pair<game::EntityKind, const char *>::first);
+    return name == BydoNameKeys.end() ? "event.flyer" : name->second;
 }
 
 } // namespace
@@ -213,8 +262,10 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations)
-    : _engine(engine), _sessions(sessions), _translations(translations)
+    : _engine(engine), _metrics(metrics), _style(style), _sessions(sessions), _translations(translations)
 {
+    sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
+    sessions.setWaveHandler([this](std::uint16_t wave) { showWave(wave); });
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
@@ -250,10 +301,59 @@ void GameScenes::end()
     }
 }
 
+void GameScenes::showKill(const Kill &kill)
+{
+    const GameSession *session = _sessions.session();
+    if (session == nullptr) {
+        return;
+    }
+    const std::uint8_t local = session->localSlot();
+    if (kill.kind == game::EntityKind::PlayerShip) {
+        _engine.showToast(playerName(kill.owner), _translations.text("event.player_down"), "",
+                          kill.owner == local ? engine::ToastType::Error : engine::ToastType::Warning);
+        if (kill.owner == local) {
+            showDeath();
+        }
+    } else if (kill.killer == local) {
+        _engine.showToast(_translations.text(bydoNameKey(kill.kind)), _translations.text("event.bydo_down"),
+                          playerName(local), engine::ToastType::Success);
+    }
+}
+
+void GameScenes::showWave(std::uint16_t wave)
+{
+    _engine.showBanner(std::format("{} {:02}", _translations.text("event.wave"), wave),
+                       _translations.text("event.wave_detail"), engine::ToastType::Info, WaveBannerDuration);
+}
+
+void GameScenes::showDeath()
+{
+    const std::uint8_t lives = livesOf(_sessions.players(), _sessions.session()->localSlot());
+    if (lives == 0 || !_scene) {
+        return;
+    }
+    // The banner leaves as the next ship comes
+    const game::Rules rules;
+    const float respawn = static_cast<float>(rules.respawnDelay) / static_cast<float>(game::TickRate);
+    const float entrances = _style.toast.getFadeIn(engine::ToastKind::Banner) +
+                            _style.toast.getFadeOut(engine::ToastKind::Banner);
+    _engine.showBanner(_translations.text("death.title"), "", engine::ToastType::Error,
+                       std::max(respawn - entrances, 0.0f));
+    openDeathScreen(_engine.getEcs(), *_scene, _metrics, _style.toast, _deathLook,
+                    {lives, rules.lives, _sessions.tick() + rules.respawnDelay, rules.respawnDelay});
+}
+
 void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     configureGameLooks(_sessions, resources, audio);
+    _scene = scene;
+    _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),
+                  resources.loadTexture(RTYPE_IMAGE_LIFE_LOST, render::TextureFiltering::Smooth),
+                  style.toast.messageFont,
+                  style.toast.nameFont,
+                  _translations.text("death.lives"),
+                  _translations.text("death.respawn")};
 
     ecs::Ecs &ecs = _engine.getEcs();
 
@@ -264,33 +364,10 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
     ecs.addComponent<engine::Light>(sky, GameLight);
 
-    buildHud(scene, style);
+    openHud(ecs, scene, {_deathLook.life, _deathLook.lostLife, style.toast.nameFont}, game::Rules{}.lives);
 
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
-}
-
-void GameScenes::buildHud(engine::SceneId scene, const engine::InterfaceStyle &style)
-{
-    ecs::Ecs &ecs = _engine.getEcs();
-    // One line per player, in its colour, empty while the slot is free
-    engine::InterfaceBuilder hud(ecs, scene, style);
-    for (std::uint8_t slot = 0; slot < game::MaxPlayers; ++slot) {
-        const ecs::entity_t line = hud.boundText(
-            [this, slot] {
-                for (const game::PlayerState &player : _sessions.players()) {
-                    if (player.slot == slot) {
-                        return std::format("P{}   {} {}   {} {:06}", slot + 1,
-                                           _translations.text("hud.lives"), player.lives,
-                                           _translations.text("hud.score"), player.score);
-                    }
-                }
-                return std::string();
-            },
-            {engine::AnchorPoint::TopLeft, HudMargin,
-             HudMargin + (static_cast<float>(slot) * HudLineSpacing)});
-        ecs.getComponent<engine::Text>(line).color = playerColor(slot);
-    }
 }
 
 } // namespace rtype::client

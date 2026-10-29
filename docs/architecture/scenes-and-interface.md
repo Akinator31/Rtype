@@ -163,7 +163,7 @@ the game creates entities with `Position` and `Collider`.
 | `Drawable` | Required: the layer (`World` or `Interface`) and the order inside it (higher on top). |
 | `Text` | A text, centred on the position. |
 | `Sprite` | A texture or a frame of a sprite sheet, centred on the position, turned by its `rotation`. |
-| `Box` | A rectangle, filled or outlined, centred on the position. |
+| `Box` | A rectangle, filled or outlined, centred on the position. A filled box with a `bottom` colour fades from its colour at the top into it: a shadow along an edge of the screen. |
 | `Scale`, `Opacity` | Size factor and transparency, animated by tweens. |
 
 The HUD is made of entities of the game scene in the `Interface` layer: it is drawn after the world.
@@ -268,6 +268,7 @@ maximum (`maxVisible`, `maxAnnouncements`, `maxBanners`):
 ```cpp
 engine.showAnnouncement("PLAYER 2 JOINED", "Room · 2 / 4 pilots");     // title, line of light, detail
 engine.showBanner("BOSS APPROACHING", "GET THE BEAM READY", ToastType::Error); // across the whole screen
+engine.showBanner("WAVE 03", "BYDOS INCOMING", ToastType::Info, 1.5f);        // shown 1.5 s, not the style's
 ```
 
 An announcement is centred at the top of the screen: its icon and title, a line of light under them, and its
@@ -283,7 +284,8 @@ the two lines move apart, the sparks fly out from the middle, the title tightens
 rises. The `ToastSystem` writes the progress of the entrance as the `Opacity` of the toast, and the
 `SceneRenderer` splits it into parts (`stage()`).
 
-The toast entity holds only a `Toast` (its words and type). Everything about its look lives in one place,
+The toast entity holds only a `Toast` (its words and type, and the time a banner stays fully shown when it is
+given one: `Toast::duration`, `ToastStyle::duration` otherwise). Everything about its look lives in one place,
 `InterfaceStyle::toast` (`ToastStyle`): corner, margin, fonts, sizes, colours of each type, durations, slide,
 maximum number shown. The `SceneRenderer` draws it from that style (`drawToast`), and the `ToastSystem` places,
 fades and destroys it. To change how every toast looks, change the style, or `drawToast` for its shape; the
@@ -314,7 +316,18 @@ set it, as for every `Toggle`.
 
 `InterfaceBuilder::gauge()` makes a value between 0 and 1 drawn as a rail lit from its start (transparent) to
 its value, with a spark at the end (`InterfaceStyle::gauge`, `GaugeStyle`; a full gauge shines more). A gauge
-shows only: it gets no focus. An `Extent` gives its size to the `AnchorSystem`.
+shows only: it gets no focus. An `Extent` gives its size to the `AnchorSystem`. `Gauge::width` gives it its
+own length instead of the one of the style, and `Gauge::low` a value at or below which its light and spark turn
+red (`GaugeStyle::lowLight`, `lowGlow`). Without a caption, its rail is on the position of the entity: the
+health bars of the game are such gauges, in the World layer.
+
+An `engine::Ring` draws a circle lit along a part of its length, centred on its position: a dark track, then a
+light from the right of the circle anticlockwise over the top, up to `Ring::value`, with a glow and a spark at
+its end. Its owner writes the value: the countdown of the death screen of the game runs out this way. Like a
+gauge, it takes an `Extent` to be placed by an `Anchor`.
+
+`Text::spacing` spaces the letters of a text, as in the widely spaced capitals of the design; the
+`AnchorSystem` and the `HitboxSystem` measure the text with it.
 
 The handle of a slider lights up only while the pointer is over it (or it is dragged); its caption lights up
 while the slider is under the pointer or has the focus.

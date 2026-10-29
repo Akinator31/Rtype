@@ -23,7 +23,7 @@ enum class Layer {
 
 /// Makes an entity drawn, in a pass and at an order inside this pass: higher orders are drawn on top. An
 /// entity is drawn with a Position and one of Text, Sprite, Box or Panel, which are drawn centred on the
-/// position.
+/// position, or a Ring, drawn around it.
 struct Drawable {
     Layer layer = Layer::World;
     int order = 0;
@@ -35,6 +35,8 @@ struct Text {
     render::FontId font;
     float size = 48.0f;
     render::Color color = render::colors::White;
+    /// Space added between two letters, in game units: widely spaced capitals.
+    float spacing = 0.0f;
 };
 
 /// Writes the Text of the entity from a function, every frame: a score, a life count, a ping.
@@ -66,6 +68,23 @@ struct Box {
     render::Color color = render::colors::White;
     /// Width of the outline, drawn inside the box, or 0 for a filled box.
     float outline = 0.0f;
+    /// Colour of the bottom edge of a filled box, which fades from `color` at the top into it: a shadow along
+    /// an edge of the screen. None for a plain box.
+    std::optional<render::Color> bottom = std::nullopt;
+};
+
+/// A circle lit along a part of its length, centred on the position of the entity: a countdown that runs
+/// out. The light starts on the right of the circle and goes round anticlockwise, over the top, with a
+/// spark at its end; the rest of the circle is a dark track. Without a Text, Sprite or Box, an Extent places
+/// it with an Anchor.
+struct Ring {
+    /// Outer radius, in game units.
+    float radius = 40.0f;
+    float thickness = 3.0f;
+    /// Part of the circle lit, from 0 to 1.
+    float value = 1.0f;
+    render::Color track{38, 41, 45, 255};
+    render::Color light = render::colors::White;
 };
 
 /// What makes the text of a button a button: no frame, the text alone, crossed by a line of light with a star

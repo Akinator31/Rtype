@@ -206,11 +206,13 @@ public:
     ecs::entity_t showAnnouncement(const std::string &title, const std::string &detail,
                                    ToastType type = ToastType::Info);
     /// Shows a banner across the whole screen, for what the player must not miss: a title and a detail.
+    /// @param duration Time it stays fully shown, in seconds: ToastStyle::duration when empty.
     /// @code
     /// engine.showBanner("BOSS APPROACHING", "GET THE BEAM READY", ToastType::Error);
+    /// engine.showBanner("WAVE 03", "BYDOS INCOMING", ToastType::Info, 1.5f);
     /// @endcode
     ecs::entity_t showBanner(const std::string &title, const std::string &detail,
-                             ToastType type = ToastType::Info);
+                             ToastType type = ToastType::Info, std::optional<float> duration = std::nullopt);
 
     /// Runs one frame: updates the controls from the input source, if any, so that the whole frame reads the
     /// same state; destroys the entities of the closed scenes and applies the scene requests (which

@@ -104,6 +104,11 @@ public:
     /// @throws std::logic_error if no frame is started.
     void drawRectangle(Rectangle rectangle, Color color);
 
+    /// Draws a filled rectangle coloured with a vertical gradient: a shadow along an edge of the screen.
+    /// @param top Colour of the top edge, blended into bottom towards the bottom edge.
+    /// @throws std::logic_error if no frame is started.
+    void drawGradientRectangle(Rectangle rectangle, Color top, Color bottom);
+
     /// Draws a filled circle.
     /// @param center Centre of the circle, in game units.
     /// @param radius Radius, in game units. Nothing is drawn if it is not strictly positive.

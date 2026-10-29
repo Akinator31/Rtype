@@ -15,6 +15,8 @@
 #define RTYPE_IMAGE_LOGO_FLARE "images/flare.png"
 #define RTYPE_IMAGE_ENERGY_NOISE "images/fx/energy_noise.png"
 #define RTYPE_IMAGE_GLOW_CORE "images/fx/glow_core.png"
+#define RTYPE_IMAGE_LIFE "images/hud/life.png"
+#define RTYPE_IMAGE_LIFE_LOST "images/hud/life_lost.png"
 
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"

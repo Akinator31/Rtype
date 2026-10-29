@@ -27,7 +27,7 @@ struct Rules {
     std::uint32_t plasmaZigzagInterval = 20;
 
     /// Ticks between the loss of a ship and the next one, if the player has lives left.
-    std::uint32_t respawnDelay = 90;
+    std::uint32_t respawnDelay = 180;
     /// Ticks a new ship cannot be hit.
     std::uint32_t invulnerableTicks = 120;
     /// Ticks a ship that was hit, and survived, cannot be hit again.
