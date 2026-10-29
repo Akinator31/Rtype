@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Common/Settings.hpp"
 #include "rtype/database/Address.hpp"
 #include "rtype/log/Log.hpp"
 #include "rtype/network/Address.hpp"
@@ -45,6 +46,11 @@ struct MasterOptions {
     bool check = false;
     /// The configuration of the game, given to the instances; empty: config/ next to the executable.
     std::filesystem::path config{};
+    /// The settings file given with --settings, read before the command line, which wins over it; empty:
+    /// none.
+    std::filesystem::path settingsFile{};
+    /// What the settings file gives: its sections other than [server], for the panel and the accounts.
+    ServerSettings settings{};
 };
 
 /// The options of an instance: one game, started by the master (docs/protocol/instances.md, section 1).
@@ -90,5 +96,11 @@ struct Options {
 /// one mode are refused in the other, and an instance needs its id and ports.
 /// @throws std::invalid_argument with a message for the user.
 [[nodiscard]] Options parseOptions(std::span<const std::string_view> arguments);
+
+/// Reads the arguments as parseOptions() does, over the settings read from the file of --settings: the
+/// command line wins over the file for the options both have.
+/// @throws std::invalid_argument with a message for the user.
+[[nodiscard]] Options parseOptions(std::span<const std::string_view> arguments,
+                                   const ServerSettings &settings);
 
 } // namespace rtype::server
