@@ -5,9 +5,9 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { system } from '../theme/system';
-import { Banner } from './Banner';
+import { AlertStrip } from './AlertStrip';
 import { EventFeed } from './EventFeed';
-import { FlareButton } from './Flare';
+import { Badge, Button, Chip } from './Controls';
 import { Gauge } from './Gauge';
 
 function themed(node: ReactNode) {
@@ -47,11 +47,11 @@ describe('the gauge', () => {
 });
 
 describe('the feed of events', () => {
-  it('fades its lines with their rank, the newest lit', () => {
+  it('fades its lines with their rank, as the design, the newest lit', () => {
     themed(
       <EventFeed
         empty="Nothing"
-        items={['A', 'B', 'C', 'D', 'E', 'F'].map((name, index) => ({
+        items={['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((name, index) => ({
           key: index,
           tone: index === 2 ? 'alert' : 'info',
           subject: name,
@@ -62,11 +62,13 @@ describe('the feed of events', () => {
     const lines = screen.getByRole('log').children;
     expect(Array.from(lines, (line) => getComputedStyle(line).opacity)).toEqual([
       '1',
+      '0.9',
       '0.8',
-      '0.6',
-      '0.4',
-      '0.22',
-      '0.22',
+      '0.65',
+      '0.5',
+      '0.38',
+      '0.26',
+      '0.26',
     ]);
     expect(lines[2]).toHaveAttribute('data-tone', 'alert');
   });
@@ -77,35 +79,58 @@ describe('the feed of events', () => {
   });
 });
 
-describe('the banner', () => {
-  it('is an alert in red, a status otherwise', () => {
+describe('the strip', () => {
+  it('is an alert in red, a status otherwise, with its action', async () => {
+    const user = userEvent.setup();
+    const retried = vi.fn();
     themed(
       <>
-        <Banner title="Connection lost" detail="Reconnecting" tone="alert" />
-        <Banner title="Sector 02" />
+        <AlertStrip
+          title="Connection lost"
+          detail="Reconnecting"
+          action={<Button onClick={retried}>Retry</Button>}
+        />
+        <AlertStrip title="Step 12" tone="info" />
       </>,
     );
     expect(screen.getByRole('alert')).toHaveTextContent('Connection lost');
     expect(screen.getByRole('alert')).toHaveTextContent('Reconnecting');
-    expect(screen.getByRole('status')).toHaveTextContent('Sector 02');
+    expect(screen.getByRole('status')).toHaveTextContent('Step 12');
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(retried).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('the flare button', () => {
-  it('is a button that does nothing while disabled', async () => {
+describe('the controls', () => {
+  it('a button does nothing while disabled', async () => {
     const user = userEvent.setup();
     const clicked = vi.fn();
     themed(
       <>
-        <FlareButton onClick={clicked}>Play</FlareButton>
-        <FlareButton onClick={clicked} disabled>
-          Quit
-        </FlareButton>
+        <Button variant="primary" onClick={clicked}>
+          Apply
+        </Button>
+        <Button variant="danger" onClick={clicked} disabled>
+          Ban
+        </Button>
       </>,
     );
-    await user.click(screen.getByRole('button', { name: 'Play' }));
-    await user.click(screen.getByRole('button', { name: 'Quit' }));
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    await user.click(screen.getByRole('button', { name: 'Ban' }));
     expect(clicked).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Play' })).toHaveAttribute('type', 'button');
+    expect(screen.getByRole('button', { name: 'Apply' })).toHaveAttribute('type', 'button');
+  });
+
+  it('a chip says whether it is pressed; a badge is a word', () => {
+    themed(
+      <>
+        <Chip pressed>All · 3</Chip>
+        <Chip pressed={false}>Stuck · 0</Chip>
+        <Badge tone="alert">Stuck</Badge>
+      </>,
+    );
+    expect(screen.getByRole('button', { name: 'All · 3' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Stuck · 0' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Stuck')).not.toHaveAttribute('role');
   });
 });

@@ -1,13 +1,14 @@
-import { Empty, PageHeader, Surface } from '../components/Layout';
+import { ButtonLink } from '../components/Controls';
+import { Card, Empty } from '../components/Layout';
+import { usePageTitle } from '../components/pageTitle';
 import { strings } from '../strings';
 
 export function NotFound() {
+  usePageTitle(strings.notFound.title);
   return (
-    <>
-      <PageHeader caption="404" title={strings.notFound.title} />
-      <Surface>
-        <Empty>{strings.notFound.detail}</Empty>
-      </Surface>
-    </>
+    <Card alignItems="center">
+      <Empty>{strings.notFound.detail}</Empty>
+      <ButtonLink to="/">{strings.nav.overview}</ButtonLink>
+    </Card>
   );
 }

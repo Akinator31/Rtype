@@ -1,16 +1,13 @@
-// The feed of events of the design (N6, node 44:37): one line per event, its subject and object lit, its
-// icon by tone, fading from 100 % to 22 % with age.
+// The feed of events of the design (the card "Direct" of the overview, node 146:143): one line per event, its
+// subject and object lit, its icon by tone, fading with its rank.
 
 import { Box, Flex, Image, Text } from '@chakra-ui/react';
 import type { ReactNode } from 'react';
 
-import alertIcon from '../assets/icons/alert.svg';
-import bonusIcon from '../assets/icons/bonus.svg';
-import infoIcon from '../assets/icons/info.svg';
 import { fade } from '../format';
 import type { Tone } from '../live/state';
-
-const toneIcons: Record<Tone, string> = { info: infoIcon, bonus: bonusIcon, alert: alertIcon };
+import { alertGlow, glow } from '../theme/system';
+import { toneIcons } from './toneIcons';
 
 /** The icon of a tone, 11 px, its glow drawn in the room its SVG keeps around it. */
 export function ToneIcon({ tone }: { tone: Tone }) {
@@ -42,8 +39,7 @@ export interface EventLineProps {
 }
 
 export function EventLine({ tone, subject, verb, object, lead, opacity = 1 }: EventLineProps) {
-  const lit = tone === 'alert' ? 'alert' : 'fg';
-  const glow = tone === 'alert' ? '0 0 8px rgba(232,114,110,0.5)' : '0 0 8px rgba(255,255,255,0.5)';
+  const alert = tone === 'alert';
   return (
     <Flex gap="8px" align="center" opacity={opacity} minW={0} data-tone={tone}>
       {lead}
@@ -52,8 +48,8 @@ export function EventLine({ tone, subject, verb, object, lead, opacity = 1 }: Ev
         fontSize="9px"
         letterSpacing="1px"
         textTransform="uppercase"
-        color={lit}
-        textShadow={glow}
+        color={alert ? 'alert' : 'fg'}
+        textShadow={alert ? alertGlow(0.5) : glow(0.5)}
         whiteSpace="nowrap"
       >
         {subject}
@@ -81,8 +77,8 @@ export interface FeedItem extends EventLineProps {
   key: number | string;
 }
 
-/** Lines stacked to the right, the newest on top, fading with their rank. */
-export function EventFeed({ items, empty }: { items: FeedItem[]; empty: string }) {
+/** Lines stacked, the newest on top, fading with their rank. */
+export function EventFeed({ items, empty, label }: { items: FeedItem[]; empty: string; label?: string }) {
   if (items.length === 0) {
     return (
       <Text color="fg.subtle" fontSize="10px">
@@ -91,7 +87,7 @@ export function EventFeed({ items, empty }: { items: FeedItem[]; empty: string }
     );
   }
   return (
-    <Flex direction="column" align="flex-end" gap="10px" role="log" aria-live="polite">
+    <Flex direction="column" gap="14px" role="log" aria-live="polite" aria-label={label} minW={0}>
       {items.map(({ key, ...line }, rank) => (
         <EventLine key={key} {...line} opacity={fade(rank)} />
       ))}

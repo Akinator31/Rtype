@@ -1,11 +1,14 @@
-import type { RouteObject } from 'react-router';
+import { Navigate, type RouteObject } from 'react-router';
 
-import { Actions } from './pages/Actions';
+import { Bans } from './pages/Bans';
 import { GamePage } from './pages/GamePage';
-import { NotFound } from './pages/NotFound';
 import { Games } from './pages/Games';
+import { History } from './pages/History';
+import { Messages } from './pages/Messages';
+import { NotFound } from './pages/NotFound';
 import { Overview } from './pages/Overview';
 import { Players } from './pages/Players';
+import { Settings } from './pages/Settings';
 import { Shell } from './Shell';
 
 /** The pages of the panel; the master serves index.html for each of their addresses. */
@@ -18,7 +21,12 @@ export const routes: RouteObject[] = [
       { path: 'games', element: <Games /> },
       { path: 'games/:id', element: <GamePage /> },
       { path: 'players', element: <Players /> },
-      { path: 'actions', element: <Actions /> },
+      { path: 'bans', element: <Bans /> },
+      { path: 'messages', element: <Messages /> },
+      { path: 'history', element: <History /> },
+      // The record had this address before the history
+      { path: 'actions', element: <Navigate to="/history" replace /> },
+      { path: 'settings', element: <Settings /> },
       { path: '*', element: <NotFound /> },
     ],
   },

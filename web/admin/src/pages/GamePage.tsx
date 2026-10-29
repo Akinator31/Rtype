@@ -1,139 +1,224 @@
-// One game, live: its players, their scores and latency, its wave; end it, or message its players.
+// One game, live (node 147:432): its wave and its time of play; its pilots with their address,
+// score, state and latency; a message to its players; its own events. End it, remove a pilot, ban its address.
 
-import { Flex, Grid, Link as ChakraLink, Table, Text } from '@chakra-ui/react';
-import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Box, Flex, Grid, Table, Text } from '@chakra-ui/react';
+import type { FormEvent } from 'react';
+import { useParams } from 'react-router';
 
-import { EndGameDialog, KickDialog, MessageDialog } from '../components/ActionDialogs';
-import { Banner } from '../components/Banner';
-import { FlareButton } from '../components/Flare';
-import { Gauge } from '../components/Gauge';
-import { Empty, Field, PageHeader, Surface } from '../components/Layout';
-import { dateTime, duration, score } from '../format';
+import type { Game, GamePlayer, Player } from '../api/types';
+import { useActions } from '../components/useActions';
+import { AlertStrip } from '../components/AlertStrip';
+import { Badge, Button, ButtonLink, RowAction } from '../components/Controls';
+import { EventFeed } from '../components/EventFeed';
+import { Card, Empty } from '../components/Layout';
+import { usePageTitle } from '../components/pageTitle';
+import { MessageField } from '../components/MessageField';
+import { useSendMessage } from '../components/useSendMessage';
+import { duration, score, tenths, wave } from '../format';
 import { useLive } from '../live/context';
 import { strings } from '../strings';
+import { glow } from '../theme/system';
 import { useNow } from '../useNow';
-import { GameStatus } from './Games';
+import { gameRef } from '../records';
+import { GameState } from './Overview';
 
-type Dialog = { kind: 'end' } | { kind: 'message' } | { kind: 'kick'; player: { id: number; name: string } };
+/** The latency of a pilot: four bars lit by how good it is, then its milliseconds. */
+function Latency({ value }: { value: number | null }) {
+  if (value === null) {
+    return <>{strings.game.notMeasured}</>;
+  }
+  const lit = value < 40 ? 4 : value < 80 ? 3 : value < 150 ? 2 : 1;
+  return (
+    <Flex align="center" gap="8px">
+      <Flex align="flex-end" gap="1.5px" h="9px" aria-hidden>
+        {[3, 5, 7, 9].map((height, index) => (
+          <Box key={height} w="2px" h={`${height}px`} bg={index < lit ? 'fg' : 'edge'} />
+        ))}
+      </Flex>
+      <Text as="span" textStyle="number" color="fg">
+        {value} ms
+      </Text>
+    </Flex>
+  );
+}
+
+function PilotState({ pilot }: { pilot: GamePlayer }) {
+  if (pilot.alive === null) return <Badge tone="neutral">{strings.game.joining}</Badge>;
+  return pilot.alive ? (
+    <Badge tone="active">{strings.game.alive}</Badge>
+  ) : (
+    <Badge tone="muted">{strings.game.destroyed}</Badge>
+  );
+}
+
+function Figure({ label, value }: { label: string; value: string }) {
+  return (
+    <Flex direction="column" gap="6px">
+      <Text textStyle="label" color="fg.subtle">
+        {label}
+      </Text>
+      <Text
+        fontFamily="heading"
+        fontSize="18px"
+        letterSpacing="1px"
+        textTransform="uppercase"
+        textShadow={glow(0.4)}
+      >
+        {value}
+      </Text>
+    </Flex>
+  );
+}
+
+function Pilots({
+  game,
+  players,
+  actions,
+}: {
+  game: Game;
+  players: Player[];
+  actions: ReturnType<typeof useActions>;
+}) {
+  const t = strings.game;
+  return (
+    <Card title={t.pilots}>
+      {game.players.length === 0 ? (
+        <Empty>{t.noPilot}</Empty>
+      ) : (
+        <Table.ScrollArea>
+          <Table.Root aria-label={t.pilots}>
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeader>{t.pilot}</Table.ColumnHeader>
+                <Table.ColumnHeader>{t.address}</Table.ColumnHeader>
+                <Table.ColumnHeader>{t.score}</Table.ColumnHeader>
+                <Table.ColumnHeader>{t.state}</Table.ColumnHeader>
+                <Table.ColumnHeader>{t.latency}</Table.ColumnHeader>
+                <Table.ColumnHeader />
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {game.players.map((pilot) => {
+                const player = players.find((candidate) => candidate.id === pilot.id);
+                return (
+                  <Table.Row key={pilot.id} data-testid={`pilot-${pilot.id}`}>
+                    <Table.Cell textStyle="name">{pilot.name}</Table.Cell>
+                    <Table.Cell>{player?.address ?? strings.none}</Table.Cell>
+                    <Table.Cell textStyle="number" color="fg" textShadow={glow(0.35)}>
+                      {pilot.score === null ? (
+                        <Text as="span" textStyle="body" color="fg.muted" textShadow="none">
+                          {t.notConnected}
+                        </Text>
+                      ) : (
+                        score(pilot.score)
+                      )}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <PilotState pilot={pilot} />
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Latency value={pilot.latency} />
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Flex justify="flex-end" gap="10px">
+                        <RowAction
+                          onClick={() => actions.kick(pilot)}
+                          aria-label={`${t.remove} ${pilot.name}`}
+                        >
+                          {t.remove}
+                        </RowAction>
+                        {player !== undefined && (
+                          <RowAction
+                            tone="alert"
+                            onClick={() => actions.ban(player.address)}
+                            aria-label={`${t.banAddress} ${player.address}`}
+                          >
+                            {t.banAddress}
+                          </RowAction>
+                        )}
+                      </Flex>
+                    </Table.Cell>
+                  </Table.Row>
+                );
+              })}
+            </Table.Body>
+          </Table.Root>
+        </Table.ScrollArea>
+      )}
+    </Card>
+  );
+}
+
+function MessageCard({ game }: { game: Game }) {
+  const message = useSendMessage(game);
+  const t = strings.game;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void message.send();
+  };
+  return (
+    <Card title={t.messageTitle} as="form" onSubmit={submit} gap="16px">
+      <MessageField value={message.text} onChange={message.setText} />
+      <Flex>
+        <Button type="submit" variant="primary" disabled={!message.ready}>
+          {strings.messages.send(game.players.length)}
+        </Button>
+      </Flex>
+    </Card>
+  );
+}
 
 export function GamePage() {
   const { id } = useParams();
-  const { games } = useLive();
+  const { games, players, feed } = useLive();
   const now = useNow();
-  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const actions = useActions();
   const t = strings.game;
   const game = games.find((candidate) => String(candidate.id) === id);
-
-  const back = (
-    <ChakraLink asChild textStyle="caption" color="fg.muted" _hover={{ color: 'fg' }}>
-      <Link to="/games">← {t.back}</Link>
-    </ChakraLink>
-  );
+  usePageTitle(game === undefined ? `#${id ?? ''}` : `${game.name} · #${game.id}`);
 
   if (game === undefined) {
     return (
-      <>
-        <PageHeader caption={t.caption} title={id === undefined ? '—' : `#${id}`} />
-        <Surface>
-          <Empty>{t.notFound}</Empty>
-          <Flex justify="center">{back}</Flex>
-        </Surface>
-      </>
+      <Card>
+        <Empty>{t.notFound}</Empty>
+        <Flex justify="center">
+          <ButtonLink to="/games">{t.back}</ButtonLink>
+        </Flex>
+      </Card>
     );
   }
 
+  const events = feed.filter((entry) => entry.gameId === game.id).slice(0, 8);
   return (
     <>
-      <Flex mb="16px">{back}</Flex>
-      <PageHeader
-        caption={`${t.caption} ${game.id}`}
-        title={game.name}
-        actions={
-          <>
-            <FlareButton onClick={() => setDialog({ kind: 'message' })}>{t.message}</FlareButton>
-            <FlareButton tone="alert" onClick={() => setDialog({ kind: 'end' })}>
-              {t.end}
-            </FlareButton>
-          </>
-        }
-      />
       {game.stale && (
-        <Flex mb="16px">
-          <Banner tone="alert" title={strings.games.stale} detail={t.staleWarning} />
-        </Flex>
+        <AlertStrip
+          title={strings.games.stuckTitle}
+          detail={strings.games.stuckDetail(`${game.name} #${game.id}`, tenths(game.statusAge))}
+        />
       )}
-      <Grid templateColumns={{ base: '1fr', lg: '1fr 2fr' }} gap="16px">
-        <Surface>
-          <Field label={strings.games.status}>
-            <GameStatus game={game} />
-          </Field>
-          <Field label={t.wave}>{game.wave ?? t.unknown}</Field>
-          <Field label={t.tick}>{game.tick ?? t.unknown}</Field>
-          <Field label={t.port}>{game.port}</Field>
-          <Field label={t.created}>{dateTime(game.createdAt)}</Field>
-          <Field label={strings.games.age}>{duration(now - game.createdAt)}</Field>
-          <Field label={t.statusAge}>{duration(game.statusAge)}</Field>
-          <Flex direction="column" gap="8px" mt="16px">
-            <Text textStyle="caption" color="fg.muted">
-              {t.seats} · {strings.of(game.players.length, game.maxPlayers)}
-            </Text>
-            <Gauge
-              value={game.players.length / game.maxPlayers}
-              label={t.seats}
-              valueText={strings.of(game.players.length, game.maxPlayers)}
-            />
+      <Card>
+        <Flex gap="36px" align="center" wrap="wrap">
+          <Figure label={t.wave} value={game.wave === null ? strings.none : wave(game.wave)} />
+          <Figure label={t.playing} value={duration(now - game.createdAt)} />
+          <Box flex="1 0 0" />
+          <Flex gap="8px">
+            <GameState game={game} />
+            <Badge tone="neutral">{t.seats(game.players.length, game.maxPlayers)}</Badge>
           </Flex>
-        </Surface>
-        <Surface title={t.players}>
-          {game.players.length === 0 ? (
-            <Empty>{strings.players.empty}</Empty>
-          ) : (
-            <Table.ScrollArea>
-              <Table.Root aria-label={t.players}>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeader>{strings.players.name}</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="right">{t.score}</Table.ColumnHeader>
-                    <Table.ColumnHeader>{t.alive}</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="right">{t.latency}</Table.ColumnHeader>
-                    <Table.ColumnHeader />
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {game.players.map((player) => (
-                    <Table.Row key={player.id}>
-                      <Table.Cell>{player.name}</Table.Cell>
-                      <Table.Cell textStyle="number" textAlign="right">
-                        {player.score === null ? t.unknown : score(player.score)}
-                      </Table.Cell>
-                      <Table.Cell color={player.alive === false ? 'alert' : undefined}>
-                        {player.alive === null ? t.unknown : player.alive ? t.yes : t.no}
-                      </Table.Cell>
-                      <Table.Cell textStyle="number" textAlign="right">
-                        {player.latency === null ? t.unknown : `${player.latency} ms`}
-                      </Table.Cell>
-                      <Table.Cell textAlign="right">
-                        <FlareButton
-                          size="sm"
-                          tone="alert"
-                          onClick={() => setDialog({ kind: 'kick', player })}
-                          aria-label={`${strings.players.remove} ${player.name}`}
-                        >
-                          {strings.players.remove}
-                        </FlareButton>
-                      </Table.Cell>
-                    </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table.Root>
-            </Table.ScrollArea>
-          )}
-        </Surface>
+          <Button variant="danger" onClick={() => actions.end(gameRef(game))}>
+            {t.end}
+          </Button>
+        </Flex>
+      </Card>
+      <Pilots game={game} players={players} actions={actions} />
+      <Grid templateColumns={{ base: '1fr', xl: '1fr 470px' }} gap="20px">
+        <MessageCard game={game} />
+        <Card title={t.events} gap="14px">
+          <EventFeed items={events} empty={t.noEvent} label={t.events} />
+        </Card>
       </Grid>
-      {dialog?.kind === 'end' && <EndGameDialog game={game} onClose={() => setDialog(null)} />}
-      {dialog?.kind === 'message' && <MessageDialog game={game} onClose={() => setDialog(null)} />}
-      {dialog?.kind === 'kick' && <KickDialog player={dialog.player} onClose={() => setDialog(null)} />}
+      {actions.dialogs}
     </>
   );
 }

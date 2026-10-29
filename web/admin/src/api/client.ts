@@ -97,3 +97,10 @@ export const api = {
   unban: (address: string, reason: string) =>
     request<{ address: string }>('POST', '/api/bans/lift', { address, reason }),
 };
+
+/** Trades a local token for a session: the master sets its cookie, then sends the browser to the panel. */
+export const session = {
+  open(token: string): void {
+    window.location.assign(`/?token=${encodeURIComponent(token)}`);
+  },
+};

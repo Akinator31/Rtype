@@ -53,9 +53,18 @@ export function fakeStore(options: { hasSession?: () => Promise<boolean> } = {})
   });
 }
 
-/** Renders the panel at `path`, its WebSocket opened and sent this snapshot and these events. */
-export function renderPanel(path: string, events: LiveEvent[] = []) {
-  const store = fakeStore();
+/**
+ * Renders the panel at `path`, its WebSocket opened and sent this snapshot and these events; or refused, as
+ * the master refuses a page without a session, when `signedOut`.
+ */
+export function renderPanel(
+  path: string,
+  events: LiveEvent[] = [],
+  options: { signedOut?: boolean; hasSession?: () => Promise<boolean> } = {},
+) {
+  const store = fakeStore({
+    hasSession: options.hasSession ?? (() => Promise.resolve(options.signedOut !== true)),
+  });
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const view = render(
     <ChakraProvider value={system}>
@@ -66,6 +75,10 @@ export function renderPanel(path: string, events: LiveEvent[] = []) {
   );
   const socket = FakeSocket.last();
   act(() => {
+    if (options.signedOut === true) {
+      socket.close();
+      return;
+    }
     socket.open();
     for (const event of events) socket.send(event);
   });

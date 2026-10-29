@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 
 import { resetSession } from '../api/client';
 import { toaster } from '../components/notify';
+import { resetPreferences } from '../preferences';
 import { sent, server } from './server';
 
 // What jsdom lacks and Chakra UI asks for
@@ -34,5 +35,6 @@ afterEach(() => {
   server.resetHandlers();
   sent.length = 0;
   resetSession();
+  resetPreferences();
 });
 afterAll(() => server.close());

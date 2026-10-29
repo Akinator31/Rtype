@@ -1,84 +1,207 @@
-// The actions of the administration (docs/protocol/admin-api.md, 4), each behind its dialog: remove a player,
-// ban an address, end a game, send a message. The server records each one; the panel tells the host.
+// The actions of the administration (docs/protocol/admin-api.md, 4), each behind its window: remove a player,
+// ban an address, lift a ban, end a game. The server records each one; a toast tells the host.
 
-import { Field, Input, NativeSelect } from '@chakra-ui/react';
+import { Box, Field, Flex, Input, Text } from '@chakra-ui/react';
 import { useState } from 'react';
 
+import { ban, end, kick, type GameRef, type PlayerRef } from '../actions';
 import { api } from '../api/client';
+import { dayTime, shortDuration } from '../format';
+import { useLive } from '../live/context';
 import { strings } from '../strings';
-import { byteLength, isValidMessage, MaxTextBytes } from '../validation';
+import { alertGlow, glow } from '../theme/system';
+import { useNow } from '../useNow';
+import { byteLength, isAddress, isValidBanDuration, MaxTextBytes, NearLimit } from '../validation';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Chip } from './Controls';
 import { notify } from './notify';
 
-function ReasonField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const tooLong = byteLength(value) > MaxTextBytes;
+/** The field of an optional reason; its bytes counted once it nears the most the server takes. */
+export function ReasonField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const used = byteLength(value);
+  const tooLong = used > MaxTextBytes;
   return (
     <Field.Root invalid={tooLong}>
-      <Field.Label textStyle="caption" color="fg.muted">
-        {strings.dialog.reason}
-      </Field.Label>
-      <Input value={value} onChange={(event) => onChange(event.target.value)} autoComplete="off" />
-      <Field.HelperText color="fg.subtle">{strings.dialog.reasonHint}</Field.HelperText>
+      <Field.Label>{strings.dialog.reason}</Field.Label>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={strings.dialog.reasonHint}
+        autoComplete="off"
+      />
+      {tooLong ? (
+        <Field.ErrorText>{strings.dialog.bytes(used)}</Field.ErrorText>
+      ) : (
+        used > NearLimit && <Field.HelperText>{strings.dialog.bytes(used)}</Field.HelperText>
+      )}
     </Field.Root>
   );
 }
 
-export function KickDialog({
-  player,
-  onClose,
-}: {
-  player: { id: number; name: string };
-  onClose: () => void;
-}) {
+const fits = (reason: string) => byteLength(reason) <= MaxTextBytes;
+
+export function KickDialog({ player, onClose }: { player: PlayerRef; onClose: () => void }) {
   const [reason, setReason] = useState('');
   return (
     <ConfirmDialog
-      title={strings.dialog.kickTitle(player.name)}
-      body={strings.dialog.kickBody}
-      confirmLabel={strings.players.remove}
-      ready={byteLength(reason) <= MaxTextBytes}
+      title={strings.dialog.kickTitle}
+      body={strings.dialog.kickBody(`${player.name} #${player.id}`)}
+      confirmLabel={strings.dialog.kickConfirm}
+      ready={fits(reason)}
       onClose={onClose}
-      onConfirm={async () => {
-        await api.kick(player.id, reason.trim());
-        notify('alert', strings.notify.kicked(player.name), reason.trim() || undefined);
-      }}
+      onConfirm={() => kick(player, reason)}
     >
       <ReasonField value={reason} onChange={setReason} />
     </ConfirmDialog>
   );
 }
 
-export function BanDialog({ address, onClose }: { address: string; onClose: () => void }) {
+export function EndGameDialog({ game, onClose }: { game: GameRef; onClose: () => void }) {
   const [reason, setReason] = useState('');
-  const [duration, setDuration] = useState(strings.dialog.durations[0]?.seconds ?? 3600);
   return (
     <ConfirmDialog
-      title={strings.dialog.banTitle(address)}
-      body={strings.dialog.banBody}
-      confirmLabel={strings.players.ban}
-      ready={byteLength(reason) <= MaxTextBytes}
+      title={strings.dialog.endTitle}
+      body={strings.dialog.endBody(`${game.name} #${game.id}`, game.players)}
+      confirmLabel={strings.dialog.endConfirm}
+      ready={fits(reason)}
       onClose={onClose}
-      onConfirm={async () => {
-        const banned = await api.ban(address, duration, reason.trim());
-        notify('alert', strings.notify.banned(address), strings.notify.bannedDetail(banned.removed));
-      }}
+      onConfirm={() => end(game, reason)}
     >
-      <Field.Root>
-        <Field.Label textStyle="caption" color="fg.muted">
-          {strings.dialog.duration}
-        </Field.Label>
-        <NativeSelect.Root>
-          <NativeSelect.Field value={duration} onChange={(event) => setDuration(Number(event.target.value))}>
-            {strings.dialog.durations.map((choice) => (
-              <option key={choice.seconds} value={choice.seconds}>
-                {choice.label}
-              </option>
-            ))}
-          </NativeSelect.Field>
-          <NativeSelect.Indicator />
-        </NativeSelect.Root>
-      </Field.Root>
       <ReasonField value={reason} onChange={setReason} />
+    </ConfirmDialog>
+  );
+}
+
+/** The durations of a ban to choose from, then any other in seconds. */
+export function DurationField({
+  seconds,
+  onChange,
+  other,
+  onOther,
+}: {
+  seconds: number;
+  onChange: (seconds: number) => void;
+  other: boolean;
+  onOther: (other: boolean) => void;
+}) {
+  const valid = isValidBanDuration(seconds);
+  return (
+    <>
+      <Field.Root>
+        <Field.Label>{strings.dialog.duration}</Field.Label>
+        <Flex gap="8px" wrap="wrap" role="group" aria-label={strings.dialog.duration}>
+          {strings.dialog.durations.map((choice) => (
+            <Chip
+              key={choice.seconds}
+              pressed={!other && seconds === choice.seconds}
+              onClick={() => {
+                onOther(false);
+                onChange(choice.seconds);
+              }}
+            >
+              {choice.label}
+            </Chip>
+          ))}
+          <Chip pressed={other} tone="muted" onClick={() => onOther(true)}>
+            {strings.dialog.other}
+          </Chip>
+        </Flex>
+      </Field.Root>
+      {other && (
+        <Field.Root invalid={!valid}>
+          <Field.Label>{strings.bans.formSeconds}</Field.Label>
+          <Input
+            inputMode="numeric"
+            value={Number.isNaN(seconds) ? '' : String(seconds)}
+            onChange={(event) =>
+              onChange(event.target.value === '' ? Number.NaN : Number(event.target.value))
+            }
+            autoComplete="off"
+          />
+          {!valid && <Field.ErrorText>{strings.bans.formSecondsInvalid}</Field.ErrorText>}
+        </Field.Root>
+      )}
+    </>
+  );
+}
+
+/** The pilots a ban of this address removes, red: who they are, and their game. */
+export function RemovedPilots({ address }: { address: string }) {
+  const { players, games } = useLive();
+  const removed = players.filter((player) => player.address === address);
+  if (removed.length === 0) {
+    return (
+      <Text textStyle="hint" color="fg.subtle">
+        {strings.dialog.banNoneRemoved}
+      </Text>
+    );
+  }
+  return (
+    <Flex
+      direction="column"
+      gap="10px"
+      px="16px"
+      py="14px"
+      borderWidth="1px"
+      borderColor="rgba(232,114,110,0.35)"
+      borderRadius="l2"
+      bg="rgba(232,114,110,0.05)"
+      data-testid="removed-pilots"
+    >
+      <Text
+        fontFamily="heading"
+        fontSize="10px"
+        letterSpacing="2px"
+        textTransform="uppercase"
+        color="alert"
+        textShadow={alertGlow(0.45)}
+      >
+        {strings.dialog.banRemoved(removed.length)}
+      </Text>
+      {removed.map((player) => {
+        const game = games.find((candidate) => candidate.id === player.gameId);
+        return (
+          <Flex key={player.id} align="center" gap="10px">
+            <Text textStyle="name" textShadow={glow(0.35)}>
+              {player.name} #{player.id}
+            </Text>
+            <Box flex="1 0 0" />
+            <Text textStyle="hint" color="fg.muted" textTransform="uppercase">
+              {player.gameId === null ? strings.players.lobby : `${game?.name ?? ''} #${player.gameId}`}
+            </Text>
+          </Flex>
+        );
+      })}
+    </Flex>
+  );
+}
+
+export function BanDialog({ address: initial, onClose }: { address: string; onClose: () => void }) {
+  const [address, setAddress] = useState(initial);
+  const [reason, setReason] = useState('');
+  const [seconds, setSeconds] = useState(3600);
+  const [other, setOther] = useState(false);
+  const now = useNow();
+  const validAddress = isAddress(address.trim());
+  const valid = validAddress && isValidBanDuration(seconds) && fits(reason);
+  return (
+    <ConfirmDialog
+      title={strings.dialog.banTitle}
+      body={strings.dialog.banBody}
+      confirmLabel={strings.dialog.banConfirm(isValidBanDuration(seconds) ? shortDuration(seconds) : '')}
+      ready={valid}
+      note={isValidBanDuration(seconds) ? strings.dialog.banEnds(dayTime(now + seconds * 1000)) : undefined}
+      onClose={onClose}
+      onConfirm={() => ban(address.trim(), seconds, reason)}
+    >
+      <Field.Root invalid={!validAddress}>
+        <Field.Label>{strings.dialog.banAddress}</Field.Label>
+        <Input value={address} onChange={(event) => setAddress(event.target.value)} autoComplete="off" />
+        {!validAddress && <Field.ErrorText>{strings.bans.formAddressInvalid}</Field.ErrorText>}
+      </Field.Root>
+      <DurationField seconds={seconds} onChange={setSeconds} other={other} onOther={setOther} />
+      <ReasonField value={reason} onChange={setReason} />
+      {validAddress && <RemovedPilots address={address.trim()} />}
     </ConfirmDialog>
   );
 }
@@ -87,77 +210,18 @@ export function UnbanDialog({ address, onClose }: { address: string; onClose: ()
   const [reason, setReason] = useState('');
   return (
     <ConfirmDialog
-      title={strings.dialog.unbanTitle(address)}
-      body={strings.dialog.unbanBody}
+      title={strings.dialog.unbanTitle}
+      body={strings.dialog.unbanBody(address)}
       confirmLabel={strings.dialog.unbanConfirm}
-      tone="light"
-      ready={byteLength(reason) <= MaxTextBytes}
+      tone="info"
+      ready={fits(reason)}
       onClose={onClose}
       onConfirm={async () => {
         await api.unban(address, reason.trim());
-        notify('bonus', strings.notify.unbanned(address), reason.trim() || undefined);
+        notify('bonus', strings.notify.unbanned, strings.notify.unbannedDetail(address));
       }}
     >
       <ReasonField value={reason} onChange={setReason} />
-    </ConfirmDialog>
-  );
-}
-
-export function EndGameDialog({
-  game,
-  onClose,
-}: {
-  game: { id: number; name: string };
-  onClose: () => void;
-}) {
-  const [reason, setReason] = useState('');
-  return (
-    <ConfirmDialog
-      title={strings.dialog.endTitle(game.name)}
-      body={strings.dialog.endBody}
-      confirmLabel={strings.game.end}
-      ready={byteLength(reason) <= MaxTextBytes}
-      onClose={onClose}
-      onConfirm={async () => {
-        await api.endGame(game.id, reason.trim());
-        notify('alert', strings.notify.ended(game.name), reason.trim() || undefined);
-      }}
-    >
-      <ReasonField value={reason} onChange={setReason} />
-    </ConfirmDialog>
-  );
-}
-
-/** A message to a game, or to every player when `game` is null. */
-export function MessageDialog({
-  game,
-  onClose,
-}: {
-  game: { id: number; name: string } | null;
-  onClose: () => void;
-}) {
-  const [text, setText] = useState('');
-  const valid = isValidMessage(text);
-  return (
-    <ConfirmDialog
-      title={strings.dialog.messageTitle(game?.name ?? strings.dialog.everyone)}
-      body={strings.dialog.messageBody}
-      confirmLabel={strings.dialog.confirm}
-      tone="light"
-      ready={valid}
-      onClose={onClose}
-      onConfirm={async () => {
-        const sent = await api.message(text.trim(), game?.id ?? null);
-        notify('bonus', strings.notify.sent, strings.notify.sentDetail(sent.recipients));
-      }}
-    >
-      <Field.Root invalid={text !== '' && !valid}>
-        <Field.Label textStyle="caption" color="fg.muted">
-          {strings.dialog.text}
-        </Field.Label>
-        <Input value={text} onChange={(event) => setText(event.target.value)} autoComplete="off" autoFocus />
-        <Field.HelperText color="fg.subtle">{strings.dialog.textHint}</Field.HelperText>
-      </Field.Root>
     </ConfirmDialog>
   );
 }
