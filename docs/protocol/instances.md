@@ -4,13 +4,14 @@ The local connection between the master and the game processes it starts
 ([ADR 0013](../decisions/0013-one-process-per-game.md)). Clients never see this protocol. Conventions and types
 are defined in the [overview](index.md#2-conventions).
 
-This page describes **version 2**. Master and instances come from the same build, so a master refuses an
+This page describes **version 3**. Master and instances come from the same build, so a master refuses an
 `INSTANCE_HELLO` of another version.
 
 | Version | Change |
 |---|---|
 | 1 | First version |
 | 2 | `GAME_STATUS`: the instance tells the master where its game stands, every second |
+| 3 | The actions of the administrators ([administration](../architecture/administration.md)): `REMOVE_PLAYER` reason `KICKED`, `SHUTDOWN` reason `ENDED_BY_ADMIN` |
 
 ## 1. Starting an instance
 
@@ -54,7 +55,7 @@ sequenceDiagram
         I->>M: GAME_STATUS (tick, wave, players)
     end
     Note over M,I: later, one of:
-    M->>I: REMOVE_PLAYER (player id): the player left through the lobby
+    M->>I: REMOVE_PLAYER (player id): the player left through the lobby, or was removed by an administrator
     I->>M: PLAYER_DISCONNECTED (player id): the player timed out
     I->>M: GAME_OVER (scores)
     Note over I: exits
@@ -71,6 +72,7 @@ its players and reports their connections and the state of the game until the ga
 | No `READY` within 10 s of the start | The master kills the process and answers the client `ERROR (GAME_START_FAILED)` |
 | The UDP port cannot be opened | The instance exits with a non-zero code; the master answers `ERROR (GAME_START_FAILED)` |
 | The game has no player left | The master sends `SHUTDOWN (EMPTY)` |
+| An administrator ends the game | The master sends `SHUTDOWN (ENDED_BY_ADMIN)`, and `LEFT_GAME (ENDED_BY_ADMIN)` to its players |
 | The instance exits, or the connection closes, without `GAME_OVER` | The master considers the game crashed: it sends `LEFT_GAME (GAME_CRASHED)` to its players and frees the port |
 | The connection to the master closes | The instance sends `DISCONNECT (SHUTDOWN)` to its clients and exits |
 
@@ -219,15 +221,16 @@ it forgets the session and sends `PLAYER_DISCONNECTED (TIMED_OUT)`.
 | | |
 |---|---|
 | **Direction** | Master → Instance |
-| **Sent when** | A player sends `LEAVE_GAME`, or its lobby connection closes. |
+| **Sent when** | A player sends `LEAVE_GAME`, its lobby connection closes, or an administrator removes it. |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Player id | `u32` | |
-| 4 | Reason | `u8` | `LEFT` (0): `LEAVE_GAME`; `LOBBY_CLOSED` (1): lobby connection closed |
+| 4 | Reason | `u8` | `LEFT` (0): `LEAVE_GAME`; `LOBBY_CLOSED` (1): lobby connection closed; `KICKED` (2): removed by an administrator (version 3) |
 
 **Receiver behaviour:** the instance sends `DISCONNECT (QUIT)` to the player if connected, closes its session,
-and sends `PLAYER_LEFT` to the others with the reason `QUIT` or `LOBBY_CLOSED`. It does not answer
+and sends `PLAYER_LEFT` to the others with the reason `QUIT` (for `LEFT` and `KICKED`) or `LOBBY_CLOSED`: the
+game protocol has no reason for a removal, which the lobby tells the player itself. It does not answer
 `PLAYER_DISCONNECTED`: the master already knows.
 
 #### SHUTDOWN (`0x84`)
@@ -235,10 +238,10 @@ and sends `PLAYER_LEFT` to the others with the reason `QUIT` or `LOBBY_CLOSED`. 
 | | |
 |---|---|
 | **Direction** | Master → Instance |
-| **Sent when** | The game has no player left, or the master stops. |
+| **Sent when** | The game has no player left, the master stops, or an administrator ends the game. |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Reason | `u8` | `EMPTY` (0) or `MASTER_STOPPING` (1) |
+| 0 | Reason | `u8` | `EMPTY` (0), `MASTER_STOPPING` (1) or `ENDED_BY_ADMIN` (2, version 3) |
 
 **Receiver behaviour:** the instance sends `DISCONNECT (SHUTDOWN)` to its clients and exits with code 0.

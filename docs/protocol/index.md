@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Version 1, specified, not yet implemented |
-| **Version** | 1 |
+| **Version** | Lobby 2, game 1, instances 3 ([section 4](#4-versioning)) |
 | **Transport** | TCP with TLS 1.3 for the lobby, encrypted UDP for the games ([ADR 0012](../decisions/0012-tcp-lobby-udp-game.md), [ADR 0014](../decisions/0014-encryption.md)) |
 
 ## 1. Introduction
@@ -12,7 +12,7 @@ This specification defines the binary protocol between `r-type_client` and `r-ty
 master server and its game instances. Anyone MUST be able to write a compatible client or server by reading
 it only.
 
-It is split into four pages:
+It is split into five pages:
 
 | Page | Content |
 |---|---|
@@ -20,6 +20,7 @@ It is split into four pages:
 | [Lobby (TCP)](lobby.md) | The connection between a client and the master: TLS, framing, lobby messages |
 | [Game (UDP)](game.md) | The datagrams between a client and its game: encryption, reliability, sessions, inputs and snapshots |
 | [Master and instances](instances.md) | The local connection between the master and the game processes it starts |
+| [Administration API (HTTP)](admin-api.md) | The JSON API and the WebSocket through which the panel sees a server and acts on it |
 
 Version 1 defines how to reach a game, how to exchange messages with it securely and reliably, and the
 messages of the game itself: the players' inputs, the snapshots of the world and the events
@@ -97,8 +98,10 @@ keys of the game. It then talks to the game directly, over encrypted datagrams.*
 
 ## 4. Versioning
 
-The protocol version is a `u16`, currently **1**. It is sent by the client in `HELLO` and in the header of every
-datagram (as a `u8`). The instances have a version of their own, sent in `INSTANCE_HELLO`, currently **2**
+The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **2** (version 2 adds the
+messages of the administrators, [lobby](lobby.md)). The game protocol has its own, in the header of every
+datagram (as a `u8`), currently **1**. The instances have a version of their own, sent in `INSTANCE_HELLO`,
+currently **3**
 ([master and instances](instances.md)): master and instances come from the same build, so it changes without
 the clients.
 

@@ -3,6 +3,14 @@
 The connection between a client and the master: TLS, framing, and the messages to list, create, join and
 leave games. Conventions and types are defined in the [overview](index.md#2-conventions).
 
+This page describes **version 2**. The client and the master ship together: a master refuses a `HELLO` of
+another version with `UNSUPPORTED_VERSION`, and the client tells the player to update.
+
+| Version | Change |
+|---|---|
+| 1 | First version |
+| 2 | The administrators of the server ([administration API](admin-api.md)): `SERVER_MESSAGE`; `LEFT_GAME` reasons `KICKED` and `ENDED_BY_ADMIN`; `ERROR` codes `KICKED` and `BANNED`, sent before the master closes the connection |
+
 ## 1. Connection
 
 1. The client opens a TCP connection to the master, on port 4242 by default.
@@ -84,12 +92,12 @@ TCP carries a stream of bytes with no boundaries. Inside TLS, each message is a 
   a size of 0 or above 16382, without reading the rest.
 - Types `0x01`–`0x7F` are sent by the client, types `0x80`–`0xFF` by the master.
 
-Example: `HELLO` with version 1 and the name `"Pavel"`:
+Example: `HELLO` with version 2 and the name `"Pavel"`:
 
 ```
 00 09   size: 9 bytes follow
 01      type: HELLO
-00 01   version: 1
+00 02   version: 2
 05 50 61 76 65 6C   name: "Pavel"
 ```
 
@@ -99,7 +107,9 @@ Example: `HELLO` with version 1 and the name `"Pavel"`:
 - The master answers requests **in the order it received them**. A client may send several requests without
   waiting, and match the replies in order.
 - The master may also send **notifications** at any time, between replies: `LEFT_GAME` when the game ends or
-  crashes. A notification is never a reply.
+  crashes, or an administrator removes the player from it or ends it; `SERVER_MESSAGE`; and `ERROR` with the
+  request 0 and the code `KICKED` or `BANNED`, after which the master closes the connection. A notification is
+  never a reply.
 
 | Request | Reply |
 |---|---|
@@ -123,11 +133,12 @@ Example: `HELLO` with version 1 and the name `"Pavel"`:
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 1 |
+| 0 | Version | `u16` | Protocol version, 2 |
 | 2 | Name | `str8` | Name of the player, 1 to 16 bytes |
 
 **Receiver behaviour:** if the version is not supported, the master answers `ERROR (UNSUPPORTED_VERSION)`
-and closes the connection. If the name is empty, too long or invalid, it answers `ERROR (INVALID_NAME)`.
+and closes the connection. If the address of the client is banned, it answers `ERROR (BANNED)` and closes the
+connection. If the name is empty, too long or invalid, it answers `ERROR (INVALID_NAME)`.
 Otherwise it gives the player an id and answers `WELCOME`. Names do not have to be unique.
 
 #### LIST_GAMES (`0x02`)
@@ -269,9 +280,11 @@ secret: a client MUST NOT write them to its logs.
 | `GAME_OVER` | 1 | The game ended normally |
 | `GAME_CRASHED` | 2 | The game process stopped unexpectedly |
 | `TIMED_OUT` | 3 | The game received nothing from the client for 5 seconds |
+| `KICKED` | 4 | An administrator removed the player: `ERROR (KICKED)` follows, then the connection closes (version 2) |
+| `ENDED_BY_ADMIN` | 5 | An administrator ended the game (version 2) |
 
-**Receiver behaviour:** the client closes its UDP session and goes back to the lobby. For `GAME_CRASHED`, it
-tells the player that the game stopped.
+**Receiver behaviour:** the client closes its UDP session and goes back to the lobby. For `GAME_CRASHED`,
+`KICKED` and `ENDED_BY_ADMIN`, it tells the player why.
 
 #### PONG (`0x85`)
 
@@ -287,11 +300,11 @@ No payload.
 | | |
 |---|---|
 | **Direction** | Master → Client |
-| **Sent when** | Reply to a request that cannot be honoured. |
+| **Sent when** | Reply to a request that cannot be honoured; for `KICKED` and `BANNED`, a notification too. |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Request | `u8` | Type of the request that failed, 0 if it could not be read |
+| 0 | Request | `u8` | Type of the request that failed; 0 if it could not be read, or if the error answers no request |
 | 1 | Code | `u16` | See below |
 
 | Code | Value | Meaning | Connection |
@@ -308,13 +321,30 @@ No payload.
 | `NOT_IN_GAME` | 10 | `LEAVE_GAME` while not in a game | Kept |
 | `SERVER_FULL` | 11 | No more games can be created | Kept |
 | `GAME_START_FAILED` | 12 | The game process did not start | Kept |
+| `KICKED` | 13 | An administrator removed the player from the server. Sent without a request (request 0) | Closed after the error |
+| `BANNED` | 14 | The address of the client is banned for a time: the reply to `HELLO`, or sent without a request (request 0) when the ban comes while it is connected | Closed after the error |
 
 **Receiver behaviour:** the client shows a message matching the code. Unknown codes are shown as a generic
-error.
+error. An `ERROR` with the request 0 and the code `KICKED` or `BANNED` is not the reply to the request the
+client waits for: the connection closes after it.
+
+#### SERVER_MESSAGE (`0x87`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Notification: the administrators of the server send a message to the game of the player, or to every player (version 2). |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Text | `str8` | 1 to 200 bytes of text, without control characters |
+
+**Receiver behaviour:** the client shows the text to the player, as coming from the server. A message that
+does not fit the field is malformed.
 
 ## 6. When the connection closes
 
 - **The client closes it, or it times out:** the master removes the player from its game, if any. The game
   tells the other players ([game, `PLAYER_LEFT`](game.md#player_left-0x05)).
 - **The master closes it:** the client closes its UDP session, if any, and tells the player that the
-  connection to the server is lost.
+  connection to the server is lost, or, after `ERROR (KICKED)` or `ERROR (BANNED)`, why.
