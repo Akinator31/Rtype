@@ -68,6 +68,12 @@ void saveAddressBan(rtype::database::Database &database, const AddressBan &ban)
         soci::use(ban.actor);
 }
 
+void deleteAddressBan(rtype::database::Database &database, const rtype::network::Address &address)
+{
+    const std::string key = banKey(address).ip();
+    database.session() << "DELETE FROM address_bans WHERE address = :address", soci::use(key);
+}
+
 std::size_t purgeAddressBans(rtype::database::Database &database, std::chrono::system_clock::time_point now)
 {
     const long long at = unixMilliseconds(now);

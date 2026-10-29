@@ -747,6 +747,9 @@ struct WebServer::Impl {
                 }
                 ban(request, response);
             });
+        CROW_ROUTE(app, "/api/bans/lift")
+            .methods(crow::HTTPMethod::Post)(
+                [this](const crow::request &request, crow::response &response) { unban(request, response); });
         CROW_ROUTE(app, "/api/players/<uint>/kick")
             .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
                                                     std::uint64_t id) { kick(request, response, id); });
@@ -888,6 +891,34 @@ struct WebServer::Impl {
                        done["removed"] = static_cast<std::uint64_t>(removed);
                        reply(jsonOf(200, done));
                    });
+    }
+
+    void unban(const crow::request &request, crow::response &response)
+    {
+        if (!authorized(request, response, true)) {
+            return;
+        }
+        const auto read = body(request, false);
+        const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
+        const auto addressText = read ? textField(*read, "address", 64) : std::nullopt;
+        const auto address = addressText ? rtype::network::Address::parse(*addressText, 0) : std::nullopt;
+        if (!reason || !address) {
+            refuse(
+                response,
+                "the body is a JSON object with an IP address, and an optional reason of at most 200 bytes");
+            return;
+        }
+        administer(
+            request, response,
+            [address = *address, reason = *reason](Administration &administration, const Reply &reply) {
+                if (!administration.unban(address, reason, std::string(LocalActor))) {
+                    reply(error(404, "no ban of this address"));
+                    return;
+                }
+                crow::json::wvalue done;
+                done["address"] = banKey(address).ip();
+                reply(jsonOf(200, done));
+            });
     }
 
     /// `GET /api/events`: the WebSocket of the live events, a snapshot first.

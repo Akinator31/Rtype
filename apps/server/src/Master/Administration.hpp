@@ -172,6 +172,9 @@ public:
     /// @return The number of players removed.
     std::size_t ban(const rtype::network::Address &address, std::chrono::seconds duration,
                     const std::string &reason, const std::string &actor);
+    /// Lifts the ban of an address before it expires: the lobby welcomes it again.
+    /// @return False if no ban of this address runs.
+    bool unban(const rtype::network::Address &address, const std::string &reason, const std::string &actor);
 
     /// Calls `subscriber` at once with a snapshot, then with each event.
     /// @return What unsubscribe() takes.

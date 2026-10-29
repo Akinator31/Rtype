@@ -48,6 +48,11 @@ public:
          std::chrono::system_clock::time_point now = std::chrono::system_clock::now()) const;
     /// Adds a ban, or replaces the one of its address.
     void add(AddressBan ban);
+    /// Lifts the ban of an address before it expires.
+    /// @return The ban lifted; nothing if none ran at `now`.
+    std::optional<AddressBan>
+    remove(const rtype::network::Address &address,
+           std::chrono::system_clock::time_point now = std::chrono::system_clock::now());
     /// Forgets the bans expired at `now`.
     /// @return How many.
     std::size_t purge(std::chrono::system_clock::time_point now);
