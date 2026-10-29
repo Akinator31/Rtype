@@ -224,6 +224,27 @@ sounds play when the shot is drawn and when the ship disappears, about 100 ms af
 is not used yet; the destruction sound of `config/ships/` (`ShipSounds`) is not read by the client, which does not
 know which enemy a Bydo is.
 
+### Events
+
+The corner of the toasts (top right) tells the deaths of the game, as event lines (`engine::Engine::showToast()`
+with a subject, a message and an actor):
+
+| What | Line | Type |
+|---|---|---|
+| A Bydo shot down by the local player | `FLYER shot down by P1` | `Success` |
+| The ship of the local player shot down | `P1 was shot down` | `Error` |
+| The ship of an ally shot down | `P2 was shot down` | `Warning` |
+
+The kills of the allies are not told: four players would fill the corner. The players are named as in the HUD,
+`P1` to `P4`, and the Bydos by their kind (`event.flyer`, `event.shooter`, `event.tank`, `event.boss`).
+
+The snapshots do not tell who killed what. The game spends a shot of a player that hits (`DestroyCause::Killed`,
+in the same tick as the Bydo it kills), so the killer of a Bydo is the owner of the shot of a player killed with
+it nearest to it, kept in `Replicated::owner`. Two players killing two Bydos side by side in the same tick may
+swap their kills; a Bydo killed by no shot has no killer. The `GameSessionSystem` tells each ship killed while
+drawn, a Bydo or the ship of a player, to its kill handler (`setKillHandler()`, a `Kill`: its kind, its owner,
+its killer), when the game tells its destruction; `GameScenes` turns it into the line.
+
 ## Tests
 
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:
@@ -250,7 +271,9 @@ know which enemy a Bydo is.
   theirs, not the local one, and a heal fills it up again;
 - the sounds: a shot of a kind given a sound appears with its `SoundEffect`, its volume, and a pan on its side
   of the screen, the other entities with none; a ship killed gives its destruction sound to its impact, one
-  removed makes none.
+  removed makes none;
+- the kills: a Bydo killed is told with the owner of the shot of a player killed nearest to it, or no killer
+  without one, a shot or an entity removed is not told, and the ship of a player killed is told with its owner.
 
 ```sh
 ./build/bin/rtype_tests "[client]"

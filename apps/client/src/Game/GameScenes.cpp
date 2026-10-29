@@ -226,6 +226,27 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
     setCollisionSounds(sessions, audio);
 }
 
+/// The name of a player in the events, as in the HUD: P1 to P4.
+std::string playerName(std::uint8_t slot)
+{
+    return std::format("P{}", slot + 1);
+}
+
+/// The translation key of the name of a kind of Bydo in the events.
+const char *bydoNameKey(game::EntityKind kind)
+{
+    switch (kind) {
+    case game::EntityKind::BydoShooter:
+        return "event.shooter";
+    case game::EntityKind::BydoTank:
+        return "event.tank";
+    case game::EntityKind::BydoBoss:
+        return "event.boss";
+    default:
+        return "event.flyer";
+    }
+}
+
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
@@ -233,6 +254,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                        GameSessionSystem &sessions, localization::Localization &translations)
     : _engine(engine), _sessions(sessions), _translations(translations)
 {
+    sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
@@ -265,6 +287,22 @@ void GameScenes::end()
         onEnd();
     } else {
         _engine.switchScene(MainMenuScene);
+    }
+}
+
+void GameScenes::showKill(const Kill &kill)
+{
+    const GameSession *session = _sessions.session();
+    if (session == nullptr) {
+        return;
+    }
+    const std::uint8_t local = session->localSlot();
+    if (kill.kind == game::EntityKind::PlayerShip) {
+        _engine.showToast(playerName(kill.owner), _translations.text("event.player_down"), "",
+                          kill.owner == local ? engine::ToastType::Error : engine::ToastType::Warning);
+    } else if (kill.killer == local) {
+        _engine.showToast(_translations.text(bydoNameKey(kill.kind)), _translations.text("event.bydo_down"),
+                          playerName(local), engine::ToastType::Success);
     }
 }
 

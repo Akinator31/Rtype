@@ -25,6 +25,8 @@ inline constexpr const char *PauseScene = "pause";
 /// - The game scene shows the starry sky, the world of the session (the ships of the players and the Bydos
 ///   in 3D, through an orthographic camera: what is drawn is what collides), and a HUD with the lives and
 ///   score of each player, in its colour.
+/// - The events, in the corner of the toasts: a Bydo shot down by the local player, and the ship of a player
+///   shot down, the local one or an ally.
 /// - Escape (or Start on a gamepad) opens the pause menu: Resume, or Leave the game. Offline, the game stops
 ///   while it is open.
 /// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
@@ -52,6 +54,8 @@ class GameScenes
     void build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                const engine::Metrics &metrics, const engine::InterfaceStyle &style);
     void buildHud(engine::SceneId scene, const engine::InterfaceStyle &style);
+    /// Shows the event of a ship killed, if it is one: a Bydo killed by the local player, or a player ship.
+    void showKill(const Kill &kill);
 
 public:
     /// Declares the scenes. Everything given must outlive the engine.

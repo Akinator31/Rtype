@@ -846,3 +846,49 @@ TEST_CASE("The ships of the other players show their health bar, not the one of 
     CHECK(health.health == Approx(1.0f));
     CHECK(health.shown == Approx(1.0f));
 }
+
+// --- Kills ---
+
+TEST_CASE("A Bydo killed is told with the owner of the shot of a player killed nearest to it", "[client]")
+{
+    ImpactClient client;
+    std::vector<Kill> kills;
+    client.sessions.setKillHandler([&kills](const Kill &kill) { kills.push_back(kill); });
+    rtype::game::EntityState far = shotAt(11, 600.0f, 400.0f);
+    rtype::game::EntityState near = shotAt(12, 1190.0f, 400.0f);
+    near.owner = 2;
+    client.receive(snapshotOf(
+        1, {bydoAt(5, 1200.0f, 400.0f, 10), bydoAt(6, 1500.0f, 300.0f, 30), bydoAt(7, 900.0f, 200.0f, 10), far,
+            near}));
+
+    client.receive(snapshotOf(2, {bydoAt(7, 900.0f, 200.0f, 10)},
+                              {{5, rtype::game::DestroyCause::Killed},
+                               {6, rtype::game::DestroyCause::Removed},
+                               {11, rtype::game::DestroyCause::Killed},
+                               {12, rtype::game::DestroyCause::Killed}}));
+    client.receive(snapshotOf(3, {}, {{7, rtype::game::DestroyCause::Killed}}));
+
+    REQUIRE(kills.size() == 2);
+    CHECK(kills[0].kind == rtype::game::EntityKind::BydoFlyer);
+    CHECK(kills[0].owner == rtype::game::NoOwner);
+    CHECK(kills[0].killer == std::optional<std::uint8_t>{2});
+    // Killed by no shot: by nobody
+    CHECK_FALSE(kills[1].killer);
+}
+
+TEST_CASE("The ship of a player killed is told with its owner, and no killer", "[client]")
+{
+    ImpactClient client;
+    std::vector<Kill> kills;
+    client.sessions.setKillHandler([&kills](const Kill &kill) { kills.push_back(kill); });
+    rtype::game::EntityState ship{7, rtype::game::EntityKind::PlayerShip, 3};
+    client.receive(snapshotOf(1, {ship, shotAt(11, 300.0f, 200.0f)}));
+
+    client.receive(
+        snapshotOf(2, {}, {{7, rtype::game::DestroyCause::Killed}, {11, rtype::game::DestroyCause::Killed}}));
+
+    REQUIRE(kills.size() == 1);
+    CHECK(kills[0].kind == rtype::game::EntityKind::PlayerShip);
+    CHECK(kills[0].owner == 3);
+    CHECK_FALSE(kills[0].killer);
+}

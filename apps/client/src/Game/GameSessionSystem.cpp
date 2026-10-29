@@ -7,14 +7,39 @@
 #include "rtype/engine/Component/Sound.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Control/Control.hpp"
+#include "rtype/game/Constants.hpp"
 #include "rtype/game/PlayerInput.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <unordered_set>
 #include <utility>
 
 namespace rtype::client
 {
+
+namespace
+{
+
+/// The kinds of the Bydos, shots excluded: 0x10 to 0x3F in the protocol.
+bool isBydoShip(game::EntityKind kind)
+{
+    const auto value = static_cast<std::uint8_t>(kind);
+    return value >= 0x10 && value < 0x40;
+}
+
+bool isPlayerShot(game::EntityKind kind)
+{
+    return kind == game::EntityKind::PlayerShot || kind == game::EntityKind::PlayerChargedShot;
+}
+
+float distanceBetween(const ecs::Position &first, const ecs::Position &second)
+{
+    return std::hypot(first.x - second.x, first.y - second.y);
+}
+
+} // namespace
 
 game::PlayerInput inputFrom(const engine::Controls &controls)
 {
@@ -108,6 +133,11 @@ void GameSessionSystem::setDestructionSound(game::EntityKind kind, const EntityS
     _destructionSounds.setSound(kind, sound);
 }
 
+void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
+{
+    _onKill = std::move(onKill);
+}
+
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
 {
     const auto found = _entities.find(networkId);
@@ -163,6 +193,7 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         moveEntity(found->second.id, state);
     }
     rememberKilled(snapshot.destroyed);
+    reportKills(snapshot.destroyed);
 
     // Each snapshot holds the whole world: what is not in it any more is gone
     for (auto entry = _entities.begin(); entry != _entities.end();) {
@@ -184,12 +215,59 @@ void GameSessionSystem::rememberKilled(const std::vector<game::DestroyedEntity> 
     }
 }
 
+void GameSessionSystem::reportKills(const std::vector<game::DestroyedEntity> &destroyed)
+{
+    if (!_onKill) {
+        return;
+    }
+    const std::vector<ecs::entity_t> killed = findKilled(destroyed);
+    for (const ecs::entity_t entity : killed) {
+        const Replicated &replicated = _ecs.getComponent<Replicated>(entity);
+        if (replicated.kind == game::EntityKind::PlayerShip) {
+            _onKill({replicated.kind, replicated.owner, std::nullopt});
+        } else if (isBydoShip(replicated.kind)) {
+            _onKill({replicated.kind, replicated.owner, findKiller(entity, killed)});
+        }
+    }
+}
+
+std::vector<ecs::entity_t>
+GameSessionSystem::findKilled(const std::vector<game::DestroyedEntity> &destroyed) const
+{
+    std::vector<ecs::entity_t> killed;
+    for (const game::DestroyedEntity &entity : destroyed) {
+        const auto found = _entities.find(entity.id);
+        if (entity.cause == game::DestroyCause::Killed && found != _entities.end() &&
+            _ecs.isAlive(found->second)) {
+            killed.push_back(found->second.id);
+        }
+    }
+    return killed;
+}
+
+std::optional<std::uint8_t> GameSessionSystem::findKiller(ecs::entity_t bydo,
+                                                          const std::vector<ecs::entity_t> &killed) const
+{
+    const ecs::Position &position = _ecs.getComponent<ecs::Position>(bydo);
+    std::optional<std::uint8_t> killer;
+    float nearest = std::numeric_limits<float>::max();
+    for (const ecs::entity_t entity : killed) {
+        const Replicated &shot = _ecs.getComponent<Replicated>(entity);
+        const float distance = distanceBetween(position, _ecs.getComponent<ecs::Position>(entity));
+        if (isPlayerShot(shot.kind) && shot.owner < game::MaxPlayers && distance < nearest) {
+            nearest = distance;
+            killer = shot.owner;
+        }
+    }
+    return killer;
+}
+
 void GameSessionSystem::createEntity(const game::EntityState &state)
 {
     const EntityLook look = lookOf(state);
     const ecs::entity_t entity = _ecs.createEntity();
     _ecs.addComponent<engine::SceneMember>(entity, *_scene);
-    _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.health, state.health);
+    _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.owner, state.health, state.health);
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
     if (_shipLooks.hasLook(state.kind)) {
