@@ -32,7 +32,7 @@ namespace rtype::lobby
 {
 
 /// The version of the lobby protocol, in HELLO.
-inline constexpr std::uint16_t ProtocolVersion = 1;
+inline constexpr std::uint16_t ProtocolVersion = 2;
 /// Longest name of a player, in bytes of UTF-8.
 inline constexpr std::size_t MaxPlayerNameLength = 16;
 /// Longest name of a game, in bytes of UTF-8.
@@ -41,6 +41,8 @@ inline constexpr std::size_t MaxGameNameLength = 32;
 inline constexpr std::uint8_t MaxPlayers = 4;
 /// Most games in a GAME_LIST.
 inline constexpr std::size_t MaxGamesInList = 256;
+/// Longest text of a SERVER_MESSAGE, in bytes of UTF-8.
+inline constexpr std::size_t MaxServerMessageLength = 200;
 
 /// The types of the frames: 0x01–0x7F from the client, 0x80–0xFF from the master.
 namespace message_type
@@ -57,12 +59,16 @@ inline constexpr std::uint8_t GameJoined = 0x83;
 inline constexpr std::uint8_t LeftGame = 0x84;
 inline constexpr std::uint8_t Pong = 0x85;
 inline constexpr std::uint8_t Error = 0x86;
+inline constexpr std::uint8_t ServerMessage = 0x87;
 } // namespace message_type
 
 /// Tells whether a name can be the name of a player: 1 to 16 bytes of UTF-8, without control characters.
 [[nodiscard]] bool isValidPlayerName(std::string_view name);
 /// Tells whether a name can be the name of a game: 1 to 32 bytes of UTF-8, without control characters.
 [[nodiscard]] bool isValidGameName(std::string_view name);
+/// Tells whether a text can be the text of a SERVER_MESSAGE: 1 to 200 bytes of UTF-8, without control
+/// characters.
+[[nodiscard]] bool isValidServerMessage(std::string_view text);
 
 // --- Client to master ---
 
@@ -151,6 +157,10 @@ enum class LeftGameReason : std::uint8_t {
     GameCrashed = 2,
     /// The game received nothing from the client for 5 seconds.
     TimedOut = 3,
+    /// An administrator removed the player: ERROR (KICKED) follows (version 2).
+    Kicked = 4,
+    /// An administrator ended the game (version 2).
+    EndedByAdmin = 5,
 };
 
 /// `LEFT_GAME`: the answer to LEAVE_GAME, or a notification.
@@ -178,18 +188,33 @@ enum class ErrorCode : std::uint16_t {
     NotInGame = 10,
     ServerFull = 11,
     GameStartFailed = 12,
+    /// An administrator removed the player: sent without a request, then the connection is closed (version
+    /// 2).
+    Kicked = 13,
+    /// The address of the client is banned: the answer to HELLO, or sent without a request when the ban comes
+    /// later; the connection is closed after it (version 2).
+    Banned = 14,
 };
 
-/// Tells whether the master closes the connection after this error: MALFORMED and UNSUPPORTED_VERSION.
+/// Tells whether the master closes the connection after this error: MALFORMED, UNSUPPORTED_VERSION, KICKED
+/// and BANNED.
 [[nodiscard]] bool closesConnection(ErrorCode code);
 
-/// `ERROR`: the answer to a request that cannot be honoured.
+/// `ERROR`: the answer to a request that cannot be honoured, or, for KICKED and BANNED, a notification.
 struct ErrorMessage {
-    /// The type of the request that failed, 0 if it could not be read.
+    /// The type of the request that failed, 0 if it could not be read or if the error answers no request.
     std::uint8_t request = 0;
     ErrorCode code = ErrorCode::Malformed;
 
     friend bool operator==(const ErrorMessage &, const ErrorMessage &) = default;
+};
+
+/// `SERVER_MESSAGE`: a notification, a text the administrators of the server send (version 2).
+struct ServerMessageMessage {
+    /// 1 to MaxServerMessageLength bytes of text.
+    std::string text;
+
+    friend bool operator==(const ServerMessageMessage &, const ServerMessageMessage &) = default;
 };
 
 /// The payloads. LIST_GAMES, LEAVE_GAME, PING and PONG have none: send an empty payload.
@@ -202,6 +227,7 @@ struct ErrorMessage {
 [[nodiscard]] std::vector<std::byte> encode(const GameJoinedMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const LeftGameMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const ErrorMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const ServerMessageMessage &message);
 
 [[nodiscard]] std::optional<HelloMessage> decodeHello(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<CreateGameMessage> decodeCreateGame(std::span<const std::byte> payload);
@@ -211,6 +237,7 @@ struct ErrorMessage {
 [[nodiscard]] std::optional<GameJoinedMessage> decodeGameJoined(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<LeftGameMessage> decodeLeftGame(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<ErrorMessage> decodeError(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<ServerMessageMessage> decodeServerMessage(std::span<const std::byte> payload);
 /// For the messages without payload: true if it is empty.
 [[nodiscard]] bool decodeEmpty(std::span<const std::byte> payload);
 

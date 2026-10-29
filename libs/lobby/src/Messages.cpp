@@ -51,9 +51,15 @@ bool isValidGameName(std::string_view name)
     return !name.empty() && name.size() <= MaxGameNameLength && rtype::network::isValidText(name);
 }
 
+bool isValidServerMessage(std::string_view text)
+{
+    return !text.empty() && text.size() <= MaxServerMessageLength && rtype::network::isValidText(text);
+}
+
 bool closesConnection(ErrorCode code)
 {
-    return code == ErrorCode::Malformed || code == ErrorCode::UnsupportedVersion;
+    return code == ErrorCode::Malformed || code == ErrorCode::UnsupportedVersion ||
+           code == ErrorCode::Kicked || code == ErrorCode::Banned;
 }
 
 // --- Client to master ---
@@ -218,7 +224,7 @@ std::optional<LeftGameMessage> decodeLeftGame(std::span<const std::byte> payload
     LeftGameMessage message;
     message.gameId = reader.readU32();
     const std::uint8_t reason = reader.readU8();
-    if (reason > static_cast<std::uint8_t>(LeftGameReason::TimedOut)) {
+    if (reason > static_cast<std::uint8_t>(LeftGameReason::EndedByAdmin)) {
         reader.fail();
     }
     message.reason = static_cast<LeftGameReason>(reason);
@@ -240,6 +246,22 @@ std::optional<ErrorMessage> decodeError(std::span<const std::byte> payload)
     message.request = reader.readU8();
     message.code = static_cast<ErrorCode>(reader.readU16());
     return finished(reader, message);
+}
+
+std::vector<std::byte> encode(const ServerMessageMessage &message)
+{
+    require(isValidServerMessage(message.text), "A server message is 1 to 200 bytes of text");
+    Writer writer(1 + message.text.size());
+    writer.writeString(message.text);
+    return writer.take();
+}
+
+std::optional<ServerMessageMessage> decodeServerMessage(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    ServerMessageMessage message;
+    message.text = reader.readString(1, MaxServerMessageLength);
+    return finished(reader, std::move(message));
 }
 
 bool decodeEmpty(std::span<const std::byte> payload)

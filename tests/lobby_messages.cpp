@@ -47,12 +47,12 @@ GameListMessage twoGames()
 
 TEST_CASE("HELLO is the frame of the example of the specification", "[lobby]")
 {
-    const Bytes payload = encode(HelloMessage{1, "Pavel"});
+    const Bytes payload = encode(HelloMessage{2, "Pavel"});
 
-    CHECK(payload == bytes({0x00, 0x01, 0x05, 'P', 'a', 'v', 'e', 'l'}));
+    CHECK(payload == bytes({0x00, 0x02, 0x05, 'P', 'a', 'v', 'e', 'l'}));
     CHECK(rtype::network::makeFrame(message_type::Hello, payload) ==
-          bytes({0x00, 0x09, 0x01, 0x00, 0x01, 0x05, 'P', 'a', 'v', 'e', 'l'}));
-    CHECK(decodeHello(payload) == HelloMessage{1, "Pavel"});
+          bytes({0x00, 0x09, 0x01, 0x00, 0x02, 0x05, 'P', 'a', 'v', 'e', 'l'}));
+    CHECK(decodeHello(payload) == HelloMessage{2, "Pavel"});
 }
 
 TEST_CASE("The lobby messages are written field by field", "[lobby]")
@@ -64,6 +64,9 @@ TEST_CASE("The lobby messages are written field by field", "[lobby]")
     CHECK(encode(GameListMessage{}) == bytes({0, 0}));
     CHECK(encode(LeftGameMessage{5, LeftGameReason::GameCrashed}) == bytes({0, 0, 0, 5, 2}));
     CHECK(encode(ErrorMessage{message_type::JoinGame, ErrorCode::GameFull}) == bytes({0x04, 0x00, 0x08}));
+    CHECK(encode(ErrorMessage{0, ErrorCode::Kicked}) == bytes({0x00, 0x00, 0x0D}));
+    CHECK(encode(LeftGameMessage{5, LeftGameReason::EndedByAdmin}) == bytes({0, 0, 0, 5, 5}));
+    CHECK(encode(ServerMessageMessage{"Hi"}) == bytes({2, 'H', 'i'}));
 
     const Bytes joined = encode(GameJoinedMessage{7, 4251, 9, key(1), key(2)});
     REQUIRE(joined.size() == 74);
@@ -82,12 +85,20 @@ TEST_CASE("Every lobby message survives a round trip", "[lobby]")
     CHECK(decodeGameList(encode(twoGames())) == twoGames());
     const GameJoinedMessage joined{7, 4251, 9, key(1), key(2)};
     CHECK(decodeGameJoined(encode(joined)) == joined);
-    for (const LeftGameReason reason : {LeftGameReason::Requested, LeftGameReason::GameOver,
-                                        LeftGameReason::GameCrashed, LeftGameReason::TimedOut}) {
+    for (const LeftGameReason reason :
+         {LeftGameReason::Requested, LeftGameReason::GameOver, LeftGameReason::GameCrashed,
+          LeftGameReason::TimedOut, LeftGameReason::Kicked, LeftGameReason::EndedByAdmin}) {
         CHECK(decodeLeftGame(encode(LeftGameMessage{5, reason})) == LeftGameMessage{5, reason});
     }
     CHECK(decodeError(encode(ErrorMessage{0, ErrorCode::Malformed})) ==
           ErrorMessage{0, ErrorCode::Malformed});
+    for (const ErrorCode code : {ErrorCode::Kicked, ErrorCode::Banned}) {
+        CHECK(decodeError(encode(ErrorMessage{0, code})) == ErrorMessage{0, code});
+    }
+    const ServerMessageMessage message{"Server restarts in 5 minutes: finish your wave 🚀"};
+    CHECK(decodeServerMessage(encode(message)) == message);
+    const ServerMessageMessage longest{std::string(MaxServerMessageLength, 'm')};
+    CHECK(decodeServerMessage(encode(longest)) == longest);
     CHECK(decodeEmpty({}));
     CHECK_FALSE(decodeEmpty(bytes({0})));
 
@@ -127,7 +138,7 @@ TEST_CASE("The lobby messages refuse what the protocol forbids", "[lobby]")
     CHECK_FALSE(decodeCreateGame(bytes({1, 'A', 0})));   // no player
     CHECK_FALSE(decodeCreateGame(bytes({1, 'A', 5})));   // 5 players
     CHECK_FALSE(decodeWelcome(bytes({0, 0, 0, 0})));     // player 0
-    CHECK_FALSE(decodeLeftGame(bytes({0, 0, 0, 1, 4}))); // reason 4
+    CHECK_FALSE(decodeLeftGame(bytes({0, 0, 0, 1, 6}))); // reason 6
     CHECK_FALSE(decodeGameList(bytes({0x01, 0x01})));    // 257 games
     // Not sorted, the same id twice, id 0, an empty name, 0 or 5 players at most
     CHECK_FALSE(decodeGameList(bytes({0, 2, 0, 0, 0, 9, 1, 'B', 0, 1, 0, 0, 0, 3, 1, 'A', 0, 1})));
@@ -139,6 +150,14 @@ TEST_CASE("The lobby messages refuse what the protocol forbids", "[lobby]")
     Bytes joined = encode(GameJoinedMessage{7, 4251, 9, {}, {}});
     joined[9] = std::byte{0};
     CHECK_FALSE(decodeGameJoined(joined)); // session 0
+    // A server message is 1 to 200 bytes of text
+    CHECK_FALSE(decodeServerMessage(bytes({0})));
+    CHECK_FALSE(decodeServerMessage(bytes({1, '\n'})));
+    CHECK_FALSE(decodeServerMessage(bytes({2, 0xFF, 0xFE})));
+    Bytes tooLong = encode(ServerMessageMessage{std::string(MaxServerMessageLength, 'm')});
+    tooLong[0] = std::byte{MaxServerMessageLength + 1};
+    tooLong.push_back(std::byte{'m'});
+    CHECK_FALSE(decodeServerMessage(tooLong));
     // An unknown error code is kept: the client shows a generic error
     CHECK(decodeError(bytes({0, 0x01, 0x00}))->code == ErrorCode{256});
 
@@ -149,10 +168,17 @@ TEST_CASE("The lobby messages refuse what the protocol forbids", "[lobby]")
     CHECK_THROWS_AS(encode(GameListMessage{{{0, "A", 0, 1}}}), std::invalid_argument);
     CHECK_THROWS_AS(encode(GameListMessage{{{1, "A", 0, 5}}}), std::invalid_argument);
     CHECK_THROWS_AS(encode(GameListMessage{std::vector<GameInfo>(257)}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ServerMessageMessage{""}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ServerMessageMessage{std::string(MaxServerMessageLength + 1, 'm')}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(encode(ServerMessageMessage{"two\nlines"}), std::invalid_argument);
 
     CHECK(closesConnection(ErrorCode::Malformed));
     CHECK(closesConnection(ErrorCode::UnsupportedVersion));
+    CHECK(closesConnection(ErrorCode::Kicked));
+    CHECK(closesConnection(ErrorCode::Banned));
     CHECK_FALSE(closesConnection(ErrorCode::HelloRequired));
+    CHECK_FALSE(closesConnection(ErrorCode::GameStartFailed));
 }
 
 TEST_CASE("A lobby message is refused if it is cut or longer than its fields", "[lobby]")
@@ -166,6 +192,7 @@ TEST_CASE("A lobby message is refused if it is cut or longer than its fields", "
         {encode(GameJoinedMessage{1, 2, 3, {}, {}}), [](auto p) { return decodeGameJoined(p).has_value(); }},
         {encode(LeftGameMessage{1, {}}), [](auto p) { return decodeLeftGame(p).has_value(); }},
         {encode(ErrorMessage{1, ErrorCode::GameFull}), [](auto p) { return decodeError(p).has_value(); }},
+        {encode(ServerMessageMessage{"Hi"}), [](auto p) { return decodeServerMessage(p).has_value(); }},
     };
     for (const auto &[payload, decodes] : messages) {
         CHECK(decodes(payload));
@@ -196,6 +223,7 @@ TEST_CASE("Random bytes never crash a lobby decoder", "[lobby]")
         (void)decodeGameJoined(payload);
         (void)decodeLeftGame(payload);
         (void)decodeError(payload);
+        (void)decodeServerMessage(payload);
     }
     SUCCEED();
 }
