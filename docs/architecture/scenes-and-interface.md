@@ -314,7 +314,10 @@ set it, as for every `Toggle`.
 
 `InterfaceBuilder::gauge()` makes a value between 0 and 1 drawn as a rail lit from its start (transparent) to
 its value, with a spark at the end (`InterfaceStyle::gauge`, `GaugeStyle`; a full gauge shines more). A gauge
-shows only: it gets no focus. An `Extent` gives its size to the `AnchorSystem`.
+shows only: it gets no focus. An `Extent` gives its size to the `AnchorSystem`. `Gauge::width` gives it its
+own length instead of the one of the style, and `Gauge::low` a value at or below which its light and spark turn
+red (`GaugeStyle::lowLight`, `lowGlow`). Without a caption, its rail is on the position of the entity: the
+health bars of the game are such gauges, in the World layer.
 
 The handle of a slider lights up only while the pointer is over it (or it is dragged); its caption lights up
 while the slider is under the pointer or has the focus.

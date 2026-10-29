@@ -22,6 +22,7 @@ apps/client/src/Game/
   ShotLooks.cpp          the models of energy of the shots
   ImpactLooks.cpp        the impacts of the shots and the explosions of the ships (ImpactSystem plays them)
   DamageLooks.cpp        the damage written above the Bydos hit (DamageNumberSystem shows it)
+  HealthBarLooks.cpp     the health bars above the Bydos and the allies hit (HealthBarSystem shows them)
   EntitySounds.cpp       the sound of each kind of entity, for a shot fired, a shot that hits, a ship destroyed
   GameScenes.cpp         the game scene, its HUD, and the pause menu
 ```
@@ -180,6 +181,24 @@ size and the colour. The number is an entity of its own (`DamageNumber`, `Text`,
 The `DamageNumberSystem` moves it up at 90 units per second, fades it out during the second half of its time,
 and destroys it at the end.
 
+### Health bars
+
+A Bydo hit, or the ship of another player online, shows its health bar above it: the gauge of the interface
+(`engine::Gauge`, its rail, its light and the spark at its end), without a caption and 100 units long. The bar
+slides down to the hit points left at 1.5 bars per second, so that it is seen going down, and its light turns
+red at or below a third of them (`Gauge::low`, `GaugeStyle::lowLight`). It shows for 2 s after the last hit,
+fades out in 0.4 s, and shows again at the next hit. The ship of the local player has none: it would hide it.
+
+The snapshots carry the hit points left, not the maximum: `Replicated::maxHealth` keeps the most an entity had,
+its full health since it appears with all of it (a client that joins a game sees the Bydos already hit as
+full). A heal or a respawn fills the bar up again at once, without showing it.
+
+`HealthBarLook` (`GameSessionSystem::setHealthBarLook()`, set by `GameScenes` for the Bydos and the player
+ships) gives the length of the bar, how far above the centre of the entity it is, and the share at which it
+turns red. The bar is created at the first hit, attached to the entity (`ecs::Parent`, so that it follows it
+and goes with it), and kept in `Replicated::healthBar`: an entity drawn in the World layer, under the damage
+numbers, whose gauge reads `HealthBar::shown`. The `HealthBarSystem` slides it down and fades it out.
+
 ### Sounds
 
 A shot that appears in the game plays the sound of the weapon that fired it (`sounds/fx/blaster/`):
@@ -226,6 +245,9 @@ know which enemy a Bydo is.
 - the damage numbers: a drop of the hit points writes the points lost above the entity, which rises, fades
   out and goes; an entity killed writes the points it had left, one removed or of a kind without a
   `DamageLook` writes none;
+- the health bars: a hit shows the gauge above the entity, which slides down to the hit points left, then
+  fades out and shows again at the next hit; the ships of the other players show
+  theirs, not the local one, and a heal fills it up again;
 - the sounds: a shot of a kind given a sound appears with its `SoundEffect`, its volume, and a pan on its side
   of the screen, the other entities with none; a ship killed gives its destruction sound to its impact, one
   removed makes none.

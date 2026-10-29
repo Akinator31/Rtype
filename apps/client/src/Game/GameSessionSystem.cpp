@@ -5,9 +5,11 @@
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Sound.hpp"
+#include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Control/Control.hpp"
 #include "rtype/game/PlayerInput.hpp"
 
+#include <algorithm>
 #include <unordered_set>
 #include <utility>
 
@@ -43,6 +45,10 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::Scale>(caches);
     use<engine::Tween>(caches);
     use<DamageNumber>(caches);
+    use<ecs::Parent>(caches);
+    use<ecs::LocalPosition>(caches);
+    use<engine::Gauge>(caches);
+    use<HealthBar>(caches);
     use<engine::SoundEffect>(caches);
 }
 
@@ -85,6 +91,11 @@ void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &l
 void GameSessionSystem::setDamageLook(game::EntityKind kind, const DamageLook &look)
 {
     _damageLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setHealthBarLook(game::EntityKind kind, const HealthBarLook &look)
+{
+    _healthBarLooks.setLook(kind, look);
 }
 
 void GameSessionSystem::setShotSound(game::EntityKind kind, const EntitySound &sound)
@@ -178,7 +189,7 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     const EntityLook look = lookOf(state);
     const ecs::entity_t entity = _ecs.createEntity();
     _ecs.addComponent<engine::SceneMember>(entity, *_scene);
-    _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.health);
+    _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.health, state.health);
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
     if (_shipLooks.hasLook(state.kind)) {
@@ -213,9 +224,14 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
 void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState &state)
 {
     _ecs.getComponent<ecs::Position>(entity) = {state.x, state.y};
-    const std::uint8_t health = std::exchange(_ecs.getComponent<Replicated>(entity).health, state.health);
+    Replicated &replicated = _ecs.getComponent<Replicated>(entity);
+    const std::uint8_t health = std::exchange(replicated.health, state.health);
+    replicated.maxHealth = std::max(replicated.maxHealth, state.health);
     if (state.health < health) {
         showDamage(entity, static_cast<std::uint8_t>(health - state.health));
+    }
+    if (state.health != health) {
+        showHealth(entity, state, state.health < health);
     }
     if (_ecs.hasComponent<ShipAttitude>(entity)) {
         _shipLooks.moveModel(_ecs, entity, state, _clock);
@@ -230,6 +246,32 @@ void GameSessionSystem::showDamage(ecs::entity_t entity, std::uint8_t damage)
     if (damage > 0 && _damageLooks.hasLook(kind)) {
         _damageLooks.createNumber(_ecs, *_scene, kind, _ecs.getComponent<ecs::Position>(entity), damage);
     }
+}
+
+void GameSessionSystem::showHealth(ecs::entity_t entity, const game::EntityState &state, bool hit)
+{
+    if (!_healthBarLooks.hasLook(state.kind) || isLocalShip(state)) {
+        return;
+    }
+    std::optional<ecs::entity_t> bar = _ecs.getComponent<Replicated>(entity).healthBar;
+    if (!bar && !hit) {
+        return;
+    }
+    if (!bar) {
+        bar = _healthBarLooks.createBar(_ecs, *_scene, state.kind, entity);
+        _ecs.getComponent<Replicated>(entity).healthBar = bar;
+    }
+    HealthBar &health = _ecs.getComponent<HealthBar>(*bar);
+    const std::uint8_t maxHealth = _ecs.getComponent<Replicated>(entity).maxHealth;
+    health.health = maxHealth > 0 ? static_cast<float>(state.health) / static_cast<float>(maxHealth) : 0.0f;
+    if (hit) {
+        health.time = 0.0f;
+    }
+}
+
+bool GameSessionSystem::isLocalShip(const game::EntityState &state) const
+{
+    return state.kind == game::EntityKind::PlayerShip && _session && state.owner == _session->localSlot();
 }
 
 void GameSessionSystem::placeShipModels(float elapsed)

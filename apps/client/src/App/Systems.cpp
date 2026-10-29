@@ -2,6 +2,7 @@
 
 #include "Console/ConsoleSystem.hpp"
 #include "Game/DamageNumberSystem.hpp"
+#include "Game/HealthBarSystem.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
@@ -24,6 +25,7 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
     ecs.registerSystem<ImpactSystem>(ecs);
     ecs.registerSystem<DamageNumberSystem>(ecs);
+    ecs.registerSystem<HealthBarSystem>();
     // After the menus and the game, to play their sounds in the frame they give them
     ecs.registerSystem<engine::SoundSystem>(audio);
     ecs.registerSystem<engine::WidgetTextSystem>();

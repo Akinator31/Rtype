@@ -82,6 +82,11 @@ constexpr int DamageFontSize = 96;
 constexpr float DamageTextSize = 40.0f;
 constexpr render::Color DamageColor{255, 220, 90, 255};
 
+/// The health bars shown above the Bydos hit and above the ships of the other players, over their hull, under
+/// the damage numbers: red under a third of their hit points.
+constexpr HealthBarLook BydoHealthBar{100.0f, 42.0f, 0.3f};
+constexpr HealthBarLook AllyHealthBar{110.0f, 62.0f, 0.3f};
+
 /// The animation of the impact models, played once.
 constexpr const char *ImpactAnimation = "Impact";
 /// The colours of the impacts of the shots, those of their energy: the impact models are white.
@@ -211,6 +216,11 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
     setImpactLooks(sessions, resources, energy);
     const render::FontId damageFont = resources.loadFont(RTYPE_FONT_DISPLAY, DamageFontSize);
     sessions.setDamageLook(game::EntityKind::BydoFlyer, {damageFont, DamageTextSize, DamageColor});
+    for (const game::EntityKind kind : {game::EntityKind::BydoFlyer, game::EntityKind::BydoShooter,
+                                        game::EntityKind::BydoTank, game::EntityKind::BydoBoss}) {
+        sessions.setHealthBarLook(kind, BydoHealthBar);
+    }
+    sessions.setHealthBarLook(game::EntityKind::PlayerShip, AllyHealthBar);
     setShotSounds(sessions, audio);
     setDestructionSounds(sessions, audio);
     setCollisionSounds(sessions, audio);

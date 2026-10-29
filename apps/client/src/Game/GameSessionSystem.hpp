@@ -3,6 +3,7 @@
 #include "Game/DamageLooks.hpp"
 #include "Game/EntitySounds.hpp"
 #include "Game/GameSession.hpp"
+#include "Game/HealthBarLooks.hpp"
 #include "Game/ImpactLooks.hpp"
 #include "Game/ShipLooks.hpp"
 #include "Game/ShotLooks.hpp"
@@ -31,6 +32,11 @@ struct Replicated {
     game::EntityKind kind = game::EntityKind::PlayerShip;
     /// Its hit points in the latest snapshot: when they drop, it was hit.
     std::uint8_t health = 0;
+    /// The most hit points it had: the snapshots do not carry the health of a full entity, which appears
+    /// with all of its own.
+    std::uint8_t maxHealth = 0;
+    /// Its health bar, once it was hit, if its kind shows one.
+    std::optional<ecs::entity_t> healthBar;
 };
 
 /// The input of the local player, from the virtual gamepad of the engine: the directions, and FaceDown
@@ -48,7 +54,8 @@ struct Replicated {
 ///    energy; the others are boxes. An entity killed in the game (a ship shot down, a shot that hit) leaves
 ///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. An entity whose
 ///    kind was given a DamageLook writes the damage it takes where it is hit: the hit points it lost since
-///    the previous snapshot, or those it had left when killed. The sounds are
+///    the previous snapshot, or those it had left when killed. One whose kind was given a HealthBarLook shows
+///    its health bar above it when it is hit, except the ship of the local player. The sounds are
 ///    engine::SoundEffect given to entities, which the engine::SoundSystem plays: a shot that appears has the
 ///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind.
 ///
@@ -71,6 +78,7 @@ class GameSessionSystem : public ecs::System
     ShotLooks _shotLooks;
     ImpactLooks _impactLooks;
     DamageLooks _damageLooks;
+    HealthBarLooks _healthBarLooks;
     EntitySounds _shotSounds;
     EntitySounds _destructionSounds;
     /// The entities drawn that the game killed: they leave an impact when they go.
@@ -90,6 +98,11 @@ class GameSessionSystem : public ecs::System
     void moveEntity(ecs::entity_t entity, const game::EntityState &state);
     /// Writes the damage taken by an entity, at its position, if its kind shows it and it took any.
     void showDamage(ecs::entity_t entity, std::uint8_t damage);
+    /// Shows the hit points left of an entity on its health bar, if its kind shows one: a hit creates the bar
+    /// or shows it again, a heal fills the bar it has.
+    void showHealth(ecs::entity_t entity, const game::EntityState &state, bool hit);
+    /// The ship of the local player: its health bar would hide it.
+    [[nodiscard]] bool isLocalShip(const game::EntityState &state) const;
     void placeShipModels(float elapsed);
 
 public:
@@ -110,6 +123,8 @@ public:
     void setImpactLook(game::EntityKind kind, const ImpactLook &look);
     /// Writes the damage taken by the entities of this kind where they are hit from now on.
     void setDamageLook(game::EntityKind kind, const DamageLook &look);
+    /// Shows the health bar of the entities of this kind above them when they are hit from now on.
+    void setHealthBarLook(game::EntityKind kind, const HealthBarLook &look);
     /// Plays a sound when a shot of this kind appears from now on.
     void setShotSound(game::EntityKind kind, const EntitySound &sound);
     /// Plays a sound where the game kills an entity of this kind from now on, with its impact: a kind without

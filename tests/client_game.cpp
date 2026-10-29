@@ -8,6 +8,8 @@
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
 #include "Game/GameView.hpp"
+#include "Game/HealthBarLooks.hpp"
+#include "Game/HealthBarSystem.hpp"
 #include "Game/ImpactLooks.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
@@ -16,6 +18,7 @@
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Sound.hpp"
+#include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/System/ModelAnimationSystem.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
@@ -548,6 +551,7 @@ struct ImpactClient {
     {
         ecs.registerSystem<ImpactSystem>(ecs);
         ecs.registerSystem<DamageNumberSystem>(ecs);
+        ecs.registerSystem<HealthBarSystem>();
         scene = engine.getScenes().open({});
         auto created = std::make_unique<ScriptedSession>();
         session = created.get();
@@ -571,6 +575,13 @@ struct ImpactClient {
             }
         }
         return found;
+    }
+
+    /// The health bar of an entity of the game, if it has one.
+    [[nodiscard]] std::optional<rtype::ecs::entity_t> healthBarOf(std::uint32_t networkId)
+    {
+        const std::optional<rtype::ecs::entity_t> entity = sessions.entityOf(networkId);
+        return entity ? ecs.getComponent<Replicated>(*entity).healthBar : std::nullopt;
     }
 
     [[nodiscard]] std::vector<rtype::ecs::entity_t> impacts()
@@ -604,6 +615,8 @@ rtype::game::EntityState bydoAt(std::uint32_t id, float x, float y, std::uint8_t
 }
 
 const DamageLook YellowDamage{{}, 40.0f, {255, 220, 90, 255}};
+
+const HealthBarLook BarLook{100.0f, 42.0f, 0.3f};
 
 const ImpactLook SparkLook{{}, 2, 0.4f, 3.0f, {10, 20, 30, 200}, {}};
 
@@ -757,4 +770,79 @@ TEST_CASE("A killed entity writes the hit points it had left, one removed or wit
     REQUIRE(numbers.size() == 1);
     CHECK(client.ecs.getComponent<rtype::engine::Text>(numbers[0]).text == "10");
     CHECK(client.ecs.getComponent<rtype::ecs::Position>(numbers[0]).x == Approx(1200.0f));
+}
+
+TEST_CASE("A hit shows the health bar above the entity, its hit points left from the left, then it fades out",
+          "[client]")
+{
+    ImpactClient client;
+    client.sessions.setHealthBarLook(rtype::game::EntityKind::BydoFlyer, BarLook);
+    client.receive(snapshotOf(1, {bydoAt(5, 1200.0f, 400.0f, 40)}));
+    client.receive(snapshotOf(2, {bydoAt(5, 1195.0f, 400.0f, 40)}));
+    CHECK_FALSE(client.healthBarOf(5));
+
+    client.receive(snapshotOf(3, {bydoAt(5, 1190.0f, 400.0f, 30)}));
+
+    REQUIRE(client.healthBarOf(5));
+    const rtype::ecs::entity_t bar = *client.healthBarOf(5);
+    CHECK(client.ecs.getComponent<rtype::engine::SceneMember>(bar).scene == client.scene);
+    CHECK(client.ecs.getComponent<rtype::ecs::Parent>(bar).entity.id == *client.sessions.entityOf(5));
+    CHECK(client.ecs.getComponent<rtype::ecs::LocalPosition>(bar).y == Approx(-42.0f));
+    CHECK(client.ecs.getComponent<HealthBar>(bar).health == Approx(0.75f));
+    // The gauge of the interface, without a caption, red when low
+    const rtype::engine::Gauge &gauge = client.ecs.getComponent<rtype::engine::Gauge>(bar);
+    CHECK(gauge.caption.empty());
+    CHECK(gauge.width == Approx(100.0f));
+    CHECK(gauge.low == Approx(0.3f));
+    // It slides down to the hit points left
+    const float sliding = gauge.get();
+    CHECK(sliding < 1.0f);
+    CHECK(sliding > 0.75f);
+    for (int frame = 0; frame < 60; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(4 + frame), {bydoAt(5, 1190.0f, 400.0f, 30)}));
+    }
+    CHECK(client.ecs.getComponent<rtype::engine::Gauge>(bar).get() == Approx(0.75f));
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(bar).value == Approx(1.0f));
+
+    // Faded out a while after the hit, shown again by the next one, the same bar
+    for (int frame = 0; frame < 90; ++frame) {
+        client.receive(snapshotOf(static_cast<std::uint32_t>(64 + frame), {bydoAt(5, 1190.0f, 400.0f, 30)}));
+    }
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(bar).value == Approx(0.0f));
+    client.receive(snapshotOf(154, {bydoAt(5, 1190.0f, 400.0f, 10)}));
+    CHECK(client.healthBarOf(5) == bar);
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(bar).value == Approx(1.0f));
+    CHECK(client.ecs.getComponent<HealthBar>(bar).health == Approx(0.25f));
+
+    // It goes with its entity
+    client.receive(snapshotOf(155, {}, {{5, rtype::game::DestroyCause::Killed}}));
+    CHECK_FALSE(client.ecs.isAlive(bar));
+}
+
+TEST_CASE("The ships of the other players show their health bar, not the one of the local player", "[client]")
+{
+    ImpactClient client;
+    client.sessions.setHealthBarLook(rtype::game::EntityKind::PlayerShip, BarLook);
+    rtype::game::EntityState local{7, rtype::game::EntityKind::PlayerShip, 0};
+    local.health = 100;
+    rtype::game::EntityState ally{8, rtype::game::EntityKind::PlayerShip, 1};
+    ally.health = 100;
+    client.receive(snapshotOf(1, {local, ally, bydoAt(5, 1200.0f, 400.0f, 40)}));
+
+    local.health = 60;
+    ally.health = 60;
+    client.receive(snapshotOf(2, {local, ally, bydoAt(5, 1200.0f, 400.0f, 20)}));
+
+    CHECK_FALSE(client.healthBarOf(7));
+    // A kind without a look shows none
+    CHECK_FALSE(client.healthBarOf(5));
+    REQUIRE(client.healthBarOf(8));
+    CHECK(client.ecs.getComponent<HealthBar>(*client.healthBarOf(8)).health == Approx(0.6f));
+
+    // Back to all its hit points, respawned: the bar fills up again
+    ally.health = 100;
+    client.receive(snapshotOf(3, {local, ally}));
+    const HealthBar &health = client.ecs.getComponent<HealthBar>(*client.healthBarOf(8));
+    CHECK(health.health == Approx(1.0f));
+    CHECK(health.shown == Approx(1.0f));
 }

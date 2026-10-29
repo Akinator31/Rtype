@@ -663,32 +663,36 @@ void SceneRenderer::drawGauge(render::Renderer &renderer, const Gauge &gauge, re
     const GaugeStyle &style = _style.gauge;
     const float value = std::clamp(gauge.get ? gauge.get() : 0.0f, 0.0f, 1.0f);
     const bool isFull = value >= 0.999f;
+    const bool isLow = value <= gauge.low;
+    const float width = gauge.width > 0.0f ? gauge.width : style.width;
     const float top = centre.y - (style.getHeight() / 2.0f);
-    const float left = centre.x - (style.width / 2.0f);
-    const float y = style.getRailY(centre.y);
+    const float left = centre.x - (width / 2.0f);
+    const float y = gauge.caption.empty() ? centre.y : style.getRailY(centre.y);
 
     if (!gauge.caption.empty()) {
         const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%";
-        drawCaption(renderer, style.font, gauge.caption, percentage, left, left + style.width, top,
-                    style.captionSize, style.letterSpacing, faded(style.caption, opacity),
-                    faded(style.litCaption, opacity));
+        drawCaption(renderer, style.font, gauge.caption, percentage, left, left + width, top, style.captionSize,
+                    style.letterSpacing, faded(style.caption, opacity), faded(style.litCaption, opacity));
     }
-    renderer.drawRoundedRectangle({left, y - (style.railThickness / 2.0f), style.width, style.railThickness},
+    renderer.drawRoundedRectangle({left, y - (style.railThickness / 2.0f), width, style.railThickness},
                                   style.railThickness / 2.0f, faded(style.rail, opacity),
                                   faded(style.rail, opacity));
-    const float length = value * style.width;
+    const float length = value * width;
     if (length <= 0.0f) {
         return;
     }
-    // The light is transparent at the start of the gauge and white at its value; a full gauge shines more
+    // The light is transparent at the start of the gauge and white at its value, red when it is low; a full
+    // gauge shines more
+    const render::Color colour = isLow ? style.lowLight : style.light;
+    const render::Color glow = isLow ? style.lowGlow : style.glow;
     const float thickness = isFull ? style.fullLightThickness : style.lightThickness;
     const render::Rectangle light{left, y - (thickness / 2.0f), length, thickness};
     drawBlurred(renderer, light, thickness / 2.0f, style.glowSpread * (isFull ? 2.0f : 1.0f),
-                faded(brightened(style.glow, isFull ? 1.8f : 1.0f), opacity));
-    renderer.drawRoundedRectangle(light, thickness / 2.0f, faded(clear(style.light), opacity),
-                                  faded(style.light, opacity));
+                faded(brightened(glow, isFull ? 1.8f : 1.0f), opacity));
+    renderer.drawRoundedRectangle(light, thickness / 2.0f, faded(clear(colour), opacity),
+                                  faded(colour, opacity));
     drawSpark(renderer, {left + length, y}, style.sparkLength * (isFull ? 1.3f : 1.0f), style.sparkHeight,
-              faded(style.light, opacity));
+              faded(colour, opacity));
 }
 
 void SceneRenderer::drawAnnouncement(render::Renderer &renderer, const Toast &toast, render::Vector2 centre,
