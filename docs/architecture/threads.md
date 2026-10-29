@@ -259,3 +259,8 @@ for the other. The live events go the other way: the loop hands each frame of a 
 its connection, under the lock that keeps the connection alive meanwhile
 ([Web server](web.md#the-websocket)). The administration records its actions through the database thread, and
 gets their ids back on the loop ([Administration](administration.md)).
+
+The accounts add the two threads of the `PasswordHasher` ([Accounts](accounts.md#passwords)), which the master
+starts once its lobby signs players in: each hashes or
+checks a password, a few tens of milliseconds of Argon2, and posts its result to the loop. They touch nothing
+of the loop; a full queue refuses at once rather than make the loop wait.
