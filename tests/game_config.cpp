@@ -107,10 +107,10 @@ TEST_CASE("The configuration of the repository loads, and a Simulation registers
     CHECK(context.waves.hasDefinition("scouts_line"));
     CHECK(context.weapons.hasDefinition(context.player.weapon));
     CHECK(context.ships.hasDefinition(context.player.ship));
-    // A wave of each difficulty: the game draws one of each
+    // Four choices per level; the game draws one of each
     for (std::uint8_t difficulty = MinWaveDifficulty; difficulty <= MaxWaveDifficulty; ++difficulty) {
         INFO("difficulty " << int{difficulty});
-        CHECK_FALSE(context.waves.listWavesOfDifficulty(difficulty).empty());
+        CHECK(context.waves.listWavesOfDifficulty(difficulty).size() >= 4);
     }
 }
 

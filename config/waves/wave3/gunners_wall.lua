@@ -1,0 +1,20 @@
+return {
+    name = "gunners_wall",
+    label = "Gunner wall",
+    description = "Ten gunners form a wall from top to bottom",
+    difficulty = 3,
+    placement = "manual",
+    spawnInterval = 0.3,
+    spawns = {
+        { enemy = "bydo_gunner", x = 2000, y = 180 },
+        { enemy = "bydo_gunner", x = 2000, y = 420 },
+        { enemy = "bydo_gunner", x = 2000, y = 660 },
+        { enemy = "bydo_gunner", x = 2000, y = 900 },
+        { enemy = "bydo_gunner", x = 2000, y = 300 },
+        { enemy = "bydo_gunner", x = 2000, y = 540 },
+        { enemy = "bydo_gunner", x = 2000, y = 780 },
+        { enemy = "bydo_gunner", x = 2000, y = 240 },
+        { enemy = "bydo_gunner", x = 2000, y = 540 },
+        { enemy = "bydo_gunner", x = 2000, y = 840 },
+    },
+}

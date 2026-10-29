@@ -1,0 +1,27 @@
+-- Siege ships pin the player down while raiders close the distance.
+return {
+    name = "siege_and_raid",
+    label = "Siege and raid",
+    description = "Four siege ships cover a large close-range raider assault",
+    difficulty = 5,
+    placement = "manual",
+    spawnInterval = 0.45,
+    spawns = {
+        { enemy = "bydo_siege", x = 2000, y = 280 },
+        { enemy = "bydo_raider", x = 2000, y = 420 },
+        { enemy = "bydo_raider", x = 2000, y = 660 },
+        { enemy = "bydo_siege", x = 2000, y = 800 },
+        { enemy = "bydo_berserker", x = 2000, y = 540 },
+        { enemy = "bydo_raider", x = 2000, y = 300 },
+        { enemy = "bydo_gunner", x = 2000, y = 460 },
+        { enemy = "bydo_raider", x = 2000, y = 820 },
+        { enemy = "bydo_siege", x = 2000, y = 360 },
+        { enemy = "bydo_berserker", x = 2000, y = 680 },
+        { enemy = "bydo_raider", x = 2000, y = 240 },
+        { enemy = "bydo_gunner", x = 2000, y = 760 },
+        { enemy = "bydo_siege", x = 2000, y = 720 },
+        { enemy = "bydo_raider", x = 2000, y = 540 },
+        { enemy = "bydo_berserker", x = 2000, y = 400 },
+        { enemy = "bydo_raider", x = 2000, y = 880 },
+    },
+}

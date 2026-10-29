@@ -84,7 +84,7 @@ config/
     }
     ```
 
-5. **A wave** to make it appear, `config/waves/hunters.lua`. A game plays five waves, one of each difficulty,
+5. **A wave** to make it appear, `config/waves/wave3/hunters.lua`. A game plays five waves, one of each difficulty,
    drawn among the waves of that difficulty: this one may be the third wave of a game.
 
     ```lua
@@ -194,6 +194,8 @@ The `collider` is a box or a sphere, centred on the projectile:
 A manual wave sets no `enemy` and a random wave no `spawns`: a wave does not mix both modes.
 
 A game plays the waves by difficulty, from 1 to 5: for each one, a wave drawn among those of that difficulty.
+The repository keeps its examples in `config/waves/wave1/` through `wave5/`, with four choices
+per level. The loader also accepts Lua files elsewhere under `config/waves/`.
 A difficulty without a wave is skipped, and the game is won once the last wave is over.
 
 ### The players (`config/player.lua`)
