@@ -57,7 +57,8 @@ flowchart LR
 *The client joins a game through the master, then exchanges the game traffic directly with that game's
 process.*
 
-How the server starts, what it is given and how it stops: [Server](server.md).
+How the server starts, what it is given and how it stops: [Server](server.md). How the master serves its
+administration panel over HTTP: [Web server](web.md).
 
 New to networking? Start with [Networking concepts](networking-concepts.md).
 
@@ -124,8 +125,10 @@ The programs are built on twelve libraries:
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
 raylib: the ECS, the physics, the game, the scripting, the lobby, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
-private dependencies of `network`, and reproc, which starts the instances of the server, and toml++, which reads
-its settings file, private dependencies of `r-type_server`.
+private dependencies of `network`, and reproc, which starts the instances of the server, toml++, which reads
+its settings file, and Crow, which serves its panel ([Web server](web.md)), private dependencies of
+`r-type_server`. libcurl, the HTTP client of the tests, and of the mails of the server later, comes through CPM
+too, with OpenSSL from the system on Linux.
 
 ## Repository layout
 

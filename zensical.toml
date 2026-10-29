@@ -30,6 +30,7 @@ nav = [
         "architecture/logging.md",
         "architecture/networking.md",
         "architecture/server.md",
+        "architecture/web.md",
         "architecture/game.md",
         "architecture/client-game.md",
         "architecture/client-online.md",
