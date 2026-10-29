@@ -36,15 +36,6 @@ std::array<std::byte, 32> randomBytes()
 
 } // namespace
 
-bool sameSecret(const Secret &first, const Secret &second)
-{
-    std::byte difference{0};
-    for (std::size_t i = 0; i < first.size(); ++i) {
-        difference |= first[i] ^ second[i];
-    }
-    return difference == std::byte{0};
-}
-
 struct Games::Game {
     enum class State {
         /// Started, not ready yet: not listed.

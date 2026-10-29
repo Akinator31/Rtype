@@ -16,11 +16,6 @@
 namespace rtype::server
 {
 
-namespace
-{
-
-/// Creates the file and writes it. It is created only readable by its owner, so that the private key is never
-/// readable by others, even for a moment.
 void writeNewSecretFile(const std::filesystem::path &path, std::string_view content)
 {
 #ifdef _WIN32
@@ -66,8 +61,6 @@ void writeNewSecretFile(const std::filesystem::path &path, std::string_view cont
     }
 #endif
 }
-
-} // namespace
 
 void writePrivateKey(const rtype::network::ServerIdentity &identity, const std::filesystem::path &path)
 {
