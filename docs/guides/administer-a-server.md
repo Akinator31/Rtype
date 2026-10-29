@@ -37,6 +37,9 @@ with the address the server writes at each start.
     ssh -L 8080:127.0.0.1:8080 <server>
     ```
 
+    In a container, the panel listens on the loopback of the container, which this tunnel does not reach:
+    see [Open the panel](deploy-with-docker.md#open-the-panel) of Deploy with Docker.
+
 3. **Watch**. The pages update by themselves, without a reload:
 
     | Page | What it shows |

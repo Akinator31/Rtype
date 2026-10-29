@@ -53,7 +53,8 @@ nav = [
         "guides/run-a-server.md",
         "guides/configure-a-server.md",
         "guides/administer-a-server.md",
-    "guides/use-an-external-database.md",
+        "guides/deploy-with-docker.md",
+        "guides/use-an-external-database.md",
         "guides/play-online.md",
     ] },
     { "Network protocol" = [

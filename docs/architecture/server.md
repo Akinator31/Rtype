@@ -34,6 +34,7 @@ apps/server/src/
   Web/                     the web server of the master, for its panel (Web server page)
     WebServer.cpp          Crow on two threads: the files of the panel, the sessions, the API, its WebSocket
     AdminJson.cpp          the JSON of the administration API
+    Health.cpp             --health: asks /api/health of the master running on this machine
     LocalAccess.cpp        the local access token and admin-url.txt
     Visitor.cpp            the address of a visitor behind the trusted proxies
   Instance/                an instance: one game
@@ -81,6 +82,7 @@ a server that cannot work stops at once with the reason.*
 | `--database-file <file>` | | Reads the address of the database from the first line of the file: for an address with a password, which the command line would show to every user of the machine |
 | `--settings <file>` | | Reads the settings file of the master ([Configure a server](../guides/configure-a-server.md)): the options above in `[server]`, and the sections of the panel and the accounts. The command line wins over the file |
 | `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, and opens the port of the lobby and the one of the panel, then exits: checks a configuration without running it |
+| `--health` | | Asks `/api/health` of the master running on this machine, at the `listen` address of `[web]` in the settings file (the loopback for `0.0.0.0`), shows `healthy` and exits with 0 when it answers within 5 seconds, else exits with 1. The health check of the [Docker image](../guides/deploy-with-docker.md), which has no curl |
 
 The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
 [ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game,
@@ -529,8 +531,8 @@ lobby.
 
 | Code | When |
 |---|---|
-| `0` | Stopped properly: after a stop signal, after `--help`, `--version` or `--check`, or at the end of its game for an instance |
-| `1` | Could not start (settings file refused, key missing or invalid, port of the lobby or of the panel in use, panel off the loopback without accounts, no secret), stopped on an unexpected error, or stop forced |
+| `0` | Stopped properly: after a stop signal, after `--help`, `--version` or `--check`, at the end of its game for an instance; with `--health`, the master is healthy |
+| `1` | Could not start (settings file refused, key missing or invalid, port of the lobby or of the panel in use, panel off the loopback without accounts, no secret), stopped on an unexpected error, or stop forced; with `--health`, the master is not healthy or cannot be reached |
 | `2` | Invalid arguments |
 
 The master reads the exit code of its instances: anything but 0 is a crash, which it reports to the players
@@ -558,7 +560,9 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   `X-Forwarded-For` from the right and only from a trusted proxy, in `visitorAddress()` and end to end; a port
   taken. Real masters: `admin-url.txt` (`0600`) whose address opens the page "not built" with a session, a port
   taken, a missing `panel_dir`, and a panel off the loopback refused without accounts. Every test that runs a
-  master gives its panel port 0, with `testing::webOnAnyPort()`.
+  master gives its panel port 0, with `testing::webOnAnyPort()`. `--health`: the answers of `/api/health`
+  read (healthy, another status, not HTTP, cut), a master asked at the address of its settings file, one whose
+  loop is stuck past the timeout, one gone, and a panel on port 0, which it cannot find.
 - `tests/helpers/panel_players.cpp`, `rtype_panel_players`: not a test, the players of a game for the end-to-end
   tests of the panel ([The panel](panel.md#tests)), which run a real master.
 - `tests/server_admin.cpp` (tags `[server]`, `[admin]`): the administration, alone with fakes of the games and
@@ -608,6 +612,10 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   replaced; `--fingerprint` shows the key and never makes one.
 - The smoke tests of CTest run `r-type_server --help`, refuse an unknown argument, and run `--check`, which
   makes its key in the build directory the first time.
+- `docker/smoke-test.sh`, in the *Docker* workflow: the image started with a test settings file, `--health`
+  and the health check of the image, a user that is not root, the key, the database and `admin-url.txt` in
+  `/data`, two players of `rtype_panel_players` in a game over the published ports, and `SIGTERM` stopping it
+  with code 0 ([Deploy with Docker](../guides/deploy-with-docker.md)).
 
 ## Limits and next steps
 

@@ -21,7 +21,7 @@ To configure it, see the `[web]` section of [Configure a server](../guides/confi
 
 | Route | Needs | Answer |
 |---|---|---|
-| `GET /api/health` | nothing | `200 {"status":"ok"}`, answered by the event loop of the master: a master whose loop is stuck is not healthy |
+| `GET /api/health` | nothing | `200 {"status":"ok"}`, answered by the event loop of the master: a master whose loop is stuck is not healthy. `r-type_server --health` asks it, for the health check of the Docker image |
 | `GET /api/session` | a session | `200 {"csrfToken": "…"}` with a session, `401` without |
 | `GET /api/server`, `/api/games`, `/api/games/{id}`, `/api/players`, `/api/actions`, `/api/bans` | a session | The [administration API](../protocol/admin-api.md#3-reading), answered by the loop |
 | `POST /api/players/{id}/kick`, `/api/games/{id}/end`, `/api/messages`, `/api/bans`, `/api/bans/lift` | a session and its CSRF token | The [actions](../protocol/admin-api.md#4-acting), done on the loop |

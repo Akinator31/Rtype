@@ -108,6 +108,8 @@ Once it runs, the games it starts show in its logs. Players who create a game an
 to its instances: `Cannot open UDP port` means another program uses the game ports, choose others with
 `--game-ports`.
 
+To run it in a container instead, from the image of the CI, see [Deploy with Docker](deploy-with-docker.md).
+
 Every option is listed by `r-type_server --help` and in [Server](../architecture/server.md). To give them in a
 file rather than on the command line, with the settings of the panel and the accounts, see
 [Configure a server](configure-a-server.md).
