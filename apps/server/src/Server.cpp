@@ -3,6 +3,7 @@
 #include "Common/Options.hpp"
 #include "Instance/Instance.hpp"
 #include "Master/Master.hpp"
+#include "Web/Health.hpp"
 #include "rtype/log/Logger.hpp"
 
 #include <exception>
@@ -59,6 +60,8 @@ int run(std::span<const std::string_view> arguments, std::ostream &out, std::ist
             return Success;
         case Options::Mode::Fingerprint:
             return showFingerprint(options.master, out);
+        case Options::Mode::Health:
+            return showHealth(options.master, out);
         case Options::Mode::Instance:
             return runInstance(options.instance, in);
         case Options::Mode::Master:

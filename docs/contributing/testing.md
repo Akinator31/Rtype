@@ -175,14 +175,18 @@ clang-format -i path/to/file.cpp
 | *Build* | Every push and pull request, Linux and Windows | First the *Panel* job: lint, format, types, Vitest and build of `web/admin`, its `dist/` kept as an artifact. Then compilation, all CTest tests, packaging with the panel in the server archive. On Linux, the tests of the database also run on a PostgreSQL in Docker, and Playwright runs the panel against the server just built ([Contributing to the panel](panel.md)) |
 | *Sanitizers* | Every pull request, and pushes to `main` | All CTest tests under ASan and UBSan, on SQLite and PostgreSQL (Linux) |
 | *Thread sanitizer* | Every night on `main`, and on demand | All CTest tests under TSan. A failed run blocks the next release until a run on `main` passes again, see [Releasing](releasing.md) |
+| *Docker* | Every pull request, pushes to `main` and the tags `v*` | Builds the image of the server and the one of its smoke test, then runs `docker/smoke-test.sh`: `--health`, two players in a game, the stop on `SIGTERM`. From `main`, publishes the image on GHCR as `main`; from a tag, as its version and `latest` ([Deploy with Docker](../guides/deploy-with-docker.md)) |
 | *Format* | Every pull request, and pushes to `main` that change C++ files | Formats tracked C++ files; on pull requests the bot commits the fixes, elsewhere unformatted code fails the job |
 
 ### Runners
 
 The workflows run on the team's self-hosted runners. The Linux runner needs:
 
-- **Docker**, usable by the user of the runner: the tests of the database start their PostgreSQL in it. Without
-  Docker, *Build* and *Sanitizers* fail on Linux instead of testing on SQLite only.
+- **Docker**, usable by the user of the runner: the tests of the database start their PostgreSQL in it, and
+  *Docker* builds the image with BuildKit (Docker 25 or newer, for `--start-interval` in its health check).
+  Without Docker, *Build*, *Sanitizers* and *Docker* fail on Linux instead of testing on SQLite only. The
+  smoke test publishes the UDP ports 47243 to 47245 on the loopback of the runner; the build keeps its
+  downloads and its build folder in the cache of BuildKit, `docker builder prune` empties it.
 - `sudo` without a password for `apt-get`, which installs the system libraries (X11, OpenGL, OpenSSL, libpq,
   and those **Chromium** needs for the end-to-end tests of the panel). The packages are named for Debian 13
   (trixie) and Ubuntu 24.04 or newer, the ones with the `t64` libraries.

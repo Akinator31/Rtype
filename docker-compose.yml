@@ -1,0 +1,25 @@
+# The official server in Dokploy, guests only (docs/guides/deploy-with-docker.md).
+#
+# The lobby and the games are published on the host: 4242 over TCP, 4243 to 4299 over UDP, the same numbers
+# inside and outside, since the lobby gives the players the port of their game. Turn off the userland proxy of
+# Docker on the host first: otherwise each of the 57 UDP ports costs a process. The panel listens on the
+# loopback of the container, and is never published.
+
+services:
+  server:
+    image: ${RTYPE_IMAGE:-ghcr.io/akinator31/rtype:latest}
+    restart: unless-stopped
+    # A small init as PID 1: it hands SIGTERM to the master, and reaps what it would not
+    init: true
+    ports:
+      - "4242:4242/tcp"
+      - "4243-4299:4243-4299/udp"
+    volumes:
+      - data:/data
+      # Settings of your own, in place of those of the image (docker/server.toml):
+      # - ./server.toml:/config/server.toml:ro
+    # The time to end the games properly before Docker kills the master
+    stop_grace_period: 30s
+
+volumes:
+  data:

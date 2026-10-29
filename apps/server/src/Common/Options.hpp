@@ -77,6 +77,8 @@ struct Options {
         Version,
         /// --fingerprint: show the fingerprint of the key of the master and exit.
         Fingerprint,
+        /// --health: ask the master running on this machine whether it is healthy, and exit.
+        Health,
     };
 
     Mode mode = Mode::Master;
