@@ -559,10 +559,11 @@ struct WebServer::Impl {
         });
         administrationRoutes();
         eventsRoute();
+        // Crow ends the response of the catch-all route itself, after the handler. Ended here too, it would
+        // be left completed once sent, and the next request on the connection would get Crow's bare 404
         CROW_CATCHALL_ROUTE(app)
         ([this](const crow::request &request, crow::response &response) {
             apply(response, serve(request, response));
-            response.end();
         });
     }
 
