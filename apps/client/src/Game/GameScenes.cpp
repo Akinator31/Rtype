@@ -12,6 +12,7 @@
 #include "rtype/game/Rules.hpp"
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <string>
 #include <utility>
@@ -242,19 +243,17 @@ std::uint8_t livesOf(const std::vector<game::PlayerState> &players, std::uint8_t
     return player == players.end() ? 0 : player->lives;
 }
 
-/// The translation key of the name of a kind of Bydo in the events.
+/// The translation key of the name of each kind of Bydo in the events, the flyer being the default.
+constexpr std::array<std::pair<game::EntityKind, const char *>, 3> BydoNameKeys{{
+    {game::EntityKind::BydoShooter, "event.shooter"},
+    {game::EntityKind::BydoTank, "event.tank"},
+    {game::EntityKind::BydoBoss, "event.boss"},
+}};
+
 const char *bydoNameKey(game::EntityKind kind)
 {
-    switch (kind) {
-    case game::EntityKind::BydoShooter:
-        return "event.shooter";
-    case game::EntityKind::BydoTank:
-        return "event.tank";
-    case game::EntityKind::BydoBoss:
-        return "event.boss";
-    default:
-        return "event.flyer";
-    }
+    const auto name = std::ranges::find(BydoNameKeys, kind, &std::pair<game::EntityKind, const char *>::first);
+    return name == BydoNameKeys.end() ? "event.flyer" : name->second;
 }
 
 } // namespace
