@@ -27,7 +27,8 @@ with the address the server writes at each start.
     ```
 
 2. **Open it** in a browser. The token is traded for a session of 12 hours, then leaves the address bar: the
-   panel shows its overview, and **Live** at the top right.
+   panel shows its overview, and **Live** at the top right. A page of the panel opened without a session asks
+   for the token instead: paste the address of `admin-url.txt`, or **Read admin-url.txt** to choose the file.
 
     From another machine, the panel is not reachable: it listens on the loopback of the server only. Go through
     an SSH tunnel, then open the same address:
@@ -40,24 +41,30 @@ with the address the server writes at each start.
 
     | Page | What it shows |
     |---|---|
-    | Overview | The players, those in a game, the games, the banned addresses; the version, uptime and ports; the games over time since the panel opened; the latest events |
-    | Games | The running games: their players over their seats, their wave, their age, their state. **Stale** means the instance sent no status for 3 seconds: it, or its game, is stuck |
-    | A game | Its players with their score, whether alive, their latency; its wave and tick |
-    | Players | Every player of the lobby, its address, its game |
-    | Actions | What the administrators did, newest first, and the addresses banned now |
+    | Overview | The players connected, the games running and those stuck, the banned addresses, the uptime, each opening its page; the games; the live events; the players of each minute of the last hour since the panel opened; the latest actions |
+    | Games | The running games: their seats, wave, time of play, state; searched and filtered. **Stuck** means the instance sent no status for 3 seconds: it, or its game, is stuck, and a red strip offers to end it. Click a line to open the game |
+    | A game | Its pilots with their address, score, state and latency; its wave and time of play; its own events |
+    | Players | Every player of the lobby, its address, its game; click a line for the card of its player, and the other pilots of its address |
+    | Bans | The addresses banned now and the time left of each; those lifted or expired lately |
+    | Messages | The messages sent |
+    | History | What the administrators did, newest first, 100 at a time; click a line for its details |
+    | Settings | The version and the ports of the server, and the preferences of the panel |
 
-4. **Act**. Each action asks for a confirmation and an optional reason, recorded with it; the panel then says
-   what happened at the top of the page, and the action shows in **Actions**:
+4. **Act**. Removing a player, ending a game, banning and lifting a ban ask for a confirmation and an optional
+   reason, recorded with it; a toast then says what happened at the top right, and the action shows in
+   **History**:
 
     | To | Where | What happens |
     |---|---|---|
-    | End a game | A game, **End the game** | The game stops; its players are back in the lobby, told why |
-    | Send a message | The overview, **Message everyone**; a game, **Message the game** | Each player sees it in the game. One line, 200 bytes at most |
+    | End a game | A game, **End the game**; Games, **End** | The game stops; its players are back in the lobby, told why |
+    | Send a message | **Messages**, to the whole lobby or to a game; a game, **Message to the game** | Each player sees it in the game. One line, 200 bytes at most |
     | Remove a player | Players, or a game, **Remove** | The player leaves its game and the server. It may connect again |
-    | Ban an address | Players, **Ban** | For an hour, a day or seven days, across restarts: the server refuses the address, and removes the players connected from it |
-    | Lift a ban | Actions, **Lift**, beside the banned address | The server welcomes the address again at once |
+    | Ban an address | Players, **Ban**; a game, **Ban the address**; Bans, **New ban** | From 1 second to 7 days, across restarts: the server refuses the address, and removes the players connected from it, whom the panel lists first |
+    | Lift a ban | Bans, **Lift** | The server welcomes the address again at once |
 
-    A ban is temporary: an address is shared, by a household or a network, and changes.
+    A ban is temporary: an address is shared, by a household or a network, and changes. In **Settings**, turn
+    **Confirm the actions** off to remove and end without the window, and **Sound alert** on to hear an
+    instance become stuck; both are kept in this browser only.
 
 ## Result
 
@@ -68,8 +75,8 @@ actor: the token of the machine.
 |---|---|
 | The panel is not built | The server has no `admin/` beside it: use the server archive, or install the panel ([web/admin/README.md](https://github.com/Akinator31/Rtype/blob/main/web/admin/README.md#build)) |
 | This link is not valid | The address is of a previous start: the server writes a new one at each start, read `admin-url.txt` again |
-| Session expired, at the top of the page | The session ended, or the server restarted: open the address of `admin-url.txt` again |
-| Connection lost, at the top of the page | The server does not answer: the panel tries again by itself and shows its last state meanwhile. If it lasts, check that the server runs |
+| Session expired, in a window over the page | The session ended, or the server restarted: paste the new address of `admin-url.txt`, or open it |
+| Connection lost, at the top of the page | The server does not answer: the panel tries again by itself, **Retry** at once, and shows its last state meanwhile. If it lasts, check that the server runs |
 
 Without a browser, the same session drives the [administration API](../protocol/admin-api.md) with `curl`
 ([With curl](../protocol/admin-api.md#6-with-curl)). How the panel works: [The panel](../architecture/panel.md).

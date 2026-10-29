@@ -30,12 +30,14 @@ The details: [web/admin/README.md](https://github.com/Akinator31/Rtype/blob/main
 
 ## Rules
 
-- **The design is the Figma frame** [R-Type UI — Éléments retenus](https://www.figma.com/design/RrrH0ic4ttdyDoc3nRnWBr/Untitled?node-id=42-3).
-  A colour, a font, a size or an effect of the design lives in `src/theme/system.ts`, once; pages use its tokens,
-  text styles and recipes, or the components of the design, never a value of their own. No colour but black,
-  silver and the red of the alerts; no filled button.
+- **The design is the Figma section** [Panel d'administration](https://www.figma.com/design/RrrH0ic4ttdyDoc3nRnWBr/Untitled?node-id=144-28): its row of components (A0
+  to A4) and a frame per screen. A colour, a font, a size or an effect of the design lives in
+  `src/theme/system.ts`, once; pages use its tokens, text styles and recipes, or the components of the design
+  (`src/components/`), never a value of their own. No colour but black, silver and the red of the alerts.
 - **Every text in `src/strings.ts`**, in English: a French panel replaces that object.
-- **Every action behind a dialog**, which confirms it and shows the error of the master.
+- **Every action behind a dialog**, which confirms it and shows the error of the master; removing a player and
+  ending a game skip it only when the host turned **Confirm the actions** off in the settings. A form that is
+  itself the action (a new ban, a message) needs none.
 - **Nothing from another host**: fonts and images are files of the panel, no inline script, no `eval`. The CSP
   of the master refuses anything else ([Within the CSP](../architecture/panel.md#within-the-csp)), and the
   end-to-end tests fail on it.

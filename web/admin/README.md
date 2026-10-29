@@ -11,21 +11,33 @@ MSW; Playwright.
 
 ## Design
 
-The reference is the Figma design of the panel, the frame **"R-Type UI — Éléments retenus"** (node `42:3`),
-direction "Éclat stellaire":
-<https://www.figma.com/design/RrrH0ic4ttdyDoc3nRnWBr/Untitled?node-id=42-3>
+The reference is the Figma design of the panel, the section **"Panel d'administration"** (node `144:28`), direction
+"Éclat stellaire": a row of components, then a frame per screen (login, overview, games, a game, players, bans,
+messages, history, accounts, settings, the confirmations, the master unreachable, the session expired):
+<https://www.figma.com/design/RrrH0ic4ttdyDoc3nRnWBr/Untitled?node-id=144-28>
+
+The panel takes the look of the design, not all of its text: it keeps what a host acts on, and leaves out the
+routes of the API, the technical details and the notes of the frames. The accounts frame waits for step 12.
 
 Black and silver, light as the only accent, red for alerts; Audiowide for titles, labels, buttons and numbers,
 Inter for text. Every value of the design is set once, in `src/theme/system.ts` (tokens, text styles, recipes),
 and never in a page. The elements of the design each have their component:
 
-| Design                                          | Component                                           |
-| ----------------------------------------------- | --------------------------------------------------- |
-| Menu button (Normal, Survol, Pressé, Désactivé) | `FlareButton`, `FlareLink` (`components/Flare.tsx`) |
-| J1, Jauge                                       | `Gauge`                                             |
-| N1, Notification                                | `Notifications`, `notify()`                         |
-| N3, Bandeau traversant                          | `Banner`                                            |
-| N6, Fil d'événements                            | `EventFeed`, `EventLine`                            |
+| Design                                               | Component                                            |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| A0, Entrée de navigation                             | `NavItem` (`components/Controls.tsx`)                |
+| A1, Bouton d'action (principal, secondaire, danger)  | `Button`, `ButtonLink`; `RowAction` in a table       |
+| A2, Badge d'état                                     | `Badge`; `Chip` for a filter or a choice             |
+| A3, Champ de formulaire                              | Chakra's `Field` and `Input`, themed                 |
+| A4, Toast de retour                                  | `Notifications`, `notify()`                          |
+| Barre latérale, barre supérieure, champ d'étoiles    | `Shell`                                              |
+| Carte, indicateur, paire                             | `Card`, `Stat`, `Pair` (`components/Layout.tsx`)     |
+| Bandeau (instance bloquée, master injoignable)       | `AlertStrip`                                         |
+| Fenêtre (bannir, terminer, retirer, session expirée) | `DialogFrame`, `ConfirmDialog`, `ActionDialogs`      |
+| Fil d'événements (Direct)                            | `EventFeed`, `EventLine`                             |
+| Fréquentation                                        | `AttendanceChart`                                    |
+| Jauge (temps restant d'un ban)                       | `Gauge`                                              |
+| Ouverture de session                                 | `Login`, `SessionExpired` (`components/Session.tsx`) |
 
 The fonts (OFL, with their licenses), the sparkles and the icons are in `src/assets/`, served by the panel:
 its CSP takes nothing from another host.
@@ -84,8 +96,11 @@ src/
   api/          the client of the API (its CSRF token) and its types
   live/         the WebSocket of /api/events: its store, reconnected, and the state it keeps
   theme/        the Chakra system after the Figma design, and the fonts
-  components/   the elements of the design, the dialogs of the actions
-  pages/        Overview, Games, a game, Players, Actions
+  components/   the elements of the design, the dialogs of the actions, the opening of a session
+  pages/        Overview, Games, a game, Players, Bans, Messages, History, Settings
+  actions.ts    the actions sent to the master, and their toasts
+  records.ts    an action of the record as the pages show it; the games searched; the bans that ended
+  preferences.ts what the host chose, kept in this browser
   strings.ts    every text, in English, in one place
 e2e/            Playwright, and the master it starts
 ```
