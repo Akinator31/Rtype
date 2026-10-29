@@ -245,6 +245,30 @@ std::size_t Administration::ban(const rtype::network::Address &address, std::chr
     return removed;
 }
 
+bool Administration::unban(const rtype::network::Address &address, const std::string &reason,
+                           const std::string &actor)
+{
+    const std::optional<AddressBan> lifted = _bans.remove(address);
+    if (!lifted) {
+        return false;
+    }
+    if (_database != nullptr && !_database->run("lift the ban of an address",
+                                                [key = lifted->address](rtype::database::Database &database) {
+                                                    deleteAddressBan(database, key);
+                                                })) {
+        logger().error("The ban of {} is lifted until the next start only: the database is too busy",
+                       lifted->address.ip());
+    }
+    logger().info("The ban of {} lifted by {}{}", lifted->address.ip(), actor, because(reason));
+
+    crow::json::wvalue details;
+    details["expiresAt"] = static_cast<std::int64_t>(unixMilliseconds(lifted->expiresAt));
+    details["bannedBy"] = lifted->actor;
+    details["reason"] = reason;
+    record(actor, "unban", std::format("address:{}", lifted->address.ip()), details.dump());
+    return true;
+}
+
 void Administration::purge()
 {
     const Clock::time_point now = Clock::now();

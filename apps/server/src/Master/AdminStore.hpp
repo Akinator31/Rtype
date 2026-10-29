@@ -55,6 +55,10 @@ long long recordAction(rtype::database::Database &database, const AdminAction &a
 /// @throws soci::soci_error if the database refuses it.
 void saveAddressBan(rtype::database::Database &database, const AddressBan &ban);
 
+/// Removes the ban of an address, lifted before it expires.
+/// @throws soci::soci_error if the database refuses it.
+void deleteAddressBan(rtype::database::Database &database, const rtype::network::Address &address);
+
 /// Removes the bans expired at `now`.
 /// @return How many.
 /// @throws soci::soci_error if the database refuses it.

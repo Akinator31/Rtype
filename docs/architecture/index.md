@@ -59,7 +59,7 @@ process.*
 
 How the server starts, what it is given and how it stops: [Server](server.md). How the master serves its
 administration panel over HTTP: [Web server](web.md). What an administrator sees and does:
-[Administration](administration.md).
+[Administration](administration.md), and the web page it does it from: [The panel](panel.md).
 
 New to networking? Start with [Networking concepts](networking-concepts.md).
 

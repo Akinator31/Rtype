@@ -65,8 +65,11 @@ jobs:
       - name: Build
         run: cmake --build build-sanitizers --parallel
 
-      # Without the randomization of the addresses: ThreadSanitizer refuses the layouts of the recent kernels
+      # Without the randomization of the addresses: ThreadSanitizer refuses the layouts of the recent kernels.
+      # The temporary files of the tests in the directory of this runner, as in the Build workflow
       - name: Test
+        env:
+          TMPDIR: ${{ runner.temp }}
         run: setarch "$(uname -m)" -R ctest --test-dir build-sanitizers --output-on-failure
 
       - name: Stop PostgreSQL

@@ -46,6 +46,21 @@ void AddressBans::add(AddressBan ban)
     _bans.insert_or_assign(key, std::move(ban));
 }
 
+std::optional<AddressBan> AddressBans::remove(const rtype::network::Address &address,
+                                              std::chrono::system_clock::time_point now)
+{
+    const auto found = _bans.find(banKey(address));
+    if (found == _bans.end()) {
+        return std::nullopt;
+    }
+    AddressBan lifted = std::move(found->second);
+    _bans.erase(found);
+    if (lifted.expiresAt <= now) {
+        return std::nullopt;
+    }
+    return lifted;
+}
+
 std::size_t AddressBans::purge(std::chrono::system_clock::time_point now)
 {
     return std::erase_if(_bans, [now](const auto &entry) { return entry.second.expiresAt <= now; });

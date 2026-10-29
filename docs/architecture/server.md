@@ -552,12 +552,15 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 - `tests/server_web.cpp` (tags `[server]`, `[web]`): a real `WebServer` with its loop on a thread, asked with
   libcurl (`tests/helpers/Http.hpp`). `/api/health` answered after the loop has worked, the others meanwhile;
   a request waiting for the loop answered `503` at the stop; the files of the panel and their types,
-  `index.html` for its pages, the page "not built", no path out of its folder; the headers of security on every
+  `index.html` for its pages, the page "not built", no path out of its folder, pages and files asked one after
+  the other on a connection kept alive, as a browser does; the headers of security on every
   response; the token traded for a session cookie, a wrong token refused, neither in the logs at any level;
   `X-Forwarded-For` from the right and only from a trusted proxy, in `visitorAddress()` and end to end; a port
   taken. Real masters: `admin-url.txt` (`0600`) whose address opens the page "not built" with a session, a port
   taken, a missing `panel_dir`, and a panel off the loopback refused without accounts. Every test that runs a
   master gives its panel port 0, with `testing::webOnAnyPort()`.
+- `tests/helpers/panel_players.cpp`, `rtype_panel_players`: not a test, the players of a game for the end-to-end
+  tests of the panel ([The panel](panel.md#tests)), which run a real master.
 - `tests/server_admin.cpp` (tags `[server]`, `[admin]`): the administration, alone with fakes of the games and
   the lobby, then end to end over HTTP and the WebSocket with real clients and instances
   ([Administration](administration.md#tests)).

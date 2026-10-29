@@ -97,6 +97,16 @@ This produces one archive per program: `r-type-<version>-Linux-client.tar.gz` an
 `r-type-<version>-Linux-server.tar.gz` on Linux, `.zip` files on Windows. Published versions are built the
 same way, see [Releasing](../contributing/releasing.md).
 
+The server archive carries the administration panel, as `admin/` beside the server, when it is given at the
+configure: the panel is built by Node, apart from the game
+([web/admin/README.md](https://github.com/Akinator31/Rtype/blob/main/web/admin/README.md)), and the CI does it.
+Without it, the server runs, and its panel says it is not built.
+
+```sh
+(cd web/admin && npm ci && npm run build)
+cmake -S . -B build -DRTYPE_ADMIN_PANEL_DIR=$PWD/web/admin/dist
+```
+
 ## Troubleshooting
 
 ??? question "CMake reports a dependency path that no longer exists"

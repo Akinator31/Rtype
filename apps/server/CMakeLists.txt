@@ -33,7 +33,8 @@ CPMAddPackage(
 
 # Crow serves the panel and its API (docs/architecture/web.md). Header-only, given the Asio of libs/network,
 # so that the binary holds one Asio. A private dependency, behind Web/WebServer.hpp. Patched: a response ended
-# after its handler returned freed its connection while completing it (CrowCpp/Crow#843)
+# after its handler returned freed its connection while completing it (CrowCpp/Crow#843), and an empty request
+# left booleans uninitialized, which the parser copied after each response (undefined behavior)
 CPMAddPackage(NAME asio VERSION 1.38.2)
 set(ASIO_INCLUDE_DIR ${asio_SOURCE_DIR}/include CACHE PATH "The Asio Crow uses: the one of libs/network")
 CPMAddPackage(
@@ -41,7 +42,7 @@ CPMAddPackage(
     VERSION 1.3.4
     URL https://github.com/CrowCpp/Crow/archive/refs/tags/v1.3.4.tar.gz
     URL_HASH SHA256=6be759b3a648b41f0adc3a8408a53fd0243775217b4e32e8101d69e4aadf48cc
-    PATCHES patches/crow-deferred-response.patch
+    PATCHES patches/crow-deferred-response.patch patches/crow-request-initialized.patch
     SYSTEM YES
     EXCLUDE_FROM_ALL YES
     OPTIONS
@@ -155,3 +156,16 @@ add_executable(r-type_server
 target_link_libraries(r-type_server PRIVATE rtype_options r-type_server_core rtype::ecs rtype::log rtype::physics)
 
 install(TARGETS r-type_server RUNTIME DESTINATION . COMPONENT server)
+
+# The administration panel (web/admin), built by Node apart from the game: given its dist/ folder, the server
+# package holds it as admin/ beside the executable, where the master serves it from by default. Without it, the
+# panel says it is not built; the game builds without Node
+set(RTYPE_ADMIN_PANEL_DIR "" CACHE PATH "The built panel (web/admin/dist) to install beside the server, as admin/")
+if(RTYPE_ADMIN_PANEL_DIR)
+  file(TO_CMAKE_PATH "${RTYPE_ADMIN_PANEL_DIR}" admin_panel_dir)
+  if(NOT EXISTS "${admin_panel_dir}/index.html")
+    message(FATAL_ERROR "RTYPE_ADMIN_PANEL_DIR=${admin_panel_dir} holds no index.html: build the panel first "
+                        "(npm run build in web/admin)")
+  endif()
+  install(DIRECTORY "${admin_panel_dir}/" DESTINATION admin COMPONENT server)
+endif()

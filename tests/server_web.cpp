@@ -318,6 +318,33 @@ TEST_CASE("The files of the panel are served, and its index.html for the paths o
     CHECK(post.header("allow") == "GET");
 }
 
+TEST_CASE("A connection kept alive gets each page and file it asks, as a browser does", "[server][web]")
+{
+    const TempDirectory panel("panel_keep_alive");
+    panel.write("index.html", "<!doctype html><title>Panel</title>");
+    panel.write("assets/app.js", "console.log('panel');");
+    Web web(withPanel(panel.path));
+
+    // The token traded, then the page it redirects to, then its script, then other pages: one connection, as
+    // a browser keeps it. Crow ends the response of the catch-all route itself: ended twice, the next request
+    // on the connection got its bare 404
+    bool reused = false;
+    const std::vector<HttpResponse> responses = testing::httpSequence(
+        {web.base + "/?token=" + formatSecret(web.token), web.base + "/", web.base + "/assets/app.js",
+         web.base + "/games", web.base + "/players", web.base + "/api/health", web.base + "/actions"},
+        &reused);
+    CHECK(reused);
+    REQUIRE(responses.size() == 7);
+    CHECK(responses[0].status == 303);
+    for (const std::size_t page : {1U, 3U, 4U, 6U}) {
+        INFO(page);
+        CHECK(responses[page].status == 200);
+        CHECK(responses[page].body == "<!doctype html><title>Panel</title>");
+    }
+    CHECK(responses[2].body == "console.log('panel');");
+    CHECK(responses[5].status == 200);
+}
+
 TEST_CASE("Without its files, the panel says it is not built", "[server][web]")
 {
     const TempDirectory directory("unbuilt");

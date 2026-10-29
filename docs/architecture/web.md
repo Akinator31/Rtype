@@ -5,7 +5,7 @@ the static files of the panel, `/api/health`, the local access token traded for 
 [administration API](../protocol/admin-api.md) and its WebSocket, and the headers of security of every
 response. `WebServer` (`apps/server/src/Web/WebServer.hpp`) runs it on threads of its own, beside the event loop
 of the master. What the API shows and does lives in the master: [Administration](administration.md). The panel
-itself comes later.
+it serves: [The panel](panel.md).
 
 To configure it, see the `[web]` section of [Configure a server](../guides/configure-a-server.md).
 
@@ -24,7 +24,7 @@ To configure it, see the `[web]` section of [Configure a server](../guides/confi
 | `GET /api/health` | nothing | `200 {"status":"ok"}`, answered by the event loop of the master: a master whose loop is stuck is not healthy |
 | `GET /api/session` | a session | `200 {"csrfToken": "…"}` with a session, `401` without |
 | `GET /api/server`, `/api/games`, `/api/games/{id}`, `/api/players`, `/api/actions`, `/api/bans` | a session | The [administration API](../protocol/admin-api.md#3-reading), answered by the loop |
-| `POST /api/players/{id}/kick`, `/api/games/{id}/end`, `/api/messages`, `/api/bans` | a session and its CSRF token | The [actions](../protocol/admin-api.md#4-acting), done on the loop |
+| `POST /api/players/{id}/kick`, `/api/games/{id}/end`, `/api/messages`, `/api/bans`, `/api/bans/lift` | a session and its CSRF token | The [actions](../protocol/admin-api.md#4-acting), done on the loop |
 | `GET /api/events` | a session, from a page of the panel | The WebSocket of the [live events](../protocol/admin-api.md#5-events) |
 | other `/api/...` | a session | `401` without a session, `404` with one |
 | `GET /?token=<64 hex digits>` | the local access token | `303` to `/` with the session cookie; `403` for a wrong token, without a cookie |
@@ -72,6 +72,17 @@ Crow does not support a response ended after its handler has returned (CrowCpp/C
 completes the request holds the last reference to its connection, and clears itself while it runs, which frees
 the connection in the middle. `apps/server/patches/crow-deferred-response.patch`, applied by CPM, calls a copy
 of it instead. The test that answers after the loop has worked fails without it.
+
+Crow's empty `request()` leaves `keep_alive`, `close_connection`, `upgrade` and the HTTP version
+uninitialized, and its parser resets its request with one after each response: the copy reads those values,
+which is undefined behavior. UndefinedBehaviorSanitizer stops on it whenever the memory does not hold a 0 or a
+1, so a test of the API failed now and then in the build with the sanitizers.
+`apps/server/patches/crow-request-initialized.patch` gives them a value.
+
+Crow ends the response of its catch-all route itself, after the handler, which serves the files of the panel:
+that handler only fills the response. Ended twice, the response stayed completed once sent, and the next request
+on the same connection got Crow's bare `404` without reaching any handler, which a browser, keeping its
+connections alive, hit on its second page. The test of a connection kept alive fails without it.
 
 ## Local access
 
