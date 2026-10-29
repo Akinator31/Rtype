@@ -6,11 +6,14 @@
 //   arguments <file> <args>...     writes its arguments to the file, one per line, and exits with 0
 //   sleep [file] [anything]...     creates the file if given, to say it is ready, and waits until stopped
 //   stubborn <file>                ignores the requests to stop, creates the file to say so, and waits
+//   relay <file> [anything]...     writes the first line of its standard input to the file, and waits until
+//                                  stopped: a test then plays the instance with the secret of its master
 //
 // It never waits more than a minute: a test that fails leaves no program behind for long.
 
 #include <chrono>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -71,6 +74,17 @@ int main(int argc, char **argv)
         if (argc >= 3 && argv[2][0] != '-') {
             std::ofstream(argv[2]) << "ready\n";
         }
+        return sleepAWhile();
+    }
+    if (mode == "relay" && argc >= 3) {
+        std::string line;
+        std::getline(std::cin, line);
+        {
+            std::ofstream file(std::string(argv[2]) + ".part", std::ios::binary);
+            file << line << '\n';
+        }
+        // Whole or absent: the test never reads half a line
+        std::rename((std::string(argv[2]) + ".part").c_str(), argv[2]);
         return sleepAWhile();
     }
     if (mode == "stubborn" && argc == 3) {
