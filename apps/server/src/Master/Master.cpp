@@ -2,6 +2,9 @@
 
 #include "Common/GameConfig.hpp"
 #include "Common/Lifecycle.hpp"
+#include "Master/AddressBans.hpp"
+#include "Master/AdminStore.hpp"
+#include "Master/Administration.hpp"
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "Master/Process.hpp"
@@ -77,6 +80,14 @@ int runMaster(const MasterOptions &options)
     if (!database) {
         return Failure;
     }
+    // The bans of addresses outlive a restart (docs/architecture/administration.md#bans)
+    std::vector<AddressBan> loadedBans;
+    try {
+        loadedBans = loadAddressBans(*database, std::chrono::system_clock::now());
+    } catch (const soci::soci_error &error) {
+        logger.error("Cannot read the bans of addresses: {}", error.what());
+        return Failure;
+    }
 
     rtype::network::EventLoop loop;
     std::optional<rtype::network::TcpListener> listener;
@@ -111,6 +122,7 @@ int runMaster(const MasterOptions &options)
                               .listen = webSettings.listen,
                               .panelDir = panelDir,
                               .trustedProxies = webSettings.trustedProxies,
+                              .publicUrl = webSettings.publicUrl,
                               .accessToken = accessToken,
                           });
     } catch (const std::system_error &error) {
@@ -161,7 +173,24 @@ int runMaster(const MasterOptions &options)
         logger.error("Cannot prepare the games: {}", error.what());
         return Failure;
     }
+    AddressBans bans(loadedBans);
+    if (!loadedBans.empty()) {
+        logger.info("{} addresses banned", loadedBans.size());
+    }
     Lobby lobby(loop, std::move(*listener), identity, *games);
+    lobby.setBans(&bans);
+    // The administration API (docs/architecture/administration.md), shown by the panel
+    Administration administration(loop, *games, lobby, bans, &databaseThread,
+                                  AdministrationSettings{
+                                      .version = RTYPE_VERSION,
+                                      .lobbyPort = lobby.localAddress().port(),
+                                      .firstGamePort = options.firstGamePort,
+                                      .lastGamePort = options.lastGamePort,
+                                      .panelPort = web->localAddress().port(),
+                                  });
+    games->setObserver(&administration);
+    lobby.setObserver(&administration);
+    web->setAdministration(&administration);
     // Until every instance has exited, then the time for the last frames to leave
     rtype::network::Timer stopping(loop);
     logger.info("Master started: Ctrl+C to stop");
@@ -176,6 +205,10 @@ int runMaster(const MasterOptions &options)
             }
         });
     });
+    // The administration goes first: nothing tells it anything any more
+    web->setAdministration(nullptr);
+    lobby.setObserver(nullptr);
+    games->setObserver(nullptr);
     logger.info("Master stopped");
     return clean ? Success : Failure;
 }

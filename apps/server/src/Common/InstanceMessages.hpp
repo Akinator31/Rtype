@@ -18,7 +18,7 @@ namespace rtype::server
 {
 
 /// The version of this protocol, in INSTANCE_HELLO.
-inline constexpr std::uint16_t InstanceProtocolVersion = 2;
+inline constexpr std::uint16_t InstanceProtocolVersion = 3;
 /// Longest name of a game, in bytes of UTF-8.
 inline constexpr std::size_t MaxGameNameLength = 32;
 /// Longest name of a player, in bytes of UTF-8.
@@ -159,6 +159,8 @@ enum class RemovePlayerReason : std::uint8_t {
     Left = 0,
     /// The connection of the player to the master closed.
     LobbyClosed = 1,
+    /// An administrator removed the player (version 3).
+    Kicked = 2,
 };
 
 /// `REMOVE_PLAYER`.
@@ -175,6 +177,8 @@ enum class ShutdownReason : std::uint8_t {
     Empty = 0,
     /// The master stops.
     MasterStopping = 1,
+    /// An administrator ended the game (version 3).
+    EndedByAdmin = 2,
 };
 
 /// `SHUTDOWN`.

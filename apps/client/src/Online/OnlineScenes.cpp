@@ -43,6 +43,10 @@ std::string leftReason(lobby::LeftGameReason reason)
         return "The game stopped unexpectedly";
     case lobby::LeftGameReason::TimedOut:
         return "The game lost the connection with the client";
+    case lobby::LeftGameReason::Kicked:
+        return "An administrator removed you from the game";
+    case lobby::LeftGameReason::EndedByAdmin:
+        return "An administrator ended the game";
     }
     return "Left the game";
 }
@@ -252,10 +256,13 @@ void OnlineScenes::connect()
             .onLeftGame =
                 [this](const lobby::LeftGameMessage &left) {
                     _engine.showToast(leftReason(left.reason),
-                                      left.reason == lobby::LeftGameReason::GameCrashed
+                                      left.reason == lobby::LeftGameReason::GameCrashed ||
+                                              left.reason == lobby::LeftGameReason::Kicked
                                           ? engine::ToastType::Error
                                           : engine::ToastType::Info);
                 },
+            .onServerMessage =
+                [this](const std::string &text) { _engine.showToast(std::format("Server: {}", text)); },
             .onClosed = [this](const std::string &reason) { lobbyClosed(reason); },
             .onUntrusted = [this](const network::KeyFingerprint &presented) { untrusted(presented); },
         });

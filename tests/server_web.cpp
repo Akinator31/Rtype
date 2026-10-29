@@ -398,9 +398,19 @@ TEST_CASE("The access token is traded for a session cookie, then the address wit
     CHECK_THAT(cookie, !ContainsSubstring(formatSecret(web.token)));
 
     const std::string session = cookie.substr(0, cookie.find(';'));
-    CHECK(web.get("/api/session", {.method = "GET", .headers = sessionHeader(session)}).status == 204);
+    const HttpResponse described =
+        web.get("/api/session", {.method = "GET", .headers = sessionHeader(session)});
+    CHECK(described.status == 200);
+    CHECK(described.header("content-type") == "application/json");
+    // Its CSRF token, which every POST of the API carries: neither the session nor the access token
+    REQUIRE(described.body.starts_with(R"({"csrfToken":")"));
+    const std::string csrf = described.body.substr(14, 64);
+    CHECK(parseSecret(csrf).has_value());
+    CHECK(described.body == R"({"csrfToken":")" + csrf + R"("})");
+    CHECK(csrf != formatSecret(web.token));
+    CHECK_THAT(session, !ContainsSubstring(csrf));
     CHECK(web.get("/api/session", {.method = "GET", .headers = {"Cookie: theme=dark; " + session + "; a=b"}})
-              .status == 204);
+              .body == described.body);
     // Every other route of the API needs it
     CHECK(web.get("/api/nothing").status == 401);
     CHECK(web.get("/api/nothing", {.method = "GET", .headers = sessionHeader(session)}).status == 404);
@@ -420,8 +430,8 @@ TEST_CASE("The access token is traded for a session cookie, then the address wit
     // Opened again: a second session, the first one still valid
     const std::string second = web.signIn();
     CHECK(second != session);
-    CHECK(web.get("/api/session", {.method = "GET", .headers = sessionHeader(session)}).status == 204);
-    CHECK(web.get("/api/session", {.method = "GET", .headers = sessionHeader(second)}).status == 204);
+    CHECK(web.get("/api/session", {.method = "GET", .headers = sessionHeader(session)}).status == 200);
+    CHECK(web.get("/api/session", {.method = "GET", .headers = sessionHeader(second)}).status == 200);
 }
 
 TEST_CASE("A wrong access token is refused, without a cookie", "[server][web]")
@@ -450,7 +460,7 @@ TEST_CASE("Neither the access token nor a session reaches the logs", "[server][w
         Web web;
         token = formatSecret(web.token);
         session = web.signIn();
-        CHECK(web.get("/api/session", {.method = "GET", .headers = sessionHeader(session)}).status == 204);
+        CHECK(web.get("/api/session", {.method = "GET", .headers = sessionHeader(session)}).status == 200);
         CHECK(web.get("/?token=" + wrong).status == 403);
         CHECK(web.get("/games?token=" + token).status == 200);
     }
@@ -612,7 +622,17 @@ TEST_CASE("A master writes admin-url.txt beside its key, whose address opens the
     const HttpResponse page = http(base + "/", {.method = "GET", .headers = sessionHeader(session)});
     CHECK(page.status == 200);
     CHECK_THAT(page.body, ContainsSubstring("The panel is not built"));
-    CHECK(http(base + "/api/session", {.method = "GET", .headers = sessionHeader(session)}).status == 204);
+    CHECK(http(base + "/api/session", {.method = "GET", .headers = sessionHeader(session)}).status == 200);
+    // The done-when of the administration API: its routes answer from the master
+    const HttpResponse server =
+        http(base + "/api/server", {.method = "GET", .headers = sessionHeader(session)});
+    CHECK(server.status == 200);
+    CHECK_THAT(server.body, ContainsSubstring(R"("version":")"));
+    const HttpResponse games =
+        http(base + "/api/games", {.method = "GET", .headers = sessionHeader(session)});
+    CHECK(games.status == 200);
+    CHECK(games.body == "[]");
+    CHECK(http(base + "/api/server").status == 401);
 
     std::raise(SIGTERM);
     master.join();

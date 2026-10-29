@@ -201,7 +201,7 @@ of a `TcpConnection`: the code above it only sees whole messages.
 
 ```
 size (u16) | type (u8) | payload (size − 1 bytes)
-00 09        01          00 01 05 50 61 76 65 6C      HELLO, version 1, "Pavel"
+00 09        01          00 02 05 50 61 76 65 6C      HELLO, version 2, "Pavel"
 ```
 
 ```cpp

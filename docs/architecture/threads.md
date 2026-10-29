@@ -253,5 +253,9 @@ The server does not link the engine and keeps its own threads ([Server](server.m
 network loop, its database thread ([Database](database.md#the-database-thread)) and the two threads of its web
 server ([Web server](web.md#responses-from-the-loop)), each instance its network loop and its game thread.
 
-The web threads never touch the lobby or the games: a request that needs them posts its work to the loop, which
-replies, and the reply is sent back by the web thread of the connection. Neither waits for the other.
+The web threads never touch the lobby, the games or the administration: a request that needs them posts its
+work to the loop, which replies, and the reply is sent back by the web thread of the connection. Neither waits
+for the other. The live events go the other way: the loop hands each frame of a WebSocket to the web thread of
+its connection, under the lock that keeps the connection alive meanwhile
+([Web server](web.md#the-websocket)). The administration records its actions through the database thread, and
+gets their ids back on the loop ([Administration](administration.md)).

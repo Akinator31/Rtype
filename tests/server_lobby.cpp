@@ -14,6 +14,7 @@
 #include "rtype/network/TlsConnection.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -182,7 +183,8 @@ TEST_CASE("An invalid name is refused, and the client can try again", "[lobby]")
     LobbyFixture fixture;
     auto client = fixture.client();
     const auto sendName = [&](std::string name) {
-        Bytes payload = {std::byte{0}, std::byte{1}, static_cast<std::byte>(name.size())};
+        Bytes payload = {std::byte{0}, static_cast<std::byte>(ProtocolVersion),
+                         static_cast<std::byte>(name.size())};
         for (const char character : name) {
             payload.push_back(static_cast<std::byte>(character));
         }
@@ -206,10 +208,13 @@ TEST_CASE("An invalid name is refused, and the client can try again", "[lobby]")
 
 TEST_CASE("Another version of the protocol is refused, and the connection closed", "[lobby]")
 {
+    // A client of before the administration (version 1), and one of a newer server
+    const std::uint16_t version = GENERATE(std::uint16_t{1}, static_cast<std::uint16_t>(ProtocolVersion + 1));
+    CAPTURE(version);
     LobbyFixture fixture;
     auto client = fixture.client();
 
-    client->send(message_type::Hello, encode(HelloMessage{2, "Pavel"}));
+    client->send(message_type::Hello, encode(HelloMessage{version, "Pavel"}));
 
     CHECK(client->error(fixture.loop) == ErrorMessage{message_type::Hello, ErrorCode::UnsupportedVersion});
     CHECK(waitUntil(fixture.loop, [&] { return client->closed.has_value(); }));

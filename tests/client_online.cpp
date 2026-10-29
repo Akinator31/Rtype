@@ -57,6 +57,7 @@ struct Master {
 struct Events {
     std::optional<std::uint32_t> welcomed;
     std::vector<lobby::LeftGameMessage> left;
+    std::vector<std::string> messages;
     std::optional<std::string> closed;
 
     LobbyClient::Handlers handlers()
@@ -64,6 +65,7 @@ struct Events {
         return {
             .onWelcome = [this](std::uint32_t player) { welcomed = player; },
             .onLeftGame = [this](const lobby::LeftGameMessage &message) { left.push_back(message); },
+            .onServerMessage = [this](const std::string &text) { messages.push_back(text); },
             .onClosed = [this](const std::string &reason) { closed = reason; },
             .onUntrusted = {},
         };
@@ -144,13 +146,14 @@ TEST_CASE("A server is given as host:port, the port of the lobby by default", "[
 TEST_CASE("Every error of the master has a message for the player", "[online]")
 {
     std::set<std::string> messages;
-    for (std::uint16_t code = 1; code <= 12; ++code) {
+    for (std::uint16_t code = 1; code <= 14; ++code) {
         const std::string message = rtype::client::describe(static_cast<lobby::ErrorCode>(code));
         CHECK_FALSE(message.empty());
+        CHECK_FALSE(message.starts_with("The server refused (error"));
         messages.insert(message);
     }
     // HELLO_REQUIRED and ALREADY_WELCOMED share theirs: the player can do nothing about either
-    CHECK(messages.size() == 11);
+    CHECK(messages.size() == 13);
     CHECK_FALSE(rtype::client::describe(static_cast<lobby::ErrorCode>(999)).empty());
 }
 
@@ -363,4 +366,34 @@ TEST_CASE("A game that stops ends the session of its players", "[online]")
 
     REQUIRE(play(master.loop, {&session}, [&] { return session.isOver(); }));
     CHECK(session.endReason() == "The game stopped");
+}
+
+TEST_CASE("A client is told what the administrators do: a message, a game ended, a removal", "[online]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed(); }));
+
+    // A message: a notification, between the replies
+    REQUIRE(master.lobby.sendMessage(*alice.playerId(), "Restart in 5 minutes"));
+    REQUIRE(waitUntil(master.loop, [&] { return !events.messages.empty(); }));
+    CHECK(events.messages == std::vector<std::string>{"Restart in 5 minutes"});
+    CHECK(list(master.loop, alice).empty());
+
+    // A game ended: back in the lobby
+    const lobby::GameJoinedMessage game = create(master.loop, alice, "Doomed");
+    REQUIRE(master.games.end(game.gameId));
+    REQUIRE(waitUntil(master.loop, [&] { return !events.left.empty(); }));
+    CHECK(events.left[0] == lobby::LeftGameMessage{game.gameId, lobby::LeftGameReason::EndedByAdmin});
+
+    // Removed: out of its game, then of the server, with the reason
+    const lobby::GameJoinedMessage second = create(master.loop, alice, "Second");
+    REQUIRE(master.games.kick(*alice.playerId()));
+    REQUIRE(master.lobby.disconnect(*alice.playerId(), lobby::ErrorCode::Kicked));
+    REQUIRE(waitUntil(master.loop, [&] { return events.closed.has_value(); }));
+    CHECK(events.left.back() == lobby::LeftGameMessage{second.gameId, lobby::LeftGameReason::Kicked});
+    CHECK(*events.closed == rtype::client::describe(lobby::ErrorCode::Kicked));
+    CHECK_FALSE(alice.welcomed());
 }

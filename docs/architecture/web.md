@@ -1,9 +1,11 @@
 # Web server
 
 The master serves HTTP for its administration panel ([ADR 0025](../decisions/0025-server-administration.md)):
-the static files of the panel, `/api/health`, the local access token traded for a session, and the headers of
-security of every response. `WebServer` (`apps/server/src/Web/WebServer.hpp`) runs it on threads of its own,
-beside the event loop of the master. The administration API and the panel itself come later.
+the static files of the panel, `/api/health`, the local access token traded for a session, the
+[administration API](../protocol/admin-api.md) and its WebSocket, and the headers of security of every
+response. `WebServer` (`apps/server/src/Web/WebServer.hpp`) runs it on threads of its own, beside the event loop
+of the master. What the API shows and does lives in the master: [Administration](administration.md). The panel
+itself comes later.
 
 To configure it, see the `[web]` section of [Configure a server](../guides/configure-a-server.md).
 
@@ -12,16 +14,19 @@ To configure it, see the `[web]` section of [Configure a server](../guides/confi
 | Library | [Crow](https://crowcpp.org) 1.3.4, header-only, through CPM with a hash, given the Asio of `libs/network`: one Asio in the binary. A private dependency, behind `Web/WebServer.hpp`, patched ([Responses from the loop](#responses-from-the-loop)) |
 | Listens | `127.0.0.1:8080` by default, `[web] listen`. Without accounts, a loopback address only |
 | Threads | Two of Crow: one accepts the connections, one handles them |
-| Code | `Web/WebServer.cpp` (Crow, the routes, the files, the sessions), `Web/LocalAccess.cpp` (the token, `admin-url.txt`), `Web/Visitor.cpp` (the address of the visitor behind the proxies) |
-| Tests | `tests/server_web.cpp`, tag `[web]` |
+| Code | `Web/WebServer.cpp` (Crow, the routes, the files, the sessions, the WebSocket), `Web/AdminJson.cpp` (the JSON of the API), `Web/LocalAccess.cpp` (the token, `admin-url.txt`), `Web/Visitor.cpp` (the address of the visitor behind the proxies) |
+| Tests | `tests/server_web.cpp`, tag `[web]`; the API in `tests/server_admin.cpp`, tag `[admin]` |
 
 ## Routes
 
 | Route | Needs | Answer |
 |---|---|---|
 | `GET /api/health` | nothing | `200 {"status":"ok"}`, answered by the event loop of the master: a master whose loop is stuck is not healthy |
-| `GET /api/session` | a session | `204` with a session, `401` without |
-| `/api/...` | a session | `401` without a session, `404` with one: the routes of the administration API, to come |
+| `GET /api/session` | a session | `200 {"csrfToken": "…"}` with a session, `401` without |
+| `GET /api/server`, `/api/games`, `/api/games/{id}`, `/api/players`, `/api/actions`, `/api/bans` | a session | The [administration API](../protocol/admin-api.md#3-reading), answered by the loop |
+| `POST /api/players/{id}/kick`, `/api/games/{id}/end`, `/api/messages`, `/api/bans` | a session and its CSRF token | The [actions](../protocol/admin-api.md#4-acting), done on the loop |
+| `GET /api/events` | a session, from a page of the panel | The WebSocket of the [live events](../protocol/admin-api.md#5-events) |
+| other `/api/...` | a session | `401` without a session, `404` with one |
 | `GET /?token=<64 hex digits>` | the local access token | `303` to `/` with the session cookie; `403` for a wrong token, without a cookie |
 | `GET /<file>` | nothing | The file of the panel, with its `Content-Type` |
 | `GET /<page>` | nothing | `index.html` of the panel, for a path without an extension: the panel routes it itself. A missing file with an extension is `404` |
@@ -57,6 +62,8 @@ sequenceDiagram
 
 - The response is ended on Crow's thread of its connection, never on the loop: Crow is not thread-safe.
 - The requests waiting are kept by id, not by response: a connection reuses its response for its next request.
+- A route of the API whose work needs the administration answers `503` until the master gives it
+  (`setAdministration()`), and after it takes it away, on the way out.
 - `stop()`, called by the shutdown of the master and by the destructor, first answers `503` to the requests
   still waiting, on Crow's threads, then stops Crow and waits for its threads. A reply that comes later is
   dropped. The web server stops first, before the lobby and the games, and is destroyed before the loop.
@@ -90,6 +97,40 @@ There are no accounts yet: the panel is opened from the machine of the server, w
 The session lasts 12 hours, in the memory of the master: a restart ends it, as it changes the token. Each
 opening makes a new session, 64 at most, the oldest dropped. The session is not the token: a cookie that leaks
 does not give the token. Tokens and sessions are compared in constant time.
+
+## Requests from other sites
+
+The cookie is `SameSite=Strict`: a browser does not send it with a request that another site starts. Two more
+rules close what it leaves open, such as a page of a sibling domain (`*.example.org`), which is the same site:
+
+- **Every `POST` of the API carries the CSRF token of its session** in `X-CSRF-Token`. Each session has its own,
+  256 random bits, given by `GET /api/session` to the panel, which a page of another origin cannot read. A
+  `POST` without it, or with another session's, is `403`, before its body is read; the session is checked
+  first, so a visitor without one learns nothing about a route.
+- **The WebSocket of `/api/events` is refused when its `Origin` is not the panel's**: the address the browser
+  asked (`http://<Host>`, `https://<Host>`), or the origin of `[web] public_url`. A browser always sends the
+  origin of the page that opens a WebSocket, which the page cannot change; the cookie alone would let a sibling
+  domain read the events, addresses of the players included. Refused, the upgrade gets `401` or `403` and no
+  event, and is logged:
+
+    ```
+    WARN  web      A WebSocket was refused: it was opened by a page of http://evil.example.org
+    ```
+
+## The WebSocket
+
+Crow accepts the WebSocket on its threads; the events come from the loop.
+
+1. On the upgrade, Crow's thread checks the session and the origin.
+2. Once open, the connection is kept with a token of its own, never reused, and the loop is asked to
+   subscribe it to the administration: the snapshot goes first, then each event, from the loop.
+3. Sending from the loop takes the lock of the connections and checks the connection is still there with its
+   token: Crow removes it in its close handler, under the same lock, before it frees it. `send_text()` hands the
+   frame to Crow's thread of the connection, which writes it.
+4. Closed, the connection is forgotten under the lock, then unsubscribed on the loop.
+
+`stop()` forgets every connection first: Crow then closes them, and may free them without calling the close
+handler.
 
 **The token is accepted wherever the panel listens**, not only from this machine. It is as strong as a session,
 and whoever can read `admin-url.txt` already controls the server. No access is ever decided by the address of

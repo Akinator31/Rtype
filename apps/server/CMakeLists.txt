@@ -113,12 +113,16 @@ add_library(r-type_server_core STATIC
     src/Instance/InputBuffer.cpp
     src/Instance/Instance.cpp
     src/Instance/MasterLink.cpp
+    src/Master/AddressBans.cpp
+    src/Master/Administration.cpp
+    src/Master/AdminStore.cpp
     src/Master/Games.cpp
     src/Master/Lobby.cpp
     src/Master/Master.cpp
     src/Master/Process.cpp
     src/Master/ServerDatabase.cpp
     src/Master/ServerKey.cpp
+    src/Web/AdminJson.cpp
     src/Web/LocalAccess.cpp
     src/Web/Visitor.cpp
     src/Web/WebServer.cpp

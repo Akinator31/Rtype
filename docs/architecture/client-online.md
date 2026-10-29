@@ -56,6 +56,10 @@ sequenceDiagram
 Everything that goes wrong is shown in a toast: a server unreachable or not the expected one, a game full, a
 game that crashed, the connection lost. A lobby connection lost brings the player back to the main menu.
 
+What the administrators of the server do is shown in a toast too ([Administration](administration.md)): a
+message they send (`Server: <text>`), a game they end (back to the list), a removal from the game then from the
+server, an address banned (back to the main menu, with the reason).
+
 ## Trusted servers
 
 Players never handle a key file: each server makes its key at its first start, and the player trusts it at
@@ -82,7 +86,8 @@ the key trusted until the client closes, and the client says so.
 ```cpp
 rtype::client::LobbyClient lobby(loop, server, known.trusted(address), "Pavel",
     {.onWelcome = [&](std::uint32_t player) { lobby.listGames(showList); },
-     .onLeftGame = [&](const rtype::lobby::LeftGameMessage &left) { /* game over, crash, timeout */ },
+     .onLeftGame = [&](const rtype::lobby::LeftGameMessage &left) { /* game over, crash, timeout, admin */ },
+     .onServerMessage = [&](const std::string &text) { /* toast it */ },
      .onClosed = [&](const std::string &reason) { /* toast it */ },
      .onUntrusted = [&](const rtype::network::KeyFingerprint &presented) { /* ask the player, or warn */ }});
 lobby.joinGame(id, [&](const rtype::client::LobbyClient::JoinResult &result) { /* GAME_JOINED or an error */ });
@@ -92,7 +97,10 @@ lobby.joinGame(id, [&](const rtype::client::LobbyClient::JoinResult &result) { /
   reply goes to the oldest request waiting. An `ERROR` goes to the callback of its request:
   `describe(code)` gives the message for the player.
 - **`LEFT_GAME`** is the reply to `LEAVE_GAME`, or a notification when the player did not ask (game over,
-  crash, timeout): the latter goes to `onLeftGame`.
+  crash, timeout, removed by an administrator, game ended by one): the latter goes to `onLeftGame`.
+- **`SERVER_MESSAGE`** is a notification: it goes to `onServerMessage`, never to a request.
+- **`ERROR (KICKED)` or `ERROR (BANNED)` with the request 0** answers no request: the master closes the
+  connection after it, and `onClosed` gets its `describe()`. `BANNED` in reply to `HELLO` ends the same way.
 - **`PING`** is sent after 10 seconds without sending anything, so that the master, which closes a connection
   silent for 30 seconds, keeps it.
 - **A name is checked before connecting** (`std::invalid_argument`): `HELLO` is written in a handler of the loop,

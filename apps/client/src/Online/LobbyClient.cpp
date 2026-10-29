@@ -65,6 +65,10 @@ std::string describe(ErrorCode code)
         return "The server cannot host another game";
     case ErrorCode::GameStartFailed:
         return "The game could not start";
+    case ErrorCode::Kicked:
+        return "An administrator removed you from the server";
+    case ErrorCode::Banned:
+        return "Your address is banned from this server";
     }
     return std::format("The server refused (error {})", static_cast<int>(code));
 }
@@ -154,6 +158,27 @@ void LobbyClient::request(std::uint8_t type, std::span<const std::byte> payload,
 
 void LobbyClient::received(std::uint8_t type, std::span<const std::byte> payload)
 {
+    if (type == message_type::ServerMessage) {
+        const std::optional<lobby::ServerMessageMessage> message = lobby::decodeServerMessage(payload);
+        if (!message) {
+            fail("The server sent a malformed SERVER_MESSAGE");
+            return;
+        }
+        logger().info("Message from the server: {}", message->text);
+        if (_handlers.onServerMessage) {
+            _handlers.onServerMessage(message->text);
+        }
+        return;
+    }
+    // KICKED and BANNED come without a request, then the master closes the connection
+    if (type == message_type::Error) {
+        const std::optional<lobby::ErrorMessage> error = lobby::decodeError(payload);
+        if (error && error->request == 0 &&
+            (error->code == ErrorCode::Kicked || error->code == ErrorCode::Banned)) {
+            fail(describe(error->code));
+            return;
+        }
+    }
     // LEFT_GAME is a reply to LEAVE_GAME, or a notification when the player did not ask
     if (type == message_type::LeftGame) {
         const std::optional<lobby::LeftGameMessage> left = lobby::decodeLeftGame(payload);

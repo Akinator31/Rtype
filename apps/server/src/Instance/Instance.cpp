@@ -44,6 +44,20 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
+/// Why the master shuts the game down, for the logs.
+std::string_view describe(ShutdownReason reason)
+{
+    switch (reason) {
+    case ShutdownReason::Empty:
+        return "no player left";
+    case ShutdownReason::MasterStopping:
+        return "the master stops";
+    case ShutdownReason::EndedByAdmin:
+        return "an administrator ended the game";
+    }
+    return "unknown reason";
+}
+
 /// The player of a slot in standalone mode, with the public keys of rtype/game/Standalone.hpp.
 AddPlayerMessage standalonePlayer(std::uint8_t slot)
 {
@@ -199,10 +213,7 @@ public:
                               },
                           .onShutdown =
                               [this](const ShutdownMessage &shutdown) {
-                                  logger().info("Shut down by the master: {}",
-                                                shutdown.reason == ShutdownReason::Empty
-                                                    ? "no player left"
-                                                    : "the master stops");
+                                  logger().info("Shut down by the master: {}", describe(shutdown.reason));
                                   stop(Success, DisconnectReason::Shutdown);
                               },
                           .onFailed =

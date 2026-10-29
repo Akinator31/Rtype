@@ -41,6 +41,8 @@ namespace rtype::client
 /// onUntrusted
 ///   tells the key it presented, so that the player can trust it (ADR 0021), or onClosed without it.
 /// - After 10 seconds without sending anything, it sends PING, so that the master keeps the connection.
+/// - SERVER_MESSAGE, and LEFT_GAME when the player did not ask, are notifications: they go to their handlers.
+///   ERROR (KICKED) or (BANNED) without a request closes the connection, with its reason.
 /// - Everything runs on the thread that polls the loop: in the client, the game loop.
 class LobbyClient
 {
@@ -52,8 +54,11 @@ public:
     struct Handlers {
         /// The master welcomed the player: requests can be sent.
         std::function<void(std::uint32_t playerId)> onWelcome;
-        /// The player is no longer in its game without having asked: game over, crash, timeout.
+        /// The player is no longer in its game without having asked: game over, crash, timeout, an
+        /// administrator.
         std::function<void(const lobby::LeftGameMessage &left)> onLeftGame;
+        /// The administrators of the server sent a message (SERVER_MESSAGE).
+        std::function<void(const std::string &text)> onServerMessage;
         /// The connection ended, or could not be opened, with the reason for the player. Called once; nothing
         /// is called after.
         std::function<void(const std::string &reason)> onClosed;

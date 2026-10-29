@@ -31,6 +31,7 @@ nav = [
         "architecture/networking.md",
         "architecture/server.md",
         "architecture/web.md",
+        "architecture/administration.md",
         "architecture/game.md",
         "architecture/client-game.md",
         "architecture/client-online.md",
@@ -58,6 +59,7 @@ nav = [
         "protocol/lobby.md",
         "protocol/game.md",
         "protocol/instances.md",
+        "protocol/admin-api.md",
     ] },
     { "Technical decisions" = [
         "decisions/index.md",

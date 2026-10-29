@@ -174,7 +174,8 @@ bool GameHost::removePlayer(std::uint32_t playerId, RemovePlayerReason reason)
         return false;
     }
     const std::uint32_t session = found->first;
-    logger().info("{} ({}) removed by the master", found->second.name, playerId);
+    logger().info("{} ({}) removed by {}", found->second.name, playerId,
+                  reason == RemovePlayerReason::Kicked ? "an administrator" : "the master");
     _sessions.close(session, DisconnectReason::Quit);
     leave(session, reason == RemovePlayerReason::LobbyClosed ? rtype::game::LeaveReason::LobbyClosed
                                                              : rtype::game::LeaveReason::Quit);
