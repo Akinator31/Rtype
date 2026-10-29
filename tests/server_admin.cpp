@@ -355,6 +355,42 @@ TEST_CASE("Each action goes through the games and the lobby, and is recorded", "
     CHECK(kept[0].actor == "local");
 }
 
+TEST_CASE("A ban lifted before it expires lets the address in again, and is recorded",
+          "[server][admin][database]")
+{
+    const auto engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    Fixture fixture(engine, "admin_unban");
+    Administration &administration = *fixture.administration;
+    (void)administration.ban(ip("198.51.100.4"), 1h, "flood", "local");
+    (void)administration.ban(ip("192.0.2.1"), 1h, "", "local");
+
+    // Lifted, written as the lobby saw it
+    CHECK(administration.unban(ip("::ffff:198.51.100.4"), "a mistake", "local"));
+    CHECK_FALSE(fixture.bans.find(ip("198.51.100.4")));
+    CHECK(fixture.bans.find(ip("192.0.2.1")));
+    // Not banned any more, or never: refused, and not recorded
+    CHECK_FALSE(administration.unban(ip("198.51.100.4"), "", "local"));
+    CHECK_FALSE(administration.unban(ip("203.0.113.9"), "", "local"));
+
+    const std::vector<AdminAction> recorded = fixture.recorded(3);
+    REQUIRE(recorded.size() == 3);
+    CHECK(recorded[2].action == "unban");
+    CHECK(recorded[2].target == "address:198.51.100.4");
+    CHECK(recorded[2].actor == "local");
+    const crow::json::rvalue details = parse(recorded[2].details);
+    CHECK(details["reason"].s() == "a mistake");
+    CHECK(details["bannedBy"].s() == "local");
+    CHECK(details["expiresAt"].t() == crow::json::type::Number);
+    CHECK(fixture.read().size() == 3);
+
+    // Gone from the database too: the next start does not ban it again
+    rtype::database::Database database = fixture.test.open();
+    const std::vector<AddressBan> kept = loadAddressBans(database, Clock::now());
+    REQUIRE(kept.size() == 1);
+    CHECK(kept[0].address == ip("192.0.2.1"));
+}
+
 TEST_CASE("A ban lasts seven days at most", "[server][admin]")
 {
     Fixture fixture(rtype::database::Engine::Sqlite, "admin_ban_limit");
@@ -391,6 +427,17 @@ TEST_CASE("A ban runs until it expires, whatever the port and the writing of its
     CHECK(listed[0].address == ip("2001:db8::1"));
     CHECK(bans.purge(now + 1h) == 1);
     CHECK(bans.list(now).size() == 1);
+
+    // Lifted before it expires, whatever the writing of its address; once only
+    const std::optional<AddressBan> lifted = bans.remove(*Address::parse("::ffff:203.0.113.9", 4000), now);
+    REQUIRE(lifted);
+    CHECK(lifted->reason == "again");
+    CHECK_FALSE(bans.find(ip("203.0.113.9"), now));
+    CHECK_FALSE(bans.remove(ip("203.0.113.9"), now));
+    // An expired ban is not lifted: it had ended already
+    bans.add({ip("192.0.2.1"), now - 2h, now - 1h, "", "local"});
+    CHECK_FALSE(bans.remove(ip("192.0.2.1"), now));
+    CHECK(bans.list(now).empty());
 }
 
 TEST_CASE("The bans are kept in the database, and the expired ones purged", "[server][admin][database]")
@@ -857,6 +904,48 @@ TEST_CASE("A banned address is refused at HELLO, after a restart too, and welcom
     }
 }
 
+TEST_CASE("A ban lifted from the panel lets the address in again at once", "[server][admin]")
+{
+    const rtype::test::TestDatabase test(rtype::database::Engine::Sqlite, "admin_unban_http");
+    AdminMaster master(test, rtype::network::ServerIdentity::generate());
+    const Panel panel(master);
+    const auto socket = panel.events();
+    const auto welcomed = [&] {
+        testing::LobbyClient client(master.loop, master.lobby.localAddress(), master.identity.fingerprint());
+        REQUIRE(waitUntil(master.loop, [&] { return client.connection.has_value(); }));
+        client.hello("Mallory");
+        const auto answer = client.reply(master.loop);
+        REQUIRE(answer);
+        return answer->first == lobby::message_type::Welcome;
+    };
+
+    REQUIRE(panel.post("/api/bans", R"({"address":"127.0.0.1","duration":3600,"reason":"flood"})").status ==
+            200);
+    CHECK_FALSE(welcomed());
+
+    const HttpResponse lifted =
+        panel.post("/api/bans/lift", R"({"address":"127.0.0.1","reason":"a mistake"})");
+    CHECK(lifted.status == 200);
+    CHECK(parse(lifted.body)["address"].s() == "127.0.0.1");
+    CHECK(welcomed());
+    CHECK(parse(panel.get("/api/bans").body).size() == 0);
+    CHECK(parse(panel.get("/api/server").body)["bans"].i() == 0);
+
+    // Recorded, and told to the panel
+    REQUIRE(master.wait([&] { return eventsOf(*socket, "action").size() == 2; }));
+    const std::vector<crow::json::rvalue> actions = eventsOf(*socket, "action");
+    const crow::json::rvalue &event = actions[1];
+    CHECK(event["action"]["action"].s() == "unban");
+    CHECK(event["action"]["target"].s() == "address:127.0.0.1");
+    CHECK(event["action"]["details"]["reason"].s() == "a mistake");
+
+    // Lifted already, never banned, or not an address
+    CHECK(panel.post("/api/bans/lift", R"({"address":"127.0.0.1"})").status == 404);
+    CHECK(panel.post("/api/bans/lift", R"({"address":"203.0.113.9"})").status == 404);
+    CHECK(panel.post("/api/bans/lift", R"({"address":"nowhere"})").status == 400);
+    CHECK(panel.post("/api/bans/lift", R"({"reason":"no address"})").status == 400);
+}
+
 TEST_CASE("The API refuses a visitor without a session, a change without its CSRF token, and wrong JSON",
           "[server][admin]")
 {
@@ -871,13 +960,15 @@ TEST_CASE("The API refuses a visitor without a session, a change without its CSR
         INFO(path);
         CHECK(master.call(path).status == 401);
     }
-    for (const std::string path : {"/api/players/1/kick", "/api/games/1/end", "/api/messages", "/api/bans"}) {
+    for (const std::string path :
+         {"/api/players/1/kick", "/api/games/1/end", "/api/messages", "/api/bans", "/api/bans/lift"}) {
         INFO(path);
         CHECK(master.call(path, {.method = "POST", .headers = {}}, R"({"text":"x"})").status == 401);
     }
     // A session without its CSRF token, or with another one
     const HttpRequest withoutToken{.method = "POST", .headers = {"Cookie: " + panel.session}};
     CHECK(master.call("/api/players/1/kick", withoutToken).status == 403);
+    CHECK(master.call("/api/bans/lift", withoutToken, R"({"address":"127.0.0.1"})").status == 403);
     const HttpRequest wrongToken{
         .method = "POST",
         .headers = {"Cookie: " + panel.session, "X-CSRF-Token: " + formatSecret(newAccessToken())}};
