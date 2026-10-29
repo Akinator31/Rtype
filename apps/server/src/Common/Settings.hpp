@@ -40,6 +40,8 @@ struct WebSettings {
     std::string publicUrl;
     /// The proxies whose X-Forwarded-For is believed.
     std::vector<Subnet> trustedProxies;
+    /// The folder of the built panel; empty: admin/ next to the executable.
+    std::filesystem::path panelDir;
 };
 
 /// [accounts]: accounts with an email and a password. Needs [mail].
@@ -103,6 +105,9 @@ struct ServerSettings {
     /// Whether the players can have accounts: [accounts] there and enabled.
     [[nodiscard]] bool accountsEnabled() const { return accounts && accounts->enabled; }
 };
+
+/// Tells whether `address` is a loopback address, 127.0.0.0/8 or ::1: only this machine reaches it.
+[[nodiscard]] bool isLoopback(const rtype::network::Address &address);
 
 /// Reads a secret kept in a file of its own: its first line, the spaces at its end cut. On Unix, warns when
 /// every user of the machine can read the file. The secret is never logged.
