@@ -53,6 +53,7 @@ add_executable(rtype_tests
     scenes.cpp
     scripting.cpp
     serialization.cpp
+    server_admin.cpp
     server_database.cpp
     server_instance.cpp
     server_key.cpp
@@ -74,7 +75,7 @@ add_executable(rtype_tests
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
     rtype::scripting rtype::shaders r-type_client_core r-type_server_core
-    CURL::libcurl Catch2::Catch2WithMain)
+    CURL::libcurl Crow::Crow Catch2::Catch2WithMain)
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
 add_executable(rtype_test_child helpers/process_child.cpp)
 target_link_libraries(rtype_test_child PRIVATE rtype_options)
