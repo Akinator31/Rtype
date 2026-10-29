@@ -230,7 +230,7 @@ TEST_CASE("X-Forwarded-For is read from the right, and only from a trusted proxy
 
 // --- The web server ---
 
-TEST_CASE("/api/health is answered by the loop of the master, without blocking either side", "[server][web]")
+TEST_CASE("The health of the master is answered by its loop, without blocking either side", "[server][web]")
 {
     Web web;
 
