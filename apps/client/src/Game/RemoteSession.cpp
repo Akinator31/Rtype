@@ -232,13 +232,24 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
     }
     // Each frame: the world drawn moves at the frame rate
     game::Snapshot snapshot = _interpolation.view();
-    // The ship of the player where it is predicted, the rest where the interpolation draws it
-    if (const std::optional<ecs::Position> predicted = _prediction.position()) {
-        for (game::EntityState &entity : snapshot.entities) {
-            if (entity.kind == game::EntityKind::PlayerShip && entity.owner == localSlot()) {
-                entity.x = predicted->x;
-                entity.y = predicted->y;
-            }
+    // The ship of the player where it is predicted, aiming as its input says, the rest where the
+    // interpolation draws it
+    const std::optional<ecs::Position> predicted = _prediction.position();
+    for (game::EntityState &entity : snapshot.entities) {
+        if (entity.kind != game::EntityKind::PlayerShip || entity.owner != localSlot()) {
+            continue;
+        }
+        if (predicted) {
+            entity.x = predicted->x;
+            entity.y = predicted->y;
+        }
+        const int aim = _input.aim();
+        entity.flags &=
+            static_cast<std::uint8_t>(~(game::EntityState::AimingUp | game::EntityState::AimingDown));
+        if (aim < 0) {
+            entity.flags |= game::EntityState::AimingUp;
+        } else if (aim > 0) {
+            entity.flags |= game::EntityState::AimingDown;
         }
     }
     snapshot.destroyed = std::exchange(_destroyed, {});

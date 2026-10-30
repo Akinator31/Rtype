@@ -156,6 +156,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<Owner> &owners = _ecs.cache<Owner>();
     ecs::ComponentCache<Health> &healths = _ecs.cache<Health>();
     ecs::ComponentCache<Invulnerable> &invulnerables = _ecs.cache<Invulnerable>();
+    ecs::ComponentCache<PlayerShip> &ships = _ecs.cache<PlayerShip>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -173,6 +174,14 @@ void Simulation::buildSnapshot()
         state.health = healths.has(entity) ? healths.get(entity).points : 0;
         if (invulnerables.has(entity) && invulnerables.get(entity).ticks > 0) {
             state.flags |= EntityState::Invulnerable;
+        }
+        if (ships.has(entity)) {
+            const int aim = _context.players[ships.get(entity).slot].input.aim();
+            if (aim < 0) {
+                state.flags |= EntityState::AimingUp;
+            } else if (aim > 0) {
+                state.flags |= EntityState::AimingDown;
+            }
         }
         snapshot.entities.push_back(state);
     }

@@ -5,8 +5,8 @@ How the client plays a game: one game scene, fed by a **game session**, offline 
 [libs/game](game.md) runs in the client; online, it runs in a server instance, and the client receives its
 snapshots (the online session comes with `client: networking`).
 
-To play: **Play**, then **Solo**, in the main menu. Arrows (or WASD, ZQSD) move the ship, Space fires, Escape
-opens the pause menu.
+To play: **Play**, then **Solo**, in the main menu. Arrows (or WASD, ZQSD) move the ship, Space fires, Q and
+E (A and E on AZERTY) held turn the ship by 30° up and down to fire diagonally, Escape opens the pause menu.
 
 ## Code layout
 

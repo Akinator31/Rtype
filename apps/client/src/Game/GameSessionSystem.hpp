@@ -51,8 +51,9 @@ struct Kill {
     std::optional<std::uint8_t> killer;
 };
 
-/// The input of the local player, from the virtual gamepad of the engine: the directions, and FaceDown
-/// (Space, A on a gamepad) to fire.
+/// The input of the local player, from the virtual gamepad of the engine: the directions, FaceDown (Space, A
+/// on a gamepad) to fire, and LeftShoulder and RightShoulder (Q and E, A and E on AZERTY, the bumpers on a
+/// gamepad) held to aim up and down.
 [[nodiscard]] game::PlayerInput inputFrom(const engine::Controls &controls);
 
 /// Plays the game session of the game scene (ADR 0015), each frame:

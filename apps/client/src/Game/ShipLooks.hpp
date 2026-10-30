@@ -12,7 +12,8 @@
 namespace rtype::client
 {
 
-/// A ship of the game drawn with a 3D model: it rolls around its length with its vertical speed, smoothly.
+/// A ship of the game drawn with a 3D model: it rolls around its length with its vertical speed, and turns
+/// its nose up or down as its player aims, smoothly.
 struct ShipAttitude {
     /// The centre of the hull of the model (ShipLook::hull), in model units: it is put on the entity.
     render::Vector2 hullCentre;
@@ -20,6 +21,10 @@ struct ShipAttitude {
     /// belly to the camera, as it climbs, positive its top, as it dives.
     float targetRoll = 0.0f;
     float roll = 0.0f;
+    /// The aim it turns towards, from the latest snapshot, and its aim now, in degrees in the plane of the
+    /// game: negative turns its nose up, positive down.
+    float targetAim = 0.0f;
+    float aim = 0.0f;
 };
 
 /// How the ships of a kind are drawn in 3D, instead of a box.
@@ -52,10 +57,11 @@ public:
     /// @param clock Seconds the session has been played: the time of the animations.
     void addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, const EntityLook &look,
                   float clock) const;
-    /// Turns the model of an entity towards the roll of the latest state of its ship, its animation in step
-    /// with the session.
+    /// Turns the model of an entity towards the roll and the aim of the latest state of its ship, its
+    /// animation in step with the session.
     void moveModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, float clock) const;
-    /// Rolls the model of an entity towards its roll for `elapsed` seconds, and puts its hull on the entity.
+    /// Rolls and turns the model of an entity towards its roll and its aim for `elapsed` seconds, and puts
+    /// its hull on the entity.
     static void placeModel(ecs::Ecs &ecs, ecs::entity_t entity, float elapsed);
 };
 
