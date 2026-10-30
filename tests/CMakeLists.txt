@@ -55,6 +55,7 @@ add_executable(rtype_tests
     scripting.cpp
     serialization.cpp
     server_account_store.cpp
+    server_accounts.cpp
     server_admin.cpp
     server_database.cpp
     server_instance.cpp
