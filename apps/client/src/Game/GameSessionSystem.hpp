@@ -142,6 +142,8 @@ public:
     void stop();
     /// Draws the ships of this kind with a 3D model from now on, instead of a box.
     void setShipLook(game::EntityKind kind, const ShipLook &look);
+    /// Draws the ship of the local player with this 3D model from now on, instead of the look of its kind.
+    void setLocalShipLook(const ShipLook &look);
     /// Draws the shots of this kind with a 3D model of energy from now on, instead of a box.
     void setShotLook(game::EntityKind kind, const ShotLook &look);
     /// Leaves an impact where the game kills an entity of this kind from now on.

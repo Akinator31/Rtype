@@ -1,12 +1,15 @@
 #pragma once
 
+#include "rtype/render/Types.hpp"
+
 #include <array>
 #include <cstddef>
+#include <vector>
 
 namespace rtype::client
 {
 
-/// A ship the player can pick in the hangar.
+/// A ship the player can pick in the hangar, and fly in the game once equipped.
 struct ShipEntry {
     /// Short name written before its name, such as "VX-03".
     const char *code;
@@ -22,6 +25,11 @@ struct ShipEntry {
     float armor;
     /// A locked ship can be looked at but not equipped.
     bool locked;
+    /// The box around the hull of the model seen through the camera of the game, flames excluded, in model
+    /// units, measured on the model in its Move pose facing right (ShipLook::hull).
+    render::Rectangle hull;
+    /// The meshes of the trails behind its flames, by index in the model file (ShipLook::trailMeshes).
+    std::vector<int> trailMeshes;
 };
 
 inline constexpr std::size_t shipCount = 6;

@@ -105,6 +105,11 @@ void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
     _shipLooks.setLook(kind, look);
 }
 
+void GameSessionSystem::setLocalShipLook(const ShipLook &look)
+{
+    _shipLooks.setLocalLook(look);
+}
+
 void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
 {
     _shotLooks.setLook(kind, look);
@@ -281,7 +286,7 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
     if (_shipLooks.hasLook(state.kind)) {
-        _shipLooks.addModel(_ecs, entity, state, look, _clock);
+        _shipLooks.addModel(_ecs, entity, state, look, _clock, isLocalShip(state));
     } else if (_shotLooks.hasLook(state.kind)) {
         _shotLooks.addModel(_ecs, entity, state, look);
     } else {

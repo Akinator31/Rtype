@@ -92,15 +92,20 @@ void ShipLooks::setLook(game::EntityKind kind, const ShipLook &look)
     _looks.insert_or_assign(kind, look);
 }
 
+void ShipLooks::setLocalLook(const ShipLook &look)
+{
+    _localLook = look;
+}
+
 bool ShipLooks::hasLook(game::EntityKind kind) const
 {
     return _looks.contains(kind);
 }
 
 void ShipLooks::addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state,
-                         const EntityLook &look, float clock) const
+                         const EntityLook &look, float clock, bool local) const
 {
-    const ShipLook &ship = _looks.at(state.kind);
+    const ShipLook &ship = local && _localLook ? *_localLook : _looks.at(state.kind);
     const bool isPlayerShip = state.kind == game::EntityKind::PlayerShip;
     const render::Rectangle &hull = ship.hull;
     ecs.addComponent<engine::Model>(entity, ship.model.model, render::Vector3{}, LengthAxis,
