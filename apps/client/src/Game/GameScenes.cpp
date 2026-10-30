@@ -54,6 +54,8 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::Sound, RTYPE_SOUND_BIG_BLASTER},
     {AssetType::Sound, RTYPE_SOUND_DESTRUCTION},
     {AssetType::Sound, RTYPE_SOUND_COLLISION},
+    {AssetType::Sound, RTYPE_SOUND_SABER},
+    {AssetType::Sound, RTYPE_SOUND_DASH_WIND},
 };
 
 /// The hulls of the ship models seen through the camera of the game, flames excluded, in model units:
@@ -136,6 +138,9 @@ constexpr float BydoDestructionVolume = 0.8f;
 constexpr float ShipDestructionVolume = 1.0f;
 /// How loud a shot is when it hits something: its file is much quieter than the others.
 constexpr float CollisionVolume = 1.0f;
+/// How loud the blade of the boss is when it strikes, and the wind of its dash.
+constexpr float SaberVolume = 0.9f;
+constexpr float DashWindVolume = 0.7f;
 
 /// The energy of a shot with a light around its core.
 /// @param core The core of the shot model, as in ShotLook.
@@ -229,8 +234,10 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
         {loadShipModel(resources, equipped.modelPath), equipped.hull, false, equipped.trailMeshes});
     sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
                                                        DropShipHull, true, DropShipTrails});
-    sessions.setBossLook(game::EntityKind::BydoBoss,
-                         loadBossLook(resources, RTYPE_MODEL_BOSS_SHOGUN, ShogunHull, ShogunSpin));
+    BossLook shogun = loadBossLook(resources, RTYPE_MODEL_BOSS_SHOGUN, ShogunHull, ShogunSpin);
+    shogun.slashSounds = {{audio.loadSound(RTYPE_SOUND_SABER), SaberVolume},
+                          {audio.loadSound(RTYPE_SOUND_DASH_WIND), DashWindVolume}};
+    sessions.setBossLook(game::EntityKind::BydoBoss, shogun);
     const render::Energy energy{
         resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
     const render::TextureId light =

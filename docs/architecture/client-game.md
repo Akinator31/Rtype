@@ -150,7 +150,10 @@ an entity flies.
 +z, as its toes and its visor show; its hull is its body
 in its `Idle` pose, blade and gun excluded, the proportions of its collider (`config/ships/bydo_shogun.lua`). It
 plays the animation of its stance, from the flags of the snapshots: `Guard`, `Slash` or `Shoot`, `Fly` while it
-moves without one, `Idle` otherwise, fading from one to the next in 0.25 s. Its health bar is wider and higher,
+moves without one, `Idle` otherwise, fading from one to the next in 0.25 s. Its blade makes a sound (`BossLook::slashSounds`: `sounds/fx/saber/laser_saber.wav`, with the wind of
+`wing_giant_flap.wav`) as a dash starts: the `Slashing` flag with a speed above 400 units per second, not the
+blade raised before it. Each sound has a child entity of the boss to play it, as an entity plays one
+`SoundEffect` at a time. Its health bar is wider and higher,
 and the start of its wave, the last one, shows a banner of its own.
 
 The local player flies the ship equipped in the hangar: `GameScenes` gives it its own look
