@@ -20,6 +20,7 @@ apps/server/src/
     MailMessages.cpp       what the mails say, in English and French
     Mailer.cpp             the interface of the mailer, and a mail written for SMTP
     CurlMailer.cpp         the mail server, with libcurl, on a thread of its own; its check at start
+    AccountService.cpp     the requests of the accounts in the lobby, on the loop
   Common/                  what both modes share
     GameConfig.cpp         the configuration of the game: where it is, loaded and logged
     InstanceMessages.cpp   the messages between the master and its instances
@@ -95,7 +96,8 @@ a server that cannot work stops at once with the reason.*
 The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
 [ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game,
 opens its database, its port and the one of its panel ([Web server](web.md)), and with accounts checks its mail
-server ([Accounts](accounts.md#at-start)), before anything else, and logs them:
+server ([Accounts](accounts.md#at-start)), before anything else, and logs them. With accounts, it then logs
+`Accounts on, guests allowed` (or `no guests`) before it starts:
 
 ```
 INFO  master   Game configuration /opt/r-type/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
@@ -224,26 +226,30 @@ stateDiagram-v2
 
 | Request | Before `HELLO` | In the lobby | In a game |
 |---|---|---|---|
-| `HELLO` | `WELCOME` with a new player id and the features (guests only, for now); `INVALID_NAME`; `UNSUPPORTED_VERSION`, `BANNED`, or `SESSION_EXPIRED` for a session token, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
+| `HELLO` | `WELCOME` with a new player id, the features, and the account of its token; `INVALID_NAME`; with accounts, `NAME_RESERVED` for the username of an account; `UNSUPPORTED_VERSION`, `BANNED`, or `SESSION_EXPIRED` for a session token refused, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
 | `PING` | `PONG` | `PONG` | `PONG` |
 | `LIST_GAMES` | `HELLO_REQUIRED` | `GAME_LIST` | `GAME_LIST` |
-| `CREATE_GAME` | `HELLO_REQUIRED` | `GAME_JOINED` once the game is ready; `INVALID_NAME`, `SERVER_FULL`, `GAME_START_FAILED` | `ALREADY_IN_GAME` |
-| `JOIN_GAME` | `HELLO_REQUIRED` | `GAME_JOINED`; `GAME_NOT_FOUND`, `GAME_FULL` | `ALREADY_IN_GAME` |
+| `CREATE_GAME` | `HELLO_REQUIRED` | `GAME_JOINED` once the game is ready; `INVALID_NAME`, `SERVER_FULL`, `GAME_START_FAILED`; `GUESTS_DISABLED` for a guest of a master without guests | `ALREADY_IN_GAME` |
+| `JOIN_GAME` | `HELLO_REQUIRED` | `GAME_JOINED`; `GAME_NOT_FOUND`, `GAME_FULL`; `GUESTS_DISABLED` for a guest of a master without guests | `ALREADY_IN_GAME` |
 | `LEAVE_GAME` | `HELLO_REQUIRED` | `NOT_IN_GAME` | `LEFT_GAME (REQUESTED)` |
-| `REGISTER` … `DELETE_ACCOUNT` (the accounts) | `HELLO_REQUIRED` | `ACCOUNTS_DISABLED`, the payload not read | `ACCOUNTS_DISABLED` |
+| `REGISTER` … `DELETE_ACCOUNT` (the accounts) | `HELLO_REQUIRED` | With accounts, their replies ([Accounts](accounts.md#the-requests)); without, `ACCOUNTS_DISABLED`, the payload not read | `ALREADY_IN_GAME`: nobody changes identity in a game |
 | Any other type | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` |
 | A malformed payload | `MALFORMED`, then closed | `MALFORMED`, then closed | `MALFORMED`, then closed |
 
 - **One reply per request, in order**: the requests of a connection are handled one after the other, so a
   client can send several without waiting. `CREATE_GAME` is answered once its game is ready, up to 10 seconds
-  later: the requests sent meanwhile wait for its answer (32 at most, then the client is disconnected).
+  later, and on a server with accounts `HELLO` and the requests of the accounts once the database, the hasher
+  or the mailer answered: the requests sent meanwhile wait for its answer (32 at most, then the client is
+  disconnected).
 - **The state comes first**: a second `HELLO` is `ALREADY_WELCOMED` whatever it holds, a `LIST_GAMES` before
   `HELLO` is `HELLO_REQUIRED` whatever its payload.
 - **A player id** is given by `HELLO`: never 0, never given twice by a master. Names do not have to be unique.
-- **The accounts** are specified ([lobby protocol 3](../protocol/lobby.md#6-accounts)) but not kept by the
-  lobby yet: `WELCOME` offers guests only, every request of the accounts gets `ACCOUNTS_DISABLED`, and a `HELLO`
-  with a session token gets `SESSION_EXPIRED`, after which the client connects again without it. The locale of
-  `HELLO` is kept with the connection, for the language of the [emails](accounts.md#the-mails).
+- **The accounts** ([lobby protocol 3](../protocol/lobby.md#6-accounts)) are answered by the `AccountService`
+  when the settings enable `[accounts]` ([Accounts](accounts.md#in-the-lobby)): `WELCOME` offers password
+  accounts, and guests unless `accounts.guests = false`; a guest carries `~` before its name. Without accounts,
+  `WELCOME` offers guests only, every request of the accounts gets `ACCOUNTS_DISABLED`, and a `HELLO` with a
+  session token gets `SESSION_EXPIRED`, after which the client connects again without it. The locale of `HELLO`
+  is kept with the connection, for the language of the [emails](accounts.md#the-mails).
 - **Leaving without asking**: a game over, a crash, a client that timed out, or an administrator who removes
   the player or ends its game, send `LEFT_GAME` with their reason, and the player is back in the lobby. A client that closed its UDP session itself (`QUIT`) is back in
   the lobby without a message: it knows. A lobby connection that closes takes its player out of its game.
@@ -590,6 +596,9 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   ([Administration](administration.md#tests)).
 - `tests/server_account_store.cpp` (tags `[server]`, `[accounts]`): the rules of the accounts, the hasher of
   the passwords, and their tables on every engine ([Accounts](accounts.md#tests)).
+- `tests/server_accounts.cpp` (tags `[server]`, `[accounts]`, `[database]`): the accounts in a real lobby, with a
+  mailer of the tests that keeps the codes, on every engine: every flow and its errors, the order of the replies,
+  the limits, the purge, the deletion of an account ([Accounts](accounts.md#tests)).
 - `tests/server_database.cpp` (tag `[server]`): `sqlite:rtype.db` by default, `--database`, `--database-file`
   with a Windows line end, the invalid combinations; a database created at start, then opened again; a file
   without an address, empty or missing, stopping the master without its content logged; a password on the

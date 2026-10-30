@@ -141,13 +141,16 @@ if given, for the next page.
 
 | `action` | `target` | `details` |
 |---|---|---|
-| `kick` | `player:<id>` | `name`, `address`, `gameId` if it was in a game, `reason` |
-| `end_game` | `game:<id>` | `name`, `players` (their names), `reason` |
+| `kick` | `player:<id>` | `name`, `address`, `account` (its id) if it was signed in, `gameId` if it was in a game, `reason` |
+| `end_game` | `game:<id>` | `name`, `players` (their names), `accounts` (the ids of those signed in), `reason` |
 | `message` | `game:<id>` or `everyone` | `text`, `recipients` |
 | `ban` | `address:<ip>` | `duration` (seconds), `expiresAt`, `reason`, `removed` (the players connected from it) |
 | `unban` | `address:<ip>` | `expiresAt` (when the ban would have ended), `bannedBy` (the actor of the ban), `reason` |
 
-`actor` is `local` for the local access token; the accounts will add theirs. A `reason` not given is `""`.
+`actor` is `local` for the local access token; the accounts will add theirs, and `deleted` once its account is
+deleted. A player who deletes its account is taken out of the actions done to it: its name becomes `deleted`, its
+address and id are removed ([Accounts](../architecture/accounts.md#deleting-an-account)). A `reason` not given is
+`""`.
 
 ### `GET /api/bans`
 

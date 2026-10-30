@@ -180,6 +180,9 @@ Limits a server MUST enforce, with configurable values:
 | Datagrams per second and per source address, before decryption | 200, the excess is dropped |
 | Reliable messages waiting for an acknowledgement, per session and direction | 256, then the session is closed |
 | Inputs kept per player | 60 ticks ahead, the others are ignored |
+| Requests of the accounts per IP address | 10 a minute, then `TOO_MANY_ATTEMPTS` |
+| Wrong passwords of one account in a row | 10, then 15 minutes without a password checked |
+| `RESEND_CODE` per login | Once a minute |
 
 What the protocol does not hide: the sizes and timing of the datagrams and frames, and the IP addresses of
 the players.
