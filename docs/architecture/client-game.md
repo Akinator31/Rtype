@@ -295,10 +295,13 @@ its killer), when the game tells its destruction; `GameScenes` turns it into the
 
 When a wave starts, a banner crosses the screen (`engine::Engine::showBanner()`, `Info`): `WAVE 03` and
 `BYDOS INCOMING` (`event.wave`, `event.wave_detail`), fully shown for 1.5 s instead of the 3 s of the style, as
-it comes back with each wave. Only the number of the wave reaches the client: its name
-stays in the game. Offline, it is `Snapshot::waveStarted`; online, `RemoteSession` keeps the number of
-`WAVE_STARTED` and puts it in the next snapshot it gives. The `GameSessionSystem` tells it to its wave handler
-(`setWaveHandler()`), and `GameScenes` shows the banner.
+it comes back with each wave. Only the number and the music of the wave reach the client: its name
+stays in the game. Offline, they are `Snapshot::waveStarted` and `Snapshot::waveMusic`; online, `RemoteSession`
+keeps those of `WAVE_STARTED` and puts them in the next snapshot it gives. The `GameSessionSystem` tells them to
+its wave handler (`setWaveHandler()`), and `GameScenes` shows the banner and plays the music of the wave
+(`music` in its Lua file, for instance `sounds/boss_theme.mp3` for the shogun), looped, in place of the one
+playing. A wave without music leaves the current one; it stops when the game ends. A path that leaves the
+assets (absolute, or with `..`) is ignored, as the game may be a server.
 
 ### Death screen
 

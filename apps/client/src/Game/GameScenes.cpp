@@ -12,10 +12,13 @@
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
+#include "rtype/log/Logger.hpp"
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
 #include <format>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -298,17 +301,29 @@ const char *bydoNameKey(game::EntityKind kind)
     return name == BydoNameKeys.end() ? "event.flyer" : name->second;
 }
 
+/// Tells whether a path sent by the game stays in the assets: relative, without ".." (the game may be a
+/// server).
+bool isAssetPath(const std::string &path)
+{
+    const std::filesystem::path file = std::filesystem::path(path).lexically_normal();
+    return file.is_relative() && !file.has_root_name() && !file.has_root_directory() &&
+           std::ranges::none_of(file, [](const std::filesystem::path &part) { return part == ".."; });
+}
+
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations,
                        const ShipSelection &ships)
-    : _engine(engine), _metrics(metrics), _style(style), _sessions(sessions), _translations(translations),
+    : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions), _translations(translations),
       _ships(ships)
 {
     sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
-    sessions.setWaveHandler([this](std::uint16_t wave) { showWave(wave); });
+    sessions.setWaveHandler([this](std::uint16_t wave, const std::string &music) {
+        showWave(wave);
+        playWaveMusic(music);
+    });
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
@@ -335,6 +350,7 @@ void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()
 
 void GameScenes::end()
 {
+    _audio.stopMusic();
     _sessions.stop();
     const std::function<void()> onEnd = std::exchange(_onEnd, nullptr);
     if (onEnd) {
@@ -372,6 +388,23 @@ void GameScenes::showWave(std::uint16_t wave)
     }
     _engine.showBanner(std::format("{} {:02}", _translations.text("event.wave"), wave),
                        _translations.text("event.wave_detail"), engine::ToastType::Info, WaveBannerDuration);
+}
+
+void GameScenes::playWaveMusic(const std::string &music)
+{
+    if (music.empty()) {
+        return;
+    }
+    const log::Logger logger("game");
+    if (!isAssetPath(music)) {
+        logger.warning("Music \"{}\" of the wave is not a path of the assets, ignored", music);
+        return;
+    }
+    try {
+        _audio.playMusic(_audio.loadMusic(music));
+    } catch (const std::runtime_error &error) {
+        logger.warning("Music of the wave not played: {}", error.what());
+    }
 }
 
 void GameScenes::showDeath()

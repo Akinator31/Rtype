@@ -90,7 +90,7 @@ class GameSessionSystem : public ecs::System
     std::optional<engine::SceneId> _scene;
     std::function<void()> _onOver;
     std::function<void(const Kill &)> _onKill;
-    std::function<void(std::uint16_t)> _onWave;
+    std::function<void(std::uint16_t, const std::string &)> _onWave;
     /// The entity of the scene of each entity of the game, by id.
     std::unordered_map<std::uint32_t, ecs::EntityRef> _entities;
     ShipLooks _shipLooks;
@@ -164,8 +164,9 @@ public:
     void setDestructionSound(game::EntityKind kind, const EntitySound &sound);
     /// Calls this for each ship killed in the game while drawn from now on: a Bydo or the ship of a player.
     void setKillHandler(std::function<void(const Kill &)> onKill);
-    /// Calls this with the number of each wave started in the game from now on, from 1.
-    void setWaveHandler(std::function<void(std::uint16_t)> onWave);
+    /// Calls this with the number of each wave started in the game from now on, from 1, and its music (empty
+    /// if it has none).
+    void setWaveHandler(std::function<void(std::uint16_t, const std::string &)> onWave);
 
     void update(float elapsed) override;
 

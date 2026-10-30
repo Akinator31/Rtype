@@ -937,7 +937,7 @@ TEST_CASE("Each wave started in the game is told with its number, once", "[clien
 {
     ImpactClient client;
     std::vector<std::uint16_t> waves;
-    client.sessions.setWaveHandler([&waves](std::uint16_t wave) { waves.push_back(wave); });
+    client.sessions.setWaveHandler([&waves](std::uint16_t wave, const std::string &) { waves.push_back(wave); });
     rtype::game::Snapshot first = snapshotOf(1, {});
     first.waveStarted = 1;
 

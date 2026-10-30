@@ -151,7 +151,7 @@ void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
     _onKill = std::move(onKill);
 }
 
-void GameSessionSystem::setWaveHandler(std::function<void(std::uint16_t)> onWave)
+void GameSessionSystem::setWaveHandler(std::function<void(std::uint16_t, const std::string &)> onWave)
 {
     _onWave = std::move(onWave);
 }
@@ -213,7 +213,7 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     rememberKilled(snapshot.destroyed);
     reportKills(snapshot.destroyed);
     if (snapshot.waveStarted && _onWave) {
-        _onWave(*snapshot.waveStarted);
+        _onWave(*snapshot.waveStarted, snapshot.waveMusic);
     }
 
     // Each snapshot holds the whole world: what is not in it any more is gone

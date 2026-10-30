@@ -31,7 +31,8 @@ inline constexpr const char *PauseScene = "pause";
 ///   lives and score of the local player, the score of the others, and the ping online.
 /// - The events, in the corner of the toasts: a Bydo shot down by the local player, and the ship of a player
 ///   shot down, the local one or an ally.
-/// - A banner across the screen when a wave starts, with its number.
+/// - A banner across the screen when a wave starts, with its number, and its music if it has one
+///   (WaveDefinition::music); the music stops when the game ends.
 /// - When the ship of the local player is lost with lives left, the death screen (openDeathScreen()): the red
 ///   banner "SHIP DESTROYED" with the lives left in its band, and the countdown to the next ship.
 /// - Escape (or Start on a gamepad) opens the pause menu: Resume, or Leave the game. Offline, the game stops
@@ -47,6 +48,7 @@ inline constexpr const char *PauseScene = "pause";
 class GameScenes
 {
     engine::Engine &_engine;
+    audio::AudioPlayer &_audio;
     const engine::Metrics &_metrics;
     const engine::InterfaceStyle &_style;
     GameSessionSystem &_sessions;
@@ -69,6 +71,8 @@ class GameScenes
     /// Shows the event of a ship killed, if it is one: a Bydo killed by the local player, or a player ship.
     void showKill(const Kill &kill);
     void showWave(std::uint16_t wave);
+    /// Plays the music of the wave started, a path of the assets, replacing the current one; nothing if empty.
+    void playWaveMusic(const std::string &music);
     /// Shows the death screen of the local player, unless its ship was its last life.
     void showDeath();
 

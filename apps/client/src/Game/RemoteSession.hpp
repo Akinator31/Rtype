@@ -72,6 +72,7 @@ private:
     std::vector<game::DestroyedEntity> _destroyed;
     /// The wave WAVE_STARTED told, until the next snapshot taken.
     std::optional<std::uint16_t> _waveStarted;
+    std::string _waveMusic;
     bool _over = false;
     std::string _endReason;
 
