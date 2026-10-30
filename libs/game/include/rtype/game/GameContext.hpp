@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <optional>
 #include <random>
+#include <string>
 #include <vector>
 
 namespace rtype::game
@@ -54,6 +55,8 @@ struct GameContext {
     /// Events since the previous snapshot.
     std::vector<DestroyedEntity> destroyed;
     std::optional<std::uint16_t> waveStarted;
+    /// The music of the wave started, empty if it has none: set with waveStarted.
+    std::string waveMusic;
     std::optional<GameOutcome> gameOver;
 
     /// A number from `first` to `last` included. Same result on every platform, unlike the distributions of

@@ -512,9 +512,11 @@ makes the message malformed.
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Wave | `u16` | Number of the wave, from 1 |
+| 2 | Music | `str8` | Music to play, a path relative to the assets of the client; 0 to 128 bytes, empty for none |
 
-**Receiver behaviour:** the client shows the number, for instance "Wave 3". A wave of 0 makes the message
-malformed.
+**Receiver behaviour:** the client shows the number, for instance "Wave 3", and plays the music if there is one,
+unless the path leaves its assets (absolute, or with `..`). A wave of 0, or a music of more than 128 bytes,
+makes the message malformed.
 
 ### GAME_OVER (`0x83`)
 

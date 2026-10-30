@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rtype::game
@@ -110,6 +111,8 @@ struct Snapshot {
     std::vector<DestroyedEntity> destroyed;
     /// A wave started during the tick: its number, from 1.
     std::optional<std::uint16_t> waveStarted;
+    /// The music of the wave started (WaveDefinition::music), empty if it has none.
+    std::string waveMusic;
     /// The game ended during the tick.
     std::optional<GameOutcome> gameOver;
 

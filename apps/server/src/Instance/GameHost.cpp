@@ -203,7 +203,7 @@ void GameHost::publish(const TickResult &result)
     }
     if (snapshot.waveStarted) {
         sendToConnected(rtype::game::message_type::WaveStarted,
-                        rtype::game::encode(rtype::game::WaveStartedMessage{*snapshot.waveStarted}),
+                        rtype::game::encode(rtype::game::WaveStartedMessage{*snapshot.waveStarted, snapshot.waveMusic}),
                         Delivery::Reliable);
     }
     // The last snapshot goes with the game over, whatever its tick: the final scores

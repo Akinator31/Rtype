@@ -75,6 +75,7 @@ void WaveSystem::startNextWave()
         progress.spawned = 0;
         progress.nextSpawnIn = 0;
         _context.waveStarted = progress.number;
+        _context.waveMusic = _context.waves.getDefinition(progress.name).music;
         spawnDueEnemies(_context.waves.getDefinition(progress.name));
         return;
     }
