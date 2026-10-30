@@ -49,7 +49,8 @@ sequenceDiagram
    server that does not hold a matching private key is refused during the handshake, before `HELLO` leaves: the
    player is asked to trust it if it was never met, warned otherwise.
 3. **The lobby** lists the games of the server: Create a game (for 4 players, named after the player), Join one,
-   Refresh, Disconnect. Escape disconnects too.
+   Refresh, Disconnect. Escape disconnects too. Creating or joining a game first opens the hangar: the game is
+   asked for when the player launches it with a ship.
 4. **The game** plays a `RemoteSession` with what `GAME_JOINED` gave. When it ends, by the pause menu or because
    the game ended, the client leaves it (`LEAVE_GAME`) and shows the list again.
 

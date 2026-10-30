@@ -3,6 +3,7 @@
 #include "Game/GameScenes.hpp"
 #include "Online/KnownServers.hpp"
 #include "Online/LobbyClient.hpp"
+#include "ShipSelector/ShipSelection.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
@@ -44,8 +45,9 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 ///   A server never met shows its key, which the player may trust: it is remembered, and the client connects
 ///   again. A known server with another key is refused, with a warning, until the player forgets its key
 ///   (**Forget the server key**).
-/// - **The lobby** lists the games: Create a game, Join one, Refresh, Disconnect. Joining plays a
-///   RemoteSession in the game scene; when the game ends, the player is back in the lobby.
+/// - **The lobby** lists the games: Create a game, Join one, Refresh, Disconnect. Creating or joining one
+///   first opens the hangar, where the player picks its ship. Joining plays a RemoteSession in the game
+///   scene; when the game ends, the player is back in the lobby.
 /// - What goes wrong is shown in a toast: the server cannot be reached, is not the expected one, the game is
 ///   full...
 class OnlineScenes
@@ -54,6 +56,7 @@ class OnlineScenes
     network::EventLoop &_loop;
     GameScenes &_games;
     localization::Localization &_translations;
+    ShipSelection &_ships;
     KnownServers _known;
     std::string _serverText = "127.0.0.1:4242";
     std::string _name = "Player";
@@ -85,7 +88,7 @@ public:
     /// The servers trusted are kept in the settings of the engine.
     OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                  const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                 localization::Localization &translations);
+                 localization::Localization &translations, ShipSelection &ships);
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;
