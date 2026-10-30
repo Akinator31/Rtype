@@ -298,7 +298,7 @@ void SceneRenderer::drawConsoleField(render::Renderer &renderer, const Text &tex
     const std::string prompt = fieldPrefix(field);
     renderer.drawText(text.font, prompt, topLeft, size, faded(_style.console.prompt, opacity));
     const float promptWidth = renderer.measureText(text.font, prompt, size).x;
-    renderer.drawText(text.font, field.input.text(), {topLeft.x + promptWidth, topLeft.y}, size,
+    renderer.drawText(text.font, fieldContent(field), {topLeft.x + promptWidth, topLeft.y}, size,
                       faded(text.color, opacity));
 }
 
@@ -981,11 +981,9 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
             const bool editing = isFocused && fields.has(entity);
             const auto offsetOf = [&](std::size_t byte) {
                 const TextField &field = fields.get(entity);
-                return topLeft.x + renderer
-                                       .measureText(text.font,
-                                                    fieldPrefix(field) + field.input.text().substr(0, byte),
-                                                    size)
-                                       .x;
+                return topLeft.x +
+                       renderer.measureText(text.font, fieldPrefix(field) + fieldContent(field, byte), size)
+                           .x;
             };
             if (editing && !fields.get(entity).input.selection().empty()) {
                 const input::TextInput::Range selection = fields.get(entity).input.selection();

@@ -126,5 +126,9 @@ struct TextField {
 /// Text before the content of a text field: "Caption: " for a menu field, "Caption " for a console field, or
 /// nothing without caption.
 [[nodiscard]] std::string fieldPrefix(const TextField &field);
+/// The content of a text field as it is shown, up to a byte offset of its text (all of it by default): the
+/// text, or one `*` per character for a secret field (TextInput::setSecret()), so that a password is never
+/// drawn.
+[[nodiscard]] std::string fieldContent(const TextField &field, std::size_t bytes = std::string::npos);
 
 } // namespace rtype::engine

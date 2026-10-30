@@ -395,6 +395,26 @@ TEST_CASE("A text field is edited only while it has the focus", "[engine][interf
     REQUIRE(world.textOf(name) == "Name: Pavel");
 }
 
+TEST_CASE("A password field shows a mask, one per character, never its text", "[engine][interface]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Sign in");
+    const entity_t password = menu.passwordField("Password");
+    world.update();
+    REQUIRE(world.isFocused(password));
+
+    world.input.typed = U"s\u00e9cret";
+    world.update();
+    const TextField &field = world.ecs.getComponent<TextField>(password);
+    CHECK(field.input.text() == "s\xC3\xA9"
+                                "cret");
+    CHECK(world.textOf(password) == "Password: ******");
+    // The cursor and the selection are measured on the mask: "\xC3\xA9" is one character
+    CHECK(fieldContent(field, 3) == "**");
+    CHECK(fieldContent(field) == "******");
+    CHECK(field.input.isSecret());
+}
+
 TEST_CASE("Widgets are stacked in a column, centred", "[engine][layout]")
 {
     World world;
