@@ -147,10 +147,10 @@ void run()
 
     assetsLoaded = true;
     // The scenes of the game are built from the loaded assets, which they find in the cache
-    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
     // The ship equipped at the last run
     rtype::client::ShipSelection ships;
     rtype::client::readEquippedShip(ships, engine.getSettings());
+    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
     rtype::client::createMenuScenes(engine, resources, style, window, metrics, games, config, translations,
                                     ships);
