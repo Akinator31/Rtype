@@ -8,6 +8,9 @@
 
 // Asio includes windows.h: without its min and max macros, which break std::min
 #ifdef _WIN32
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -136,9 +139,8 @@ private:
     std::size_t _refuseNext = 0;
     bool _held = false;
     std::atomic<bool> _stopping = false;
-    /// The socket of the connection being served, shut down to stop it.
-    std::atomic<asio::ip::tcp::socket::native_handle_type> _active{
-        asio::ip::tcp::socket::native_handle_type(-1)};
+    /// The handle of the system (a SOCKET on Windows, whose Asio handle is a class), shut down to stop it.
+    std::atomic<asio::detail::socket_type> _active{asio::detail::invalid_socket};
     std::thread _thread;
 
 #ifdef RTYPE_TEST_OPENSSL
@@ -438,7 +440,7 @@ private:
                 return;
             }
             // Set before _stopping is read again: stop() sees it, or this sees _stopping
-            _active = socket.native_handle();
+            _active = static_cast<asio::detail::socket_type>(socket.native_handle());
             {
                 std::unique_lock lock(_mutex);
                 ++_connections;
@@ -449,7 +451,7 @@ private:
                 return;
             }
             serve(socket);
-            _active = asio::ip::tcp::socket::native_handle_type(-1);
+            _active = asio::detail::invalid_socket;
         }
     }
 
@@ -493,7 +495,7 @@ public:
         _changed.notify_all();
         // Unblocks the read of the connection served, then the accept
         const auto active = _active.load();
-        if (active != asio::ip::tcp::socket::native_handle_type(-1)) {
+        if (active != asio::detail::invalid_socket) {
             ::shutdown(active, 2);
         }
         {
