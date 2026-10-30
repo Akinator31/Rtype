@@ -50,6 +50,8 @@ struct Lobby::Client {
     State state = State::Handshake;
     std::uint32_t playerId = 0;
     std::string name;
+    /// The language of the player, from HELLO: its emails are written in it.
+    std::string locale;
     std::chrono::system_clock::time_point welcomedAt;
     /// The game the player is in.
     std::optional<std::uint32_t> gameId;
@@ -284,6 +286,13 @@ void Lobby::handle(Client &client, std::uint8_t type, std::span<const std::byte>
         }
         return;
     default:
+        if (rtype::lobby::isAccountRequest(type)) {
+            // No account behind them yet: the state is checked, the payload is not read
+            if (!notWelcomed()) {
+                error(ErrorCode::AccountsDisabled);
+            }
+            return;
+        }
         error(ErrorCode::UnknownMessage);
         return;
     }
@@ -373,6 +382,12 @@ void Lobby::hello(Client &client, std::span<const std::byte> payload)
             return;
         }
     }
+    if (hello->token) {
+        // No account is kept yet, so no session: the client forgets its token and comes back without it
+        logger().info("{} refused: its session is unknown", client.address);
+        fail(client, message_type::Hello, ErrorCode::SessionExpired);
+        return;
+    }
     if (!rtype::lobby::isValidPlayerName(hello->name)) {
         fail(client, message_type::Hello, ErrorCode::InvalidName);
         return;
@@ -380,12 +395,15 @@ void Lobby::hello(Client &client, std::span<const std::byte> payload)
     // Never 0, never given twice: 4 billion players before it would wrap
     client.playerId = ++_lastPlayerId;
     client.name = hello->name;
+    client.locale = hello->locale;
     client.welcomedAt = std::chrono::system_clock::now();
     _players[client.playerId] = client.id;
     client.state = Client::State::Welcomed;
     const std::uint64_t id = client.id;
     client.timeout.start(_limits.idleTimeout, [this, id] { disconnect(id, "silent for too long"); });
-    reply(client, message_type::Welcome, rtype::lobby::encode(rtype::lobby::WelcomeMessage{client.playerId}));
+    reply(client, message_type::Welcome,
+          rtype::lobby::encode(rtype::lobby::WelcomeMessage{
+              .playerId = client.playerId, .features = {}, .account = std::nullopt}));
     logger().info("{} joined the lobby from {}", client.describe(), client.address);
     if (_observer != nullptr) {
         _observer->playerJoined(client.playerId);

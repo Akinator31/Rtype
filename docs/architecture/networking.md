@@ -201,7 +201,7 @@ of a `TcpConnection`: the code above it only sees whole messages.
 
 ```
 size (u16) | type (u8) | payload (size − 1 bytes)
-00 09        01          00 02 05 50 61 76 65 6C      HELLO, version 2, "Pavel"
+00 0D        01          00 03 05 50 61 76 65 6C 02 66 72 00      HELLO, version 3, "Pavel", "fr"
 ```
 
 ```cpp
@@ -695,6 +695,7 @@ connection.send(writer.bytes());
 | `bool` | `writeBool()` | `readBool()`: a value other than 0 or 1 is an error |
 | `bytes[N]` | `writeBytes(span)` | `readBytes(n)` (a view into the data) or `readBytes<N>()` (a copy) |
 | `str8` | `writeString(text)` | `readString(min, max)`: length range of the field, text checked |
+| `str16` | `writeString16(text)` | `readString16(min, max)`: the same, with a length on two bytes |
 
 **Why not `memcpy` a struct?** The compiler adds padding between fields, differently on GCC and MSVC, and an
 x86 processor stores integers little-endian. Writing each field explicitly gives the same bytes everywhere.
@@ -722,8 +723,8 @@ cannot go wrong:
   character, length within the range of the field. A name cannot carry a line break that would forge a line
   in the logs, nor terminal escape codes.
 - **Decoders refuse values themselves** with `reader.fail()`, for instance a number of players above 4.
-- **Nothing is allocated from an unchecked length.** A `str8` is at most 255 bytes and only built once its
-  bytes are there. For a list, never `reserve(count)` with a count read from the network: loop while
+- **Nothing is allocated from an unchecked length.** A `str8` is at most 255 bytes, a `str16` at most the
+  maximum of its field, and either is only built once its length is in range and its bytes are there. For a list, never `reserve(count)` with a count read from the network: loop while
   `reader.ok()`, and the loop stops at the end of the data even if the count announces 65535 entries.
 - **No side effect**: a reader only reads its bytes. Decoders built on it are pure functions, bytes in and
   message or error out, which a fuzzer can call millions of times

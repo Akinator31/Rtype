@@ -68,18 +68,58 @@ std::string describe(ErrorCode code)
     case ErrorCode::Kicked:
         return "An administrator removed you from the server";
     case ErrorCode::Banned:
-        return "Your address is banned from this server";
+        return "You are banned from this server";
+    case ErrorCode::AccountsDisabled:
+        return "This server does not offer this way of signing in";
+    case ErrorCode::UsernameTaken:
+        return "This username is taken";
+    case ErrorCode::WeakPassword:
+        return "The password needs 10 to 128 characters, and must not be the username or the email";
+    case ErrorCode::InvalidCredentials:
+        return "Wrong username, email or password";
+    case ErrorCode::EmailNotVerified:
+        return "Your email is not verified: a new code was sent";
+    case ErrorCode::InvalidCode:
+        return "Wrong code";
+    case ErrorCode::CodeExpired:
+        return "This code expired: ask for a new one";
+    case ErrorCode::TooManyAttempts:
+        return "Too many attempts: try again later";
+    case ErrorCode::SessionExpired:
+        return "Your session expired: sign in again";
+    case ErrorCode::Busy:
+        return "The server is busy: try again in a moment";
+    case ErrorCode::GuestsDisabled:
+        return "This server needs an account to play";
+    case ErrorCode::NameReserved:
+        return "This name belongs to an account";
+    case ErrorCode::MailUnavailable:
+        return "The server cannot send emails now";
+    case ErrorCode::DiscordNotConfirmed:
+        return "Confirm with Discord first";
+    case ErrorCode::InvalidEmail:
+        return "Invalid email address";
+    case ErrorCode::NotSignedIn:
+        return "Not signed in";
+    case ErrorCode::AlreadySignedIn:
+        return "Already signed in";
+    case ErrorCode::DiscordTaken:
+        return "This Discord account belongs to another account";
     }
     return std::format("The server refused (error {})", static_cast<int>(code));
 }
 
 LobbyClient::LobbyClient(network::EventLoop &loop, const network::Address &server,
-                         std::vector<network::KeyFingerprint> trusted, std::string name, Handlers handlers)
-    : _name(std::move(name)), _handlers(std::move(handlers)), _ping(loop)
+                         std::vector<network::KeyFingerprint> trusted, std::string name, Handlers handlers,
+                         std::string locale)
+    : _name(std::move(name)), _locale(std::move(locale)), _handlers(std::move(handlers)), _ping(loop)
 {
     // Checked now: HELLO is written once connected, in a handler of the loop, where it must not throw
     if (!lobby::isValidPlayerName(_name)) {
         throw std::invalid_argument("A player name is 1 to 16 characters of text");
+    }
+    if (!lobby::isValidLocale(_locale)) {
+        throw std::invalid_argument("A locale is 2 to 16 of A-Z a-z 0-9 - _");
     }
     logger().info("Connecting to {}", server);
     network::TcpConnection::connect(
@@ -111,11 +151,14 @@ void LobbyClient::connected(network::TcpConnection connection, std::vector<netwo
         [this](std::uint8_t type, std::span<const std::byte> payload) { received(type, payload); },
         [this](std::error_code reason) { connectionClosed(reason); });
     // Sent at once: it waits for the end of the handshake
-    request(message_type::Hello, lobby::encode(lobby::HelloMessage{lobby::ProtocolVersion, _name}),
+    request(message_type::Hello,
+            lobby::encode(lobby::HelloMessage{
+                .version = lobby::ProtocolVersion, .name = _name, .locale = _locale, .token = std::nullopt}),
             [this](std::uint8_t type, std::span<const std::byte> payload) {
                 if (type == message_type::Welcome) {
                     if (const auto welcome = lobby::decodeWelcome(payload)) {
                         _playerId = welcome->playerId;
+                        _features = welcome->features;
                         logger().info("Welcomed as {} ({})", _name, *_playerId);
                         if (_handlers.onWelcome) {
                             _handlers.onWelcome(*_playerId);

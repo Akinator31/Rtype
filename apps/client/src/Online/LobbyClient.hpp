@@ -76,11 +76,13 @@ private:
     };
 
     std::string _name;
+    std::string _locale;
     Handlers _handlers;
     std::optional<network::FramedConnection> _connection;
     network::Timer _ping;
     std::deque<Pending> _pending;
     std::optional<std::uint32_t> _playerId;
+    lobby::ServerFeatures _features;
     bool _closed = false;
     /// The key the server presented, if it was refused.
     std::optional<network::KeyFingerprint> _untrusted;
@@ -97,9 +99,12 @@ public:
     /// Starts connecting at once, without blocking.
     /// @param trusted The keys the server may present (KnownServers::trusted()). None: the server is refused,
     /// and onUntrusted tells its key.
-    /// @throws std::invalid_argument if the name cannot be the name of a player (lobby::isValidPlayerName()).
+    /// @param locale The language of the player, sent in HELLO: the master writes its emails in it.
+    /// @throws std::invalid_argument if the name cannot be the name of a player (lobby::isValidPlayerName()),
+    /// or the locale cannot be a locale (lobby::isValidLocale()).
     LobbyClient(network::EventLoop &loop, const network::Address &server,
-                std::vector<network::KeyFingerprint> trusted, std::string name, Handlers handlers);
+                std::vector<network::KeyFingerprint> trusted, std::string name, Handlers handlers,
+                std::string locale = "en");
     ~LobbyClient();
 
     LobbyClient(const LobbyClient &) = delete;
@@ -109,6 +114,8 @@ public:
     [[nodiscard]] std::optional<std::uint32_t> playerId() const { return _playerId; }
     [[nodiscard]] bool welcomed() const { return _playerId.has_value() && !_closed; }
     [[nodiscard]] const std::string &name() const { return _name; }
+    /// What the master offers, once welcomed.
+    [[nodiscard]] const lobby::ServerFeatures &features() const { return _features; }
 
     void listGames(ListCallback done);
     void createGame(const std::string &name, std::uint8_t maxPlayers, JoinCallback done);

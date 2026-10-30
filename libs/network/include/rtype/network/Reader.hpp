@@ -59,6 +59,8 @@ private:
     /// The next `size` bytes, or an empty span (and the error state) if there are not that many left.
     std::span<const std::byte> take(std::size_t size);
     std::uint64_t readUnsigned(std::size_t size);
+    /// The `length` bytes of a text whose length was read, checked against its range and as text.
+    std::string readText(std::size_t length, std::size_t minLength, std::size_t maxLength);
 
 public:
     /// Reads from these bytes, which must stay valid while the reader is used.
@@ -94,6 +96,12 @@ public:
     /// @param maxLength Largest length accepted, in bytes, at most 255.
     /// @return The text, or an empty string on error.
     [[nodiscard]] std::string readString(std::size_t minLength = 0, std::size_t maxLength = 255);
+    /// Reads a `str16` field: its length on two bytes, then its bytes, checked as those of a `str8`. For the
+    /// texts that can pass 255 bytes, such as a password or an address.
+    /// @param minLength Smallest length accepted, in bytes.
+    /// @param maxLength Largest length accepted, in bytes, at most 65535.
+    /// @return The text, or an empty string on error.
+    [[nodiscard]] std::string readString16(std::size_t minLength = 0, std::size_t maxLength = 65535);
 
     /// Puts the reader in the error state (ReadError::InvalidValue), for a value the decoder refuses, such as
     /// a number of players above 4. Does nothing if the reader has already failed.

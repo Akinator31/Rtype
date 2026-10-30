@@ -265,7 +265,8 @@ void OnlineScenes::connect()
                 [this](const std::string &text) { _engine.showToast(std::format("Server: {}", text)); },
             .onClosed = [this](const std::string &reason) { lobbyClosed(reason); },
             .onUntrusted = [this](const network::KeyFingerprint &presented) { untrusted(presented); },
-        });
+        },
+        _translations.language());
 }
 
 void OnlineScenes::untrusted(const network::KeyFingerprint &presented)

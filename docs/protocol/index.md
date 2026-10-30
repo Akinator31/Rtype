@@ -46,9 +46,10 @@ described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 | `bool` | 1 | `0` is false, `1` is true. Any other value is invalid. |
 | `bytes[N]` | N | N raw bytes |
 | `str8` | 1 + n | A `u8` length n, then n bytes of UTF-8 text, without a terminating zero |
+| `str16` | 2 + n | A `u16` length n, then n bytes of UTF-8 text: for a text that can pass 255 bytes, such as a password |
 
-A `str8` is invalid if its bytes are not valid UTF-8, or if they contain a control character (`0x00`–`0x1F`
-or `0x7F`). Each field of type `str8` gives its allowed length range.
+A `str8` or a `str16` is invalid if its bytes are not valid UTF-8, or if they contain a control character
+(`0x00`–`0x1F` or `0x7F`). Each text field gives its allowed length range.
 
 ### 2.2 Message tables
 
@@ -98,8 +99,8 @@ keys of the game. It then talks to the game directly, over encrypted datagrams.*
 
 ## 4. Versioning
 
-The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **2** (version 2 adds the
-messages of the administrators, [lobby](lobby.md)). The game protocol has its own, in the header of every
+The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **3** (version 2 adds the
+messages of the administrators, version 3 those of the player accounts, [lobby](lobby.md)). The game protocol has its own, in the header of every
 datagram (as a `u8`), currently **1**. The instances have a version of their own, sent in `INSTANCE_HELLO`,
 currently **3**
 ([master and instances](instances.md)): master and instances come from the same build, so it changes without

@@ -224,12 +224,13 @@ stateDiagram-v2
 
 | Request | Before `HELLO` | In the lobby | In a game |
 |---|---|---|---|
-| `HELLO` | `WELCOME` with a new player id; `INVALID_NAME`; `UNSUPPORTED_VERSION` or `BANNED`, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
+| `HELLO` | `WELCOME` with a new player id and the features (guests only, for now); `INVALID_NAME`; `UNSUPPORTED_VERSION`, `BANNED`, or `SESSION_EXPIRED` for a session token, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
 | `PING` | `PONG` | `PONG` | `PONG` |
 | `LIST_GAMES` | `HELLO_REQUIRED` | `GAME_LIST` | `GAME_LIST` |
 | `CREATE_GAME` | `HELLO_REQUIRED` | `GAME_JOINED` once the game is ready; `INVALID_NAME`, `SERVER_FULL`, `GAME_START_FAILED` | `ALREADY_IN_GAME` |
 | `JOIN_GAME` | `HELLO_REQUIRED` | `GAME_JOINED`; `GAME_NOT_FOUND`, `GAME_FULL` | `ALREADY_IN_GAME` |
 | `LEAVE_GAME` | `HELLO_REQUIRED` | `NOT_IN_GAME` | `LEFT_GAME (REQUESTED)` |
+| `REGISTER` … `DELETE_ACCOUNT` (the accounts) | `HELLO_REQUIRED` | `ACCOUNTS_DISABLED`, the payload not read | `ACCOUNTS_DISABLED` |
 | Any other type | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` |
 | A malformed payload | `MALFORMED`, then closed | `MALFORMED`, then closed | `MALFORMED`, then closed |
 
@@ -239,6 +240,10 @@ stateDiagram-v2
 - **The state comes first**: a second `HELLO` is `ALREADY_WELCOMED` whatever it holds, a `LIST_GAMES` before
   `HELLO` is `HELLO_REQUIRED` whatever its payload.
 - **A player id** is given by `HELLO`: never 0, never given twice by a master. Names do not have to be unique.
+- **The accounts** are specified ([lobby protocol 3](../protocol/lobby.md#6-accounts)) but not kept by the
+  lobby yet: `WELCOME` offers guests only, every request of the accounts gets `ACCOUNTS_DISABLED`, and a `HELLO`
+  with a session token gets `SESSION_EXPIRED`, after which the client connects again without it. The locale of
+  `HELLO` is kept with the connection, for the language of the [emails](accounts.md#the-mails).
 - **Leaving without asking**: a game over, a crash, a client that timed out, or an administrator who removes
   the player or ends its game, send `LEFT_GAME` with their reason, and the player is back in the lobby. A client that closed its UDP session itself (`QUIT`) is back in
   the lobby without a message: it knows. A lobby connection that closes takes its player out of its game.
