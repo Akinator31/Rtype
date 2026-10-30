@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace rtype::client
@@ -143,22 +144,42 @@ ecs::entity_t createShipName(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
     return name;
 }
 
-/// What the button under the name says: equip the ship, or that it is equipped or locked.
+/// What the button under the name says: equip the ship, or that it is equipped or locked; launch the game
+/// with it before a game.
 std::string getEquipText(localization::Localization &translations, const ShipSelection &selection)
 {
     if (selection.getShown().locked) {
         return translations.text("ship.locked");
     }
+    if (selection.launch) {
+        return translations.text("ship.launch");
+    }
     const bool equipped = selection.getShownIndex() == selection.equipped;
     return translations.text(equipped ? "ship.equipped" : "ship.equip");
 }
 
-ecs::entity_t createEquipButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
+/// Equips the ship looked at and keeps it in the settings; before a game, closes the hangar and launches it.
+void equip(engine::Engine &target, ShipSelection &selection)
+{
+    if (selection.getFocused().locked) {
+        return;
+    }
+    selection.equipFocused();
+    writeEquippedShip(selection, target.getSettings());
+    if (selection.launch) {
+        const std::function<void()> launch = std::exchange(selection.launch, nullptr);
+        target.popScene();
+        launch();
+    }
+}
+
+ecs::entity_t createEquipButton(engine::Engine &target, engine::InterfaceBuilder &interface,
                                 localization::Localization &translations, ShipSelection &selection)
 {
-    const ecs::entity_t button =
-        interface.button(getEquipText(translations, selection), [&selection] { selection.equipFocused(); },
-                         {engine::AnchorPoint::Bottom, 0.0f, equipBottom});
+    ecs::Ecs &ecs = target.getEcs();
+    const ecs::entity_t button = interface.button(getEquipText(translations, selection),
+                                                  [&target, &selection] { equip(target, selection); },
+                                                  {engine::AnchorPoint::Bottom, 0.0f, equipBottom});
     ecs.addComponent<engine::BoundText>(
         button, [&translations, &selection] { return getEquipText(translations, selection); });
     ecs.addComponent<engine::Opacity>(button);
@@ -215,12 +236,18 @@ void createShipSelectorScene(engine::Engine &engine, render::ResourceManager &re
                                   {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
             createArrows(interface, selection);
             const ecs::entity_t name = createShipName(ecs, interface, translations, selection);
-            const ecs::entity_t equip = createEquipButton(ecs, interface, translations, selection);
+            const ecs::entity_t equip = createEquipButton(target, interface, translations, selection);
             ShipCarousel &carousel = ecs.getComponent<ShipCarousel>(carouselEntity);
             carousel.fading = {name, equip};
             carousel.dots = createDots(interface);
             createStatGauges(interface, translations, selection);
         });
+}
+
+void openShipSelector(engine::Engine &engine, ShipSelection &selection, std::function<void()> launch)
+{
+    selection.launch = std::move(launch);
+    engine.pushScene(ShipSelectorScene);
 }
 
 } // namespace rtype::client

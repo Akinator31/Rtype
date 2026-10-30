@@ -3,6 +3,7 @@
 #include "Game/RemoteSession.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
+#include "ShipSelector/ShipSelector.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/log/Logger.hpp"
@@ -108,8 +109,9 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
 
 OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                            const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                           localization::Localization &translations)
-    : _engine(engine), _loop(loop), _games(games), _translations(translations), _known(engine.getSettings())
+                           localization::Localization &translations, ShipSelection &ships)
+    : _engine(engine), _loop(loop), _games(games), _translations(translations), _ships(ships),
+      _known(engine.getSettings())
 {
     engine.createScene(OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
@@ -192,23 +194,27 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
                                      _translations.text("menu.online"));
             menu.label(std::format("{} on {}", _name, _serverText));
             menu.button(_translations.text("online.create"), [this] {
-                if (_lobby) {
-                    const std::string game =
-                        std::string(_name).append("'s game").substr(0, lobby::MaxGameNameLength);
-                    _lobby->createGame(game, CreatedGamePlayers,
-                                       [this](const LobbyClient::JoinResult &result) { joined(result); });
-                }
+                openShipSelector(_engine, _ships, [this] {
+                    if (_lobby) {
+                        const std::string game =
+                            std::string(_name).append("'s game").substr(0, lobby::MaxGameNameLength);
+                        _lobby->createGame(game, CreatedGamePlayers,
+                                           [this](const LobbyClient::JoinResult &result) { joined(result); });
+                    }
+                });
             });
             for (std::size_t i = 0; i < std::min(_list.size(), MaxGamesShown); ++i) {
                 const lobby::GameInfo &game = _list[i];
                 menu.button(std::format("{} {} ({}/{})", _translations.text("online.join"), game.name,
                                         game.players, game.maxPlayers),
                             [this, id = game.id] {
-                                if (_lobby) {
-                                    _lobby->joinGame(id, [this](const LobbyClient::JoinResult &result) {
-                                        joined(result);
-                                    });
-                                }
+                                openShipSelector(_engine, _ships, [this, id] {
+                                    if (_lobby) {
+                                        _lobby->joinGame(id, [this](const LobbyClient::JoinResult &result) {
+                                            joined(result);
+                                        });
+                                    }
+                                });
                             });
             }
             if (_list.empty()) {

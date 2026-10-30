@@ -2,7 +2,6 @@
 
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/UiShowcase.hpp"
-#include "ShipSelector/ShipSelector.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 
@@ -81,11 +80,11 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
 } // namespace
 
 void createSubmenuScenes(engine::Engine &engine, const engine::InterfaceStyle &style,
-                         localization::Localization &translations, std::function<void()> playSolo)
+                         localization::Localization &translations, std::function<void()> playSolo,
+                         std::function<void()> openHangar)
 {
     createSubmenuScene(engine, style, PlayMenuScene, translations, "menu.play",
-                       {{"menu.solo", std::move(playSolo)},
-                        {"menu.ships", [&engine] { engine.pushScene(ShipSelectorScene); }}});
+                       {{"menu.solo", std::move(playSolo)}, {"menu.ships", std::move(openHangar)}});
     createSettingsScene(engine, style, translations);
     createUiShowcaseScene(engine, style, translations);
 }
