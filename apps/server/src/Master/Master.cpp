@@ -1,6 +1,8 @@
 #include "Master/Master.hpp"
 
+#include "Accounts/AccountService.hpp"
 #include "Accounts/CurlMailer.hpp"
+#include "Accounts/PasswordHasher.hpp"
 #include "Common/GameConfig.hpp"
 #include "Common/Lifecycle.hpp"
 #include "Master/AddressBans.hpp"
@@ -133,12 +135,13 @@ int runMaster(const MasterOptions &options)
 
     // A master with accounts sends their codes: a mail server it cannot use stops it at start, as --check
     // (docs/guides/set-up-accounts.md). Nothing is sent
+    std::optional<CurlMailerSettings> mailerSettings;
     if (options.settings.accountsEnabled()) {
         if (!options.settings.mail) {
             logger.error("The accounts need a mail server, to send their codes: add [mail] to the settings");
             return Failure;
         }
-        CurlMailerSettings mailer;
+        CurlMailerSettings &mailer = mailerSettings.emplace();
         mailer.mail = *options.settings.mail;
         const MailSettings &mail = mailer.mail;
         if (const std::optional<std::string> problem = checkMailServer(mailer)) {
@@ -200,8 +203,21 @@ int runMaster(const MasterOptions &options)
     if (!loadedBans.empty()) {
         logger.info("{} addresses banned", loadedBans.size());
     }
+    // The accounts of the players (docs/architecture/accounts.md#in-the-lobby): declared before the lobby,
+    // they outlive it
+    std::optional<CurlMailer> mailer;
+    std::optional<PasswordHasher> hasher;
+    std::optional<AccountService> accounts;
+    if (mailerSettings) {
+        mailer.emplace(*mailerSettings);
+        hasher.emplace([&loop](std::function<void()> function) { loop.post(std::move(function)); });
+        accounts.emplace(loop, databaseThread, *hasher, *mailer,
+                         AccountServiceSettings{.guests = options.settings.accounts->guests, .limits = {}});
+        logger.info("Accounts on, {}", options.settings.accounts->guests ? "guests allowed" : "no guests");
+    }
     Lobby lobby(loop, std::move(*listener), identity, *games);
     lobby.setBans(&bans);
+    lobby.setAccounts(accounts ? &*accounts : nullptr);
     // The administration API (docs/architecture/administration.md), shown by the panel
     Administration administration(loop, *games, lobby, bans, &databaseThread,
                                   AdministrationSettings{

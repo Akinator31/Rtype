@@ -112,6 +112,9 @@ public:
 
     /// The requests whose result is not delivered yet.
     [[nodiscard]] std::size_t pending() const;
+
+    /// What its hashes cost.
+    [[nodiscard]] const Argon2Parameters &parameters() const { return _settings.parameters; }
 };
 
 } // namespace rtype::server

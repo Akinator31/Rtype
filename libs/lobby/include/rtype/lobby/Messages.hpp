@@ -367,7 +367,8 @@ enum class ErrorCode : std::uint16_t {
     Kicked = 13,
     /// The address of the client is banned: the answer to HELLO, or sent without a request when the ban comes
     /// later; the connection is closed after it (version 2). From version 3, the account is banned too: the
-    /// answer to HELLO with its token, to SIGN_IN, or sent without a request.
+    /// answer to SIGN_IN after the right password, or sent without a request. A ban ends the sessions of the
+    /// account: its token gets SESSION_EXPIRED.
     Banned = 14,
     /// The master does not offer this way of signing in (WELCOME tells what it offers) (version 3, as all the
     /// codes below).

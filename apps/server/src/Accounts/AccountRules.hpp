@@ -34,6 +34,15 @@ inline constexpr std::size_t MaxEmailLength = 254;
 /// database.
 [[nodiscard]] std::string emailKey(std::string_view email);
 
+/// What a guest carries before its name on a server with accounts, in the lobby and on the score board: no
+/// username has it, so that a guest named like an account never looks like it.
+inline constexpr char GuestMark = '~';
+
+/// The name of a guest on a server with accounts: GuestMark, then the name, cut on a whole character so that
+/// both fit in the 16 bytes of a name.
+/// @param name A valid name of a player, 1 to 16 bytes of UTF-8.
+[[nodiscard]] std::string markGuest(std::string_view name);
+
 /// Why a password is refused.
 enum class PasswordProblem {
     None,

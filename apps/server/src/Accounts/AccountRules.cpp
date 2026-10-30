@@ -98,4 +98,15 @@ PasswordProblem checkPassword(std::string_view password, std::string_view userna
     return PasswordProblem::None;
 }
 
+std::string markGuest(std::string_view name)
+{
+    static constexpr std::size_t MaxNameLength = 16;
+    std::size_t length = std::min(name.size(), MaxNameLength - 1);
+    // Back to the start of a character
+    while (length > 0 && length < name.size() && (static_cast<unsigned char>(name[length]) & 0xC0) == 0x80) {
+        --length;
+    }
+    return std::string(1, GuestMark).append(name.substr(0, length));
+}
+
 } // namespace rtype::server
