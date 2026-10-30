@@ -16,8 +16,11 @@ export function actionBadge(action: Action): { label: string; tone: BadgeTone } 
   switch (action.action) {
     case 'ban':
     case 'end_game':
+    case 'ban_account':
+    case 'delete_account':
       return { label, tone: 'alert' };
     case 'unban':
+    case 'unban_account':
       return { label, tone: 'muted' };
     default:
       return { label, tone: 'neutral' };
@@ -31,7 +34,10 @@ export function targetLabel(action: Action): string {
   if (action.target === 'everyone') return strings.messages.everyone;
   if (action.target.startsWith('address:')) return action.target.replace(/^address:/, '');
   if (name !== undefined && id !== undefined) return `${name} #${id}`;
-  return action.target.replace(/^game:/, 'game #').replace(/^player:/, 'player #');
+  return action.target
+    .replace(/^game:/, 'game #')
+    .replace(/^player:/, 'player #')
+    .replace(/^account:/, 'account #');
 }
 
 /** The details of an action on one line, as the record of the design shows them. */
@@ -80,6 +86,15 @@ export function detailsLine(action: Action): string {
         text(details.bannedBy) !== undefined ? words.bannedBy(String(details.bannedBy)) : undefined,
         reason,
       );
+      break;
+    case 'ban_account':
+      parts.push(
+        reason,
+        number(details.removed) !== undefined ? words.removed(details.removed as number) : undefined,
+      );
+      break;
+    case 'role':
+      parts.push(text(details.role) === 'admin' ? strings.accounts.admin : strings.accounts.player);
       break;
     default:
       parts.push(reason);

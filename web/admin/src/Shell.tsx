@@ -1,22 +1,27 @@
 // The frame of every screen of the design (node 146:143): the side bar with the logo, the navigation by group
 // and the state of the master; the top bar with the path and the title of the page, the state of the live
 // connection, the address of the panel and the date; the field of stars behind. Without a session, the page
-// to open one; once it expired, the window to reopen it over the page.
+// to open one; once it expired, the window to reopen it over the page. Who is signed in, and signing out, at
+// the foot of the side bar.
 
 import { Box, Flex, Image, Text } from '@chakra-ui/react';
 import { useEffect, useRef, useState } from 'react';
 import { Outlet } from 'react-router';
 
+import { api, session } from './api/client';
+import type { SessionAccount } from './api/types';
+
 import stars from './assets/backgrounds/stars.svg';
 import liveSparkle from './assets/flares/live.svg';
 import logo from './assets/images/logo.png';
 import { AlertStrip } from './components/AlertStrip';
-import { Badge, Button, NavItem } from './components/Controls';
+import { Badge, Button, NavItem, RowAction } from './components/Controls';
 import { ToneIcon } from './components/EventFeed';
 import { PageTitleContext } from './components/pageTitle';
 import { Notifications } from './components/Notifications';
 import { notify } from './components/notify';
 import { Login, SessionExpired } from './components/Session';
+import { useSignInOptions } from './components/useSignInOptions';
 import { toneIcons } from './components/toneIcons';
 import { duration, time } from './format';
 import { useLive, useLiveStore } from './live/context';
@@ -49,7 +54,13 @@ const groups = [
   },
 ];
 
-function Navigation() {
+/** The pages, the accounts among them when the master has accounts. */
+function Navigation({ accounts }: { accounts: boolean }) {
+  const shown = groups.map((group) =>
+    group.label === strings.nav.groups.administration && accounts
+      ? { ...group, links: [{ to: '/accounts', label: strings.nav.accounts }, ...group.links] }
+      : group,
+  );
   return (
     <Flex
       as="nav"
@@ -58,7 +69,7 @@ function Navigation() {
       wrap="wrap"
       gap="4px"
     >
-      {groups.map((group) => (
+      {shown.map((group) => (
         <Flex key={group.label} direction={{ base: 'row', lg: 'column' }} wrap="wrap" gap="4px">
           <Text
             textStyle="label"
@@ -116,6 +127,48 @@ function MasterState({ live, now }: { live: LiveState; now: number }) {
       </Text>
     </Flex>
   );
+}
+
+/** Who opened the session, at the foot of the side bar: an account, or the local token; and signing out. */
+function Who({ account }: { account: SessionAccount | null | undefined }) {
+  const [pending, setPending] = useState(false);
+  if (account === undefined) return null;
+  const signOut = async () => {
+    setPending(true);
+    try {
+      await api.signOut();
+    } catch {
+      // Signed out already
+    }
+    session.reload();
+  };
+  return (
+    <Flex align="center" justify="space-between" gap="10px" px="4px" pt="12px" data-testid="who">
+      <Text textStyle="hint" color="fg.muted" truncate>
+        {account === null ? strings.session.localAccess : strings.session.signedInAs(account.username)}
+      </Text>
+      <RowAction onClick={() => void signOut()} disabled={pending}>
+        {strings.session.signOut}
+      </RowAction>
+    </Flex>
+  );
+}
+
+/** The account of the session, once the live connection opened: undefined until then. */
+function useSessionAccount(connection: LiveState['connection']): SessionAccount | null | undefined {
+  const [account, setAccount] = useState<SessionAccount | null | undefined>(undefined);
+  useEffect(() => {
+    if (connection !== 'open') return;
+    let current = true;
+    api
+      .session()
+      .then((answer) => current && setAccount(answer.account))
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [connection]);
+  return account;
 }
 
 /** The live connection, at the right of the top bar. */
@@ -247,6 +300,8 @@ export function Shell() {
   const store = useLiveStore();
   const now = useNow();
   const [title, setTitle] = useState('');
+  const options = useSignInOptions();
+  const account = useSessionAccount(live.connection);
   useSignals(live);
 
   // Never opened: the page to open a session
@@ -297,11 +352,12 @@ export function Shell() {
               objectFit="cover"
             />
           </Box>
-          <Navigation />
+          <Navigation accounts={options?.password === true} />
           <Box flex="1 0 0" minH="24px" display={{ base: 'none', lg: 'block' }} />
           <Box display={{ base: 'none', lg: 'block' }}>
             <MasterState live={live} now={now} />
           </Box>
+          <Who account={account} />
         </Flex>
         <Flex direction="column" flex="1 1 0" minW={0}>
           <TopBar title={title} live={live} now={now} />

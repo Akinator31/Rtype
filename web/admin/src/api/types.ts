@@ -40,9 +40,59 @@ export interface Player {
   address: string;
   gameId: number | null;
   joinedAt: number;
+  /** The account signed in, null for a guest. */
+  accountId?: number | null;
 }
 
-export type ActionKind = 'kick' | 'end_game' | 'message' | 'ban' | 'unban';
+export type Role = 'player' | 'admin';
+
+/** An account, as GET /api/accounts lists it. */
+export interface Account {
+  id: number;
+  username: string;
+  email: string | null;
+  emailVerifiedAt: number | null;
+  /** Whether it signs in with a password. */
+  password: boolean;
+  discordId: string | null;
+  role: Role;
+  /** One of [admin] admins of the settings: never demoted, banned nor deleted from the panel. */
+  locked: boolean;
+  bannedAt: number | null;
+  banReason: string;
+  createdAt: number;
+  lastSeenAt: number;
+}
+
+/** The administrator signed in, null for the local token. */
+export interface SessionAccount {
+  id: number;
+  username: string;
+  role: Role;
+  locked: boolean;
+}
+
+export interface SessionInfo {
+  csrfToken: string;
+  account: SessionAccount | null;
+}
+
+/** How the panel can be opened, besides the local token. */
+export interface SignInOptions {
+  password: boolean;
+  discord: boolean;
+}
+
+export type ActionKind =
+  | 'kick'
+  | 'end_game'
+  | 'message'
+  | 'ban'
+  | 'unban'
+  | 'ban_account'
+  | 'unban_account'
+  | 'role'
+  | 'delete_account';
 
 export interface Action {
   id: number;

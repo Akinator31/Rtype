@@ -103,6 +103,142 @@ describe('the shell', () => {
   });
 });
 
+describe('the accounts of the administrators', () => {
+  it('signs in with an account and its password, and says why it is refused', async () => {
+    const user = userEvent.setup();
+    const reload = vi.spyOn(session, 'reload').mockImplementation(() => undefined);
+    server.use(http.get('*/api/sign-in', () => HttpResponse.json({ password: true, discord: false })));
+    renderPanel('/', [], { signedOut: true });
+    const form = await screen.findByRole('form', { name: 'Sign in' });
+    expect(within(form).queryByRole('button', { name: 'Sign in with Discord' })).not.toBeInTheDocument();
+    // The local token stays offered
+    expect(screen.getByRole('form', { name: 'Open a session' })).toBeInTheDocument();
+
+    const button = within(form).getByRole('button', { name: 'Sign in' });
+    expect(button).toBeDisabled();
+    await user.type(within(form).getByRole('textbox', { name: 'Username or email' }), 'Chief');
+    await user.type(within(form).getByLabelText('Password'), 'wrong password!');
+    await user.click(button);
+    expect(await within(form).findByText('wrong login or password')).toBeInTheDocument();
+    expect(sent[0]).toEqual({
+      path: '/api/sign-in',
+      csrf: null,
+      body: { login: 'Chief', password: 'wrong password!' },
+    });
+    expect(within(form).getByLabelText('Password')).toHaveValue('');
+    expect(reload).not.toHaveBeenCalled();
+
+    server.use(
+      http.post('*/api/sign-in', () =>
+        HttpResponse.json({
+          csrfToken: fixtures.csrfToken,
+          account: { id: 1, username: 'Chief', role: 'admin', locked: false },
+        }),
+      ),
+    );
+    await user.type(within(form).getByLabelText('Password'), 'correct horse battery');
+    await user.click(button);
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    reload.mockRestore();
+  });
+
+  it('sends the browser to Discord when the master offers it', async () => {
+    const user = userEvent.setup();
+    const discord = vi.spyOn(session, 'discord').mockImplementation(() => undefined);
+    server.use(http.get('*/api/sign-in', () => HttpResponse.json({ password: true, discord: true })));
+    renderPanel('/', [], { signedOut: true });
+    const form = await screen.findByRole('form', { name: 'Sign in' });
+    await user.click(within(form).getByRole('button', { name: 'Sign in with Discord' }));
+    expect(discord).toHaveBeenCalledTimes(1);
+    discord.mockRestore();
+  });
+
+  it('shows who is signed in, and signs out', async () => {
+    const user = userEvent.setup();
+    const reload = vi.spyOn(session, 'reload').mockImplementation(() => undefined);
+    server.use(
+      http.get('*/api/session', () =>
+        HttpResponse.json({
+          csrfToken: fixtures.csrfToken,
+          account: { id: 1, username: 'Chief', role: 'admin', locked: true },
+        }),
+      ),
+    );
+    renderPanel('/', [snapshot]);
+    const who = await screen.findByTestId('who');
+    expect(who).toHaveTextContent('Signed in as Chief');
+    await user.click(within(who).getByRole('button', { name: 'Sign out' }));
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    expect(sent[0]?.path).toBe('/api/sign-out');
+    reload.mockRestore();
+  });
+
+  it('shows the page of the accounts only when the master has accounts', async () => {
+    renderPanel('/', [snapshot]);
+    expect(await screen.findByTestId('who')).toHaveTextContent('Local access token');
+    expect(screen.queryByRole('link', { name: 'Accounts' })).not.toBeInTheDocument();
+
+    server.use(http.get('*/api/sign-in', () => HttpResponse.json({ password: true, discord: false })));
+    renderPanel('/', [snapshot]);
+    expect(await screen.findByRole('link', { name: 'Accounts' })).toBeInTheDocument();
+  });
+
+  it('lists the accounts, searches them, and locks the administrators of the settings', async () => {
+    const user = userEvent.setup();
+    const searches: string[] = [];
+    server.use(
+      http.get('*/api/accounts', ({ request }) => {
+        searches.push(new URL(request.url).search);
+        return HttpResponse.json(fixtures.accounts);
+      }),
+    );
+    renderPanel('/accounts', [snapshot]);
+    const alice = await screen.findByTestId('account-3');
+    expect(alice).toHaveTextContent('alice@example.org');
+    expect(within(alice).getByRole('button', { name: 'Ban Alice' })).toBeInTheDocument();
+    expect(within(alice).getByRole('button', { name: 'Make admin Alice' })).toBeInTheDocument();
+    const chief = screen.getByTestId('account-1');
+    expect(chief).toHaveTextContent('Settings');
+    expect(chief).toHaveTextContent('4242');
+    expect(within(chief).queryByRole('button')).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole('searchbox', { name: /Search a username/ }), 'ali');
+    await waitFor(() => expect(searches).toContain('?search=ali'));
+  });
+
+  it('bans an account after its confirmation, with a reason', async () => {
+    const user = userEvent.setup();
+    renderPanel('/accounts', [snapshot]);
+    const alice = await screen.findByTestId('account-3');
+    await user.click(within(alice).getByRole('button', { name: 'Ban Alice' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Ban an account' });
+    await user.type(within(dialog).getByRole('textbox'), 'cheating');
+    await user.click(within(dialog).getByRole('button', { name: 'Ban the account' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({
+      path: '/api/accounts/3/ban',
+      csrf: fixtures.csrfToken,
+      body: { reason: 'cheating' },
+    });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps the dialog open with the refusal of the master', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post('*/api/accounts/:id/delete', () =>
+        HttpResponse.json({ error: 'this administrator is in [admin] admins' }, { status: 409 }),
+      ),
+    );
+    renderPanel('/accounts', [snapshot]);
+    const alice = await screen.findByTestId('account-3');
+    await user.click(within(alice).getByRole('button', { name: 'Delete Alice' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Delete an account' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete the account' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('[admin] admins');
+  });
+});
+
 describe('the overview', () => {
   it('shows the counts, each opening its page, the games and the events as they come', async () => {
     const { push } = renderPanel('/', [snapshot]);

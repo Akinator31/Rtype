@@ -1,7 +1,7 @@
 // What a master answers in the tests: a server, a game of two players, a player in the lobby, as
 // docs/protocol/admin-api.md writes them.
 
-import type { Action, Ban, Game, Player, ServerInfo } from '../api/types';
+import type { Account, Action, Ban, Game, Player, ServerInfo } from '../api/types';
 
 export const now = 1798000000000;
 
@@ -55,3 +55,34 @@ export const ban: Ban = {
 };
 
 export const csrfToken = 'c'.repeat(64);
+
+export const accounts: Account[] = [
+  {
+    id: 3,
+    username: 'Alice',
+    email: 'alice@example.org',
+    emailVerifiedAt: now - 86_400_000,
+    password: true,
+    discordId: null,
+    role: 'player',
+    locked: false,
+    bannedAt: null,
+    banReason: '',
+    createdAt: now - 86_400_000,
+    lastSeenAt: now - 60_000,
+  },
+  {
+    id: 1,
+    username: 'Chief',
+    email: 'chief@example.org',
+    emailVerifiedAt: now - 172_800_000,
+    password: true,
+    discordId: '4242',
+    role: 'admin',
+    locked: true,
+    bannedAt: null,
+    banReason: '',
+    createdAt: now - 172_800_000,
+    lastSeenAt: now,
+  },
+];
