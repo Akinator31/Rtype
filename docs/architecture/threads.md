@@ -264,3 +264,8 @@ The accounts add the two threads of the `PasswordHasher` ([Accounts](accounts.md
 starts once its lobby signs players in: each hashes or
 checks a password, a few tens of milliseconds of Argon2, and posts its result to the loop. They touch nothing
 of the loop; a full queue refuses at once rather than make the loop wait.
+
+The mails of the accounts go through one more thread, the one of the `CurlMailer`
+([Accounts](accounts.md#the-mailer)): the loop queues a mail and goes on, the thread talks to the mail server,
+up to 30 seconds a mail, and tries again later. Nothing comes back to the loop: whether a mail left only the
+logs tell. A full queue, or an address with its mails of the hour, refuses at once.

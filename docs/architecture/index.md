@@ -129,8 +129,9 @@ and the client code only uses our own classes. The server only links the librari
 raylib: the ECS, the physics, the game, the scripting, the lobby, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
 private dependencies of `network`, and reproc, which starts the instances of the server, toml++, which reads
 its settings file, Crow, which serves its panel ([Web server](web.md)), and Argon2, which hashes the passwords of
-the accounts ([Accounts](accounts.md#passwords)), private dependencies of `r-type_server`. libcurl, the HTTP client of the tests, and of the mails of the server later, comes through CPM
-too, with OpenSSL from the system on Linux.
+the accounts ([Accounts](accounts.md#passwords)), private dependencies of `r-type_server`. libcurl, which sends
+the mails of the accounts ([Accounts](accounts.md#the-mails)) and is the HTTP client of the tests, comes through
+CPM too, with OpenSSL from the system on Linux.
 
 ## Repository layout
 

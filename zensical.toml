@@ -53,6 +53,7 @@ nav = [
         "guides/generate-the-server-keys.md",
         "guides/run-a-server.md",
         "guides/configure-a-server.md",
+        "guides/set-up-accounts.md",
         "guides/administer-a-server.md",
         "guides/deploy-with-docker.md",
         "guides/use-an-external-database.md",

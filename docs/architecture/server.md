@@ -17,6 +17,9 @@ apps/server/src/
     AccountRules.cpp       what a username, an email and a password must be
     AccountStore.cpp       their tables: accounts, account_sessions, account_codes
     PasswordHasher.cpp     Argon2id, on two threads of its own
+    MailMessages.cpp       what the mails say, in English and French
+    Mailer.cpp             the interface of the mailer, and a mail written for SMTP
+    CurlMailer.cpp         the mail server, with libcurl, on a thread of its own; its check at start
   Common/                  what both modes share
     GameConfig.cpp         the configuration of the game: where it is, loaded and logged
     InstanceMessages.cpp   the messages between the master and its instances
@@ -86,13 +89,13 @@ a server that cannot work stops at once with the reason.*
 | `--database <address>` | `sqlite:rtype.db` | Where the master keeps its data: `sqlite:<file>`, or `postgresql://<user>@<host>:<port>/<database>` ([The database](#the-database)) |
 | `--database-file <file>` | | Reads the address of the database from the first line of the file: for an address with a password, which the command line would show to every user of the machine |
 | `--settings <file>` | | Reads the settings file of the master ([Configure a server](../guides/configure-a-server.md)): the options above in `[server]`, and the sections of the panel and the accounts. The command line wins over the file |
-| `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, and opens the port of the lobby and the one of the panel, then exits: checks a configuration without running it |
+| `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, opens the port of the lobby and the one of the panel, and with accounts signs in to the mail server without sending anything, then exits: checks a configuration without running it |
 | `--health` | | Asks `/api/health` of the master running on this machine, at the `listen` address of `[web]` in the settings file (the loopback for `0.0.0.0`), shows `healthy` and exits with 0 when it answers within 5 seconds, else exits with 1. The health check of the [Docker image](../guides/deploy-with-docker.md), which has no curl |
 
 The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
 [ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game,
-opens its database, its port and the one of its panel ([Web server](web.md)) before anything else, and logs
-them:
+opens its database, its port and the one of its panel ([Web server](web.md)), and with accounts checks its mail
+server ([Accounts](accounts.md#at-start)), before anything else, and logs them:
 
 ```
 INFO  master   Game configuration /opt/r-type/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
@@ -555,8 +558,11 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   defaults, an unknown key or section, a wrong type, a TOML error, each with its line and column; invalid
   values, the rules between the sections (accounts without mail, Discord without accounts or `public_url`, the
   panel off the loopback without accounts), an administrator named by username; relative paths from the folder
-  of the file; the secret files, missing, empty, readable by everyone, never logged; the command line winning;
-  and `--settings --check`.
+  of the file; the secret files, missing, empty, readable by everyone, never logged; the sender of the mails and
+  its address, mail in the clear without a password; the command line winning; and `--settings --check`, with
+  the fake mail server.
+- `tests/server_mail.cpp` (tags `[server]`, `[mail]`): the mails, their format, and `CurlMailer` against the
+  fake mail server of `tests/helpers/SmtpServer.hpp` ([Accounts](accounts.md#tests)).
 - `tests/server_key.cpp` (tag `[server]`): the key generated at the first start, then loaded, only readable by
   its owner, never replaced, and `--fingerprint`.
 - `tests/server_web.cpp` (tags `[server]`, `[web]`): a real `WebServer` with its loop on a thread, asked with
@@ -567,7 +573,8 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   response; the token traded for a session cookie, a wrong token refused, neither in the logs at any level;
   `X-Forwarded-For` from the right and only from a trusted proxy, in `visitorAddress()` and end to end; a port
   taken. Real masters: `admin-url.txt` (`0600`) whose address opens the page "not built" with a session, a port
-  taken, a missing `panel_dir`, and a panel off the loopback refused without accounts. Every test that runs a
+  taken, a missing `panel_dir`, and a panel off the loopback refused without accounts, allowed with them and
+  their mail server. Every test that runs a
   master gives its panel port 0, with `testing::webOnAnyPort()`. `--health`: the answers of `/api/health`
   read (healthy, another status, not HTTP, cut), a master asked at the address of its settings file, one whose
   loop is stuck past the timeout, one gone, and a panel on port 0, which it cannot find.

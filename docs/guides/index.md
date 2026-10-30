@@ -15,6 +15,7 @@ Step-by-step guides for common tasks in the client and the server. They assume t
 | [Manage the server key](generate-the-server-keys.md) | Keep the key the server makes at its first start, give its fingerprint to the players, replace it. |
 | [Run a server](run-a-server.md) | Check the configuration, open the ports, start the server, open its panel and stop it. |
 | [Configure a server](configure-a-server.md) | Give a server its settings in one file, its secrets in files of their own, and check them. |
+| [Set up accounts](set-up-accounts.md) | Give a server the mail server the codes of its accounts are sent through, and check it. |
 | [Administer a server](administer-a-server.md) | Open the panel of a server, watch its games and players live, end a game, message, remove, ban. |
 | [Deploy with Docker](deploy-with-docker.md) | Run the server from its image in Dokploy, publish its ports, keep its volume, back up its database. |
 | [Use an external database](use-an-external-database.md) | Give a server a PostgreSQL database hosted elsewhere, without its password on the command line. |

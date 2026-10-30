@@ -28,8 +28,9 @@ system-wide besides a compiler and, on Linux, the X11/OpenGL and OpenSSL develop
     Install [Visual Studio 2022](https://visualstudio.microsoft.com/) with the
     **Desktop development with C++** workload, which includes CMake.
 
-OpenSSL (`libssl-dev`, `openssl`) is required on Linux: libcurl, the HTTP client of the tests and of the server,
-takes its TLS from it. Windows uses its own (Schannel).
+OpenSSL (`libssl-dev`, `openssl`) is required on Linux: libcurl, which sends the mails of the server and is the
+HTTP client of the tests, takes its TLS from it, and so does the fake mail server of the tests. Windows uses its
+own (Schannel).
 
 libpq (`libpq-dev`, `postgresql-libs`) is optional: with it, the server can keep its data in a PostgreSQL
 database; without it, in SQLite only. The configure says which: `Database engines: SQLite, PostgreSQL`. On

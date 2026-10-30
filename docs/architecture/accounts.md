@@ -1,18 +1,18 @@
 # Accounts
 
 The accounts of the players of a server ([ADR 0024](../decisions/0024-player-accounts.md)): what makes a valid
-username, email and password, how a password is hashed, and what the master keeps of the accounts, their
-sessions and the codes it sends by email. This page covers the storage: nothing reaches the network yet, the
-lobby and the client use it in the next steps of the accounts
-([#259](https://github.com/Akinator31/Rtype/issues/259)).
+username, email and password, how a password is hashed, what the master keeps of the accounts, their sessions
+and the codes, and how it sends those codes by email. This page covers the storage and the mail: the lobby and
+the client use them in the next steps of the accounts ([#259](https://github.com/Akinator31/Rtype/issues/259)).
+To give a server its mail server, see [Set up accounts](../guides/set-up-accounts.md).
 
 | | |
 |---|---|
-| Code | `Accounts/AccountRules.{hpp,cpp}` (the rules, pure), `Accounts/PasswordHasher.{hpp,cpp}` (Argon2id, on its threads), `Accounts/AccountStore.{hpp,cpp}` (the tables) in `apps/server/src`; `rtype/network/Crypto.hpp` (random bytes, SHA-256) |
-| Threads | The rules anywhere; the store on the database thread; the hashes on the two threads of the hasher |
+| Code | `Accounts/AccountRules.{hpp,cpp}` (the rules, pure), `Accounts/PasswordHasher.{hpp,cpp}` (Argon2id, on its threads), `Accounts/AccountStore.{hpp,cpp}` (the tables), `Accounts/MailMessages.{hpp,cpp}` (what the mails say, pure), `Accounts/Mailer.{hpp,cpp}` (the interface, and a mail written for SMTP), `Accounts/CurlMailer.{hpp,cpp}` (the mail server, on its thread) in `apps/server/src`; `rtype/network/Crypto.hpp` (random bytes, SHA-256) |
+| Threads | The rules and the messages anywhere; the store on the database thread; the hashes on the two threads of the hasher; the mails on the thread of the mailer |
 | Tables | `accounts`, `account_sessions`, `account_codes` (migrations 3 to 5 of `ServerMigrations`) |
-| Dependencies | The [reference implementation of Argon2](https://github.com/P-H-C/phc-winner-argon2) (CC0 or Apache 2.0), through CPM with a hash; TF-PSA-Crypto, through `libs/network` |
-| Tests | `tests/server_account_store.cpp`, tags `[accounts]` and `[database]`; `tests/crypto.cpp`, tag `[crypto]` |
+| Dependencies | The [reference implementation of Argon2](https://github.com/P-H-C/phc-winner-argon2) (CC0 or Apache 2.0), through CPM with a hash; TF-PSA-Crypto, through `libs/network`; libcurl for SMTP ([Web server](web.md#libcurl)) |
+| Tests | `tests/server_account_store.cpp`, tags `[accounts]` and `[database]`; `tests/server_mail.cpp`, tag `[mail]`; `tests/crypto.cpp`, tag `[crypto]` |
 
 ## The rules
 
@@ -125,6 +125,61 @@ who tries them all; the codes are short-lived and limited instead:
 Without the daily limit, an attacker could ask for a new code after every 5 attempts, and try 5 of the million
 each time. With it, an account gives away at most 20 tries a day: one chance in 50,000.
 
+## The mails
+
+The master sends four mails, each in **English and French** by the locale the client gives (`mailLanguage()`:
+`fr`, `fr-FR`, `fr_CA` are French, anything else English), as text and as HTML that say the same:
+
+| Mail | `Accounts/MailMessages.hpp` | Sent when (step 09) |
+|---|---|---|
+| The verification code | `verificationMail(language, username, code, validFor)` | An account is created, or signs in unverified |
+| The reset code | `resetMail(language, username, code, validFor)` | A forgotten password is asked for |
+| "You already have an account" | `existingAccountMail(language, username)` | Someone registers with an email that has an account: its holder learns it, the one who registered learns nothing from the answer of the lobby |
+| Too many wrong codes | `tooManyCodesMail(language, username)` | The daily limit of the codes is reached (`DailyLimitReached`) |
+
+A code is shown large, on a line of its own; the mail says how long it is valid, and holds **no link**: the
+player types the code in the game, so that a mail that copies ours cannot lead anywhere with a link of its own.
+The HTML is in the colours of the game, black and silver, with its styles inline, the only ones mail clients
+keep; what it is given (the username) is escaped.
+
+`formatMail()` (`Accounts/Mailer.hpp`) writes a mail as SMTP carries it: `Date`, `From`, `To`, `Subject`,
+`Message-ID`, `Auto-Submitted: auto-generated`, then a `multipart/alternative` of the text and the HTML, each in
+UTF-8 and base64, every line under 78 characters and ended by CRLF. A subject or a name of the sender that is not
+ASCII goes in encoded words of UTF-8 (RFC 2047), each a whole number of characters.
+
+### The mailer
+
+The lobby gives its mails to a `Mailer`, and returns at once: `send()` only queues. `CurlMailer` sends them
+through the mail server of the settings ([`[mail]`](../guides/configure-a-server.md#the-keys)) with libcurl, on
+**a thread of its own**, never on the event loop:
+
+| | |
+|---|---|
+| Security | STARTTLS required with `"starttls"` (a server that does not offer it is refused, never used in the clear), TLS from the start with `"tls"`; the certificate of the server checked against the certificates of the system. `"none"` for a relay on the same machine or a test server, without a password |
+| Queue | At most 64 mails not sent yet, the one being sent and those waiting for another try included. Beyond, `send()` gives `MailQueued::Busy` at once: `MAIL_UNAVAILABLE` for the lobby |
+| Retries | A mail the server refuses, does not take or cannot be reached for is tried again after 30 s, 1 min, then 2 min: 4 tries in all, then given up and logged. A mail waiting for its next try holds back none of the others |
+| Per address | At most **5 mails an hour to one address**, ignoring case, counted when they are queued; beyond, `MailQueued::AddressLimit`. Whoever types the email of another cannot flood their mailbox |
+| Addresses | Only one address, as `normalizeEmail()` keeps it: a line break, a name or a second address gives `MailQueued::InvalidAddress`, never a header of the mail |
+| Timeouts | 10 s to connect, 30 s for a whole mail |
+| Destruction | The mails not sent yet are dropped, and the one being sent is cut, without waiting for its timeout |
+
+The logs name a mail by its subject and its address masked, `p…@example.org`: never its content, where a code
+is, nor the password of the mail server.
+
+### At start
+
+A master with accounts checks its mail server before it starts, `--check` included: `checkMailServer()`
+connects, starts TLS, signs in, sends `NOOP`, then `QUIT`, so that **nothing is sent**. A mail server it cannot
+use stops it with the reason, as a port taken does: the codes could not leave, and a player would wait for a
+mail that never comes.
+
+```
+ERROR master   Cannot use the mail server mail.example.org:587: Login denied
+```
+
+In a container that restarts on failure, a mail server down at start makes the server restart again and again,
+until it answers ([Set up accounts](../guides/set-up-accounts.md#result)).
+
 ## Tests
 
 `tests/server_account_store.cpp` (tags `[server]`, `[accounts]`, `[database]` for those on the database), every
@@ -142,6 +197,27 @@ test of the database on SQLite and on PostgreSQL:
 - codes used once, bound to their account and their purpose, replaced, expired, refused after 5 attempts, and
   the daily limit across several codes of both purposes, lifted the next day;
 - the purge of accounts not verified within 24 hours, with their codes and sessions, those of Discord kept.
+
+`tests/server_mail.cpp` (tags `[server]`, `[mail]`), against a small SMTP server of the tests
+(`tests/helpers/SmtpServer.hpp`) in the clear, with STARTTLS, or TLS from the start, with or without an account:
+
+- the messages: the language of a locale, the code, its expiry and no link in both languages, the HTML escaped;
+- the format: the headers, CRLF and the length of every line, the parts decoded back, a long subject that is not
+  ASCII folded into encoded words of whole characters, the name of the sender quoted or encoded;
+- a code mail received in English and in French; the account of the mail server accepted, or refused; the check
+  that sends nothing; a server gone, its mails given up after their tries; a mail refused for now then received,
+  and one waiting for another try holding none back; the full queue refusing at once; the limit per address,
+  ignoring case, lifted once its window has passed; an address with a line break or a name never sent; the
+  mailer destroyed while it sends; STARTTLS required, a certificate not trusted refused, TLS from the start;
+- the logs, which hold neither the password, nor the code, nor the address;
+- a master with accounts checking its mail server at start, and stopping when it is gone.
+
+The TLS of the fake server needs OpenSSL: those tests are skipped on Windows, whose libcurl uses Schannel. A
+hidden test sends a code mail in each language through a real mail server, by hand:
+
+```sh
+RTYPE_TEST_MAIL_SETTINGS=server.toml RTYPE_TEST_MAIL_TO=you@example.org ./build/bin/rtype_tests "[.mail-server]"
+```
 
 `tests/crypto.cpp` (tag `[network]`, `[crypto]`): SHA-256 against the digests of FIPS 180-2, random bytes that
 differ from one draw to the next.

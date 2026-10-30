@@ -106,10 +106,10 @@ else.
 | `[accounts]` | `enabled` | `true` | Accounts with an email and a password. Needs `[mail]` |
 | | `guests` | `true` | Whether players can still play without an account |
 | `[mail]` | `host` | | The mail server the codes are sent through. Required |
-| | `security` | `"starttls"` | `"starttls"`, or `"tls"` from the start |
-| | `port` | 587, or 465 with `"tls"` | Port of the mail server |
+| | `security` | `"starttls"` | `"starttls"`, `"tls"` from the start, or `"none"`: in the clear, for a relay on this machine or a test server such as Mailpit, and then without `username` |
+| | `port` | 587; 465 with `"tls"`, 25 with `"none"` | Port of the mail server |
 | | `username`, `password_file` | | The account on the mail server, and the file of its password; both, or neither |
-| | `from` | | The sender of the mails, `R-Type <rtype@example.org>`. Required |
+| | `from` | | The sender of the mails, `R-Type <rtype@example.org>` or `rtype@example.org`: its address is also the sender SMTP announces. Required |
 | `[discord]` | `client_id` | | The id of the Discord application. Required |
 | | `client_secret_file` | | The file of its secret. Required |
 | `[admin]` | `admins` | `[]` | The administrators, each an email or `discord:<id>`. Never a username, which anyone could take by registering it first. The panel can neither demote nor ban them |
@@ -120,9 +120,10 @@ The sections go together:
   false` keep their `[mail]` without using it.
 - `[discord]` needs `[accounts]`, and `public_url` in `[web]`, where Discord sends the players back.
 
-The server serves its panel with `[web]` ([Run a server](run-a-server.md#steps), step 4). The accounts, the
-mail and Discord come in the next versions of the server: until then, their sections are checked, and not used
-yet.
+The server serves its panel with `[web]` ([Run a server](run-a-server.md#steps), step 4). With accounts
+enabled, it checks its mail server at every start, `--check` included, without sending anything
+([Set up accounts](set-up-accounts.md)). The accounts themselves and Discord come in the next versions of the
+server: until then, their sections are checked, and not used yet.
 
 ## Result
 
@@ -135,6 +136,9 @@ The server reads its settings at start, `--check` included, and stops with code 
 | `server.toml:2:8: [server] port must be a number` | A value of the wrong type: `4242`, not `"4242"` |
 | `[mail] password_file: cannot read /run/secrets/mail_password` | The secret file is missing, or the server's user cannot read it |
 | `[accounts] needs a [mail] section, to send the codes` | Add `[mail]`, or remove `[accounts]` |
+| `[mail] from must hold the address of the sender` | Write the sender `Name <address>`, or the address alone |
+| `[mail] security = "none" would send the password in the clear` | Use `"starttls"` or `"tls"` with an account on the mail server |
+| `Cannot use the mail server mail.example.org:587: Login denied` | The mail server refused the account: see [Set up accounts](set-up-accounts.md#result) for this message and the others |
 | `[web] listen must be a loopback address (127.0.0.1, [::1]) without accounts` | Keep the panel on this machine, or enable the accounts |
 | `Cannot serve the panel on 127.0.0.1:8080: Address already in use` | Another program, or another server, uses that port: choose another `listen` |
 | `The folder of the panel /opt/r-type/admin does not exist` | Give the folder of the built panel in `panel_dir`, or remove the key |
