@@ -464,7 +464,7 @@ Each entity, 16 bytes:
 | 10 | Velocity X | `i16` | Eighths of a unit per second |
 | 12 | Velocity Y | `i16` | |
 | 14 | Health | `u8` | Hit points left, for health bars; 0 for kinds without |
-| 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bit 3: aiming up. Bit 4: aiming down (a ship of a player turned by 30°, [section 9.2](#92-inputs)). Bits 5–7: reserved, set to 0 and ignored |
+| 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bit 3: aiming up. Bit 4: aiming down (a ship of a player turned by 30°, [section 9.2](#92-inputs)). Bit 5: guarding, bit 6: slashing, bit 7: shooting (the stance of a Bydo, at most one, drawn with its animation) |
 
 **Receiver behaviour:** the client applies the part as [section 9.3](#93-snapshots) says. A part number not below
 the number of parts, a number of parts of 0 or above 16, more than 4 players, a slot above 3 or given twice, an

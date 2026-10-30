@@ -127,9 +127,10 @@ The `CombatSystem` tests what touches what with the colliders of the entities, b
 of what it hits:
 
 - **A player shot** (its `Owner` is a slot) hurts a Bydo and is spent (`DestroyCause::Killed`: the client draws
-  its impact). The Bydo
-  with no hit points left is destroyed (`DestroyCause::Killed`) and `EnemyDefinition::score` goes to the
-  player of the shot.
+  its impact). A Bydo behind its guard (`EnemyStance::Guard`, ordered by its behavior) takes no damage. The
+  Bydo with no hit points left starts its next phase with all its health if it has one left
+  (`EnemyDefinition::phases`, `Enemy::phase`): a boss outlasts the 255 hit points of a `Health`. Otherwise it is
+  destroyed (`DestroyCause::Killed`) and `EnemyDefinition::score` goes to the player of the shot.
 - **A Bydo shot** (`NoOwner`) hurts a ship and is spent, killed as well; **a Bydo** hurts a ship it runs into
   (`EnemyDefinition::collisionDamage`) and keeps going. A ship that survives is invulnerable for
   `hitInvulnerableTicks`, so that a Bydo on it does not take its health away tick after tick.
@@ -351,6 +352,8 @@ A kind of enemy is **data** as well, an `EnemyDefinition`, kept by id in an `Ene
 | `score` | `std::uint32_t` | Points for the player who destroys it (default 100) |
 | `collisionDamage` | `std::uint8_t` | Hit points a ship loses when it runs into it (default 20) |
 | `behavior` | `std::optional<EnemyBehavior>` | What moves it and makes it fire (see [Enemy behaviors](#enemy-behaviors)); none: it flies left and fires as soon as it can |
+| `phases` | `std::uint8_t` | How many times its health is filled (not 0, default 1): it gets all of it back at each new phase |
+| `boss` | `bool` | Sent as `EntityKind::BydoBoss` instead of `BydoFlyer`: the clients draw it as a boss (default false) |
 
 ```mermaid
 flowchart LR
@@ -401,13 +404,15 @@ flowchart LR
 
 **What a behavior sees and orders**, with recipes, is in the guide
 [Script the behavior of an enemy](../guides/script-enemy-behaviors.md#reference): the enemy (position, velocity,
-top speed, age, health, weapon, a `memory` of its own), the players and their weapons, the time and the random
-numbers of the game; the orders `setVelocity`, `moveTo`, `fire` and `fireAt`. On the C++ side:
+top speed, age, health, phase, weapon, a `memory` of its own), the players and their weapons, the time and the
+random numbers of the game; the orders `setVelocity`, `moveTo`, `fire`, `fireAt`, and the stances `guard`,
+`slash` and `aim`. On the C++ side:
 
 - **The bound types are copies.** `EnemyScripts` gives each call an `enemy` userdata built from the components
   (`Position`, `Velocity`, `Health`, `Armed`, `Enemy::age`, `EnemyOrders`), owned by Lua, read-only, and reads
   its orders back after the call: a new velocity, and the `EnemyOrders` (destination, kept from one tick to the
-  next; `fire` and `target`, reset at every call). A script that keeps `enemy` changes nothing. `game` is built
+  next; `fire`, `target` and `stance`, reset at every call). The stance goes into the flags of the snapshot
+  (`EntityState::Guarding`, `Slashing`, `Shooting`), for the clients to animate. A script that keeps `enemy` changes nothing. `game` is built
   once per tick (`startTick()`), with the players in slot order.
 - **Moving and firing stay in C++.** The `EnemySystem` flies an enemy with a destination to it at its top
   speed, slower on the last tick so that it stops on it; the `WeaponSystem` fires an enemy with `EnemyOrders`
@@ -435,7 +440,7 @@ A wave is a group of enemies that appear one after the other. Like the enemies, 
 | `name` | `std::string` | Unique name in the registry |
 | `label` | `std::string` | Short text shown to the players |
 | `description` | `std::string` | Longer text |
-| `difficulty` | `std::uint8_t` | How hard the wave is, from 1 (`MinWaveDifficulty`) to 5 (`MaxWaveDifficulty`) |
+| `difficulty` | `std::uint8_t` | How hard the wave is, from 1 (`MinWaveDifficulty`) to 6 (`MaxWaveDifficulty`, the final boss) |
 | `quantity` | `std::uint16_t` | How many enemies (above 0) |
 | `spawnInterval` | `float` | Seconds between two enemies (0 or more; 0 = all at once) |
 | `placement` | `WavePlacement` | `Manual` or `Random`, one mode per wave |

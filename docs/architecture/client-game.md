@@ -144,6 +144,15 @@ where its box would be, with the same size anywhere on the screen: what is drawn
 The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
 an entity flies.
 
+**The boss** (`EntityKind::BydoBoss`, the shogun) is a standing figure, not a ship: a `BossLook`
+(`Game/BossLooks.hpp`), without roll nor tilt. Its model is turned by the same half turn around x, then by
+`BossLook::spin` (-70°) around its vertical axis, to face left, a little towards the camera: the model faces
++z, as its toes and its visor show; its hull is its body
+in its `Idle` pose, blade and gun excluded, the proportions of its collider (`config/ships/bydo_shogun.lua`). It
+plays the animation of its stance, from the flags of the snapshots: `Guard`, `Slash` or `Shoot`, `Fly` while it
+moves without one, `Idle` otherwise, fading from one to the next in 0.25 s. Its health bar is wider and higher,
+and the start of its wave, the last one, shows a banner of its own.
+
 The local player flies the ship equipped in the hangar: `GameScenes` gives it its own look
 (`GameSessionSystem::setLocalShipLook()`), from the entry of the ship catalog (`ShipSelector/ShipCatalog.cpp`),
 which keeps the hull and the trail meshes of each model, measured as above. The ships of the other players keep

@@ -175,6 +175,8 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `score` | whole number, 0 or more | `100` | Points for the player who destroys it |
 | `collisionDamage` | whole number from 0 to 255 | `20` | Hit points a player ship loses when it runs into it; the enemy keeps going |
 | `update` | function | none | Its behavior, called at every tick: see [Script the behavior of an enemy](script-enemy-behaviors.md). Without one, it flies left and fires as soon as it is in the game area |
+| `phases` | whole number from 1 to 255 | `1` | How many times its `health` is filled: once it runs out, it gets all of it back, until its last phase. A boss lasts `health × phases` hit points |
+| `boss` | boolean | `false` | The clients draw it as a boss (the shogun model) instead of a Bydo ship |
 
 ### Waves (`config/waves/`)
 
@@ -183,7 +185,7 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `name` | string | *required* | Unique among the waves |
 | `label` | string | `""` | Short text shown to the players |
 | `description` | string | `""` | Longer text |
-| `difficulty` | whole number from 1 to 5 | *required* | How hard the wave is, 1 the easiest |
+| `difficulty` | whole number from 1 to 6 | *required* | How hard the wave is, 1 the easiest, 6 the final boss |
 | `placement` | `"manual"` or `"random"` | *required* | Each enemy listed with its position, or one kind of enemy placed at random |
 | `spawnInterval` | number, 0 or more | `1` | Seconds between two enemies, 0 for all at once |
 | `spawns` | list of `{ enemy = "...", x = ..., y = ... }` | | Manual only, *required*: each enemy and where it appears, in order |
@@ -193,9 +195,10 @@ The `collider` is a box or a sphere, centred on the projectile:
 
 A manual wave sets no `enemy` and a random wave no `spawns`: a wave does not mix both modes.
 
-A game plays the waves by difficulty, from 1 to 5: for each one, a wave drawn among those of that difficulty.
+A game plays the waves by difficulty, from 1 to 6: for each one, a wave drawn among those of that difficulty.
 The repository keeps its examples in `config/waves/wave1/` through `wave5/`, with four choices
-per level. The loader also accepts Lua files elsewhere under `config/waves/`.
+per level, and the final boss in `wave6/`: the shogun (`config/enemies/bydo_shogun.lua`), alone, in four
+phases. The loader also accepts Lua files elsewhere under `config/waves/`.
 A difficulty without a wave is skipped, and the game is won once the last wave is over.
 
 ### The players (`config/player.lua`)
