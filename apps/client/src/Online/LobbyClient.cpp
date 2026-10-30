@@ -3,6 +3,7 @@
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Errors.hpp"
 #include "rtype/network/TcpConnection.hpp"
+#include "rtype/network/Text.hpp"
 #include "rtype/network/TlsConnection.hpp"
 
 #include <format>
@@ -35,6 +36,25 @@ std::string reasonOf(std::error_code reason)
         return "This is not the expected server: its key is not trusted";
     }
     return std::format("Connection lost: {}", reason.message());
+}
+
+/// Whether a field of the accounts fits its place in a request: 1 to `maxLength` bytes of text (0 to
+/// `maxLength` if it may be empty).
+bool fits(std::string_view text, std::size_t maxLength, bool allowEmpty = false)
+{
+    return (allowEmpty || !text.empty()) && text.size() <= maxLength && network::isValidText(text);
+}
+
+/// What the master gives a request answered SIGNED_IN or an error.
+LobbyClient::SignInResult signInResult(std::uint8_t type, std::span<const std::byte> payload)
+{
+    if (type == message_type::SignedIn) {
+        if (const auto signedIn = lobby::decodeSignedIn(payload)) {
+            return *signedIn;
+        }
+    }
+    const auto error = type == message_type::Error ? lobby::decodeError(payload) : std::nullopt;
+    return error ? error->code : ErrorCode::Malformed;
 }
 
 } // namespace
@@ -109,13 +129,85 @@ std::string describe(ErrorCode code)
     return std::format("The server refused (error {})", static_cast<int>(code));
 }
 
+std::string_view errorKey(ErrorCode code)
+{
+    switch (code) {
+    case ErrorCode::Malformed:
+        return "error.malformed";
+    case ErrorCode::UnknownMessage:
+        return "error.unknown_message";
+    case ErrorCode::UnsupportedVersion:
+        return "error.unsupported_version";
+    case ErrorCode::HelloRequired:
+        return "error.hello_required";
+    case ErrorCode::AlreadyWelcomed:
+        return "error.already_welcomed";
+    case ErrorCode::InvalidName:
+        return "error.invalid_name";
+    case ErrorCode::GameNotFound:
+        return "error.game_not_found";
+    case ErrorCode::GameFull:
+        return "error.game_full";
+    case ErrorCode::AlreadyInGame:
+        return "error.already_in_game";
+    case ErrorCode::NotInGame:
+        return "error.not_in_game";
+    case ErrorCode::ServerFull:
+        return "error.server_full";
+    case ErrorCode::GameStartFailed:
+        return "error.game_start_failed";
+    case ErrorCode::Kicked:
+        return "error.kicked";
+    case ErrorCode::Banned:
+        return "error.banned";
+    case ErrorCode::AccountsDisabled:
+        return "error.accounts_disabled";
+    case ErrorCode::UsernameTaken:
+        return "error.username_taken";
+    case ErrorCode::WeakPassword:
+        return "error.weak_password";
+    case ErrorCode::InvalidCredentials:
+        return "error.invalid_credentials";
+    case ErrorCode::EmailNotVerified:
+        return "error.email_not_verified";
+    case ErrorCode::InvalidCode:
+        return "error.invalid_code";
+    case ErrorCode::CodeExpired:
+        return "error.code_expired";
+    case ErrorCode::TooManyAttempts:
+        return "error.too_many_attempts";
+    case ErrorCode::SessionExpired:
+        return "error.session_expired";
+    case ErrorCode::Busy:
+        return "error.busy";
+    case ErrorCode::GuestsDisabled:
+        return "error.guests_disabled";
+    case ErrorCode::NameReserved:
+        return "error.name_reserved";
+    case ErrorCode::MailUnavailable:
+        return "error.mail_unavailable";
+    case ErrorCode::DiscordNotConfirmed:
+        return "error.discord_not_confirmed";
+    case ErrorCode::InvalidEmail:
+        return "error.invalid_email";
+    case ErrorCode::NotSignedIn:
+        return "error.not_signed_in";
+    case ErrorCode::AlreadySignedIn:
+        return "error.already_signed_in";
+    case ErrorCode::DiscordTaken:
+        return "error.discord_taken";
+    }
+    return "error.unknown";
+}
+
 LobbyClient::LobbyClient(network::EventLoop &loop, const network::Address &server,
                          std::vector<network::KeyFingerprint> trusted, std::string name, Handlers handlers,
-                         std::string locale)
-    : _name(std::move(name)), _locale(std::move(locale)), _handlers(std::move(handlers)), _ping(loop)
+                         std::string locale, std::optional<lobby::SessionToken> token)
+    : _name(std::move(name)), _locale(std::move(locale)), _handlers(std::move(handlers)), _ping(loop),
+      _token(token)
 {
     // Checked now: HELLO is written once connected, in a handler of the loop, where it must not throw
-    if (!lobby::isValidPlayerName(_name)) {
+    if (!_token && !lobby::isValidPlayerName(_name)) {
         throw std::invalid_argument("A player name is 1 to 16 characters of text");
     }
     if (!lobby::isValidLocale(_locale)) {
@@ -150,28 +242,40 @@ void LobbyClient::connected(network::TcpConnection connection, std::vector<netwo
     _connection->start(
         [this](std::uint8_t type, std::span<const std::byte> payload) { received(type, payload); },
         [this](std::error_code reason) { connectionClosed(reason); });
-    // Sent at once: it waits for the end of the handshake
-    request(message_type::Hello,
-            lobby::encode(lobby::HelloMessage{
-                .version = lobby::ProtocolVersion, .name = _name, .locale = _locale, .token = std::nullopt}),
-            [this](std::uint8_t type, std::span<const std::byte> payload) {
-                if (type == message_type::Welcome) {
-                    if (const auto welcome = lobby::decodeWelcome(payload)) {
-                        _playerId = welcome->playerId;
-                        _features = welcome->features;
-                        logger().info("Welcomed as {} ({})", _name, *_playerId);
-                        if (_handlers.onWelcome) {
-                            _handlers.onWelcome(*_playerId);
-                        }
-                        return;
+    // Sent at once: it waits for the end of the handshake. With a token, the name is the username
+    request(
+        message_type::Hello,
+        lobby::encode(lobby::HelloMessage{.version = lobby::ProtocolVersion,
+                                          .name = _token ? std::string() : _name,
+                                          .locale = _locale,
+                                          .token = _token}),
+        [this](std::uint8_t type, std::span<const std::byte> payload) {
+            if (type == message_type::Welcome) {
+                if (const auto welcome = lobby::decodeWelcome(payload)) {
+                    _playerId = welcome->playerId;
+                    _features = welcome->features;
+                    _account = welcome->account;
+                    if (_account) {
+                        _name = _account->username;
                     }
-                } else if (const auto error = lobby::decodeError(payload);
-                           error && type == message_type::Error) {
-                    fail(describe(error->code));
+                    logger().info("Welcomed as {} ({}){}", _name, *_playerId, _account ? ", signed in" : "");
+                    if (_handlers.onWelcome) {
+                        _handlers.onWelcome(*_playerId);
+                    }
                     return;
                 }
-                fail("The server answered HELLO with something else");
-            });
+            } else if (const auto error = lobby::decodeError(payload); error && type == message_type::Error) {
+                if (error->code == ErrorCode::SessionExpired && _handlers.onSessionExpired) {
+                    logger().info("The session of the account expired");
+                    close();
+                    _handlers.onSessionExpired();
+                    return;
+                }
+                fail(error->code);
+                return;
+            }
+            fail("The server answered HELLO with something else");
+        });
 }
 
 void LobbyClient::connectionClosed(std::error_code reason)
@@ -213,12 +317,13 @@ void LobbyClient::received(std::uint8_t type, std::span<const std::byte> payload
         }
         return;
     }
-    // KICKED and BANNED come without a request, then the master closes the connection
+    // An error after which the master closes the connection: KICKED and BANNED without a request, BANNED
+    // after a SIGN_IN. The one of HELLO goes to it, for SESSION_EXPIRED
     if (type == message_type::Error) {
         const std::optional<lobby::ErrorMessage> error = lobby::decodeError(payload);
-        if (error && error->request == 0 &&
-            (error->code == ErrorCode::Kicked || error->code == ErrorCode::Banned)) {
-            fail(describe(error->code));
+        if (error && lobby::closesConnection(error->code) &&
+            (error->request == 0 || _pending.empty() || _pending.front().request != message_type::Hello)) {
+            fail(error->code);
             return;
         }
     }
@@ -302,6 +407,136 @@ void LobbyClient::leaveGame(std::function<void()> done)
             done();
         }
     });
+}
+
+void LobbyClient::signInRequest(std::uint8_t type, std::vector<std::byte> payload, SignInCallback done)
+{
+    request(type, payload,
+            [this, done = std::move(done)](std::uint8_t reply, std::span<const std::byte> body) {
+                const SignInResult result = signInResult(reply, body);
+                if (const auto *signedIn = std::get_if<lobby::SignedInMessage>(&result)) {
+                    _account = signedIn->account;
+                    _name = signedIn->account.username;
+                    logger().info("Signed in as {}", _name);
+                }
+                if (done) {
+                    done(result);
+                }
+            });
+}
+
+void LobbyClient::doneRequest(std::uint8_t type, std::vector<std::byte> payload, DoneCallback done,
+                              bool closes)
+{
+    request(type, payload,
+            [this, done = std::move(done), closes](std::uint8_t reply, std::span<const std::byte> body) {
+                std::optional<ErrorCode> error;
+                if (reply == message_type::Error) {
+                    const auto message = lobby::decodeError(body);
+                    error = message ? message->code : ErrorCode::Malformed;
+                } else if ((reply != message_type::CodeSent && reply != message_type::Done) ||
+                           !lobby::decodeEmpty(body)) {
+                    error = ErrorCode::Malformed;
+                }
+                if (!error && closes) {
+                    // The master closes the connection after DONE: not a connection lost
+                    logger().info("Signed out of {}", _name);
+                    _account.reset();
+                    close();
+                }
+                if (done) {
+                    done(error);
+                }
+            });
+}
+
+void LobbyClient::registerAccount(const std::string &username, const std::string &email,
+                                  const std::string &password, DoneCallback done)
+{
+    if (!fits(username, lobby::MaxUsernameLength)) {
+        done(ErrorCode::InvalidName);
+    } else if (!fits(email, lobby::MaxEmailLength)) {
+        done(ErrorCode::InvalidEmail);
+    } else if (!fits(password, lobby::MaxPasswordLength)) {
+        done(ErrorCode::WeakPassword);
+    } else {
+        doneRequest(message_type::Register, lobby::encode(lobby::RegisterMessage{username, email, password}),
+                    std::move(done));
+    }
+}
+
+void LobbyClient::verifyEmail(const std::string &login, const std::string &code, SignInCallback done)
+{
+    if (!fits(login, lobby::MaxEmailLength) || !lobby::isValidEmailCode(code)) {
+        done(ErrorCode::InvalidCode);
+        return;
+    }
+    signInRequest(message_type::VerifyEmail, lobby::encode(lobby::VerifyEmailMessage{login, code}),
+                  std::move(done));
+}
+
+void LobbyClient::resendCode(const std::string &login, DoneCallback done)
+{
+    if (!fits(login, lobby::MaxEmailLength)) {
+        done(ErrorCode::InvalidName);
+        return;
+    }
+    doneRequest(message_type::ResendCode, lobby::encode(lobby::ResendCodeMessage{login}), std::move(done));
+}
+
+void LobbyClient::signIn(const std::string &login, const std::string &password, SignInCallback done)
+{
+    if (!fits(login, lobby::MaxEmailLength) || !fits(password, lobby::MaxPasswordLength)) {
+        done(ErrorCode::InvalidCredentials);
+        return;
+    }
+    signInRequest(message_type::SignIn, lobby::encode(lobby::SignInMessage{login, password}),
+                  std::move(done));
+}
+
+void LobbyClient::forgotPassword(const std::string &email, DoneCallback done)
+{
+    if (!fits(email, lobby::MaxEmailLength)) {
+        done(ErrorCode::InvalidEmail);
+        return;
+    }
+    doneRequest(message_type::ForgotPassword, lobby::encode(lobby::ForgotPasswordMessage{email}),
+                std::move(done));
+}
+
+void LobbyClient::resetPassword(const std::string &email, const std::string &code,
+                                const std::string &password, SignInCallback done)
+{
+    if (!fits(email, lobby::MaxEmailLength)) {
+        done(ErrorCode::InvalidEmail);
+    } else if (!lobby::isValidEmailCode(code)) {
+        done(ErrorCode::InvalidCode);
+    } else if (!fits(password, lobby::MaxPasswordLength)) {
+        done(ErrorCode::WeakPassword);
+    } else {
+        signInRequest(message_type::ResetPassword,
+                      lobby::encode(lobby::ResetPasswordMessage{email, code, password}), std::move(done));
+    }
+}
+
+void LobbyClient::signOut(DoneCallback done)
+{
+    doneRequest(message_type::SignOut, {}, std::move(done), true);
+}
+
+void LobbyClient::deleteAccount(const std::string &password, DoneCallback done)
+{
+    if (!fits(password, lobby::MaxPasswordLength)) {
+        done(ErrorCode::InvalidCredentials);
+        return;
+    }
+    doneRequest(message_type::DeleteAccount, lobby::encode(lobby::DeleteAccountMessage{password}),
+                std::move(done), true);
+}
+
+void LobbyClient::fail(ErrorCode code)
+{
+    fail(_handlers.describe ? _handlers.describe(code) : describe(code));
 }
 
 void LobbyClient::fail(const std::string &reason)

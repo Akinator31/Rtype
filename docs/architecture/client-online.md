@@ -12,6 +12,8 @@ apps/client/src/
   Online/
     LobbyClient.cpp    the connection to the lobby: TLS with the key pinned, HELLO, the requests
     OnlineScenes.cpp   the Online menu and the list of the games
+    AccountScenes.cpp  the scenes of the accounts: sign in, create an account, the code, my account
+    SessionTokens.cpp  the session token of the account signed in on each server, kept in the settings
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn 100 ms in the past, between the snapshots around that time
@@ -53,7 +55,10 @@ sequenceDiagram
 4. **The game** plays a `RemoteSession` with what `GAME_JOINED` gave. When it ends, by the pause menu or because
    the game ended, the client leaves it (`LEAVE_GAME`) and shows the list again.
 
-Everything that goes wrong is shown in a toast: a server unreachable or not the expected one, a game full, a
+On a server with accounts, `WELCOME` leads to the scenes of the [accounts](#accounts) first, unless the player
+comes back signed in.
+
+Everything that goes wrong is shown in a toast, in the language of the game: a server unreachable or not the expected one, a game full, a
 game that crashed, the connection lost. A lobby connection lost brings the player back to the main menu.
 
 What the administrators of the server do is shown in a toast too ([Administration](administration.md)): a
@@ -89,8 +94,12 @@ rtype::client::LobbyClient lobby(loop, server, known.trusted(address), "Pavel",
      .onLeftGame = [&](const rtype::lobby::LeftGameMessage &left) { /* game over, crash, timeout, admin */ },
      .onServerMessage = [&](const std::string &text) { /* toast it */ },
      .onClosed = [&](const std::string &reason) { /* toast it */ },
-     .onUntrusted = [&](const rtype::network::KeyFingerprint &presented) { /* ask the player, or warn */ }});
+     .onUntrusted = [&](const rtype::network::KeyFingerprint &presented) { /* ask the player, or warn */ },
+     .onSessionExpired = [&] { /* forget the token, connect again as a guest */ },
+     .describe = [&](rtype::lobby::ErrorCode code) { return translations.text(rtype::client::errorKey(code)); }},
+    "fr", sessions.token(address));
 lobby.joinGame(id, [&](const rtype::client::LobbyClient::JoinResult &result) { /* GAME_JOINED or an error */ });
+lobby.signIn("Pilot_7", password, [&](const rtype::client::LobbyClient::SignInResult &result) { /* SIGNED_IN */ });
 ```
 
 - **One callback per request.** The master answers in order ([lobby protocol](../protocol/lobby.md)), so each
@@ -106,9 +115,55 @@ lobby.joinGame(id, [&](const rtype::client::LobbyClient::JoinResult &result) { /
 - **A name and a locale are checked before connecting** (`std::invalid_argument`): `HELLO` is written in a
   handler of the loop, where nothing may throw. The locale is the language of the game (`en` or `fr`), so that
   the emails of the master come in it.
-- **`WELCOME` tells what the master offers** (`features()`): guests, password accounts, Discord. The client
-  sends no session token and shows no account yet ([lobby protocol 3](../protocol/lobby.md#6-accounts)); the
-  error codes of the accounts already have their `describe()`.
+- **`WELCOME` tells what the master offers** (`features()`): guests, password accounts, Discord; and the
+  account the token of `HELLO` signed in (`account()`), whose username is then the name of the player.
+- **The requests of the accounts** ([lobby protocol 3](../protocol/lobby.md#6-accounts)): `registerAccount()`,
+  `verifyEmail()`, `resendCode()`, `signIn()`, `forgotPassword()`, `resetPassword()`, `signOut()`,
+  `deleteAccount()`. Those that sign in give `SIGNED_IN` or the error, and sign the connection in; the others
+  give nothing or the error. A field the protocol cannot carry (an empty password, a code that is not 6 digits,
+  a username of 17 bytes) gets at once the error the master would give it, without being sent.
+- **`DONE` to `SIGN_OUT` or `DELETE_ACCOUNT`**: the master closes the connection, so the client closes it first,
+  and `onClosed` is not called: it is not a connection lost.
+- **`SESSION_EXPIRED` in reply to `HELLO`** goes to `onSessionExpired`, instead of `onClosed`. Any other error
+  after which the master closes the connection (`BANNED` after a `SIGN_IN`, `MALFORMED`) goes to `onClosed`.
+- **The messages of the errors**: `describe(code)` in English, for the logs and the tests; `errorKey(code)` the
+  key of its message in `en.lang` and `fr.lang` (`error.game_full`), which the scenes show, and give the
+  `LobbyClient` through `Handlers::describe`.
+- **A password, a code and a token are never logged**, at any level.
+
+## Accounts
+
+On a server with accounts ([lobby protocol 3, section 6](../protocol/lobby.md#6-accounts)), the client offers
+what `WELCOME` says the server offers. A server without accounts looks as it did before them.
+
+```mermaid
+flowchart LR
+    W[WELCOME] -->|signed in by its token, or no accounts| L[Lobby]
+    W -->|accounts, not signed in| A[online_accounts]
+    A -->|Sign in| S[online_sign_in] -->|SIGNED_IN| L
+    S -->|EMAIL_NOT_VERIFIED| C[online_code]
+    S -->|Forgot password| F[online_forgot_password] -->|CODE_SENT| R[online_reset_password] -->|SIGNED_IN| L
+    A -->|Create an account| G[online_register] -->|CODE_SENT| C -->|SIGNED_IN| L
+    A -->|Play as a guest, if allowed| L
+    L -->|My account| M[online_my_account] -->|Sign out, Delete| A
+```
+
+*Each scene goes back (Escape) to the one before it; the choice of the accounts disconnects.*
+
+- **The session token** of `SIGNED_IN` is kept for the server by `SessionTokens` (`Online/SessionTokens.hpp`), in
+  the [settings](settings.md) under `servers.session.<address>`, the address as `KnownServers` knows it. The
+  next **Connect** sends it in `HELLO`, without a name: the player comes back signed in, even after a restart.
+- **It is forgotten** at sign-out and at the deletion of the account (`DONE`), then the client connects again as
+  a guest; and on `SESSION_EXPIRED` (a session older than 30 days, a new password, a ban, a sign-out from
+  another machine), after which the client connects again without it and says so in a toast.
+- **The password fields** are `MenuBuilder::passwordField()`: drawn as `*`, never copied to the clipboard
+  ([Interface](scenes-and-interface.md)). A password lives in its field only: it is read when the button is
+  pressed, and never kept by the scenes.
+- **The settings file** is readable by the player only on Unix (mode `0600`), since it holds the tokens.
+- **The language of the game** is sent in `HELLO`, so that the emails of the master come in it; every error
+  code has its message in `en.lang` and `fr.lang`.
+- **My account** shows the username, and the role when the account administers the server: **Sign out**, and
+  **Delete the account**, which asks for the password once more.
 
 ## RemoteSession
 
@@ -200,6 +255,18 @@ them, through the interpolation.
 - a game that crashes reported to its player, who can create another one, and a game that stops ending the
   session of its player.
 
+The accounts (tag `[online][accounts]`) run against a master with accounts, a mailer of the tests that keeps
+the codes, on SQLite and PostgreSQL:
+
+- an account created, verified with the code of its email, kept in the settings, and signed in again from its
+  token alone after a restart of the client;
+- an expired token told through `onSessionExpired`, not as a connection lost, forgotten, then a guest welcomed;
+- a sign-out closing the connection without an error, its token refused after;
+- a wrong password and its message, fields refused before sending, then the right password by email;
+- a forgotten password changed with its code, which signs in; an account deleted with its password;
+- the token kept for its server only, in a file readable by its owner only;
+- every error code with a message in `en.lang` and `fr.lang`.
+
 `tests/known_servers.cpp` (tag `[online]`) checks the key trusted for each server: a server trusted on first
 use, kept in the settings, then refused with another key until forgotten; settings holding something else than a
 fingerprint, which trusts nothing; a fingerprint shown in groups of 4 digits.
@@ -218,6 +285,7 @@ elsewhere; a correction too large applied at once; and the ticks skipped when st
 
 ```sh
 ./build/bin/rtype_tests "[online]"
+./build/bin/rtype_tests "[online][accounts]"
 ./build/bin/rtype_tests "[interpolation]"
 ./build/bin/rtype_tests "[prediction]"
 ```

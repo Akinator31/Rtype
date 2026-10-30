@@ -123,6 +123,15 @@ void Settings::writeFile() const
     std::filesystem::path temporary = _path;
     temporary += ".tmp";
     std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+#ifndef _WIN32
+    // The settings hold the session tokens of the player: readable by the player only, before anything is
+    // written. On Windows, the data directory of the player is already its own.
+    if (file) {
+        std::filesystem::permissions(temporary,
+                                     std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+                                     std::filesystem::perm_options::replace);
+    }
+#endif
     for (const auto &[key, value] : _values) {
         file << escape(key) << '=' << escape(value) << '\n';
     }

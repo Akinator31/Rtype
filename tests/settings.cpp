@@ -129,6 +129,24 @@ TEST_CASE("The file has one line per value, sorted by key", "[settings]")
     REQUIRE(readText(directory.path / "settings.txt") == "audio.volume=80\nvideo.width=1920\n");
 }
 
+#ifndef _WIN32
+TEST_CASE("The file is readable by its owner only: it holds session tokens", "[settings]")
+{
+    const SettingsDirectory directory;
+    const std::filesystem::path path = directory.path / "settings.txt";
+    // A file left readable by everyone, by an older client, is written again for its owner only
+    std::ofstream(path) << "audio.volume=80\n";
+    std::filesystem::permissions(path, std::filesystem::perms::all);
+    rtype::engine::Settings settings(path);
+    settings.setString("servers.session.127.0.0.1:4242", "secret");
+
+    settings.writeFile();
+
+    using std::filesystem::perms;
+    CHECK(std::filesystem::status(path).permissions() == (perms::owner_read | perms::owner_write));
+}
+#endif
+
 TEST_CASE("Reading the file replaces the values in memory", "[settings]")
 {
     const SettingsDirectory directory;

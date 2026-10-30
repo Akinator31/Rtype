@@ -128,4 +128,14 @@ ecs::entity_t MenuBuilder::textField(const std::string &caption, const std::stri
     return entity;
 }
 
+ecs::entity_t MenuBuilder::passwordField(const std::string &caption, std::size_t maxLength)
+{
+    TextField field{caption, {}, {}};
+    field.input.setSecret(true);
+    field.input.setMaxLength(maxLength);
+    const ecs::entity_t entity = widget(widgetLabel(field), true);
+    _ecs.addComponent<TextField>(entity, std::move(field));
+    return entity;
+}
+
 } // namespace rtype::engine

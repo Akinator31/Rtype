@@ -216,6 +216,7 @@ It only creates entities: an icon or an animation can be added to any of them af
 | `slider` | `Volume: 80%` | Left, Right and the wheel change it by steps |
 | `choice` | `Colour filter: None` | Left, Right, the wheel and a click go through the options |
 | `textField` | `Name: Player` | Typing edits it while focused, with cursor, selection and clipboard; Confirm submits it |
+| `passwordField` | `Password: ******` | A `textField` whose text is secret (`TextInput::setSecret()`): drawn as one `*` per character (`fieldContent()`), never copied nor cut to the clipboard; pasting works |
 
 Values are read and written through functions, not copied: a toggle for fullscreen always shows the real
 setting, even when it is changed by a shortcut key.

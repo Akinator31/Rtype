@@ -108,7 +108,8 @@ flood the mailbox of another by typing their email. The logs show each mail by i
 
 ## What the players can do
 
-Once the server starts with `[accounts]`, its players can, from the game:
+Once the server starts with `[accounts]`, its players can, from the Online menu of the game
+([Play online](play-online.md)):
 
 - **create an account** with a username, an email and a password: a code of 6 digits reaches the email, valid
   15 minutes, which they type in the game. An account not verified within 24 hours is deleted;

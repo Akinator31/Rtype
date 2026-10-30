@@ -40,7 +40,8 @@ public:
     void readFile();
 
     /// Writes every value to the file, creating its directories. The file is written to a temporary file
-    /// first, then renamed, so that a crash while writing keeps the previous settings. Throws
+    /// first, then renamed, so that a crash while writing keeps the previous settings. On Unix, the file is
+    /// readable and writable by its owner only (0600): it holds session tokens. Throws
     /// std::runtime_error or std::filesystem::filesystem_error if the file cannot be written.
     void writeFile() const;
 
