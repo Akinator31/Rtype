@@ -6,6 +6,7 @@
 #include "Game/LocalSession.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "ShipModel.hpp"
+#include "ShipSelector/ShipCatalog.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/game/Constants.hpp"
@@ -34,6 +35,11 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE_LOST},
     {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
     {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
+    // The ships of the hangar, which the local player may fly
+    {AssetType::Model, RTYPE_MODEL_SHIP_CAVED},
+    {AssetType::Model, RTYPE_MODEL_SHIP_BATTLESHIP},
+    {AssetType::Model, RTYPE_MODEL_SHIP_SPACESHIP},
+    {AssetType::Model, RTYPE_MODEL_SHIP_BATTLESTAR},
     {AssetType::Model, RTYPE_MODEL_SHOT_BASIC},
     {AssetType::Model, RTYPE_MODEL_SHOT_SPIRAL},
     {AssetType::Model, RTYPE_MODEL_ORB_PLASMA},
@@ -198,12 +204,15 @@ void setCollisionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
     }
 }
 
-/// Gives each kind of entity of the game its look and its sounds, from the GameAssets, loaded by then.
+/// Gives each kind of entity of the game its look and its sounds, from the GameAssets, loaded by then, and
+/// the ship of the local player the look of the ship equipped.
 void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
-                        audio::AudioPlayer &audio)
+                        audio::AudioPlayer &audio, const ShipEntry &equipped)
 {
     sessions.setShipLook(game::EntityKind::PlayerShip,
                          {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoTrails});
+    sessions.setLocalShipLook(
+        {loadShipModel(resources, equipped.modelPath), equipped.hull, false, equipped.trailMeshes});
     sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
                                                        DropShipHull, true, DropShipTrails});
     const render::Energy energy{
@@ -267,8 +276,10 @@ const char *bydoNameKey(game::EntityKind kind)
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                       GameSessionSystem &sessions, localization::Localization &translations)
-    : _engine(engine), _metrics(metrics), _style(style), _sessions(sessions), _translations(translations)
+                       GameSessionSystem &sessions, localization::Localization &translations,
+                       const ShipSelection &ships)
+    : _engine(engine), _metrics(metrics), _style(style), _sessions(sessions), _translations(translations),
+      _ships(ships)
 {
     sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
     sessions.setWaveHandler([this](std::uint16_t wave) { showWave(wave); });
@@ -352,7 +363,7 @@ void GameScenes::showDeath()
 void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
-    configureGameLooks(_sessions, resources, audio);
+    configureGameLooks(_sessions, resources, audio, getShipCatalog()[_ships.equipped]);
     _scene = scene;
     _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),
                   resources.loadTexture(RTYPE_IMAGE_LIFE_LOST, render::TextureFiltering::Smooth),

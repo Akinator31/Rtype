@@ -3,6 +3,7 @@
 #include "Game/DeathScreen.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
+#include "ShipSelector/ShipSelection.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
@@ -25,7 +26,8 @@ inline constexpr const char *PauseScene = "pause";
 /// and the pause menu over it.
 ///
 /// - The game scene shows the starry sky, the world of the session (the ships of the players and the Bydos
-///   in 3D, through an orthographic camera: what is drawn is what collides), and the HUD (openHud()): the
+///   in 3D, through an orthographic camera: what is drawn is what collides; the local player flies the ship
+///   equipped in the hangar), and the HUD (openHud()): the
 ///   lives and score of the local player, the score of the others, and the ping online.
 /// - The events, in the corner of the toasts: a Bydo shot down by the local player, and the ship of a player
 ///   shot down, the local one or an ally.
@@ -49,6 +51,7 @@ class GameScenes
     const engine::InterfaceStyle &_style;
     GameSessionSystem &_sessions;
     localization::Localization &_translations;
+    const ShipSelection &_ships;
     /// The game scene open, and the look of its death screen.
     std::optional<engine::SceneId> _scene;
     DeathScreenLook _deathLook;
@@ -73,7 +76,8 @@ public:
     /// Declares the scenes. Everything given must outlive the engine.
     GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-               GameSessionSystem &sessions, localization::Localization &translations);
+               GameSessionSystem &sessions, localization::Localization &translations,
+               const ShipSelection &ships);
 
     GameScenes(const GameScenes &) = delete;
     GameScenes &operator=(const GameScenes &) = delete;
