@@ -52,8 +52,8 @@ CPMAddPackage(
         "CROW_INSTALL OFF"
 )
 
-# libcurl: the mails of the accounts (Accounts/CurlMailer.hpp), Discord later, and the HTTP client of the
-# tests. TLS from OpenSSL on Linux, from the system (Schannel) on Windows; only HTTP(S) and SMTP(S), nothing
+# libcurl: the mails of the accounts (Accounts/CurlMailer.hpp), Discord (Accounts/Discord.hpp), and the HTTP
+# client of the tests. TLS from OpenSSL on Linux, from the system (Schannel) on Windows; only HTTP(S) and SMTP(S), nothing
 # else it could reach
 if(WIN32)
   set(curl_tls "CURL_USE_SCHANNEL ON" "CURL_USE_OPENSSL OFF")
@@ -129,6 +129,7 @@ add_library(r-type_server_core STATIC
     src/Accounts/AccountService.cpp
     src/Accounts/AccountStore.cpp
     src/Accounts/CurlMailer.cpp
+    src/Accounts/Discord.cpp
     src/Accounts/Mailer.cpp
     src/Accounts/MailMessages.cpp
     src/Accounts/PasswordHasher.cpp

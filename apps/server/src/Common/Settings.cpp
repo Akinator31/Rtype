@@ -452,10 +452,6 @@ void checkSections(const Reader &reader, const toml::table &root, const ServerSe
     if (settings.discord && !settings.accountsEnabled()) {
         reader.fail(root.get("discord")->source(), "[discord] signs in to accounts: add [accounts]");
     }
-    if (settings.discord && settings.web.publicUrl.empty()) {
-        reader.fail(root.get("discord")->source(),
-                    "[discord] needs public_url in [web], where Discord sends the players back");
-    }
     if (!settings.accountsEnabled() && !isLoopback(settings.web.listen)) {
         // Without accounts, nobody signs in to the panel: only this machine may reach it
         reader.fail(

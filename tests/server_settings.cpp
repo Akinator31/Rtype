@@ -357,7 +357,7 @@ TEST_CASE("Accounts need the mail, and the mail the accounts", "[server][setting
     CHECK(parse("[accounts]\nenabled = false\n[mail]\nhost = \"mail\"\nfrom = \"a@b.c\"\n").mail);
 }
 
-TEST_CASE("Discord needs the accounts and the public address of the panel", "[server][settings]")
+TEST_CASE("Discord needs the accounts, not the public address of the panel", "[server][settings]")
 {
     const TempDirectory directory("discord");
     directory.write("discord_secret", "secret\n");
@@ -368,8 +368,8 @@ TEST_CASE("Discord needs the accounts and the public address of the panel", "[se
     };
 
     CHECK(load(std::string(Accounts) + publicUrl + discord).discord->clientId == "123");
-    CHECK_THROWS_WITH(load(std::string(Accounts) + discord),
-                      ContainsSubstring("[discord] needs public_url in [web]"));
+    // The players get the code of Discord on their own machine (ADR 0026): the master need not be reachable
+    CHECK(load(std::string(Accounts) + discord).discord->clientId == "123");
     CHECK_THROWS_WITH(load(publicUrl + discord), ContainsSubstring("[discord] signs in to accounts"));
     CHECK_THROWS_WITH(
         load(std::string(Accounts) + publicUrl + "[discord]\nclient_secret_file = \"discord_secret\"\n"),

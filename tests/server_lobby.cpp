@@ -113,7 +113,8 @@ std::vector<std::pair<std::uint8_t, Bytes>> accountRequests()
         {message_type::ResetPassword,
          encode(ResetPasswordMessage{"pavel@example.org", "123456", "new password!"})},
         {message_type::DiscordSignIn, {}},
-        {message_type::DiscordConfirm, encode(DiscordConfirmMessage{"K7P2ZX"})},
+        {message_type::DiscordConfirm,
+         encode(DiscordConfirmMessage{"code", std::string(43, 'v'), "http://127.0.0.1/callback"})},
         {message_type::ChooseUsername, encode(ChooseUsernameMessage{"Pavel"})},
         {message_type::DeleteAccount, encode(DeleteAccountMessage{"correct horse battery"})},
     };

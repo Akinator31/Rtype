@@ -1,13 +1,16 @@
 // Tests of the accounts in the lobby of the master (docs/architecture/accounts.md#in-the-lobby): real TLS
-// clients against a real lobby, a mailer of the tests that keeps the codes, on every engine of the database.
-// Every flow of lobby protocol 3 and its errors, the answers in order, the limits, and the purge.
+// clients against a real lobby, a mailer of the tests that keeps the codes, a fake Discord, on every engine
+// of the database. Every flow of lobby protocol 3 and its errors, the answers in order, the limits, and the
+// purge.
 
 #include "Accounts/AccountRules.hpp"
 #include "Accounts/AccountService.hpp"
 #include "Accounts/AccountStore.hpp"
+#include "Accounts/Discord.hpp"
 #include "Accounts/MailMessages.hpp"
 #include "Accounts/PasswordHasher.hpp"
 #include "Common/Secret.hpp"
+#include "FakeDiscord.hpp"
 #include "FakeMailer.hpp"
 #include "GameServers.hpp"
 #include "LobbyClient.hpp"
@@ -52,6 +55,7 @@ using rtype::network::EventLoop;
 using rtype::network::ServerIdentity;
 using rtype::network::TcpListener;
 using rtype::test::TestDatabase;
+using testing::FakeDiscord;
 using testing::FakeMailer;
 using testing::LobbyClient;
 using testing::waitUntil;
@@ -79,6 +83,8 @@ struct Setup {
     PasswordHasher::Settings hasher{.threads = 2, .maxPending = 32, .parameters = CheapArgon2};
     /// Games run by real instances, for the tests that play one.
     bool games = false;
+    /// Signing in with Discord, through a fake Discord.
+    bool discord = false;
 };
 
 /// A lobby with accounts, its database of its own, and a fake mailer. The test reaches the database through
@@ -94,8 +100,10 @@ struct Server {
                                                   .leadingArguments = {},
                                                   .trailingArguments = {}}};
     FakeMailer mailer;
+    std::optional<FakeDiscord> fakeDiscord;
     std::optional<DatabaseThread> database;
     std::optional<PasswordHasher> hasher;
+    std::optional<DiscordClient> discord;
     std::optional<AccountService> accounts;
     std::optional<Lobby> lobby;
 
@@ -109,6 +117,7 @@ struct Server {
     {
         lobby.reset();
         accounts.reset();
+        discord.reset();
         hasher.reset();
         database.reset();
     }
@@ -121,7 +130,11 @@ struct Server {
         const auto post = [this](std::function<void()> function) { loop.post(std::move(function)); };
         database.emplace(test.open(), post);
         hasher.emplace(post, setup.hasher);
-        accounts.emplace(loop, *database, *hasher, mailer, setup.accounts);
+        if (setup.discord) {
+            fakeDiscord.emplace();
+            discord.emplace(fakeDiscord->settings(), post);
+        }
+        accounts.emplace(loop, *database, *hasher, mailer, setup.accounts, discord ? &*discord : nullptr);
         lobby.emplace(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games);
         lobby->setAccounts(&*accounts);
     }
@@ -215,6 +228,32 @@ struct Player {
     [[nodiscard]] bool closed()
     {
         return waitUntil(loop, [&] { return client->closed.has_value(); });
+    }
+
+    /// DISCORD_SIGN_IN, which must give the application of the fake Discord.
+    void discordSignIn()
+    {
+        const auto reply = ask(message_type::DiscordSignIn);
+        REQUIRE(reply.first == message_type::DiscordAuthorize);
+        const auto authorize = rtype::lobby::decodeDiscordAuthorize(reply.second);
+        REQUIRE(authorize);
+        CHECK(std::to_string(authorize->applicationId) == FakeDiscord::ClientId);
+    }
+
+    /// DISCORD_CONFIRM with what the client got from Discord.
+    std::pair<std::uint8_t, Bytes> discordConfirm(const DiscordAuthorization &authorization)
+    {
+        return ask(message_type::DiscordConfirm, rtype::lobby::encode(rtype::lobby::DiscordConfirmMessage{
+                                                     .code = authorization.code,
+                                                     .codeVerifier = authorization.codeVerifier,
+                                                     .redirectUri = authorization.redirectUri}));
+    }
+
+    /// The whole flow: DISCORD_SIGN_IN, the user accepts in Discord, DISCORD_CONFIRM.
+    std::pair<std::uint8_t, Bytes> discord(FakeDiscord &discord, const DiscordUser &user)
+    {
+        discordSignIn();
+        return discordConfirm(discord.accept(user));
     }
 };
 
@@ -886,18 +925,372 @@ TEST_CASE("A player deletes its account with its password; its actions stay, ano
     CHECK_THAT(actions[0].details, ContainsSubstring("Other") && ContainsSubstring("203.0.113.10"));
 }
 
-TEST_CASE("Discord is not offered yet", "[server][accounts][database]")
+TEST_CASE("Discord is not offered without its settings", "[server][accounts][discord][database]")
 {
     FOR_EACH_ENGINE();
-    Server server(engine, "lobby_accounts_discord");
+    Server server(engine, "lobby_accounts_no_discord");
     server.start();
     Player player(server);
-    player.welcome("Someone");
+    CHECK_FALSE(player.welcome("Someone").features.discord);
     CHECK(errorOf(player.ask(message_type::DiscordSignIn), message_type::DiscordSignIn) ==
           ErrorCode::AccountsDisabled);
     CHECK(errorOf(player.ask(message_type::DiscordConfirm,
-                             rtype::lobby::encode(rtype::lobby::DiscordConfirmMessage{"K7P2ZX"})),
+                             rtype::lobby::encode(rtype::lobby::DiscordConfirmMessage{
+                                 "code", std::string(43, 'v'), FakeDiscord::RedirectUri})),
                   message_type::DiscordConfirm) == ErrorCode::AccountsDisabled);
+    CHECK(errorOf(player.ask(message_type::ChooseUsername,
+                             rtype::lobby::encode(rtype::lobby::ChooseUsernameMessage{"Wing"})),
+                  message_type::ChooseUsername) == ErrorCode::AccountsDisabled);
+}
+
+namespace
+{
+
+const DiscordUser WingUser{.id = "80351110224678912", .username = "wing"};
+const DiscordUser NovaUser{.id = "175928847299117063", .username = "nova"};
+
+Setup withDiscord()
+{
+    Setup setup;
+    setup.discord = true;
+    return setup;
+}
+
+Bytes choosing(const std::string &username)
+{
+    return rtype::lobby::encode(rtype::lobby::ChooseUsernameMessage{username});
+}
+
+} // namespace
+
+TEST_CASE("A new Discord user chooses a username, then signs in with Discord alone",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_new", withDiscord());
+    server.seed("Taken", "taken@example.org");
+    server.start();
+
+    std::uint64_t id = 0;
+    {
+        Player player(server);
+        CHECK(player.welcome("Someone").features ==
+              rtype::lobby::ServerFeatures{.guests = true, .passwordAccounts = true, .discord = true});
+        // Nothing is signed in yet: the new user chooses its username
+        CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Done);
+        CHECK(errorOf(player.ask(message_type::ChooseUsername, choosing("taken")),
+                      message_type::ChooseUsername) == ErrorCode::UsernameTaken);
+        CHECK(errorOf(player.ask(message_type::ChooseUsername, choosing("no spaces")),
+                      message_type::ChooseUsername) == ErrorCode::InvalidName);
+        const auto created = signedInOf(player.ask(message_type::ChooseUsername, choosing("Wing")));
+        REQUIRE(created);
+        CHECK(created->account.username == "Wing");
+        id = created->account.id;
+        // Used: the new user is an account now
+        CHECK(errorOf(player.ask(message_type::ChooseUsername, choosing("Wing2")),
+                      message_type::ChooseUsername) == ErrorCode::AlreadySignedIn);
+    }
+    const std::optional<Account> account = findAccountByDiscord(server.direct, WingUser.id);
+    REQUIRE(account);
+    CHECK(account->id == static_cast<long long>(id));
+    CHECK_FALSE(account->email);
+    CHECK_FALSE(account->passwordHash);
+
+    // Another connection, another code of Discord: the same account
+    Player again(server);
+    again.welcome("Someone");
+    const auto signedIn = signedInOf(again.discord(*server.fakeDiscord, WingUser));
+    REQUIRE(signedIn);
+    CHECK(signedIn->account.id == id);
+    CHECK(signedIn->account.username == "Wing");
+    CHECK(errorOf(again.ask(message_type::SignIn, signingIn("Wing")), message_type::SignIn) ==
+          ErrorCode::AlreadySignedIn);
+}
+
+TEST_CASE("Nothing signs in without DISCORD_CONFIRM, nor without DISCORD_SIGN_IN on the connection",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_unconfirmed", withDiscord());
+    const auto created =
+        createDiscordAccount(server.direct, "Wing", WingUser.id, std::chrono::system_clock::now());
+    REQUIRE(std::holds_alternative<Account>(created));
+    server.start();
+
+    Player player(server);
+    player.welcome("Someone");
+    // The user accepted in Discord, but the client never confirmed: the connection is a guest still
+    const DiscordAuthorization accepted = server.fakeDiscord->accept(WingUser);
+    player.discordSignIn();
+    CHECK(errorOf(player.ask(message_type::ChooseUsername, choosing("Other")),
+                  message_type::ChooseUsername) == ErrorCode::DiscordNotConfirmed);
+    CHECK(errorOf(player.ask(message_type::DeleteAccount,
+                             rtype::lobby::encode(rtype::lobby::DeleteAccountMessage{""})),
+                  message_type::DeleteAccount) == ErrorCode::NotSignedIn);
+
+    // A code given to a connection that never asked: the attempt is unknown
+    Player other(server);
+    other.welcome("Other");
+    CHECK(errorOf(other.discordConfirm(accepted), message_type::DiscordConfirm) ==
+          ErrorCode::DiscordNotConfirmed);
+    CHECK(server.fakeDiscord->exchanges() == 0);
+    // A DISCORD_SIGN_IN serves one DISCORD_CONFIRM
+    CHECK(signedInOf(player.discordConfirm(accepted)));
+    Player third(server);
+    third.welcome("Third");
+    third.discordSignIn();
+    CHECK(signedInOf(third.discordConfirm(server.fakeDiscord->accept(WingUser))));
+    CHECK(errorOf(third.discordConfirm(server.fakeDiscord->accept(WingUser)), message_type::DiscordConfirm) ==
+          ErrorCode::DiscordNotConfirmed);
+}
+
+TEST_CASE("A code Discord refuses is wrong, and five of them need a new DISCORD_SIGN_IN",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_refused", withDiscord());
+    server.start();
+    Player player(server);
+    player.welcome("Someone");
+
+    // A code used once already: Discord refuses it
+    const DiscordAuthorization used = server.fakeDiscord->accept(WingUser);
+    player.discordSignIn();
+    CHECK(player.discordConfirm(used).first == message_type::Done);
+    player.discordSignIn();
+    CHECK(errorOf(player.discordConfirm(used), message_type::DiscordConfirm) == ErrorCode::InvalidCode);
+    // The verifier of another code, an address Discord did not send the code to, a code it never gave
+    DiscordAuthorization stolen = server.fakeDiscord->accept(WingUser);
+    stolen.codeVerifier = server.fakeDiscord->accept(WingUser).codeVerifier;
+    CHECK(errorOf(player.discordConfirm(stolen), message_type::DiscordConfirm) == ErrorCode::InvalidCode);
+    DiscordAuthorization elsewhere = server.fakeDiscord->accept(WingUser);
+    elsewhere.redirectUri = "https://attacker.example/callback";
+    CHECK(errorOf(player.discordConfirm(elsewhere), message_type::DiscordConfirm) == ErrorCode::InvalidCode);
+    DiscordAuthorization unknown = server.fakeDiscord->accept(WingUser);
+    unknown.code = "never-given";
+    CHECK(errorOf(player.discordConfirm(unknown), message_type::DiscordConfirm) == ErrorCode::InvalidCode);
+    CHECK(errorOf(player.discordConfirm(unknown), message_type::DiscordConfirm) == ErrorCode::InvalidCode);
+    CHECK(server.fakeDiscord->exchanges() == 6);
+
+    // Five refused: the next is not even asked to Discord, right or not
+    const DiscordAuthorization right = server.fakeDiscord->accept(WingUser);
+    CHECK(errorOf(player.discordConfirm(right), message_type::DiscordConfirm) == ErrorCode::TooManyAttempts);
+    CHECK(server.fakeDiscord->exchanges() == 6);
+    player.discordSignIn();
+    CHECK(player.discordConfirm(right).first == message_type::Done);
+}
+
+TEST_CASE("A DISCORD_SIGN_IN and a new Discord user expire", "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Setup setup = withDiscord();
+    setup.accounts.limits.discordLifetime = 300ms;
+    Server server(engine, "lobby_discord_expired", setup);
+    server.start();
+    Player player(server);
+    player.welcome("Someone");
+
+    player.discordSignIn();
+    testing::runFor(server.loop, 400ms);
+    CHECK(errorOf(player.discordConfirm(server.fakeDiscord->accept(WingUser)),
+                  message_type::DiscordConfirm) == ErrorCode::CodeExpired);
+    // Used up by its expiry
+    CHECK(errorOf(player.discordConfirm(server.fakeDiscord->accept(WingUser)),
+                  message_type::DiscordConfirm) == ErrorCode::DiscordNotConfirmed);
+
+    CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Done);
+    testing::runFor(server.loop, 400ms);
+    CHECK(errorOf(player.ask(message_type::ChooseUsername, choosing("Wing")), message_type::ChooseUsername) ==
+          ErrorCode::DiscordNotConfirmed);
+    CHECK_FALSE(findAccountByDiscord(server.direct, WingUser.id));
+}
+
+TEST_CASE("Discord down: the player tries again, without losing an attempt",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_down", withDiscord());
+    server.start();
+    Player player(server);
+    player.welcome("Someone");
+
+    player.discordSignIn();
+    const DiscordAuthorization accepted = server.fakeDiscord->accept(WingUser);
+    server.fakeDiscord->setDown(true);
+    for (int i = 0; i < 6; ++i) {
+        CHECK(errorOf(player.discordConfirm(accepted), message_type::DiscordConfirm) ==
+              ErrorCode::DiscordUnavailable);
+    }
+    server.fakeDiscord->setDown(false);
+    CHECK(player.discordConfirm(accepted).first == message_type::Done);
+}
+
+TEST_CASE("Signed in, a player links Discord, which then signs in to its account",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_link", withDiscord());
+    const Account pilot = server.seed("Pilot_7", "pilot@example.org");
+    const auto nova =
+        createDiscordAccount(server.direct, "Nova", NovaUser.id, std::chrono::system_clock::now());
+    REQUIRE(std::holds_alternative<Account>(nova));
+    server.start();
+
+    {
+        Player player(server);
+        player.welcome("Someone");
+        player.signIn("Pilot_7");
+        CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Done);
+        CHECK(discordIdentity(server.direct, pilot.id) == WingUser.id);
+        // The identity of another account is refused
+        CHECK(errorOf(player.discord(*server.fakeDiscord, NovaUser), message_type::DiscordConfirm) ==
+              ErrorCode::DiscordTaken);
+        CHECK(discordIdentity(server.direct, pilot.id) == WingUser.id);
+    }
+    Player again(server);
+    again.welcome("Someone");
+    const auto signedIn = signedInOf(again.discord(*server.fakeDiscord, WingUser));
+    REQUIRE(signedIn);
+    CHECK(signedIn->account.id == static_cast<std::uint64_t>(pilot.id));
+    CHECK(signedIn->account.username == "Pilot_7");
+}
+
+TEST_CASE("A banned account cannot sign in with Discord", "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_banned", withDiscord());
+    const auto now = std::chrono::system_clock::now();
+    const auto created = createDiscordAccount(server.direct, "Wing", WingUser.id, now);
+    REQUIRE(std::holds_alternative<Account>(created));
+    banAccount(server.direct, std::get<Account>(created).id, "cheating", now);
+    server.start();
+
+    Player player(server);
+    player.welcome("Someone");
+    CHECK(errorOf(player.discord(*server.fakeDiscord, WingUser), message_type::DiscordConfirm) ==
+          ErrorCode::Banned);
+    CHECK(player.closed());
+}
+
+TEST_CASE("An account without password is deleted after a Discord confirmation of five minutes",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Setup setup = withDiscord();
+    setup.accounts.limits.deletionConfirmation = 300ms;
+    Server server(engine, "lobby_discord_delete", setup);
+    const auto created =
+        createDiscordAccount(server.direct, "Wing", WingUser.id, std::chrono::system_clock::now());
+    REQUIRE(std::holds_alternative<Account>(created));
+    const Account wing = std::get<Account>(created);
+    server.start();
+
+    const auto deleting = [](const std::string &password) {
+        return rtype::lobby::encode(rtype::lobby::DeleteAccountMessage{password});
+    };
+    Player player(server);
+    player.welcome("Someone");
+    REQUIRE(signedInOf(player.discord(*server.fakeDiscord, WingUser)));
+    // Signing in is not the confirmation: it comes after, on purpose
+    CHECK(errorOf(player.ask(message_type::DeleteAccount, deleting("")), message_type::DeleteAccount) ==
+          ErrorCode::DiscordNotConfirmed);
+    CHECK(errorOf(player.ask(message_type::DeleteAccount, deleting("a password")),
+                  message_type::DeleteAccount) == ErrorCode::InvalidCredentials);
+    // Confirmed, then too late
+    CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Done);
+    testing::runFor(server.loop, 400ms);
+    CHECK(errorOf(player.ask(message_type::DeleteAccount, deleting("")), message_type::DeleteAccount) ==
+          ErrorCode::DiscordNotConfirmed);
+    // Confirmed, in time
+    CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Done);
+    CHECK(player.ask(message_type::DeleteAccount, deleting("")).first == message_type::Done);
+    CHECK(player.closed());
+    CHECK_FALSE(findAccount(server.direct, wing.id));
+    CHECK_FALSE(findAccountByDiscord(server.direct, WingUser.id));
+}
+
+TEST_CASE("No code nor verifier of Discord reaches the logs", "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_logs", withDiscord());
+    auto capture = std::make_shared<Capture>();
+    const rtype::log::Level previous = rtype::log::level();
+    rtype::log::setSink(capture);
+    rtype::log::setLevel(rtype::log::Level::Trace);
+
+    server.start();
+    Player player(server);
+    player.welcome("Someone");
+    player.discordSignIn();
+    const DiscordAuthorization refused = server.fakeDiscord->accept(NovaUser);
+    DiscordAuthorization wrong = refused;
+    wrong.codeVerifier = std::string(43, 'w');
+    CHECK(errorOf(player.discordConfirm(wrong), message_type::DiscordConfirm) == ErrorCode::InvalidCode);
+    const DiscordAuthorization accepted = server.fakeDiscord->accept(WingUser);
+    CHECK(player.discordConfirm(accepted).first == message_type::Done);
+    REQUIRE(signedInOf(player.ask(message_type::ChooseUsername, choosing("Wing"))));
+    server.settle();
+
+    rtype::log::setLevel(previous);
+    rtype::log::setSink(nullptr);
+    const std::string logs = capture->text();
+    CHECK_THAT(logs, ContainsSubstring("created with Discord"));
+    for (const DiscordAuthorization &secret : {refused, accepted}) {
+        CHECK_THAT(logs, !ContainsSubstring(secret.code));
+        CHECK_THAT(logs, !ContainsSubstring(secret.codeVerifier));
+    }
+    CHECK_THAT(logs, !ContainsSubstring(FakeDiscord::ClientSecret));
+}
+
+TEST_CASE("The master checks its Discord application without any player", "[server][accounts][discord]")
+{
+    FakeDiscord discord;
+    CHECK_FALSE(checkDiscord(discord.settings()));
+
+    DiscordClientSettings wrongSecret = discord.settings();
+    wrongSecret.discord.clientSecret = "not the secret";
+    const std::optional<std::string> refused = checkDiscord(wrongSecret);
+    REQUIRE(refused);
+    CHECK_THAT(*refused, ContainsSubstring("refuses the id 1234567890123456789"));
+    CHECK_THAT(*refused, !ContainsSubstring("not the secret"));
+
+    discord.setDown(true);
+    CHECK_THAT(checkDiscord(discord.settings()).value_or(""), ContainsSubstring("HTTP 503"));
+
+    DiscordClientSettings nobody = discord.settings();
+    nobody.apiUrl = "http://127.0.0.1:1/api/v10";
+    CHECK(checkDiscord(nobody));
+}
+
+TEST_CASE("The Discord client refuses a request at once when its queue is full",
+          "[server][accounts][discord]")
+{
+    EventLoop loop;
+    FakeDiscord fake;
+    DiscordClientSettings settings = fake.settings();
+    settings.maxPending = 2;
+    fake.setDown(true);
+    DiscordClient client(settings,
+                         [&loop](std::function<void()> function) { loop.post(std::move(function)); });
+    CHECK(client.applicationId() == 1234567890123456789ULL);
+
+    std::vector<DiscordAnswer> answers;
+    const auto keep = [&answers](const DiscordAnswer &answer) { answers.push_back(answer); };
+    CHECK(client.identify(fake.accept(WingUser), keep));
+    CHECK(client.identify(fake.accept(WingUser), keep));
+    CHECK_FALSE(client.identify(fake.accept(WingUser), keep));
+    REQUIRE(waitUntil(loop, [&] { return answers.size() == 2; }));
+    CHECK(answers[0] == DiscordAnswer(DiscordFailure::Unavailable));
+    CHECK(client.pending() == 0);
+
+    fake.setDown(false);
+    CHECK(client.identify(fake.accept(WingUser), keep));
+    REQUIRE(waitUntil(loop, [&] { return answers.size() == 3; }));
+    CHECK(answers[2] == DiscordAnswer(WingUser));
+
+    DiscordClientSettings notANumber = settings;
+    notANumber.discord.clientId = "rtype";
+    CHECK_THROWS_AS(DiscordClient(notANumber, [](std::function<void()>) {}), std::invalid_argument);
 }
 
 TEST_CASE("No password, code nor token of the accounts reaches the logs", "[server][accounts][database]")

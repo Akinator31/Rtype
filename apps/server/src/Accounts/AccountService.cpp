@@ -107,8 +107,10 @@ struct Registered {
 } // namespace
 
 AccountService::AccountService(rtype::network::EventLoop &loop, rtype::database::DatabaseThread &database,
-                               PasswordHasher &hasher, Mailer &mailer, AccountServiceSettings settings)
-    : _loop(loop), _database(database), _hasher(hasher), _mailer(mailer), _settings(settings),
+                               PasswordHasher &hasher, Mailer &mailer, AccountServiceSettings settings,
+                               DiscordClient *discord)
+    : _loop(loop), _database(database), _hasher(hasher), _mailer(mailer), _discord(discord),
+      _settings(settings),
       _dummyHash(hashPassword(formatSecret(rtype::network::randomBytes<SecretSize>()), hasher.parameters())),
       _purge(loop)
 {
@@ -126,7 +128,7 @@ AccountService::~AccountService()
 
 rtype::lobby::ServerFeatures AccountService::features() const
 {
-    return {.guests = _settings.guests, .passwordAccounts = true, .discord = false};
+    return {.guests = _settings.guests, .passwordAccounts = true, .discord = _discord != nullptr};
 }
 
 void AccountService::later(const Done &done, AccountReply reply)
@@ -340,9 +342,12 @@ void AccountService::handle(std::uint8_t type, std::span<const std::byte> payloa
     case message_type::DiscordSignIn:
     case message_type::DiscordConfirm:
     case message_type::ChooseUsername:
-        // Not offered by this master yet: the payload is not read
-        later(done, ErrorCode::AccountsDisabled);
-        return;
+        if (_discord == nullptr) {
+            // Not offered by this master: the payload is not read
+            later(done, ErrorCode::AccountsDisabled);
+            return;
+        }
+        break;
     default:
         break;
     }
@@ -375,6 +380,15 @@ void AccountService::handle(std::uint8_t type, std::span<const std::byte> payloa
         return;
     case message_type::DeleteAccount:
         deleteAccount(connection, payload, std::move(done));
+        return;
+    case message_type::DiscordSignIn:
+        discordSignIn(connection, payload, std::move(done));
+        return;
+    case message_type::DiscordConfirm:
+        discordConfirm(connection, payload, std::move(done));
+        return;
+    case message_type::ChooseUsername:
+        chooseUsername(connection, payload, std::move(done));
         return;
     default:
         later(done, ErrorCode::UnknownMessage);
@@ -794,41 +808,228 @@ void AccountService::deleteAccount(const AccountConnection &connection, std::spa
         later(done, ErrorCode::TooManyAttempts);
         return;
     }
+    const std::function<void()> remove = [this, done, id] {
+        onDatabase(
+            "delete an account",
+            [id](rtype::database::Database &database) { return rtype::server::deleteAccount(database, id); },
+            done,
+            [this, done, id](bool) {
+                _strikes.erase(id);
+                logger().info("Account {} deleted by its owner", id);
+                done(AccountDone{.closes = true});
+            });
+    };
+    // Confirmed with Discord on this connection, not too long ago: what an account without password gives
+    const std::optional<DiscordProgress::Time> confirmed = connection.discord->confirmedAt;
+    const bool discordConfirmed =
+        confirmed && SteadyClock::now() - *confirmed <= _settings.limits.deletionConfirmation;
     onDatabase(
         "find an account to delete",
         [id](rtype::database::Database &database) { return findAccount(database, id); }, done,
-        [this, done, id, password = std::move(request->password)](const std::optional<Account> &account) {
+        [this, done, id, remove, discordConfirmed,
+         password = std::move(request->password)](const std::optional<Account> &account) {
             if (!account) {
                 done(ErrorCode::NotSignedIn);
                 return;
             }
             if (!account->passwordHash) {
-                // Confirmed with Discord, which this master does not offer yet
-                done(password.empty() ? ErrorCode::DiscordNotConfirmed : ErrorCode::InvalidCredentials);
+                if (!password.empty()) {
+                    done(ErrorCode::InvalidCredentials);
+                } else if (!discordConfirmed) {
+                    done(ErrorCode::DiscordNotConfirmed);
+                } else {
+                    remove();
+                }
                 return;
             }
             if (password.empty()) {
                 done(ErrorCode::InvalidCredentials);
                 return;
             }
-            verify(*account->passwordHash, password, done, [this, done, id](bool matches) {
+            verify(*account->passwordHash, password, done, [this, done, id, remove](bool matches) {
                 if (!matches) {
                     wrongPassword(id);
                     done(ErrorCode::InvalidCredentials);
                     return;
                 }
-                onDatabase(
-                    "delete an account",
-                    [id](rtype::database::Database &database) {
-                        return rtype::server::deleteAccount(database, id);
-                    },
-                    done,
-                    [this, done, id](bool) {
-                        _strikes.erase(id);
-                        logger().info("Account {} deleted by its owner", id);
-                        done(AccountDone{.closes = true});
-                    });
+                remove();
             });
+        });
+}
+
+void AccountService::discordSignIn(const AccountConnection &connection, std::span<const std::byte> payload,
+                                   Done done)
+{
+    if (!rtype::lobby::decodeEmpty(payload)) {
+        later(done, ErrorCode::Malformed);
+        return;
+    }
+    // A new attempt: the codes refused before are forgotten, and with them a new user not given a name
+    DiscordProgress &progress = *connection.discord;
+    progress.startedAt = SteadyClock::now();
+    progress.refused = 0;
+    progress.newUser.reset();
+    later(done, rtype::lobby::DiscordAuthorizeMessage{.applicationId = _discord->applicationId()});
+}
+
+void AccountService::discordConfirm(const AccountConnection &connection, std::span<const std::byte> payload,
+                                    Done done)
+{
+    std::optional<rtype::lobby::DiscordConfirmMessage> request = rtype::lobby::decodeDiscordConfirm(payload);
+    if (!request) {
+        later(done, ErrorCode::Malformed);
+        return;
+    }
+    DiscordProgress &progress = *connection.discord;
+    if (!progress.startedAt) {
+        later(done, ErrorCode::DiscordNotConfirmed);
+        return;
+    }
+    if (SteadyClock::now() - *progress.startedAt > _settings.limits.discordLifetime) {
+        progress.startedAt.reset();
+        later(done, ErrorCode::CodeExpired);
+        return;
+    }
+    if (progress.refused >= _settings.limits.discordAttempts) {
+        later(done, ErrorCode::TooManyAttempts);
+        return;
+    }
+    const bool queued = _discord->identify(
+        DiscordAuthorization{.code = std::move(request->code),
+                             .codeVerifier = std::move(request->codeVerifier),
+                             .redirectUri = std::move(request->redirectUri)},
+        [this, alive = std::weak_ptr<bool>(_alive), connection, done](const DiscordAnswer &answer) {
+            if (alive.expired()) {
+                return;
+            }
+            DiscordProgress &progress = *connection.discord;
+            if (const auto *failure = std::get_if<DiscordFailure>(&answer)) {
+                if (*failure == DiscordFailure::Refused) {
+                    ++progress.refused;
+                    done(ErrorCode::InvalidCode);
+                } else {
+                    done(ErrorCode::DiscordUnavailable);
+                }
+                return;
+            }
+            // Used: another DISCORD_CONFIRM needs another DISCORD_SIGN_IN
+            progress.startedAt.reset();
+            discordUser(connection, std::get<DiscordUser>(answer), done);
+        });
+    if (!queued) {
+        later(done, ErrorCode::Busy);
+    }
+}
+
+void AccountService::discordUser(const AccountConnection &connection, const DiscordUser &user,
+                                 const Done &done)
+{
+    if (connection.signedIn) {
+        // Signed in: the user becomes the identity of the account, or proves it is
+        const auto id = static_cast<long long>(connection.signedIn->account.id);
+        onDatabase(
+            "link a Discord identity",
+            [id, discordId = user.id](rtype::database::Database &database) {
+                return linkDiscord(database, id, discordId, SystemClock::now());
+            },
+            done,
+            [done, connection, id](DiscordLink link) {
+                switch (link) {
+                case DiscordLink::Linked:
+                case DiscordLink::AlreadyLinked:
+                    logger().info("Account {} {} its Discord identity", id,
+                                  link == DiscordLink::Linked ? "linked" : "confirmed");
+                    connection.discord->confirmedAt = SteadyClock::now();
+                    done(AccountDone{.closes = false});
+                    return;
+                case DiscordLink::Taken:
+                    done(ErrorCode::DiscordTaken);
+                    return;
+                case DiscordLink::NoAccount:
+                    done(ErrorCode::NotSignedIn);
+                    return;
+                }
+            });
+        return;
+    }
+    onDatabase(
+        "sign in with Discord",
+        [discordId = user.id](rtype::database::Database &database)
+            -> std::pair<std::optional<Account>, std::optional<SessionToken>> {
+            std::optional<Account> account = findAccountByDiscord(database, discordId);
+            if (!account || account->banned()) {
+                return {std::move(account), std::nullopt};
+            }
+            return {std::move(account),
+                    createSession(database, account->id, SessionClient::Game, SystemClock::now())};
+        },
+        done,
+        [done, connection,
+         user](const std::pair<std::optional<Account>, std::optional<SessionToken>> &found) {
+            const auto &[account, token] = found;
+            if (!account) {
+                // A new user: CHOOSE_USERNAME makes its account
+                connection.discord->newUser = user;
+                connection.discord->newUserAt = SteadyClock::now();
+                done(AccountDone{.closes = false});
+                return;
+            }
+            if (!token) {
+                logger().info("Account {} refused: it is banned", account->id);
+                done(ErrorCode::Banned);
+                return;
+            }
+            logger().info("Account {} signed in with Discord", account->id);
+            done(SignedInAccount{.account = accountInfo(*account), .token = *token});
+        });
+}
+
+void AccountService::chooseUsername(const AccountConnection &connection, std::span<const std::byte> payload,
+                                    Done done)
+{
+    const std::optional<rtype::lobby::ChooseUsernameMessage> request =
+        rtype::lobby::decodeChooseUsername(payload);
+    if (!request) {
+        later(done, ErrorCode::Malformed);
+        return;
+    }
+    if (connection.signedIn) {
+        later(done, ErrorCode::AlreadySignedIn);
+        return;
+    }
+    const DiscordProgress &progress = *connection.discord;
+    if (!progress.newUser || SteadyClock::now() - progress.newUserAt > _settings.limits.discordLifetime) {
+        later(done, ErrorCode::DiscordNotConfirmed);
+        return;
+    }
+    if (!isValidUsername(request->username)) {
+        later(done, ErrorCode::InvalidName);
+        return;
+    }
+    using Created = std::pair<std::variant<Account, AccountConflict>, std::optional<SessionToken>>;
+    onDatabase(
+        "create an account with Discord",
+        [username = request->username,
+         discordId = progress.newUser->id](rtype::database::Database &database) {
+            const auto now = SystemClock::now();
+            Created created{createDiscordAccount(database, username, discordId, now), std::nullopt};
+            if (const auto *account = std::get_if<Account>(&created.first)) {
+                created.second = createSession(database, account->id, SessionClient::Game, now);
+            }
+            return created;
+        },
+        done,
+        [done, connection](const Created &created) {
+            if (const auto *conflict = std::get_if<AccountConflict>(&created.first)) {
+                // EmailTaken: the identity got an account meanwhile, on another connection
+                done(*conflict == AccountConflict::UsernameTaken ? ErrorCode::UsernameTaken
+                                                                 : ErrorCode::DiscordTaken);
+                return;
+            }
+            const Account &account = std::get<Account>(created.first);
+            connection.discord->newUser.reset();
+            logger().info("Account {} created with Discord, and signed in", account.id);
+            done(SignedInAccount{.account = accountInfo(account), .token = *created.second});
         });
 }
 
