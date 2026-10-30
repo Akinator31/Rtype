@@ -56,6 +56,9 @@ enum class MailSecurity {
     StartTls,
     /// TLS from the start, port 465 by default.
     Tls,
+    /// In the clear, port 25 by default: for a relay on this machine or a test server (Mailpit). The codes
+    /// travel unencrypted to it, so it takes no password.
+    None,
 };
 
 /// [mail]: the server the codes are sent through. Needs [accounts].
@@ -63,7 +66,7 @@ struct MailSettings {
     std::string host;
     std::uint16_t port = 587;
     MailSecurity security = MailSecurity::StartTls;
-    /// Empty: no authentication.
+    /// Empty: no authentication. Never with MailSecurity::None.
     std::string username;
     /// Read from `password_file`. Never logged.
     std::string password;
@@ -108,6 +111,11 @@ struct ServerSettings {
 
 /// Tells whether `address` is a loopback address, 127.0.0.0/8 or ::1: only this machine reaches it.
 [[nodiscard]] bool isLoopback(const rtype::network::Address &address);
+
+/// The address of a mailbox written `R-Type <rtype@example.org>` or `rtype@example.org`: what is between its
+/// angle brackets, or all of it, without the spaces around it.
+/// @return Nothing if that is not an email, or if the mailbox holds a line break.
+[[nodiscard]] std::optional<std::string> mailboxAddress(std::string_view mailbox);
 
 /// Reads a secret kept in a file of its own: its first line, the spaces at its end cut. On Unix, warns when
 /// every user of the machine can read the file. The secret is never logged.

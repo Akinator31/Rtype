@@ -355,18 +355,27 @@ void readMail(const Reader &reader, const toml::table &root, ServerSettings &set
             result.security = MailSecurity::StartTls;
         } else if (*security == "tls") {
             result.security = MailSecurity::Tls;
+        } else if (*security == "none") {
+            result.security = MailSecurity::None;
         } else {
-            reader.fail(
-                Reader::at(*mail, "security"),
-                std::format("[mail] security must be \"starttls\" or \"tls\", not \"{}\"", *security));
+            reader.fail(Reader::at(*mail, "security"),
+                        std::format("[mail] security must be \"starttls\", \"tls\" or \"none\", not \"{}\"",
+                                    *security));
         }
     }
-    result.port =
-        reader.port(*mail, "mail", "port", 1).value_or(result.security == MailSecurity::Tls ? 465 : 587);
+    const std::uint16_t defaultPort = result.security == MailSecurity::Tls    ? 465
+                                      : result.security == MailSecurity::None ? 25
+                                                                              : 587;
+    result.port = reader.port(*mail, "mail", "port", 1).value_or(defaultPort);
     const auto username = reader.string(*mail, "mail", "username");
     const bool passwordGiven = mail->contains("password_file");
     if (username.has_value() != passwordGiven) {
         reader.fail(mail->source(), "[mail] username and password_file go together: give both, or neither");
+    }
+    if (username && result.security == MailSecurity::None) {
+        reader.fail(Reader::at(*mail, "username"),
+                    "[mail] security = \"none\" would send the password in the clear: use \"starttls\" or "
+                    "\"tls\" with a username");
     }
     result.username = username.value_or("");
     result.password = reader.secret(*mail, "mail", "password_file").value_or("");
@@ -374,6 +383,13 @@ void readMail(const Reader &reader, const toml::table &root, ServerSettings &set
     if (!from) {
         reader.fail(mail->source(),
                     "[mail] needs from, the sender of the mails: \"R-Type <rtype@example.org>\"");
+    }
+    if (!mailboxAddress(*from)) {
+        reader.fail(
+            Reader::at(*mail, "from"),
+            std::format("[mail] from must hold the address of the sender, \"R-Type <rtype@example.org>\" "
+                        "or \"rtype@example.org\", not \"{}\"",
+                        *from));
     }
     result.from = *from;
 }
@@ -460,6 +476,33 @@ bool isLoopback(const rtype::network::Address &address)
     }
     return std::all_of(bytes.begin(), bytes.end() - 1, [](std::uint8_t byte) { return byte == 0; }) &&
            bytes.back() == 1;
+}
+
+std::optional<std::string> mailboxAddress(std::string_view mailbox)
+{
+    if (mailbox.find_first_of("\r\n") != std::string_view::npos) {
+        return std::nullopt;
+    }
+    std::string_view address = mailbox;
+    const std::size_t open = mailbox.rfind('<');
+    if (open != std::string_view::npos) {
+        // One address: the name before it holds no other
+        if (!mailbox.ends_with('>') ||
+            mailbox.substr(0, open).find_first_of("<>") != std::string_view::npos) {
+            return std::nullopt;
+        }
+        address = mailbox.substr(open + 1, mailbox.size() - open - 2);
+    }
+    while (!address.empty() && (address.front() == ' ' || address.front() == '\t')) {
+        address.remove_prefix(1);
+    }
+    while (!address.empty() && (address.back() == ' ' || address.back() == '\t')) {
+        address.remove_suffix(1);
+    }
+    if (!isEmail(address) || address.find_first_of("<>") != std::string_view::npos) {
+        return std::nullopt;
+    }
+    return std::string(address);
 }
 
 std::string readSecretFile(const std::filesystem::path &path, const rtype::log::Logger &logger)

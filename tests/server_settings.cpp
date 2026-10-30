@@ -3,6 +3,7 @@
 #include "Common/Options.hpp"
 #include "Common/Settings.hpp"
 #include "Server.hpp"
+#include "SmtpServer.hpp"
 #include "rtype/log/Log.hpp"
 #include "rtype/log/Logger.hpp"
 
@@ -10,6 +11,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -229,6 +231,8 @@ TEST_CASE("The sections have their defaults", "[server][settings]")
 
     CHECK(parse(std::string(Accounts) + "security = \"tls\"\n").mail->port == 465);
     CHECK(parse(std::string(Accounts) + "security = \"tls\"\nport = 2465\n").mail->port == 2465);
+    CHECK(parse(std::string(Accounts) + "security = \"none\"\n").mail->security == MailSecurity::None);
+    CHECK(parse(std::string(Accounts) + "security = \"none\"\n").mail->port == 25);
     CHECK(parse("[server]\ndatabase = \"postgresql://rtype@db/rtype\"\n").database ==
           rtype::database::Address{rtype::database::Engine::Postgresql, "postgresql://rtype@db/rtype"});
 }
@@ -286,11 +290,42 @@ TEST_CASE("Invalid values are refused", "[server][settings]")
                    ContainsSubstring("[web] trusted_proxies:"));
     }
     CHECK_THAT(refusal(std::string(Accounts) + "security = \"ssl\"\n"),
-               ContainsSubstring("[mail] security must be \"starttls\" or \"tls\""));
+               ContainsSubstring("[mail] security must be \"starttls\", \"tls\" or \"none\""));
     CHECK_THAT(refusal("[accounts]\n[mail]\nfrom = \"a@b.c\"\n"), ContainsSubstring("[mail] needs host"));
     CHECK_THAT(refusal("[accounts]\n[mail]\nhost = \"mail\"\n"), ContainsSubstring("[mail] needs from"));
     CHECK_THAT(refusal(std::string(Accounts) + "username = \"rtype\"\n"),
                ContainsSubstring("[mail] username and password_file go together"));
+}
+
+TEST_CASE("The sender of the mails holds an address", "[server][settings]")
+{
+    const auto from = [](std::string_view sender) {
+        return std::format("[accounts]\n[mail]\nhost = \"mail\"\nfrom = \"{}\"\n", sender);
+    };
+    CHECK(parse(from("rtype@example.org")).mail->from == "rtype@example.org");
+    CHECK(parse(from("R-Type <rtype@example.org>")).mail->from == "R-Type <rtype@example.org>");
+    for (const std::string_view sender : {"R-Type", "R-Type <rtype>", "R-Type <rtype@example.org", "<>",
+                                          "R-Type rtype@example.org", "a <b> <rtype@example.org>x"}) {
+        CHECK_THAT(refusal(from(sender)),
+                   ContainsSubstring(":4:8: [mail] from must hold the address of the sender"));
+    }
+
+    CHECK(mailboxAddress("R-Type <rtype@example.org>") == "rtype@example.org");
+    CHECK(mailboxAddress("  rtype@example.org ") == "rtype@example.org");
+    CHECK(mailboxAddress("R-Type < rtype@example.org >") == "rtype@example.org");
+    CHECK_FALSE(mailboxAddress("rtype@example.org\r\nBcc: other@example.org"));
+    CHECK_FALSE(mailboxAddress("R-Type\n<rtype@example.org>"));
+    CHECK_FALSE(mailboxAddress("<rtype@example.org> <other@example.org>"));
+}
+
+TEST_CASE("Mail in the clear takes no password", "[server][settings]")
+{
+    const TempDirectory directory("clear");
+    directory.write("mail_password", "password\n");
+    const std::string clear = std::string(Accounts) + "security = \"none\"\n";
+    CHECK(parse(clear).mail->username.empty());
+    CHECK_THAT(refusal(clear + "username = \"rtype\"\npassword_file = \"/nowhere\"\n"),
+               ContainsSubstring(":7:12: [mail] security = \"none\" would send the password in the clear"));
 }
 
 TEST_CASE("An administrator is an email or a Discord id, never a username", "[server][settings]")
@@ -502,16 +537,24 @@ TEST_CASE("The option --settings is one of the master, which reads the file at s
 TEST_CASE("A master checks its settings file with --check", "[server][settings]")
 {
     const TempDirectory directory("check");
-    directory.write("mail_password", "password\n");
+    // The mail server of the accounts is checked too (tests/server_mail.cpp)
+    const testing::SmtpServer mail;
     const std::string file = directory
-                                 .write("server.toml", std::string(R"(
+                                 .write("server.toml", std::format(R"(
 [server]
 port = 0
 key = "server.key"
 database = "sqlite:rtype.db"
 [web]
 listen = "127.0.0.1:0"
-)") + std::string(Accounts) + "username = \"rtype\"\npassword_file = \"mail_password\"\n")
+[accounts]
+[mail]
+host = "127.0.0.1"
+port = {}
+security = "none"
+from = "R-Type <rtype@example.org>"
+)",
+                                                                   mail.port()))
                                  .string();
 
     CHECK(run({"--settings", file, "--check", "--config", RTYPE_TEST_CONFIG}) == Success);

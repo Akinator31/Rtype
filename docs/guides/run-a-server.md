@@ -18,7 +18,8 @@ on their own machine for development or on a machine on the Internet.
 
 1. **Check the configuration.** `--check` loads the key and the database, or makes them the first time, and the game configuration (the `config/` folder next
    to the server, or `--config <dir>`, see [Configure enemies and weapons](configure-enemies-and-weapons.md))
-   and opens the ports of the lobby and of the panel, then exits, without running the server:
+   and opens the ports of the lobby and of the panel, then exits, without running the server. With accounts, it
+   also signs in to the mail server, without sending anything ([Set up accounts](set-up-accounts.md)):
 
     ```sh
     ./build/bin/r-type_server --key keys/server.key --check

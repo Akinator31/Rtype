@@ -1,5 +1,6 @@
 #include "Master/Master.hpp"
 
+#include "Accounts/CurlMailer.hpp"
 #include "Common/GameConfig.hpp"
 #include "Common/Lifecycle.hpp"
 #include "Master/AddressBans.hpp"
@@ -128,6 +129,28 @@ int runMaster(const MasterOptions &options)
     } catch (const std::system_error &error) {
         logger.error("Cannot serve the panel on {}: {}", webSettings.listen, error.code().message());
         return Failure;
+    }
+
+    // A master with accounts sends their codes: a mail server it cannot use stops it at start, as --check
+    // (docs/guides/set-up-accounts.md). Nothing is sent
+    if (options.settings.accountsEnabled()) {
+        if (!options.settings.mail) {
+            logger.error("The accounts need a mail server, to send their codes: add [mail] to the settings");
+            return Failure;
+        }
+        CurlMailerSettings mailer;
+        mailer.mail = *options.settings.mail;
+        const MailSettings &mail = mailer.mail;
+        if (const std::optional<std::string> problem = checkMailServer(mailer)) {
+            logger.error("Cannot use the mail server {}:{}: {}", mail.host, mail.port, *problem);
+            return Failure;
+        }
+        logger.info("Mail server {}:{}, mails from {}", mail.host, mail.port, mail.from);
+        if (mail.security == MailSecurity::None) {
+            logger.warning("The mails go to {} in the clear (security = \"none\"): only for a relay on this "
+                           "machine or a test server",
+                           mail.host);
+        }
     }
 
     const unsigned maxGames = options.lastGamePort - options.firstGamePort + 1U;
