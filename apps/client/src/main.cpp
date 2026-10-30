@@ -20,6 +20,7 @@
 #include "ShipSelector/ShipSelectorSystem.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
+#include "rtype/discord/SocialSdkAuthorizer.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -202,6 +203,8 @@ void run()
     const rtype::game::GameConfig config = readGameConfig(console);
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
+    // Signing in with Discord, polled by the game loop too
+    rtype::discord::SocialSdkAuthorizer discord;
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions = registerSystems(engine, devices, audio, metrics, style);
     rtype::client::AssetPreload preload(resources);
@@ -222,6 +225,7 @@ void run()
         }
         debugKeyWasDown = debugKeyDown;
         network.poll();
+        discord.poll();
         engine.update(window.frameTime());
         if (assetsLoaded) {
             resources.finishPendingLoads();
@@ -249,7 +253,7 @@ void run()
     assetsLoaded = true;
     // The scenes of the game are built from the loaded assets, which they find in the cache
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
-    rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations);
+    rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, discord);
     rtype::client::ShipSelection ships;
     createScenes(engine, resources, style, window, metrics, games, config, translations, ships);
     rtype::client::registerClientCommands(console, engine, window);

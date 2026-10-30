@@ -112,9 +112,9 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
 
 OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                            const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                           localization::Localization &translations)
-    : _engine(engine), _loop(loop), _games(games), _translations(translations), _known(engine.getSettings()),
-      _sessions(engine.getSettings())
+                           localization::Localization &translations, discord::Authorizer &discord)
+    : _engine(engine), _loop(loop), _discord(discord), _games(games), _translations(translations),
+      _known(engine.getSettings()), _sessions(engine.getSettings())
 {
     engine.createScene(OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
@@ -385,6 +385,8 @@ void OnlineScenes::forgetLobby()
     if (!_lobby) {
         return;
     }
+    // What Discord would give goes to no connection
+    _discord.cancel();
     // Destroyed once the loop runs again: this may be one of its handlers
     std::shared_ptr<LobbyClient> old(std::move(_lobby));
     _loop.post([old] {});

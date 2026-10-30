@@ -64,6 +64,15 @@ public:
     using SignInCallback = std::function<void(const SignInResult &result)>;
     /// Nothing for CODE_SENT or DONE, else the error of the master.
     using DoneCallback = std::function<void(std::optional<lobby::ErrorCode> error)>;
+    /// DISCORD_AUTHORIZE, or the error of the master.
+    using DiscordAuthorizeCallback =
+        std::function<void(const std::variant<lobby::DiscordAuthorizeMessage, lobby::ErrorCode> &result)>;
+    /// DISCORD_CONFIRM done without signing in (DONE): a new Discord user, who chooses its username, or,
+    /// signed in, the identity linked or confirmed.
+    struct DiscordConfirmed {};
+    /// What DISCORD_CONFIRM gives: SIGNED_IN, DONE, or the error of the master.
+    using DiscordConfirmResult = std::variant<lobby::SignedInMessage, DiscordConfirmed, lobby::ErrorCode>;
+    using DiscordConfirmCallback = std::function<void(const DiscordConfirmResult &result)>;
 
     struct Handlers {
         /// The master welcomed the player: requests can be sent.
@@ -176,8 +185,15 @@ public:
                        SignInCallback done);
     /// SIGN_OUT. On DONE, the master closes the connection: it is closed here first, without onClosed.
     void signOut(DoneCallback done);
-    /// DELETE_ACCOUNT, with the password of the account. On DONE, closed as for signOut().
+    /// DELETE_ACCOUNT, with the password of the account, or empty after a Discord confirmation. On DONE,
+    /// closed as for signOut().
     void deleteAccount(const std::string &password, DoneCallback done);
+    /// DISCORD_SIGN_IN: the Discord application of the master, to ask the player with.
+    void discordSignIn(DiscordAuthorizeCallback done);
+    /// DISCORD_CONFIRM: what Discord gave once the player accepted. Signs in on SIGNED_IN.
+    void discordConfirm(const lobby::DiscordConfirmMessage &confirmation, DiscordConfirmCallback done);
+    /// CHOOSE_USERNAME: the username of the account of the new Discord user just confirmed.
+    void chooseUsername(const std::string &username, SignInCallback done);
 
     /// Closes the connection, after what was sent. No handler is called after.
     void close();
