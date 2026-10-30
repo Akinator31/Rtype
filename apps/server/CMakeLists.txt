@@ -52,8 +52,9 @@ CPMAddPackage(
         "CROW_INSTALL OFF"
 )
 
-# libcurl: the HTTP client of the tests now, the mails of the accounts and Discord later. TLS from OpenSSL on
-# Linux, from the system (Schannel) on Windows; only HTTP(S) and SMTP(S), nothing else it could reach
+# libcurl: the mails of the accounts (Accounts/CurlMailer.hpp), Discord later, and the HTTP client of the
+# tests. TLS from OpenSSL on Linux, from the system (Schannel) on Windows; only HTTP(S) and SMTP(S), nothing
+# else it could reach
 if(WIN32)
   set(curl_tls "CURL_USE_SCHANNEL ON" "CURL_USE_OPENSSL OFF")
 else()
@@ -126,6 +127,9 @@ add_library(r-type_server_core STATIC
     src/Server.cpp
     src/Accounts/AccountRules.cpp
     src/Accounts/AccountStore.cpp
+    src/Accounts/CurlMailer.cpp
+    src/Accounts/Mailer.cpp
+    src/Accounts/MailMessages.cpp
     src/Accounts/PasswordHasher.cpp
     src/Common/GameConfig.cpp
     src/Common/InstanceMessages.cpp
@@ -156,7 +160,7 @@ add_library(r-type_server_core STATIC
 target_include_directories(r-type_server_core PUBLIC src)
 # SYSTEM: the warnings of toml++'s headers are not ours
 target_include_directories(r-type_server_core SYSTEM PRIVATE ${tomlplusplus_SOURCE_DIR}/include)
-target_link_libraries(r-type_server_core PUBLIC rtype::database rtype::game rtype::lobby rtype::log rtype::network PRIVATE rtype_options reproc Crow::Crow rtype_argon2)
+target_link_libraries(r-type_server_core PUBLIC rtype::database rtype::game rtype::lobby rtype::log rtype::network PRIVATE rtype_options reproc Crow::Crow CURL::libcurl rtype_argon2)
 # Crow serves files itself only from CROW_STATIC_DIRECTORY: ours are served by Web/WebServer.cpp, inside the
 # panel folder only
 target_compile_definitions(r-type_server_core PRIVATE CROW_DISABLE_STATIC_DIR)
