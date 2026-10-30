@@ -27,7 +27,7 @@ else.
 
     [web]
     listen = "127.0.0.1:8080"                     # the default; "0.0.0.0:8080" in a container, behind the proxy
-    public_url = "https://admin.rtype.example.org"  # needed by Discord
+    public_url = "https://admin.rtype.example.org"  # the panel from outside
     trusted_proxies = ["172.16.0.0/12"]           # whose X-Forwarded-For is believed
     panel_dir = "/opt/r-type/admin"               # the default: admin/ next to the server
 
@@ -100,7 +100,7 @@ else.
 | | `database` | `sqlite:rtype.db` | Where the master keeps its data, as `--database`; a relative SQLite file is next to the settings file |
 | | `database_file` | | A file holding the address of the database, as `--database-file`. Not with `database` |
 | `[web]` | `listen` | `127.0.0.1:8080` | Where the administration panel listens: `<ip>:<port>`, `[<ipv6>]:<port>`. Without accounts, a loopback address only (`127.0.0.1`, `[::1]`): nobody signs in to the panel without them. Port 0 takes a free port |
-| | `public_url` | | Where the panel is reached from outside, `https://...`; needed by Discord. The live events of the panel accept a page of its origin, beside the address the browser asked |
+| | `public_url` | | Where the panel is reached from outside, `https://...`. The players sign in with Discord without it ([ADR 0026](../decisions/0026-discord-social-sdk.md)). The live events of the panel accept a page of its origin, beside the address the browser asked |
 | | `trusted_proxies` | `[]` | The proxies whose `X-Forwarded-For` is believed: addresses, or `<ip>/<prefix>` |
 | | `panel_dir` | `admin/` next to the server | The folder of the built panel. Given and missing, the server does not start; by default and missing, the panel says it is not built |
 | `[accounts]` | `enabled` | `true` | Accounts with an email and a password. Needs `[mail]` |
@@ -110,7 +110,7 @@ else.
 | | `port` | 587; 465 with `"tls"`, 25 with `"none"` | Port of the mail server |
 | | `username`, `password_file` | | The account on the mail server, and the file of its password; both, or neither |
 | | `from` | | The sender of the mails, `R-Type <rtype@example.org>` or `rtype@example.org`: its address is also the sender SMTP announces. Required |
-| `[discord]` | `client_id` | | The id of the Discord application. Required |
+| `[discord]` | `client_id` | | The id of the Discord application, its digits. Required |
 | | `client_secret_file` | | The file of its secret. Required |
 | `[admin]` | `admins` | `[]` | The administrators, each an email or `discord:<id>`. Never a username, which anyone could take by registering it first. The panel can neither demote nor ban them |
 
@@ -118,13 +118,14 @@ The sections go together:
 
 - `[accounts]` needs `[mail]`, to send the codes, and `[mail]` needs `[accounts]`. Accounts with `enabled =
   false` keep their `[mail]` without using it.
-- `[discord]` needs `[accounts]`, and `public_url` in `[web]`, where Discord sends the players back.
+- `[discord]` needs `[accounts]`: Discord signs in to accounts.
 
 The server serves its panel with `[web]` ([Run a server](run-a-server.md#steps), step 4). With accounts
 enabled, it checks its mail server at every start, `--check` included, without sending anything
-([Set up accounts](set-up-accounts.md)), then lets its players create accounts and sign in. Discord and the
-administrators of `[admin]` come in the next versions of the server: until then, their sections are checked, and
-not used yet.
+([Set up accounts](set-up-accounts.md)), then lets its players create accounts and sign in. With `[discord]`,
+it checks its Discord application the same way, and the players sign in with Discord too
+([Set up accounts](set-up-accounts.md#sign-in-with-discord)). The administrators of `[admin]` come in the next version of
+the server: until then, their section is checked, and not used yet.
 
 ## Result
 

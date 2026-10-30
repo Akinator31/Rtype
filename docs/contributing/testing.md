@@ -188,7 +188,8 @@ The workflows run on the team's self-hosted runners. The Linux runner needs:
   smoke test publishes the UDP ports 47243 to 47245 on the loopback of the runner; the build keeps its
   downloads and its build folder in the cache of BuildKit, `docker builder prune` empties it.
 - `sudo` without a password for `apt-get`, which installs the system libraries (X11, OpenGL, OpenSSL, libpq,
-  and those **Chromium** needs for the end-to-end tests of the panel). The packages are named for Debian 13
+  PulseAudio and ALSA for the Discord Social SDK of the client, and those **Chromium** needs for the end-to-end
+  tests of the panel). The packages are named for Debian 13
   (trixie) and Ubuntu 24.04 or newer, the ones with the `t64` libraries.
 - GCC or Clang with their sanitizer runtimes (`libasan`, `libubsan`, `libtsan`), Ninja and CMake 3.25 or newer.
 - Nothing else for the panel: `actions/setup-node` provides Node LTS, and Playwright downloads Chromium into the

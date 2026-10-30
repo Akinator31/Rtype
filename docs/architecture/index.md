@@ -121,6 +121,7 @@ The programs are built on twelve libraries:
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
+| `libs/discord` | Signing in with Discord from the client: an interface, and its implementation through the Discord Social SDK, kept in `libs/discord/sdk/`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
@@ -130,8 +131,10 @@ raylib: the ECS, the physics, the game, the scripting, the lobby, the log, the c
 private dependencies of `network`, and reproc, which starts the instances of the server, toml++, which reads
 its settings file, Crow, which serves its panel ([Web server](web.md)), and Argon2, which hashes the passwords of
 the accounts ([Accounts](accounts.md#passwords)), private dependencies of `r-type_server`. libcurl, which sends
-the mails of the accounts ([Accounts](accounts.md#the-mails)) and is the HTTP client of the tests, comes through
-CPM too, with OpenSSL from the system on Linux.
+the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who a player is, and is the HTTP
+client of the tests, comes through CPM too, with OpenSSL from the system on Linux. The Discord Social SDK is a
+private dependency of `rtype::discord_sdk`, linked by `r-type_client` alone
+([ADR 0026](../decisions/0026-discord-social-sdk.md)).
 
 ## Repository layout
 

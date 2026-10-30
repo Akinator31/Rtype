@@ -1,8 +1,7 @@
 # How to set up accounts
 
-This guide gives the players of a server their accounts: the mail server their codes are sent through, what the
-players can then do, and what the server keeps of them. It is for whoever hosts a server. Discord comes in a next
-version of the server ([#259](https://github.com/Akinator31/Rtype/issues/259)).
+This guide gives the players of a server their accounts: the mail server their codes are sent through, signing in
+with Discord, what the players can then do, and what the server keeps of them. It is for whoever hosts a server.
 
 A server without `[accounts]` needs none of this: its players play as guests.
 
@@ -83,6 +82,45 @@ from = "R-Type <rtype@example.org>"
 `security = "none"` sends in the clear, and takes no `username`: a password would travel unencrypted. The server
 warns about it at start. Keep it for a mail server on the same machine, or for tests.
 
+## Sign in with Discord
+
+Optional: the players then sign in with their Discord account too, in two clicks, without a password
+([ADR 0026](../decisions/0026-discord-social-sdk.md)). The game asks them in the Discord client if it runs, in the
+browser otherwise, and receives the answer of Discord on their own machine: the server needs no address
+reachable from the Internet for it.
+
+1. **Create the application** in the [developer portal of Discord](https://discord.com/developers/applications):
+   *New Application*, its name the one of the server. Its *Application ID* is the `client_id`.
+2. **On its OAuth2 page**, add the redirect `http://127.0.0.1/callback`, where the game receives the answer, and
+   leave *Public Client* off: the server exchanges the codes with the secret of the application. *Reset Secret*
+   gives the secret, shown once.
+3. **Enable the Social SDK** for the application, if the portal asks for it (*Social SDK*, *Getting Started*):
+   the game asks Discord through it.
+4. **Write the secret in a file** only the server's user can read, then add `[discord]` to the settings:
+
+    ```sh
+    printf '%s
+' 'the secret of the application' > /run/secrets/discord_secret
+    chmod 600 /run/secrets/discord_secret
+    ```
+
+    ```toml
+    [discord]
+    client_id = "123456789012345678"
+    client_secret_file = "/run/secrets/discord_secret"
+    ```
+
+5. **Check it**: `--check` asks Discord a token of the application itself, which proves the id and the secret,
+   then drops it.
+
+    ```
+    INFO  master   Discord application 123456789012345678
+    INFO  master   Check passed: the server can start
+    ```
+
+The server asks Discord the scope `identify` only, and keeps the id of the Discord user: never its token, its
+email nor its friends. A new Discord user chooses the username of its account in the game.
+
 ## Result
 
 A server with accounts reaches its mail server at every start, or does not start, and says why:
@@ -95,6 +133,8 @@ A server with accounts reaches its mail server at every start, or does not start
 | `Requested SSL level failed` | The mail server does not offer STARTTLS: use `"tls"` on its port 465 |
 | `Couldn't resolve host name` | The host is wrong, or the machine has no DNS |
 | `The mails go to 127.0.0.1 in the clear` | A warning: `security = "none"` |
+| `Cannot use the Discord application …: Discord refuses the id … or its secret` | The `client_id` or the secret is wrong, or the secret was reset since |
+| `Cannot use the Discord application …: Couldn't connect to server`, `HTTP 5..` | The machine cannot reach `discord.com` on 443, or Discord is down: try again |
 
 !!! warning "In a container"
 
@@ -116,7 +156,10 @@ Once the server starts with `[accounts]`, its players can, from the Online menu 
 - **sign in** with their username or their email, and **stay signed in** on that server for 30 days without
   playing, each game pushing it back;
 - **get a new password** with a code sent to their email, which signs them out everywhere else;
-- **sign out**, and **delete their account** with its password.
+- **sign in with Discord**, if the server has `[discord]`: a new Discord user chooses a username, then comes back
+  with Discord alone; a player signed in links Discord to its account from *My account*;
+- **sign out**, and **delete their account** with its password, or, for an account made with Discord, after
+  confirming with Discord.
 
 `guests = true` lets players play without an account too. On a server with accounts, a guest carries `~` before
 its name, in the game and in the panel, and cannot take the username of an account: whoever sees `Pavel` knows
@@ -129,6 +172,7 @@ The server limits the tries, so that nobody guesses a password or a code, nor fl
 | Requests of the accounts from one address | 10 a minute |
 | Wrong passwords of one account in a row | 10, then 15 minutes of pause |
 | Wrong codes | 5 per code, 20 per account per day; the holder gets a mail on the 20th |
+| Codes Discord refuses | 5 per sign-in with Discord, which lasts 10 minutes |
 | A new code for the same account | Once a minute |
 | Mails to one address | 5 an hour |
 
@@ -143,6 +187,7 @@ that a host can tell them, as the GDPR asks:
 | Data | Kept | Until |
 |---|---|---|
 | Username, email | As typed | The account is deleted by its player, or within 24 hours if the email is never verified |
+| Discord identity | The id of the Discord user, and when it was linked; never its token | The account is deleted, or another identity linked |
 | Password | Its Argon2id hash only, never the password | The account is deleted, or the password changed |
 | Dates: created, email verified, last seen | | The account is deleted |
 | Ban and its reason | | The ban is lifted, or the account deleted |
@@ -153,6 +198,6 @@ that a host can tell them, as the GDPR asks:
 | Mails | Nothing: sent through the mail server, which keeps what its host keeps | |
 | Limits on tries, the address of a connection | In memory only | A restart of the server |
 
-A player deletes their account from the game, with its password: the account, its sessions and its codes are
-deleted at once. The guests leave nothing in the database. The logs hold the usernames, account ids and IP
+A player deletes their account from the game, with its password or a confirmation of Discord: the account, its
+sessions, its codes and its Discord identity are deleted at once. The guests leave nothing in the database. The logs hold the usernames, account ids and IP
 addresses of the players, for as long as the host keeps the logs.

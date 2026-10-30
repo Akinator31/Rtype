@@ -12,8 +12,9 @@ apps/client/src/
   Online/
     LobbyClient.cpp    the connection to the lobby: TLS with the key pinned, HELLO, the requests
     OnlineScenes.cpp   the Online menu and the list of the games
-    AccountScenes.cpp  the scenes of the accounts: sign in, create an account, the code, my account
+    AccountScenes.cpp  the scenes of the accounts: sign in, create an account, the code, Discord, my account
     SessionTokens.cpp  the session token of the account signed in on each server, kept in the settings
+  main.cpp             gives OnlineScenes the SocialSdkAuthorizer of libs/discord, polled every frame
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn 100 ms in the past, between the snapshots around that time
@@ -119,8 +120,9 @@ lobby.signIn("Pilot_7", password, [&](const rtype::client::LobbyClient::SignInRe
   account the token of `HELLO` signed in (`account()`), whose username is then the name of the player.
 - **The requests of the accounts** ([lobby protocol 3](../protocol/lobby.md#6-accounts)): `registerAccount()`,
   `verifyEmail()`, `resendCode()`, `signIn()`, `forgotPassword()`, `resetPassword()`, `signOut()`,
-  `deleteAccount()`. Those that sign in give `SIGNED_IN` or the error, and sign the connection in; the others
-  give nothing or the error. A field the protocol cannot carry (an empty password, a code that is not 6 digits,
+  `deleteAccount()`, and those of Discord, `discordSignIn()` (the application of the master),
+  `discordConfirm()` (`SIGNED_IN`, `DiscordConfirmed` for `DONE`, or the error) and `chooseUsername()`. Those
+  that sign in give `SIGNED_IN` or the error, and sign the connection in; the others give nothing or the error. A field the protocol cannot carry (an empty password, a code that is not 6 digits,
   a username of 17 bytes) gets at once the error the master would give it, without being sent.
 - **`DONE` to `SIGN_OUT` or `DELETE_ACCOUNT`**: the master closes the connection, so the client closes it first,
   and `onClosed` is not called: it is not a connection lost.
@@ -129,7 +131,7 @@ lobby.signIn("Pilot_7", password, [&](const rtype::client::LobbyClient::SignInRe
 - **The messages of the errors**: `describe(code)` in English, for the logs and the tests; `errorKey(code)` the
   key of its message in `en.lang` and `fr.lang` (`error.game_full`), which the scenes show, and give the
   `LobbyClient` through `Handlers::describe`.
-- **A password, a code and a token are never logged**, at any level.
+- **A password, a code, a code verifier and a token are never logged**, at any level.
 
 ## Accounts
 
@@ -145,7 +147,10 @@ flowchart LR
     S -->|Forgot password| F[online_forgot_password] -->|CODE_SENT| R[online_reset_password] -->|SIGNED_IN| L
     A -->|Create an account| G[online_register] -->|CODE_SENT| C -->|SIGNED_IN| L
     A -->|Play as a guest, if allowed| L
+    A -->|Sign in with Discord| D[online_discord] -->|SIGNED_IN| L
+    D -->|DONE: a new Discord user| U[online_choose_username] -->|SIGNED_IN| L
     L -->|My account| M[online_my_account] -->|Sign out, Delete| A
+    M -->|Link Discord| D
 ```
 
 *Each scene goes back (Escape) to the one before it; the choice of the accounts disconnects.*
@@ -162,8 +167,34 @@ flowchart LR
 - **The settings file** is readable by the player only on Unix (mode `0600`), since it holds the tokens.
 - **The language of the game** is sent in `HELLO`, so that the emails of the master come in it; every error
   code has its message in `en.lang` and `fr.lang`.
-- **My account** shows the username, and the role when the account administers the server: **Sign out**, and
-  **Delete the account**, which asks for the password once more.
+- **My account** shows the username, and the role when the account administers the server: **Sign out**,
+  **Link Discord** on a server that offers it, and **Delete the account**, which asks for the password once
+  more, or **Confirm with Discord** for an account made with Discord.
+
+### Discord
+
+On a server whose `WELCOME` offers Discord ([ADR 0026](../decisions/0026-discord-social-sdk.md)):
+
+1. **Sign in with Discord** sends `DISCORD_SIGN_IN`; `DISCORD_AUTHORIZE` gives the id of the Discord application
+   of the master, and the client shows `online_discord`, which waits, with **Cancel**.
+2. `discord::Authorizer::authorize()` asks the player: the Discord client if it runs, the browser otherwise.
+   `SocialSdkAuthorizer` (`libs/discord`) does it with `Client::Authorize` of the Discord Social SDK, scope
+   `identify`, and the challenge of a code verifier of PKCE it makes; the SDK receives the code on the loopback
+   of the player. Its callbacks run in `poll()`, which the game loop calls every frame, after the network.
+3. The code, the verifier and the redirect address go in `DISCORD_CONFIRM`. `SIGNED_IN` keeps the token as any
+   sign-in does; `DONE` leads a new Discord user to `online_choose_username`, a player signed in back to **My
+   account** (the identity linked), or, for **Confirm with Discord**, straight to `DELETE_ACCOUNT` with an empty
+   password.
+
+The player who refuses in Discord, or a Discord that cannot be reached, gets a toast and the scene before. The
+SDK starts at the first sign-in with Discord only; its logs go to the logger `discord`, warnings and errors.
+Cancel, or the connection lost, gives up the authorization running (`cancel()`): what Discord answers then goes
+nowhere.
+
+`libs/discord` is two targets, so that the tests never load the library of Discord: `rtype::discord`, the
+interface, which the client and its tests know, and `rtype::discord_sdk`, its implementation, linked by the
+executable `r-type_client` alone. The SDK itself is kept in `libs/discord/sdk/` (its `README.md`), for Linux
+x86-64 and Windows x64; its library is copied beside the executable, in the build and in the package.
 
 ## RemoteSession
 
@@ -264,6 +295,9 @@ the codes, on SQLite and PostgreSQL:
 - a sign-out closing the connection without an error, its token refused after;
 - a wrong password and its message, fields refused before sending, then the right password by email;
 - a forgotten password changed with its code, which signs in; an account deleted with its password;
+- Discord against a fake Discord (tag `[discord]`): the application of the master, a new Discord user signed in
+  once it chose its username, a code verifier refused before sending, and the account, without password,
+  deleted after a confirmation of Discord;
 - the token kept for its server only, in a file readable by its owner only;
 - every error code with a message in `en.lang` and `fr.lang`.
 
