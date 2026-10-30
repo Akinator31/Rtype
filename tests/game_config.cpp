@@ -253,7 +253,7 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     directory.write("waves/tanks.lua",
                     "return { name = 'tanks', label = 'Tanks', description = 'Three tanks', difficulty = 5,"
                     " placement = 'random', enemy = 'tank', quantity = 3, spawnInterval = 0.5,"
-                    " area = { minX = 2000, maxY = 500 } }");
+                    " music = 'sounds/tank.mp3', area = { minX = 2000, maxY = 500 } }");
 
     const LoadedGameConfig loaded = loadGameConfig(directory.path);
 
@@ -330,6 +330,8 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     CHECK(tanks.difficulty == 5);
     CHECK(tanks.quantity == 3);
     CHECK(tanks.spawnInterval == Approx(0.5f));
+    CHECK(tanks.music == "sounds/tank.mp3");
+    CHECK(line.music.empty());
     CHECK(tanks.area.minX == Approx(2000.0f));
     CHECK(tanks.area.maxX == Approx(WaveArea{}.maxX));
     CHECK(tanks.area.maxY == Approx(500.0f));

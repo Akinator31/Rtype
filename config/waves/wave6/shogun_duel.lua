@@ -4,6 +4,7 @@ return {
     label = "Shogun duel",
     description = "The final boss: the Bydo shogun guards, slashes and shoots through four phases",
     difficulty = 6,
+    music = "sounds/boss_theme.mp3",
     placement = "manual",
     spawns = {
         { enemy = "bydo_shogun", x = 2050, y = 540 },

@@ -447,6 +447,7 @@ A wave is a group of enemies that appear one after the other. Like the enemies, 
 | `spawns` | `std::vector<WaveSpawn>` | Manual only: each enemy (`enemy`, `x`, `y`), in the order they appear |
 | `enemy` | `std::string` | Random only: the id of the `EnemyDefinition` of every enemy |
 | `area` | `WaveArea` | Random only: the rectangle (`minX`, `maxX`, `minY`, `maxY`) where they appear |
+| `music` | `std::string` | Path of the music the clients play when the wave starts, relative to their assets; empty = the music playing goes on. Sent in `WAVE_STARTED` |
 
 ```mermaid
 flowchart LR

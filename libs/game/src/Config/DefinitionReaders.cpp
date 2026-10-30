@@ -175,6 +175,7 @@ WaveDefinition readWaveDefinition(TableReader &table)
     for (TableReader &spawn : table.readList("spawns")) {
         definition.spawns.push_back(readWaveSpawn(spawn));
     }
+    definition.music = table.readString("music", "");
     definition.enemy = table.readString("enemy", "");
     if (table.hasField("area")) {
         definition.area = readWaveArea(table.readTable("area"));

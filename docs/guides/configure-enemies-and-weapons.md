@@ -188,6 +188,7 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `difficulty` | whole number from 1 to 6 | *required* | How hard the wave is, 1 the easiest, 6 the final boss |
 | `placement` | `"manual"` or `"random"` | *required* | Each enemy listed with its position, or one kind of enemy placed at random |
 | `spawnInterval` | number, 0 or more | `1` | Seconds between two enemies, 0 for all at once |
+| `music` | string, at most 128 bytes | `""` | Music the players hear when the wave starts, a path in the assets of the client (`"sounds/boss_theme.mp3"`); none: the music playing goes on |
 | `spawns` | list of `{ enemy = "...", x = ..., y = ... }` | | Manual only, *required*: each enemy and where it appears, in order |
 | `enemy` | string | | Random only, *required*: the id of the kind of every enemy |
 | `area` | `{ minX, maxX, minY, maxY }` | a band just past the right edge, over the whole height | Random only: where they appear; each bound optional |
