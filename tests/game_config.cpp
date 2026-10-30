@@ -96,11 +96,12 @@ TEST_CASE("The configuration of the repository loads, and a Simulation registers
     CHECK(context.waves.hasDefinition("scouts_line"));
     CHECK(context.weapons.hasDefinition(context.player.weapon));
     CHECK(context.ships.hasDefinition(context.player.ship));
-    // Four choices per level; the game draws one of each
-    for (std::uint8_t difficulty = MinWaveDifficulty; difficulty <= MaxWaveDifficulty; ++difficulty) {
+    // Four choices per level; the game draws one of each, and ends with the final boss
+    for (std::uint8_t difficulty = MinWaveDifficulty; difficulty < MaxWaveDifficulty; ++difficulty) {
         INFO("difficulty " << int{difficulty});
         CHECK(context.waves.listWavesOfDifficulty(difficulty).size() >= 4);
     }
+    CHECK(context.waves.listWavesOfDifficulty(MaxWaveDifficulty) == std::vector<std::string>{"shogun_duel"});
 }
 
 TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest player, then leaves", "[game]")
@@ -155,6 +156,42 @@ TEST_CASE("The new Bydo behaviors issue their first orders", "[game]")
     simulation.step();
     CHECK(ecs.getComponent<rtype::physics::Velocity>(wounded).x < -250.0f);
     CHECK(ecs.getComponent<EnemyOrders>(wounded).target.has_value());
+}
+
+TEST_CASE("The shogun of the repository is a boss that comes in, guards, shoots and dashes at the ship",
+          "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    Rules rules;
+    rules.firstWaveDelay = 10000;
+    Simulation simulation(rules, loaded.config);
+    simulation.addPlayer(0);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    CHECK(simulation.context().enemies.getDefinition("bydo_shogun").phases == 4);
+    const rtype::ecs::entity_t shogun = spawnEnemy(ecs, simulation.context(), "bydo_shogun", 2050.0f, 540.0f);
+    CHECK(ecs.getComponent<Kind>(shogun).value == EntityKind::BydoBoss);
+    const std::uint32_t id = ecs.getComponent<NetworkId>(shogun).value;
+
+    // 40 seconds: every stance of its behavior, which never fails, and its dashes reach the ship, which waits
+    // on the left
+    std::uint8_t stances = 0;
+    float leftmost = GameWidth;
+    for (int tick = 0; tick < 40 * TickRate && ecs.isAlive(shogun); ++tick) {
+        simulation.step();
+        for (const EntityState &state : simulation.snapshot().entities) {
+            if (state.id == id) {
+                stances |= state.flags;
+                leftmost = std::min(leftmost, state.x);
+            }
+        }
+    }
+    REQUIRE(ecs.isAlive(shogun));
+    CHECK(ecs.hasComponent<EnemyOrders>(shogun));
+    CHECK((stances & EntityState::Guarding) != 0);
+    CHECK((stances & EntityState::Shooting) != 0);
+    CHECK((stances & EntityState::Slashing) != 0);
+    CHECK(leftmost < 400.0f);
 }
 
 TEST_CASE("The Bydo raider fires at close range and retreats to the right", "[game]")
@@ -396,8 +433,8 @@ TEST_CASE("A wrong field is an error naming the file and the field", "[game]")
                     "return { id = 'scout', ship = 'scout', health = 1, weapon = 'blaster', update = 3 }") ==
           "enemies/scout.lua: update: expected a function");
     CHECK(errorWith("difficulty", "waves/line.lua",
-                    "return { name = 'line', difficulty = 6, placement = 'random', enemy = 'scout',"
-                    " quantity = 1 }") == "waves/line.lua: difficulty: expected an integer from 1 to 5");
+                    "return { name = 'line', difficulty = 7, placement = 'random', enemy = 'scout',"
+                    " quantity = 1 }") == "waves/line.lua: difficulty: expected an integer from 1 to 6");
 }
 
 TEST_CASE("A file that does not return a table, or does not run, is an error naming it", "[game]")
