@@ -8,6 +8,7 @@
 #include "Http.hpp"
 #include "Master/Master.hpp"
 #include "Server.hpp"
+#include "SmtpServer.hpp"
 #include "Web/Health.hpp"
 #include "Web/LocalAccess.hpp"
 #include "Web/Visitor.hpp"
@@ -838,7 +839,15 @@ TEST_CASE("Without accounts, a master serves its panel on the loopback only", "[
     CHECK(runMaster(options.master) == Failure);
     options.master.settings.web.listen = *Address::parse("::", 0);
     CHECK(runMaster(options.master) == Failure);
-    // With accounts, the panel has its sign-in: it may listen beyond
+    // With accounts, the panel has its sign-in: it may listen beyond. They need their mail server
     options.master.settings.accounts = AccountsSettings{};
+    CHECK(runMaster(options.master) == Failure);
+    const testing::SmtpServer mail;
+    options.master.settings.mail = MailSettings{.host = "127.0.0.1",
+                                                .port = mail.port(),
+                                                .security = MailSecurity::None,
+                                                .username = {},
+                                                .password = {},
+                                                .from = "rtype@example.org"};
     CHECK(runMaster(options.master) == Success);
 }

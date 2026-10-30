@@ -62,6 +62,7 @@ add_executable(rtype_tests
     server_lifecycle.cpp
     server_games.cpp
     server_lobby.cpp
+    server_mail.cpp
     server_options.cpp
     server_replication.cpp
     server_settings.cpp
@@ -78,6 +79,13 @@ target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
     rtype::scripting rtype::shaders r-type_client_core r-type_server_core
     CURL::libcurl Crow::Crow Catch2::Catch2WithMain)
+# The fake mail server of the tests speaks TLS with OpenSSL, there where libcurl uses it: not on Windows, whose
+# libcurl uses Schannel
+if(NOT WIN32)
+  find_package(OpenSSL REQUIRED)
+  target_link_libraries(rtype_tests PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+  target_compile_definitions(rtype_tests PRIVATE RTYPE_TEST_OPENSSL)
+endif()
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
 add_executable(rtype_test_child helpers/process_child.cpp)
 target_link_libraries(rtype_test_child PRIVATE rtype_options)
