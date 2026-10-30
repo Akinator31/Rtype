@@ -64,6 +64,7 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::Model>(caches);
     use<engine::ModelAnimation>(caches);
     use<ShipAttitude>(caches);
+    use<BossModel>(caches);
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
     use<Impact>(caches);
@@ -108,6 +109,11 @@ void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
 void GameSessionSystem::setLocalShipLook(const ShipLook &look)
 {
     _shipLooks.setLocalLook(look);
+}
+
+void GameSessionSystem::setBossLook(game::EntityKind kind, const BossLook &look)
+{
+    _bossLooks.setLook(kind, look);
 }
 
 void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
@@ -287,6 +293,8 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
     if (_shipLooks.hasLook(state.kind)) {
         _shipLooks.addModel(_ecs, entity, state, look, _clock, isLocalShip(state));
+    } else if (_bossLooks.hasLook(state.kind)) {
+        _bossLooks.addModel(_ecs, entity, state, look);
     } else if (_shotLooks.hasLook(state.kind)) {
         _shotLooks.addModel(_ecs, entity, state, look);
     } else {
@@ -328,6 +336,8 @@ void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState
     }
     if (_ecs.hasComponent<ShipAttitude>(entity)) {
         _shipLooks.moveModel(_ecs, entity, state, _clock);
+    } else if (_ecs.hasComponent<BossModel>(entity)) {
+        _bossLooks.moveModel(_ecs, entity, state);
     } else if (_ecs.hasComponent<engine::Model>(entity)) {
         _shotLooks.placeModel(_ecs, entity, state);
     }
@@ -370,8 +380,13 @@ bool GameSessionSystem::isLocalShip(const game::EntityState &state) const
 void GameSessionSystem::placeShipModels(float elapsed)
 {
     for (const auto &[networkId, entity] : _entities) {
-        if (_ecs.isAlive(entity) && _ecs.hasComponent<ShipAttitude>(entity.id)) {
+        if (!_ecs.isAlive(entity)) {
+            continue;
+        }
+        if (_ecs.hasComponent<ShipAttitude>(entity.id)) {
             ShipLooks::placeModel(_ecs, entity.id, elapsed);
+        } else if (_ecs.hasComponent<BossModel>(entity.id)) {
+            BossLooks::placeModel(_ecs, entity.id);
         }
     }
 }

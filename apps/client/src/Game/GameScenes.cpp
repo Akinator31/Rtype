@@ -11,6 +11,7 @@
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/Wave/WaveDefinition.hpp"
 
 #include <algorithm>
 #include <array>
@@ -35,6 +36,7 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE_LOST},
     {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
     {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
+    {AssetType::Model, RTYPE_MODEL_BOSS_SHOGUN},
     // The ships of the hangar, which the local player may fly
     {AssetType::Model, RTYPE_MODEL_SHIP_CAVED},
     {AssetType::Model, RTYPE_MODEL_SHIP_BATTLESHIP},
@@ -60,6 +62,12 @@ const std::vector<engine::SceneAsset> GameAssets{
 /// config/ships/bydo_scout.lua).
 constexpr render::Rectangle EznoHull{-8.66f, -3.31f, 17.31f, 10.01f};
 constexpr render::Rectangle DropShipHull{-11.95f, -5.74f, 23.9f, 9.11f};
+
+/// The body of the shogun, the final boss, in its Idle pose, blade and gun excluded, in model units. The model
+/// faces +z (its toes, its visor): turned by -70° around its vertical axis, it faces left, towards the players,
+/// and a little towards the camera. Its collider has the same proportions (config/ships/bydo_shogun.lua).
+constexpr render::Rectangle ShogunHull{-5.0f, -33.0f, 17.0f, 33.5f};
+constexpr float ShogunSpin = -70.0f;
 
 /// The meshes of the trails behind the flames of the ship models, by index in their files.
 const std::vector<int> EznoTrails{6};
@@ -97,6 +105,7 @@ constexpr render::Color DamageColor{255, 220, 90, 255};
 /// The health bars shown above the Bydos hit and above the ships of the other players, over their hull, under
 /// the damage numbers: red under a third of their hit points.
 constexpr HealthBarLook BydoHealthBar{100.0f, 42.0f, 0.3f};
+constexpr HealthBarLook BossHealthBar{240.0f, 180.0f, 0.3f};
 constexpr HealthBarLook AllyHealthBar{110.0f, 62.0f, 0.3f};
 
 /// The animation of the impact models, played once.
@@ -114,6 +123,7 @@ constexpr float SparkScale = 20.0f;
 constexpr float BurstScale = 15.0f;
 constexpr float SplashScale = 24.0f;
 constexpr float BydoExplosionScale = 25.0f;
+constexpr float BossExplosionScale = 70.0f;
 constexpr float ShipExplosionScale = 28.0f;
 
 /// How loud the shots are: the players fire all the time, the Bydos often and many at once, their plasma orbs
@@ -169,6 +179,9 @@ void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resour
     sessions.setImpactLook(game::EntityKind::BydoFlyer,
                            loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, BydoExplosionScale,
                                           ExplosionTint, explosion));
+    sessions.setImpactLook(game::EntityKind::BydoBoss,
+                           loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, BossExplosionScale,
+                                          ExplosionTint, explosion));
     sessions.setImpactLook(game::EntityKind::PlayerShip,
                            loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, ShipExplosionScale,
                                           ExplosionTint, explosion));
@@ -191,6 +204,7 @@ void setDestructionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio
 {
     const audio::SoundId destruction = audio.loadSound(RTYPE_SOUND_DESTRUCTION);
     sessions.setDestructionSound(game::EntityKind::BydoFlyer, {destruction, BydoDestructionVolume});
+    sessions.setDestructionSound(game::EntityKind::BydoBoss, {destruction, ShipDestructionVolume});
     sessions.setDestructionSound(game::EntityKind::PlayerShip, {destruction, ShipDestructionVolume});
 }
 
@@ -215,6 +229,8 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
         {loadShipModel(resources, equipped.modelPath), equipped.hull, false, equipped.trailMeshes});
     sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
                                                        DropShipHull, true, DropShipTrails});
+    sessions.setBossLook(game::EntityKind::BydoBoss,
+                         loadBossLook(resources, RTYPE_MODEL_BOSS_SHOGUN, ShogunHull, ShogunSpin));
     const render::Energy energy{
         resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
     const render::TextureId light =
@@ -230,11 +246,14 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
     setImpactLooks(sessions, resources, energy);
     const render::FontId damageFont = resources.loadFont(RTYPE_FONT_DISPLAY, DamageFontSize);
-    sessions.setDamageLook(game::EntityKind::BydoFlyer, {damageFont, DamageTextSize, DamageColor});
-    for (const game::EntityKind kind : {game::EntityKind::BydoFlyer, game::EntityKind::BydoShooter,
-                                        game::EntityKind::BydoTank, game::EntityKind::BydoBoss}) {
+    for (const game::EntityKind kind : {game::EntityKind::BydoFlyer, game::EntityKind::BydoBoss}) {
+        sessions.setDamageLook(kind, {damageFont, DamageTextSize, DamageColor});
+    }
+    for (const game::EntityKind kind :
+         {game::EntityKind::BydoFlyer, game::EntityKind::BydoShooter, game::EntityKind::BydoTank}) {
         sessions.setHealthBarLook(kind, BydoHealthBar);
     }
+    sessions.setHealthBarLook(game::EntityKind::BydoBoss, BossHealthBar);
     sessions.setHealthBarLook(game::EntityKind::PlayerShip, AllyHealthBar);
     setShotSounds(sessions, audio);
     setDestructionSounds(sessions, audio);
@@ -339,6 +358,11 @@ void GameScenes::showKill(const Kill &kill)
 
 void GameScenes::showWave(std::uint16_t wave)
 {
+    if (wave == game::MaxWaveDifficulty) {
+        _engine.showBanner(_translations.text("event.boss_wave"),
+                           _translations.text("event.boss_wave_detail"), engine::ToastType::Error);
+        return;
+    }
     _engine.showBanner(std::format("{} {:02}", _translations.text("event.wave"), wave),
                        _translations.text("event.wave_detail"), engine::ToastType::Info, WaveBannerDuration);
 }

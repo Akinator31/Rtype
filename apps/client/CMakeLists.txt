@@ -11,6 +11,7 @@ add_library(r-type_client_core STATIC
     src/App/Configuration.cpp
     src/App/Scenes.cpp
     src/App/Systems.cpp
+    src/Commands/BossCommand.cpp
     src/Commands/Commands.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
@@ -18,6 +19,7 @@ add_library(r-type_client_core STATIC
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
+    src/Game/BossLooks.cpp
     src/Game/DamageLooks.cpp
     src/Game/DamageNumberSystem.cpp
     src/Game/DeathScreen.cpp

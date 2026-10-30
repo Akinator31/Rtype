@@ -31,6 +31,7 @@
 #define RTYPE_MODEL_SHIP_DROP_SHIP "models/drop_ship_v2.glb"
 #define RTYPE_MODEL_SHIP_BATTLESHIP "models/battleship.glb"
 #define RTYPE_MODEL_SHIP_CAVED "models/spaceship_caved.glb"
+#define RTYPE_MODEL_BOSS_SHOGUN "models/boss_shogun.glb"
 #define RTYPE_MODEL_PEDESTAL "models/scifi_gadget.glb"
 #define RTYPE_MODEL_SHOT_BASIC "models/projectiles/player/shot_basic.glb"
 #define RTYPE_MODEL_SHOT_SPIRAL "models/projectiles/enemy/shot_spiral.glb"
