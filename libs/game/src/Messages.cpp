@@ -31,7 +31,8 @@ constexpr std::size_t DestroyedHeaderSize = 5;
 constexpr std::size_t DestroyedEntitySize = 5;
 /// The bits of the flags of an entity that the protocol defines: the others are reserved.
 constexpr std::uint8_t KnownFlags = EntityState::Invulnerable | EntityState::Charging | EntityState::Hit |
-                                    EntityState::AimingUp | EntityState::AimingDown;
+                                    EntityState::AimingUp | EntityState::AimingDown | EntityState::Guarding |
+                                    EntityState::Slashing | EntityState::Shooting;
 /// Eighths of a unit: the positions and velocities of the protocol (docs/protocol/game.md, section 9.1).
 constexpr float FixedScale = 8.0f;
 

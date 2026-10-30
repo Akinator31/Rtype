@@ -11,9 +11,9 @@
 namespace rtype::game
 {
 
-/// The difficulty of the easiest waves, and of the hardest.
+/// The difficulty of the easiest waves, and of the hardest: the last one, the final boss.
 constexpr std::uint8_t MinWaveDifficulty = 1;
-constexpr std::uint8_t MaxWaveDifficulty = 5;
+constexpr std::uint8_t MaxWaveDifficulty = 6;
 
 /// A group of enemies that appear one after the other. Creating a new wave is filling this and registering it
 /// in a WaveRegistry; loadGameConfig() reads them from config/waves/ (ADR 0018).

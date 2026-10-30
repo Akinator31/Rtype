@@ -63,6 +63,11 @@ struct EntityState {
         /// A ship of a player turned nose up, or nose down, by Rules::aimAngle: it fires that way.
         AimingUp = 1 << 3,
         AimingDown = 1 << 4,
+        /// A Bydo in a stance its behavior ordered (EnemyStance): behind its guard, striking with a blade,
+        /// aiming its gun.
+        Guarding = 1 << 5,
+        Slashing = 1 << 6,
+        Shooting = 1 << 7,
     };
 
     /// Never 0, and never reused within a game: a client can keep it to recognize the entity.

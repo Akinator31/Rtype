@@ -184,18 +184,19 @@ TEST_CASE("Unknown reasons, causes and outcomes are read as the specification sa
     CHECK(decodeGameOver(bytes({0x09}))->outcome == GameOutcome::Defeat);
 }
 
-TEST_CASE("The reserved bits of inputs and flags are dropped", "[game][messages]")
+TEST_CASE("The reserved bits of inputs are dropped; every bit of the flags is defined", "[game][messages]")
 {
     CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0x7F);
     CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0x7F});
 
+    // The stances of the Bydos take the last three bits
     std::vector<std::byte> payload = ExampleSnapshot;
     payload.back() = std::byte{0xFF};
-    CHECK(decodeSnapshotPart(payload)->entities[0].flags == 0x1F);
+    CHECK(decodeSnapshotPart(payload)->entities[0].flags == 0xFF);
 
     SnapshotPart part = examplePart();
-    part.entities[0].flags = 0xFF;
-    CHECK(encode(part).back() == std::byte{0x1F});
+    part.entities[0].flags = EntityState::Guarding | EntityState::Slashing | EntityState::Shooting;
+    CHECK(encode(part).back() == std::byte{0xE0});
 }
 
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")

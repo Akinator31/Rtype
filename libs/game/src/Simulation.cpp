@@ -32,6 +32,22 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
+/// The flag of the snapshot that tells the stance of a Bydo, 0 for none.
+std::uint8_t stanceFlag(EnemyStance stance)
+{
+    switch (stance) {
+    case EnemyStance::Guard:
+        return EntityState::Guarding;
+    case EnemyStance::Slash:
+        return EntityState::Slashing;
+    case EnemyStance::Shoot:
+        return EntityState::Shooting;
+    case EnemyStance::None:
+        break;
+    }
+    return 0;
+}
+
 } // namespace
 
 Simulation::Simulation(Rules rules, const GameConfig &config)
@@ -157,6 +173,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<Health> &healths = _ecs.cache<Health>();
     ecs::ComponentCache<Invulnerable> &invulnerables = _ecs.cache<Invulnerable>();
     ecs::ComponentCache<PlayerShip> &ships = _ecs.cache<PlayerShip>();
+    ecs::ComponentCache<EnemyOrders> &orders = _ecs.cache<EnemyOrders>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -182,6 +199,9 @@ void Simulation::buildSnapshot()
             } else if (aim > 0) {
                 state.flags |= EntityState::AimingDown;
             }
+        }
+        if (orders.has(entity)) {
+            state.flags |= stanceFlag(orders.get(entity).stance);
         }
         snapshot.entities.push_back(state);
     }

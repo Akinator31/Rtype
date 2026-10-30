@@ -33,6 +33,11 @@ struct EnemyDefinition {
     /// What moves it and makes it fire; without one, it speeds up to the left and fires as soon as it is in
     /// the game area.
     std::optional<EnemyBehavior> behavior = std::nullopt;
+    /// How many times its health is filled (not 0): once it runs out, it gets all of it back and starts its
+    /// next phase, until the last one. A boss lasts longer than the 255 hit points of a Health.
+    std::uint8_t phases = 1;
+    /// The clients draw it as a boss (EntityKind::BydoBoss) instead of a flyer.
+    bool boss = false;
 };
 
 } // namespace rtype::game

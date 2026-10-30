@@ -67,7 +67,8 @@ ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string 
     const EnemyDefinition &enemy = context.enemies.getDefinition(enemyId);
     const physics::Collider &collider = context.ships.getDefinition(enemy.ship).collider;
     static_cast<void>(context.weapons.getDefinition(enemy.weapon));
-    const ecs::entity_t entity = spawnVisible(ecs, context, EntityKind::BydoFlyer, NoOwner, x, y);
+    const EntityKind kind = enemy.boss ? EntityKind::BydoBoss : EntityKind::BydoFlyer;
+    const ecs::entity_t entity = spawnVisible(ecs, context, kind, NoOwner, x, y);
     ecs.addComponent<Enemy>(entity, enemyId);
     ecs.addComponent<Health>(entity, enemy.health);
     ecs.addComponent<Damage>(entity, enemy.collisionDamage);
