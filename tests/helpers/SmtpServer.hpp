@@ -6,6 +6,15 @@
 // (RTYPE_TEST_OPENSSL, Linux): its certificate is made at start, for 127.0.0.1, and written for the client to
 // trust.
 
+// Asio includes windows.h: without its min and max macros, which break std::min
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
 #include <asio.hpp>
 
 #ifndef _WIN32

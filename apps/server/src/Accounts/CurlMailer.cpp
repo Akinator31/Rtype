@@ -5,6 +5,15 @@
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Crypto.hpp"
 
+// libcurl includes windows.h: without its min and max macros, which break std::min
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
 #include <curl/curl.h>
 
 #include <algorithm>
