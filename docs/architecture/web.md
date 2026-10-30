@@ -122,7 +122,7 @@ With accounts, the administrators sign in to the panel with their account, from 
 server with `setPanelAccounts()`.
 
 - **An administrator** is an account with the role `admin`, or one of `[admin] admins` of the settings, named
-  by its verified email or `discord:<id>`, whatever its role ([Configure a server](../guides/configure-a-server.md#the-sections)).
+  by its verified email or `discord:<id>`, whatever its role ([Configure a server](../guides/configure-a-server.md#the-keys)).
   At start, the master gives the role `admin` to those of the list that have an account, and warns of the others.
   A banned account is never one.
 - **With a password**: `POST /api/sign-in {"login": …, "password": …}`, `Content-Type: application/json` only,
