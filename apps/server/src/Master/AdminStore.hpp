@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 /// What the administration keeps in the database of the master (docs/architecture/administration.md): the
@@ -17,6 +18,8 @@ namespace rtype::server
 
 /// The actor of an action done with the local access token, until the accounts of step 12.
 inline constexpr std::string_view LocalActor = "local";
+/// The actor of an action whose account was deleted.
+inline constexpr std::string_view DeletedActor = "deleted";
 
 /// One action of an administrator (table `admin_actions`).
 struct AdminAction {
@@ -50,6 +53,14 @@ long long recordAction(rtype::database::Database &database, const AdminAction &a
 /// @throws soci::soci_error if the database cannot be read.
 [[nodiscard]] std::vector<AdminAction> readActions(rtype::database::Database &database, std::size_t limit,
                                                    std::optional<long long> before = std::nullopt);
+
+/// Takes a deleted account out of the record (docs/architecture/accounts.md#deleting-an-account): its actions
+/// stay, their actor `deleted`; the actions done to it lose its name and its address, `kick` by its
+/// `account`, `end_game` by its id in `accounts`.
+/// @return How many actions changed.
+/// @throws soci::soci_error if the database refuses it.
+std::size_t anonymizeActions(rtype::database::Database &database, long long accountId,
+                             std::string_view username);
 
 /// Keeps a ban, replacing the one of its address.
 /// @throws soci::soci_error if the database refuses it.

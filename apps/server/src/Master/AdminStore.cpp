@@ -1,8 +1,12 @@
 #include "Master/AdminStore.hpp"
 
+#include <crow/json.h>
 #include <soci/soci.h>
 
 #include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace rtype::server
 {
@@ -52,6 +56,100 @@ std::vector<AdminAction> readActions(rtype::database::Database &database, std::s
         });
     }
     return actions;
+}
+
+namespace
+{
+
+/// The details of an action done to the account, without what tells who it was; nothing if the action was
+/// not done to it.
+std::optional<std::string> withoutAccount(const std::string &action, const std::string &text,
+                                          long long accountId, std::string_view username)
+{
+    const crow::json::rvalue details = crow::json::load(text);
+    if (!details || details.t() != crow::json::type::Object) {
+        return std::nullopt;
+    }
+    const auto isAccount = [&](const crow::json::rvalue &value) {
+        return value.t() == crow::json::type::Number && value.i() == accountId;
+    };
+    crow::json::wvalue result;
+    if (action == "kick" && details.has("account") && isAccount(details["account"])) {
+        for (const std::string &key : details.keys()) {
+            if (key != "account" && key != "name" && key != "address") {
+                result[key] = crow::json::wvalue(details[key]);
+            }
+        }
+        result["name"] = std::string(DeletedActor);
+        return result.dump();
+    }
+    if (action == "end_game" && details.has("accounts") &&
+        details["accounts"].t() == crow::json::type::List) {
+        std::vector<crow::json::wvalue> accounts;
+        bool found = false;
+        for (const crow::json::rvalue &account : details["accounts"].lo()) {
+            if (isAccount(account)) {
+                found = true;
+            } else {
+                accounts.emplace_back(account);
+            }
+        }
+        if (!found) {
+            return std::nullopt;
+        }
+        for (const std::string &key : details.keys()) {
+            if (key != "accounts" && key != "players") {
+                result[key] = crow::json::wvalue(details[key]);
+            }
+        }
+        std::vector<crow::json::wvalue> players;
+        bool replaced = false;
+        if (details.has("players") && details["players"].t() == crow::json::type::List) {
+            for (const crow::json::rvalue &player : details["players"].lo()) {
+                if (!replaced && player.t() == crow::json::type::String && std::string(player) == username) {
+                    replaced = true;
+                    players.emplace_back(std::string(DeletedActor));
+                } else {
+                    players.emplace_back(player);
+                }
+            }
+        }
+        result["players"] = std::move(players);
+        result["accounts"] = std::move(accounts);
+        return result.dump();
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+std::size_t anonymizeActions(rtype::database::Database &database, long long accountId,
+                             std::string_view username)
+{
+    const std::string actor = std::to_string(accountId);
+    const std::string deleted(DeletedActor);
+    soci::statement byActor =
+        (database.session().prepare << "UPDATE admin_actions SET actor = :deleted WHERE actor = :actor",
+         soci::use(deleted), soci::use(actor));
+    byActor.execute(true);
+    auto changed = static_cast<std::size_t>(byActor.get_affected_rows());
+
+    // Few actions name an account: those are read, and written again without it
+    std::vector<std::pair<long long, std::string>> rewritten;
+    const soci::rowset<soci::row> rows =
+        (database.session().prepare << "SELECT id, action, details FROM admin_actions WHERE details LIKE "
+                                       "'%\"account%'");
+    for (const soci::row &row : rows) {
+        if (std::optional<std::string> details =
+                withoutAccount(row.get<std::string>(1), row.get<std::string>(2), accountId, username)) {
+            rewritten.emplace_back(row.get<long long>(0), std::move(*details));
+        }
+    }
+    for (const auto &[id, details] : rewritten) {
+        database.session() << "UPDATE admin_actions SET details = :details WHERE id = :id",
+            soci::use(details), soci::use(id);
+    }
+    return changed + rewritten.size();
 }
 
 void saveAddressBan(rtype::database::Database &database, const AddressBan &ban)
