@@ -1,0 +1,3 @@
+# The headers of the Discord Social SDK are kept as Discord ships them
+DisableFormat: true
+SortIncludes: Never

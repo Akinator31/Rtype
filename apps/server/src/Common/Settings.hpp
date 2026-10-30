@@ -36,7 +36,7 @@ struct WebSettings {
     /// Where the panel listens. Without accounts, a loopback address only. Port 0 takes a free port.
     rtype::network::Address listen = rtype::network::Address::loopbackIpv4(8080);
     /// The address the panel is reached at from outside, `https://admin.example.org`, without a trailing
-    /// slash; empty: none. Needed by Discord.
+    /// slash; empty: none. Needed by the Discord sign-in of the panel (step 12), not by the players'.
     std::string publicUrl;
     /// The proxies whose X-Forwarded-For is believed.
     std::vector<Subnet> trustedProxies;
@@ -74,7 +74,7 @@ struct MailSettings {
     std::string from;
 };
 
-/// [discord]: signing in with Discord. Needs [accounts] and `web.public_url`.
+/// [discord]: signing in with Discord, through the Discord Social SDK of the client. Needs [accounts].
 struct DiscordSettings {
     std::string clientId;
     /// Read from `client_secret_file`. Never logged.

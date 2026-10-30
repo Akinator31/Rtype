@@ -41,11 +41,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install system libraries (X11 / OpenGL, OpenSSL, libpq)
+      # The Discord Social SDK of the client (libs/discord) is linked against PulseAudio and ALSA
+      - name: Install system libraries (X11 / OpenGL, OpenSSL, libpq, Discord)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev \
+            libpulse0 libasound2t64
 
       - name: Start PostgreSQL for the tests
         uses: ./.github/actions/start-postgresql

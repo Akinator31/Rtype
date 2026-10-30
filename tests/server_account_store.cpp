@@ -235,6 +235,7 @@ TEST_CASE("The schema of the master has the tables of the accounts", "[server][a
     CHECK(rtype::test::tableExists(fixture.database, "accounts"));
     CHECK(rtype::test::tableExists(fixture.database, "account_sessions"));
     CHECK(rtype::test::tableExists(fixture.database, "account_codes"));
+    CHECK(rtype::test::tableExists(fixture.database, "discord_identities"));
 }
 
 TEST_CASE("An account is found by its id, its username or its email, ignoring case",
@@ -273,6 +274,49 @@ TEST_CASE("An account is found by its id, its username or its email, ignoring ca
     CHECK_FALSE(wing.email);
     CHECK_FALSE(wing.passwordHash);
     CHECK(wing.role == AccountRole::Admin);
+}
+
+TEST_CASE("A Discord identity signs in to one account, which has one identity",
+          "[server][accounts][database]")
+{
+    const auto engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    Fixture fixture(engine, "accounts_discord");
+    Database &database = fixture.database;
+    const Account pilot = create(database, "Pilot", "pilot@example.org");
+    markEmailVerified(database, pilot.id, Noon);
+
+    // A new identity: an account of its own, without email nor password, never purged
+    using Result = std::variant<Account, AccountConflict>;
+    const Result created = createDiscordAccount(database, "Wing", "111", Noon);
+    REQUIRE(std::holds_alternative<Account>(created));
+    const Account wing = std::get<Account>(created);
+    CHECK_FALSE(wing.email);
+    CHECK_FALSE(wing.passwordHash);
+    CHECK(findAccountByDiscord(database, "111") == wing);
+    CHECK(discordIdentity(database, wing.id) == "111");
+    CHECK(purgeUnverifiedAccounts(database, Noon + UnverifiedAccountLifetime * 2) == 0);
+    // The identity has its account, and the username is taken ignoring case
+    CHECK(createDiscordAccount(database, "Other", "111", Noon) == Result(AccountConflict::EmailTaken));
+    CHECK(createDiscordAccount(database, "WING", "222", Noon) == Result(AccountConflict::UsernameTaken));
+    CHECK_FALSE(findAccountByDiscord(database, "222"));
+    CHECK_FALSE(findAccountByUsername(database, "Other"));
+
+    // Linked to an account with a password, then replaced by another identity
+    CHECK(linkDiscord(database, pilot.id, "222", Noon) == DiscordLink::Linked);
+    CHECK(linkDiscord(database, pilot.id, "222", Noon) == DiscordLink::AlreadyLinked);
+    CHECK(linkDiscord(database, pilot.id, "111", Noon) == DiscordLink::Taken);
+    CHECK(linkDiscord(database, 99, "333", Noon) == DiscordLink::NoAccount);
+    CHECK(findAccountByDiscord(database, "222")->id == pilot.id);
+    CHECK(linkDiscord(database, pilot.id, "333", Noon) == DiscordLink::Linked);
+    CHECK_FALSE(findAccountByDiscord(database, "222"));
+    CHECK(discordIdentity(database, pilot.id) == "333");
+
+    // Deleted with its account: the identity can make a new one
+    CHECK(deleteAccount(database, wing.id));
+    CHECK_FALSE(findAccountByDiscord(database, "111"));
+    CHECK_FALSE(discordIdentity(database, wing.id));
+    CHECK(std::holds_alternative<Account>(createDiscordAccount(database, "Wing", "111", Noon)));
 }
 
 TEST_CASE("Usernames and emails are unique ignoring case", "[server][accounts][database]")

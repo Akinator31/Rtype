@@ -69,6 +69,17 @@ AccountInfo pavel()
     return {.id = 0x0102030405060708, .username = "Pavel_42", .role = AccountRole::Admin};
 }
 
+/// A code verifier of PKCE of 43 characters, the shortest.
+const std::string Verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+
+/// What the Discord Social SDK gives the client, for DISCORD_CONFIRM.
+DiscordConfirmMessage confirmation()
+{
+    return {.code = "NhhvTDYsFcdgNLnnLijcl7Ku7bEEeee",
+            .codeVerifier = Verifier,
+            .redirectUri = "http://127.0.0.1/callback"};
+}
+
 /// Every message of the accounts with a payload, with its decoder.
 std::vector<std::pair<Bytes, std::function<bool(std::span<const std::byte>)>>> accountMessages()
 {
@@ -84,14 +95,14 @@ std::vector<std::pair<Bytes, std::function<bool(std::span<const std::byte>)>>> a
          [](auto p) { return decodeForgotPassword(p).has_value(); }},
         {encode(ResetPasswordMessage{"pavel@example.org", "999999", "battery staple"}),
          [](auto p) { return decodeResetPassword(p).has_value(); }},
-        {encode(DiscordConfirmMessage{"K7P2ZX"}), [](auto p) { return decodeDiscordConfirm(p).has_value(); }},
+        {encode(confirmation()), [](auto p) { return decodeDiscordConfirm(p).has_value(); }},
         {encode(ChooseUsernameMessage{"Pavel"}), [](auto p) { return decodeChooseUsername(p).has_value(); }},
         {encode(DeleteAccountMessage{"correct horse"}),
          [](auto p) { return decodeDeleteAccount(p).has_value(); }},
         {encode(DeleteAccountMessage{""}), [](auto p) { return decodeDeleteAccount(p).has_value(); }},
         {encode(SignedInMessage{key(3), pavel()}), [](auto p) { return decodeSignedIn(p).has_value(); }},
-        {encode(DiscordUrlMessage{"https://discord.com/oauth2/authorize?state=x"}),
-         [](auto p) { return decodeDiscordUrl(p).has_value(); }},
+        {encode(DiscordAuthorizeMessage{1234567890123456789}),
+         [](auto p) { return decodeDiscordAuthorize(p).has_value(); }},
     };
 }
 
@@ -347,7 +358,7 @@ TEST_CASE("Random bytes never crash a lobby decoder", "[lobby]")
         (void)decodeChooseUsername(payload);
         (void)decodeDeleteAccount(payload);
         (void)decodeSignedIn(payload);
-        (void)decodeDiscordUrl(payload);
+        (void)decodeDiscordAuthorize(payload);
     }
     SUCCEED();
 }
@@ -364,7 +375,14 @@ TEST_CASE("The requests of the accounts are written field by field", "[lobby][ac
     CHECK(encode(ForgotPasswordMessage{"a@b.c"}) == bytes({5, 'a', '@', 'b', '.', 'c'}));
     CHECK(encode(ResetPasswordMessage{"a@b.c", "123456", "pw"}) ==
           bytes({5, 'a', '@', 'b', '.', 'c', 6, '1', '2', '3', '4', '5', '6', 0, 2, 'p', 'w'}));
-    CHECK(encode(DiscordConfirmMessage{"K7P2ZX"}) == bytes({6, 'K', '7', 'P', '2', 'Z', 'X'}));
+    Bytes confirm = bytes({1, 'c', 43});
+    for (const char c : Verifier) {
+        confirm.push_back(static_cast<std::byte>(c));
+    }
+    for (const char byte : {'\0', '\3', 'h', ':', '/'}) {
+        confirm.push_back(static_cast<std::byte>(byte));
+    }
+    CHECK(encode(DiscordConfirmMessage{"c", Verifier, "h:/"}) == confirm);
     CHECK(encode(ChooseUsernameMessage{"Ann"}) == bytes({3, 'A', 'n', 'n'}));
     CHECK(encode(DeleteAccountMessage{""}) == bytes({0, 0}));
     CHECK(encode(DeleteAccountMessage{"pw"}) == bytes({0, 2, 'p', 'w'}));
@@ -379,8 +397,7 @@ TEST_CASE("The replies of the accounts are written field by field", "[lobby][acc
     CHECK(Bytes(signedIn.begin() + 32, signedIn.end()) ==
           bytes({0, 0, 0, 0, 0, 0, 0, 9, 3, 'A', 'n', 'n', 1}));
 
-    CHECK(encode(DiscordUrlMessage{"https://d.c"}) ==
-          bytes({0, 11, 'h', 't', 't', 'p', 's', ':', '/', '/', 'd', '.', 'c'}));
+    CHECK(encode(DiscordAuthorizeMessage{0x0102030405060708}) == bytes({1, 2, 3, 4, 5, 6, 7, 8}));
 }
 
 TEST_CASE("Every message of the accounts survives a round trip", "[lobby][accounts]")
@@ -397,8 +414,7 @@ TEST_CASE("Every message of the accounts survives a round trip", "[lobby][accoun
     CHECK(decodeForgotPassword(encode(forgot)) == forgot);
     const ResetPasswordMessage reset{"élodie@exemple.fr", "999999", "un autre mot de passe"};
     CHECK(decodeResetPassword(encode(reset)) == reset);
-    const DiscordConfirmMessage confirm{"23456Z"};
-    CHECK(decodeDiscordConfirm(encode(confirm)) == confirm);
+    CHECK(decodeDiscordConfirm(encode(confirmation())) == confirmation());
     const ChooseUsernameMessage choose{"Elodie-_9"};
     CHECK(decodeChooseUsername(encode(choose)) == choose);
     for (const std::string &password : {std::string(), std::string("pw")}) {
@@ -408,15 +424,15 @@ TEST_CASE("Every message of the accounts survives a round trip", "[lobby][accoun
         const SignedInMessage signedIn{key(9), {0xFFFFFFFFFFFFFFFF, "Élodie", role}};
         CHECK(decodeSignedIn(encode(signedIn)) == signedIn);
     }
-    const DiscordUrlMessage url{"https://discord.com/oauth2/authorize?client_id=1&scope=identify&state=abc"};
-    CHECK(decodeDiscordUrl(encode(url)) == url);
+    const DiscordAuthorizeMessage authorize{0xFFFFFFFFFFFFFFFF};
+    CHECK(decodeDiscordAuthorize(encode(authorize)) == authorize);
     for (const ErrorCode code :
          {ErrorCode::AccountsDisabled, ErrorCode::UsernameTaken, ErrorCode::WeakPassword,
           ErrorCode::InvalidCredentials, ErrorCode::EmailNotVerified, ErrorCode::InvalidCode,
           ErrorCode::CodeExpired, ErrorCode::TooManyAttempts, ErrorCode::SessionExpired, ErrorCode::Busy,
           ErrorCode::GuestsDisabled, ErrorCode::NameReserved, ErrorCode::MailUnavailable,
           ErrorCode::DiscordNotConfirmed, ErrorCode::InvalidEmail, ErrorCode::NotSignedIn,
-          ErrorCode::AlreadySignedIn, ErrorCode::DiscordTaken}) {
+          ErrorCode::AlreadySignedIn, ErrorCode::DiscordTaken, ErrorCode::DiscordUnavailable}) {
         CHECK(decodeError(encode(ErrorMessage{message_type::SignIn, code})) ==
               ErrorMessage{message_type::SignIn, code});
     }
@@ -439,8 +455,11 @@ TEST_CASE("The fields of the accounts hold their longest values, and not one byt
     CHECK(decodeSignIn(encode(SignInMessage{email, emoji})) == SignInMessage{email, emoji});
     CHECK(decodeResetPassword(encode(ResetPasswordMessage{email, "123456", password}))->password == password);
     CHECK(decodeDeleteAccount(encode(DeleteAccountMessage{password}))->password == password);
-    const std::string url = "https://" + std::string(MaxDiscordUrlLength - 8, 'u');
-    CHECK(decodeDiscordUrl(encode(DiscordUrlMessage{url}))->url == url);
+    const DiscordConfirmMessage longestConfirm{
+        std::string(MaxDiscordCodeLength, 'c'), std::string(MaxCodeVerifierLength, 'v'),
+        "http://127.0.0.1/" + std::string(MaxRedirectUriLength - 17, 'u')};
+    CHECK(decodeDiscordConfirm(encode(longestConfirm)) == longestConfirm);
+    CHECK(encode(longestConfirm).size() <= rtype::network::MaxFramePayloadSize);
     CHECK(encode(SignedInMessage{key(1), {1, username, AccountRole::Player}}).size() == 32 + 8 + 17 + 1);
     // The longest REGISTER fits in a frame
     CHECK(encode(longest).size() <= rtype::network::MaxFramePayloadSize);
@@ -455,7 +474,12 @@ TEST_CASE("The fields of the accounts hold their longest values, and not one byt
     CHECK_THROWS_AS(encode(SignInMessage{email, tooLongPassword}), std::invalid_argument);
     CHECK_THROWS_AS(encode(ChooseUsernameMessage{tooLongUsername}), std::invalid_argument);
     CHECK_THROWS_AS(encode(DeleteAccountMessage{tooLongPassword}), std::invalid_argument);
-    CHECK_THROWS_AS(encode(DiscordUrlMessage{url + "u"}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(DiscordConfirmMessage{longestConfirm.code + "c", Verifier, "h:/"}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(encode(DiscordConfirmMessage{"c", longestConfirm.codeVerifier + "v", "h:/"}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(encode(DiscordConfirmMessage{"c", Verifier, longestConfirm.redirectUri + "u"}),
+                    std::invalid_argument);
     CHECK_THROWS_AS(encode(SignedInMessage{key(1), {1, tooLongUsername, AccountRole::Player}}),
                     std::invalid_argument);
 
@@ -473,9 +497,11 @@ TEST_CASE("The fields of the accounts hold their longest values, and not one byt
     Bytes signIn = bytes({1, 'A'});
     signIn.insert(signIn.end(), password513.begin(), password513.end());
     CHECK_FALSE(decodeSignIn(signIn));
-    Bytes url2049 = bytes({0x08, 0x01, 'h', 't', 't', 'p', 's', ':', '/', '/'});
-    url2049.resize(2 + 2049, std::byte{'u'});
-    CHECK_FALSE(decodeDiscordUrl(url2049));
+    Writer redirect2049;
+    redirect2049.writeString("c");
+    redirect2049.writeString(Verifier);
+    redirect2049.writeString16(std::string(MaxRedirectUriLength + 1, 'u'));
+    CHECK_FALSE(decodeDiscordConfirm(redirect2049.take()));
 }
 
 TEST_CASE("The messages of the accounts refuse what the protocol forbids", "[lobby][accounts]")
@@ -504,18 +530,23 @@ TEST_CASE("The messages of the accounts refuse what the protocol forbids", "[lob
     CHECK_FALSE(decodeResetPassword(bytes({1, 'e', 6, '1', '2', '3', '4', '5', ' ', 0, 1, 'p'})));
     CHECK_THROWS_AS(encode(VerifyEmailMessage{"Ann", "12345"}), std::invalid_argument);
     CHECK_THROWS_AS(encode(ResetPasswordMessage{"a@b.c", "abcdef", "pw"}), std::invalid_argument);
-    // A Discord code is 6 of its alphabet: no 0, O, 1, I, nor small letters
-    for (const char *wrong : {"K7P2Z0", "K7P2ZO", "K7P2Z1", "K7P2ZI", "k7p2zx", "K7P2Z", "K7P2ZXY"}) {
-        CHECK_FALSE(isValidDiscordCode(wrong));
-        CHECK_THROWS_AS(encode(DiscordConfirmMessage{wrong}), std::invalid_argument);
-        Bytes payload = bytes({static_cast<int>(std::string_view(wrong).size())});
-        for (const char c : std::string_view(wrong)) {
-            payload.push_back(static_cast<std::byte>(c));
-        }
-        CHECK_FALSE(decodeDiscordConfirm(payload));
+    // DISCORD_CONFIRM: a code, a code verifier of PKCE (43 to 128 unreserved characters), a redirect address
+    for (const std::string &wrong :
+         {Verifier.substr(1), std::string(MaxCodeVerifierLength + 1, 'v'), Verifier.substr(1) + "+",
+          Verifier.substr(1) + "/", Verifier.substr(1) + "=", Verifier.substr(1) + " "}) {
+        CHECK_FALSE(isValidCodeVerifier(wrong));
+        CHECK_THROWS_AS(encode(DiscordConfirmMessage{"c", wrong, "h:/"}), std::invalid_argument);
+        Writer writer;
+        writer.writeString("c");
+        writer.writeString(wrong);
+        writer.writeString16("h:/");
+        CHECK_FALSE(decodeDiscordConfirm(writer.take()));
     }
-    CHECK(isValidDiscordCode("23456Z"));
-    CHECK(isValidDiscordCode("ABCHJK"));
+    CHECK(isValidCodeVerifier(Verifier));
+    CHECK(isValidCodeVerifier(std::string(MaxCodeVerifierLength - 4, 'v') + "-._~"));
+    CHECK_THROWS_AS(encode(DiscordConfirmMessage{"", Verifier, "h:/"}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(DiscordConfirmMessage{"c", Verifier, ""}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(DiscordConfirmMessage{"c\n", Verifier, "h:/"}), std::invalid_argument);
 
     // An account has an id, and a role of 0 or 1
     Bytes signedIn = encode(SignedInMessage{key(1), {1, "Ann", AccountRole::Player}});
@@ -534,15 +565,10 @@ TEST_CASE("The messages of the accounts refuse what the protocol forbids", "[lob
     CHECK_FALSE(decodeWelcome(bytes({0, 0, 0, 1, 0x01, 2})));
     CHECK_FALSE(decodeWelcome(bytes({0, 0, 0, 1, 0x01, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'A', 0})));
 
-    // DISCORD_URL: only https, so that the client never opens another scheme
-    for (const char *wrong :
-         {"http://discord.com", "javascript:alert(1)", "file:///etc/passwd", "HTTPS://x"}) {
-        CHECK_THROWS_AS(encode(DiscordUrlMessage{wrong}), std::invalid_argument);
-        Writer writer;
-        writer.writeString16(wrong);
-        CHECK_FALSE(decodeDiscordUrl(writer.take()));
-    }
-    CHECK_FALSE(decodeDiscordUrl(bytes({0, 0})));
+    // DISCORD_AUTHORIZE: an application id, never 0
+    CHECK_THROWS_AS(encode(DiscordAuthorizeMessage{0}), std::invalid_argument);
+    CHECK_FALSE(decodeDiscordAuthorize(bytes({0, 0, 0, 0, 0, 0, 0, 0})));
+    CHECK_FALSE(decodeDiscordAuthorize(bytes({0, 0, 0, 0, 0, 0, 0})));
 }
 
 TEST_CASE("A HELLO refuses a locale that is not one, and a token flag that is not a bool", "[lobby]")

@@ -125,6 +125,8 @@ std::string describe(ErrorCode code)
         return "Already signed in";
     case ErrorCode::DiscordTaken:
         return "This Discord account belongs to another account";
+    case ErrorCode::DiscordUnavailable:
+        return "The server cannot reach Discord now: try again in a moment";
     }
     return std::format("The server refused (error {})", static_cast<int>(code));
 }
@@ -196,6 +198,8 @@ std::string_view errorKey(ErrorCode code)
         return "error.already_signed_in";
     case ErrorCode::DiscordTaken:
         return "error.discord_taken";
+    case ErrorCode::DiscordUnavailable:
+        return "error.discord_unavailable";
     }
     return "error.unknown";
 }
@@ -526,12 +530,65 @@ void LobbyClient::signOut(DoneCallback done)
 
 void LobbyClient::deleteAccount(const std::string &password, DoneCallback done)
 {
-    if (!fits(password, lobby::MaxPasswordLength)) {
+    // Empty after a Discord confirmation, for an account without password
+    if (!fits(password, lobby::MaxPasswordLength, true)) {
         done(ErrorCode::InvalidCredentials);
         return;
     }
     doneRequest(message_type::DeleteAccount, lobby::encode(lobby::DeleteAccountMessage{password}),
                 std::move(done), true);
+}
+
+void LobbyClient::discordSignIn(DiscordAuthorizeCallback done)
+{
+    request(message_type::DiscordSignIn, {},
+            [done = std::move(done)](std::uint8_t type, std::span<const std::byte> payload) {
+                if (type == message_type::DiscordAuthorize) {
+                    if (const auto authorize = lobby::decodeDiscordAuthorize(payload)) {
+                        done(*authorize);
+                        return;
+                    }
+                }
+                const auto error = type == message_type::Error ? lobby::decodeError(payload) : std::nullopt;
+                done(error ? error->code : ErrorCode::Malformed);
+            });
+}
+
+void LobbyClient::discordConfirm(const lobby::DiscordConfirmMessage &confirmation,
+                                 DiscordConfirmCallback done)
+{
+    if (!fits(confirmation.code, lobby::MaxDiscordCodeLength) ||
+        !lobby::isValidCodeVerifier(confirmation.codeVerifier) ||
+        !fits(confirmation.redirectUri, lobby::MaxRedirectUriLength)) {
+        done(ErrorCode::InvalidCode);
+        return;
+    }
+    request(message_type::DiscordConfirm, lobby::encode(confirmation),
+            [this, done = std::move(done)](std::uint8_t type, std::span<const std::byte> payload) {
+                if (type == message_type::Done && lobby::decodeEmpty(payload)) {
+                    done(DiscordConfirmed{});
+                    return;
+                }
+                const SignInResult result = signInResult(type, payload);
+                if (const auto *signedIn = std::get_if<lobby::SignedInMessage>(&result)) {
+                    _account = signedIn->account;
+                    _name = signedIn->account.username;
+                    logger().info("Signed in with Discord as {}", _name);
+                    done(*signedIn);
+                    return;
+                }
+                done(std::get<ErrorCode>(result));
+            });
+}
+
+void LobbyClient::chooseUsername(const std::string &username, SignInCallback done)
+{
+    if (!fits(username, lobby::MaxUsernameLength)) {
+        done(ErrorCode::InvalidName);
+        return;
+    }
+    signInRequest(message_type::ChooseUsername, lobby::encode(lobby::ChooseUsernameMessage{username}),
+                  std::move(done));
 }
 
 void LobbyClient::fail(ErrorCode code)

@@ -93,6 +93,7 @@ nav = [
         "decisions/0023-server-database.md",
         "decisions/0024-player-accounts.md",
         "decisions/0025-server-administration.md",
+        "decisions/0026-discord-social-sdk.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

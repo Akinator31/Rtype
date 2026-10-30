@@ -75,7 +75,16 @@ add_executable(rtype_tests
     timer.cpp
     tls.cpp
     viewport.cpp
+    helpers/FakeDiscord.cpp
 )
+# The fake Discord is a Crow server: Asio for Windows 10 and later, as libs/network, and on MSVC, Crow and Asio in
+# one file go past the number of sections of an object file
+if(WIN32)
+  set_source_files_properties(helpers/FakeDiscord.cpp PROPERTIES COMPILE_DEFINITIONS _WIN32_WINNT=0x0A00)
+endif()
+if(MSVC)
+  set_source_files_properties(helpers/FakeDiscord.cpp PROPERTIES COMPILE_OPTIONS /bigobj)
+endif()
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
     rtype::scripting rtype::shaders r-type_client_core r-type_server_core

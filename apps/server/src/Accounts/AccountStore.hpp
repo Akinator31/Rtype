@@ -11,7 +11,8 @@
 #include <variant>
 
 /// What the master keeps of the accounts in its database (docs/architecture/accounts.md): the accounts
-/// (`accounts`), their sessions (`account_sessions`) and the codes sent by email (`account_codes`). Plain
+/// (`accounts`), their sessions (`account_sessions`), the codes sent by email (`account_codes`) and the
+/// Discord users who sign in to them (`discord_identities`). Plain
 /// functions on a Database, as Master/AdminStore.hpp: the master runs them on its database thread, the tests
 /// anywhere. Each takes the time it runs at, so that the tests choose it.
 ///
@@ -133,8 +134,8 @@ bool banAccount(rtype::database::Database &database, long long accountId, const 
 /// @throws soci::soci_error if the database refuses it.
 bool unbanAccount(rtype::database::Database &database, long long accountId);
 
-/// Deletes an account, with its sessions and its codes, at the request of its owner. Its administration
-/// actions stay, without its name nor its address (anonymizeActions()).
+/// Deletes an account, with its sessions, its codes and its Discord identity, at the request of its owner.
+/// Its administration actions stay, without its name nor its address (anonymizeActions()).
 /// @return False if there is no such account.
 /// @throws soci::soci_error if the database refuses it.
 bool deleteAccount(rtype::database::Database &database, long long accountId);
@@ -145,6 +146,45 @@ bool deleteAccount(rtype::database::Database &database, long long accountId);
 /// @throws soci::soci_error if the database refuses it.
 std::size_t purgeUnverifiedAccounts(rtype::database::Database &database,
                                     std::chrono::system_clock::time_point now);
+
+// --- Discord ---
+
+/// What linking a Discord identity to an account gives.
+enum class DiscordLink {
+    /// Linked, in place of the identity the account had, if any.
+    Linked,
+    /// The account had this identity already.
+    AlreadyLinked,
+    /// The identity is linked to another account.
+    Taken,
+    /// There is no such account.
+    NoAccount,
+};
+
+/// The account a Discord user signs in to (table `discord_identities`).
+/// @param discordId The id of the user, in decimal digits.
+/// @throws soci::soci_error if the database cannot be read.
+[[nodiscard]] std::optional<Account> findAccountByDiscord(rtype::database::Database &database,
+                                                          std::string_view discordId);
+
+/// The id of the Discord user an account is linked to, if any.
+/// @throws soci::soci_error if the database cannot be read.
+[[nodiscard]] std::optional<std::string> discordIdentity(rtype::database::Database &database,
+                                                         long long accountId);
+
+/// Links a Discord user to an account: from then on, it signs in to it. An account has one identity at most:
+/// a new one replaces the old.
+/// @throws soci::soci_error if the database refuses it.
+DiscordLink linkDiscord(rtype::database::Database &database, long long accountId,
+                        const std::string &discordId, std::chrono::system_clock::time_point now);
+
+/// Makes the account of a new Discord user, without email nor password, and links them.
+/// @return The account, or why it cannot be made: UsernameTaken, or EmailTaken when the identity has an
+/// account already.
+/// @throws soci::soci_error if the database refuses it.
+[[nodiscard]] std::variant<Account, AccountConflict>
+createDiscordAccount(rtype::database::Database &database, const std::string &username,
+                     const std::string &discordId, std::chrono::system_clock::time_point now);
 
 // --- Sessions ---
 

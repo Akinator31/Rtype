@@ -15,11 +15,12 @@ apps/server/src/
   Server.cpp               run(): the options, then the master or an instance
   Accounts/                the accounts of the players (Accounts page)
     AccountRules.cpp       what a username, an email and a password must be
-    AccountStore.cpp       their tables: accounts, account_sessions, account_codes
+    AccountStore.cpp       their tables: accounts, account_sessions, account_codes, discord_identities
     PasswordHasher.cpp     Argon2id, on two threads of its own
     MailMessages.cpp       what the mails say, in English and French
     Mailer.cpp             the interface of the mailer, and a mail written for SMTP
     CurlMailer.cpp         the mail server, with libcurl, on a thread of its own; its check at start
+    Discord.cpp            who a player is for Discord, with libcurl, on a thread of its own; its check at start
     AccountService.cpp     the requests of the accounts in the lobby, on the loop
   Common/                  what both modes share
     GameConfig.cpp         the configuration of the game: where it is, loaded and logged
@@ -90,7 +91,7 @@ a server that cannot work stops at once with the reason.*
 | `--database <address>` | `sqlite:rtype.db` | Where the master keeps its data: `sqlite:<file>`, or `postgresql://<user>@<host>:<port>/<database>` ([The database](#the-database)) |
 | `--database-file <file>` | | Reads the address of the database from the first line of the file: for an address with a password, which the command line would show to every user of the machine |
 | `--settings <file>` | | Reads the settings file of the master ([Configure a server](../guides/configure-a-server.md)): the options above in `[server]`, and the sections of the panel and the accounts. The command line wins over the file |
-| `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, opens the port of the lobby and the one of the panel, and with accounts signs in to the mail server without sending anything, then exits: checks a configuration without running it |
+| `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, opens the port of the lobby and the one of the panel, and with accounts signs in to the mail server without sending anything, and with `[discord]` asks Discord a token of its application, then exits: checks a configuration without running it |
 | `--health` | | Asks `/api/health` of the master running on this machine, at the `listen` address of `[web]` in the settings file (the loopback for `0.0.0.0`), shows `healthy` and exits with 0 when it answers within 5 seconds, else exits with 1. The health check of the [Docker image](../guides/deploy-with-docker.md), which has no curl |
 
 The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
@@ -567,7 +568,7 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   `run()`, a master without its key, an instance without a secret, and the secret itself.
 - `tests/server_settings.cpp` (tags `[server]`, `[settings]`): every key of the settings file and their
   defaults, an unknown key or section, a wrong type, a TOML error, each with its line and column; invalid
-  values, the rules between the sections (accounts without mail, Discord without accounts or `public_url`, the
+  values, the rules between the sections (accounts without mail, Discord without accounts, the
   panel off the loopback without accounts), an administrator named by username; relative paths from the folder
   of the file; the secret files, missing, empty, readable by everyone, never logged; the sender of the mails and
   its address, mail in the clear without a password; the command line winning; and `--settings --check`, with

@@ -4,6 +4,7 @@
 #include "Online/KnownServers.hpp"
 #include "Online/LobbyClient.hpp"
 #include "Online/SessionTokens.hpp"
+#include "rtype/discord/Authorizer.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
@@ -38,6 +39,10 @@ inline constexpr const char *ForgotPasswordScene = "online_forgot_password";
 inline constexpr const char *ResetPasswordScene = "online_reset_password";
 inline constexpr const char *MyAccountScene = "online_my_account";
 inline constexpr const char *DeleteAccountScene = "online_delete_account";
+/// Names of the scenes of Discord: waiting for the player to accept in Discord, then the username of a new
+/// account.
+inline constexpr const char *DiscordScene = "online_discord";
+inline constexpr const char *ChooseUsernameScene = "online_choose_username";
 
 /// A fingerprint as shown to the player: its 64 digits in groups of 4, `groupsPerLine` groups per line.
 [[nodiscard]] std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerprint,
@@ -63,12 +68,24 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 ///   next HELLO: the player comes back signed in. It is forgotten at sign-out, at the deletion of the
 ///   account, and on SESSION_EXPIRED, after which the client connects again as a guest. A server without
 ///   accounts looks as before them.
+/// - **Discord**, on a server that offers it: the client asks the master for its application, the player
+///   accepts it in Discord (discord::Authorizer), and the master signs in, or asks for the username of a new
+///   account. Signed in, the same flow links Discord to the account, or confirms the deletion of an account
+///   without password.
 /// - What goes wrong is shown in a toast, in the language of the game: the server cannot be reached, is not
 ///   the expected one, the game is full...
 class OnlineScenes
 {
+    /// What a Discord confirmation is for.
+    enum class DiscordPurpose {
+        SignIn,
+        Link,
+        DeleteAccount,
+    };
+
     engine::Engine &_engine;
     network::EventLoop &_loop;
+    discord::Authorizer &_discord;
     GameScenes &_games;
     localization::Localization &_translations;
     KnownServers _known;
@@ -112,13 +129,20 @@ class OnlineScenes
     void signedIn(const LobbyClient::SignInResult &result);
     /// The answer to SIGN_OUT or DELETE_ACCOUNT: forgets the token, then connects again as a guest.
     void signedOut(std::optional<lobby::ErrorCode> error, const char *done);
+    /// DISCORD_SIGN_IN, then the player accepts in Discord, then DISCORD_CONFIRM.
+    void startDiscord(DiscordPurpose purpose);
+    /// The answer to DISCORD_CONFIRM.
+    void discordConfirmed(DiscordPurpose purpose, const LobbyClient::DiscordConfirmResult &result);
+    /// The scene a Discord confirmation goes back to when it fails.
+    [[nodiscard]] static const char *discordOrigin(DiscordPurpose purpose);
 
 public:
     /// Declares the Online menu and the lobby. Everything given must outlive the engine.
     /// The servers trusted are kept in the settings of the engine.
+    /// @param discord Asks the player to accept the Discord application of a server; polled by the game loop.
     OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                  const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                 localization::Localization &translations);
+                 localization::Localization &translations, discord::Authorizer &discord);
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;

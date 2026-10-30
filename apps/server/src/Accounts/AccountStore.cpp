@@ -135,13 +135,17 @@ std::string_view roleName(AccountRole role)
     return role == AccountRole::Admin ? "admin" : "player";
 }
 
-std::variant<Account, AccountConflict> createAccount(rtype::database::Database &database,
+namespace
+{
+
+/// createAccount(), inside the transaction of its caller.
+std::variant<Account, AccountConflict> insertAccount(rtype::database::Database &database,
                                                      const NewAccount &account, TimePoint now)
 {
     const std::string username = usernameKey(account.username);
     const std::optional<std::string> email =
         account.email ? std::optional<std::string>(emailKey(*account.email)) : std::nullopt;
-    return database.transaction([&]() -> std::variant<Account, AccountConflict> {
+    {
         if (findOne(database, "username_key = :key", username)) {
             return AccountConflict::UsernameTaken;
         }
@@ -175,7 +179,34 @@ std::variant<Account, AccountConflict> createAccount(rtype::database::Database &
             .createdAt = fromUnixMilliseconds(created),
             .lastSeenAt = fromUnixMilliseconds(created),
         };
-    });
+    }
+}
+
+/// linkDiscord(), inside the transaction of its caller.
+DiscordLink insertDiscordLink(rtype::database::Database &database, long long accountId,
+                              const std::string &discordId, TimePoint now)
+{
+    if (const std::optional<Account> owner = findAccountByDiscord(database, discordId)) {
+        return owner->id == accountId ? DiscordLink::AlreadyLinked : DiscordLink::Taken;
+    }
+    if (!findAccount(database, accountId)) {
+        return DiscordLink::NoAccount;
+    }
+    const long long at = unixMilliseconds(now);
+    execute(database, "DELETE FROM discord_identities WHERE account_id = :id", accountId);
+    execute(
+        database,
+        "INSERT INTO discord_identities (discord_id, account_id, linked_at) VALUES (:discord, :account, :at)",
+        discordId, accountId, at);
+    return DiscordLink::Linked;
+}
+
+} // namespace
+
+std::variant<Account, AccountConflict> createAccount(rtype::database::Database &database,
+                                                     const NewAccount &account, TimePoint now)
+{
+    return database.transaction([&] { return insertAccount(database, account, now); });
 }
 
 std::optional<Account> findAccount(rtype::database::Database &database, long long id)
@@ -264,6 +295,50 @@ std::size_t purgeUnverifiedAccounts(rtype::database::Database &database, TimePoi
                    "DELETE FROM accounts WHERE email IS NOT NULL AND email_verified_at IS NULL AND "
                    "created_at <= :limit",
                    limit);
+}
+
+std::optional<Account> findAccountByDiscord(rtype::database::Database &database, std::string_view discordId)
+{
+    return findOne(database, "id = (SELECT account_id FROM discord_identities WHERE discord_id = :id)",
+                   std::string(discordId));
+}
+
+std::optional<std::string> discordIdentity(rtype::database::Database &database, long long accountId)
+{
+    std::string discordId;
+    database.session() << "SELECT discord_id FROM discord_identities WHERE account_id = :id",
+        soci::use(accountId), soci::into(discordId);
+    if (!database.session().got_data()) {
+        return std::nullopt;
+    }
+    return discordId;
+}
+
+DiscordLink linkDiscord(rtype::database::Database &database, long long accountId,
+                        const std::string &discordId, TimePoint now)
+{
+    return database.transaction([&] { return insertDiscordLink(database, accountId, discordId, now); });
+}
+
+std::variant<Account, AccountConflict> createDiscordAccount(rtype::database::Database &database,
+                                                            const std::string &username,
+                                                            const std::string &discordId, TimePoint now)
+{
+    return database.transaction([&]() -> std::variant<Account, AccountConflict> {
+        if (findAccountByDiscord(database, discordId)) {
+            return AccountConflict::EmailTaken;
+        }
+        std::variant<Account, AccountConflict> created = insertAccount(database,
+                                                                       {.username = username,
+                                                                        .email = std::nullopt,
+                                                                        .passwordHash = std::nullopt,
+                                                                        .role = AccountRole::Player},
+                                                                       now);
+        if (const auto *account = std::get_if<Account>(&created)) {
+            insertDiscordLink(database, account->id, discordId, now);
+        }
+        return created;
+    });
 }
 
 SessionToken createSession(rtype::database::Database &database, long long accountId, SessionClient client,

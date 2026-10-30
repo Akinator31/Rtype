@@ -1,10 +1,12 @@
 // Tests of the client online: its LobbyClient and its RemoteSession against a real master (the Lobby and the
 // Games of r-type_server, with real instances), all on the loop of the test
 // (docs/architecture/client-online.md). The accounts against a master with accounts, a mailer of the tests
-// that keeps the codes, on every engine of the database.
+// that keeps the codes, a fake Discord, on every engine of the database.
 
 #include "Accounts/AccountService.hpp"
+#include "Accounts/Discord.hpp"
 #include "Accounts/PasswordHasher.hpp"
+#include "FakeDiscord.hpp"
 #include "FakeMailer.hpp"
 #include "Game/RemoteSession.hpp"
 #include "GameServers.hpp"
@@ -66,13 +68,13 @@ struct Master {
 };
 
 /// The last code of an ERROR (lobby protocol 3).
-constexpr std::uint16_t LastErrorCode = static_cast<std::uint16_t>(lobby::ErrorCode::DiscordTaken);
+constexpr std::uint16_t LastErrorCode = static_cast<std::uint16_t>(lobby::ErrorCode::DiscordUnavailable);
 
 /// The password of the accounts of the tests.
 const std::string Password = "correct horse battery";
 
-/// A master with accounts on the loopback: its database of its own, cheap hashes, and a mailer that keeps the
-/// codes. Its games are not played.
+/// A master with accounts on the loopback: its database of its own, cheap hashes, a mailer that keeps the
+/// codes, and Discord through a fake one if asked. Its games are not played.
 struct AccountsMaster {
     EventLoop loop;
     rtype::test::TestDatabase test;
@@ -81,12 +83,15 @@ struct AccountsMaster {
                                                                   .leadingArguments = {},
                                                                   .trailingArguments = {}}};
     testing::FakeMailer mailer;
+    std::optional<testing::FakeDiscord> fakeDiscord;
     std::optional<rtype::database::DatabaseThread> database;
     std::optional<rtype::server::PasswordHasher> hasher;
+    std::optional<rtype::server::DiscordClient> discord;
     std::optional<rtype::server::AccountService> accounts;
     std::optional<rtype::server::Lobby> lobby;
 
-    AccountsMaster(rtype::database::Engine engine, std::string_view name) : test(engine, name)
+    AccountsMaster(rtype::database::Engine engine, std::string_view name, bool withDiscord = false)
+        : test(engine, name)
     {
         test.open().migrate(rtype::server::ServerMigrations);
         const auto post = [this](std::function<void()> function) { loop.post(std::move(function)); };
@@ -94,6 +99,10 @@ struct AccountsMaster {
         hasher.emplace(
             post, rtype::server::PasswordHasher::Settings{
                       .threads = 2, .maxPending = 32, .parameters = {.memory = 64, .passes = 1, .lanes = 1}});
+        if (withDiscord) {
+            fakeDiscord.emplace();
+            discord.emplace(fakeDiscord->settings(), post);
+        }
         // Limits per address far away: every client of the tests comes from the loopback
         accounts.emplace(loop, *database, *hasher, mailer,
                          rtype::server::AccountServiceSettings{.guests = true,
@@ -102,7 +111,8 @@ struct AccountsMaster {
                                                                           .wrongPasswords = 10,
                                                                           .wrongPasswordPause = 15min,
                                                                           .resendInterval = 1min,
-                                                                          .purgeInterval = 1h}});
+                                                                          .purgeInterval = 1h}},
+                         discord ? &*discord : nullptr);
         lobby.emplace(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games);
         lobby->setAccounts(&*accounts);
     }
@@ -111,6 +121,7 @@ struct AccountsMaster {
     {
         lobby.reset();
         accounts.reset();
+        discord.reset();
         hasher.reset();
         database.reset();
     }
@@ -786,4 +797,71 @@ TEST_CASE("The session token of a server is kept in the settings, readable by th
     CHECK(sessions.forget(address));
     CHECK_FALSE(sessions.forget(address));
     CHECK_FALSE(sessions.token(address));
+}
+
+TEST_CASE(
+    "A player signs in with Discord: a new account, its username, then its deletion confirmed by Discord",
+    "[online][accounts][discord]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_discord", true);
+    const rtype::server::DiscordUser wing{.id = "80351110224678912", .username = "wing"};
+    const auto confirmation = [](const rtype::server::DiscordAuthorization &accepted) {
+        return lobby::DiscordConfirmMessage{.code = accepted.code,
+                                            .codeVerifier = accepted.codeVerifier,
+                                            .redirectUri = accepted.redirectUri};
+    };
+    Events events;
+    const auto client = master.client("Pilot", events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
+    CHECK(client->features() ==
+          lobby::ServerFeatures{.guests = true, .passwordAccounts = true, .discord = true});
+
+    // The application of the master, for the Discord Social SDK, then what Discord gave
+    const auto signInWithDiscord = [&] {
+        std::optional<std::variant<lobby::DiscordAuthorizeMessage, lobby::ErrorCode>> authorize;
+        client->discordSignIn([&](const auto &result) { authorize = result; });
+        REQUIRE(waitUntil(master.loop, [&] { return authorize.has_value(); }));
+        REQUIRE(std::holds_alternative<lobby::DiscordAuthorizeMessage>(*authorize));
+        CHECK(std::to_string(std::get<lobby::DiscordAuthorizeMessage>(*authorize).applicationId) ==
+              testing::FakeDiscord::ClientId);
+        std::optional<LobbyClient::DiscordConfirmResult> confirmed;
+        client->discordConfirm(confirmation(master.fakeDiscord->accept(wing)),
+                               [&](const auto &result) { confirmed = result; });
+        REQUIRE(waitUntil(master.loop, [&] { return confirmed.has_value(); }));
+        return *confirmed;
+    };
+
+    // A new Discord user: not signed in until it chooses its username
+    CHECK(std::holds_alternative<LobbyClient::DiscordConfirmed>(signInWithDiscord()));
+    CHECK_FALSE(client->account());
+    std::optional<LobbyClient::SignInResult> created;
+    client->chooseUsername("Wing", [&](const auto &result) { created = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return created.has_value(); }));
+    REQUIRE(std::holds_alternative<lobby::SignedInMessage>(*created));
+    REQUIRE(client->account());
+    CHECK(client->account()->username == "Wing");
+    CHECK(client->name() == "Wing");
+
+    // What the protocol cannot carry is refused at once, without asking the master
+    std::optional<LobbyClient::DiscordConfirmResult> malformed;
+    client->discordConfirm(
+        {.code = "code", .codeVerifier = "short", .redirectUri = "http://127.0.0.1/callback"},
+        [&](const auto &result) { malformed = result; });
+    REQUIRE(malformed);
+    CHECK(std::get<lobby::ErrorCode>(*malformed) == lobby::ErrorCode::InvalidCode);
+
+    // No password: Discord confirms the deletion
+    std::optional<std::optional<lobby::ErrorCode>> refused;
+    client->deleteAccount("", [&](auto error) { refused = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return refused.has_value(); }));
+    CHECK(*refused == lobby::ErrorCode::DiscordNotConfirmed);
+    CHECK(std::holds_alternative<LobbyClient::DiscordConfirmed>(signInWithDiscord()));
+    std::optional<std::optional<lobby::ErrorCode>> deleted;
+    client->deleteAccount("", [&](auto error) { deleted = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return deleted.has_value(); }));
+    CHECK_FALSE(*deleted);
+    CHECK_FALSE(client->welcomed());
+    rtype::database::Database direct = master.test.open();
+    CHECK_FALSE(rtype::server::findAccountByDiscord(direct, wing.id));
 }

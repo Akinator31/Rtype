@@ -148,13 +148,15 @@ bool isValidEmailCode(std::string_view code)
     return true;
 }
 
-bool isValidDiscordCode(std::string_view code)
+bool isValidCodeVerifier(std::string_view verifier)
 {
-    if (code.size() != CodeLength) {
+    if (verifier.size() < MinCodeVerifierLength || verifier.size() > MaxCodeVerifierLength) {
         return false;
     }
-    for (const char c : code) {
-        if (DiscordCodeAlphabet.find(c) == std::string_view::npos) {
+    for (const char c : verifier) {
+        const bool unreserved = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                                c == '-' || c == '.' || c == '_' || c == '~';
+        if (!unreserved) {
             return false;
         }
     }
@@ -355,9 +357,14 @@ std::optional<ResetPasswordMessage> decodeResetPassword(std::span<const std::byt
 
 std::vector<std::byte> encode(const DiscordConfirmMessage &message)
 {
-    require(isValidDiscordCode(message.code), "A Discord code is 6 of 23456789ABCDEFGHJKLMNPQRSTUVWXYZ");
-    Writer writer(1 + CodeLength);
-    writer.writeString(message.code);
+    require(isValidCodeVerifier(message.codeVerifier), "A code verifier is 43 to 128 of A-Z a-z 0-9 - . _ ~");
+    Writer writer;
+    writeText(writer, message.code, MaxDiscordCodeLength, "A Discord code is 1 to 255 bytes of text");
+    writer.writeString(message.codeVerifier);
+    require(!message.redirectUri.empty() && message.redirectUri.size() <= MaxRedirectUriLength &&
+                rtype::network::isValidText(message.redirectUri),
+            "A redirect address is 1 to 2048 bytes of text");
+    writer.writeString16(message.redirectUri);
     return writer.take();
 }
 
@@ -365,10 +372,12 @@ std::optional<DiscordConfirmMessage> decodeDiscordConfirm(std::span<const std::b
 {
     Reader reader(payload);
     DiscordConfirmMessage message;
-    message.code = reader.readString(CodeLength, CodeLength);
-    if (reader.ok() && !isValidDiscordCode(message.code)) {
+    message.code = reader.readString(1, MaxDiscordCodeLength);
+    message.codeVerifier = reader.readString(MinCodeVerifierLength, MaxCodeVerifierLength);
+    if (reader.ok() && !isValidCodeVerifier(message.codeVerifier)) {
         reader.fail();
     }
+    message.redirectUri = reader.readString16(1, MaxRedirectUriLength);
     return finished(reader, std::move(message));
 }
 
@@ -580,22 +589,20 @@ std::optional<SignedInMessage> decodeSignedIn(std::span<const std::byte> payload
     return finished(reader, std::move(message));
 }
 
-std::vector<std::byte> encode(const DiscordUrlMessage &message)
+std::vector<std::byte> encode(const DiscordAuthorizeMessage &message)
 {
-    require(message.url.starts_with("https://") && message.url.size() <= MaxDiscordUrlLength &&
-                rtype::network::isValidText(message.url),
-            "A Discord address is 1 to 2048 bytes of text, starting with https://");
-    Writer writer(2 + message.url.size());
-    writer.writeString16(message.url);
+    require(message.applicationId != 0, "A Discord application id is never 0");
+    Writer writer(8);
+    writer.writeU64(message.applicationId);
     return writer.take();
 }
 
-std::optional<DiscordUrlMessage> decodeDiscordUrl(std::span<const std::byte> payload)
+std::optional<DiscordAuthorizeMessage> decodeDiscordAuthorize(std::span<const std::byte> payload)
 {
     Reader reader(payload);
-    DiscordUrlMessage message;
-    message.url = reader.readString16(1, MaxDiscordUrlLength);
-    if (reader.ok() && !message.url.starts_with("https://")) {
+    DiscordAuthorizeMessage message;
+    message.applicationId = reader.readU64();
+    if (reader.ok() && message.applicationId == 0) {
         reader.fail();
     }
     return finished(reader, std::move(message));

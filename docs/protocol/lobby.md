@@ -11,7 +11,7 @@ another version with `UNSUPPORTED_VERSION`, and the client tells the player to u
 |---|---|
 | 1 | First version |
 | 2 | The administrators of the server ([administration API](admin-api.md)): `SERVER_MESSAGE`; `LEFT_GAME` reasons `KICKED` and `ENDED_BY_ADMIN`; `ERROR` codes `KICKED` and `BANNED`, sent before the master closes the connection |
-| 3 | The player accounts ([section 6](#6-accounts)): `HELLO` carries a locale and an optional session token; `WELCOME` carries the features of the server and the account signed in; the requests `REGISTER` to `DELETE_ACCOUNT`, the replies `SIGNED_IN`, `CODE_SENT`, `DISCORD_URL` and `DONE`, and their error codes |
+| 3 | The player accounts ([section 6](#6-accounts)): `HELLO` carries a locale and an optional session token; `WELCOME` carries the features of the server and the account signed in; the requests `REGISTER` to `DELETE_ACCOUNT`, the replies `SIGNED_IN`, `CODE_SENT`, `DISCORD_AUTHORIZE` and `DONE`, and their error codes |
 
 The version is the first field of `HELLO` in every version, so that a master reads it from a client of any
 version and answers `UNSUPPORTED_VERSION`, never `MALFORMED`.
@@ -134,7 +134,7 @@ Example: `HELLO` with version 3, the name `"Pavel"`, the locale `"fr"` and no se
 | `SIGN_OUT` | `DONE` |
 | `FORGOT_PASSWORD` | `CODE_SENT` |
 | `RESET_PASSWORD` | `SIGNED_IN` |
-| `DISCORD_SIGN_IN` | `DISCORD_URL` |
+| `DISCORD_SIGN_IN` | `DISCORD_AUTHORIZE` |
 | `DISCORD_CONFIRM` | `SIGNED_IN` or `DONE` |
 | `CHOOSE_USERNAME` | `SIGNED_IN` |
 | `DELETE_ACCOUNT` | `DONE` |
@@ -256,8 +256,8 @@ of `A-Z a-z 0-9 _ -` is `INVALID_NAME`, an email that is not an address `INVALID
 not 10 to 128 characters, or that is the username or the email, `WEAK_PASSWORD`.
 
 A **password** is only ever in `REGISTER`, `SIGN_IN`, `RESET_PASSWORD` and `DELETE_ACCOUNT`, inside TLS. A
-password, a code and a session token MUST NOT be written to any log, at any level, by the client or the
-master.
+password, a code, a code verifier and a session token MUST NOT be written to any log, at any level, by the
+client or the master.
 
 | Field | Type | Range |
 |---|---|---|
@@ -266,7 +266,9 @@ master.
 | Login | `str8` | 1 to 254 bytes: a username or an email |
 | Password | `str16` | 1 to 512 bytes (128 characters of up to 4 bytes); 0 to 512 in `DELETE_ACCOUNT` |
 | Email code | `str8` | Exactly 6 digits `0`–`9`: anything else is `MALFORMED` |
-| Discord code | `str8` | Exactly 6 of `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` (no `0 O 1 I`, which look alike): anything else is `MALFORMED` |
+| Discord code | `str8` | 1 to 255 bytes: the authorization code Discord gave the client |
+| Code verifier | `str8` | 43 to 128 of `A-Z a-z 0-9 - . _ ~`, the code verifier of PKCE ([RFC 7636](https://www.rfc-editor.org/rfc/rfc7636#section-4.1)): anything else is `MALFORMED` |
+| Redirect address | `str16` | 1 to 2048 bytes |
 
 ##### REGISTER (`0x07`)
 
@@ -347,27 +349,34 @@ Errors: `INVALID_CODE`, `CODE_EXPIRED`, `TOO_MANY_ATTEMPTS`, `WEAK_PASSWORD`, `B
 
 No payload.
 
-**Receiver behaviour:** `DISCORD_URL`, the page of Discord for this connection, valid ten minutes. Signed in,
-it starts the link of a Discord identity to the account, or the confirmation `DELETE_ACCOUNT` needs.
+**Receiver behaviour:** `DISCORD_AUTHORIZE`, the Discord application of the master. It starts an attempt on
+this connection, valid ten minutes, for one `DISCORD_CONFIRM`; a new `DISCORD_SIGN_IN` starts another. Signed
+in, it starts the link of a Discord identity to the account, or the confirmation `DELETE_ACCOUNT` needs.
 
 ##### DISCORD_CONFIRM (`0x0F`)
 
 | Offset | Field | Type |
 |---|---|---|
 | 0 | Code | `str8`, Discord code |
+| 1 + c | Code verifier | `str8` |
+| 2 + c + v | Redirect address | `str16` |
 
-**Receiver behaviour:** the code the page of Discord showed, after the player went through it. Only this
-request signs in or links anything: whoever opens the page of another signs nobody in without being given the
-code. Then:
+**Receiver behaviour:** what the client got from Discord once the player accepted the application, through
+the Discord Social SDK ([ADR 0026](../decisions/0026-discord-social-sdk.md)). The master exchanges the code,
+with the verifier, the redirect address and the secret of its application, for a token of Discord, then asks
+who the user is, scope `identify` only, and drops the token. It needs a `DISCORD_SIGN_IN` of this connection
+less than ten minutes old, which it uses up. Only this request signs in or links anything. Then:
 
 - not signed in, an identity that has an account: `SIGNED_IN`;
 - not signed in, a new identity: `DONE`, and the client sends `CHOOSE_USERNAME` within ten minutes;
 - signed in, an identity without account: linked to the account, `DONE`; the account's own identity: confirmed
   for `DELETE_ACCOUNT` for five minutes, `DONE`.
 
-Errors: `INVALID_CODE`, `CODE_EXPIRED`, `TOO_MANY_ATTEMPTS` (5 wrong codes), `DISCORD_NOT_CONFIRMED` (the
-page of Discord was not completed for this connection), `DISCORD_TAKEN` (signed in, an identity of another
-account), `BANNED` (then closed).
+Errors: `INVALID_CODE` (Discord refused the code: wrong, used already, or not made for this verifier or this
+address), `CODE_EXPIRED` (the `DISCORD_SIGN_IN` is older than ten minutes), `TOO_MANY_ATTEMPTS` (Discord refused
+5 codes since the `DISCORD_SIGN_IN`: a new one is needed), `DISCORD_NOT_CONFIRMED` (no `DISCORD_SIGN_IN` on
+this connection, or used already), `DISCORD_UNAVAILABLE` (the master cannot reach Discord: the attempt is kept),
+`BUSY`, `DISCORD_TAKEN` (signed in, an identity of another account), `BANNED` (then closed).
 
 ##### CHOOSE_USERNAME (`0x10`)
 
@@ -533,7 +542,7 @@ No payload.
 | `INVALID_CREDENTIALS` | 18 | No account with this login and this password | Kept |
 | `EMAIL_NOT_VERIFIED` | 19 | The password was right, the email is not verified: a new code was sent | Kept |
 | `INVALID_CODE` | 20 | Wrong code | Kept |
-| `CODE_EXPIRED` | 21 | The code is older than 15 minutes (a Discord code, ten minutes): ask for a new one | Kept |
+| `CODE_EXPIRED` | 21 | The code is older than 15 minutes (a `DISCORD_SIGN_IN`, ten minutes): ask for a new one | Kept |
 | `TOO_MANY_ATTEMPTS` | 22 | Too many tries: of this code (5), of codes for the account today (20), of wrong passwords, or of requests from this address | Kept |
 | `SESSION_EXPIRED` | 23 | The token of `HELLO` is unknown or expired: the client forgets it and connects again without it | Closed after the error |
 | `BUSY` | 24 | The master cannot check a password now: try again in a moment | Kept |
@@ -545,6 +554,7 @@ No payload.
 | `NOT_SIGNED_IN` | 30 | `SIGN_OUT` or `DELETE_ACCOUNT` without an account signed in | Kept |
 | `ALREADY_SIGNED_IN` | 31 | A request to sign in, or to create an account, while signed in | Kept |
 | `DISCORD_TAKEN` | 32 | This Discord identity belongs to another account | Kept |
+| `DISCORD_UNAVAILABLE` | 33 | The master cannot reach Discord now, or Discord answers with an error: try again in a moment | Kept |
 
 **Receiver behaviour:** the client shows a message matching the code. Unknown codes are shown as a generic
 error. An `ERROR` with the request 0 and the code `KICKED` or `BANNED` is not the reply to the request the
@@ -588,7 +598,7 @@ keeps the token for this server, and MUST NOT write it to its logs.
 
 No payload. "If this email has an account, a code was sent": the client asks for the code, valid 15 minutes.
 
-#### DISCORD_URL (`0x8A`)
+#### DISCORD_AUTHORIZE (`0x8A`)
 
 | | |
 |---|---|
@@ -597,10 +607,11 @@ No payload. "If this email has an account, a code was sent": the client asks for
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Address | `str16` | 1 to 2048 bytes, starting with `https://` |
+| 0 | Application id | `u64` | The id (client id) of the Discord application of the master, never 0 |
 
-**Receiver behaviour:** the client opens the address in the browser, then asks for the code the page shows. An
-address that does not start with `https://` is malformed: a client never opens another scheme.
+**Receiver behaviour:** the client asks the player to accept this application through the Discord Social SDK,
+scope `identify`, with the challenge of a code verifier of PKCE it keeps, then sends what Discord gave in
+`DISCORD_CONFIRM`. An id of 0 is malformed.
 
 #### DONE (`0x8B`)
 
@@ -695,19 +706,15 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant B as Browser
-    participant M as Master
     participant D as Discord
+    participant M as Master
     C->>M: DISCORD_SIGN_IN
-    M->>C: DISCORD_URL (https://discord.com/...)
-    C->>B: opens the address
-    B->>D: the player accepts
-    D->>B: back to the master
-    B->>M: GET /auth/discord/callback
-    M->>D: code exchanged, /users/@me
-    M->>B: a page with a code of 6 characters
-    Note over C: the player types the code
-    C->>M: DISCORD_CONFIRM (code)
+    M->>C: DISCORD_AUTHORIZE (application id)
+    C->>D: Social SDK: authorize, scope identify, PKCE challenge
+    Note over D: the player accepts, in Discord or in the browser
+    D->>C: authorization code, on the loopback of the player
+    C->>M: DISCORD_CONFIRM (code, verifier, redirect address)
+    M->>D: code exchanged with the secret, /users/@me
     alt identity with an account
         M->>C: SIGNED_IN (token, account)
     else new identity
@@ -717,9 +724,10 @@ sequenceDiagram
     end
 ```
 
-*Nothing is signed in until `DISCORD_CONFIRM` carries the code of the page: someone who opens the address of
-another learns a code they would have to give to that other. Signed in, the same requests link a Discord
-identity to the account (`DONE`).*
+*Nothing is signed in until `DISCORD_CONFIRM`, which needs a `DISCORD_SIGN_IN` of the same connection. Discord
+sends the code to the loopback of the player who asked, and only the verifier that client keeps makes it
+usable: someone who opens the page of another gives the code to that other, never to themselves. Signed in,
+the same requests link a Discord identity to the account (`DONE`).*
 
 ### 6.5 Sign out, delete the account
 

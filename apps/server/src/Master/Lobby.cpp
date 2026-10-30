@@ -56,6 +56,8 @@ struct Lobby::Client {
     std::optional<SignedInAccount> account;
     /// The language of the player, from HELLO: its emails are written in it.
     std::string locale;
+    /// Where it stands with Discord, for the AccountService.
+    std::shared_ptr<DiscordProgress> discord = std::make_shared<DiscordProgress>();
     std::chrono::system_clock::time_point welcomedAt;
     /// The game the player is in.
     std::optional<std::uint32_t> gameId;
@@ -496,7 +498,10 @@ void Lobby::accountRequest(Client &client, std::uint8_t type, std::span<const st
     }
     _accounts->handle(
         type, payload,
-        AccountConnection{.address = client.address, .locale = client.locale, .signedIn = client.account},
+        AccountConnection{.address = client.address,
+                          .locale = client.locale,
+                          .signedIn = client.account,
+                          .discord = client.discord},
         [this, resume = waitFor(client), type](const AccountReply &answer) {
             resume([&](Client &asking) {
                 if (const auto *code = std::get_if<ErrorCode>(&answer)) {
@@ -511,6 +516,9 @@ void Lobby::accountRequest(Client &client, std::uint8_t type, std::span<const st
                     changed(asking);
                 } else if (std::holds_alternative<CodeSent>(answer)) {
                     reply(asking, message_type::CodeSent);
+                } else if (const auto *authorize =
+                               std::get_if<rtype::lobby::DiscordAuthorizeMessage>(&answer)) {
+                    reply(asking, message_type::DiscordAuthorize, rtype::lobby::encode(*authorize));
                 } else {
                     reply(asking, message_type::Done);
                     if (std::get<AccountDone>(answer).closes) {

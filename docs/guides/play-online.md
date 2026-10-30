@@ -33,9 +33,11 @@ Run a server and play the same game from several machines, or from several clien
    account** (a username, an email, a password of 10 to 128 characters), and **Play as a guest** if the server
    accepts guests. A new account, or one whose email is not verified, asks for the code of 6 digits sent by
    email, valid 15 minutes: **Send a new code** if it did not come. **Forgot password** sends a code to choose a
-   new one. Once signed in, the client comes back signed in at the next connections, even after a restart;
-   **My account** in the lobby signs out or deletes the account, with its password. A server without accounts
-   goes straight to the lobby.
+   new one. **Sign in with Discord**, on a server that offers it, asks in the Discord client, or in the browser:
+   accept, then come back to the game; the first time, choose the username of the account. Once signed in, the
+   client comes back signed in at the next connections, even after a restart; **My account** in the lobby signs
+   out, links Discord, or deletes the account, with its password or, for an account made with Discord, with
+   **Confirm with Discord**. A server without accounts goes straight to the lobby.
 
 6. **Play.** In the lobby, **Create a game**, or **Join** one of the list (**Refresh** to see the new ones). A
    second client, on this machine or another, joins the same game: each player has a ship of its colour.
@@ -60,3 +62,6 @@ INFO  instance Pavel (1) connected from 127.0.0.1:40102, slot 0
 | `Your session expired: sign in again` | The session ended (30 days, a new password, a ban, signed out elsewhere): the client connected again as a guest |
 | `If this email has an account, a code was sent to it` but no email | Look in the spam folder, then **Send a new code** (once a minute); the server may not reach its mail server |
 | `This name belongs to an account` | A guest cannot take the username of an account: choose another name, or sign in |
+| `Discord sign-in cancelled` | Refused or closed in Discord: **Sign in with Discord** again |
+| `This Discord account belongs to another account` | That Discord account signs in to another account of the server: sign in with it, or link another |
+| `The server cannot reach Discord now` | Try again in a moment; the server may not reach `discord.com` |

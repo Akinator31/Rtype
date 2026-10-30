@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Accounts/AccountStore.hpp"
+#include "Accounts/Discord.hpp"
 #include "Accounts/Mailer.hpp"
 #include "Accounts/PasswordHasher.hpp"
 #include "rtype/database/DatabaseThread.hpp"
@@ -39,6 +40,13 @@ struct AccountLimits {
     std::chrono::milliseconds resendInterval = std::chrono::minutes(1);
     /// The accounts not verified are purged at start, then at this interval.
     std::chrono::milliseconds purgeInterval = std::chrono::hours(1);
+    /// A DISCORD_SIGN_IN is valid this long for its DISCORD_CONFIRM, and a new Discord user confirmed this
+    /// long for its CHOOSE_USERNAME.
+    std::chrono::milliseconds discordLifetime = std::chrono::minutes(10);
+    /// Codes Discord refuses after one DISCORD_SIGN_IN: beyond, TOO_MANY_ATTEMPTS until the next.
+    unsigned discordAttempts = 5;
+    /// The account's own Discord identity confirmed is valid this long for DELETE_ACCOUNT without password.
+    std::chrono::milliseconds deletionConfirmation = std::chrono::minutes(5);
 };
 
 struct AccountServiceSettings {
@@ -54,12 +62,29 @@ struct SignedInAccount {
     SessionToken token{};
 };
 
+/// Where a connection stands with Discord (docs/architecture/accounts.md#discord): kept by the lobby for each
+/// connection, read and written by the AccountService, on the loop.
+struct DiscordProgress {
+    using Time = std::chrono::steady_clock::time_point;
+
+    /// The last DISCORD_SIGN_IN not used yet by a DISCORD_CONFIRM, and the codes Discord refused since.
+    std::optional<Time> startedAt;
+    unsigned refused = 0;
+    /// A Discord user without account, confirmed on this connection: CHOOSE_USERNAME makes its account.
+    std::optional<DiscordUser> newUser;
+    Time newUserAt;
+    /// Signed in, the account's own Discord identity confirmed: DELETE_ACCOUNT needs no password.
+    std::optional<Time> confirmedAt;
+};
+
 /// What a request of the accounts needs to know of its connection.
 struct AccountConnection {
     rtype::network::Address address;
     /// From HELLO: the language of the mails.
     std::string locale;
     std::optional<SignedInAccount> signedIn;
+    /// Never null: the Discord requests of this connection change it.
+    std::shared_ptr<DiscordProgress> discord = std::make_shared<DiscordProgress>();
 };
 
 /// The reply CODE_SENT.
@@ -70,20 +95,24 @@ struct AccountDone {
 };
 
 /// What a request of the accounts gets: ERROR with its code, SIGNED_IN (the connection is now signed in to
-/// that account), CODE_SENT or DONE.
-using AccountReply = std::variant<rtype::lobby::ErrorCode, SignedInAccount, CodeSent, AccountDone>;
+/// that account), CODE_SENT, DONE or DISCORD_AUTHORIZE.
+using AccountReply = std::variant<rtype::lobby::ErrorCode, SignedInAccount, CodeSent, AccountDone,
+                                  rtype::lobby::DiscordAuthorizeMessage>;
 
 /// The accounts of the lobby (docs/architecture/accounts.md#in-the-lobby): the requests REGISTER to
 /// DELETE_ACCOUNT, the sessions resumed by HELLO, the names of guests, on the thread of the loop.
 ///
 /// @code
-/// AccountService accounts(loop, databaseThread, hasher, mailer, {.guests = true});
+/// AccountService accounts(loop, databaseThread, hasher, mailer, {.guests = true}, &discord);
 /// lobby.setAccounts(&accounts);
 /// @endcode
 ///
 /// - **Asynchronous**: each request goes through the database thread, the hasher and the mailer, and its
 ///   reply comes back through `done`, always later, on the loop, never inside the call. The lobby answers one
 ///   request of a connection at a time, the next ones waiting.
+/// - **Discord**, with a DiscordClient: DISCORD_SIGN_IN gives the application, DISCORD_CONFIRM the code the
+///   client got from Discord, which the DiscordClient exchanges for the user. Only DISCORD_CONFIRM signs in
+///   or links anything; a new user chooses its username with CHOOSE_USERNAME.
 /// - **Nothing tells the accounts of others**: REGISTER answers CODE_SENT whether the email has an account or
 ///   not, FORGOT_PASSWORD and RESEND_CODE too, a wrong login and a wrong password get the same error after
 ///   the same work, and EMAIL_NOT_VERIFIED comes only after the right password.
@@ -110,6 +139,7 @@ private:
     rtype::database::DatabaseThread &_database;
     PasswordHasher &_hasher;
     Mailer &_mailer;
+    DiscordClient *_discord;
     AccountServiceSettings _settings;
     /// Checked against a password when the login has no account, so that it takes as long.
     std::string _dummyHash;
@@ -152,12 +182,19 @@ private:
     void forgotPassword(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
     void resetPassword(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
     void deleteAccount(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
+    void discordSignIn(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
+    void discordConfirm(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
+    /// DISCORD_CONFIRM, once Discord told who the player is.
+    void discordUser(const AccountConnection &connection, const DiscordUser &user, const Done &done);
+    void chooseUsername(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
 
 public:
-    /// The database thread, the hasher and the mailer must outlive the service; their results come back on
-    /// this loop.
+    /// The database thread, the hasher, the mailer and the Discord client must outlive the service; their
+    /// results come back on this loop.
+    /// @param discord Signing in with Discord; nullptr for none: its requests get ACCOUNTS_DISABLED.
     AccountService(rtype::network::EventLoop &loop, rtype::database::DatabaseThread &database,
-                   PasswordHasher &hasher, Mailer &mailer, AccountServiceSettings settings);
+                   PasswordHasher &hasher, Mailer &mailer, AccountServiceSettings settings,
+                   DiscordClient *discord = nullptr);
     ~AccountService();
 
     AccountService(const AccountService &) = delete;
@@ -165,7 +202,7 @@ public:
     AccountService(AccountService &&) = delete;
     AccountService &operator=(AccountService &&) = delete;
 
-    /// What WELCOME offers: password accounts, and guests if the settings allow them.
+    /// What WELCOME offers: password accounts, guests if the settings allow them, Discord if it has a client.
     [[nodiscard]] rtype::lobby::ServerFeatures features() const;
     /// `accounts.guests`.
     [[nodiscard]] bool guests() const { return _settings.guests; }

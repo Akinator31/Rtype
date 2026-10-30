@@ -39,6 +39,11 @@ inline const std::vector<rtype::database::Migration> ServerMigrations{
      {"CREATE TABLE account_codes (account_id BIGINT NOT NULL REFERENCES accounts (id) ON DELETE CASCADE, "
       "purpose TEXT NOT NULL, code_hash TEXT NOT NULL, expires_at BIGINT NOT NULL, attempts BIGINT NOT NULL, "
       "PRIMARY KEY (account_id, purpose))"}},
+    {6,
+     "create the discord_identities table: the Discord users who sign in to the accounts, one per account",
+     {"CREATE TABLE discord_identities (discord_id TEXT PRIMARY KEY, "
+      "account_id BIGINT NOT NULL UNIQUE REFERENCES accounts (id) ON DELETE CASCADE, linked_at BIGINT NOT "
+      "NULL)"}},
 };
 
 /// The address of the database of the master: the one of --database, or the one the file of --database-file

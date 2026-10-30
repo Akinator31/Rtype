@@ -1,6 +1,6 @@
 // The scenes of the accounts of OnlineScenes (docs/architecture/client-online.md#accounts): what the server
-// offers, sign in, create an account, the code of the email, the forgotten password, and the account signed
-// in.
+// offers, sign in, create an account, the code of the email, the forgotten password, Discord, and the account
+// signed in.
 
 #include "Online/OnlineScenes.hpp"
 #include "rtype/engine/Component/Widget.hpp"
@@ -81,6 +81,83 @@ void OnlineScenes::signedOut(std::optional<lobby::ErrorCode> error, const char *
     connect();
 }
 
+const char *OnlineScenes::discordOrigin(DiscordPurpose purpose)
+{
+    switch (purpose) {
+    case DiscordPurpose::SignIn:
+        return AccountsScene;
+    case DiscordPurpose::Link:
+        return MyAccountScene;
+    case DiscordPurpose::DeleteAccount:
+        return DeleteAccountScene;
+    }
+    return AccountsScene;
+}
+
+void OnlineScenes::startDiscord(DiscordPurpose purpose)
+{
+    if (!_lobby) {
+        return;
+    }
+    _lobby->discordSignIn([this, purpose](const auto &result) {
+        if (const auto *error = std::get_if<lobby::ErrorCode>(&result)) {
+            _engine.showToast(message(*error), engine::ToastType::Error);
+            return;
+        }
+        _engine.switchScene(DiscordScene);
+        const std::uint64_t application = std::get<lobby::DiscordAuthorizeMessage>(result).applicationId;
+        _discord.authorize(application, [this, purpose](const discord::AuthorizationResult &authorization) {
+            if (!_lobby) {
+                return;
+            }
+            if (const auto *error = std::get_if<discord::AuthorizationError>(&authorization)) {
+                _engine.showToast(_translations.text(*error == discord::AuthorizationError::Refused
+                                                         ? "account.discord_refused"
+                                                         : "account.discord_failed"),
+                                  engine::ToastType::Warning);
+                _engine.switchScene(discordOrigin(purpose));
+                return;
+            }
+            const auto &accepted = std::get<discord::Authorization>(authorization);
+            _lobby->discordConfirm({.code = accepted.code,
+                                    .codeVerifier = accepted.codeVerifier,
+                                    .redirectUri = accepted.redirectUri},
+                                   [this, purpose](const LobbyClient::DiscordConfirmResult &confirmed) {
+                                       discordConfirmed(purpose, confirmed);
+                                   });
+        });
+    });
+}
+
+void OnlineScenes::discordConfirmed(DiscordPurpose purpose, const LobbyClient::DiscordConfirmResult &result)
+{
+    if (const auto *error = std::get_if<lobby::ErrorCode>(&result)) {
+        _engine.showToast(message(*error), engine::ToastType::Error);
+        _engine.switchScene(discordOrigin(purpose));
+        return;
+    }
+    if (const auto *account = std::get_if<lobby::SignedInMessage>(&result)) {
+        // An identity that has an account
+        signedIn(*account);
+        return;
+    }
+    switch (purpose) {
+    case DiscordPurpose::SignIn:
+        // A new Discord user: its account needs a username
+        _engine.switchScene(ChooseUsernameScene);
+        return;
+    case DiscordPurpose::Link:
+        _engine.showToast(_translations.text("account.discord_linked"), engine::ToastType::Success);
+        _engine.switchScene(MyAccountScene);
+        return;
+    case DiscordPurpose::DeleteAccount:
+        // Confirmed for five minutes: the deletion needs no password
+        _lobby->deleteAccount(
+            "", [this](std::optional<lobby::ErrorCode> error) { signedOut(error, "account.deleted"); });
+        return;
+    }
+}
+
 void OnlineScenes::declareAccountScenes(const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     const auto backTo = [this](const char *scene) {
@@ -96,6 +173,10 @@ void OnlineScenes::declareAccountScenes(const engine::Metrics &metrics, const en
             menu.label(_serverText);
             menu.button(_translations.text("account.sign_in"), [this] { _engine.switchScene(SignInScene); });
             menu.button(_translations.text("account.create"), [this] { _engine.switchScene(RegisterScene); });
+            if (_lobby && _lobby->features().discord) {
+                menu.button(_translations.text("account.discord"),
+                            [this] { startDiscord(DiscordPurpose::SignIn); });
+            }
             if (_lobby && _lobby->features().guests) {
                 menu.button(_translations.text("account.guest"), [this] { refresh(); });
             } else {
@@ -235,6 +316,36 @@ void OnlineScenes::declareAccountScenes(const engine::Metrics &metrics, const en
             menu.button(_translations.text("online.back"), [this] { _engine.switchScene(SignInScene); });
         });
 
+    // Waiting for the player to accept in Discord, or in the browser
+    const auto leaveDiscord = [this] {
+        _discord.cancel();
+        _engine.switchScene(_lobby && _lobby->account() ? MyAccountScene : AccountsScene);
+    };
+    _engine.createScene(
+        DiscordScene, {.onBack = leaveDiscord},
+        [this, &metrics, &style, leaveDiscord](engine::Engine &target, engine::SceneId scene) {
+            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style, "Discord");
+            menu.label(_translations.text("account.discord_waiting"));
+            menu.button(_translations.text("trust.cancel"), leaveDiscord);
+        });
+
+    _engine.createScene(
+        ChooseUsernameScene, backTo(AccountsScene),
+        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
+            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
+                                     _translations.text("account.choose_username"));
+            const ecs::entity_t username =
+                menu.textField(_translations.text("account.username"), _name, {}, lobby::MaxUsernameLength);
+            menu.button(_translations.text("account.choose_create"), [this, &target, username] {
+                if (_lobby) {
+                    _lobby->chooseUsername(
+                        textOf(target, username),
+                        [this](const LobbyClient::SignInResult &result) { signedIn(result); });
+                }
+            });
+            menu.button(_translations.text("trust.cancel"), [this] { _engine.switchScene(AccountsScene); });
+        });
+
     _engine.createScene(
         MyAccountScene, {.onBack = [this] { refresh(); }},
         [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
@@ -254,6 +365,10 @@ void OnlineScenes::declareAccountScenes(const engine::Metrics &metrics, const en
                     });
                 }
             });
+            if (_lobby && _lobby->features().discord) {
+                menu.button(_translations.text("account.discord_link"),
+                            [this] { startDiscord(DiscordPurpose::Link); });
+            }
             menu.button(_translations.text("account.delete"),
                         [this] { _engine.switchScene(DeleteAccountScene); });
             menu.button(_translations.text("online.back"), [this] { refresh(); });
@@ -275,6 +390,11 @@ void OnlineScenes::declareAccountScenes(const engine::Metrics &metrics, const en
                                           });
                 }
             });
+            // An account made with Discord has no password: Discord confirms instead
+            if (_lobby && _lobby->features().discord) {
+                menu.button(_translations.text("account.discord_delete"),
+                            [this] { startDiscord(DiscordPurpose::DeleteAccount); });
+            }
             menu.button(_translations.text("trust.cancel"), [this] { _engine.switchScene(MyAccountScene); });
         });
 }

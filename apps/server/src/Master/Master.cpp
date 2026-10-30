@@ -2,6 +2,7 @@
 
 #include "Accounts/AccountService.hpp"
 #include "Accounts/CurlMailer.hpp"
+#include "Accounts/Discord.hpp"
 #include "Accounts/PasswordHasher.hpp"
 #include "Common/GameConfig.hpp"
 #include "Common/Lifecycle.hpp"
@@ -156,6 +157,18 @@ int runMaster(const MasterOptions &options)
         }
     }
 
+    // Discord too: an application it refuses stops the master at start, as --check
+    std::optional<DiscordClientSettings> discordSettings;
+    if (options.settings.accountsEnabled() && options.settings.discord) {
+        discordSettings.emplace().discord = *options.settings.discord;
+        if (const std::optional<std::string> problem = checkDiscord(*discordSettings)) {
+            logger.error("Cannot use the Discord application {}: {}", discordSettings->discord.clientId,
+                         *problem);
+            return Failure;
+        }
+        logger.info("Discord application {}", discordSettings->discord.clientId);
+    }
+
     const unsigned maxGames = options.lastGamePort - options.firstGamePort + 1U;
     logger.info("Lobby on TCP {}, games on UDP {}-{} ({} at most)", listener->localAddress(),
                 options.firstGamePort, options.lastGamePort, maxGames);
@@ -207,13 +220,20 @@ int runMaster(const MasterOptions &options)
     // they outlive it
     std::optional<CurlMailer> mailer;
     std::optional<PasswordHasher> hasher;
+    std::optional<DiscordClient> discord;
     std::optional<AccountService> accounts;
     if (mailerSettings) {
+        const auto post = [&loop](std::function<void()> function) { loop.post(std::move(function)); };
         mailer.emplace(*mailerSettings);
-        hasher.emplace([&loop](std::function<void()> function) { loop.post(std::move(function)); });
+        hasher.emplace(post);
+        if (discordSettings) {
+            discord.emplace(*discordSettings, post);
+        }
         accounts.emplace(loop, databaseThread, *hasher, *mailer,
-                         AccountServiceSettings{.guests = options.settings.accounts->guests, .limits = {}});
-        logger.info("Accounts on, {}", options.settings.accounts->guests ? "guests allowed" : "no guests");
+                         AccountServiceSettings{.guests = options.settings.accounts->guests, .limits = {}},
+                         discord ? &*discord : nullptr);
+        logger.info("Accounts on, {}{}", options.settings.accounts->guests ? "guests allowed" : "no guests",
+                    discord ? ", Discord sign-in" : "");
     }
     Lobby lobby(loop, std::move(*listener), identity, *games);
     lobby.setBans(&bans);

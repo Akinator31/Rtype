@@ -14,13 +14,15 @@ system-wide besides a compiler and, on Linux, the X11/OpenGL and OpenSSL develop
 
     ```sh
     sudo apt install build-essential cmake \
-        libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev
+        libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev \
+        libpulse0 libasound2t64
     ```
 
 === "Arch Linux"
 
     ```sh
-    sudo pacman -S base-devel cmake libx11 libxrandr libxinerama libxcursor libxi mesa openssl postgresql-libs
+    sudo pacman -S base-devel cmake libx11 libxrandr libxinerama libxcursor libxi mesa openssl postgresql-libs \
+        libpulse alsa-lib
     ```
 
 === "Windows"
@@ -31,6 +33,10 @@ system-wide besides a compiler and, on Linux, the X11/OpenGL and OpenSSL develop
 OpenSSL (`libssl-dev`, `openssl`) is required on Linux: libcurl, which sends the mails of the server and is the
 HTTP client of the tests, takes its TLS from it, and so does the fake mail server of the tests. Windows uses its
 own (Schannel).
+
+PulseAudio and ALSA (`libpulse0`, `libasound2t64`) are required on Linux by the Discord Social SDK the client
+signs in to Discord with ([ADR 0026](../decisions/0026-discord-social-sdk.md)); the SDK itself is in the
+repository, in `libs/discord/sdk/`, for Linux x86-64 and Windows x64, the only platforms the client builds on.
 
 libpq (`libpq-dev`, `postgresql-libs`) is optional: with it, the server can keep its data in a PostgreSQL
 database; without it, in SQLite only. The configure says which: `Database engines: SQLite, PostgreSQL`. On

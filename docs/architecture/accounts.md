@@ -1,18 +1,18 @@
 # Accounts
 
 The accounts of the players of a server ([ADR 0024](../decisions/0024-player-accounts.md)): what makes a valid
-username, email and password, how a password is hashed, what the master keeps of the accounts, their sessions
-and the codes, how it sends those codes by email, and how its lobby answers the requests of the accounts of
-[lobby protocol 3](../protocol/lobby.md#6-accounts). The client offers them from its Online menu
+username, email and password, how a password is hashed, what the master keeps of the accounts, their sessions,
+the codes and the Discord identities, how it sends those codes by email, how it asks Discord who a player is, and
+how its lobby answers the requests of the accounts of [lobby protocol 3](../protocol/lobby.md#6-accounts). The client offers them from its Online menu
 ([Playing online, accounts](client-online.md#accounts)). To give a server its accounts, see
 [Set up accounts](../guides/set-up-accounts.md).
 
 | | |
 |---|---|
-| Code | `Accounts/AccountRules.{hpp,cpp}` (the rules, pure), `Accounts/PasswordHasher.{hpp,cpp}` (Argon2id, on its threads), `Accounts/AccountStore.{hpp,cpp}` (the tables), `Accounts/MailMessages.{hpp,cpp}` (what the mails say, pure), `Accounts/Mailer.{hpp,cpp}` (the interface, and a mail written for SMTP), `Accounts/CurlMailer.{hpp,cpp}` (the mail server, on its thread), `Accounts/AccountService.{hpp,cpp}` (the requests of the lobby, on the loop) in `apps/server/src`; `rtype/network/Crypto.hpp` (random bytes, SHA-256) |
-| Threads | The rules and the messages anywhere; the store on the database thread; the hashes on the two threads of the hasher; the mails on the thread of the mailer; the service and the lobby on the event loop |
-| Tables | `accounts`, `account_sessions`, `account_codes` (migrations 3 to 5 of `ServerMigrations`) |
-| Dependencies | The [reference implementation of Argon2](https://github.com/P-H-C/phc-winner-argon2) (CC0 or Apache 2.0), through CPM with a hash; TF-PSA-Crypto, through `libs/network`; libcurl for SMTP ([Web server](web.md#libcurl)) |
+| Code | `Accounts/AccountRules.{hpp,cpp}` (the rules, pure), `Accounts/PasswordHasher.{hpp,cpp}` (Argon2id, on its threads), `Accounts/AccountStore.{hpp,cpp}` (the tables), `Accounts/MailMessages.{hpp,cpp}` (what the mails say, pure), `Accounts/Mailer.{hpp,cpp}` (the interface, and a mail written for SMTP), `Accounts/CurlMailer.{hpp,cpp}` (the mail server, on its thread), `Accounts/Discord.{hpp,cpp}` (Discord, on its thread), `Accounts/AccountService.{hpp,cpp}` (the requests of the lobby, on the loop) in `apps/server/src`; `rtype/network/Crypto.hpp` (random bytes, SHA-256) |
+| Threads | The rules and the messages anywhere; the store on the database thread; the hashes on the two threads of the hasher; the mails on the thread of the mailer; the requests to Discord on the thread of the Discord client; the service and the lobby on the event loop |
+| Tables | `accounts`, `account_sessions`, `account_codes`, `discord_identities` (migrations 3 to 6 of `ServerMigrations`) |
+| Dependencies | The [reference implementation of Argon2](https://github.com/P-H-C/phc-winner-argon2) (CC0 or Apache 2.0), through CPM with a hash; TF-PSA-Crypto, through `libs/network`; libcurl for SMTP and for Discord ([Web server](web.md#libcurl)) |
 | Tests | `tests/server_account_store.cpp`, tags `[accounts]` and `[database]`; `tests/server_accounts.cpp` (the lobby), tags `[accounts]` and `[database]`; `tests/server_mail.cpp`, tag `[mail]`; `tests/crypto.cpp`, tag `[crypto]` |
 
 ## The rules
@@ -74,6 +74,7 @@ lower-case hexadecimal.
 | `accounts` | `id`, `username` (as written), `username_key` (lower case, unique), `email` and `email_key` (lower case, unique, both `NULL` for an account of Discord only), `email_verified_at`, `password_hash` (`NULL` for an account of Discord only), `role` (`player` or `admin`), `banned_at` and `ban_reason` (`NULL` unless banned), `code_failures` and `code_failures_day` (the wrong codes of the day), `created_at`, `last_seen_at` | 3 |
 | `account_sessions` | `token_hash` (SHA-256 of the token, primary key), `account_id` (deleted with its account), `created_at`, `last_used_at`, `expires_at`, `client` (`game` or `panel`) | 4 |
 | `account_codes` | `account_id` (deleted with its account), `purpose` (`verify` or `reset`), `code_hash`, `expires_at`, `attempts`; one code per account and purpose | 5 |
+| `discord_identities` | `discord_id` (the id of the Discord user, primary key), `account_id` (unique: one identity per account; deleted with its account), `linked_at` | 6 |
 
 `Accounts/AccountStore.hpp` gives plain functions on a `Database`, as `Master/AdminStore.hpp` does: the master
 runs them on its database thread, the tests anywhere. Each takes the time it runs at, so that the tests choose
@@ -86,8 +87,11 @@ it.
 | `markEmailVerified(database, id, now)` | Once its code is accepted |
 | `setPassword(database, id, hash)` | A new hash, and **every session of the account ends**: whoever knew the old password is signed out |
 | `banAccount(database, id, reason, now)`, `unbanAccount` | Banned, **every session ends**, and none resumes until unbanned |
-| `deleteAccount(database, id)` | The account, its sessions and its codes, at the request of its owner; its administration actions stay, anonymized ([Deleting an account](#deleting-an-account)) |
+| `deleteAccount(database, id)` | The account, its sessions, its codes and its Discord identity, at the request of its owner; its administration actions stay, anonymized ([Deleting an account](#deleting-an-account)) |
 | `purgeUnverifiedAccounts(database, now)` | Deletes the accounts with an email not verified within **24 hours**, with their codes and sessions. An account without email (Discord) is never purged |
+| `findAccountByDiscord(database, discordId)`, `discordIdentity(database, id)` | The account a Discord user signs in to; the identity of an account |
+| `linkDiscord(database, id, discordId, now)` | `Linked` (in place of the identity the account had), `AlreadyLinked`, `Taken` by another account, or `NoAccount` |
+| `createDiscordAccount(database, username, discordId, now)` | The account of a new Discord user, without email nor password, linked; or `UsernameTaken`, or `EmailTaken` when the identity has an account already |
 
 ### Sessions
 
@@ -187,12 +191,13 @@ until it answers ([Set up accounts](../guides/set-up-accounts.md#result)).
 `Accounts/AccountService.hpp` answers the requests of the accounts that the lobby receives, `REGISTER` to
 `DELETE_ACCOUNT`, resumes the session of a `HELLO` with a token, and checks the names of guests. It runs on the
 event loop, and does its work on the threads of the others: the database thread for the store, the hasher for
-the passwords, the mailer for the mails. A master has one when its settings enable `[accounts]`
-(`Lobby::setAccounts()`); without it, the lobby answers `ACCOUNTS_DISABLED` and a token `SESSION_EXPIRED`, as
-before the accounts.
+the passwords, the mailer for the mails, the Discord client for Discord. A master has one when its settings
+enable `[accounts]` (`Lobby::setAccounts()`); without it, the lobby answers `ACCOUNTS_DISABLED` and a token
+`SESSION_EXPIRED`, as before the accounts. With `[discord]`, it has a `DiscordClient` too; without, the requests
+of Discord get `ACCOUNTS_DISABLED`.
 
 ```cpp
-AccountService accounts(loop, databaseThread, hasher, mailer, {.guests = settings.accounts->guests});
+AccountService accounts(loop, databaseThread, hasher, mailer, {.guests = settings.accounts->guests}, &discord);
 lobby.setAccounts(&accounts);
 ```
 
@@ -221,7 +226,9 @@ never after the service is gone.
 | `FORGOT_PASSWORD` | `createCode()` and the mail, if the email has an account | `CODE_SENT` whatever the email |
 | `RESET_PASSWORD` | The hash, `checkCode()`, `setPassword()` (every session ends), the email verified, `createSession()` | `SIGNED_IN` |
 | `DELETE_ACCOUNT` | The hash checked, `deleteAccount()` | `DONE`, then closed |
-| `DISCORD_SIGN_IN`, `DISCORD_CONFIRM`, `CHOOSE_USERNAME` | None: Discord comes in step 11 | `ACCOUNTS_DISABLED` |
+| `DISCORD_SIGN_IN` | An attempt started on the connection ([Discord](#discord)) | `DISCORD_AUTHORIZE`, the id of the application |
+| `DISCORD_CONFIRM` | The code exchanged by the Discord client, then `findAccountByDiscord()` and `createSession()`, or, signed in, `linkDiscord()` | `SIGNED_IN` for an identity with an account; `DONE` for a new one, or, signed in, the identity linked or confirmed; `DISCORD_TAKEN`, `BANNED` (then closed) |
+| `CHOOSE_USERNAME` | `createDiscordAccount()`, `createSession()` | `SIGNED_IN`; `DISCORD_NOT_CONFIRMED` without a new identity confirmed on the connection within ten minutes |
 
 In a game, every request of the accounts gets `ALREADY_IN_GAME`, before any work: a player signs in, out, or
 deletes its account from the lobby only, so that nobody changes identity in a game. A request that signs in gives
@@ -249,7 +256,10 @@ Nothing tells the accounts of others:
 | Wrong passwords of one account in a row (`SIGN_IN`, `DELETE_ACCOUNT`) | 10 | Paused 15 minutes: `TOO_MANY_ATTEMPTS`, the password not checked, even right |
 | `RESEND_CODE` for one login | Once a minute | `TOO_MANY_ATTEMPTS` |
 | Wrong codes of an account | 5 per code, 20 a day ([Codes](#codes)) | `TOO_MANY_ATTEMPTS`; on the 20th, the holder of the account gets the "too many wrong codes" mail |
-| The hasher, the database thread | Their queues | `BUSY` |
+| Codes Discord refuses after one `DISCORD_SIGN_IN` (`discordAttempts`) | 5 | `TOO_MANY_ATTEMPTS`, Discord not asked, until the next `DISCORD_SIGN_IN` |
+| A `DISCORD_SIGN_IN`, a new Discord user (`discordLifetime`) | 10 minutes | `CODE_EXPIRED`; `DISCORD_NOT_CONFIRMED` for `CHOOSE_USERNAME` |
+| The Discord confirmation of a deletion (`deletionConfirmation`) | 5 minutes | `DISCORD_NOT_CONFIRMED` |
+| The hasher, the database thread, the Discord client | Their queues | `BUSY` |
 
 With 10 wrong passwords then a pause of 15 minutes, a guesser gets about a thousand tries a day on one account,
 and needs as many addresses to go faster, each limited too.
@@ -276,8 +286,34 @@ administration actions stay, so that the record keeps what was done, without who
 - an `end_game` with the player in it (its `details` hold `accounts`) has its username replaced by `deleted` in
   `players`, and its id taken out of `accounts`.
 
-An account without password, made with Discord, confirms with Discord (step 11): until then, it gets
-`DISCORD_NOT_CONFIRMED`.
+An account without password, made with Discord, confirms with Discord instead: `DISCORD_SIGN_IN` then
+`DISCORD_CONFIRM` of its own identity on the connection, then `DELETE_ACCOUNT` with an empty password within
+five minutes; otherwise `DISCORD_NOT_CONFIRMED`. Signing in with Discord is not that confirmation: it comes
+after, on purpose. Its Discord identity goes with it.
+
+### Discord
+
+[ADR 0026](../decisions/0026-discord-social-sdk.md): the client asks the player through the Discord Social SDK,
+and the master exchanges the code it got. `Accounts/Discord.hpp` holds the `DiscordClient`, which does the two
+requests to Discord with libcurl on a thread of its own, its bounded queue (16) answering `BUSY` when full, its
+results posted to the loop:
+
+1. `POST /oauth2/token` with the code, the code verifier of PKCE and the redirect address of `DISCORD_CONFIRM`,
+   the application authenticated with its id and its secret (HTTP Basic). `invalid_grant` is a code Discord
+   refuses (`INVALID_CODE`); any other answer is `DISCORD_UNAVAILABLE`.
+2. `GET /users/@me` with the token, scope `identify`: the id of the user, kept, and its name, for the logs. The
+   token is dropped at once.
+
+Where a connection stands is a `DiscordProgress`, kept by the lobby for each connection and changed by the
+service on the loop: the `DISCORD_SIGN_IN` not used yet and the codes refused since; a new user confirmed, for
+`CHOOSE_USERNAME`; the account's own identity confirmed, for `DELETE_ACCOUNT`. A `DISCORD_CONFIRM` uses up its
+`DISCORD_SIGN_IN` when Discord gives a user: one sign-in, one confirmation. Discord down keeps the attempt, so
+that the player tries again.
+
+At start, and with `--check`, `checkDiscord()` asks a token of the application itself (`client_credentials`),
+which proves the id and the secret, then drops it: an application Discord refuses stops the master, as a mail
+server does. The address of Discord is `https://discord.com/api/v10`; the tests give the address of their fake
+Discord through `DiscordClientSettings::apiUrl`, which neither the settings file nor the command line reach.
 
 ### The purge
 
@@ -301,11 +337,14 @@ test of the database on SQLite and on PostgreSQL:
   ban ending them;
 - codes used once, bound to their account and their purpose, replaced, expired, refused after 5 attempts, and
   the daily limit across several codes of both purposes, lifted the next day;
-- the purge of accounts not verified within 24 hours, with their codes and sessions, those of Discord kept.
+- the purge of accounts not verified within 24 hours, with their codes and sessions, those of Discord kept;
+- the Discord identities: an account made for a new one, linked, replaced, taken by another, deleted with its
+  account.
 
 `tests/server_accounts.cpp` (tags `[server]`, `[accounts]`, `[database]`), a real lobby with its TLS clients, the
-real hasher with cheap parameters, and a mailer of the tests that keeps the codes
-(`tests/helpers/FakeMailer.hpp`), on SQLite and on PostgreSQL:
+real hasher with cheap parameters, a mailer of the tests that keeps the codes
+(`tests/helpers/FakeMailer.hpp`), and a fake Discord, a small Crow server of the two routes the master uses
+(`tests/helpers/FakeDiscord.hpp`), on SQLite and on PostgreSQL:
 
 - a player who registers, reads its code, verifies, disconnects, and comes back signed in from its token alone;
 - a register with an email that has an account answered `CODE_SENT` like any other, its holder told, no account
@@ -319,7 +358,14 @@ real hasher with cheap parameters, and a mailer of the tests that keeps the code
 - requests sent back to back, `HELLO` included, answered in order; the requests of the accounts refused in a game
   of a real instance;
 - the limits: per address, per account, the codes of a day mailed to the holder, a full hasher, a full mailer;
-- the purge at start; an account deleted with its password, its actions anonymized; Discord not offered yet;
+- the purge at start; an account deleted with its password, its actions anonymized;
+- Discord (tag `[discord]`): not offered without its settings; a new user who chooses its username, then signs
+  in with Discord alone; nothing signed in without `DISCORD_CONFIRM`, nor with a code given to another
+  connection; a code used twice, with the verifier of another, for another address, or unknown, refused; five
+  refused needing a new `DISCORD_SIGN_IN`; a sign-in and a new user expired; Discord down without losing an
+  attempt; a link, an identity of another account refused; a banned account; an account without password
+  deleted after a confirmation of five minutes; the check of the application at start; the queue of the client
+  full; the logs, which hold neither code nor verifier;
 - the logs, which hold neither the password, nor the code, nor the token, nor the email.
 
 `tests/server_mail.cpp` (tags `[server]`, `[mail]`), against a small SMTP server of the tests

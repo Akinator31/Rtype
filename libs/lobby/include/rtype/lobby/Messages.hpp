@@ -57,13 +57,15 @@ inline constexpr std::size_t MaxUsernameLength = 16;
 inline constexpr std::size_t MaxEmailLength = 254;
 /// Longest password, in bytes: 128 characters of up to 4 bytes. The master allows 10 to 128 characters.
 inline constexpr std::size_t MaxPasswordLength = 512;
-/// The characters of a code: 6 digits for a code sent by email, 6 of DiscordCodeAlphabet for the code the
-/// page of Discord shows.
+/// The digits of a code sent by email.
 inline constexpr std::size_t CodeLength = 6;
-/// The characters of a Discord code: capital letters and digits, without `0 O 1 I`, which look alike.
-inline constexpr std::string_view DiscordCodeAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-/// Longest address of DISCORD_URL, in bytes.
-inline constexpr std::size_t MaxDiscordUrlLength = 2048;
+/// Longest authorization code of Discord in DISCORD_CONFIRM, in bytes.
+inline constexpr std::size_t MaxDiscordCodeLength = 255;
+/// Shortest and longest code verifier of DISCORD_CONFIRM: those of PKCE (RFC 7636, section 4.1).
+inline constexpr std::size_t MinCodeVerifierLength = 43;
+inline constexpr std::size_t MaxCodeVerifierLength = 128;
+/// Longest redirect address of DISCORD_CONFIRM, in bytes.
+inline constexpr std::size_t MaxRedirectUriLength = 2048;
 
 /// A session token: 256 random bits, given by SIGNED_IN, sent back in HELLO. Secret: never logged.
 using SessionToken = std::array<std::byte, 32>;
@@ -97,7 +99,7 @@ inline constexpr std::uint8_t Error = 0x86;
 inline constexpr std::uint8_t ServerMessage = 0x87;
 inline constexpr std::uint8_t SignedIn = 0x88;
 inline constexpr std::uint8_t CodeSent = 0x89;
-inline constexpr std::uint8_t DiscordUrl = 0x8A;
+inline constexpr std::uint8_t DiscordAuthorize = 0x8A;
 inline constexpr std::uint8_t Done = 0x8B;
 } // namespace message_type
 
@@ -115,8 +117,8 @@ inline constexpr std::uint8_t Done = 0x8B;
 [[nodiscard]] bool isValidLocale(std::string_view locale);
 /// Tells whether a text can be a code sent by email: 6 digits.
 [[nodiscard]] bool isValidEmailCode(std::string_view code);
-/// Tells whether a text can be the code of the page of Discord: 6 of DiscordCodeAlphabet.
-[[nodiscard]] bool isValidDiscordCode(std::string_view code);
+/// Tells whether a text can be the code verifier of PKCE: 43 to 128 of `A-Z a-z 0-9 - . _ ~` (RFC 7636).
+[[nodiscard]] bool isValidCodeVerifier(std::string_view verifier);
 
 // --- Client to master ---
 
@@ -215,10 +217,17 @@ struct ResetPasswordMessage {
     friend bool operator==(const ResetPasswordMessage &, const ResetPasswordMessage &) = default;
 };
 
-/// `DISCORD_CONFIRM`: the code the page of Discord showed (version 3).
+/// `DISCORD_CONFIRM`: what Discord gave the client once the player accepted (version 3), for the master to
+/// exchange with Discord. The three fields go to Discord as they are: Discord checks them.
 struct DiscordConfirmMessage {
-    /// isValidDiscordCode(), or the message is malformed. Secret.
+    /// The authorization code: 1 to MaxDiscordCodeLength bytes of text. Secret.
     std::string code;
+    /// The code verifier of PKCE whose challenge the client gave Discord: isValidCodeVerifier(), or the
+    /// message is malformed. Secret.
+    std::string codeVerifier;
+    /// The address Discord sent the code back to, on the machine of the player: 1 to MaxRedirectUriLength
+    /// bytes of text.
+    std::string redirectUri;
 
     friend bool operator==(const DiscordConfirmMessage &, const DiscordConfirmMessage &) = default;
 };
@@ -406,6 +415,8 @@ enum class ErrorCode : std::uint16_t {
     AlreadySignedIn = 31,
     /// This Discord identity belongs to another account.
     DiscordTaken = 32,
+    /// The master cannot reach Discord now, or Discord answers with an error: try again in a moment.
+    DiscordUnavailable = 33,
 };
 
 /// Tells whether the master closes the connection after this error: MALFORMED, UNSUPPORTED_VERSION, KICKED,
@@ -439,13 +450,13 @@ struct SignedInMessage {
     friend bool operator==(const SignedInMessage &, const SignedInMessage &) = default;
 };
 
-/// `DISCORD_URL`: the answer to DISCORD_SIGN_IN, the page of Discord to open in the browser (version 3).
-struct DiscordUrlMessage {
-    /// 1 to MaxDiscordUrlLength bytes, starting with `https://`: anything else is malformed, so that a client
-    /// never opens another scheme.
-    std::string url;
+/// `DISCORD_AUTHORIZE`: the answer to DISCORD_SIGN_IN, the Discord application of the master, for the client
+/// to ask the player through the Discord Social SDK (version 3).
+struct DiscordAuthorizeMessage {
+    /// The id of the application (its client id): never 0, which is malformed.
+    std::uint64_t applicationId = 0;
 
-    friend bool operator==(const DiscordUrlMessage &, const DiscordUrlMessage &) = default;
+    friend bool operator==(const DiscordAuthorizeMessage &, const DiscordAuthorizeMessage &) = default;
 };
 
 /// The payloads. LIST_GAMES, LEAVE_GAME, PING, SIGN_OUT, DISCORD_SIGN_IN, PONG, CODE_SENT and DONE have none:
@@ -470,7 +481,7 @@ struct DiscordUrlMessage {
 [[nodiscard]] std::vector<std::byte> encode(const ErrorMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const ServerMessageMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const SignedInMessage &message);
-[[nodiscard]] std::vector<std::byte> encode(const DiscordUrlMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const DiscordAuthorizeMessage &message);
 
 [[nodiscard]] std::optional<HelloMessage> decodeHello(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<CreateGameMessage> decodeCreateGame(std::span<const std::byte> payload);
@@ -491,7 +502,8 @@ struct DiscordUrlMessage {
 [[nodiscard]] std::optional<ErrorMessage> decodeError(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<ServerMessageMessage> decodeServerMessage(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<SignedInMessage> decodeSignedIn(std::span<const std::byte> payload);
-[[nodiscard]] std::optional<DiscordUrlMessage> decodeDiscordUrl(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<DiscordAuthorizeMessage>
+decodeDiscordAuthorize(std::span<const std::byte> payload);
 /// For the messages without payload: true if it is empty.
 [[nodiscard]] bool decodeEmpty(std::span<const std::byte> payload);
 

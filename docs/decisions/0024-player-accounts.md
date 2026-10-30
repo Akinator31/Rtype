@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted; its sign-in with Discord superseded by [0026](0026-discord-social-sdk.md) |
 | **Date** | 2026-10-28 |
 
 ## Context

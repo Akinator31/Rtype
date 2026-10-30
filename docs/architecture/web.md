@@ -217,6 +217,6 @@ otherwise all take 8080.
 ## libcurl
 
 libcurl 8.23.0 arrives with this web server, through CPM with a hash: the HTTP client of the tests
-(`tests/helpers/Http.hpp`), the mails of the accounts ([Accounts](accounts.md#the-mails)), and Discord later. Its protocols are limited to HTTP(S) and
+(`tests/helpers/Http.hpp`), the mails of the accounts ([Accounts](accounts.md#the-mails)), and the requests to Discord ([Accounts](accounts.md#discord)). Its protocols are limited to HTTP(S) and
 SMTP(S); its TLS is OpenSSL on Linux, which is a prerequisite of the build there (`libssl-dev`), and the system's
 (Schannel) on Windows.
