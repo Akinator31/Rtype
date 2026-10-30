@@ -859,6 +859,33 @@ TEST_CASE("The ships of the other players show their health bar, not the one of 
     CHECK(health.shown == Approx(1.0f));
 }
 
+TEST_CASE("The ship of the local player is drawn with the local look, the others with the look of their kind",
+          "[client]")
+{
+    ImpactClient client;
+    const ShipLook kindLook{{{1}, {0, 1, 2, 3}}, {-1.0f, -2.0f, 4.0f, 2.0f}, false, {4}};
+    // The ship equipped in the hangar: another model, twice as long
+    const ShipLook localLook{{{2}, {0, 1, 2, 3}}, {-2.0f, -2.0f, 8.0f, 2.0f}, false, {7}};
+    client.sessions.setShipLook(rtype::game::EntityKind::PlayerShip, kindLook);
+    client.sessions.setLocalShipLook(localLook);
+    const rtype::game::EntityState local{7, rtype::game::EntityKind::PlayerShip, 0};
+    const rtype::game::EntityState ally{8, rtype::game::EntityKind::PlayerShip, 1};
+    client.receive(snapshotOf(1, {local, ally}));
+
+    const std::optional<rtype::ecs::entity_t> localShip = client.sessions.entityOf(7);
+    const std::optional<rtype::ecs::entity_t> allyShip = client.sessions.entityOf(8);
+    REQUIRE(localShip);
+    REQUIRE(allyShip);
+    const rtype::engine::Model &localModel = client.ecs.getComponent<rtype::engine::Model>(*localShip);
+    const rtype::engine::Model &allyModel = client.ecs.getComponent<rtype::engine::Model>(*allyShip);
+    CHECK(localModel.model == localLook.model.model);
+    CHECK(localModel.hiddenMeshes == localLook.trailMeshes);
+    CHECK(allyModel.model == kindLook.model.model);
+    CHECK(allyModel.hiddenMeshes == kindLook.trailMeshes);
+    // Each one fitted to the box of the ship by its own hull
+    CHECK(localModel.scale == Approx(allyModel.scale / 2.0f));
+}
+
 // --- Kills ---
 
 TEST_CASE("A Bydo killed is told with the owner of the shot of a player killed nearest to it", "[client]")
