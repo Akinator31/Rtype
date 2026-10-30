@@ -133,6 +133,12 @@ bool banAccount(rtype::database::Database &database, long long accountId, const 
 /// @throws soci::soci_error if the database refuses it.
 bool unbanAccount(rtype::database::Database &database, long long accountId);
 
+/// Deletes an account, with its sessions and its codes, at the request of its owner. Its administration
+/// actions stay, without its name nor its address (anonymizeActions()).
+/// @return False if there is no such account.
+/// @throws soci::soci_error if the database refuses it.
+bool deleteAccount(rtype::database::Database &database, long long accountId);
+
 /// Deletes the accounts with an email not verified within UnverifiedAccountLifetime, with their codes and
 /// sessions.
 /// @return How many.

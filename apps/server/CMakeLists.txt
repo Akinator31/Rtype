@@ -126,6 +126,7 @@ target_compile_definitions(rtype_argon2 PRIVATE ARGON2_NO_THREADS)
 add_library(r-type_server_core STATIC
     src/Server.cpp
     src/Accounts/AccountRules.cpp
+    src/Accounts/AccountService.cpp
     src/Accounts/AccountStore.cpp
     src/Accounts/CurlMailer.cpp
     src/Accounts/Mailer.cpp

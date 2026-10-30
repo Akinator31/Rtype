@@ -242,6 +242,20 @@ bool unbanAccount(rtype::database::Database &database, long long accountId)
                    accountId) != 0;
 }
 
+bool deleteAccount(rtype::database::Database &database, long long accountId)
+{
+    return database.transaction([&] {
+        const std::optional<Account> account = findAccount(database, accountId);
+        if (!account) {
+            return false;
+        }
+        anonymizeActions(database, accountId, account->username);
+        // Its codes and sessions go with it (ON DELETE CASCADE)
+        execute(database, "DELETE FROM accounts WHERE id = :id", accountId);
+        return true;
+    });
+}
+
 std::size_t purgeUnverifiedAccounts(rtype::database::Database &database, TimePoint now)
 {
     const long long limit = unixMilliseconds(now - UnverifiedAccountLifetime);

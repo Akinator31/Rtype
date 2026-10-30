@@ -2,18 +2,18 @@
 
 The accounts of the players of a server ([ADR 0024](../decisions/0024-player-accounts.md)): what makes a valid
 username, email and password, how a password is hashed, what the master keeps of the accounts, their sessions
-and the codes, and how it sends those codes by email. This page covers the storage and the mail: the lobby and
-the client use them in the next steps of the accounts ([#259](https://github.com/Akinator31/Rtype/issues/259)),
-through the messages of [lobby protocol 3](../protocol/lobby.md#6-accounts).
-To give a server its mail server, see [Set up accounts](../guides/set-up-accounts.md).
+and the codes, how it sends those codes by email, and how its lobby answers the requests of the accounts of
+[lobby protocol 3](../protocol/lobby.md#6-accounts). The client uses them in the next step of the accounts
+([#259](https://github.com/Akinator31/Rtype/issues/259)). To give a server its accounts, see
+[Set up accounts](../guides/set-up-accounts.md).
 
 | | |
 |---|---|
-| Code | `Accounts/AccountRules.{hpp,cpp}` (the rules, pure), `Accounts/PasswordHasher.{hpp,cpp}` (Argon2id, on its threads), `Accounts/AccountStore.{hpp,cpp}` (the tables), `Accounts/MailMessages.{hpp,cpp}` (what the mails say, pure), `Accounts/Mailer.{hpp,cpp}` (the interface, and a mail written for SMTP), `Accounts/CurlMailer.{hpp,cpp}` (the mail server, on its thread) in `apps/server/src`; `rtype/network/Crypto.hpp` (random bytes, SHA-256) |
-| Threads | The rules and the messages anywhere; the store on the database thread; the hashes on the two threads of the hasher; the mails on the thread of the mailer |
+| Code | `Accounts/AccountRules.{hpp,cpp}` (the rules, pure), `Accounts/PasswordHasher.{hpp,cpp}` (Argon2id, on its threads), `Accounts/AccountStore.{hpp,cpp}` (the tables), `Accounts/MailMessages.{hpp,cpp}` (what the mails say, pure), `Accounts/Mailer.{hpp,cpp}` (the interface, and a mail written for SMTP), `Accounts/CurlMailer.{hpp,cpp}` (the mail server, on its thread), `Accounts/AccountService.{hpp,cpp}` (the requests of the lobby, on the loop) in `apps/server/src`; `rtype/network/Crypto.hpp` (random bytes, SHA-256) |
+| Threads | The rules and the messages anywhere; the store on the database thread; the hashes on the two threads of the hasher; the mails on the thread of the mailer; the service and the lobby on the event loop |
 | Tables | `accounts`, `account_sessions`, `account_codes` (migrations 3 to 5 of `ServerMigrations`) |
 | Dependencies | The [reference implementation of Argon2](https://github.com/P-H-C/phc-winner-argon2) (CC0 or Apache 2.0), through CPM with a hash; TF-PSA-Crypto, through `libs/network`; libcurl for SMTP ([Web server](web.md#libcurl)) |
-| Tests | `tests/server_account_store.cpp`, tags `[accounts]` and `[database]`; `tests/server_mail.cpp`, tag `[mail]`; `tests/crypto.cpp`, tag `[crypto]` |
+| Tests | `tests/server_account_store.cpp`, tags `[accounts]` and `[database]`; `tests/server_accounts.cpp` (the lobby), tags `[accounts]` and `[database]`; `tests/server_mail.cpp`, tag `[mail]`; `tests/crypto.cpp`, tag `[crypto]` |
 
 ## The rules
 
@@ -86,6 +86,7 @@ it.
 | `markEmailVerified(database, id, now)` | Once its code is accepted |
 | `setPassword(database, id, hash)` | A new hash, and **every session of the account ends**: whoever knew the old password is signed out |
 | `banAccount(database, id, reason, now)`, `unbanAccount` | Banned, **every session ends**, and none resumes until unbanned |
+| `deleteAccount(database, id)` | The account, its sessions and its codes, at the request of its owner; its administration actions stay, anonymized ([Deleting an account](#deleting-an-account)) |
 | `purgeUnverifiedAccounts(database, now)` | Deletes the accounts with an email not verified within **24 hours**, with their codes and sessions. An account without email (Discord) is never purged |
 
 ### Sessions
@@ -131,9 +132,9 @@ each time. With it, an account gives away at most 20 tries a day: one chance in 
 The master sends four mails, each in **English and French** by the locale the client gives (`mailLanguage()`:
 `fr`, `fr-FR`, `fr_CA` are French, anything else English), as text and as HTML that say the same:
 
-| Mail | `Accounts/MailMessages.hpp` | Sent when (step 09) |
+| Mail | `Accounts/MailMessages.hpp` | Sent when |
 |---|---|---|
-| The verification code | `verificationMail(language, username, code, validFor)` | An account is created, or signs in unverified |
+| The verification code | `verificationMail(language, username, code, validFor)` | An account is created, signs in unverified, or asks `RESEND_CODE` |
 | The reset code | `resetMail(language, username, code, validFor)` | A forgotten password is asked for |
 | "You already have an account" | `existingAccountMail(language, username)` | Someone registers with an email that has an account: its holder learns it, the one who registered learns nothing from the answer of the lobby |
 | Too many wrong codes | `tooManyCodesMail(language, username)` | The daily limit of the codes is reached (`DailyLimitReached`) |
@@ -181,6 +182,109 @@ ERROR master   Cannot use the mail server mail.example.org:587: Login denied
 In a container that restarts on failure, a mail server down at start makes the server restart again and again,
 until it answers ([Set up accounts](../guides/set-up-accounts.md#result)).
 
+## In the lobby
+
+`Accounts/AccountService.hpp` answers the requests of the accounts that the lobby receives, `REGISTER` to
+`DELETE_ACCOUNT`, resumes the session of a `HELLO` with a token, and checks the names of guests. It runs on the
+event loop, and does its work on the threads of the others: the database thread for the store, the hasher for
+the passwords, the mailer for the mails. A master has one when its settings enable `[accounts]`
+(`Lobby::setAccounts()`); without it, the lobby answers `ACCOUNTS_DISABLED` and a token `SESSION_EXPIRED`, as
+before the accounts.
+
+```cpp
+AccountService accounts(loop, databaseThread, hasher, mailer, {.guests = settings.accounts->guests});
+lobby.setAccounts(&accounts);
+```
+
+### One request at a time
+
+The lobby answers the requests of a connection in the order it receives them
+([lobby protocol, section 4](../protocol/lobby.md#4-requests-replies-and-notifications)), but a request of the
+accounts takes a round trip to the database, a hash of tens of milliseconds, sometimes both. So each connection
+handles **one request at a time**: the requests that follow wait in the queue `CREATE_GAME` already uses
+(`LobbyLimits::maxWaitingRequests`, 32, then the client is disconnected), and `Lobby::drain()` answers them once
+the reply comes. A `HELLO` waits the same way on a server with accounts, since a token or the name of a guest is
+checked in the database. The reply of the service always comes later, on the loop, never inside the call, and
+never after the service is gone.
+
+### The requests
+
+| Request | Work | Reply |
+|---|---|---|
+| `HELLO` with a token | `resumeSession()` | `WELCOME` with the account, the username as the name of the player; `SESSION_EXPIRED` (then closed) if the token is unknown, expired, of the panel, or its account banned (a ban ends its sessions) |
+| `HELLO` of a guest | `findAccountByUsername()`, only for a name that could be a username | `WELCOME`, the name with the mark of the guests; `NAME_RESERVED` if it is the username of an account, ignoring case |
+| `REGISTER` | The rules, the hash, `createAccount()` and `createCode()`, the mail | `CODE_SENT`, whether the email has an account or not: a new email gets a code, one that has an account the "you already have an account" mail, and no account is made. `USERNAME_TAKEN` is the only thing it tells |
+| `VERIFY_EMAIL` | `checkCode()`, `markEmailVerified()`, `createSession()` | `SIGNED_IN`; `INVALID_CODE` for a wrong code or a login without account |
+| `RESEND_CODE` | `createCode()`, the mail, for an account not verified | `CODE_SENT` whatever the login; `TOO_MANY_ATTEMPTS` within a minute of the last one for the same login |
+| `SIGN_IN` | The account by username or email, the hash checked, `createSession()` | `SIGNED_IN`; `INVALID_CREDENTIALS` for a wrong login or password alike; only after the right password, `BANNED` (then closed), or `EMAIL_NOT_VERIFIED` with a new code sent |
+| `SIGN_OUT` | `endSession()` | `DONE`, then closed |
+| `FORGOT_PASSWORD` | `createCode()` and the mail, if the email has an account | `CODE_SENT` whatever the email |
+| `RESET_PASSWORD` | The hash, `checkCode()`, `setPassword()` (every session ends), the email verified, `createSession()` | `SIGNED_IN` |
+| `DELETE_ACCOUNT` | The hash checked, `deleteAccount()` | `DONE`, then closed |
+| `DISCORD_SIGN_IN`, `DISCORD_CONFIRM`, `CHOOSE_USERNAME` | None: Discord comes in step 11 | `ACCOUNTS_DISABLED` |
+
+In a game, every request of the accounts gets `ALREADY_IN_GAME`, before any work: a player signs in, out, or
+deletes its account from the lobby only, so that nobody changes identity in a game. A request that signs in gives
+the connection its account: its name is now the username, for the next games,
+and the administration sees the account (`AdminPlayer::accountId`). A database that does not answer, a hasher or
+a database thread with a full queue, give `BUSY`; a mailer with a full queue `MAIL_UNAVAILABLE`.
+
+Nothing tells the accounts of others:
+
+- `REGISTER` hashes the password whether the email has an account or not, so that both answers take as long;
+- `SIGN_IN` with a login that has no account checks the password all the same, against a hash made at start
+  with the parameters of the hasher;
+- `RESEND_CODE` counts its minute by the login, before the database, and `FORGOT_PASSWORD` answers `CODE_SENT` for
+  any email;
+- an address that got its 5 mails of the hour gets its reply as if the mail had gone: only the logs say it did
+  not.
+
+### The limits
+
+`AccountLimits`, kept in memory by the service and lost at a restart:
+
+| Limit | Default | Beyond |
+|---|---|---|
+| Requests of the accounts from one IP address | 10 a minute, every connection of the address together | `TOO_MANY_ATTEMPTS` |
+| Wrong passwords of one account in a row (`SIGN_IN`, `DELETE_ACCOUNT`) | 10 | Paused 15 minutes: `TOO_MANY_ATTEMPTS`, the password not checked, even right |
+| `RESEND_CODE` for one login | Once a minute | `TOO_MANY_ATTEMPTS` |
+| Wrong codes of an account | 5 per code, 20 a day ([Codes](#codes)) | `TOO_MANY_ATTEMPTS`; on the 20th, the holder of the account gets the "too many wrong codes" mail |
+| The hasher, the database thread | Their queues | `BUSY` |
+
+With 10 wrong passwords then a pause of 15 minutes, a guesser gets about a thousand tries a day on one account,
+and needs as many addresses to go faster, each limited too.
+
+### Guests
+
+`accounts.guests` decides whether players can play without an account. A master without guests welcomes them all
+the same, so that they can sign in, and answers `GUESTS_DISABLED` to their `CREATE_GAME` and `JOIN_GAME`.
+
+On a server with accounts, a guest carries **`~` before its name** (`markGuest()`, `GuestMark`), in the lobby, in
+the panel and on the score board: no username has it, so a guest named like an account, or with a lookalike
+letter of another alphabet, never looks like it. The name is cut to keep both in 16 bytes, on a whole character.
+A server without accounts shows the names as they are.
+
+### Deleting an account
+
+`DELETE_ACCOUNT`, with the password of the account, deletes it with its sessions and its codes. Its
+administration actions stay, so that the record keeps what was done, without who it was
+(`anonymizeActions()`):
+
+- the actions it did, as an administrator (step 12), have the actor `deleted`;
+- a `kick` of the player while signed in (its `details` hold `account`) loses its `name`, which becomes
+  `deleted`, its `address` and its `account`;
+- an `end_game` with the player in it (its `details` hold `accounts`) has its username replaced by `deleted` in
+  `players`, and its id taken out of `accounts`.
+
+An account without password, made with Discord, confirms with Discord (step 11): until then, it gets
+`DISCORD_NOT_CONFIRMED`.
+
+### The purge
+
+The accounts with an email not verified within 24 hours are deleted at start, then every hour
+(`purgeUnverifiedAccounts()` on the database thread), with their codes: an email typed by mistake, or by someone
+else, does not stay taken.
+
 ## Tests
 
 `tests/server_account_store.cpp` (tags `[server]`, `[accounts]`, `[database]` for those on the database), every
@@ -198,6 +302,25 @@ test of the database on SQLite and on PostgreSQL:
 - codes used once, bound to their account and their purpose, replaced, expired, refused after 5 attempts, and
   the daily limit across several codes of both purposes, lifted the next day;
 - the purge of accounts not verified within 24 hours, with their codes and sessions, those of Discord kept.
+
+`tests/server_accounts.cpp` (tags `[server]`, `[accounts]`, `[database]`), a real lobby with its TLS clients, the
+real hasher with cheap parameters, and a mailer of the tests that keeps the codes
+(`tests/helpers/FakeMailer.hpp`), on SQLite and on PostgreSQL:
+
+- a player who registers, reads its code, verifies, disconnects, and comes back signed in from its token alone;
+- a register with an email that has an account answered `CODE_SENT` like any other, its holder told, no account
+  made; a username taken ignoring case; the fields checked before anything is kept or sent;
+- signing in by username or email, a wrong password and an unknown login answered alike, `ALREADY_SIGNED_IN`;
+  an account not verified sent a new code only after its right password;
+- codes wrong, unknown, expired and tried too often; `RESEND_CODE` once a minute whatever the login; a forgotten
+  password set again, ending every session; signing out; a token unknown, expired or of the panel;
+- a banned account refused after its right password, its sessions ended; a guest refused the name of an
+  account, and marked; a master without guests;
+- requests sent back to back, `HELLO` included, answered in order; the requests of the accounts refused in a game
+  of a real instance;
+- the limits: per address, per account, the codes of a day mailed to the holder, a full hasher, a full mailer;
+- the purge at start; an account deleted with its password, its actions anonymized; Discord not offered yet;
+- the logs, which hold neither the password, nor the code, nor the token, nor the email.
 
 `tests/server_mail.cpp` (tags `[server]`, `[mail]`), against a small SMTP server of the tests
 (`tests/helpers/SmtpServer.hpp`) in the clear, with STARTTLS, or TLS from the start, with or without an account:

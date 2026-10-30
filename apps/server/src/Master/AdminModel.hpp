@@ -24,6 +24,8 @@ struct AdminPlayer {
     /// The game it is in, or creating.
     std::optional<std::uint32_t> gameId;
     std::chrono::system_clock::time_point joinedAt;
+    /// The account signed in, nothing for a guest.
+    std::optional<long long> accountId;
 
     friend bool operator==(const AdminPlayer &, const AdminPlayer &) = default;
 };

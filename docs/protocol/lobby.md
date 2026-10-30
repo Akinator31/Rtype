@@ -165,11 +165,13 @@ does not fit its field, a token flag other than 0 or 1, or a name beside a token
 
 - **With a token**: if the token is unknown, expired, or the master keeps no account, it answers
   `ERROR (SESSION_EXPIRED)` and closes the connection: the client forgets the token and connects again without
-  it. If the account is banned, `ERROR (BANNED)`, then closed. Otherwise the connection is signed in to the
-  account, whose username is the name of the player, and the master answers `WELCOME` with the account.
+  it. A ban ends every session of the account, so the token of a banned account gets `SESSION_EXPIRED` too.
+  Otherwise the connection is signed in to the account, whose username is the name of the player, and the master
+  answers `WELCOME` with the account.
 - **Without a token**, a guest: if the name is empty, too long or invalid, the master answers
   `ERROR (INVALID_NAME)`; if it is the username of an account, ignoring case, `ERROR (NAME_RESERVED)`. Otherwise
-  it answers `WELCOME`. The names of guests do not have to be unique. A master that accepts no guest welcomes
+  it answers `WELCOME`. The names of guests do not have to be unique. On a master with accounts, a guest carries
+  `~` before its name, which no username has, where the others see it: the other players, the panel. A master that accepts no guest welcomes
   the connection all the same, so that it can sign in, and answers `GUESTS_DISABLED` to its `CREATE_GAME` and
   `JOIN_GAME` until it does.
 
@@ -519,12 +521,12 @@ No payload.
 | `INVALID_NAME` | 6 | Empty, too long, or invalid name | Kept |
 | `GAME_NOT_FOUND` | 7 | No game with this id | Kept |
 | `GAME_FULL` | 8 | The game has its maximum number of players | Kept |
-| `ALREADY_IN_GAME` | 9 | `CREATE_GAME` or `JOIN_GAME` while in a game | Kept |
+| `ALREADY_IN_GAME` | 9 | `CREATE_GAME`, `JOIN_GAME` or a request of the accounts while in a game | Kept |
 | `NOT_IN_GAME` | 10 | `LEAVE_GAME` while not in a game | Kept |
 | `SERVER_FULL` | 11 | No more games can be created | Kept |
 | `GAME_START_FAILED` | 12 | The game process did not start | Kept |
 | `KICKED` | 13 | An administrator removed the player from the server. Sent without a request (request 0) | Closed after the error |
-| `BANNED` | 14 | The address of the client is banned for a time: the reply to `HELLO`, or sent without a request (request 0) when the ban comes while it is connected. From version 3, the account is banned: the reply to `HELLO` with its token, to `SIGN_IN`, or sent without a request | Closed after the error |
+| `BANNED` | 14 | The address of the client is banned for a time: the reply to `HELLO`, or sent without a request (request 0) when the ban comes while it is connected. From version 3, the account is banned: the reply to `SIGN_IN` after the right password, or sent without a request | Closed after the error |
 | `ACCOUNTS_DISABLED` | 15 | The master does not offer this way of signing in (version 3, as all the codes below) | Kept |
 | `USERNAME_TAKEN` | 16 | Another account has this username, ignoring case | Kept |
 | `WEAK_PASSWORD` | 17 | Not 10 to 128 characters, or the username or the email | Kept |

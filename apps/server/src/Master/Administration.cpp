@@ -155,6 +155,10 @@ bool Administration::kick(std::uint32_t playerId, const std::string &reason, con
     crow::json::wvalue details;
     details["name"] = player->name;
     details["address"] = player->address.ip();
+    if (player->accountId) {
+        // Its name and address are taken out if the account is deleted
+        details["account"] = static_cast<std::int64_t>(*player->accountId);
+    }
     if (player->gameId) {
         details["gameId"] = *player->gameId;
     }
@@ -174,10 +178,17 @@ bool Administration::endGame(std::uint32_t gameId, const std::string &reason, co
     crow::json::wvalue details;
     details["name"] = ended->name;
     std::vector<crow::json::wvalue> players;
+    std::vector<crow::json::wvalue> accounts;
     for (const AdminGamePlayer &player : ended->players) {
         players.emplace_back(player.name);
+        if (const std::optional<AdminPlayer> signedIn = findPlayer(player.id);
+            signedIn && signedIn->accountId) {
+            accounts.emplace_back(static_cast<std::int64_t>(*signedIn->accountId));
+        }
     }
     details["players"] = std::move(players);
+    // The players signed in: their names are taken out if their account is deleted
+    details["accounts"] = std::move(accounts);
     details["reason"] = reason;
     record(actor, "end_game", std::format("game:{}", gameId), details.dump());
     return true;

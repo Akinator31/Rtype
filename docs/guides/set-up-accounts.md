@@ -1,9 +1,8 @@
 # How to set up accounts
 
-This guide prepares a server for the accounts of its players: the mail server their codes are sent through. It
-is for whoever hosts a server. The accounts themselves, and Discord, come in the next versions of the server
-([#259](https://github.com/Akinator31/Rtype/issues/259)); this part gives the server its mail, which it already
-checks at every start.
+This guide gives the players of a server their accounts: the mail server their codes are sent through, what the
+players can then do, and what the server keeps of them. It is for whoever hosts a server. Discord comes in a next
+version of the server ([#259](https://github.com/Akinator31/Rtype/issues/259)).
 
 A server without `[accounts]` needs none of this: its players play as guests.
 
@@ -106,3 +105,53 @@ While it runs, a mail the server refuses or cannot be reached for is tried again
 2 minutes, then given up, and the logs say so. One address receives at most 5 mails an hour, so that nobody can
 flood the mailbox of another by typing their email. The logs show each mail by its subject and a masked address,
 `p…@example.org`, never its code. How the server sends them is in [Accounts](../architecture/accounts.md#the-mails).
+
+## What the players can do
+
+Once the server starts with `[accounts]`, its players can, from the game:
+
+- **create an account** with a username, an email and a password: a code of 6 digits reaches the email, valid
+  15 minutes, which they type in the game. An account not verified within 24 hours is deleted;
+- **sign in** with their username or their email, and **stay signed in** on that server for 30 days without
+  playing, each game pushing it back;
+- **get a new password** with a code sent to their email, which signs them out everywhere else;
+- **sign out**, and **delete their account** with its password.
+
+`guests = true` lets players play without an account too. On a server with accounts, a guest carries `~` before
+its name, in the game and in the panel, and cannot take the username of an account: whoever sees `Pavel` knows
+it is the account. With `guests = false`, a player must sign in before creating or joining a game.
+
+The server limits the tries, so that nobody guesses a password or a code, nor floods a mailbox:
+
+| Limit | Value |
+|---|---|
+| Requests of the accounts from one address | 10 a minute |
+| Wrong passwords of one account in a row | 10, then 15 minutes of pause |
+| Wrong codes | 5 per code, 20 per account per day; the holder gets a mail on the 20th |
+| A new code for the same account | Once a minute |
+| Mails to one address | 5 an hour |
+
+The players see what the server answers as messages of the game; the logs of the server say who signed in, by
+account id, never a password, a code, a session or an email.
+
+## The data kept, and for how long
+
+What the server keeps of the players, in its database ([Accounts](../architecture/accounts.md#the-tables)), so
+that a host can tell them, as the GDPR asks:
+
+| Data | Kept | Until |
+|---|---|---|
+| Username, email | As typed | The account is deleted by its player, or within 24 hours if the email is never verified |
+| Password | Its Argon2id hash only, never the password | The account is deleted, or the password changed |
+| Dates: created, email verified, last seen | | The account is deleted |
+| Ban and its reason | | The ban is lifted, or the account deleted |
+| Sessions | The SHA-256 of their token, when they were made and last used | 30 days without use, sign-out, a new password, a ban, or the account deleted |
+| Codes sent by email | Their hash | Used, replaced, 15 minutes, or the account deleted |
+| Wrong codes of the day | A count | The next day (UTC) |
+| Actions of the administrators about a player | Its name, its address, its account id ([Administration](../architecture/administration.md)) | Kept; when the account is deleted, its name becomes `deleted`, its address and id are removed |
+| Mails | Nothing: sent through the mail server, which keeps what its host keeps | |
+| Limits on tries, the address of a connection | In memory only | A restart of the server |
+
+A player deletes their account from the game, with its password: the account, its sessions and its codes are
+deleted at once. The guests leave nothing in the database. The logs hold the usernames, account ids and IP
+addresses of the players, for as long as the host keeps the logs.

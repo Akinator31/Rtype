@@ -122,8 +122,9 @@ The sections go together:
 
 The server serves its panel with `[web]` ([Run a server](run-a-server.md#steps), step 4). With accounts
 enabled, it checks its mail server at every start, `--check` included, without sending anything
-([Set up accounts](set-up-accounts.md)). The accounts themselves and Discord come in the next versions of the
-server: until then, their sections are checked, and not used yet.
+([Set up accounts](set-up-accounts.md)), then lets its players create accounts and sign in. Discord and the
+administrators of `[admin]` come in the next versions of the server: until then, their sections are checked, and
+not used yet.
 
 ## Result
 
