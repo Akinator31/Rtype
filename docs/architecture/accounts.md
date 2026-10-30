@@ -3,8 +3,8 @@
 The accounts of the players of a server ([ADR 0024](../decisions/0024-player-accounts.md)): what makes a valid
 username, email and password, how a password is hashed, what the master keeps of the accounts, their sessions
 and the codes, how it sends those codes by email, and how its lobby answers the requests of the accounts of
-[lobby protocol 3](../protocol/lobby.md#6-accounts). The client uses them in the next step of the accounts
-([#259](https://github.com/Akinator31/Rtype/issues/259)). To give a server its accounts, see
+[lobby protocol 3](../protocol/lobby.md#6-accounts). The client offers them from its Online menu
+([Playing online, accounts](client-online.md#accounts)). To give a server its accounts, see
 [Set up accounts](../guides/set-up-accounts.md).
 
 | | |
