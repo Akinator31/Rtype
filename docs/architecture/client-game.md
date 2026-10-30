@@ -5,8 +5,10 @@ How the client plays a game: one game scene, fed by a **game session**, offline 
 [libs/game](game.md) runs in the client; online, it runs in a server instance, and the client receives its
 snapshots (the online session comes with `client: networking`).
 
-To play: **Play**, then **Solo**, in the main menu. Arrows (or WASD, ZQSD) move the ship, Space fires, Q and
-E (A and E on AZERTY) held turn the ship by 30° up and down to fire diagonally, Escape opens the pause menu.
+To play: **Play**, then **Solo**, in the main menu. The hangar opens first, on the ship equipped last:
+**Launch** starts the game with the ship looked at, and keeps it for the next time. Arrows (or WASD, ZQSD)
+move the ship, Space fires, Q and E (A and E on AZERTY) held turn the ship by 30° up and down to fire
+diagonally, Escape opens the pause menu.
 
 ## Code layout
 
@@ -141,6 +143,12 @@ where its box would be, with the same size anywhere on the screen: what is drawn
 
 The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
 an entity flies.
+
+The local player flies the ship equipped in the hangar: `GameScenes` gives it its own look
+(`GameSessionSystem::setLocalShipLook()`), from the entry of the ship catalog (`ShipSelector/ShipCatalog.cpp`),
+which keeps the hull and the trail meshes of each model, measured as above. The ships of the other players keep
+the look of their kind, the Ezno: the server does not know which ship each player equipped. The collider stays
+that of the rules: the long ships are fitted to its width, and are thinner than it.
 
 ### Impacts
 

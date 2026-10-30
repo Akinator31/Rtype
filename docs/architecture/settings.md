@@ -24,6 +24,7 @@ Name keys by domain with dots, so that the file stays readable:
 | Keys | Written by |
 |---|---|
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
+| `ship.equipped` | The hangar (`writeEquippedShip()`): the code of the ship the player equipped last, such as `VX-03`, on which the hangar opens at the next run |
 
 ## Not the data of the server
 

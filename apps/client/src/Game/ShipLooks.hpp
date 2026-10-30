@@ -6,6 +6,7 @@
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -47,16 +48,22 @@ struct ShipLook {
 class ShipLooks
 {
     std::unordered_map<game::EntityKind, ShipLook> _looks;
+    std::optional<ShipLook> _localLook;
 
 public:
     void setLook(game::EntityKind kind, const ShipLook &look);
+    /// The ship of the local player is drawn with this look instead of the one of its kind: the ship it
+    /// equipped in the hangar.
+    void setLocalLook(const ShipLook &look);
     /// The ships of this kind are drawn in 3D.
     [[nodiscard]] bool hasLook(game::EntityKind kind) const;
 
-    /// Gives an entity the model of its kind, with its ShipAttitude, placed on it.
+    /// Gives an entity the model of its kind, or the local look for the ship of the local player, with its
+    /// ShipAttitude, placed on it.
     /// @param clock Seconds the session has been played: the time of the animations.
+    /// @param local The entity is the ship of the local player.
     void addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, const EntityLook &look,
-                  float clock) const;
+                  float clock, bool local = false) const;
     /// Turns the model of an entity towards the roll and the aim of the latest state of its ship, its
     /// animation in step with the session.
     void moveModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, float clock) const;
