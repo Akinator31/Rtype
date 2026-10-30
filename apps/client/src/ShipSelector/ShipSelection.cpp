@@ -1,7 +1,12 @@
 #include "ShipSelector/ShipSelection.hpp"
 
+#include "rtype/log/Logger.hpp"
+
 #include <algorithm>
 #include <cmath>
+#include <exception>
+#include <optional>
+#include <string>
 
 namespace rtype::client
 {
@@ -17,7 +22,39 @@ float wrapAround(float value)
     return value - (count * std::round(value / count));
 }
 
+const log::Logger &logger()
+{
+    static const log::Logger instance("ships");
+    return instance;
+}
+
 } // namespace
+
+void readEquippedShip(ShipSelection &selection, const engine::Settings &settings)
+{
+    const std::optional<std::string> code = settings.getString(EquippedShipSettingsKey);
+    if (!code) {
+        return;
+    }
+    const auto &catalog = getShipCatalog();
+    for (std::size_t index = 0; index < shipCount; ++index) {
+        if (*code == catalog[index].code && !catalog[index].locked) {
+            selection.equipped = index;
+            selection.focused = index;
+            return;
+        }
+    }
+}
+
+void writeEquippedShip(const ShipSelection &selection, engine::Settings &settings)
+{
+    settings.setString(EquippedShipSettingsKey, getShipCatalog()[selection.equipped].code);
+    try {
+        settings.writeFile();
+    } catch (const std::exception &error) {
+        logger().error("Cannot write the settings {}: {}", settings.getPath().string(), error.what());
+    }
+}
 
 void ShipSelection::step(int direction)
 {
