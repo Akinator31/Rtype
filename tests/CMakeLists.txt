@@ -64,6 +64,7 @@ add_executable(rtype_tests
     server_games.cpp
     server_lobby.cpp
     server_mail.cpp
+    server_panel_accounts.cpp
     server_options.cpp
     server_replication.cpp
     server_settings.cpp

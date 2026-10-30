@@ -5,6 +5,7 @@
 
 #include <crow.h>
 
+#include <algorithm>
 #include <chrono>
 #include <format>
 #include <future>
@@ -42,7 +43,11 @@ struct FakeDiscord::Impl {
     /// What a code was given for.
     struct Grant {
         rtype::server::DiscordUser user;
+        /// The verifier itself, as the Social SDK keeps it, or the challenge of a verifier (S256) the panel
+        /// gave.
         std::string verifier;
+        bool challenge = false;
+        std::string redirectUri = RedirectUri;
     };
 
     crow::SimpleApp app;
@@ -81,8 +86,22 @@ struct FakeDiscord::Impl {
         codes.erase(found);
         const char *verifier = form.get("code_verifier");
         const char *redirect = form.get("redirect_uri");
-        if (verifier == nullptr || granted.verifier != verifier || redirect == nullptr ||
-            std::string(redirect) != RedirectUri) {
+        const auto verified = [&] {
+            if (verifier == nullptr) {
+                return false;
+            }
+            if (!granted.challenge) {
+                return granted.verifier == verifier;
+            }
+            const rtype::network::Sha256 digest = rtype::network::sha256(std::string_view(verifier));
+            std::string encoded = rtype::server::base64(
+                std::string_view(reinterpret_cast<const char *>(digest.data()), digest.size()));
+            std::ranges::replace(encoded, '+', '-');
+            std::ranges::replace(encoded, '/', '_');
+            std::erase(encoded, '=');
+            return encoded == granted.verifier;
+        };
+        if (!verified() || redirect == nullptr || std::string(redirect) != granted.redirectUri) {
             return json(400, {{"error", "invalid_grant"}});
         }
         const std::string access = randomText();
@@ -148,8 +167,19 @@ rtype::server::DiscordAuthorization FakeDiscord::accept(const rtype::server::Dis
     rtype::server::DiscordAuthorization authorization{
         .code = randomText(), .codeVerifier = randomText(), .redirectUri = RedirectUri};
     const std::lock_guard lock(_impl->mutex);
-    _impl->codes[authorization.code] = Impl::Grant{.user = user, .verifier = authorization.codeVerifier};
+    _impl->codes[authorization.code] = Impl::Grant{
+        .user = user, .verifier = authorization.codeVerifier, .challenge = false, .redirectUri = RedirectUri};
     return authorization;
+}
+
+std::string FakeDiscord::authorize(const rtype::server::DiscordUser &user, const std::string &challenge,
+                                   const std::string &redirectUri)
+{
+    std::string code = randomText();
+    const std::lock_guard lock(_impl->mutex);
+    _impl->codes[code] =
+        Impl::Grant{.user = user, .verifier = challenge, .challenge = true, .redirectUri = redirectUri};
+    return code;
 }
 
 void FakeDiscord::setDown(bool down)

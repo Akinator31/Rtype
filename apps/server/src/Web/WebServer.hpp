@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Accounts/PanelAccounts.hpp"
 #include "Common/Secret.hpp"
 #include "Common/Settings.hpp"
 #include "Master/Administration.hpp"
@@ -23,15 +24,16 @@ struct WebServerSettings {
     /// The proxies whose X-Forwarded-For is believed.
     std::vector<Subnet> trustedProxies;
     /// The address the panel is reached at from outside, `https://admin.example.org`: the WebSocket accepts
-    /// its origin, beside the one of the address the browser asked.
+    /// its origin, beside the one of the address the browser asked. Behind HTTPS, the cookies are `Secure`.
     std::string publicUrl;
     /// The local access token, which `GET /?token=…` trades for a session (docs/architecture/web.md).
     Secret accessToken{};
 };
 
 /// The web server of the master (docs/architecture/web.md): the static panel, `/api/health`, the local access
-/// token traded for a session cookie, the administration API and its WebSocket (docs/protocol/admin-api.md),
-/// and the security headers of every response.
+/// token traded for a session cookie, the sign-in of the administrators with their account (password or
+/// Discord), the administration API and its WebSocket (docs/protocol/admin-api.md), and the security headers
+/// of every response.
 ///
 /// It answers on threads of its own, two of them. A request that needs the master is posted to its event
 /// loop, and answered from there without blocking either side: the loop never waits for the web, the web
@@ -64,6 +66,11 @@ public:
     /// What the API shows and acts on; nullptr, the default, answers its routes 503. Called on the thread of
     /// the loop, which is the only one that uses it: it must outlive the server, or be taken away first.
     void setAdministration(Administration *administration);
+
+    /// The administrators who sign in with their account (docs/architecture/web.md#accounts); nullptr, the
+    /// default, lets in the local access token only. Called on the thread of the loop, as
+    /// setAdministration().
+    void setPanelAccounts(PanelAccounts *accounts);
 
     /// Closes the port and its connections, and waits for its threads. Does nothing the second time.
     void stop();

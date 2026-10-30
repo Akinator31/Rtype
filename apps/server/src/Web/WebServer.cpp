@@ -1,5 +1,6 @@
 #include "Web/WebServer.hpp"
 
+#include "Accounts/PanelAccounts.hpp"
 #include "Web/AdminJson.hpp"
 #include "Web/LocalAccess.hpp"
 #include "Web/Visitor.hpp"
@@ -61,12 +62,25 @@ constexpr std::string_view ContentSecurityPolicy =
     "font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 constexpr std::string_view SessionCookie = "rtype_session";
+/// The state of a sign-in with Discord, kept by the browser until Discord sends it back: `SameSite=Lax`, as
+/// the return from Discord is a navigation from another site, which a `Strict` cookie would not follow.
+constexpr std::string_view DiscordCookie = "rtype_discord";
+constexpr std::string_view DiscordPath = "/auth/discord";
 /// The header every POST of the API carries, with the token GET /api/session gives.
 constexpr std::string_view CsrfHeader = "X-CSRF-Token";
+/// The accounts of GET /api/accounts, by default and at most; the longest search.
+constexpr std::size_t DefaultAccounts = 50;
+constexpr std::size_t MaxAccounts = 200;
+constexpr std::size_t MaxSearchLength = 254;
+/// The longest login and password of a sign-in to the panel, in bytes.
+constexpr std::size_t MaxLoginLength = 254;
+constexpr std::size_t MaxPasswordBytes = 512;
 /// The actions of GET /api/actions, by default and at most.
 constexpr std::size_t DefaultActions = 100;
 constexpr std::size_t MaxActions = 500;
-constexpr std::chrono::hours SessionLifetime{12};
+constexpr std::chrono::hours SessionLifetime{PanelSessionLifetime};
+/// How long a sign-in with Discord started waits for its return.
+constexpr std::chrono::minutes DiscordLifetime{10};
 /// Opening the address of admin-url.txt again makes a new session: the oldest go beyond this many.
 constexpr std::size_t MaxSessions = 64;
 
@@ -166,6 +180,8 @@ struct Answer {
     int status = 200;
     std::string contentType;
     std::string body;
+    /// Beside the usual ones: Set-Cookie, Location. Added, so that a header can come twice.
+    std::vector<std::pair<std::string, std::string>> headers = {};
 };
 
 /// Answers a request posted to the loop. Can be called from any thread, once.
@@ -190,7 +206,18 @@ void apply(crow::response &response, const Answer &answer)
 {
     response.code = answer.status;
     response.set_header("Content-Type", answer.contentType);
+    for (const auto &[name, value] : answer.headers) {
+        response.add_header(name, value);
+    }
     response.body = answer.body;
+}
+
+/// The answer that sends the browser to `location` once it set its cookies.
+Answer redirect(std::string location, std::vector<std::pair<std::string, std::string>> headers = {})
+{
+    headers.emplace_back("Location", std::move(location));
+    headers.emplace_back("Cache-Control", "no-store");
+    return {303, "text/plain; charset=utf-8", "See the next address\n", std::move(headers)};
 }
 
 /// A page of the server itself, in the colours of the game. `text` is ours, never the visitor's.
@@ -343,11 +370,38 @@ struct Pending {
     }
 };
 
+/// A session opened with the local access token, kept in memory.
 struct Session {
     Secret id{};
     /// What every POST of the API carries in X-CSRF-Token: a page of another site cannot read it.
     Secret csrf{};
     Clock::time_point expires;
+};
+
+/// A session of an account found valid lately: what the upgrade of a WebSocket checks, which cannot wait for
+/// the database. The loop checks it again once the WebSocket is open.
+struct KnownSession {
+    Secret token{};
+    long long accountId = 0;
+    Clock::time_point expires;
+};
+
+/// Who a request of the API comes from, once its session is checked.
+struct SignedIn {
+    /// `local`, or the id of the account: the actor of what it does.
+    std::string actor;
+    /// Nothing for the local access token.
+    std::optional<PanelAccount> account;
+    Secret csrf{};
+    /// The value of its cookie. Secret.
+    Secret session{};
+};
+
+/// What a WebSocket was accepted with, from its upgrade to its opening: the userdata of its connection.
+struct Accepted {
+    Secret session{};
+    /// 0 for the local access token.
+    long long accountId = 0;
 };
 
 /// The WebSockets of /api/events, shared with the subscriptions on the loop, which can outlive the server.
@@ -357,6 +411,7 @@ struct Subscribers {
         std::uint64_t token = 0;
         /// The subscription of the administration, 0 until it is made on the loop.
         std::uint64_t subscription = 0;
+        Accepted accepted;
     };
 
     std::mutex mutex;
@@ -372,6 +427,18 @@ struct Subscribers {
         const auto found = connections.find(connection);
         if (found != connections.end() && found->second.token == token) {
             connection->send_text(std::move(text));
+        }
+    }
+
+    /// Closes the WebSockets whose session no longer opens the panel. Crow closes them on its threads.
+    void close(const std::function<bool(const Accepted &)> &which)
+    {
+        static constexpr std::uint16_t PolicyViolation = 1008;
+        const std::lock_guard lock(mutex);
+        for (const auto &[connection, subscriber] : connections) {
+            if (which(subscriber.accepted)) {
+                connection->close("signed out", PolicyViolation);
+            }
         }
     }
 };
@@ -445,24 +512,114 @@ std::optional<std::int64_t> integerField(const crow::json::rvalue &object, const
     return object[name].i();
 }
 
+/// The optional reason of a body that may be empty.
+std::optional<std::string> reasonOf(const crow::request &request)
+{
+    const auto read = body(request, true);
+    return read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
+}
+
+constexpr std::string_view ReasonOnly =
+    "the body is a JSON object, with an optional reason of at most 200 bytes";
+
+Answer noSession()
+{
+    return error(401, "no session: sign in, or open the address in admin-url.txt");
+}
+
+/// What the panel tells of a refused account, as JSON or as a page.
+struct Refused {
+    int status;
+    std::string_view title;
+    std::string_view text;
+};
+
+Refused refusedBecause(PanelRefusal refusal)
+{
+    switch (refusal) {
+    case PanelRefusal::InvalidCredentials:
+        return {401, "Not signed in", "wrong login or password"};
+    case PanelRefusal::EmailNotVerified:
+        return {403, "Not signed in",
+                "the email of this account is not verified: verify it in the game first"};
+    case PanelRefusal::NotAdmin:
+        return {403, "Not an administrator", "this account is not an administrator of this server"};
+    case PanelRefusal::Banned:
+        return {403, "Banned", "this account is banned"};
+    case PanelRefusal::TooManyAttempts:
+        return {429, "Too many attempts", "too many attempts: try again in a few minutes"};
+    case PanelRefusal::Busy:
+        return {503, "Busy", "the server is too busy: try again in a moment"};
+    case PanelRefusal::SessionExpired:
+        return {401, "Not signed in", "no session: sign in, or open the address in admin-url.txt"};
+    case PanelRefusal::DiscordExpired:
+        return {403, "Sign-in expired",
+                "this sign-in with Discord is used, expired, or was started in another browser: start again "
+                "from the panel"};
+    case PanelRefusal::DiscordRefused:
+        return {403, "Not signed in",
+                "Discord did not sign in an account of this server: sign in to the game with Discord first"};
+    case PanelRefusal::DiscordUnavailable:
+        return {503, "Discord cannot be reached", "Discord cannot be reached: try again in a moment"};
+    }
+    return {403, "Not signed in", "refused"};
+}
+
+crow::json::wvalue accountJson(const PanelAccount &account)
+{
+    crow::json::wvalue json;
+    json["id"] = static_cast<std::int64_t>(account.id);
+    json["username"] = account.username;
+    json["role"] = std::string(roleName(account.role));
+    json["locked"] = account.listed;
+    return json;
+}
+
+/// The answer of an action on an account.
+Answer changed(const AccountChanged &changed)
+{
+    switch (changed.outcome) {
+    case AccountChanged::Outcome::Done: {
+        crow::json::wvalue done;
+        done["account"] = changed.account ? toJson(*changed.account) : crow::json::wvalue(nullptr);
+        done["removed"] = static_cast<std::uint64_t>(changed.removed);
+        return jsonOf(200, done);
+    }
+    case AccountChanged::Outcome::NoAccount:
+        return error(404, "no such account");
+    case AccountChanged::Outcome::Locked:
+        return error(409,
+                     "this administrator is in [admin] admins of the settings: the panel can neither demote, "
+                     "ban nor delete it");
+    case AccountChanged::Outcome::Failed:
+        break;
+    }
+    return error(503, "the database cannot change the account now");
+}
+
 } // namespace
 
 struct WebServer::Impl {
     rtype::network::EventLoop &loop;
     WebServerSettings settings;
+    /// Behind HTTPS, the cookies are sent over HTTPS only.
+    bool secure = false;
     std::shared_ptr<Pending> pending = std::make_shared<Pending>();
     std::mutex sessionsMutex;
     std::vector<Session> sessions;
+    std::vector<KnownSession> known;
     std::shared_ptr<Subscribers> subscribers = std::make_shared<Subscribers>();
     /// The thread of the loop only.
     Administration *administration = nullptr;
+    PanelAccounts *panelAccounts = nullptr;
     App app;
     std::future<void> running;
     rtype::network::Address local;
     bool stopped = false;
 
     Impl(rtype::network::EventLoop &eventLoop, WebServerSettings webSettings)
-        : loop(eventLoop), settings(std::move(webSettings))
+        : loop(eventLoop), settings(std::move(webSettings)),
+          secure(settings.publicUrl.starts_with("https://"))
     {
         installCrowLogs();
         // Opened once here for its error: Crow only logs why it could not listen. On a loop of its own, run
@@ -539,6 +696,99 @@ struct WebServer::Impl {
         }
     }
 
+    // --- Cookies and sessions ---
+
+    /// A Set-Cookie header: HttpOnly always, Secure behind HTTPS. A `maxAge` of 0 removes the cookie.
+    [[nodiscard]] std::pair<std::string, std::string> setCookie(std::string_view name, std::string_view value,
+                                                                std::chrono::seconds maxAge,
+                                                                std::string_view sameSite,
+                                                                std::string_view path = "/") const
+    {
+        return {"Set-Cookie", std::format("{}={}; Path={}; Max-Age={}; HttpOnly; SameSite={}{}", name, value,
+                                          path, maxAge.count(), sameSite, secure ? "; Secure" : "")};
+    }
+
+    [[nodiscard]] std::pair<std::string, std::string> sessionCookie(const Secret &session) const
+    {
+        return setCookie(SessionCookie, formatSecret(session),
+                         std::chrono::duration_cast<std::chrono::seconds>(SessionLifetime), "Strict");
+    }
+
+    [[nodiscard]] static rtype::network::Address visitorOf(App &app, const crow::request &request)
+    {
+        return app.get_context<Guard>(request).visitor;
+    }
+
+    /// The session of the local access token whose cookie this is, if it is one.
+    [[nodiscard]] std::optional<Session> localSession(const Secret &id)
+    {
+        const Clock::time_point now = Clock::now();
+        const std::lock_guard lock(sessionsMutex);
+        std::erase_if(sessions, [&](const Session &session) { return session.expires <= now; });
+        // Each one compared in constant time
+        std::optional<Session> found;
+        for (const Session &session : sessions) {
+            if (sameSecret(session.id, id)) {
+                found = session;
+            }
+        }
+        return found;
+    }
+
+    /// The account of a session found valid lately, if any.
+    [[nodiscard]] std::optional<long long> knownAccount(const Secret &token)
+    {
+        const Clock::time_point now = Clock::now();
+        const std::lock_guard lock(sessionsMutex);
+        std::erase_if(known, [&](const KnownSession &session) { return session.expires <= now; });
+        std::optional<long long> found;
+        for (const KnownSession &session : known) {
+            if (sameSecret(session.token, token)) {
+                found = session.accountId;
+            }
+        }
+        return found;
+    }
+
+    void remember(const Secret &token, long long accountId)
+    {
+        const Clock::time_point expires = Clock::now() + SessionLifetime;
+        const std::lock_guard lock(sessionsMutex);
+        for (KnownSession &session : known) {
+            if (sameSecret(session.token, token)) {
+                session.expires = expires;
+                return;
+            }
+        }
+        if (known.size() >= MaxSessions * 4) {
+            known.erase(known.begin());
+        }
+        known.push_back({token, accountId, expires});
+    }
+
+    /// Forgets a session of an account, and closes its WebSockets.
+    void forgetSession(const Secret &token)
+    {
+        {
+            const std::lock_guard lock(sessionsMutex);
+            std::erase_if(known,
+                          [&](const KnownSession &session) { return sameSecret(session.token, token); });
+        }
+        subscribers->close([&](const Accepted &accepted) { return sameSecret(accepted.session, token); });
+    }
+
+    /// Forgets every session of an account no longer administrator, and closes its WebSockets.
+    void forgetAccount(long long accountId)
+    {
+        {
+            const std::lock_guard lock(sessionsMutex);
+            std::erase_if(known, [&](const KnownSession &session) { return session.accountId == accountId; });
+        }
+        subscribers->close([&](const Accepted &accepted) { return accepted.accountId == accountId; });
+    }
+
+    // --- The routes ---
+
     void routes()
     {
         CROW_ROUTE(app, "/api/health")
@@ -548,16 +798,17 @@ struct WebServer::Impl {
         });
         CROW_ROUTE(app, "/api/session")
         ([this](const crow::request &request, crow::response &response) {
-            if (const std::optional<Session> found = session(request)) {
+            withSession(request, response, false, [](const SignedIn &who, const Reply &reply) {
                 crow::json::wvalue body;
-                body["csrfToken"] = formatSecret(found->csrf);
-                apply(response, jsonOf(200, body));
-            } else {
-                apply(response, error(401, "no session: open the address in admin-url.txt"));
-            }
-            response.end();
+                body["csrfToken"] = formatSecret(who.csrf);
+                body["account"] = who.account ? accountJson(*who.account) : crow::json::wvalue(nullptr);
+                reply(jsonOf(200, body));
+            });
         });
+        signInRoutes();
+        discordRoutes();
         administrationRoutes();
+        accountRoutes();
         eventsRoute();
         // Crow ends the response of the catch-all route itself, after the handler. Ended here too, it would
         // be left completed once sent, and the next request on the connection would get Crow's bare 404
@@ -599,150 +850,315 @@ struct WebServer::Impl {
         });
     }
 
-    /// The session of the cookie of a request, if it has a valid one.
-    [[nodiscard]] std::optional<Session> session(const crow::request &request)
-    {
-        const auto value = cookie(request.get_header_value("Cookie"), SessionCookie);
-        const auto id = value ? parseSecret(*value) : std::nullopt;
-        if (!id) {
-            return std::nullopt;
-        }
-        const Clock::time_point now = Clock::now();
-        const std::lock_guard lock(sessionsMutex);
-        std::erase_if(sessions, [&](const Session &session) { return session.expires <= now; });
-        // Each one compared in constant time
-        std::optional<Session> found;
-        for (const Session &session : sessions) {
-            if (sameSecret(session.id, *id)) {
-                found = session;
-            }
-        }
-        return found;
-    }
-
-    [[nodiscard]] bool signedIn(const crow::request &request) { return session(request).has_value(); }
-
-    /// The page that opened a WebSocket is the panel's: the origin the browser sends is the one of the
-    /// address it asked, or the public address of the panel. A page of another site sends its own, which it
-    /// cannot change.
-    [[nodiscard]] bool fromPanel(const crow::request &request) const
-    {
-        const std::string origin = request.get_header_value("Origin");
-        if (origin.empty()) {
-            return false;
-        }
-        if (!settings.publicUrl.empty() && origin == originOf(settings.publicUrl)) {
-            return true;
-        }
-        const std::string host = request.get_header_value("Host");
-        return !host.empty() && (origin == "http://" + host || origin == "https://" + host);
-    }
-
-    /// The work of a route of the API, on the loop, with the administration.
-    using AdminWork = std::function<void(Administration &administration, const Reply &reply)>;
+    using SignedWork = std::function<void(const SignedIn &who, const Reply &reply)>;
 
     /// A route of the API needs a session, and a change its CSRF token, before anything else is read: answers
-    /// 401 or 403 otherwise.
-    [[nodiscard]] bool authorized(const crow::request &request, crow::response &response, bool change)
+    /// 401 or 403 otherwise. The session of the local access token is in memory; the session of an account is
+    /// resumed from the database, on the loop, so that a ban or a new role counts at once.
+    void withSession(const crow::request &request, crow::response &response, bool change, SignedWork work)
     {
-        const std::optional<Session> found = session(request);
-        if (!found) {
-            apply(response, error(401, "no session: open the address in admin-url.txt"));
+        const auto value = cookie(request.get_header_value("Cookie"), SessionCookie);
+        const std::optional<Secret> id = value ? parseSecret(*value) : std::nullopt;
+        if (!id) {
+            apply(response, noSession());
             response.end();
-            return false;
+            return;
         }
+        const std::optional<Session> local = localSession(*id);
+        const Secret csrf = local ? local->csrf : panelCsrfToken(*id);
         if (change) {
             const auto token = parseSecret(request.get_header_value(std::string(CsrfHeader)));
-            if (!token || !sameSecret(*token, found->csrf)) {
+            if (!token || !sameSecret(*token, csrf)) {
                 apply(response,
                       error(403, "no CSRF token, or not the one of this session: see GET /api/session"));
                 response.end();
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /// Answers a route of the API that reads: a session first, then the work on the loop.
-    void api(const crow::request &request, crow::response &response, AdminWork work)
-    {
-        if (authorized(request, response, false)) {
-            administer(request, response, std::move(work));
-        }
-    }
-
-    /// Runs the work of an authorized route on the loop, with the administration.
-    void administer(const crow::request &request, crow::response &response, AdminWork work)
-    {
-        onLoop(request, response, [this, work = std::move(work)](const Reply &reply) {
-            if (administration == nullptr) {
-                reply(error(503, "the administration is not ready"));
                 return;
             }
-            work(*administration, reply);
+        }
+        if (local) {
+            onLoop(request, response, [work = std::move(work), csrf, id = *id](const Reply &reply) {
+                work(SignedIn{.actor = std::string(LocalActor),
+                              .account = std::nullopt,
+                              .csrf = csrf,
+                              .session = id},
+                     reply);
+            });
+            return;
+        }
+        onLoop(request, response, [this, work = std::move(work), csrf, id = *id](const Reply &reply) {
+            if (panelAccounts == nullptr) {
+                reply(noSession());
+                return;
+            }
+            panelAccounts->resume(id, [this, work, csrf, id, reply](const PanelResume &resumed) {
+                if (const auto *account = std::get_if<PanelAccount>(&resumed)) {
+                    remember(id, account->id);
+                    work(SignedIn{.actor = std::to_string(account->id),
+                                  .account = *account,
+                                  .csrf = csrf,
+                                  .session = id},
+                         reply);
+                    return;
+                }
+                if (std::get<PanelRefusal>(resumed) == PanelRefusal::Busy) {
+                    reply(error(503, "the database cannot check the session now"));
+                    return;
+                }
+                forgetSession(id);
+                reply(noSession());
+            });
         });
+    }
+
+    // --- Signing in ---
+
+    void signInRoutes()
+    {
+        CROW_ROUTE(app, "/api/sign-in")
+            .methods(crow::HTTPMethod::Get,
+                     crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response) {
+                if (request.method == crow::HTTPMethod::Get) {
+                    // What the page of the panel offers before any session
+                    onLoop(request, response, [this](const Reply &reply) {
+                        crow::json::wvalue body;
+                        body["password"] = panelAccounts != nullptr;
+                        body["discord"] = panelAccounts != nullptr && panelAccounts->discordEnabled();
+                        reply(jsonOf(200, body));
+                    });
+                    return;
+                }
+                signIn(request, response);
+            });
+        CROW_ROUTE(app, "/api/sign-out")
+            .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response) {
+                withSession(request, response, true, [this](const SignedIn &who, const Reply &reply) {
+                    const auto removed = setCookie(SessionCookie, "", std::chrono::seconds(0), "Strict");
+                    const Answer done{200, "application/json", "{}", {removed}};
+                    if (!who.account) {
+                        {
+                            const std::lock_guard lock(sessionsMutex);
+                            std::erase_if(sessions, [&](const Session &session) {
+                                return sameSecret(session.id, who.session);
+                            });
+                        }
+                        subscribers->close([&](const Accepted &accepted) {
+                            return sameSecret(accepted.session, who.session);
+                        });
+                        reply(done);
+                        return;
+                    }
+                    forgetSession(who.session);
+                    logger().info("{} ({}) signed out of the panel", who.account->username, who.account->id);
+                    panelAccounts->signOut(who.session, [reply, done](bool) { reply(done); });
+                });
+            });
+    }
+
+    /// `POST /api/sign-in`: a login and a password traded for a session of an account.
+    void signIn(const crow::request &request, crow::response &response)
+    {
+        // A form of another site cannot send JSON without asking first, which this server never allows
+        if (!request.get_header_value("Content-Type").starts_with("application/json")) {
+            apply(response, error(415, "the body is JSON, with Content-Type: application/json"));
+            response.end();
+            return;
+        }
+        const auto read = body(request, false);
+        auto login = read ? textField(*read, "login", MaxLoginLength) : std::nullopt;
+        auto password = read ? textField(*read, "password", MaxPasswordBytes) : std::nullopt;
+        if (!login || !password || login->empty() || password->empty()) {
+            apply(response, error(400, "the body is a JSON object with a login and a password"));
+            response.end();
+            return;
+        }
+        const rtype::network::Address visitor = visitorOf(app, request);
+        onLoop(request, response,
+               [this, login = std::move(*login), password = std::move(*password),
+                visitor](const Reply &reply) mutable {
+                   if (panelAccounts == nullptr) {
+                       reply(error(404, "this server has no accounts: open the address in admin-url.txt"));
+                       return;
+                   }
+                   panelAccounts->signIn(login, std::move(password), visitor,
+                                         [this, reply](const PanelSignIn &result) {
+                                             if (const auto *refusal = std::get_if<PanelRefusal>(&result)) {
+                                                 const Refused refused = refusedBecause(*refusal);
+                                                 reply(error(refused.status, refused.text));
+                                                 return;
+                                             }
+                                             const PanelSignedIn &signedIn = std::get<PanelSignedIn>(result);
+                                             remember(signedIn.token, signedIn.account.id);
+                                             crow::json::wvalue body;
+                                             body["csrfToken"] = formatSecret(panelCsrfToken(signedIn.token));
+                                             body["account"] = accountJson(signedIn.account);
+                                             Answer answer = jsonOf(200, body);
+                                             answer.headers.push_back(sessionCookie(signedIn.token));
+                                             reply(std::move(answer));
+                                         });
+               });
+    }
+
+    /// `GET /auth/discord` sends the browser to Discord; `GET /auth/discord/callback` is where Discord sends
+    /// it back, with the state the browser kept in its cookie.
+    void discordRoutes()
+    {
+        CROW_ROUTE(app, "/auth/discord")
+        ([this](const crow::request &request, crow::response &response) {
+            const rtype::network::Address visitor = visitorOf(app, request);
+            onLoop(request, response, [this, visitor](const Reply &reply) {
+                if (panelAccounts == nullptr || !panelAccounts->discordEnabled()) {
+                    reply(page(404, "Discord is not enabled",
+                               "This server does not offer the sign-in with Discord to its panel."));
+                    return;
+                }
+                const std::optional<PanelDiscordStart> started = panelAccounts->startDiscord(visitor);
+                if (!started) {
+                    reply(page(429, "Too many attempts",
+                               "Too many sign-ins from your address: try again in a "
+                               "few minutes."));
+                    return;
+                }
+                reply(redirect(started->url,
+                               {setCookie(DiscordCookie, started->state,
+                                          std::chrono::duration_cast<std::chrono::seconds>(DiscordLifetime),
+                                          "Lax", DiscordPath)}));
+            });
+        });
+        CROW_ROUTE(app, "/auth/discord/callback")
+        ([this](const crow::request &request, crow::response &response) {
+            // Single use: the cookie goes whatever the answer
+            const auto removed = setCookie(DiscordCookie, "", std::chrono::seconds(0), "Lax", DiscordPath);
+            const std::string kept(cookie(request.get_header_value("Cookie"), DiscordCookie).value_or(""));
+            const char *state = request.url_params.get("state");
+            const char *code = request.url_params.get("code");
+            const auto refuse = [&](Answer answer) {
+                answer.headers.push_back(removed);
+                apply(response, answer);
+                response.end();
+            };
+            if (request.url_params.get("error") != nullptr) {
+                refuse(page(403, "Not signed in",
+                            "Discord did not sign you in. Go back to the panel to try again."));
+                return;
+            }
+            if (state == nullptr || code == nullptr || std::string_view(code).empty() ||
+                std::string_view(code).size() > MaxPasswordBytes) {
+                refuse(page(400, "Not signed in",
+                            "Discord sent back an address without its code or its state."));
+                return;
+            }
+            onLoop(request, response,
+                   [this, removed, state = std::string(state), kept,
+                    code = std::string(code)](const Reply &reply) mutable {
+                       if (panelAccounts == nullptr) {
+                           Answer answer =
+                               page(404, "Discord is not enabled",
+                                    "This server does not offer the sign-in with Discord to its panel.");
+                           answer.headers.push_back(removed);
+                           reply(std::move(answer));
+                           return;
+                       }
+                       panelAccounts->finishDiscord(
+                           state, kept, std::move(code), [this, removed, reply](const PanelSignIn &result) {
+                               if (const auto *refusal = std::get_if<PanelRefusal>(&result)) {
+                                   const Refused refused = refusedBecause(*refusal);
+                                   std::string text(refused.text);
+                                   text[0] =
+                                       static_cast<char>(std::toupper(static_cast<unsigned char>(text[0])));
+                                   Answer answer = page(refused.status, refused.title, text + ".");
+                                   answer.headers.push_back(removed);
+                                   reply(std::move(answer));
+                                   return;
+                               }
+                               const PanelSignedIn &signedIn = std::get<PanelSignedIn>(result);
+                               remember(signedIn.token, signedIn.account.id);
+                               reply(redirect("/", {removed, sessionCookie(signedIn.token)}));
+                           });
+                   });
+        });
+    }
+
+    // --- The administration ---
+
+    /// The work of a route of the API, on the loop, with the administration and who asks.
+    using AdminWork =
+        std::function<void(Administration &administration, const SignedIn &who, const Reply &reply)>;
+
+    /// Answers a route of the API: a session first, its CSRF token for a change, then the work on the loop.
+    void api(const crow::request &request, crow::response &response, bool change, AdminWork work)
+    {
+        withSession(request, response, change,
+                    [this, work = std::move(work)](const SignedIn &who, const Reply &reply) {
+                        if (administration == nullptr) {
+                            reply(error(503, "the administration is not ready"));
+                            return;
+                        }
+                        work(*administration, who, reply);
+                    });
     }
 
     void administrationRoutes()
     {
         CROW_ROUTE(app, "/api/server")
         ([this](const crow::request &request, crow::response &response) {
-            api(request, response, [](Administration &administration, const Reply &reply) {
-                reply(jsonOf(200, toJson(administration.server())));
-            });
+            api(request, response, false,
+                [](Administration &administration, const SignedIn &, const Reply &reply) {
+                    reply(jsonOf(200, toJson(administration.server())));
+                });
         });
         CROW_ROUTE(app, "/api/games")
         ([this](const crow::request &request, crow::response &response) {
-            api(request, response, [](Administration &administration, const Reply &reply) {
-                reply(jsonOf(200, toJsonList(administration.games())));
-            });
+            api(request, response, false,
+                [](Administration &administration, const SignedIn &, const Reply &reply) {
+                    reply(jsonOf(200, toJsonList(administration.games())));
+                });
         });
         CROW_ROUTE(app, "/api/games/<uint>")
         ([this](const crow::request &request, crow::response &response, std::uint64_t id) {
-            api(request, response, [id](Administration &administration, const Reply &reply) {
-                const auto game = id <= std::numeric_limits<std::uint32_t>::max()
-                                      ? administration.game(static_cast<std::uint32_t>(id))
-                                      : std::nullopt;
-                reply(game ? jsonOf(200, toJson(*game)) : error(404, "no such game"));
-            });
+            api(request, response, false,
+                [id](Administration &administration, const SignedIn &, const Reply &reply) {
+                    const auto game = id <= std::numeric_limits<std::uint32_t>::max()
+                                          ? administration.game(static_cast<std::uint32_t>(id))
+                                          : std::nullopt;
+                    reply(game ? jsonOf(200, toJson(*game)) : error(404, "no such game"));
+                });
         });
         CROW_ROUTE(app, "/api/players")
         ([this](const crow::request &request, crow::response &response) {
-            api(request, response, [](Administration &administration, const Reply &reply) {
-                reply(jsonOf(200, toJsonList(administration.players())));
-            });
+            api(request, response, false,
+                [](Administration &administration, const SignedIn &, const Reply &reply) {
+                    reply(jsonOf(200, toJsonList(administration.players())));
+                });
         });
         CROW_ROUTE(app, "/api/actions")
         ([this](const crow::request &request, crow::response &response) {
-            if (!authorized(request, response, false)) {
-                return;
-            }
             const auto limit = queryNumber(request, "limit", DefaultActions);
             const auto before = queryNumber(request, "before", 0);
-            if (!limit || *limit == 0 || *limit > MaxActions || !before ||
-                *before > static_cast<std::uint64_t>(std::numeric_limits<long long>::max())) {
-                apply(response, error(400, "limit is 1 to 500, before an id of an action"));
-                response.end();
-                return;
-            }
-            const std::optional<long long> page =
-                *before == 0 ? std::nullopt : std::optional(static_cast<long long>(*before));
-            administer(request, response,
-                       [limit = *limit, page](Administration &administration, const Reply &reply) {
-                           administration.actions(
-                               limit, page, [reply](std::optional<std::vector<AdminAction>> actions) {
-                                   reply(actions ? jsonOf(200, toJsonList(*actions))
-                                                 : error(503, "the database cannot read the actions now"));
-                               });
-                       });
+            const bool valid = limit && *limit != 0 && *limit <= MaxActions && before &&
+                               *before <= static_cast<std::uint64_t>(std::numeric_limits<long long>::max());
+            api(request, response, false,
+                [valid, limit, before](Administration &administration, const SignedIn &, const Reply &reply) {
+                    if (!valid) {
+                        reply(error(400, "limit is 1 to 500, before an id of an action"));
+                        return;
+                    }
+                    const std::optional<long long> page =
+                        *before == 0 ? std::nullopt : std::optional(static_cast<long long>(*before));
+                    administration.actions(
+                        *limit, page, [reply](std::optional<std::vector<AdminAction>> actions) {
+                            reply(actions ? jsonOf(200, toJsonList(*actions))
+                                          : error(503, "the database cannot read the actions now"));
+                        });
+                });
         });
         CROW_ROUTE(app, "/api/bans")
             .methods(crow::HTTPMethod::Get,
                      crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response) {
                 if (request.method == crow::HTTPMethod::Get) {
-                    api(request, response, [](Administration &administration, const Reply &reply) {
-                        reply(jsonOf(200, toJsonList(administration.bans())));
-                    });
+                    api(request, response, false,
+                        [](Administration &administration, const SignedIn &, const Reply &reply) {
+                            reply(jsonOf(200, toJsonList(administration.bans())));
+                        });
                     return;
                 }
                 ban(request, response);
@@ -762,30 +1178,18 @@ struct WebServer::Impl {
             });
     }
 
-    /// Answers 400 for a body the route cannot take.
-    static void refuse(crow::response &response, std::string_view problem)
-    {
-        apply(response, error(400, problem));
-        response.end();
-    }
-
     void kick(const crow::request &request, crow::response &response, std::uint64_t id)
     {
-        if (!authorized(request, response, true)) {
-            return;
-        }
-        const auto read = body(request, true);
-        const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
-        if (!reason) {
-            refuse(response, "the body is a JSON object, with an optional reason of at most 200 bytes");
-            return;
-        }
-        const std::string visitor = app.get_context<Guard>(request).visitor.ip();
-        administer(
-            request, response,
-            [id, reason = *reason, visitor](Administration &administration, const Reply &reply) {
+        const auto reason = reasonOf(request);
+        const std::string visitor = visitorOf(app, request).ip();
+        api(request, response, true,
+            [id, reason, visitor](Administration &administration, const SignedIn &who, const Reply &reply) {
+                if (!reason) {
+                    reply(error(400, ReasonOnly));
+                    return;
+                }
                 if (id > std::numeric_limits<std::uint32_t>::max() ||
-                    !administration.kick(static_cast<std::uint32_t>(id), reason, std::string(LocalActor))) {
+                    !administration.kick(static_cast<std::uint32_t>(id), *reason, who.actor)) {
                     reply(error(404, "no such player"));
                     return;
                 }
@@ -798,34 +1202,26 @@ struct WebServer::Impl {
 
     void endGame(const crow::request &request, crow::response &response, std::uint64_t id)
     {
-        if (!authorized(request, response, true)) {
-            return;
-        }
-        const auto read = body(request, true);
-        const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
-        if (!reason) {
-            refuse(response, "the body is a JSON object, with an optional reason of at most 200 bytes");
-            return;
-        }
-        administer(request, response,
-                   [id, reason = *reason](Administration &administration, const Reply &reply) {
-                       if (id > std::numeric_limits<std::uint32_t>::max() ||
-                           !administration.endGame(static_cast<std::uint32_t>(id), reason,
-                                                   std::string(LocalActor))) {
-                           reply(error(404, "no such game"));
-                           return;
-                       }
-                       crow::json::wvalue done;
-                       done["gameId"] = id;
-                       reply(jsonOf(200, done));
-                   });
+        const auto reason = reasonOf(request);
+        api(request, response, true,
+            [id, reason](Administration &administration, const SignedIn &who, const Reply &reply) {
+                if (!reason) {
+                    reply(error(400, ReasonOnly));
+                    return;
+                }
+                if (id > std::numeric_limits<std::uint32_t>::max() ||
+                    !administration.endGame(static_cast<std::uint32_t>(id), *reason, who.actor)) {
+                    reply(error(404, "no such game"));
+                    return;
+                }
+                crow::json::wvalue done;
+                done["gameId"] = id;
+                reply(jsonOf(200, done));
+            });
     }
 
     void message(const crow::request &request, crow::response &response)
     {
-        if (!authorized(request, response, true)) {
-            return;
-        }
         const auto read = body(request, false);
         const auto text =
             read ? textField(*read, "text", rtype::lobby::MaxServerMessageLength) : std::nullopt;
@@ -838,14 +1234,15 @@ struct WebServer::Impl {
                 gameId = static_cast<std::uint32_t>(*id);
             }
         }
-        if (!valid) {
-            refuse(response,
-                   "the body is a JSON object with a text of 1 to 200 bytes, and an optional gameId");
-            return;
-        }
-        administer(
-            request, response, [gameId, text = *text](Administration &administration, const Reply &reply) {
-                const auto recipients = administration.sendMessage(gameId, text, std::string(LocalActor));
+        api(request, response, true,
+            [valid, gameId, text](Administration &administration, const SignedIn &who, const Reply &reply) {
+                if (!valid) {
+                    reply(error(
+                        400,
+                        "the body is a JSON object with a text of 1 to 200 bytes, and an optional gameId"));
+                    return;
+                }
+                const auto recipients = administration.sendMessage(gameId, *text, who.actor);
                 if (!recipients) {
                     reply(error(404, "no such game"));
                     return;
@@ -858,86 +1255,270 @@ struct WebServer::Impl {
 
     void ban(const crow::request &request, crow::response &response)
     {
-        if (!authorized(request, response, true)) {
-            return;
-        }
         const auto read = body(request, false);
         const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
         const auto addressText = read ? textField(*read, "address", 64) : std::nullopt;
         const auto address = addressText ? rtype::network::Address::parse(*addressText, 0) : std::nullopt;
         const auto duration = read ? integerField(*read, "duration") : std::nullopt;
         const auto longest = std::chrono::duration_cast<std::chrono::seconds>(MaxBanDuration).count();
-        if (!reason || !address || !duration || *duration < 1 || *duration > longest) {
-            refuse(response,
-                   "the body is a JSON object with an IP address, a duration of 1 to 604800 seconds, "
-                   "and an optional reason of at most 200 bytes");
-            return;
-        }
-        administer(request, response,
-                   [address = *address, duration = std::chrono::seconds(*duration),
-                    reason = *reason](Administration &administration, const Reply &reply) {
-                       const std::size_t removed =
-                           administration.ban(address, duration, reason, std::string(LocalActor));
-                       const std::optional<AddressBan> ban = [&]() -> std::optional<AddressBan> {
-                           for (const AddressBan &listed : administration.bans()) {
-                               if (listed.address == banKey(address)) {
-                                   return listed;
-                               }
-                           }
-                           return std::nullopt;
-                       }();
-                       crow::json::wvalue done;
-                       done["ban"] = ban ? toJson(*ban) : crow::json::wvalue(nullptr);
-                       done["removed"] = static_cast<std::uint64_t>(removed);
-                       reply(jsonOf(200, done));
-                   });
+        const bool valid = reason && address && duration && *duration >= 1 && *duration <= longest;
+        api(request, response, true,
+            [valid, address, duration, reason](Administration &administration, const SignedIn &who,
+                                               const Reply &reply) {
+                if (!valid) {
+                    reply(error(400,
+                                "the body is a JSON object with an IP address, a duration of 1 to 604800 "
+                                "seconds, and an optional reason of at most 200 bytes"));
+                    return;
+                }
+                const std::size_t removed =
+                    administration.ban(*address, std::chrono::seconds(*duration), *reason, who.actor);
+                const std::optional<AddressBan> ban = [&]() -> std::optional<AddressBan> {
+                    for (const AddressBan &listed : administration.bans()) {
+                        if (listed.address == banKey(*address)) {
+                            return listed;
+                        }
+                    }
+                    return std::nullopt;
+                }();
+                crow::json::wvalue done;
+                done["ban"] = ban ? toJson(*ban) : crow::json::wvalue(nullptr);
+                done["removed"] = static_cast<std::uint64_t>(removed);
+                reply(jsonOf(200, done));
+            });
     }
 
     void unban(const crow::request &request, crow::response &response)
     {
-        if (!authorized(request, response, true)) {
-            return;
-        }
         const auto read = body(request, false);
         const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
         const auto addressText = read ? textField(*read, "address", 64) : std::nullopt;
         const auto address = addressText ? rtype::network::Address::parse(*addressText, 0) : std::nullopt;
-        if (!reason || !address) {
-            refuse(
-                response,
-                "the body is a JSON object with an IP address, and an optional reason of at most 200 bytes");
-            return;
-        }
-        administer(
-            request, response,
-            [address = *address, reason = *reason](Administration &administration, const Reply &reply) {
-                if (!administration.unban(address, reason, std::string(LocalActor))) {
+        api(request, response, true,
+            [address, reason](Administration &administration, const SignedIn &who, const Reply &reply) {
+                if (!reason || !address) {
+                    reply(error(400,
+                                "the body is a JSON object with an IP address, and an optional reason of at "
+                                "most 200 bytes"));
+                    return;
+                }
+                if (!administration.unban(*address, *reason, who.actor)) {
                     reply(error(404, "no ban of this address"));
                     return;
                 }
                 crow::json::wvalue done;
-                done["address"] = banKey(address).ip();
+                done["address"] = banKey(*address).ip();
                 reply(jsonOf(200, done));
             });
+    }
+
+    // --- The accounts ---
+
+    void accountRoutes()
+    {
+        CROW_ROUTE(app, "/api/accounts")
+        ([this](const crow::request &request, crow::response &response) {
+            const char *searched = request.url_params.get("search");
+            std::string search = searched != nullptr ? searched : "";
+            const auto limit = queryNumber(request, "limit", DefaultAccounts);
+            const auto before = queryNumber(request, "before", 0);
+            const bool valid = search.size() <= MaxSearchLength && rtype::network::isValidText(search) &&
+                               limit && *limit != 0 && *limit <= MaxAccounts && before &&
+                               *before <= static_cast<std::uint64_t>(std::numeric_limits<long long>::max());
+            api(request, response, false,
+                [valid, search = std::move(search), limit, before](Administration &administration,
+                                                                   const SignedIn &, const Reply &reply) {
+                    if (!valid) {
+                        reply(error(400,
+                                    "search is at most 254 bytes of text, limit 1 to 200, before an id of an "
+                                    "account"));
+                        return;
+                    }
+                    const std::optional<long long> page =
+                        *before == 0 ? std::nullopt : std::optional(static_cast<long long>(*before));
+                    administration.accounts(
+                        search, *limit, page, [reply](std::optional<std::vector<AdminAccount>> accounts) {
+                            reply(accounts ? jsonOf(200, toJsonList(*accounts))
+                                           : error(503, "the database cannot read the accounts now"));
+                        });
+                });
+        });
+        CROW_ROUTE(app, "/api/accounts/<uint>")
+        ([this](const crow::request &request, crow::response &response, std::uint64_t id) {
+            api(request, response, false,
+                [id](Administration &administration, const SignedIn &, const Reply &reply) {
+                    if (id > static_cast<std::uint64_t>(std::numeric_limits<long long>::max())) {
+                        reply(error(404, "no such account"));
+                        return;
+                    }
+                    administration.account(
+                        static_cast<long long>(id),
+                        [reply](std::optional<std::optional<AdminAccount>> account) {
+                            if (!account) {
+                                reply(error(503, "the database cannot read the account now"));
+                            } else if (!*account) {
+                                reply(error(404, "no such account"));
+                            } else {
+                                reply(jsonOf(200, toJson(**account)));
+                            }
+                        });
+                });
+        });
+        CROW_ROUTE(app, "/api/accounts/<uint>/ban")
+            .methods(crow::HTTPMethod::Post)(
+                [this](const crow::request &request, crow::response &response, std::uint64_t id) {
+                    changeAccount(request, response, id, true,
+                                  [reason = reasonOf(request)](Administration &administration,
+                                                               long long account, const SignedIn &who,
+                                                               Administration::ChangeCallback done) {
+                                      if (!reason) {
+                                          return false;
+                                      }
+                                      administration.banAccount(account, *reason, who.actor, std::move(done));
+                                      return true;
+                                  });
+                });
+        CROW_ROUTE(app, "/api/accounts/<uint>/unban")
+            .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
+                                                    std::uint64_t id) {
+                changeAccount(request, response, id, false,
+                              [reason = reasonOf(request)](Administration &administration, long long account,
+                                                           const SignedIn &who,
+                                                           Administration::ChangeCallback done) {
+                                  if (!reason) {
+                                      return false;
+                                  }
+                                  administration.unbanAccount(account, *reason, who.actor, std::move(done));
+                                  return true;
+                              });
+            });
+        CROW_ROUTE(app, "/api/accounts/<uint>/role")
+            .methods(crow::HTTPMethod::Post)(
+                [this](const crow::request &request, crow::response &response, std::uint64_t id) {
+                    const auto read = body(request, false);
+                    const auto name = read ? textField(*read, "role", 16) : std::nullopt;
+                    const std::optional<AccountRole> role = name ? parseRole(*name) : std::nullopt;
+                    changeAccount(request, response, id, role != AccountRole::Admin,
+                                  [role](Administration &administration, long long account,
+                                         const SignedIn &who, Administration::ChangeCallback done) {
+                                      if (!role) {
+                                          return false;
+                                      }
+                                      administration.setRole(account, *role, who.actor, std::move(done));
+                                      return true;
+                                  });
+                });
+        CROW_ROUTE(app, "/api/accounts/<uint>/delete")
+            .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
+                                                    std::uint64_t id) {
+                changeAccount(request, response, id, true,
+                              [reason = reasonOf(request)](Administration &administration, long long account,
+                                                           const SignedIn &who,
+                                                           Administration::ChangeCallback done) {
+                                  if (!reason) {
+                                      return false;
+                                  }
+                                  administration.deleteAccount(account, *reason, who.actor, std::move(done));
+                                  return true;
+                              });
+            });
+    }
+
+    /// Starts an action on an account; false if its body is refused.
+    using AccountWork = std::function<bool(Administration &administration, long long accountId,
+                                           const SignedIn &who, Administration::ChangeCallback done)>;
+
+    /// An action on an account: its answer once the database did it. When it takes the panel from the account
+    /// (`revokes`: a ban, a deletion, a demotion), its sessions are forgotten and its WebSockets closed.
+    void changeAccount(const crow::request &request, crow::response &response, std::uint64_t id, bool revokes,
+                       AccountWork work)
+    {
+        api(request, response, true,
+            [this, id, revokes, work = std::move(work)](Administration &administration, const SignedIn &who,
+                                                        const Reply &reply) {
+                if (id > static_cast<std::uint64_t>(std::numeric_limits<long long>::max())) {
+                    reply(error(404, "no such account"));
+                    return;
+                }
+                const auto accountId = static_cast<long long>(id);
+                const bool started = work(administration, accountId, who,
+                                          [this, accountId, revokes, reply](AccountChanged done) {
+                                              if (revokes && done.outcome == AccountChanged::Outcome::Done) {
+                                                  forgetAccount(accountId);
+                                              }
+                                              reply(changed(done));
+                                          });
+                if (!started) {
+                    reply(error(400,
+                                "the body is a JSON object, with an optional reason of at most 200 bytes, or "
+                                "the role player or admin"));
+                }
+            });
+    }
+
+    // --- The live events ---
+
+    /// What opens a WebSocket at its upgrade: the session of the local access token, or a session of an
+    /// account found valid lately.
+    [[nodiscard]] std::optional<Accepted> acceptable(const crow::request &request)
+    {
+        const auto value = cookie(request.get_header_value("Cookie"), SessionCookie);
+        const std::optional<Secret> id = value ? parseSecret(*value) : std::nullopt;
+        if (!id) {
+            return std::nullopt;
+        }
+        if (localSession(*id)) {
+            return Accepted{.session = *id, .accountId = 0};
+        }
+        if (const std::optional<long long> account = knownAccount(*id)) {
+            return Accepted{.session = *id, .accountId = *account};
+        }
+        return std::nullopt;
+    }
+
+    /// The page that opened a WebSocket is the panel's: the origin the browser sends is the one of the
+    /// address it asked, or the public address of the panel. A page of another site sends its own, which it
+    /// cannot change.
+    [[nodiscard]] bool fromPanel(const crow::request &request) const
+    {
+        const std::string origin = request.get_header_value("Origin");
+        if (origin.empty()) {
+            return false;
+        }
+        if (!settings.publicUrl.empty() && origin == originOf(settings.publicUrl)) {
+            return true;
+        }
+        const std::string host = request.get_header_value("Host");
+        return !host.empty() && (origin == "http://" + host || origin == "https://" + host);
     }
 
     /// `GET /api/events`: the WebSocket of the live events, a snapshot first.
     void eventsRoute()
     {
         CROW_WEBSOCKET_ROUTE(app, "/api/events")
-            .onaccept([this](const crow::request &request, std::optional<crow::response> &response, void **) {
+            .onaccept([this](const crow::request &request, std::optional<crow::response> &response,
+                             void **userdata) {
                 // Answered before the upgrade, without the headers of the other responses: nothing is shown
-                if (!signedIn(request)) {
-                    response.emplace(401, R"({"error":"no session: open the address in admin-url.txt"})");
+                const std::optional<Accepted> accepted = acceptable(request);
+                if (!accepted) {
+                    response.emplace(
+                        401, R"({"error":"no session: sign in, or open the address in admin-url.txt"})");
                 } else if (!fromPanel(request)) {
                     logger().warning("A WebSocket was refused: it was opened by a page of {}",
                                      request.get_header_value("Origin").empty()
                                          ? std::string("no origin")
                                          : request.get_header_value("Origin"));
                     response.emplace(403, R"({"error":"the WebSocket is opened by the panel only"})");
+                } else {
+                    // Taken back by onopen, which Crow calls right after the upgrade
+                    *userdata = new Accepted(*accepted);
                 }
             })
-            .onopen([this](crow::websocket::connection &connection) { subscribe(connection); })
+            .onopen([this](crow::websocket::connection &connection) {
+                const std::unique_ptr<Accepted> accepted(static_cast<Accepted *>(connection.userdata()));
+                connection.userdata(nullptr);
+                subscribe(connection, accepted ? *accepted : Accepted{});
+            })
             .onclose([this](crow::websocket::connection &connection, const std::string &, std::uint16_t) {
                 unsubscribe(connection);
             })
@@ -946,38 +1527,67 @@ struct WebServer::Impl {
             });
     }
 
-    void subscribe(crow::websocket::connection &opened)
+    void subscribe(crow::websocket::connection &opened, const Accepted &accepted)
     {
         crow::websocket::connection *connection = &opened;
         std::uint64_t token = 0;
         {
             const std::lock_guard lock(subscribers->mutex);
             token = ++subscribers->lastToken;
-            subscribers->connections[connection] = {token, 0};
+            subscribers->connections[connection] = {token, 0, accepted};
         }
-        loop.post([this, shared = subscribers, connection, token, pending = pending] {
+        loop.post([this, connection, token, accepted, pending = pending] {
             {
                 const std::lock_guard lock(pending->mutex);
                 if (pending->stopped) {
                     return;
                 }
             }
-            if (administration == nullptr) {
+            if (accepted.accountId == 0) {
+                startEvents(connection, token);
                 return;
             }
-            const std::uint64_t subscription =
-                administration->subscribe([shared, connection, token](const AdminEvent &event) {
-                    shared->send(connection, token, toJson(event).dump());
-                });
-            const std::lock_guard lock(shared->mutex);
-            const auto found = shared->connections.find(connection);
-            if (found != shared->connections.end() && found->second.token == token) {
-                found->second.subscription = subscription;
-            } else {
-                // Closed meanwhile
-                administration->unsubscribe(subscription);
+            if (panelAccounts == nullptr) {
+                subscribers->close(
+                    [&](const Accepted &open) { return sameSecret(open.session, accepted.session); });
+                return;
             }
+            // The upgrade trusted what it knew: the database tells whether the session still holds
+            panelAccounts->resume(accepted.session,
+                                  [this, connection, token, accepted, pending](const PanelResume &resumed) {
+                                      {
+                                          const std::lock_guard lock(pending->mutex);
+                                          if (pending->stopped) {
+                                              return;
+                                          }
+                                      }
+                                      if (std::holds_alternative<PanelAccount>(resumed)) {
+                                          startEvents(connection, token);
+                                      } else {
+                                          forgetSession(accepted.session);
+                                      }
+                                  });
         });
+    }
+
+    /// Subscribes an open WebSocket to the administration. On the loop.
+    void startEvents(crow::websocket::connection *connection, std::uint64_t token)
+    {
+        if (administration == nullptr) {
+            return;
+        }
+        const std::uint64_t subscription =
+            administration->subscribe([shared = subscribers, connection, token](const AdminEvent &event) {
+                shared->send(connection, token, toJson(event).dump());
+            });
+        const std::lock_guard lock(subscribers->mutex);
+        const auto found = subscribers->connections.find(connection);
+        if (found != subscribers->connections.end() && found->second.token == token) {
+            found->second.subscription = subscription;
+        } else {
+            // Closed meanwhile
+            administration->unsubscribe(subscription);
+        }
     }
 
     void unsubscribe(crow::websocket::connection &closed)
@@ -1007,27 +1617,30 @@ struct WebServer::Impl {
         }
     }
 
+    // --- The panel ---
+
     Answer serve(const crow::request &request, crow::response &response)
     {
         const std::string &path = request.url;
         if (path == "/api" || path.starts_with("/api/")) {
-            return signedIn(request) ? error(404, "no such route")
-                                     : error(401, "no session: open the address in admin-url.txt");
+            const auto value = cookie(request.get_header_value("Cookie"), SessionCookie);
+            const bool session = value && parseSecret(*value);
+            return session ? error(404, "no such route") : noSession();
         }
         if (request.method != crow::HTTPMethod::Get) {
             response.set_header("Allow", "GET");
             return page(405, "Method not allowed", "The panel only answers GET.");
         }
         if (path == "/" && request.url_params.get("token") != nullptr) {
-            return exchangeToken(request, response);
+            return exchangeToken(request);
         }
         return servePanel(path, response);
     }
 
     /// `GET /?token=…`: the local access token traded for a session cookie, then the address without it.
-    Answer exchangeToken(const crow::request &request, crow::response &response)
+    Answer exchangeToken(const crow::request &request)
     {
-        const std::string visitor = app.get_context<Guard>(request).visitor.ip();
+        const std::string visitor = visitorOf(app, request).ip();
         const auto token = parseSecret(request.url_params.get("token"));
         if (!token || !sameSecret(*token, settings.accessToken)) {
             logger().warning("A wrong access token was given to the panel, from {}", visitor);
@@ -1044,14 +1657,7 @@ struct WebServer::Impl {
             sessions.push_back({id, newAccessToken(), Clock::now() + SessionLifetime});
         }
         logger().info("The panel was opened with the local access token, from {}", visitor);
-        response.set_header(
-            "Set-Cookie",
-            std::format("{}={}; Path=/; Max-Age={}; HttpOnly; SameSite=Strict", SessionCookie,
-                        formatSecret(id),
-                        std::chrono::duration_cast<std::chrono::seconds>(SessionLifetime).count()));
-        response.set_header("Location", "/");
-        response.set_header("Cache-Control", "no-store");
-        return {303, "text/plain; charset=utf-8", "Signed in\n"};
+        return redirect("/", {sessionCookie(id)});
     }
 
     /// A file of the panel, or its index.html for the paths of its pages.
@@ -1119,6 +1725,11 @@ void WebServer::stop()
 void WebServer::setAdministration(Administration *administration)
 {
     _impl->administration = administration;
+}
+
+void WebServer::setPanelAccounts(PanelAccounts *accounts)
+{
+    _impl->panelAccounts = accounts;
 }
 
 } // namespace rtype::server

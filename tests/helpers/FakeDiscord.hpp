@@ -2,8 +2,8 @@
 
 // A Discord of the tests: the two routes of its API the master uses (/oauth2/token and /users/@me), on the
 // loopback, over HTTP. The tests play the player and the Discord Social SDK with accept(), which gives what
-// the client would get once the user accepted. A small Crow server, in FakeDiscord.cpp so that its headers
-// are compiled once.
+// the client would get once the user accepted, and the administrator in its browser with authorize(). A small
+// Crow server, in FakeDiscord.cpp so that its headers are compiled once.
 
 #include "Accounts/Discord.hpp"
 
@@ -39,6 +39,11 @@ public:
     /// The user accepts the application: a new code, single use, bound to a new code verifier and to
     /// RedirectUri, as the Social SDK gives them to the client.
     [[nodiscard]] rtype::server::DiscordAuthorization accept(const rtype::server::DiscordUser &user);
+
+    /// The user accepts the application in the browser, as the panel asks: a new code, single use, bound to
+    /// the challenge of PKCE (S256) and the redirect address of the authorization page.
+    [[nodiscard]] std::string authorize(const rtype::server::DiscordUser &user, const std::string &challenge,
+                                        const std::string &redirectUri);
 
     /// Discord down: every request gets 503.
     void setDown(bool down);
