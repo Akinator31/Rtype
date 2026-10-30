@@ -84,7 +84,7 @@ on their own machine for development or on a machine on the Internet.
 
     Without the panel, the same session drives the [administration API](../protocol/admin-api.md) with `curl`:
     list the games and the players, remove a player, end a game, send a message, ban an address
-    ([With curl](../protocol/admin-api.md#6-with-curl)). Every action is recorded, in `/api/actions`.
+    ([With curl](../protocol/admin-api.md#7-with-curl)). Every action is recorded, in `/api/actions`.
 
 5. **Stop it** with Ctrl+C, or `kill <pid>` (SIGTERM), or `systemctl stop` / `docker stop` when it runs as a
    service. It stops properly, which may take a few seconds once games run; a second Ctrl+C stops it at once.

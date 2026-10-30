@@ -272,4 +272,7 @@ logs tell. A full queue, or an address with its mails of the hour, refuses at on
 
 The requests of the accounts are answered on the loop by the `AccountService`
 ([Accounts](accounts.md#in-the-lobby)), which hands their work to the database thread, the hasher and the
-mailer, and gets the results back on the loop: it holds no lock, and no thread of its own.
+mailer, and gets the results back on the loop: it holds no lock, and no thread of its own. The administrators of
+the panel are signed in the same way, by `PanelAccounts` on the loop ([Web server](web.md#accounts)): a request
+of the web server posted to the loop waits there for the database thread, the hasher or Discord, without
+blocking either side.

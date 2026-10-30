@@ -93,7 +93,9 @@ reachable from the Internet for it.
    *New Application*, its name the one of the server. Its *Application ID* is the `client_id`.
 2. **On its OAuth2 page**, add the redirect `http://127.0.0.1/callback`, where the game receives the answer, and
    leave *Public Client* off: the server exchanges the codes with the secret of the application. *Reset Secret*
-   gives the secret, shown once.
+   gives the secret, shown once. For the administrators to sign in to the panel with Discord too, add the
+   redirect `<web.public_url>/auth/discord/callback`, `https://admin.example.org/auth/discord/callback`: the
+   panel needs `web.public_url` for it ([Administer a server](administer-a-server.md#from-anywhere-with-an-account)).
 3. **Enable the Social SDK** for the application, if the portal asks for it (*Social SDK*, *Getting Started*):
    the game asks Discord through it.
 4. **Write the secret in a file** only the server's user can read, then add `[discord]` to the settings:

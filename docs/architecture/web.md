@@ -1,9 +1,9 @@
 # Web server
 
 The master serves HTTP for its administration panel ([ADR 0025](../decisions/0025-server-administration.md)):
-the static files of the panel, `/api/health`, the local access token traded for a session, the
-[administration API](../protocol/admin-api.md) and its WebSocket, and the headers of security of every
-response. `WebServer` (`apps/server/src/Web/WebServer.hpp`) runs it on threads of its own, beside the event loop
+the static files of the panel, `/api/health`, the local access token traded for a session, the sign-in of the
+administrators with their account, the [administration API](../protocol/admin-api.md) and its WebSocket, and
+the headers of security of every response. `WebServer` (`apps/server/src/Web/WebServer.hpp`) runs it on threads of its own, beside the event loop
 of the master. What the API shows and does lives in the master: [Administration](administration.md). The panel
 it serves: [The panel](panel.md).
 
@@ -12,20 +12,25 @@ To configure it, see the `[web]` section of [Configure a server](../guides/confi
 | | |
 |---|---|
 | Library | [Crow](https://crowcpp.org) 1.3.4, header-only, through CPM with a hash, given the Asio of `libs/network`: one Asio in the binary. A private dependency, behind `Web/WebServer.hpp`, patched ([Responses from the loop](#responses-from-the-loop)) |
-| Listens | `127.0.0.1:8080` by default, `[web] listen`. Without accounts, a loopback address only |
+| Listens | `127.0.0.1:8080` by default, `[web] listen`. Without accounts, a loopback address only; with them, any address, behind a proxy |
 | Threads | Two of Crow: one accepts the connections, one handles them |
-| Code | `Web/WebServer.cpp` (Crow, the routes, the files, the sessions, the WebSocket), `Web/AdminJson.cpp` (the JSON of the API), `Web/LocalAccess.cpp` (the token, `admin-url.txt`), `Web/Visitor.cpp` (the address of the visitor behind the proxies) |
-| Tests | `tests/server_web.cpp`, tag `[web]`; the API in `tests/server_admin.cpp`, tag `[admin]` |
+| Code | `Web/WebServer.cpp` (Crow, the routes, the files, the sessions, the WebSocket), `Web/AdminJson.cpp` (the JSON of the API), `Web/LocalAccess.cpp` (the token, `admin-url.txt`), `Web/Visitor.cpp` (the address of the visitor behind the proxies), `Accounts/PanelAccounts.cpp` (the administrators, their sign-in and their sessions) |
+| Tests | `tests/server_web.cpp`, tag `[web]`; the API in `tests/server_admin.cpp`, tag `[admin]`; the administrators in `tests/server_panel_accounts.cpp`, tag `[panel]` |
 
 ## Routes
 
 | Route | Needs | Answer |
 |---|---|---|
 | `GET /api/health` | nothing | `200 {"status":"ok"}`, answered by the event loop of the master: a master whose loop is stuck is not healthy. `r-type_server --health` asks it, for the health check of the Docker image |
-| `GET /api/session` | a session | `200 {"csrfToken": "…"}` with a session, `401` without |
+| `GET /api/session` | a session | `200 {"csrfToken": "…", "account": …}` with a session, `401` without |
+| `GET /api/sign-in` | nothing | `200 {"password": …, "discord": …}`: how the panel can be opened besides the local token |
+| `POST /api/sign-in` | JSON | A login and a password traded for a session of an administrator ([Accounts](#accounts)) |
+| `POST /api/sign-out` | a session and its CSRF token | Ends the session, removes its cookie |
+| `GET /auth/discord`, `GET /auth/discord/callback` | `web.public_url` and Discord | The sign-in with Discord ([Accounts](#accounts)) |
 | `GET /api/server`, `/api/games`, `/api/games/{id}`, `/api/players`, `/api/actions`, `/api/bans` | a session | The [administration API](../protocol/admin-api.md#3-reading), answered by the loop |
 | `POST /api/players/{id}/kick`, `/api/games/{id}/end`, `/api/messages`, `/api/bans`, `/api/bans/lift` | a session and its CSRF token | The [actions](../protocol/admin-api.md#4-acting), done on the loop |
-| `GET /api/events` | a session, from a page of the panel | The WebSocket of the [live events](../protocol/admin-api.md#5-events) |
+| `GET /api/accounts`, `/api/accounts/{id}`; `POST /api/accounts/{id}/ban`, `/unban`, `/role`, `/delete` | a session, and its CSRF token for a `POST` | The [accounts](../protocol/admin-api.md#5-accounts) |
+| `GET /api/events` | a session, from a page of the panel | The WebSocket of the [live events](../protocol/admin-api.md#6-events) |
 | other `/api/...` | a session | `401` without a session, `404` with one |
 | `GET /?token=<64 hex digits>` | the local access token | `303` to `/` with the session cookie; `403` for a wrong token, without a cookie |
 | `GET /<file>` | nothing | The file of the panel, with its `Content-Type` |
@@ -86,7 +91,7 @@ connections alive, hit on its second page. The test of a connection kept alive f
 
 ## Local access
 
-There are no accounts yet: the panel is opened from the machine of the server, with a token.
+Whoever hosts the server opens the panel from its machine, with a token, accounts or not.
 
 1. At each start, the master makes a new token of 256 random bits (`newAccessToken()`), never logged.
 2. It writes the address of the panel with it to `admin-url.txt`, beside its key, readable by its owner only
@@ -107,7 +112,64 @@ There are no accounts yet: the panel is opened from the machine of the server, w
 
 The session lasts 12 hours, in the memory of the master: a restart ends it, as it changes the token. Each
 opening makes a new session, 64 at most, the oldest dropped. The session is not the token: a cookie that leaks
-does not give the token. Tokens and sessions are compared in constant time.
+does not give the token. Tokens and sessions are compared in constant time. What a session of the token does is
+recorded with the actor `local`.
+
+## Accounts
+
+With accounts, the administrators sign in to the panel with their account, from anywhere it is reached:
+`PanelAccounts` (`apps/server/src/Accounts/PanelAccounts.hpp`), on the loop, which the master gives the web
+server with `setPanelAccounts()`.
+
+- **An administrator** is an account with the role `admin`, or one of `[admin] admins` of the settings, named
+  by its verified email or `discord:<id>`, whatever its role ([Configure a server](../guides/configure-a-server.md#the-sections)).
+  At start, the master gives the role `admin` to those of the list that have an account, and warns of the others.
+  A banned account is never one.
+- **With a password**: `POST /api/sign-in {"login": …, "password": …}`, `Content-Type: application/json` only,
+  which a form of another site cannot send without asking first. A wrong login and a wrong password get the same
+  `401`, after the same work; `403` says the account is not an administrator, is banned, or has an email not
+  verified, only after its right password.
+- **With Discord**, when the master has `[discord]` and `web.public_url`: the browser of the panel has no Social
+  SDK, so it goes through the page of Discord and comes back to the master
+  ([ADR 0026](../decisions/0026-discord-social-sdk.md)).
+
+    ```mermaid
+    sequenceDiagram
+        participant B as Browser
+        participant M as Master
+        participant D as Discord
+        B->>M: GET /auth/discord
+        M->>B: 303 to Discord, state, PKCE challenge; Set-Cookie rtype_discord=state (Lax)
+        B->>D: authorization page, scope identify
+        D->>B: 302 to <public_url>/auth/discord/callback?code&state
+        B->>M: GET /auth/discord/callback, with the cookie
+        M->>D: code + verifier + secret, then /users/@me
+        M->>B: 303 to /, Set-Cookie rtype_session (Strict)
+    ```
+
+    *The state goes to Discord and back, and stays in a cookie of the browser that started.*
+
+    The state is 256 random bits, single use, valid 10 minutes; the master keeps it with the verifier of PKCE.
+    Its cookie is `SameSite=Lax`, `Path=/auth/discord`: the return from Discord is a navigation from another
+    site, which a `Strict` cookie would not follow. The callback needs the state of the address to be the one of
+    the cookie: a link of another person, opened in another browser, signs nobody in. The cookie is removed by
+    the callback, whatever its answer. The Discord user must have an account, made from the game.
+- **The sessions** are those of `account_sessions` with the client `panel`, 12 hours after their last use. The
+  cookie is the token of the session, of which the database keeps the SHA-256. Each request resumes it on the
+  loop, through the database thread: a ban, a new role, or a deletion counts at once.
+- **The CSRF token** of a session of an account is drawn from its token, `SHA-256("panel csrf:" + token)`:
+  nothing more is kept, and a page of another site, which cannot read the cookie, cannot read it either.
+- **The limits**: 10 sign-ins a minute from one address, password or Discord, the address read behind the
+  trusted proxies ([The proxy](#the-proxy)); 15 minutes of pause for an account after 10 wrong passwords in a
+  row. `429` beyond.
+- **The actions** of an administrator are recorded with the id of its account as the actor.
+
+Behind HTTPS, when `web.public_url` starts with `https://`, every cookie is `Secure`, the one of the local token
+too:
+
+```
+Set-Cookie: rtype_session=<64 hex digits>; Path=/; Max-Age=43200; HttpOnly; SameSite=Strict; Secure
+```
 
 ## Requests from other sites
 
@@ -115,7 +177,8 @@ The cookie is `SameSite=Strict`: a browser does not send it with a request that 
 rules close what it leaves open, such as a page of a sibling domain (`*.example.org`), which is the same site:
 
 - **Every `POST` of the API carries the CSRF token of its session** in `X-CSRF-Token`. Each session has its own,
-  256 random bits, given by `GET /api/session` to the panel, which a page of another origin cannot read. A
+  256 random bits for the local token, drawn from its token for an account, given by `GET /api/session` to the
+  panel, which a page of another origin cannot read. A
   `POST` without it, or with another session's, is `403`, before its body is read; the session is checked
   first, so a visitor without one learns nothing about a route.
 - **The WebSocket of `/api/events` is refused when its `Origin` is not the panel's**: the address the browser
@@ -132,13 +195,18 @@ rules close what it leaves open, such as a page of a sibling domain (`*.example.
 
 Crow accepts the WebSocket on its threads; the events come from the loop.
 
-1. On the upgrade, Crow's thread checks the session and the origin.
+1. On the upgrade, Crow's thread checks the session and the origin. It cannot wait for the database: a session
+   of an account is accepted if a request found it valid since it was opened, which the panel always makes
+   first.
 2. Once open, the connection is kept with a token of its own, never reused, and the loop is asked to
-   subscribe it to the administration: the snapshot goes first, then each event, from the loop.
+   subscribe it to the administration: the snapshot goes first, then each event, from the loop. A session of an
+   account is resumed from the database once more before: refused, the WebSocket is closed.
 3. Sending from the loop takes the lock of the connections and checks the connection is still there with its
    token: Crow removes it in its close handler, under the same lock, before it frees it. `send_text()` hands the
    frame to Crow's thread of the connection, which writes it.
 4. Closed, the connection is forgotten under the lock, then unsubscribed on the loop.
+5. A session that ends closes its WebSockets: signed out, or its account banned, demoted or deleted from the
+   panel. The panel then finds itself signed out.
 
 `stop()` forgets every connection first: Crow then closes them, and may free them without calling the close
 handler.
@@ -149,11 +217,12 @@ the peer: behind a local nginx or Caddy, every request comes from `127.0.0.1`, t
 
 **Without accounts, the panel listens on a loopback address only**, or the master does not start: the settings
 file refuses another `listen`, and `runMaster()` checks it again. From another machine, the panel is reached
-through an SSH tunnel. With accounts, it will be allowed to listen elsewhere, behind a proxy.
+through an SSH tunnel. With accounts, it may listen elsewhere, `0.0.0.0:8080` in a container, behind the proxy of
+the host that serves it over HTTPS ([Administer a server](../guides/administer-a-server.md#from-anywhere-with-an-account)).
 
 ## The proxy
 
-The address of a visitor, for the logs, is read by `visitorAddress()`:
+The address of a visitor, for the logs and the limits on signing in, is read by `visitorAddress()`:
 
 - From a peer that is not in `[web] trusted_proxies`, the peer is the visitor, and its `X-Forwarded-For` is
   ignored: anyone can write one.
@@ -199,7 +268,11 @@ at any level. `Guard` logs each request with its path only, its status and its v
 DEBUG web      GET / 303 from 127.0.0.1
 INFO  web      The panel was opened with the local access token, from 127.0.0.1
 WARN  web      A wrong access token was given to the panel, from 127.0.0.1
+INFO  panel    Chief (1) signed in to the panel
+INFO  panel    203.0.113.9: too many sign-ins to the panel
 ```
+
+No password, session token, state nor code of Discord reaches a log.
 
 ## Starting and stopping
 
