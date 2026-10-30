@@ -164,7 +164,8 @@ struct Fixture {
                                                       .lobbyPort = 4242,
                                                       .firstGamePort = 4243,
                                                       .lastGamePort = 4299,
-                                                      .panelPort = 8080});
+                                                      .panelPort = 8080,
+                                                      .admins = {}});
         administration->subscribe([this](const AdminEvent &event) { events.push_back(event); });
     }
     ~Fixture()
@@ -541,7 +542,8 @@ struct AdminMaster {
                                                       .lobbyPort = lobby.localAddress().port(),
                                                       .firstGamePort = 0,
                                                       .lastGamePort = 0,
-                                                      .panelPort = web->localAddress().port()});
+                                                      .panelPort = web->localAddress().port(),
+                                                      .admins = {}});
         lobby.setBans(&bans);
         games.setObserver(&*administration);
         lobby.setObserver(&*administration);

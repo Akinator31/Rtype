@@ -98,6 +98,19 @@ PasswordProblem checkPassword(std::string_view password, std::string_view userna
     return PasswordProblem::None;
 }
 
+bool isListedAdmin(const std::vector<std::string> &admins, const std::optional<std::string> &verifiedEmail,
+                   const std::optional<std::string> &discordId)
+{
+    static constexpr std::string_view DiscordPrefix = "discord:";
+    return std::ranges::any_of(admins, [&](const std::string &admin) {
+        if (admin.starts_with(DiscordPrefix)) {
+            return discordId && std::string_view(admin).substr(DiscordPrefix.size()) == *discordId;
+        }
+        const std::optional<std::string> email = normalizeEmail(admin);
+        return verifiedEmail && email && emailKey(*email) == emailKey(*verifiedEmail);
+    });
+}
+
 std::string markGuest(std::string_view name)
 {
     static constexpr std::size_t MaxNameLength = 16;

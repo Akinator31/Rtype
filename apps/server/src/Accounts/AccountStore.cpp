@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <format>
+#include <limits>
 
 namespace rtype::server
 {
@@ -133,6 +134,17 @@ long long dayOf(TimePoint time)
 std::string_view roleName(AccountRole role)
 {
     return role == AccountRole::Admin ? "admin" : "player";
+}
+
+std::optional<AccountRole> parseRole(std::string_view name)
+{
+    if (name == "admin") {
+        return AccountRole::Admin;
+    }
+    if (name == "player") {
+        return AccountRole::Player;
+    }
+    return std::nullopt;
 }
 
 namespace
@@ -273,6 +285,12 @@ bool unbanAccount(rtype::database::Database &database, long long accountId)
                    accountId) != 0;
 }
 
+bool setRole(rtype::database::Database &database, long long accountId, AccountRole role)
+{
+    const std::string name(roleName(role));
+    return execute(database, "UPDATE accounts SET role = :role WHERE id = :id", name, accountId) != 0;
+}
+
 bool deleteAccount(rtype::database::Database &database, long long accountId)
 {
     return database.transaction([&] {
@@ -339,6 +357,56 @@ std::variant<Account, AccountConflict> createDiscordAccount(rtype::database::Dat
         }
         return created;
     });
+}
+
+std::optional<AccountEntry> findAccountEntry(rtype::database::Database &database, long long accountId)
+{
+    std::optional<Account> account = findAccount(database, accountId);
+    if (!account) {
+        return std::nullopt;
+    }
+    return AccountEntry{.account = std::move(*account), .discordId = discordIdentity(database, accountId)};
+}
+
+std::vector<AccountEntry> listAccounts(rtype::database::Database &database, std::string_view search,
+                                       std::size_t limit, std::optional<long long> before)
+{
+    const long long last = before.value_or(std::numeric_limits<long long>::max());
+    const auto count = static_cast<long long>(limit);
+    // The columns of readAccount(), then the Discord user: no other column of the join has their names
+    const std::string columns = std::format("{}, discord_id", AccountColumns);
+    const std::string join = "FROM accounts LEFT JOIN discord_identities ON discord_identities.account_id = "
+                             "accounts.id";
+    const auto read = [](const soci::rowset<soci::row> &rows) {
+        std::vector<AccountEntry> entries;
+        for (const soci::row &row : rows) {
+            entries.push_back({.account = readAccount(row), .discordId = optionalText(row, 10)});
+        }
+        return entries;
+    };
+    if (search.empty()) {
+        return read((database.session().prepare << std::format(
+                         "SELECT {} {} WHERE accounts.id < :last ORDER BY accounts.id DESC LIMIT :count",
+                         columns, join),
+                     soci::use(last), soci::use(count)));
+    }
+    // The keys are in lower case; the wildcards of LIKE in the search are taken as they are
+    std::string pattern = "%";
+    for (const char c : emailKey(search)) {
+        if (c == '%' || c == '_' || c == '!') {
+            pattern += '!';
+        }
+        pattern += c;
+    }
+    pattern += '%';
+    const std::string exact(search);
+    return read((database.session().prepare << std::format(
+                     "SELECT {} {} WHERE accounts.id < :last AND (username_key LIKE :username ESCAPE '!' OR "
+                     "email_key LIKE :email ESCAPE '!' OR discord_id = :discord) ORDER BY accounts.id DESC "
+                     "LIMIT :count",
+                     columns, join),
+                 soci::use(last), soci::use(pattern), soci::use(pattern), soci::use(exact),
+                 soci::use(count)));
 }
 
 SessionToken createSession(rtype::database::Database &database, long long accountId, SessionClient client,

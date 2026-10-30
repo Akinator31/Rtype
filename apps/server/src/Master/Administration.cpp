@@ -1,5 +1,6 @@
 #include "Master/Administration.hpp"
 
+#include "Accounts/AccountRules.hpp"
 #include "rtype/log/Logger.hpp"
 
 #include <crow/json.h>
@@ -278,6 +279,240 @@ bool Administration::unban(const rtype::network::Address &address, const std::st
     details["reason"] = reason;
     record(actor, "unban", std::format("address:{}", lifted->address.ip()), details.dump());
     return true;
+}
+
+// --- The accounts ---
+
+AdminAccount Administration::adminAccount(AccountEntry entry) const
+{
+    const bool locked = isListedAdmin(
+        _settings.admins, entry.account.verified() ? entry.account.email : std::nullopt, entry.discordId);
+    return {.entry = std::move(entry), .locked = locked};
+}
+
+void Administration::accounts(std::string search, std::size_t limit, std::optional<long long> before,
+                              AccountsCallback done)
+{
+    if (_database == nullptr) {
+        done(std::vector<AdminAccount>{});
+        return;
+    }
+    auto shared = std::make_shared<AccountsCallback>(std::move(done));
+    const bool queued = _database->run(
+        "read the accounts",
+        [search = std::move(search), limit, before](rtype::database::Database &database) {
+            return listAccounts(database, search, limit, before);
+        },
+        [this, shared,
+         alive = std::weak_ptr<bool>(_alive)](std::optional<std::vector<AccountEntry>> entries) {
+            if (alive.expired()) {
+                return;
+            }
+            if (!entries) {
+                (*shared)(std::nullopt);
+                return;
+            }
+            std::vector<AdminAccount> accounts;
+            accounts.reserve(entries->size());
+            for (AccountEntry &entry : *entries) {
+                accounts.push_back(adminAccount(std::move(entry)));
+            }
+            (*shared)(std::move(accounts));
+        });
+    if (!queued) {
+        (*shared)(std::nullopt);
+    }
+}
+
+void Administration::account(long long accountId, AccountCallback done)
+{
+    if (_database == nullptr) {
+        done(std::optional<AdminAccount>{});
+        return;
+    }
+    auto shared = std::make_shared<AccountCallback>(std::move(done));
+    const bool queued = _database->run(
+        "read an account",
+        [accountId](rtype::database::Database &database) { return findAccountEntry(database, accountId); },
+        [this, shared,
+         alive = std::weak_ptr<bool>(_alive)](std::optional<std::optional<AccountEntry>> entry) {
+            if (alive.expired()) {
+                return;
+            }
+            if (!entry) {
+                (*shared)(std::nullopt);
+                return;
+            }
+            (*shared)(*entry ? std::optional(adminAccount(std::move(**entry))) : std::nullopt);
+        });
+    if (!queued) {
+        (*shared)(std::nullopt);
+    }
+}
+
+void Administration::changeAccount(
+    std::string description, long long accountId, bool refuseLocked,
+    std::function<void(rtype::database::Database &, const AccountEntry &)> change, ChangeCallback done)
+{
+    using Outcome = AccountChanged::Outcome;
+    if (_database == nullptr) {
+        done({.outcome = Outcome::NoAccount, .account = std::nullopt, .removed = 0});
+        return;
+    }
+    struct Result {
+        Outcome outcome = Outcome::Done;
+        std::optional<AccountEntry> before;
+        std::optional<AccountEntry> after;
+    };
+    auto shared = std::make_shared<ChangeCallback>(std::move(done));
+    const bool queued = _database->run(
+        std::move(description),
+        [accountId, refuseLocked, admins = _settings.admins,
+         change = std::move(change)](rtype::database::Database &database) {
+            // The database thread is its only writer: the account cannot change between the reads and the
+            // change, whose own functions take their transactions
+            Result result;
+            result.before = findAccountEntry(database, accountId);
+            if (!result.before) {
+                result.outcome = Outcome::NoAccount;
+                return result;
+            }
+            const Account &account = result.before->account;
+            if (refuseLocked && isListedAdmin(admins, account.verified() ? account.email : std::nullopt,
+                                              result.before->discordId)) {
+                result.outcome = Outcome::Locked;
+                return result;
+            }
+            change(database, *result.before);
+            result.after = findAccountEntry(database, accountId);
+            return result;
+        },
+        [this, shared, alive = std::weak_ptr<bool>(_alive)](std::optional<Result> result) {
+            if (alive.expired()) {
+                return;
+            }
+            if (!result) {
+                (*shared)({.outcome = Outcome::Failed, .account = std::nullopt, .removed = 0});
+                return;
+            }
+            std::optional<AdminAccount> account;
+            if (result->after) {
+                account = adminAccount(std::move(*result->after));
+            } else if (result->outcome != Outcome::Done && result->before) {
+                account = adminAccount(std::move(*result->before));
+            }
+            (*shared)({.outcome = result->outcome, .account = std::move(account), .removed = 0});
+        });
+    if (!queued) {
+        (*shared)({.outcome = Outcome::Failed, .account = std::nullopt, .removed = 0});
+    }
+}
+
+std::size_t Administration::removeAccountPlayers(long long accountId, rtype::lobby::ErrorCode code)
+{
+    std::size_t removed = 0;
+    for (const AdminPlayer &player : _lobby.adminPlayers()) {
+        if (player.accountId == accountId) {
+            _games.kick(player.id);
+            removed += _lobby.disconnect(player.id, code) ? 1 : 0;
+        }
+    }
+    return removed;
+}
+
+void Administration::banAccount(long long accountId, const std::string &reason, const std::string &actor,
+                                ChangeCallback done)
+{
+    changeAccount(
+        "ban an account", accountId, true,
+        [reason](rtype::database::Database &database, const AccountEntry &entry) {
+            rtype::server::banAccount(database, entry.account.id, reason, std::chrono::system_clock::now());
+        },
+        [this, accountId, reason, actor, done = std::move(done)](AccountChanged changed) {
+            if (changed.outcome == AccountChanged::Outcome::Done && changed.account) {
+                // Its sessions are ended: its connections go too
+                changed.removed = removeAccountPlayers(accountId, rtype::lobby::ErrorCode::Banned);
+                const std::string &name = changed.account->entry.account.username;
+                logger().info("Account {} ({}) banned by {}{}: {} players removed", name, accountId, actor,
+                              because(reason), changed.removed);
+                crow::json::wvalue details;
+                details["account"] = static_cast<std::int64_t>(accountId);
+                details["name"] = name;
+                details["reason"] = reason;
+                details["removed"] = static_cast<std::uint64_t>(changed.removed);
+                record(actor, "ban_account", std::format("account:{}", accountId), details.dump());
+            }
+            done(std::move(changed));
+        });
+}
+
+void Administration::unbanAccount(long long accountId, const std::string &reason, const std::string &actor,
+                                  ChangeCallback done)
+{
+    changeAccount(
+        "lift the ban of an account", accountId, false,
+        [](rtype::database::Database &database, const AccountEntry &entry) {
+            rtype::server::unbanAccount(database, entry.account.id);
+        },
+        [this, accountId, reason, actor, done = std::move(done)](AccountChanged changed) {
+            if (changed.outcome == AccountChanged::Outcome::Done && changed.account) {
+                const std::string &name = changed.account->entry.account.username;
+                logger().info("The ban of account {} ({}) lifted by {}{}", name, accountId, actor,
+                              because(reason));
+                crow::json::wvalue details;
+                details["account"] = static_cast<std::int64_t>(accountId);
+                details["name"] = name;
+                details["reason"] = reason;
+                record(actor, "unban_account", std::format("account:{}", accountId), details.dump());
+            }
+            done(std::move(changed));
+        });
+}
+
+void Administration::setRole(long long accountId, AccountRole role, const std::string &actor,
+                             ChangeCallback done)
+{
+    // Making a locked account an administrator changes nothing; demoting it is refused
+    changeAccount(
+        "change the role of an account", accountId, role != AccountRole::Admin,
+        [role](rtype::database::Database &database, const AccountEntry &entry) {
+            rtype::server::setRole(database, entry.account.id, role);
+        },
+        [this, accountId, role, actor, done = std::move(done)](AccountChanged changed) {
+            if (changed.outcome == AccountChanged::Outcome::Done && changed.account) {
+                const std::string &name = changed.account->entry.account.username;
+                logger().info("Account {} ({}) made {} by {}", name, accountId, roleName(role), actor);
+                crow::json::wvalue details;
+                details["account"] = static_cast<std::int64_t>(accountId);
+                details["name"] = name;
+                details["role"] = std::string(roleName(role));
+                record(actor, "role", std::format("account:{}", accountId), details.dump());
+            }
+            done(std::move(changed));
+        });
+}
+
+void Administration::deleteAccount(long long accountId, const std::string &reason, const std::string &actor,
+                                   ChangeCallback done)
+{
+    changeAccount(
+        "delete an account", accountId, true,
+        [](rtype::database::Database &database, const AccountEntry &entry) {
+            rtype::server::deleteAccount(database, entry.account.id);
+        },
+        [this, accountId, reason, actor, done = std::move(done)](AccountChanged changed) {
+            if (changed.outcome == AccountChanged::Outcome::Done) {
+                changed.removed = removeAccountPlayers(accountId, rtype::lobby::ErrorCode::Kicked);
+                logger().info("Account {} deleted by {}{}: {} players removed", accountId, actor,
+                              because(reason), changed.removed);
+                // Neither its name nor its address: the account is gone
+                crow::json::wvalue details;
+                details["reason"] = reason;
+                details["removed"] = static_cast<std::uint64_t>(changed.removed);
+                record(actor, "delete_account", std::format("account:{}", accountId), details.dump());
+            }
+            done(std::move(changed));
+        });
 }
 
 void Administration::purge()
