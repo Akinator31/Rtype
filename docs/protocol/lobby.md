@@ -1,15 +1,20 @@
 # Lobby (TCP)
 
-The connection between a client and the master: TLS, framing, and the messages to list, create, join and
-leave games. Conventions and types are defined in the [overview](index.md#2-conventions).
+The connection between a client and the master: TLS, framing, the messages to list, create, join and leave
+games, and those of the player accounts. Conventions and types are defined in the
+[overview](index.md#2-conventions).
 
-This page describes **version 2**. The client and the master ship together: a master refuses a `HELLO` of
+This page describes **version 3**. The client and the master ship together: a master refuses a `HELLO` of
 another version with `UNSUPPORTED_VERSION`, and the client tells the player to update.
 
 | Version | Change |
 |---|---|
 | 1 | First version |
 | 2 | The administrators of the server ([administration API](admin-api.md)): `SERVER_MESSAGE`; `LEFT_GAME` reasons `KICKED` and `ENDED_BY_ADMIN`; `ERROR` codes `KICKED` and `BANNED`, sent before the master closes the connection |
+| 3 | The player accounts ([section 6](#6-accounts)): `HELLO` carries a locale and an optional session token; `WELCOME` carries the features of the server and the account signed in; the requests `REGISTER` to `DELETE_ACCOUNT`, the replies `SIGNED_IN`, `CODE_SENT`, `DISCORD_URL` and `DONE`, and their error codes |
+
+The version is the first field of `HELLO` in every version, so that a master reads it from a client of any
+version and answers `UNSUPPORTED_VERSION`, never `MALFORMED`.
 
 ## 1. Connection
 
@@ -28,22 +33,23 @@ stateDiagram-v2
     Lobby --> InGame: CREATE_GAME or JOIN_GAME / GAME_JOINED
     InGame --> Lobby: LEAVE_GAME or game over / LEFT_GAME
     Handshake --> [*]: failure or 10 s
-    Unwelcomed --> [*]: no HELLO in 10 s
+    Unwelcomed --> [*]: no HELLO in 10 s, or SESSION_EXPIRED
     Lobby --> [*]: closed or 30 s silent
     InGame --> [*]: closed or 30 s silent
 ```
 
 *A connection is welcomed with `HELLO`, then moves between the lobby and a game, and is closed on failure or
-silence.*
+silence. In the lobby and in a game, it is either a guest or signed in to an account ([section 6](#6-accounts)).*
 
 | State | Messages accepted from the client |
 |---|---|
 | Unwelcomed | `HELLO`, `PING` |
-| Lobby | `LIST_GAMES`, `CREATE_GAME`, `JOIN_GAME`, `PING` |
+| Lobby | `LIST_GAMES`, `CREATE_GAME`, `JOIN_GAME`, `PING`, the requests of the accounts |
 | In game | `LIST_GAMES`, `LEAVE_GAME`, `PING` |
 
 Any other message is answered with `ERROR`: `HELLO_REQUIRED` before `HELLO`, `ALREADY_WELCOMED` for a second
-`HELLO`, `ALREADY_IN_GAME` or `NOT_IN_GAME` otherwise.
+`HELLO`, `ALREADY_IN_GAME` or `NOT_IN_GAME` otherwise. The requests of the accounts are answered
+`ALREADY_IN_GAME` in a game: a player signs in, out, or deletes the account from the lobby only.
 
 ## 2. TLS
 
@@ -92,13 +98,15 @@ TCP carries a stream of bytes with no boundaries. Inside TLS, each message is a 
   a size of 0 or above 16382, without reading the rest.
 - Types `0x01`–`0x7F` are sent by the client, types `0x80`–`0xFF` by the master.
 
-Example: `HELLO` with version 2 and the name `"Pavel"`:
+Example: `HELLO` with version 3, the name `"Pavel"`, the locale `"fr"` and no session token:
 
 ```
-00 09   size: 9 bytes follow
+00 0D   size: 13 bytes follow
 01      type: HELLO
-00 02   version: 2
+00 03   version: 3
 05 50 61 76 65 6C   name: "Pavel"
+02 66 72            locale: "fr"
+00                  no session token
 ```
 
 ## 4. Requests, replies and notifications
@@ -119,6 +127,17 @@ Example: `HELLO` with version 2 and the name `"Pavel"`:
 | `JOIN_GAME` | `GAME_JOINED` |
 | `LEAVE_GAME` | `LEFT_GAME` |
 | `PING` | `PONG` |
+| `REGISTER` | `CODE_SENT` |
+| `VERIFY_EMAIL` | `SIGNED_IN` |
+| `RESEND_CODE` | `CODE_SENT` |
+| `SIGN_IN` | `SIGNED_IN` |
+| `SIGN_OUT` | `DONE` |
+| `FORGOT_PASSWORD` | `CODE_SENT` |
+| `RESET_PASSWORD` | `SIGNED_IN` |
+| `DISCORD_SIGN_IN` | `DISCORD_URL` |
+| `DISCORD_CONFIRM` | `SIGNED_IN` or `DONE` |
+| `CHOOSE_USERNAME` | `SIGNED_IN` |
+| `DELETE_ACCOUNT` | `DONE` |
 
 ## 5. Messages
 
@@ -133,13 +152,29 @@ Example: `HELLO` with version 2 and the name `"Pavel"`:
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 2 |
-| 2 | Name | `str8` | Name of the player, 1 to 16 bytes |
+| 0 | Version | `u16` | Protocol version, 3 |
+| 2 | Name | `str8` | Name of a guest, 1 to 16 bytes; empty with a session token |
+| 3 + n | Locale | `str8` | Language of the player, 2 to 16 of `A-Z a-z 0-9 - _`: `en`, `fr-FR`, `fr_CA` |
+| 4 + n + m | Has token | `bool` | Whether a session token follows |
+| 5 + n + m | Session token | `bytes[32]` | Only if *has token*: the token of `SIGNED_IN`, to resume the session of an account |
 
-**Receiver behaviour:** if the version is not supported, the master answers `ERROR (UNSUPPORTED_VERSION)`
-and closes the connection. If the address of the client is banned, it answers `ERROR (BANNED)` and closes the
-connection. If the name is empty, too long or invalid, it answers `ERROR (INVALID_NAME)`.
-Otherwise it gives the player an id and answers `WELCOME`. Names do not have to be unique.
+**Receiver behaviour:** the master reads the version first. If it is not supported, the master answers
+`ERROR (UNSUPPORTED_VERSION)` and closes the connection, without reading the rest, whose layout may be another.
+If the address of the client is banned, it answers `ERROR (BANNED)` and closes the connection. A locale that
+does not fit its field, a token flag other than 0 or 1, or a name beside a token is `MALFORMED`.
+
+- **With a token**: if the token is unknown, expired, or the master keeps no account, it answers
+  `ERROR (SESSION_EXPIRED)` and closes the connection: the client forgets the token and connects again without
+  it. If the account is banned, `ERROR (BANNED)`, then closed. Otherwise the connection is signed in to the
+  account, whose username is the name of the player, and the master answers `WELCOME` with the account.
+- **Without a token**, a guest: if the name is empty, too long or invalid, the master answers
+  `ERROR (INVALID_NAME)`; if it is the username of an account, ignoring case, `ERROR (NAME_RESERVED)`. Otherwise
+  it answers `WELCOME`. The names of guests do not have to be unique. A master that accepts no guest welcomes
+  the connection all the same, so that it can sign in, and answers `GUESTS_DISABLED` to its `CREATE_GAME` and
+  `JOIN_GAME` until it does.
+
+The master writes its emails in the language of the locale (English when it does not know it), and keeps the
+token out of its logs. Each welcomed connection gets a new player id.
 
 #### LIST_GAMES (`0x02`)
 
@@ -207,6 +242,153 @@ No payload.
 **Receiver behaviour:** the master answers `PONG`. A master closes a connection on which it received nothing
 for 30 seconds.
 
+#### Requests of the accounts (`0x07`–`0x11`)
+
+Version 3. A master without the feature a request needs (`WELCOME` tells which it has) answers
+`ERROR (ACCOUNTS_DISABLED)` to it, after the check of the state (`HELLO_REQUIRED`) and without reading its
+payload. The flows they make are in [section 6](#6-accounts).
+
+The fields of these requests are checked for their length and their text: a field that does not fit is
+`MALFORMED`. What they hold is checked by the master, with an error of its own: a username that is not 3 to 16
+of `A-Z a-z 0-9 _ -` is `INVALID_NAME`, an email that is not an address `INVALID_EMAIL`, a new password that is
+not 10 to 128 characters, or that is the username or the email, `WEAK_PASSWORD`.
+
+A **password** is only ever in `REGISTER`, `SIGN_IN`, `RESET_PASSWORD` and `DELETE_ACCOUNT`, inside TLS. A
+password, a code and a session token MUST NOT be written to any log, at any level, by the client or the
+master.
+
+| Field | Type | Range |
+|---|---|---|
+| Username | `str8` | 1 to 16 bytes |
+| Email | `str8` | 1 to 254 bytes, the longest address SMTP carries |
+| Login | `str8` | 1 to 254 bytes: a username or an email |
+| Password | `str16` | 1 to 512 bytes (128 characters of up to 4 bytes); 0 to 512 in `DELETE_ACCOUNT` |
+| Email code | `str8` | Exactly 6 digits `0`–`9`: anything else is `MALFORMED` |
+| Discord code | `str8` | Exactly 6 of `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` (no `0 O 1 I`, which look alike): anything else is `MALFORMED` |
+
+##### REGISTER (`0x07`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Username | `str8` |
+| 1 + u | Email | `str8` |
+| 2 + u + e | Password | `str16` |
+
+**Receiver behaviour:** a username taken, ignoring case, is `USERNAME_TAKEN`. Otherwise the master answers
+`CODE_SENT`, **whether the email has an account or not**: a new email gets an account not verified and a code;
+an email that has an account gets an email telling its holder, and no account is created. The answer tells
+nothing of the accounts of others. Errors: `INVALID_NAME`, `INVALID_EMAIL`, `WEAK_PASSWORD`, `BUSY`,
+`MAIL_UNAVAILABLE`, `TOO_MANY_ATTEMPTS`, `ALREADY_SIGNED_IN`.
+
+##### VERIFY_EMAIL (`0x08`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Login | `str8` |
+| 1 + n | Code | `str8`, email code |
+
+**Receiver behaviour:** the code that `REGISTER`, `RESEND_CODE` or `SIGN_IN` sent verifies the email, and signs
+the connection in: `SIGNED_IN`. Errors: `INVALID_CODE` (a wrong code, or no account with this login),
+`CODE_EXPIRED`, `TOO_MANY_ATTEMPTS`, `ALREADY_SIGNED_IN`.
+
+##### RESEND_CODE (`0x09`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Login | `str8` |
+
+**Receiver behaviour:** a new code to verify the email, at most once a minute: `CODE_SENT`, whether the
+account exists or not. Errors: `TOO_MANY_ATTEMPTS`, `MAIL_UNAVAILABLE`, `ALREADY_SIGNED_IN`.
+
+##### SIGN_IN (`0x0A`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Login | `str8` |
+| 1 + n | Password | `str16` |
+
+**Receiver behaviour:** `SIGNED_IN`. Errors: `INVALID_CREDENTIALS` (no such account, or a wrong password: the
+same answer), `EMAIL_NOT_VERIFIED` (only after the right password: a new code was sent), `BANNED` (then
+closed), `BUSY`, `TOO_MANY_ATTEMPTS`, `ALREADY_SIGNED_IN`.
+
+##### SIGN_OUT (`0x0B`)
+
+No payload.
+
+**Receiver behaviour:** the session of the token of this connection ends; the master answers `DONE`, then
+closes the connection. The client forgets the token, and connects again as a guest if the player wants.
+Error: `NOT_SIGNED_IN`.
+
+##### FORGOT_PASSWORD (`0x0C`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Email | `str8` |
+
+**Receiver behaviour:** `CODE_SENT`, whether the email has an account or not; if it has one, it gets a code to
+choose a new password. Errors: `INVALID_EMAIL`, `TOO_MANY_ATTEMPTS`, `MAIL_UNAVAILABLE`, `ALREADY_SIGNED_IN`.
+
+##### RESET_PASSWORD (`0x0D`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Email | `str8` |
+| 1 + e | Code | `str8`, email code |
+| 2 + e + 6 | Password | `str16`, the new one |
+
+**Receiver behaviour:** the new password replaces the old one, every session of the account ends, the email
+counts as verified (the code proved it), and the connection is signed in with a new session: `SIGNED_IN`.
+Errors: `INVALID_CODE`, `CODE_EXPIRED`, `TOO_MANY_ATTEMPTS`, `WEAK_PASSWORD`, `BUSY`, `BANNED` (then closed),
+`ALREADY_SIGNED_IN`.
+
+##### DISCORD_SIGN_IN (`0x0E`)
+
+No payload.
+
+**Receiver behaviour:** `DISCORD_URL`, the page of Discord for this connection, valid ten minutes. Signed in,
+it starts the link of a Discord identity to the account, or the confirmation `DELETE_ACCOUNT` needs.
+
+##### DISCORD_CONFIRM (`0x0F`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Code | `str8`, Discord code |
+
+**Receiver behaviour:** the code the page of Discord showed, after the player went through it. Only this
+request signs in or links anything: whoever opens the page of another signs nobody in without being given the
+code. Then:
+
+- not signed in, an identity that has an account: `SIGNED_IN`;
+- not signed in, a new identity: `DONE`, and the client sends `CHOOSE_USERNAME` within ten minutes;
+- signed in, an identity without account: linked to the account, `DONE`; the account's own identity: confirmed
+  for `DELETE_ACCOUNT` for five minutes, `DONE`.
+
+Errors: `INVALID_CODE`, `CODE_EXPIRED`, `TOO_MANY_ATTEMPTS` (5 wrong codes), `DISCORD_NOT_CONFIRMED` (the
+page of Discord was not completed for this connection), `DISCORD_TAKEN` (signed in, an identity of another
+account), `BANNED` (then closed).
+
+##### CHOOSE_USERNAME (`0x10`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Username | `str8` |
+
+**Receiver behaviour:** creates the account of the new Discord identity this connection confirmed, with this
+username, and signs it in: `SIGNED_IN`. Errors: `DISCORD_NOT_CONFIRMED` (no new identity confirmed on this
+connection, or more than ten minutes ago), `INVALID_NAME`, `USERNAME_TAKEN`, `ALREADY_SIGNED_IN`.
+
+##### DELETE_ACCOUNT (`0x11`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Password | `str16`, 0 to 512 bytes |
+
+**Receiver behaviour:** with the password of the account, or, empty, for an account without one, after a
+Discord confirmation on this connection less than five minutes old: the account, its sessions and its codes
+are deleted; its administration actions stay, without its name, email or address. The master answers `DONE`,
+then closes the connection. Errors: `INVALID_CREDENTIALS`, `DISCORD_NOT_CONFIRMED`, `BUSY`,
+`TOO_MANY_ATTEMPTS`, `NOT_SIGNED_IN`.
+
 ### 5.2 Master to client
 
 #### WELCOME (`0x81`)
@@ -219,6 +401,26 @@ for 30 seconds.
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Player id | `u32` | Id of the player on this master, never 0 |
+| 4 | Features | `u8` | What the master offers, bits below; the other bits are 0 |
+| 5 | Signed in | `bool` | Whether an account follows: the one the token of `HELLO` signed in |
+| 6 | Account | | Only if *signed in*: an account, see below |
+
+| Feature bit | Value | Meaning |
+|---|---|---|
+| Guests | `0x01` | Players can play without an account |
+| Password accounts | `0x02` | `REGISTER`, `VERIFY_EMAIL`, `RESEND_CODE`, `SIGN_IN`, `FORGOT_PASSWORD`, `RESET_PASSWORD` |
+| Discord | `0x04` | `DISCORD_SIGN_IN`, `DISCORD_CONFIRM`, `CHOOSE_USERNAME` |
+
+An **account**, in `WELCOME` and `SIGNED_IN`:
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Account id | `u64` | Never 0 |
+| 8 | Username | `str8` | 1 to 16 bytes, the name of the player |
+| 9 + n | Role | `u8` | `0` player, `1` administrator; any other value is malformed |
+
+**Receiver behaviour:** the client offers what the master offers: sign in, create an account, play as a guest.
+A master without accounts sends only the guests bit, and the client looks as it did before accounts.
 
 #### GAME_LIST (`0x82`)
 
@@ -322,7 +524,25 @@ No payload.
 | `SERVER_FULL` | 11 | No more games can be created | Kept |
 | `GAME_START_FAILED` | 12 | The game process did not start | Kept |
 | `KICKED` | 13 | An administrator removed the player from the server. Sent without a request (request 0) | Closed after the error |
-| `BANNED` | 14 | The address of the client is banned for a time: the reply to `HELLO`, or sent without a request (request 0) when the ban comes while it is connected | Closed after the error |
+| `BANNED` | 14 | The address of the client is banned for a time: the reply to `HELLO`, or sent without a request (request 0) when the ban comes while it is connected. From version 3, the account is banned: the reply to `HELLO` with its token, to `SIGN_IN`, or sent without a request | Closed after the error |
+| `ACCOUNTS_DISABLED` | 15 | The master does not offer this way of signing in (version 3, as all the codes below) | Kept |
+| `USERNAME_TAKEN` | 16 | Another account has this username, ignoring case | Kept |
+| `WEAK_PASSWORD` | 17 | Not 10 to 128 characters, or the username or the email | Kept |
+| `INVALID_CREDENTIALS` | 18 | No account with this login and this password | Kept |
+| `EMAIL_NOT_VERIFIED` | 19 | The password was right, the email is not verified: a new code was sent | Kept |
+| `INVALID_CODE` | 20 | Wrong code | Kept |
+| `CODE_EXPIRED` | 21 | The code is older than 15 minutes (a Discord code, ten minutes): ask for a new one | Kept |
+| `TOO_MANY_ATTEMPTS` | 22 | Too many tries: of this code (5), of codes for the account today (20), of wrong passwords, or of requests from this address | Kept |
+| `SESSION_EXPIRED` | 23 | The token of `HELLO` is unknown or expired: the client forgets it and connects again without it | Closed after the error |
+| `BUSY` | 24 | The master cannot check a password now: try again in a moment | Kept |
+| `GUESTS_DISABLED` | 25 | The master accepts no guest: `CREATE_GAME` and `JOIN_GAME` need an account | Kept |
+| `NAME_RESERVED` | 26 | The name of a guest is the username of an account | Kept |
+| `MAIL_UNAVAILABLE` | 27 | The master cannot send emails now | Kept |
+| `DISCORD_NOT_CONFIRMED` | 28 | No Discord confirmation on this connection, or too old | Kept |
+| `INVALID_EMAIL` | 29 | Not an email address | Kept |
+| `NOT_SIGNED_IN` | 30 | `SIGN_OUT` or `DELETE_ACCOUNT` without an account signed in | Kept |
+| `ALREADY_SIGNED_IN` | 31 | A request to sign in, or to create an account, while signed in | Kept |
+| `DISCORD_TAKEN` | 32 | This Discord identity belongs to another account | Kept |
 
 **Receiver behaviour:** the client shows a message matching the code. Unknown codes are shown as a generic
 error. An `ERROR` with the request 0 and the code `KICKED` or `BANNED` is not the reply to the request the
@@ -342,9 +562,183 @@ client waits for: the connection closes after it.
 **Receiver behaviour:** the client shows the text to the player, as coming from the server. A message that
 does not fit the field is malformed.
 
-## 6. When the connection closes
+#### SIGNED_IN (`0x88`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Reply to `VERIFY_EMAIL`, `SIGN_IN`, `RESET_PASSWORD`, `DISCORD_CONFIRM` or `CHOOSE_USERNAME` (version 3). |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Session token | `bytes[32]` | 256 random bits, to send in the next `HELLO` |
+| 32 | Account | | The account signed in, as in `WELCOME` |
+
+**Receiver behaviour:** the connection is signed in: the name of the player is now the username. The client
+keeps the token for this server, and MUST NOT write it to its logs.
+
+#### CODE_SENT (`0x89`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Reply to `REGISTER`, `RESEND_CODE` or `FORGOT_PASSWORD` (version 3). |
+
+No payload. "If this email has an account, a code was sent": the client asks for the code, valid 15 minutes.
+
+#### DISCORD_URL (`0x8A`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Reply to `DISCORD_SIGN_IN` (version 3). |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Address | `str16` | 1 to 2048 bytes, starting with `https://` |
+
+**Receiver behaviour:** the client opens the address in the browser, then asks for the code the page shows. An
+address that does not start with `https://` is malformed: a client never opens another scheme.
+
+#### DONE (`0x8B`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Reply to `SIGN_OUT`, `DISCORD_CONFIRM` or `DELETE_ACCOUNT` (version 3). |
+
+No payload. After `SIGN_OUT` and `DELETE_ACCOUNT`, the master closes the connection.
+
+## 6. Accounts
+
+Version 3. A master with accounts offers them in `WELCOME`; one without answers every request of the accounts
+with `ACCOUNTS_DISABLED`, and a `HELLO` with a token with `SESSION_EXPIRED`. Each flow is made of the requests
+above, one reply each, in order.
+
+### 6.1 Create an account
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Master
+    participant E as Mailbox
+    C->>M: HELLO (guest name, locale)
+    M->>C: WELCOME (features: password accounts)
+    C->>M: REGISTER (username, email, password)
+    alt username taken
+        M->>C: ERROR (USERNAME_TAKEN)
+    else new email
+        M-->>E: code, in the language of the locale
+        M->>C: CODE_SENT
+    else email with an account
+        M-->>E: "you already have an account"
+        M->>C: CODE_SENT
+    end
+    C->>M: VERIFY_EMAIL (username, code)
+    M->>C: SIGNED_IN (token, account)
+```
+
+*The answer to `REGISTER` is the same whether the email has an account or not: only its mailbox learns it.
+`RESEND_CODE` sends another code, once a minute. An account not verified within 24 hours is deleted.*
+
+### 6.2 Sign in, and come back signed in
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Master
+    C->>M: HELLO (guest name, locale)
+    M->>C: WELCOME
+    C->>M: SIGN_IN (login, password)
+    alt right password, email verified
+        M->>C: SIGNED_IN (token, account)
+    else right password, email not verified
+        M->>C: ERROR (EMAIL_NOT_VERIFIED), a new code sent
+        C->>M: VERIFY_EMAIL (login, code)
+        M->>C: SIGNED_IN (token, account)
+    else wrong login or password
+        M->>C: ERROR (INVALID_CREDENTIALS)
+    end
+    Note over C: keeps the token for this server
+    C->>M: later, a new connection: HELLO (no name, locale, token)
+    alt session valid
+        M->>C: WELCOME (account)
+    else unknown or expired
+        M->>C: ERROR (SESSION_EXPIRED), then closes
+        Note over C: forgets the token, connects again without it
+    end
+```
+
+*A session lasts 30 days; a new password, a ban or `SIGN_OUT` ends it before.*
+
+### 6.3 Forgotten password
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Master
+    participant E as Mailbox
+    C->>M: FORGOT_PASSWORD (email)
+    opt the email has an account
+        M-->>E: code
+    end
+    M->>C: CODE_SENT
+    C->>M: RESET_PASSWORD (email, code, new password)
+    Note over M: every session of the account ends
+    M->>C: SIGNED_IN (new token, account)
+```
+
+### 6.4 Sign in with Discord
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant B as Browser
+    participant M as Master
+    participant D as Discord
+    C->>M: DISCORD_SIGN_IN
+    M->>C: DISCORD_URL (https://discord.com/...)
+    C->>B: opens the address
+    B->>D: the player accepts
+    D->>B: back to the master
+    B->>M: GET /auth/discord/callback
+    M->>D: code exchanged, /users/@me
+    M->>B: a page with a code of 6 characters
+    Note over C: the player types the code
+    C->>M: DISCORD_CONFIRM (code)
+    alt identity with an account
+        M->>C: SIGNED_IN (token, account)
+    else new identity
+        M->>C: DONE
+        C->>M: CHOOSE_USERNAME (username)
+        M->>C: SIGNED_IN (token, account)
+    end
+```
+
+*Nothing is signed in until `DISCORD_CONFIRM` carries the code of the page: someone who opens the address of
+another learns a code they would have to give to that other. Signed in, the same requests link a Discord
+identity to the account (`DONE`).*
+
+### 6.5 Sign out, delete the account
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Master
+    C->>M: SIGN_OUT
+    M->>C: DONE, then closes
+    Note over C: forgets the token
+    C->>M: on another connection, signed in: DELETE_ACCOUNT (password)
+    M->>C: DONE, then closes
+```
+
+*An account without password (created with Discord) confirms with Discord first: `DISCORD_SIGN_IN`, then
+`DISCORD_CONFIRM` (`DONE`), then `DELETE_ACCOUNT` with an empty password, within five minutes.*
+
+## 7. When the connection closes
 
 - **The client closes it, or it times out:** the master removes the player from its game, if any. The game
   tells the other players ([game, `PLAYER_LEFT`](game.md#player_left-0x05)).
 - **The master closes it:** the client closes its UDP session, if any, and tells the player that the
-  connection to the server is lost, or, after `ERROR (KICKED)` or `ERROR (BANNED)`, why.
+  connection to the server is lost, or, after `ERROR (KICKED)` or `ERROR (BANNED)`, why. After
+  `ERROR (SESSION_EXPIRED)`, `SIGN_OUT` or `DELETE_ACCOUNT`, it forgets the session token.

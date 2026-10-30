@@ -3,7 +3,8 @@
 The accounts of the players of a server ([ADR 0024](../decisions/0024-player-accounts.md)): what makes a valid
 username, email and password, how a password is hashed, what the master keeps of the accounts, their sessions
 and the codes, and how it sends those codes by email. This page covers the storage and the mail: the lobby and
-the client use them in the next steps of the accounts ([#259](https://github.com/Akinator31/Rtype/issues/259)).
+the client use them in the next steps of the accounts ([#259](https://github.com/Akinator31/Rtype/issues/259)),
+through the messages of [lobby protocol 3](../protocol/lobby.md#6-accounts).
 To give a server its mail server, see [Set up accounts](../guides/set-up-accounts.md).
 
 | | |

@@ -30,8 +30,8 @@ sequenceDiagram
     participant M as Master
     participant I as Instance
     P->>C: Online, server and name, Connect
-    C->>M: TCP, TLS (keys trusted for the server pinned), HELLO
-    M->>C: WELCOME
+    C->>M: TCP, TLS (keys trusted for the server pinned), HELLO (name, language)
+    M->>C: WELCOME (features of the server)
     C->>M: LIST_GAMES
     M->>C: GAME_LIST: the lobby is shown
     P->>C: Create a game, or Join
@@ -103,8 +103,12 @@ lobby.joinGame(id, [&](const rtype::client::LobbyClient::JoinResult &result) { /
   connection after it, and `onClosed` gets its `describe()`. `BANNED` in reply to `HELLO` ends the same way.
 - **`PING`** is sent after 10 seconds without sending anything, so that the master, which closes a connection
   silent for 30 seconds, keeps it.
-- **A name is checked before connecting** (`std::invalid_argument`): `HELLO` is written in a handler of the loop,
-  where nothing may throw.
+- **A name and a locale are checked before connecting** (`std::invalid_argument`): `HELLO` is written in a
+  handler of the loop, where nothing may throw. The locale is the language of the game (`en` or `fr`), so that
+  the emails of the master come in it.
+- **`WELCOME` tells what the master offers** (`features()`): guests, password accounts, Discord. The client
+  sends no session token and shows no account yet ([lobby protocol 3](../protocol/lobby.md#6-accounts)); the
+  error codes of the accounts already have their `describe()`.
 
 ## RemoteSession
 
