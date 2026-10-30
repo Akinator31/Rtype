@@ -657,7 +657,8 @@ TEST_CASE("A wrong password gets its message, and fields the protocol cannot car
     const auto client = master.client("Pilot", events.handlers());
     REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
     {
-        const auto creator = master.client("Creator", Events{}.handlers());
+        Events creatorEvents;
+        const auto creator = master.client("Creator", creatorEvents.handlers());
         REQUIRE(waitUntil(master.loop, [&] { return creator->welcomed(); }));
         (void)createAccount(master, *creator, "Pilot_7", "pilot@example.org");
     }
@@ -701,7 +702,8 @@ TEST_CASE("A forgotten password is changed with the code of its email, which sig
     FOR_EACH_ENGINE();
     AccountsMaster master(engine, "client_accounts_reset");
     {
-        const auto creator = master.client("Creator", Events{}.handlers());
+        Events creatorEvents;
+        const auto creator = master.client("Creator", creatorEvents.handlers());
         REQUIRE(waitUntil(master.loop, [&] { return creator->welcomed(); }));
         (void)createAccount(master, *creator, "Pilot_7", "pilot@example.org");
     }
