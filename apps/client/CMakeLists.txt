@@ -40,9 +40,11 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
     src/MainMenu/UiShowcase.cpp
+    src/Online/AccountScenes.cpp
     src/Online/KnownServers.cpp
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
+    src/Online/SessionTokens.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp
     src/ShipSelector/ShipSelection.cpp

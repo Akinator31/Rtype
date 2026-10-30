@@ -113,7 +113,8 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
 OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
                            const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                            localization::Localization &translations)
-    : _engine(engine), _loop(loop), _games(games), _translations(translations), _known(engine.getSettings())
+    : _engine(engine), _loop(loop), _games(games), _translations(translations), _known(engine.getSettings()),
+      _sessions(engine.getSettings())
 {
     engine.createScene(OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
                        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
@@ -194,11 +195,12 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
         [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
             engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
                                      _translations.text("menu.online"));
-            menu.label(std::format("{} on {}", _name, _serverText));
+            const std::string player = _lobby ? _lobby->name() : _name;
+            menu.label(std::format("{} {} {}", player, _translations.text("online.on"), _serverText));
             menu.button(_translations.text("online.create"), [this] {
                 if (_lobby) {
                     const std::string game =
-                        std::string(_name).append("'s game").substr(0, lobby::MaxGameNameLength);
+                        std::string(_lobby->name()).append("'s game").substr(0, lobby::MaxGameNameLength);
                     _lobby->createGame(game, CreatedGamePlayers,
                                        [this](const LobbyClient::JoinResult &result) { joined(result); });
                 }
@@ -219,19 +221,31 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, Gam
                 menu.label(_translations.text("online.empty"));
             }
             menu.button(_translations.text("online.refresh"), [this] { refresh(); });
+            if (_lobby && _lobby->account()) {
+                menu.button(_translations.text("account.mine"),
+                            [this] { _engine.switchScene(MyAccountScene); });
+            } else if (_lobby && _lobby->features().passwordAccounts) {
+                menu.button(_translations.text("account.sign_in"),
+                            [this] { _engine.switchScene(AccountsScene); });
+            }
             menu.button(_translations.text("online.disconnect"), [this] { disconnect(); });
         });
+
+    declareAccountScenes(metrics, style);
 }
 
 void OnlineScenes::connect()
 {
-    if (!lobby::isValidPlayerName(_name)) {
-        _engine.showToast("Invalid name: 1 to 16 characters", engine::ToastType::Error);
-        return;
-    }
     const auto parts = splitServer(_serverText);
     if (!parts) {
         _engine.showToast("Invalid server: give host:port", engine::ToastType::Error);
+        return;
+    }
+    // With the token of an account, the name of the player is its username
+    const std::optional<lobby::SessionToken> token =
+        _sessions.token(serverAddress(parts->first, parts->second));
+    if (!token && !lobby::isValidPlayerName(_name)) {
+        _engine.showToast(message(lobby::ErrorCode::InvalidName), engine::ToastType::Error);
         return;
     }
     // An IP is used as it is; a name is looked up, which blocks a moment, on a click
@@ -252,7 +266,7 @@ void OnlineScenes::connect()
     _lobby = std::make_unique<LobbyClient>(
         _loop, *_server, _known.trusted(_address), _name,
         LobbyClient::Handlers{
-            .onWelcome = [this](std::uint32_t) { refresh(); },
+            .onWelcome = [this](std::uint32_t) { welcomed(); },
             .onLeftGame =
                 [this](const lobby::LeftGameMessage &left) {
                     _engine.showToast(leftReason(left.reason),
@@ -265,8 +279,16 @@ void OnlineScenes::connect()
                 [this](const std::string &text) { _engine.showToast(std::format("Server: {}", text)); },
             .onClosed = [this](const std::string &reason) { lobbyClosed(reason); },
             .onUntrusted = [this](const network::KeyFingerprint &presented) { untrusted(presented); },
+            .onSessionExpired =
+                [this] {
+                    // The token is no longer good: forgotten, and the player comes back as a guest
+                    _sessions.forget(_address);
+                    _engine.showToast(message(lobby::ErrorCode::SessionExpired), engine::ToastType::Warning);
+                    connect();
+                },
+            .describe = [this](lobby::ErrorCode code) { return message(code); },
         },
-        _translations.language());
+        _translations.language(), token);
 }
 
 void OnlineScenes::untrusted(const network::KeyFingerprint &presented)
@@ -315,7 +337,7 @@ void OnlineScenes::refresh()
 void OnlineScenes::joined(const LobbyClient::JoinResult &result)
 {
     if (const auto *error = std::get_if<lobby::ErrorCode>(&result)) {
-        _engine.showToast(describe(*error), engine::ToastType::Error);
+        _engine.showToast(message(*error), engine::ToastType::Error);
         refresh();
         return;
     }
