@@ -126,7 +126,9 @@ struct FakeDiscord::Impl {
     }
 };
 
-FakeDiscord::FakeDiscord() : _impl(std::make_shared<Impl>())
+FakeDiscord::FakeDiscord() : FakeDiscord(FakeDiscordEndpoint{}) {}
+
+FakeDiscord::FakeDiscord(const FakeDiscordEndpoint &endpoint) : _impl(std::make_shared<Impl>())
 {
     Impl &impl = *_impl;
     CROW_ROUTE(impl.app, "/api/v10/oauth2/token")
@@ -135,7 +137,14 @@ FakeDiscord::FakeDiscord() : _impl(std::make_shared<Impl>())
     CROW_ROUTE(impl.app,
                "/api/v10/users/@me")([&impl](const crow::request &request) { return impl.me(request); });
     impl.app.signal_clear();
-    impl.app.bindaddr("127.0.0.1").port(0).concurrency(1);
+    impl.app.bindaddr(endpoint.address).port(endpoint.port).concurrency(1);
+    if (!endpoint.certificateFile.empty()) {
+#ifdef CROW_ENABLE_SSL
+        impl.app.ssl_file(endpoint.certificateFile, endpoint.keyFile);
+#else
+        throw std::runtime_error("The fake Discord has no TLS in this build");
+#endif
+    }
     impl.running = impl.app.run_async();
     impl.app.wait_for_server_start(std::chrono::seconds(10));
     if (!impl.app.is_bound()) {

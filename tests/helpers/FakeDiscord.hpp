@@ -3,16 +3,28 @@
 // A Discord of the tests: the two routes of its API the master uses (/oauth2/token and /users/@me), on the
 // loopback, over HTTP. The tests play the player and the Discord Social SDK with accept(), which gives what
 // the client would get once the user accepted, and the administrator in its browser with authorize(). A small
-// Crow server, in FakeDiscord.cpp so that its headers are compiled once.
+// Crow server, in FakeDiscord.cpp so that its headers are compiled once. Built with CROW_ENABLE_SSL, as in
+// rtype_fake_services (tests/helpers/fake_services.cpp), it also speaks HTTPS, as discord.com.
 
 #include "Accounts/Discord.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 
 namespace testing
 {
+
+/// Where a fake Discord listens, and with what certificate.
+struct FakeDiscordEndpoint {
+    std::string address = "127.0.0.1";
+    /// 0: a free port.
+    std::uint16_t port = 0;
+    /// PEM files of the certificate and its key; empty: HTTP. Needs CROW_ENABLE_SSL.
+    std::string certificateFile;
+    std::string keyFile;
+};
 
 class FakeDiscord
 {
@@ -26,8 +38,10 @@ public:
     /// Where the Social SDK says Discord sent the code back.
     static constexpr const char *RedirectUri = "http://127.0.0.1/callback";
 
-    /// Listens on a free port of the loopback.
+    /// Listens on a free port of the loopback, over HTTP.
     FakeDiscord();
+    /// @throws std::runtime_error if it cannot listen there, or has no TLS in this build when asked for it.
+    explicit FakeDiscord(const FakeDiscordEndpoint &endpoint);
     ~FakeDiscord();
 
     FakeDiscord(const FakeDiscord &) = delete;

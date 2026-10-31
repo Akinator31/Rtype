@@ -107,6 +107,14 @@ target_include_directories(rtype_panel_players PRIVATE helpers)
 target_link_libraries(rtype_panel_players PRIVATE rtype_options rtype::lobby rtype::network)
 add_executable(rtype_panel_accounts helpers/panel_accounts.cpp)
 target_link_libraries(rtype_panel_accounts PRIVATE rtype_options r-type_server_core)
+# Discord and a mail server for the smoke test of the Docker image with accounts (docker/smoke-test-accounts.sh):
+# the fake Discord over HTTPS, as discord.com, with the OpenSSL of Linux
+if(NOT WIN32)
+  add_executable(rtype_fake_services helpers/fake_services.cpp helpers/FakeDiscord.cpp)
+  target_link_libraries(rtype_fake_services PRIVATE
+      rtype_options r-type_server_core rtype::network Crow::Crow OpenSSL::SSL OpenSSL::Crypto)
+  target_compile_definitions(rtype_fake_services PRIVATE CROW_ENABLE_SSL)
+endif()
 target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
     RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"

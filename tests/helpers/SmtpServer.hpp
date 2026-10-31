@@ -72,6 +72,9 @@ struct SmtpSettings {
     /// The account the client must sign in with; empty username: none.
     std::string username;
     std::string password;
+    /// Where it listens: the loopback by default, every address in a container; port 0 takes a free one.
+    std::string address = "127.0.0.1";
+    std::uint16_t port = 0;
 };
 
 /// A mail received: its envelope, then its content as sent, dots unstuffed.
@@ -462,7 +465,7 @@ public:
         // OpenSSL writes to the socket with write(): a client gone would stop the tests with SIGPIPE
         std::signal(SIGPIPE, SIG_IGN);
 #endif
-        const asio::ip::tcp::endpoint endpoint(asio::ip::make_address("127.0.0.1"), 0);
+        const asio::ip::tcp::endpoint endpoint(asio::ip::make_address(_settings.address), _settings.port);
         _acceptor.open(endpoint.protocol());
         _acceptor.bind(endpoint);
         _acceptor.listen();
