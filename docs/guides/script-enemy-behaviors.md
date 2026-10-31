@@ -135,7 +135,7 @@ Everything is read-only: writing `enemy.x = 0` is an error, which stops the beha
 | `enemy.velocityX`, `enemy.velocityY` | Its velocity: its direction |
 | `enemy.speed` | The top speed of its file (`speed`), the speed of `moveTo()` |
 | `enemy.age` | Seconds since it appeared, 0 at its first call |
-| `enemy.health` | Hit points left |
+| `enemy.health`, `enemy.maxHealth` | Hit points left, and the hit points it gets at each phase |
 | `enemy.phase`, `enemy.phases` | Its phase, from 1, and how many it has (`phases` of its file): its health is filled again at each one |
 | `enemy.arrived` | It is on the point of its last `moveTo()` |
 | `enemy.weapon` | Its weapon, see below |
@@ -162,6 +162,7 @@ Orders are methods, called with a colon: `enemy:fire()`.
 | `enemy:fire()` | Fires its weapon straight ahead, to the left, if it is ready |
 | `enemy:fireAt(x, y)` | Fires towards a point, if it is ready: the shot flies along the line from the nose of the ship to the point, and on past it |
 | `enemy:guard()` | Guards, for this tick: the shots of the players that hit it are spent without damage. Drawn guarding |
+| `enemy:protect()` | Same damage immunity for this tick, without the guard stance: it can attack meanwhile |
 | `enemy:slash()` | Strikes with a blade, for this tick: only drawn, its `collisionDamage` hurts what it runs into |
 | `enemy:aim()` | Aims its gun, for this tick: only drawn, `fire()` and `fireAt()` still fire |
 | `game:randomNumber(min, max)` | A random number from `min` to `max` |
