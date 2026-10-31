@@ -115,6 +115,31 @@ crow::json::wvalue toJson(const AdminPlayer &player)
     json["address"] = player.address.ip();
     json["gameId"] = player.gameId ? crow::json::wvalue(*player.gameId) : crow::json::wvalue(nullptr);
     json["joinedAt"] = milliseconds(player.joinedAt);
+    json["accountId"] = player.accountId ? crow::json::wvalue(static_cast<std::int64_t>(*player.accountId))
+                                         : crow::json::wvalue(nullptr);
+    return json;
+}
+
+crow::json::wvalue toJson(const AdminAccount &adminAccount)
+{
+    const Account &account = adminAccount.entry.account;
+    const auto optionalTime = [](const std::optional<std::chrono::system_clock::time_point> &time) {
+        return time ? crow::json::wvalue(milliseconds(*time)) : crow::json::wvalue(nullptr);
+    };
+    crow::json::wvalue json;
+    json["id"] = static_cast<std::int64_t>(account.id);
+    json["username"] = account.username;
+    json["email"] = account.email ? crow::json::wvalue(*account.email) : crow::json::wvalue(nullptr);
+    json["emailVerifiedAt"] = optionalTime(account.emailVerifiedAt);
+    json["password"] = account.passwordHash.has_value();
+    json["discordId"] = adminAccount.entry.discordId ? crow::json::wvalue(*adminAccount.entry.discordId)
+                                                     : crow::json::wvalue(nullptr);
+    json["role"] = std::string(roleName(adminAccount.locked ? AccountRole::Admin : account.role));
+    json["locked"] = adminAccount.locked;
+    json["bannedAt"] = optionalTime(account.bannedAt);
+    json["banReason"] = account.banReason;
+    json["createdAt"] = milliseconds(account.createdAt);
+    json["lastSeenAt"] = milliseconds(account.lastSeenAt);
     return json;
 }
 

@@ -92,6 +92,8 @@ it.
 | `findAccountByDiscord(database, discordId)`, `discordIdentity(database, id)` | The account a Discord user signs in to; the identity of an account |
 | `linkDiscord(database, id, discordId, now)` | `Linked` (in place of the identity the account had), `AlreadyLinked`, `Taken` by another account, or `NoAccount` |
 | `createDiscordAccount(database, username, discordId, now)` | The account of a new Discord user, without email nor password, linked; or `UsernameTaken`, or `EmailTaken` when the identity has an account already |
+| `setRole(database, id, role)` | `player` or `admin`, from the panel; its sessions stay, the panel checks the role at each request |
+| `listAccounts(database, search, limit, before)`, `findAccountEntry(database, id)` | The accounts with their Discord identity, newest first, for the panel: a search in the username or the email ignoring case, the wildcards of `LIKE` taken as letters, or a Discord id whole |
 
 ### Sessions
 
@@ -110,8 +112,8 @@ which keeps it for this server and sends it back to resume. The database keeps o
 | `endSession(database, token)` | Signing out |
 | `endAllSessions(database, account)` | Every session of the account |
 
-A session of the game lasts **30 days without use**, each use pushing it back; a session of the panel (step 12)
-**12 hours**, and one cannot stand for the other.
+A session of the game lasts **30 days without use**, each use pushing it back; a session of the panel
+**12 hours** ([Web server](web.md#accounts)), and one cannot stand for the other.
 
 ### Codes
 
@@ -280,9 +282,10 @@ A server without accounts shows the names as they are.
 administration actions stay, so that the record keeps what was done, without who it was
 (`anonymizeActions()`):
 
-- the actions it did, as an administrator (step 12), have the actor `deleted`;
-- a `kick` of the player while signed in (its `details` hold `account`) loses its `name`, which becomes
-  `deleted`, its `address` and its `account`;
+- the actions it did, as an administrator, have the actor `deleted`;
+- an action done to it, whose `details` hold its `account` (a `kick` of the player while signed in, a
+  `ban_account`, an `unban_account`, a `role`), loses its `name`, which becomes `deleted`, its `address` and its
+  `account`;
 - an `end_game` with the player in it (its `details` hold `accounts`) has its username replaced by `deleted` in
   `players`, and its id taken out of `accounts`.
 
@@ -309,6 +312,10 @@ service on the loop: the `DISCORD_SIGN_IN` not used yet and the codes refused si
 `CHOOSE_USERNAME`; the account's own identity confirmed, for `DELETE_ACCOUNT`. A `DISCORD_CONFIRM` uses up its
 `DISCORD_SIGN_IN` when Discord gives a user: one sign-in, one confirmation. Discord down keeps the attempt, so
 that the player tries again.
+
+The panel signs its administrators in with Discord too, through the browser rather than the SDK: the same
+`DiscordClient`, the code given back to `<public_url>/auth/discord/callback` with the verifier of PKCE the master
+made ([Web server](web.md#accounts)).
 
 At start, and with `--check`, `checkDiscord()` asks a token of the application itself (`client_credentials`),
 which proves the id and the secret, then drops it: an application Discord refuses stops the master, as a mail
@@ -338,6 +345,7 @@ test of the database on SQLite and on PostgreSQL:
 - codes used once, bound to their account and their purpose, replaced, expired, refused after 5 attempts, and
   the daily limit across several codes of both purposes, lifted the next day;
 - the purge of accounts not verified within 24 hours, with their codes and sessions, those of Discord kept;
+- the accounts listed for the panel, newest first, searched by username, email or Discord id, and their role;
 - the Discord identities: an account made for a new one, linked, replaced, taken by another, deleted with its
   account.
 

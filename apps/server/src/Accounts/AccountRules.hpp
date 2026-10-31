@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 /// What a username, an email and a password must be (docs/architecture/accounts.md#the-rules). Pure
 /// functions: the lobby checks a request with them before it reaches the database or the hasher.
@@ -33,6 +34,14 @@ inline constexpr std::size_t MaxEmailLength = 254;
 /// What two emails that differ only by case share: the normalized email in lower case. Unique in the
 /// database.
 [[nodiscard]] std::string emailKey(std::string_view email);
+
+/// Tells whether an account is one of the administrators of `[admin] admins`, which are named by a verified
+/// email, ignoring case, or by `discord:<id>`; never by a username, which anyone can take.
+/// @param verifiedEmail The email of the account if it is verified, nothing otherwise.
+/// @param discordId The Discord user linked to the account, if any.
+[[nodiscard]] bool isListedAdmin(const std::vector<std::string> &admins,
+                                 const std::optional<std::string> &verifiedEmail,
+                                 const std::optional<std::string> &discordId);
 
 /// What a guest carries before its name on a server with accounts, in the lobby and on the score board: no
 /// username has it, so that a guest named like an account never looks like it.

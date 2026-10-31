@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 /// What the master keeps of the accounts in its database (docs/architecture/accounts.md): the accounts
 /// (`accounts`), their sessions (`account_sessions`), the codes sent by email (`account_codes`) and the
@@ -95,6 +96,9 @@ enum class AccountConflict {
 
 [[nodiscard]] std::string_view roleName(AccountRole role);
 
+/// Reads the name of a role, `player` or `admin`.
+[[nodiscard]] std::optional<AccountRole> parseRole(std::string_view name);
+
 /// Makes an account, its email not verified.
 /// @return The account, or why it cannot be made: the username is checked first.
 /// @throws soci::soci_error if the database refuses it.
@@ -133,6 +137,11 @@ bool banAccount(rtype::database::Database &database, long long accountId, const 
 /// @return False if there is no such account.
 /// @throws soci::soci_error if the database refuses it.
 bool unbanAccount(rtype::database::Database &database, long long accountId);
+
+/// Changes the role of an account. Its sessions stay: the panel checks the role at each request.
+/// @return False if there is no such account.
+/// @throws soci::soci_error if the database refuses it.
+bool setRole(rtype::database::Database &database, long long accountId, AccountRole role);
 
 /// Deletes an account, with its sessions, its codes and its Discord identity, at the request of its owner.
 /// Its administration actions stay, without its name nor its address (anonymizeActions()).
@@ -185,6 +194,30 @@ DiscordLink linkDiscord(rtype::database::Database &database, long long accountId
 [[nodiscard]] std::variant<Account, AccountConflict>
 createDiscordAccount(rtype::database::Database &database, const std::string &username,
                      const std::string &discordId, std::chrono::system_clock::time_point now);
+
+// --- The panel ---
+
+/// An account as the panel shows it, with the Discord user linked to it.
+struct AccountEntry {
+    Account account;
+    std::optional<std::string> discordId;
+
+    friend bool operator==(const AccountEntry &, const AccountEntry &) = default;
+};
+
+/// @throws soci::soci_error if the database cannot be read.
+[[nodiscard]] std::optional<AccountEntry> findAccountEntry(rtype::database::Database &database,
+                                                           long long accountId);
+
+/// The accounts, newest first.
+/// @param search Empty for every account; otherwise those whose username or email holds it, ignoring case,
+/// or whose Discord id is it.
+/// @param limit How many at most.
+/// @param before Only those with a smaller id: the page after one ending at this id.
+/// @throws soci::soci_error if the database cannot be read.
+[[nodiscard]] std::vector<AccountEntry> listAccounts(rtype::database::Database &database,
+                                                     std::string_view search, std::size_t limit,
+                                                     std::optional<long long> before = std::nullopt);
 
 // --- Sessions ---
 

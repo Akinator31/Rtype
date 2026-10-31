@@ -22,6 +22,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <crow/json.h>
 
 #include <atomic>
 #include <chrono>
@@ -525,11 +526,15 @@ TEST_CASE("The access token is traded for a session cookie, then the address wit
         web.get("/api/session", {.method = "GET", .headers = sessionHeader(session)});
     CHECK(described.status == 200);
     CHECK(described.header("content-type") == "application/json");
-    // Its CSRF token, which every POST of the API carries: neither the session nor the access token
-    REQUIRE(described.body.starts_with(R"({"csrfToken":")"));
-    const std::string csrf = described.body.substr(14, 64);
+    // Its CSRF token, which every POST of the API carries: neither the session nor the access token. No
+    // account: the local access token opened it
+    const crow::json::rvalue json = crow::json::load(described.body);
+    REQUIRE(json);
+    REQUIRE(json.has("csrfToken"));
+    const std::string csrf = json["csrfToken"].s();
     CHECK(parseSecret(csrf).has_value());
-    CHECK(described.body == R"({"csrfToken":")" + csrf + R"("})");
+    CHECK(json["account"].t() == crow::json::type::Null);
+    CHECK(json.size() == 2);
     CHECK(csrf != formatSecret(web.token));
     CHECK_THAT(session, !ContainsSubstring(csrf));
     CHECK(web.get("/api/session", {.method = "GET", .headers = {"Cookie: theme=dark; " + session + "; a=b"}})

@@ -17,7 +17,17 @@ import { glow } from '../theme/system';
 
 export const PageSize = 100;
 
-const kinds = ['kick', 'end_game', 'message', 'ban', 'unban'] as const;
+const kinds = [
+  'kick',
+  'end_game',
+  'message',
+  'ban',
+  'unban',
+  'ban_account',
+  'unban_account',
+  'role',
+  'delete_account',
+] as const;
 
 /** A value of the details, for a person: the times as dates, the lists joined, nothing as a dash. */
 function readable(key: string, value: unknown): string {

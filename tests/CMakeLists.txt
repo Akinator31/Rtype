@@ -64,6 +64,7 @@ add_executable(rtype_tests
     server_games.cpp
     server_lobby.cpp
     server_mail.cpp
+    server_panel_accounts.cpp
     server_options.cpp
     server_replication.cpp
     server_settings.cpp
@@ -104,6 +105,8 @@ add_dependencies(rtype_tests rtype_test_child r-type_server)
 add_executable(rtype_panel_players helpers/panel_players.cpp)
 target_include_directories(rtype_panel_players PRIVATE helpers)
 target_link_libraries(rtype_panel_players PRIVATE rtype_options rtype::lobby rtype::network)
+add_executable(rtype_panel_accounts helpers/panel_accounts.cpp)
+target_link_libraries(rtype_panel_accounts PRIVATE rtype_options r-type_server_core)
 target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
     RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"

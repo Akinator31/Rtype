@@ -22,6 +22,7 @@ apps/server/src/
     CurlMailer.cpp         the mail server, with libcurl, on a thread of its own; its check at start
     Discord.cpp            who a player is for Discord, with libcurl, on a thread of its own; its check at start
     AccountService.cpp     the requests of the accounts in the lobby, on the loop
+    PanelAccounts.cpp      the administrators of the panel: their sign-in, their sessions, on the loop
   Common/                  what both modes share
     GameConfig.cpp         the configuration of the game: where it is, loaded and logged
     InstanceMessages.cpp   the messages between the master and its instances
@@ -98,7 +99,8 @@ The master loads its key, or generates it at its first start (`loadOrCreateKey()
 [ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game,
 opens its database, its port and the one of its panel ([Web server](web.md)), and with accounts checks its mail
 server ([Accounts](accounts.md#at-start)), before anything else, and logs them. With accounts, it then logs
-`Accounts on, guests allowed` (or `no guests`) before it starts:
+`Accounts on, guests allowed` (or `no guests`) before it starts, and gives the role `admin` to the accounts of
+`[admin] admins`, warning of those that have none yet ([Web server](web.md#accounts)):
 
 ```
 INFO  master   Game configuration /opt/r-type/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves

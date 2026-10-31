@@ -1,7 +1,7 @@
 # Administration
 
 Everything an administrator sees of a server and does to it ([ADR 0025](../decisions/0025-server-administration.md)):
-the games, the players of the lobby, live, and the actions on them, each one recorded. It lives in the master,
+the games, the players of the lobby, live, the accounts, and the actions on them, each one recorded. It lives in the master,
 on its event loop, independent of what shows it: the web server serves it as the
 [administration API](../protocol/admin-api.md), and the panel is its first client ([The panel](panel.md)).
 
@@ -10,7 +10,7 @@ on its event loop, independent of what shows it: the web server serves it as the
 | Code | `Master/Administration.{hpp,cpp}` (what it shows and does), `Master/AdminModel.hpp` (its view of the games and the lobby, and their interfaces), `Master/AddressBans.{hpp,cpp}` (the bans in memory), `Master/AdminStore.{hpp,cpp}` (its tables), `Web/AdminJson.{hpp,cpp}` (its JSON) |
 | Thread | The event loop of the master; its records on the database thread |
 | Tables | `admin_actions`, `address_bans` (migrations 1 and 2 of `ServerMigrations`) |
-| Tests | `tests/server_admin.cpp`, tag `[admin]`; `tests/client_online.cpp` for what the client shows |
+| Tests | `tests/server_admin.cpp`, tag `[admin]`; the accounts in `tests/server_panel_accounts.cpp`, tag `[panel]`; `tests/client_online.cpp` for what the client shows |
 
 ## The pieces
 
@@ -82,13 +82,24 @@ players), then with each event, in order, on the loop. The web server subscribes
 | `sendMessage(game or everyone, text, actor)` | `AdminLobby::sendMessage()` for each player of the game, or of the lobby | `SERVER_MESSAGE`, shown in a toast |
 | `ban(address, duration, reason, actor)` | `AddressBans::add()`, saved in `address_bans`; each player connected from it removed with `BANNED` | `ERROR (BANNED)`; refused at `HELLO` until it expires |
 | `unban(address, reason, actor)` | `AddressBans::remove()`, deleted from `address_bans` | Welcome again at `HELLO`, at once |
+| `banAccount(account, reason, actor)` | `banAccount()` of the store: its sessions end; each player signed in to it removed with `BANNED` | `ERROR (BANNED)`; its sign-in refused, `BANNED` |
+| `unbanAccount(account, reason, actor)` | `unbanAccount()` of the store | Signs in again |
+| `setRole(account, role, actor)` | `setRole()` of the store | Nothing in the game; an administrator demoted loses the panel |
+| `deleteAccount(account, reason, actor)` | `deleteAccount()` of the store, its actions anonymized; each player signed in to it removed with `KICKED` | `ERROR (KICKED)`; its token gets `SESSION_EXPIRED` |
 
 In the game, a player removed by an administrator leaves as one who quit: its session gets
 `DISCONNECT (QUIT)`, and the others `PLAYER_LEFT (QUIT)`. The [game protocol](../protocol/game.md) does not
 change; the lobby connection says why.
 
+The actions on an account run on the database thread, which reads the account, refuses a locked one, changes
+it, and reads it again; their result comes back on the loop, which then removes its players. **The
+administrators of `[admin] admins` are locked** (`AdministrationSettings::admins`, `isListedAdmin()`): neither
+banned, demoted nor deleted from the panel, whatever their role in the database. `accounts()` and `account()`
+read them for the panel, with their Discord identity (`listAccounts()`, `findAccountEntry()` of
+[the store](accounts.md#the-tables)).
+
 **Every action is recorded** in `admin_actions`, with its time, its actor (`local` for the local access token,
-until the accounts of step 12), what it was done to, and its details as a JSON object
+the id of the account of an administrator signed in), what it was done to, and its details as a JSON object
 ([the record](../protocol/admin-api.md#3-reading)). The action is done first, at once;
 its record goes to the database thread, and comes back as an `ActionRecorded` event once written. A record that
 fails is logged, and the action stays done. The logs say each action too:
@@ -99,13 +110,16 @@ INFO  admin    Game 1 "Duo" ended by local, because "maintenance"
 INFO  admin    Message from local to everyone (3 players): Restart in 5 minutes
 INFO  admin    198.51.100.4 banned by local for 3600 s, because "flood": 1 players removed
 INFO  admin    The ban of 198.51.100.4 lifted by local, because "a mistake"
+INFO  admin    Account Alice (2) banned by 1, because "cheating": 1 players removed
+INFO  admin    Account Alice (2) made admin by 1
 ```
 
 ## Bans
 
 A ban refuses an IP address at `HELLO` until a date: `ERROR (BANNED)`, then the connection closes. The bans of
 addresses are temporary, 7 days at most (`MaxBanDuration`): an address is shared by a household or a school,
-and changes. The accounts will bring bans of accounts.
+and changes. A ban of an account has no end: it holds until an administrator lifts it
+([What it does](#what-it-does)).
 
 | Where | What |
 |---|---|

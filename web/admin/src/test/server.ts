@@ -34,8 +34,45 @@ function checked(answer: (request: Request) => Response | Promise<Response>) {
   };
 }
 
+/** The id of an account, in its path. */
+const accountId = (request: Request) => Number(new URL(request.url).pathname.split('/')[3]);
+
 export const handlers = [
-  http.get('*/api/session', () => HttpResponse.json({ csrfToken: fixtures.csrfToken })),
+  http.get('*/api/session', () => HttpResponse.json({ csrfToken: fixtures.csrfToken, account: null })),
+  http.get('*/api/sign-in', () => HttpResponse.json({ password: false, discord: false })),
+  http.post('*/api/sign-in', async ({ request }) => {
+    await keep(request.clone());
+    return HttpResponse.json({ error: 'wrong login or password' }, { status: 401 });
+  }),
+  http.post(
+    '*/api/sign-out',
+    checked(() => HttpResponse.json({})),
+  ),
+  http.get('*/api/accounts', () => HttpResponse.json(fixtures.accounts)),
+  http.post(
+    '*/api/accounts/:id/ban',
+    checked((request) =>
+      HttpResponse.json({
+        account: {
+          ...fixtures.accounts.find((account) => account.id === accountId(request)),
+          bannedAt: fixtures.now,
+        },
+        removed: 1,
+      }),
+    ),
+  ),
+  http.post(
+    '*/api/accounts/:id/unban',
+    checked(() => HttpResponse.json({ account: fixtures.accounts[0] })),
+  ),
+  http.post(
+    '*/api/accounts/:id/role',
+    checked(() => HttpResponse.json({ account: fixtures.accounts[0] })),
+  ),
+  http.post(
+    '*/api/accounts/:id/delete',
+    checked(() => HttpResponse.json({ account: null, removed: 0 })),
+  ),
   http.get('*/api/server', () => HttpResponse.json(fixtures.server)),
   http.get('*/api/games', () => HttpResponse.json([fixtures.game])),
   http.get('*/api/players', () => HttpResponse.json(fixtures.players)),

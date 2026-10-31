@@ -1,5 +1,6 @@
 import { Navigate, type RouteObject } from 'react-router';
 
+import { Accounts } from './pages/Accounts';
 import { Bans } from './pages/Bans';
 import { GamePage } from './pages/GamePage';
 import { Games } from './pages/Games';
@@ -26,6 +27,7 @@ export const routes: RouteObject[] = [
       { path: 'history', element: <History /> },
       // The record had this address before the history
       { path: 'actions', element: <Navigate to="/history" replace /> },
+      { path: 'accounts', element: <Accounts /> },
       { path: 'settings', element: <Settings /> },
       { path: '*', element: <NotFound /> },
     ],

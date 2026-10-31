@@ -82,11 +82,12 @@ npm run lint            # ESLint, no warning allowed
 npm run format:check    # Prettier; npm run format fixes
 npm run typecheck
 npm test                # Vitest: the store, the client of the API, the components and the pages, the API mocked
-npm run test:e2e        # Playwright: a real master and a game of real players
+npm run test:e2e        # Playwright: a real master with accounts and a game of real players
 ```
 
 The end-to-end tests need the panel built (`npm run build`) and the server built with its tests: they start
-`r-type_server` and `rtype_panel_players` from `../../build/bin`, or from `RTYPE_BUILD_BIN`, and Chromium
+`r-type_server`, `rtype_panel_players` and `rtype_panel_accounts` from `../../build/bin`, or from
+`RTYPE_BUILD_BIN`, and Chromium
 (`npx playwright install chromium`, once). Linux only.
 
 ## Layout
@@ -96,8 +97,8 @@ src/
   api/          the client of the API (its CSRF token) and its types
   live/         the WebSocket of /api/events: its store, reconnected, and the state it keeps
   theme/        the Chakra system after the Figma design, and the fonts
-  components/   the elements of the design, the dialogs of the actions, the opening of a session
-  pages/        Overview, Games, a game, Players, Bans, Messages, History, Settings
+  components/   the elements of the design, the dialogs of the actions, the opening of a session, the sign-in
+  pages/        Overview, Games, a game, Players, Bans, Messages, History, Accounts, Settings
   actions.ts    the actions sent to the master, and their toasts
   records.ts    an action of the record as the pages show it; the games searched; the bans that ended
   preferences.ts what the host chose, kept in this browser

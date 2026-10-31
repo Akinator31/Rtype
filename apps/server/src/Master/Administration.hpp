@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Accounts/AccountStore.hpp"
 #include "Master/AddressBans.hpp"
 #include "Master/AdminModel.hpp"
 #include "Master/AdminStore.hpp"
@@ -29,6 +30,8 @@ struct AdministrationSettings {
     std::uint16_t firstGamePort = 0;
     std::uint16_t lastGamePort = 0;
     std::uint16_t panelPort = 0;
+    /// `[admin] admins`: their accounts are locked, neither demoted, banned nor deleted.
+    std::vector<std::string> admins;
 };
 
 /// The server, as GET /api/server shows it.
@@ -43,6 +46,33 @@ struct AdminServer {
     std::size_t players = 0;
     std::size_t games = 0;
     std::size_t bans = 0;
+};
+
+/// An account, as the panel shows it.
+struct AdminAccount {
+    AccountEntry entry;
+    /// One of `[admin] admins`: neither demoted, banned nor deleted from the panel.
+    bool locked = false;
+
+    friend bool operator==(const AdminAccount &, const AdminAccount &) = default;
+};
+
+/// What an action on an account gives.
+struct AccountChanged {
+    enum class Outcome {
+        Done,
+        NoAccount,
+        /// One of `[admin] admins`.
+        Locked,
+        /// The database failed, or its queue is full.
+        Failed,
+    };
+
+    Outcome outcome = Outcome::Done;
+    /// The account after the change; nothing once deleted.
+    std::optional<AdminAccount> account;
+    /// The players of the account removed from the lobby.
+    std::size_t removed = 0;
 };
 
 /// The longest reason an administrator gives, in bytes.
@@ -107,12 +137,18 @@ using AdminEvent = std::variant<admin_event::Snapshot, admin_event::PlayerJoined
 /// - **Bans** are kept in AddressBans for the lobby, and in the database across restarts; the expired ones
 /// are
 ///   purged every minute.
+/// - **Accounts**, with a database: list and search them, ban and unban, change their role, delete them. The
+///   accounts of `[admin] admins` are locked.
 /// - **Subscribers** get a snapshot at once, then the events.
 class Administration final : public AdminObserver
 {
 public:
     using Subscriber = std::function<void(const AdminEvent &event)>;
     using ActionsCallback = std::function<void(std::optional<std::vector<AdminAction>> actions)>;
+    using AccountsCallback = std::function<void(std::optional<std::vector<AdminAccount>> accounts)>;
+    /// Nothing if the database failed; then nothing inside if there is no such account.
+    using AccountCallback = std::function<void(std::optional<std::optional<AdminAccount>> account)>;
+    using ChangeCallback = std::function<void(AccountChanged changed)>;
 
     /// How often the expired bans are forgotten.
     static constexpr std::chrono::minutes PurgeInterval{1};
@@ -136,6 +172,14 @@ private:
     /// Records an action, then publishes it once recorded.
     void record(std::string actor, std::string action, std::string target, std::string details);
     void purge();
+    [[nodiscard]] AdminAccount adminAccount(AccountEntry entry) const;
+    /// Removes the players signed in to an account from their game and the lobby, with ERROR (`code`).
+    std::size_t removeAccountPlayers(long long accountId, rtype::lobby::ErrorCode code);
+    /// Changes an account on the database thread: `change` gets it, then `done` comes on the loop with what
+    /// the account is after it. A locked account is refused before `change` when `refuseLocked`.
+    void changeAccount(std::string description, long long accountId, bool refuseLocked,
+                       std::function<void(rtype::database::Database &, const AccountEntry &)> change,
+                       ChangeCallback done);
 
 public:
     /// @param database Where the actions are recorded and the bans kept; nullptr keeps nothing.
@@ -156,6 +200,22 @@ public:
     /// Reads the record of the actions, newest first, on the database thread; `done` comes on the loop, empty
     /// if the database failed or its queue is full.
     void actions(std::size_t limit, std::optional<long long> before, ActionsCallback done);
+
+    /// Reads the accounts, newest first, on the database thread (Accounts/AccountStore.hpp, listAccounts()).
+    void accounts(std::string search, std::size_t limit, std::optional<long long> before,
+                  AccountsCallback done);
+    void account(long long accountId, AccountCallback done);
+    /// Bans an account: its sessions end, its players are removed with ERROR (BANNED).
+    void banAccount(long long accountId, const std::string &reason, const std::string &actor,
+                    ChangeCallback done);
+    void unbanAccount(long long accountId, const std::string &reason, const std::string &actor,
+                      ChangeCallback done);
+    /// Gives an account a role; demoting a locked one is refused.
+    void setRole(long long accountId, AccountRole role, const std::string &actor, ChangeCallback done);
+    /// Deletes an account, as its owner can: its players are removed with ERROR (KICKED), its actions
+    /// anonymized.
+    void deleteAccount(long long accountId, const std::string &reason, const std::string &actor,
+                       ChangeCallback done);
 
     /// Removes a player from its game and from the lobby.
     /// @return False if no player has this id.

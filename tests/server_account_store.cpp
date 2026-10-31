@@ -319,6 +319,55 @@ TEST_CASE("A Discord identity signs in to one account, which has one identity",
     CHECK(std::holds_alternative<Account>(createDiscordAccount(database, "Wing", "111", Noon)));
 }
 
+TEST_CASE(
+    "The panel lists the accounts newest first, by username, email or Discord id, and changes their role",
+    "[server][accounts][database]")
+{
+    const auto engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    Fixture fixture(engine, "accounts_listed");
+    Database &database = fixture.database;
+    const Account pilot = create(database, "Pilot", "pilot@example.org");
+    const Account wing = create(database, "Wing_Man", "WING@example.org");
+    const Account ace = create(database, "Ace", "ace@other.org");
+    CHECK(linkDiscord(database, ace.id, "4242", Noon) == DiscordLink::Linked);
+
+    const auto ids = [](const std::vector<AccountEntry> &entries) {
+        std::vector<long long> list;
+        for (const AccountEntry &entry : entries) {
+            list.push_back(entry.account.id);
+        }
+        return list;
+    };
+    const std::vector<AccountEntry> all = listAccounts(database, "", 10);
+    CHECK(ids(all) == std::vector<long long>{ace.id, wing.id, pilot.id});
+    CHECK(all[0].discordId == "4242");
+    CHECK_FALSE(all[1].discordId);
+    CHECK(findAccountEntry(database, ace.id) == all[0]);
+    CHECK_FALSE(findAccountEntry(database, 99));
+
+    // Ignoring case, anywhere in the username or the email; a Discord id whole
+    CHECK(ids(listAccounts(database, "wing", 10)) == std::vector<long long>{wing.id});
+    CHECK(ids(listAccounts(database, "EXAMPLE.ORG", 10)) == std::vector<long long>{wing.id, pilot.id});
+    CHECK(ids(listAccounts(database, "4242", 10)) == std::vector<long long>{ace.id});
+    CHECK(listAccounts(database, "424", 10).empty());
+    // The wildcards of LIKE are letters like the others
+    CHECK(listAccounts(database, "%", 10).empty());
+    CHECK(ids(listAccounts(database, "_", 10)) == std::vector<long long>{wing.id});
+    // Pages
+    CHECK(ids(listAccounts(database, "", 1)) == std::vector<long long>{ace.id});
+    CHECK(ids(listAccounts(database, "", 10, wing.id)) == std::vector<long long>{pilot.id});
+
+    CHECK(parseRole("admin") == AccountRole::Admin);
+    CHECK(parseRole("player") == AccountRole::Player);
+    CHECK_FALSE(parseRole("Admin"));
+    CHECK(setRole(database, pilot.id, AccountRole::Admin));
+    CHECK(findAccount(database, pilot.id)->role == AccountRole::Admin);
+    CHECK(setRole(database, pilot.id, AccountRole::Player));
+    CHECK(findAccount(database, pilot.id)->role == AccountRole::Player);
+    CHECK_FALSE(setRole(database, 99, AccountRole::Admin));
+}
+
 TEST_CASE("Usernames and emails are unique ignoring case", "[server][accounts][database]")
 {
     const auto engine = GENERATE(from_range(rtype::test::testEngines()));

@@ -1,13 +1,16 @@
-// Starts what the end-to-end tests of the panel need: a real master, r-type_server, serving the panel built in
-// dist/, and a game of two real players, rtype_panel_players (tests/helpers/panel_players.cpp). The tests read
-// the address of admin-url.txt and the id of the game from the environment.
+// Starts what the end-to-end tests of the panel need: a real master, r-type_server, with accounts, serving the
+// panel built in dist/, and a game of two real players, rtype_panel_players (tests/helpers/panel_players.cpp).
+// Its accounts are written before it starts by rtype_panel_accounts (tests/helpers/panel_accounts.cpp): an
+// administrator and a player; its mail server is a small one of the tests, which takes every mail. The tests
+// read the address of admin-url.txt, the id of the game and what they need to start players of their own from
+// the environment.
 //
 // The programs are looked for in RTYPE_BUILD_BIN, by default build/bin at the root of the repository.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,11 +74,76 @@ function started(program: ChildProcess, output: { text: string }, name: string):
   });
 }
 
+/** The accounts written before the master starts; the administrator is in [admin] admins too. */
+export const AdminLogin = 'admin@example.org';
+export const PlayerName = 'Dana';
+export const AccountPassword = 'correct horse battery';
+
+/**
+ * A mail server of the tests, in the clear: it says yes to everything, which is all the master checks at start
+ * and all its mails need.
+ */
+function mailServer(): Promise<{ server: Server; port: number }> {
+  return new Promise((done, fail) => {
+    const server = createServer((socket) => {
+      let data = false;
+      socket.setEncoding('utf8');
+      socket.write('220 mail.test ESMTP\r\n');
+      let buffer = '';
+      socket.on('data', (chunk: string) => {
+        buffer += chunk;
+        let end = buffer.indexOf('\r\n');
+        while (end !== -1) {
+          const line = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          if (data) {
+            if (line === '.') {
+              data = false;
+              socket.write('250 queued\r\n');
+            }
+          } else if (/^DATA/i.test(line)) {
+            data = true;
+            socket.write('354 go on\r\n');
+          } else if (/^QUIT/i.test(line)) {
+            socket.end('221 bye\r\n');
+          } else if (/^EHLO/i.test(line)) {
+            socket.write('250-mail.test\r\n250 8BITMIME\r\n');
+          } else {
+            socket.write('250 ok\r\n');
+          }
+          end = buffer.indexOf('\r\n');
+        }
+      });
+      socket.on('error', () => undefined);
+    });
+    server.once('error', fail);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      return typeof address === 'object' && address
+        ? done({ server, port: address.port })
+        : fail(new Error('no port'));
+    });
+  });
+}
+
+function run(program: string, args: string[], cwd: string): Promise<void> {
+  return new Promise((done, fail) => {
+    const output = { text: '' };
+    const child = spawn(program, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    child.stdout.on('data', (chunk: Buffer) => (output.text += chunk.toString()));
+    child.stderr.on('data', (chunk: Buffer) => (output.text += chunk.toString()));
+    child.on('exit', (code) =>
+      code === 0 ? done() : fail(new Error(`${program} exited with ${code}:\n${output.text}`)),
+    );
+  });
+}
+
 export default async function setup(): Promise<() => Promise<void>> {
   for (const needed of [
     join(panel, 'index.html'),
     executable('r-type_server'),
     executable('rtype_panel_players'),
+    executable('rtype_panel_accounts'),
   ]) {
     if (!existsSync(needed)) {
       throw new Error(`${needed} is missing: build the panel (npm run build) and the server with its tests`);
@@ -84,6 +152,16 @@ export default async function setup(): Promise<() => Promise<void>> {
   const folder = mkdtempSync(join(tmpdir(), 'rtype-panel-e2e-'));
   const lobbyPort = await freeTcpPort();
   const firstGamePort = await freeUdpPorts(4);
+  const mail = await mailServer();
+  await run(
+    executable('rtype_panel_accounts'),
+    [
+      'sqlite:rtype.db',
+      `Admin:${AdminLogin}:${AccountPassword}`,
+      `${PlayerName}:dana@example.org:${AccountPassword}`,
+    ],
+    folder,
+  );
   writeFileSync(
     join(folder, 'server.toml'),
     [
@@ -96,6 +174,18 @@ export default async function setup(): Promise<() => Promise<void>> {
       '[web]',
       'listen = "127.0.0.1:0"',
       `panel_dir = ${JSON.stringify(panel)}`,
+      '',
+      '[accounts]',
+      'guests = true',
+      '',
+      '[mail]',
+      'host = "127.0.0.1"',
+      `port = ${mail.port}`,
+      'security = "none"',
+      'from = "R-Type <rtype@example.org>"',
+      '',
+      '[admin]',
+      `admins = [${JSON.stringify(AdminLogin)}]`,
       '',
     ].join('\n'),
   );
@@ -123,11 +213,16 @@ export default async function setup(): Promise<() => Promise<void>> {
 
   process.env.RTYPE_PANEL_URL = url;
   process.env.RTYPE_PANEL_GAME = gameId;
+  // For the tests that start players of their own
+  process.env.RTYPE_PANEL_PLAYERS = executable('rtype_panel_players');
+  process.env.RTYPE_PANEL_LOBBY_PORT = String(lobbyPort);
+  process.env.RTYPE_PANEL_KEY = join(folder, 'server.key');
 
   return async () => {
     players.kill();
     master.kill('SIGTERM');
     await new Promise((done) => (master.exitCode !== null ? done(null) : master.once('exit', done)));
+    mail.server.close();
     rmSync(folder, { recursive: true, force: true });
   };
 }

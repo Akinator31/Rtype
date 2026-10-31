@@ -100,7 +100,7 @@ else.
 | | `database` | `sqlite:rtype.db` | Where the master keeps its data, as `--database`; a relative SQLite file is next to the settings file |
 | | `database_file` | | A file holding the address of the database, as `--database-file`. Not with `database` |
 | `[web]` | `listen` | `127.0.0.1:8080` | Where the administration panel listens: `<ip>:<port>`, `[<ipv6>]:<port>`. Without accounts, a loopback address only (`127.0.0.1`, `[::1]`): nobody signs in to the panel without them. Port 0 takes a free port |
-| | `public_url` | | Where the panel is reached from outside, `https://...`. The players sign in with Discord without it ([ADR 0026](../decisions/0026-discord-social-sdk.md)). The live events of the panel accept a page of its origin, beside the address the browser asked |
+| | `public_url` | | Where the panel is reached from outside, `https://...`. The players sign in with Discord without it ([ADR 0026](../decisions/0026-discord-social-sdk.md)); the administrators need it to sign in to the panel with Discord, which sends them back to `<public_url>/auth/discord/callback`. In `https://`, every cookie of the panel is `Secure`. The live events of the panel accept a page of its origin, beside the address the browser asked |
 | | `trusted_proxies` | `[]` | The proxies whose `X-Forwarded-For` is believed: addresses, or `<ip>/<prefix>` |
 | | `panel_dir` | `admin/` next to the server | The folder of the built panel. Given and missing, the server does not start; by default and missing, the panel says it is not built |
 | `[accounts]` | `enabled` | `true` | Accounts with an email and a password. Needs `[mail]` |
@@ -112,7 +112,7 @@ else.
 | | `from` | | The sender of the mails, `R-Type <rtype@example.org>` or `rtype@example.org`: its address is also the sender SMTP announces. Required |
 | `[discord]` | `client_id` | | The id of the Discord application, its digits. Required |
 | | `client_secret_file` | | The file of its secret. Required |
-| `[admin]` | `admins` | `[]` | The administrators, each an email or `discord:<id>`. Never a username, which anyone could take by registering it first. The panel can neither demote nor ban them |
+| `[admin]` | `admins` | `[]` | The administrators, each an email or `discord:<id>`. Never a username, which anyone could take by registering it first. Administrators of the panel whatever their role, once their account exists, its email verified; given the role `admin` at every start. The panel can neither demote, ban nor delete them |
 
 The sections go together:
 
@@ -124,8 +124,10 @@ The server serves its panel with `[web]` ([Run a server](run-a-server.md#steps),
 enabled, it checks its mail server at every start, `--check` included, without sending anything
 ([Set up accounts](set-up-accounts.md)), then lets its players create accounts and sign in. With `[discord]`,
 it checks its Discord application the same way, and the players sign in with Discord too
-([Set up accounts](set-up-accounts.md#sign-in-with-discord)). The administrators of `[admin]` come in the next version of
-the server: until then, their section is checked, and not used yet.
+([Set up accounts](set-up-accounts.md#sign-in-with-discord)). With accounts, the administrators sign in to the
+panel with their account, those of `[admin]` first, and the panel may listen beyond the loopback, behind a proxy
+([Administer a server](administer-a-server.md#from-anywhere-with-an-account)). Without accounts, `[admin]` is
+checked, and not used.
 
 ## Result
 

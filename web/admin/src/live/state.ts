@@ -1,5 +1,5 @@
 // What the panel knows of the server, live: the snapshot of /api/events, then each event applied to it
-// (docs/protocol/admin-api.md, 5). Pure: the store feeds it the frames of its WebSocket.
+// (docs/protocol/admin-api.md, 6). Pure: the store feeds it the frames of its WebSocket.
 
 import type { Action, Game, LiveEvent, Player, ServerInfo } from '../api/types';
 
@@ -149,6 +149,22 @@ export function describeAction(action: Action): Omit<FeedEntry, 'key' | 'at'> {
         tone: 'bonus',
         subject: action.target.replace('address:', ''),
         verb: `ban lifted${reason}`,
+      };
+    case 'ban_account':
+      return { tone: 'alert', subject: name ?? action.target, verb: `banned${reason}` };
+    case 'unban_account':
+      return { tone: 'bonus', subject: name ?? action.target, verb: `unbanned${reason}` };
+    case 'role':
+      return {
+        tone: 'info',
+        subject: name ?? action.target,
+        verb: details.role === 'admin' ? 'made administrator' : 'made player',
+      };
+    case 'delete_account':
+      return {
+        tone: 'alert',
+        subject: action.target.replace('account:', 'account '),
+        verb: `deleted${reason}`,
       };
     default:
       return { tone: 'info', subject: action.action, verb: action.target };

@@ -5,7 +5,7 @@
 | **Status** | Implemented |
 | **Transport** | HTTP from the web server of the master, behind the HTTPS of the host's proxy ([Web server](../architecture/web.md)) |
 | **Format** | JSON, UTF-8 |
-| **Who** | A session of the panel: the local access token of `admin-url.txt` traded for a cookie |
+| **Who** | A session of the panel: the local access token of `admin-url.txt` traded for a cookie, or an administrator signed in with its account |
 
 The API through which the panel, or any other tool, sees a server and acts on it
 ([ADR 0025](../decisions/0025-server-administration.md)). Every route is answered by the event loop of the
@@ -25,19 +25,42 @@ master: what it shows is the state of the master at that moment. How it works in
 | Status | When |
 |---|---|
 | `400` | A body or a query the route cannot take: not JSON, a field missing, of the wrong type or out of its range |
-| `401` | No session, or one that expired: open the address in `admin-url.txt` again |
-| `403` | A `POST` without the CSRF token of its session; a WebSocket opened by a page that is not the panel |
-| `404` | No player, or no game, with this id; no ban of this address |
+| `401` | No session, or one that expired: sign in, or open the address in `admin-url.txt` again; a wrong login or password |
+| `403` | A `POST` without the CSRF token of its session; a WebSocket opened by a page that is not the panel; an account that is not an administrator, is banned, or has its email not verified |
+| `404` | No player, game or account with this id; no ban of this address; no accounts on this server |
+| `409` | An action on an administrator of `[admin] admins`, which the panel can neither demote, ban nor delete |
+| `415` | A sign-in that is not `application/json` |
+| `429` | Too many sign-ins from the address, or wrong passwords of the account |
 | `503` | The master is stopping, or its database cannot answer now |
 
 A request without a session is refused before anything else is read: a `401` says nothing about the body.
 
 ## 2. Sessions
 
+A session is opened with the local access token, or, with accounts, by an administrator with its password or
+Discord ([Web server](../architecture/web.md#accounts)):
+
 ```
 GET /?token=<64 hex digits>           →  303, Set-Cookie: rtype_session=…; HttpOnly; SameSite=Strict
-GET /api/session                      →  200 {"csrfToken": "<64 hex digits>"}
+GET /api/sign-in                      →  200 {"password": true, "discord": true}
+POST /api/sign-in {"login": "chief@example.org", "password": "…"}
+                                      →  200 {"csrfToken": "…", "account": {…}}, Set-Cookie: rtype_session=…
+GET /auth/discord                     →  303 to Discord, Set-Cookie: rtype_discord=…; SameSite=Lax
+GET /auth/discord/callback?code&state →  303 to /, Set-Cookie: rtype_session=…
+GET /api/session                      →  200 {"csrfToken": "<64 hex digits>", "account": {…} or null}
+POST /api/sign-out                    →  200 {}, the cookie removed
 ```
+
+`GET /api/sign-in` tells what the master offers besides the local token: `password` with accounts, `discord`
+with `[discord]` and `web.public_url` too. `POST /api/sign-in` takes a username or an email as `login`, and only
+`Content-Type: application/json`. `account` is the administrator signed in, `null` for the local token:
+
+```json
+{"id": 1, "username": "Chief", "role": "admin", "locked": true}
+```
+
+`locked` is `true` for an administrator of `[admin] admins`. Behind HTTPS (`web.public_url` in `https://`), the
+cookies are `Secure`.
 
 Every route below needs the cookie. Every `POST` also needs the CSRF token of its session in a header, which a
 page of another site cannot read, so cannot send:
@@ -51,7 +74,9 @@ Content-Type: application/json
 {"reason": "cheating"}
 ```
 
-A session lasts 12 hours, and ends with the master: a restart asks for the new address of `admin-url.txt`.
+A session lasts 12 hours: that of the local token ends with the master, a restart asks for the new address of
+`admin-url.txt`; that of an account 12 hours after its last request, and at once when it signs out, or its
+account is banned, demoted or deleted.
 
 ## 3. Reading
 
@@ -114,12 +139,13 @@ The players of the lobby, sorted by id.
 
 ```json
 [
-  {"id": 7, "name": "Alice", "address": "203.0.113.9", "gameId": 3, "joinedAt": 1798000000123},
-  {"id": 8, "name": "Carol", "address": "198.51.100.4", "gameId": null, "joinedAt": 1798000004567}
+  {"id": 7, "name": "Alice", "address": "203.0.113.9", "gameId": 3, "joinedAt": 1798000000123, "accountId": 2},
+  {"id": 8, "name": "~Carol", "address": "198.51.100.4", "gameId": null, "joinedAt": 1798000004567, "accountId": null}
 ]
 ```
 
-`gameId` is the game the player is in, `null` in the lobby. Names do not have to be unique.
+`gameId` is the game the player is in, `null` in the lobby; `accountId` the account signed in, `null` for a
+guest. Names do not have to be unique.
 
 ### `GET /api/actions`
 
@@ -146,11 +172,15 @@ if given, for the next page.
 | `message` | `game:<id>` or `everyone` | `text`, `recipients` |
 | `ban` | `address:<ip>` | `duration` (seconds), `expiresAt`, `reason`, `removed` (the players connected from it) |
 | `unban` | `address:<ip>` | `expiresAt` (when the ban would have ended), `bannedBy` (the actor of the ban), `reason` |
+| `ban_account` | `account:<id>` | `account`, `name`, `reason`, `removed` (its players removed) |
+| `unban_account` | `account:<id>` | `account`, `name`, `reason` |
+| `role` | `account:<id>` | `account`, `name`, `role` (`admin` or `player`) |
+| `delete_account` | `account:<id>` | `reason`, `removed`: neither its name nor its address, the account is gone |
 
-`actor` is `local` for the local access token; the accounts will add theirs, and `deleted` once its account is
-deleted. A player who deletes its account is taken out of the actions done to it: its name becomes `deleted`, its
-address and id are removed ([Accounts](../architecture/accounts.md#deleting-an-account)). A `reason` not given is
-`""`.
+`actor` is `local` for the local access token, the id of the account of an administrator signed in, and
+`deleted` once its account is deleted. A player who deletes its account is taken out of the actions done to it:
+its name becomes `deleted`, its address and id are removed
+([Accounts](../architecture/accounts.md#deleting-an-account)). A `reason` not given is `""`.
 
 ### `GET /api/bans`
 
@@ -217,7 +247,68 @@ lifts the ban of `198.51.100.4`).
 `200 {"address": "198.51.100.4"}`, or `404` if no ban of this address runs: never banned, lifted already, or
 expired.
 
-## 5. Events
+## 5. Accounts
+
+With a database, every server has these routes; the panel shows them when the master has accounts. The
+administrators of `[admin] admins` are `locked`: demoting, banning or deleting them is `409`.
+
+### `GET /api/accounts`
+
+Query: `?search=<text>&limit=50&before=<id>`, all optional. The accounts, newest first: `limit` of them (1 to
+200, 50 by default), with an id below `before` if given. `search`, at most 254 bytes, keeps those whose username
+or email holds it, ignoring case, or whose Discord id is it.
+
+```json
+[
+  {
+    "id": 2,
+    "username": "Alice",
+    "email": "alice@example.org",
+    "emailVerifiedAt": 1797900000000,
+    "password": true,
+    "discordId": "80351110224678912",
+    "role": "player",
+    "locked": false,
+    "bannedAt": null,
+    "banReason": "",
+    "createdAt": 1797900000000,
+    "lastSeenAt": 1798000000123
+  }
+]
+```
+
+`email` is `null` for an account made with Discord only, `password` whether it has one; `role` is `admin` for
+an administrator of `[admin] admins`, whatever the database holds.
+
+### `GET /api/accounts/{id}`
+
+One account, as in the list; `404` without it.
+
+### `POST /api/accounts/{id}/ban`
+
+Body: `{"reason": "cheating"}`, the reason optional. The account can no longer sign in; its sessions, of the game
+and of the panel, end, and its players are removed with `ERROR (BANNED)`.
+
+```json
+{"account": {…, "bannedAt": 1798000000123, "banReason": "cheating"}, "removed": 1}
+```
+
+### `POST /api/accounts/{id}/unban`
+
+Body: `{"reason": "appeal"}`, optional. `{"account": {…}, "removed": 0}`.
+
+### `POST /api/accounts/{id}/role`
+
+Body: `{"role": "admin"}` or `{"role": "player"}`. A player made administrator signs in to the panel; an
+administrator made player loses it at its next request, its WebSockets closed. `{"account": {…}, "removed": 0}`.
+
+### `POST /api/accounts/{id}/delete`
+
+Body: `{"reason": "asked by mail"}`, optional. The account, its sessions, codes and Discord identity are deleted;
+its players are removed with `ERROR (KICKED)`; its actions stay, anonymized
+([Accounts](../architecture/accounts.md#deleting-an-account)). `{"account": null, "removed": 1}`.
+
+## 6. Events
 
 `GET /api/events` opens a WebSocket of the live events, as text frames of JSON. It needs the session cookie,
 and the `Origin` of the page that opens it must be the panel's: the address the browser asked
@@ -251,7 +342,7 @@ The objects are those of the routes: `server` of `/api/server`, `game` of `/api/
 
 A panel that reconnects gets a new snapshot: events missed meanwhile are in it.
 
-## 6. With curl
+## 7. With curl
 
 From the machine of the server, with the address of `admin-url.txt`:
 
@@ -264,4 +355,15 @@ csrf=$(curl -s -b cookies "$base/api/session" | sed 's/.*"csrfToken":"\([0-9a-f]
 curl -s -b cookies "$base/api/games"
 curl -s -b cookies -X POST -H "X-CSRF-Token: $csrf" -d '{"reason":"cheating"}' "$base/api/players/7/kick"
 curl -s -b cookies "$base/api/actions"
+```
+
+With an administrator account, from anywhere the panel is reached:
+
+```sh
+base=https://admin.example.org
+csrf=$(curl -s -c cookies -H 'Content-Type: application/json' \
+    -d '{"login":"chief@example.org","password":"…"}' "$base/api/sign-in" \
+    | sed 's/.*"csrfToken":"\([0-9a-f]*\)".*/\1/')
+curl -s -b cookies "$base/api/accounts?search=alice"
+curl -s -b cookies -X POST -H "X-CSRF-Token: $csrf" -d '{"reason":"cheating"}' "$base/api/accounts/2/ban"
 ```

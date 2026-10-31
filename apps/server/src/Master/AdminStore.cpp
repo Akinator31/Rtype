@@ -74,7 +74,8 @@ std::optional<std::string> withoutAccount(const std::string &action, const std::
         return value.t() == crow::json::type::Number && value.i() == accountId;
     };
     crow::json::wvalue result;
-    if (action == "kick" && details.has("account") && isAccount(details["account"])) {
+    // A player removed, an account banned, its ban lifted, its role changed: the account in `account`
+    if (action != "end_game" && details.has("account") && isAccount(details["account"])) {
         for (const std::string &key : details.keys()) {
             if (key != "account" && key != "name" && key != "address") {
                 result[key] = crow::json::wvalue(details[key]);

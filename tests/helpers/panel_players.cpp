@@ -3,6 +3,9 @@
 //
 //   rtype_panel_players <lobby port> <key file of the master> <game name> <name>...
 //
+// A name written `<login>:<password>` signs in to that account after HELLO, as a guest named `Pilot` until
+// then: the player then plays under its username.
+//
 // The first player creates the game, the others join it; each one then holds its session of the game, over
 // UDP, and pings the lobby, which closes a connection silent for 30 seconds. Once every session is accepted,
 // it writes "ready <game id>" on its standard output. A player removed, or a game ended, simply stops
@@ -99,17 +102,28 @@ int run(std::uint16_t port, const std::string &keyFile, const std::string &gameN
 
     std::vector<Player> players;
     std::uint32_t gameId = 0;
-    for (const std::string &name : names) {
+    for (const std::string &given : names) {
+        const std::size_t colon = given.find(':');
+        const std::string name = given.substr(0, colon);
         Player &player = players.emplace_back();
         player.lobby = std::make_unique<testing::LobbyClient>(loop, master, pinned);
         if (!testing::waitUntil(loop, [&] { return player.lobby->connection.has_value(); })) {
             std::cerr << "Cannot connect to the lobby on port " << port << '\n';
             return Failed;
         }
-        player.lobby->hello(name);
+        player.lobby->hello(colon == std::string::npos ? name : "Pilot");
         if (!expect(loop, *player.lobby, 0, lobby::message_type::Welcome)) {
             std::cerr << name << " was not welcomed\n";
             return Failed;
+        }
+        std::size_t next = 1;
+        if (colon != std::string::npos) {
+            player.lobby->send(lobby::message_type::SignIn,
+                               lobby::encode(lobby::SignInMessage{name, given.substr(colon + 1)}));
+            if (!expect(loop, *player.lobby, next++, lobby::message_type::SignedIn)) {
+                std::cerr << name << " could not sign in\n";
+                return Failed;
+            }
         }
         if (gameId == 0) {
             player.lobby->send(lobby::message_type::CreateGame,
@@ -117,7 +131,7 @@ int run(std::uint16_t port, const std::string &keyFile, const std::string &gameN
         } else {
             player.lobby->send(lobby::message_type::JoinGame, lobby::encode(lobby::JoinGameMessage{gameId}));
         }
-        const auto payload = expect(loop, *player.lobby, 1, lobby::message_type::GameJoined);
+        const auto payload = expect(loop, *player.lobby, next, lobby::message_type::GameJoined);
         const auto joined = payload ? lobby::decodeGameJoined(*payload) : std::nullopt;
         if (!joined) {
             std::cerr << name << " could not " << (gameId == 0 ? "create" : "join") << " the game\n";

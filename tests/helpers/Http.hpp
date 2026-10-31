@@ -21,12 +21,25 @@ struct HttpResponse {
     long status = 0;
     /// By name in lower case; a header given twice keeps its last value.
     std::map<std::string, std::string> headers;
+    /// Every Set-Cookie, in the order they came.
+    std::vector<std::string> cookies;
     std::string body;
 
     [[nodiscard]] std::string header(const std::string &name) const
     {
         const auto found = headers.find(name);
         return found == headers.end() ? std::string{} : found->second;
+    }
+
+    /// The Set-Cookie of the cookie `name`, empty without it.
+    [[nodiscard]] std::string cookie(const std::string &name) const
+    {
+        for (const std::string &line : cookies) {
+            if (line.starts_with(name + "=")) {
+                return line;
+            }
+        }
+        return {};
     }
 };
 
@@ -63,7 +76,11 @@ inline HttpResponse perform(CURL *curl, const std::string &url, const HttpReques
             while (!value.empty() && (value.back() == '\r' || value.back() == '\n' || value.back() == ' ')) {
                 value.pop_back();
             }
-            (*static_cast<std::map<std::string, std::string> *>(user))[name] = value;
+            auto &response = *static_cast<HttpResponse *>(user);
+            if (name == "set-cookie") {
+                response.cookies.push_back(value);
+            }
+            response.headers[name] = value;
         }
         return size * count;
     };
@@ -82,7 +99,7 @@ inline HttpResponse perform(CURL *curl, const std::string &url, const HttpReques
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeBody);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response.body);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, writeHeader);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response.headers);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response);
     const CURLcode result = curl_easy_perform(curl);
     if (result == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response.status);
@@ -100,7 +117,7 @@ inline HttpResponse http(const std::string &url, const HttpRequest &request = {}
 {
     CURL *curl = curl_easy_init();
     if (curl == nullptr) {
-        return {.status = 0, .headers = {}, .body = "curl_easy_init failed"};
+        return {.status = 0, .headers = {}, .cookies = {}, .body = "curl_easy_init failed"};
     }
     HttpResponse response = perform(curl, url, request, body);
     curl_easy_cleanup(curl);

@@ -16,7 +16,8 @@ is the master's. To use it: [Administer a server](../guides/administer-a-server.
 ## Pages
 
 The frame of every page is the shell of the design: a side bar with the logo, the navigation by group (Server,
-Communication, Administration) and the state of the master: its version and uptime; a top bar with the title of
+Communication, Administration), the state of the master, its version and uptime, and who opened the session, an
+account or the local token, with **Sign out**; a top bar with the title of
 the page and the live connection, with the delay before the next attempt while it is lost. The pages show what
 a host acts on, and no more: no route of the API, no technical detail, a count of bytes only near the limit.
 
@@ -29,6 +30,7 @@ a host acts on, and no more: no route of the API, no technical detail, a count o
 | `/bans` | The addresses banned now and the time left of each, lifted from here; those lifted or expired lately, from the record; a new ban: address, duration, reason, the pilots it removes |
 | `/messages` | A message to the whole lobby or to a game, from a template kept in the browser, previewed as the game shows it; the messages sent, from the record |
 | `/history` | The record of the actions, newest first, a page of 100 at a time, searched and filtered by kind; an entry unfolded under its line into its details |
+| `/accounts` | With accounts only, in the navigation: the accounts, newest first, searched by username, email or Discord id; their email and whether it is verified, Discord id, role, state, last sign-in. Ban one with a reason, unban it, make it an administrator or a player, delete it, each behind its window; the administrators of `[admin] admins` marked **Settings**, without these actions |
 | `/settings` | The version, start and ports of the server, read only; the preferences of the panel: confirm the actions, a sound when an instance becomes stuck |
 
 `/actions`, the address of the record before the history, leads to `/history`. The master answers `index.html`
@@ -39,10 +41,14 @@ and ending off in the settings; a ban always asks its duration.
 
 ### Without a session
 
-A panel opened without a session shows the page to open one: the token of `admin-url.txt`, pasted alone or in
-its address, or read from the file itself (the browser reads it, nothing is uploaded), is sent to `/?token=`,
-which the master trades for its cookie. A session that expires while the panel is open (12 hours, or a restart
-of the master) puts the same field in a window over the page.
+A panel opened without a session shows the page to open one. With accounts (`GET /api/sign-in`), an
+administrator signs in first: its username or email and its password, sent to `POST /api/sign-in`, or **Sign in
+with Discord**, which goes to `/auth/discord` when the master offers it ([Accounts](web.md#accounts)); the page
+then loads again. Below, and alone without accounts, the token of `admin-url.txt`, pasted alone or in its
+address, or read from the file itself (the browser reads it, nothing is uploaded), is sent to `/?token=`, which
+the master trades for its cookie. A session that expires while the panel is open (12 hours, a restart of the
+master, an account banned or demoted) puts a window over the page: the account and its password with accounts,
+the token without.
 
 ## One WebSocket
 
@@ -126,10 +132,16 @@ The end-to-end tests fail on any violation the browser reports.
 - `src/components/components.test.tsx`, `src/pages/pages.test.tsx`: each page from a snapshot, then live; the
   searches and the filters; each action through its window, what it sends, its toast; a refused action; a
   cancelled one; the preferences; the opening of a session, by its token or by `admin-url.txt`, and its window
-  once it expired.
+  once it expired; the sign-in with an account and its refusal, Discord, who is signed in and signing out, the
+  page of the accounts shown with accounts only, searched, an account banned, a refusal of the master.
 - `e2e/panel.spec.ts`: a real `r-type_server` serving the built panel, and `rtype_panel_players`
   (`tests/helpers/panel_players.cpp`), two players in a game. The panel opened with the address of
   `admin-url.txt`, the game seen live with the latency of its players, ended with a reason, its players back in
   the lobby, the action in the record; their address banned, which removes them, then the ban lifted; a panel without
   a session opened by pasting the address of `admin-url.txt`. No CSP
   violation, no error in the console.
+- `e2e/accounts.spec.ts`: the master of `e2e/master.ts` has accounts, its mail server a small one of the test
+  that takes everything, its accounts written before it starts by `rtype_panel_accounts`
+  (`tests/helpers/panel_accounts.cpp`): an administrator of `[admin] admins` and a player. The player plays,
+  signed in to its account; the administrator signs in with its password, bans the account, sees the player
+  removed and the action in the record, then signs out.

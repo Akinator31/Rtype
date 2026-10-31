@@ -132,6 +132,7 @@ add_library(r-type_server_core STATIC
     src/Accounts/Discord.cpp
     src/Accounts/Mailer.cpp
     src/Accounts/MailMessages.cpp
+    src/Accounts/PanelAccounts.cpp
     src/Accounts/PasswordHasher.cpp
     src/Common/GameConfig.cpp
     src/Common/InstanceMessages.cpp

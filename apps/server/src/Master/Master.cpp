@@ -3,6 +3,7 @@
 #include "Accounts/AccountService.hpp"
 #include "Accounts/CurlMailer.hpp"
 #include "Accounts/Discord.hpp"
+#include "Accounts/PanelAccounts.hpp"
 #include "Accounts/PasswordHasher.hpp"
 #include "Common/GameConfig.hpp"
 #include "Common/Lifecycle.hpp"
@@ -222,6 +223,7 @@ int runMaster(const MasterOptions &options)
     std::optional<PasswordHasher> hasher;
     std::optional<DiscordClient> discord;
     std::optional<AccountService> accounts;
+    std::optional<PanelAccounts> panelAccounts;
     if (mailerSettings) {
         const auto post = [&loop](std::function<void()> function) { loop.post(std::move(function)); };
         mailer.emplace(*mailerSettings);
@@ -234,6 +236,19 @@ int runMaster(const MasterOptions &options)
                          discord ? &*discord : nullptr);
         logger.info("Accounts on, {}{}", options.settings.accounts->guests ? "guests allowed" : "no guests",
                     discord ? ", Discord sign-in" : "");
+        // The administrators sign in to the panel with their account (docs/architecture/web.md#accounts)
+        panelAccounts.emplace(loop, databaseThread, *hasher, discord ? &*discord : nullptr,
+                              PanelAccountsSettings{.admins = options.settings.admin.admins,
+                                                    .publicUrl = webSettings.publicUrl});
+        if (discord && webSettings.publicUrl.empty()) {
+            logger.info("No Discord sign-in for the panel: it needs web.public_url, where Discord sends the "
+                        "administrators back");
+        }
+        panelAccounts->promoteListed([&logger](std::optional<std::size_t> promoted) {
+            if (promoted && *promoted > 0) {
+                logger.info("{} accounts of [admin] admins made administrators", *promoted);
+            }
+        });
     }
     Lobby lobby(loop, std::move(*listener), identity, *games);
     lobby.setBans(&bans);
@@ -246,10 +261,12 @@ int runMaster(const MasterOptions &options)
                                       .firstGamePort = options.firstGamePort,
                                       .lastGamePort = options.lastGamePort,
                                       .panelPort = web->localAddress().port(),
+                                      .admins = options.settings.admin.admins,
                                   });
     games->setObserver(&administration);
     lobby.setObserver(&administration);
     web->setAdministration(&administration);
+    web->setPanelAccounts(panelAccounts ? &*panelAccounts : nullptr);
     // Until every instance has exited, then the time for the last frames to leave
     rtype::network::Timer stopping(loop);
     logger.info("Master started: Ctrl+C to stop");
@@ -266,6 +283,7 @@ int runMaster(const MasterOptions &options)
     });
     // The administration goes first: nothing tells it anything any more
     web->setAdministration(nullptr);
+    web->setPanelAccounts(nullptr);
     lobby.setObserver(nullptr);
     games->setObserver(nullptr);
     logger.info("Master stopped");

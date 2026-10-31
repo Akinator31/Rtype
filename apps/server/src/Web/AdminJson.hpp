@@ -16,6 +16,7 @@ namespace rtype::server
 [[nodiscard]] crow::json::wvalue toJson(const AdminPlayer &player);
 [[nodiscard]] crow::json::wvalue toJson(const AdminAction &action);
 [[nodiscard]] crow::json::wvalue toJson(const AddressBan &ban);
+[[nodiscard]] crow::json::wvalue toJson(const AdminAccount &account);
 [[nodiscard]] crow::json::wvalue toJson(const AdminEvent &event);
 
 /// A list as a JSON array.

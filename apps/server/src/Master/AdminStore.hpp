@@ -16,7 +16,8 @@
 namespace rtype::server
 {
 
-/// The actor of an action done with the local access token, until the accounts of step 12.
+/// The actor of an action done with the local access token; an action of an administrator signed in to its
+/// account has the id of the account.
 inline constexpr std::string_view LocalActor = "local";
 /// The actor of an action whose account was deleted.
 inline constexpr std::string_view DeletedActor = "deleted";
@@ -28,7 +29,8 @@ struct AdminAction {
     std::chrono::system_clock::time_point at;
     /// `local`, an account id, or `deleted`.
     std::string actor;
-    /// `kick`, `end_game`, `message` or `ban`.
+    /// `kick`, `end_game`, `message`, `ban`, `unban`, `ban_account`, `unban_account`, `role` or
+    /// `delete_account`.
     std::string action;
     /// What it was done to: `player:7`, `game:3`, `everyone`, `address:203.0.113.9`.
     std::string target;
@@ -55,8 +57,9 @@ long long recordAction(rtype::database::Database &database, const AdminAction &a
                                                    std::optional<long long> before = std::nullopt);
 
 /// Takes a deleted account out of the record (docs/architecture/accounts.md#deleting-an-account): its actions
-/// stay, their actor `deleted`; the actions done to it lose its name and its address, `kick` by its
-/// `account`, `end_game` by its id in `accounts`.
+/// stay, their actor `deleted`; the actions done to it lose its name and its address, those whose details
+/// hold its `account` (`kick`, `ban_account`, `unban_account`, `role`), and `end_game` by its id in
+/// `accounts`.
 /// @return How many actions changed.
 /// @throws soci::soci_error if the database refuses it.
 std::size_t anonymizeActions(rtype::database::Database &database, long long accountId,
