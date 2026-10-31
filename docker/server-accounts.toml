@@ -1,0 +1,44 @@
+# The settings of the official server, with its accounts (docs/guides/deploy-with-docker.md, part two): copied
+# into the files of the service in Dokploy, as server.toml, then the values marked "yours" changed. Every key is
+# in docs/guides/configure-a-server.md.
+#
+# The secrets are not here: each *_file key names a Docker secret of docker-compose.yml, mounted in
+# /run/secrets/.
+
+[server]
+port = 4242
+game_ports = "4243-4299"
+key = "/data/server.key"
+database = "sqlite:/data/rtype.db"
+
+[web]
+# Every address of the container: Traefik reaches it over the network of Dokploy, nothing else does, since the
+# compose file publishes no port of the panel
+listen = "0.0.0.0:8080"
+# Yours: the domain of the panel in Dokploy. In https://, every cookie of the panel is Secure
+public_url = "https://admin.rtype.example.org"
+# Traefik, whose X-Forwarded-For gives the address of the visitor: the subnet of dokploy-network
+# (docker network inspect dokploy-network)
+trusted_proxies = ["10.0.0.0/8"]
+
+[accounts]
+enabled = true
+guests = true
+
+[mail]
+# Yours: the mail server the codes are sent through, checked at each start
+host = "mail.example.org"
+port = 587
+security = "starttls"
+username = "rtype@example.org"
+password_file = "/run/secrets/mail_password"
+from = "R-Type <rtype@example.org>"
+
+[discord]
+# Yours: the id of the Discord application
+client_id = "123456789012345678"
+client_secret_file = "/run/secrets/discord_secret"
+
+[admin]
+# Yours: the first administrators, by verified email or discord:<id>; the panel names the others
+admins = ["admin@example.org"]
