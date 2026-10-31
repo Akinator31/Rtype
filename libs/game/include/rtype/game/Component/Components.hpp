@@ -100,6 +100,8 @@ struct EnemyOrders {
     std::optional<ecs::Position> target;
     /// Its stance at this tick, ordered again at every tick.
     EnemyStance stance = EnemyStance::None;
+    /// The shots of the players do no damage at this tick, whatever its stance, ordered again at every tick.
+    bool invulnerable = false;
 };
 
 /// Hurts what it hits: the shots of a player hurt the Bydos, the Bydos and their shots hurt the players.

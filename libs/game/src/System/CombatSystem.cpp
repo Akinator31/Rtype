@@ -126,7 +126,8 @@ bool CombatSystem::hurt(ecs::entity_t target, ecs::entity_t source)
 
 bool CombatSystem::isGuarding(ecs::entity_t enemy) const
 {
-    return _orders.has(enemy) && _orders.get(enemy).stance == EnemyStance::Guard;
+    return _orders.has(enemy) &&
+           (_orders.get(enemy).stance == EnemyStance::Guard || _orders.get(enemy).invulnerable);
 }
 
 bool CombatSystem::startNextPhase(ecs::entity_t enemy)

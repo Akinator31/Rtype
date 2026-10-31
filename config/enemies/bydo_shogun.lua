@@ -1,7 +1,8 @@
 -- The final boss. The shogun comes in and guards, then fights from the right of the game area: mostly it
 -- raises its blade and dashes straight at the nearest ship, past it, then flies back; the rest of the time it
 -- shoots bursts of plasma. Its health is filled again at each of its four phases: it guards a moment, then
--- fights faster, and in the last two it chains two dashes.
+-- fights faster, and in the last two it chains two dashes. In the last one, under 40% of its health, it
+-- becomes unkillable and attacks relentlessly, so that the players soon lose.
 
 -- Where it stands, in game units from the left edge
 local StandX = 1600
@@ -28,6 +29,15 @@ local DashAtMost = 1.6
 local Stagger = 0.4
 -- Within this distance of the end of its dash, it is there
 local DashArrival = 30
+-- On its last life, under this share of its health it cannot be killed any more and attacks relentlessly:
+-- seconds it flies between two attacks, its blade raised before a dash, and it stays after one; the chance
+-- of a dash, and the dashes in a row
+local FrenzyHealth = 0.4
+local FrenzyFly = 0.3
+local FrenzyWindUp = 0.18
+local FrenzyStagger = 0.1
+local FrenzyDashChance = 0.8
+local FrenzyDashes = 3
 
 local function findNearestPlayer(enemy, players)
     local nearest, nearestDistance = nil, math.huge
@@ -87,6 +97,20 @@ return {
         local target = findNearestPlayer(enemy, game.players)
         local elapsed = enemy.age - memory.since
 
+        -- On its last life, under this share of its health it cannot be killed any more and goes on a
+        -- rampage: the players can only survive so long
+        local frenzy = enemy.phase == enemy.phases and enemy.health < enemy.maxHealth * FrenzyHealth
+        if frenzy then
+            enemy:protect()
+            if memory.action == "guard" or memory.action == "enter" then
+                memory.y = clamp(target and target.y or 540, MinY, MaxY)
+                start(enemy, "fly", FrenzyFly)
+                elapsed = 0
+            end
+        end
+        local flyTime = frenzy and FrenzyFly or lerp(Fly, Fly / 2, rage)
+        local windUpTime = frenzy and FrenzyWindUp or lerp(WindUp, AngryWindUp, rage)
+
         if memory.phase ~= enemy.phase then
             memory.phase = enemy.phase
             enemy:setVelocity(0, 0)
@@ -103,17 +127,17 @@ return {
             enemy:guard()
             if elapsed >= memory.duration then
                 memory.y = clamp(target and target.y or 540, MinY, MaxY)
-                start(enemy, "fly", lerp(Fly, Fly / 2, rage))
+                start(enemy, "fly", flyTime)
             end
         elseif memory.action == "fly" then
             enemy:moveTo(StandX, memory.y)
             if elapsed >= memory.duration and enemy.arrived then
-                if target and game:randomNumber(0, 1) < lerp(0.4, 0.55, rage) then
-                    -- One dash, two in a row in the last two phases
-                    memory.dashesLeft = rage >= 0.5 and 2 or 1
-                    start(enemy, "windUp", lerp(WindUp, AngryWindUp, rage))
+                if target and game:randomNumber(0, 1) < (frenzy and FrenzyDashChance or lerp(0.4, 0.55, rage)) then
+                    -- One dash, two in a row in the last two phases, three in a frenzy
+                    memory.dashesLeft = frenzy and FrenzyDashes or (rage >= 0.5 and 2 or 1)
+                    start(enemy, "windUp", windUpTime)
                 else
-                    start(enemy, "shoot", lerp(Burst, Burst * 2, rage))
+                    start(enemy, "shoot", frenzy and Burst or lerp(Burst, Burst * 2, rage))
                 end
             end
         elseif memory.action == "shoot" then
@@ -127,7 +151,7 @@ return {
             end
             if elapsed >= memory.duration then
                 memory.y = clamp(game:randomNumber(MinY, MaxY), MinY, MaxY)
-                start(enemy, "fly", lerp(Fly, Fly / 2, rage))
+                start(enemy, "fly", flyTime)
             end
         elseif memory.action == "windUp" then
             -- Blade raised, it steps back from the ship it watches, then dashes where the ship is then
@@ -154,7 +178,7 @@ return {
             if distance <= DashArrival or elapsed >= memory.duration then
                 enemy:setVelocity(0, 0)
                 memory.dashesLeft = memory.dashesLeft - 1
-                start(enemy, "stagger", Stagger)
+                start(enemy, "stagger", frenzy and FrenzyStagger or Stagger)
             else
                 local speed = lerp(DashSpeed, AngryDashSpeed, rage)
                 enemy:setVelocity(dx / distance * speed, dy / distance * speed)
@@ -163,7 +187,7 @@ return {
             enemy:setVelocity(0, 0)
             if elapsed >= memory.duration then
                 if memory.dashesLeft > 0 and target then
-                    start(enemy, "windUp", lerp(WindUp, AngryWindUp, rage))
+                    start(enemy, "windUp", windUpTime)
                 else
                     memory.y = clamp(enemy.y, MinY, MaxY)
                     start(enemy, "back")
