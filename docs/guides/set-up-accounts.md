@@ -142,6 +142,7 @@ A server with accounts reaches its mail server at every start, or does not start
 
     A mail server down at start stops the server: in Docker, with `restart: unless-stopped`, the container then
     restarts again and again until the mail server answers. The logs of the container say why, at each start.
+    See [With accounts](deploy-with-docker.md#with-accounts) of Deploy with Docker.
 
 While it runs, a mail the server refuses or cannot be reached for is tried again after 30 seconds, 1 minute, then
 2 minutes, then given up, and the logs say so. One address receives at most 5 mails an hour, so that nobody can

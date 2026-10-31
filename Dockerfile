@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 #
 # The image of the server (docs/guides/deploy-with-docker.md): the master, the instances it starts, the panel and
-# the configuration of the game, guests only.
+# the configuration of the game. Guests only with its own settings; accounts, mail and Discord with those of the
+# host (docker/server-accounts.toml).
 #
 #   docker build -t rtype-server .                 the server, the default target
-#   docker build --target smoke -t rtype-smoke .   the players of docker/smoke-test.sh, for the CI
+#   docker build --target smoke -t rtype-smoke .   the programs of the smoke tests in docker/, for the CI
 #
 # The panel is built by Node, the server by CMake, then both go into a small runtime, run as a user that is not
 # root. The downloads of CPM and the build folder are kept in cache mounts: a change of the code rebuilds what
@@ -39,22 +40,28 @@ RUN --mount=type=cache,target=/cache/cpm,sharing=locked \
     && cmake --build build --target r-type_server \
     && cmake --install build --component server --prefix /opt/rtype
 
-# --- The players of the smoke test (tests/helpers/panel_players.cpp), built with the tests ---
+# --- The programs of the smoke tests, built with the tests: the players (tests/helpers/panel_players.cpp), the
+# accounts written before the master starts (panel_accounts.cpp), Discord and the mail server
+# (fake_services.cpp) ---
 FROM build AS players
 RUN --mount=type=cache,target=/cache/cpm,sharing=locked \
     --mount=type=cache,target=/src/build,sharing=locked \
     cmake -S . -B build -DRTYPE_BUILD_TESTS=ON \
-    && cmake --build build --target rtype_panel_players \
-    && install -D build/bin/rtype_panel_players /opt/smoke/rtype_panel_players
+    && cmake --build build --target rtype_panel_players rtype_panel_accounts rtype_fake_services \
+    && install -D -t /opt/smoke build/bin/rtype_panel_players build/bin/rtype_panel_accounts \
+        build/bin/rtype_fake_services
 
 FROM debian:${DEBIAN}-slim AS smoke
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 libssl3t64 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=players /opt/smoke /opt/smoke
 ENTRYPOINT ["/opt/smoke/rtype_panel_players"]
 
 # --- The server, the default target ---
 FROM debian:${DEBIAN}-slim AS server
 LABEL org.opencontainers.image.title="R-Type server" \
-      org.opencontainers.image.description="The master of R-Type, its games and its panel, guests only" \
+      org.opencontainers.image.description="The master of R-Type, its games, its accounts and its panel" \
       org.opencontainers.image.source="https://github.com/Akinator31/Rtype"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3t64 \

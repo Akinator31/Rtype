@@ -650,6 +650,13 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   and the health check of the image, a user that is not root, the key, the database and `admin-url.txt` in
   `/data`, two players of `rtype_panel_players` in a game over the published ports, and `SIGTERM` stopping it
   with code 0 ([Deploy with Docker](../guides/deploy-with-docker.md)).
+- `docker/smoke-test-accounts.sh`, after it: the image started with `docker/server-accounts.toml`, the settings
+  of the official server, its Discord secret in `/run/secrets`. `rtype_fake_services`
+  (`tests/helpers/fake_services.cpp`) runs a fake Discord over HTTPS, under the network alias `discord.com`,
+  and a fake mail server; the image is given their certificate to trust, so the master reaches Discord at the
+  address it always uses. The test checks that the master checked both at start, that a player signs in to its
+  account and plays with a guest, that the panel offers the password and Discord, refuses a player and lets an
+  administrator of `[admin] admins` in with a `Secure` cookie, and the stop on `SIGTERM`.
 
 ## Limits and next steps
 

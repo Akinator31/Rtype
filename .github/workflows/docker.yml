@@ -45,6 +45,11 @@ jobs:
       - name: Smoke test
         run: docker/smoke-test.sh "$SERVER_IMAGE" "$SMOKE_IMAGE"
 
+      # The settings of the official server, a fake Discord and a fake mail server: a player and an
+      # administrator sign in
+      - name: Smoke test with accounts
+        run: docker/smoke-test-accounts.sh "$SERVER_IMAGE" "$SMOKE_IMAGE"
+
       - name: Publish on GHCR
         if: github.event_name == 'push'
         env:
