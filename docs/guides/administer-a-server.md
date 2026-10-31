@@ -104,7 +104,8 @@ host that serves it over HTTPS, and its administrators sign in with their own ac
 
     `public_url` makes every cookie `Secure`, and is where Discord sends the administrators back.
     `trusted_proxies` are the addresses of the proxy, whose `X-Forwarded-For` gives the address of the visitor,
-    for the logs and the limits on signing in.
+    for the logs and the limits on signing in. In Dokploy, the domain of the service does it, with Traefik:
+    see [With accounts](deploy-with-docker.md#with-accounts) of Deploy with Docker.
 
 3. **Sign in** at the address of the panel: a username or an email and its password, or **Sign in with
    Discord** when the server has `[discord]` and `public_url`. With Discord, add
