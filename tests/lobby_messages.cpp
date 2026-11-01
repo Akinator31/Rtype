@@ -103,6 +103,12 @@ std::vector<std::pair<Bytes, std::function<bool(std::span<const std::byte>)>>> a
         {encode(SignedInMessage{key(3), pavel()}), [](auto p) { return decodeSignedIn(p).has_value(); }},
         {encode(DiscordAuthorizeMessage{1234567890123456789}),
          [](auto p) { return decodeDiscordAuthorize(p).has_value(); }},
+        {encode(GetProfileMessage{9}), [](auto p) { return decodeGetProfile(p).has_value(); }},
+        {encode(GetAvatarMessage{9, 16000}), [](auto p) { return decodeGetAvatar(p).has_value(); }},
+        {encode(ProfileMessage{9, true, "wing", "Wing", "a1b2", 20000}),
+         [](auto p) { return decodeProfile(p).has_value(); }},
+        {encode(AvatarMessage{9, "a1b2", 20000, 16000, Bytes(4000, std::byte{7})}),
+         [](auto p) { return decodeAvatar(p).has_value(); }},
     };
 }
 
@@ -110,12 +116,12 @@ std::vector<std::pair<Bytes, std::function<bool(std::span<const std::byte>)>>> a
 
 TEST_CASE("HELLO is the frame of the example of the specification", "[lobby]")
 {
-    const HelloMessage hello{.version = 3, .name = "Pavel", .locale = "fr", .token = std::nullopt};
+    const HelloMessage hello{.version = 4, .name = "Pavel", .locale = "fr", .token = std::nullopt};
     const Bytes payload = encode(hello);
 
-    CHECK(payload == bytes({0x00, 0x03, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
+    CHECK(payload == bytes({0x00, 0x04, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
     CHECK(rtype::network::makeFrame(message_type::Hello, payload) ==
-          bytes({0x00, 0x0D, 0x01, 0x00, 0x03, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
+          bytes({0x00, 0x0D, 0x01, 0x00, 0x04, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
     CHECK(decodeHello(payload) == hello);
 }
 
@@ -125,12 +131,12 @@ TEST_CASE("A HELLO with a session token has no name, and the token after the loc
 
     REQUIRE(payload.size() == 2 + 1 + 6 + 1 + 32);
     CHECK(Bytes(payload.begin(), payload.begin() + 10) ==
-          bytes({0x00, 0x03, 0x00, 0x05, 'f', 'r', '-', 'F', 'R', 0x01}));
+          bytes({0x00, 0x04, 0x00, 0x05, 'f', 'r', '-', 'F', 'R', 0x01}));
     CHECK(payload[10] == std::byte{7});
     CHECK(decodeHello(payload) == resuming());
 
     // A name beside a token is malformed: the token signs in an account, whose name the master knows
-    Bytes named = bytes({0x00, 0x03, 0x01, 'A', 0x02, 'e', 'n', 0x01});
+    Bytes named = bytes({0x00, 0x04, 0x01, 'A', 0x02, 'e', 'n', 0x01});
     named.resize(named.size() + 32);
     CHECK_FALSE(decodeHello(named));
     HelloMessage both = resuming();
@@ -146,7 +152,7 @@ TEST_CASE("A HELLO of another version is read as its version alone, for UNSUPPOR
     CHECK(older->version == 2);
     CHECK(older->name.empty());
     CHECK_FALSE(older->token);
-    CHECK(decodeHello(bytes({0x00, 0x04}))->version == 4);
+    CHECK(decodeHello(bytes({0x00, 0x05}))->version == 5);
     CHECK(decodeHello(bytes({0x00, 0x01, 0xFF, 0xFF, 0xFF}))->version == 1);
     CHECK_FALSE(decodeHello(bytes({0x00})));
 }
@@ -159,7 +165,8 @@ TEST_CASE("The lobby messages are written field by field", "[lobby]")
     CHECK(encode(welcome(7, {.guests = false, .passwordAccounts = true, .discord = true})) ==
           bytes({0, 0, 0, 7, 0x06, 0}));
     CHECK(encode(welcome(7, {}, AccountInfo{9, "Ann", AccountRole::Player})) ==
-          bytes({0, 0, 0, 7, 0x01, 1, 0, 0, 0, 0, 0, 0, 0, 9, 3, 'A', 'n', 'n', 0}));
+          bytes({0,   0,   0,   7, 0x01, 1, 0, 0, 0, 0, 0, 0, 0, 9, 3,
+                 'A', 'n', 'n', 0, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0}));
     CHECK(encode(GameListMessage{{{3, "Duo", 1, 2}}}) == bytes({0, 1, 0, 0, 0, 3, 3, 'D', 'u', 'o', 1, 2}));
     CHECK(encode(GameListMessage{}) == bytes({0, 0}));
     CHECK(encode(LeftGameMessage{5, LeftGameReason::GameCrashed}) == bytes({0, 0, 0, 5, 2}));
@@ -237,9 +244,9 @@ TEST_CASE("Names are checked apart from the decoding, for INVALID_NAME", "[lobby
     CHECK_FALSE(isValidGameName(std::string(33, 'g')));
 
     // Decoded as they come: the master answers INVALID_NAME, not MALFORMED
-    CHECK(decodeHello(bytes({0, 3, 0, 2, 'e', 'n', 0}))->name.empty());
-    CHECK(decodeHello(bytes({0, 3, 2, 0xFF, 0xFE, 2, 'e', 'n', 0}))->name == "\xFF\xFE");
-    CHECK(decodeHello(bytes({0,   3,   17,  'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
+    CHECK(decodeHello(bytes({0, 4, 0, 2, 'e', 'n', 0}))->name.empty());
+    CHECK(decodeHello(bytes({0, 4, 2, 0xFF, 0xFE, 2, 'e', 'n', 0}))->name == "\xFF\xFE");
+    CHECK(decodeHello(bytes({0,   4,   17,  'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
                              'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 2,   'e', 'n', 0}))
               ->name.size() == 17);
     CHECK(decodeCreateGame(bytes({0, 2}))->name.empty());
@@ -359,6 +366,10 @@ TEST_CASE("Random bytes never crash a lobby decoder", "[lobby]")
         (void)decodeDeleteAccount(payload);
         (void)decodeSignedIn(payload);
         (void)decodeDiscordAuthorize(payload);
+        (void)decodeGetProfile(payload);
+        (void)decodeGetAvatar(payload);
+        (void)decodeProfile(payload);
+        (void)decodeAvatar(payload);
     }
     SUCCEED();
 }
@@ -391,11 +402,24 @@ TEST_CASE("The requests of the accounts are written field by field", "[lobby][ac
 TEST_CASE("The replies of the accounts are written field by field", "[lobby][accounts]")
 {
     const Bytes signedIn = encode(SignedInMessage{key(5), {9, "Ann", AccountRole::Admin}});
-    REQUIRE(signedIn.size() == 32 + 8 + 4 + 1);
+    REQUIRE(signedIn.size() == 32 + 8 + 4 + 1 + 1 + 1 + 8);
     CHECK(signedIn[0] == std::byte{5});
     CHECK(signedIn[31] == std::byte{5});
     CHECK(Bytes(signedIn.begin() + 32, signedIn.end()) ==
-          bytes({0, 0, 0, 0, 0, 0, 0, 9, 3, 'A', 'n', 'n', 1}));
+          bytes({0, 0, 0, 0, 0, 0, 0, 9, 3, 'A', 'n', 'n', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
+
+    // Version 4: the flags, the email and the date of the account
+    const AccountInfo full{.id = 9,
+                           .username = "Ann",
+                           .role = AccountRole::Player,
+                           .email = "a@b.c",
+                           .emailVerified = true,
+                           .hasPassword = true,
+                           .createdAt = 0x0102030405060708};
+    const Bytes withEmail = encode(SignedInMessage{key(5), full});
+    CHECK(Bytes(withEmail.begin() + 32 + 12, withEmail.end()) ==
+          bytes({0, 0x03, 5, 'a', '@', 'b', '.', 'c', 1, 2, 3, 4, 5, 6, 7, 8}));
+    CHECK(decodeSignedIn(withEmail)->account == full);
 
     CHECK(encode(DiscordAuthorizeMessage{0x0102030405060708}) == bytes({1, 2, 3, 4, 5, 6, 7, 8}));
 }
@@ -460,7 +484,8 @@ TEST_CASE("The fields of the accounts hold their longest values, and not one byt
         "http://127.0.0.1/" + std::string(MaxRedirectUriLength - 17, 'u')};
     CHECK(decodeDiscordConfirm(encode(longestConfirm)) == longestConfirm);
     CHECK(encode(longestConfirm).size() <= rtype::network::MaxFramePayloadSize);
-    CHECK(encode(SignedInMessage{key(1), {1, username, AccountRole::Player}}).size() == 32 + 8 + 17 + 1);
+    CHECK(encode(SignedInMessage{key(1), {1, username, AccountRole::Player}}).size() ==
+          32 + 8 + 17 + 1 + 1 + 1 + 8);
     // The longest REGISTER fits in a frame
     CHECK(encode(longest).size() <= rtype::network::MaxFramePayloadSize);
 
@@ -554,8 +579,11 @@ TEST_CASE("The messages of the accounts refuse what the protocol forbids", "[lob
     noId[39] = std::byte{0};
     CHECK_FALSE(decodeSignedIn(noId));
     Bytes role2 = signedIn;
-    role2.back() = std::byte{2};
+    role2[32 + 12] = std::byte{2};
     CHECK_FALSE(decodeSignedIn(role2));
+    Bytes flags = signedIn;
+    flags[32 + 13] = std::byte{4};
+    CHECK_FALSE(decodeSignedIn(flags));
     CHECK_THROWS_AS(encode(SignedInMessage{key(1), {0, "Ann", AccountRole::Player}}), std::invalid_argument);
     CHECK_THROWS_AS(encode(SignedInMessage{key(1), {1, "", AccountRole::Player}}), std::invalid_argument);
     CHECK_THROWS_AS(encode(SignedInMessage{key(1), {1, "Ann", AccountRole{2}}}), std::invalid_argument);
@@ -583,23 +611,64 @@ TEST_CASE("A HELLO refuses a locale that is not one, and a token flag that is no
     CHECK_FALSE(isValidLocale("fr.UTF-8"));
     CHECK_FALSE(isValidLocale("é1"));
 
-    CHECK_FALSE(decodeHello(bytes({0, 3, 1, 'A', 1, 'e', 0})));           // locale of 1 byte
-    CHECK_FALSE(decodeHello(bytes({0, 3, 1, 'A', 3, 'e', ' ', 'n', 0}))); // a space
-    CHECK_FALSE(decodeHello(bytes({0, 3, 1, 'A', 2, 'e', 'n', 2})));      // token flag 2
-    CHECK_FALSE(decodeHello(bytes({0, 3, 1, 'A', 2, 'e', 'n'})));         // no token flag
-    CHECK_FALSE(decodeHello(bytes({0, 3, 0, 2, 'e', 'n', 1, 1, 2, 3})));  // a token cut
+    CHECK_FALSE(decodeHello(bytes({0, 4, 1, 'A', 1, 'e', 0})));           // locale of 1 byte
+    CHECK_FALSE(decodeHello(bytes({0, 4, 1, 'A', 3, 'e', ' ', 'n', 0}))); // a space
+    CHECK_FALSE(decodeHello(bytes({0, 4, 1, 'A', 2, 'e', 'n', 2})));      // token flag 2
+    CHECK_FALSE(decodeHello(bytes({0, 4, 1, 'A', 2, 'e', 'n'})));         // no token flag
+    CHECK_FALSE(decodeHello(bytes({0, 4, 0, 2, 'e', 'n', 1, 1, 2, 3})));  // a token cut
     CHECK_THROWS_AS(encode(guest("Ann", "e")), std::invalid_argument);
     CHECK_THROWS_AS(encode(guest("Ann", "fr FR")), std::invalid_argument);
 }
 
 TEST_CASE("The requests of the accounts are told apart from the others", "[lobby][accounts]")
 {
-    for (std::uint8_t type = message_type::Register; type <= message_type::DeleteAccount; ++type) {
+    for (std::uint8_t type = message_type::Register; type <= message_type::GetAvatar; ++type) {
         CHECK(isAccountRequest(type));
     }
     for (const std::uint8_t type : {message_type::Hello, message_type::ListGames, message_type::CreateGame,
                                     message_type::JoinGame, message_type::LeaveGame, message_type::Ping,
-                                    std::uint8_t{0x12}, std::uint8_t{0x7F}, message_type::SignedIn}) {
+                                    std::uint8_t{0x14}, std::uint8_t{0x7F}, message_type::SignedIn}) {
         CHECK_FALSE(isAccountRequest(type));
     }
+}
+
+TEST_CASE("The profiles and the pictures are written field by field, within their bounds",
+          "[lobby][accounts]")
+{
+    CHECK(encode(GetProfileMessage{9}) == bytes({0, 0, 0, 0, 0, 0, 0, 9}));
+    CHECK(encode(GetAvatarMessage{9, 0x0102}) == bytes({0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 1, 2}));
+    CHECK(encode(ProfileMessage{9, true, "w", "W", "h", 3}) ==
+          bytes({0, 0, 0, 0, 0, 0, 0, 9, 1, 1, 'w', 1, 'W', 1, 'h', 0, 0, 0, 3}));
+    CHECK(encode(ProfileMessage{9}) == bytes({0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0}));
+    CHECK(encode(AvatarMessage{9, "h", 5, 3, bytes({0xAA, 0xBB})}) ==
+          bytes({0, 0, 0, 0, 0, 0, 0, 9, 1, 'h', 0, 0, 0, 5, 0, 0, 0, 3, 0, 2, 0xAA, 0xBB}));
+
+    // The largest part of the largest picture fits in a frame
+    const AvatarMessage largest{.accountId = 1,
+                                .avatarHash = std::string(MaxAvatarHashLength, 'h'),
+                                .total = static_cast<std::uint32_t>(MaxAvatarSize),
+                                .offset = static_cast<std::uint32_t>(MaxAvatarSize - MaxAvatarChunk),
+                                .bytes = Bytes(MaxAvatarChunk, std::byte{1})};
+    CHECK(encode(largest).size() <= rtype::network::MaxFramePayloadSize);
+    CHECK(decodeAvatar(encode(largest)) == largest);
+
+    // A profile: an account, a picture with its version and its size, nothing of Discord without Discord
+    CHECK_THROWS_AS(encode(GetProfileMessage{0}), std::invalid_argument);
+    CHECK_FALSE(decodeGetProfile(bytes({0, 0, 0, 0, 0, 0, 0, 0})));
+    CHECK_THROWS_AS(encode(ProfileMessage{9, false, "wing"}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ProfileMessage{9, true, "", "", "h", 0}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ProfileMessage{9, true, "", "", "", 5}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(ProfileMessage{9, true, "", "", "h", MaxAvatarSize + 1}), std::invalid_argument);
+    CHECK_FALSE(decodeProfile(bytes({0, 0, 0, 0, 0, 0, 0, 9, 0, 1, 'w', 0, 0, 0, 0, 0, 0})));
+    CHECK_FALSE(decodeProfile(bytes({0, 0, 0, 0, 0, 0, 0, 9, 1, 0, 0, 1, 'h', 0, 0, 0, 0})));
+    CHECK_FALSE(decodeProfile(bytes({0, 0, 0, 0, 0, 0, 0, 9, 2, 0, 0, 0, 0, 0, 0, 0})));
+
+    // A part of a picture: 1 to 16000 bytes, inside the picture
+    CHECK_THROWS_AS(encode(AvatarMessage{9, "h", 5, 3, bytes({1, 2, 3})}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(AvatarMessage{9, "h", 5, 5, bytes({1})}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(AvatarMessage{9, "h", 5, 0, {}}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(AvatarMessage{9, "", 5, 0, bytes({1})}), std::invalid_argument);
+    CHECK_FALSE(decodeAvatar(bytes({0, 0, 0, 0, 0, 0, 0, 9, 1, 'h', 0, 0, 0, 5, 0, 0, 0, 4, 0, 2, 1, 2})));
+    CHECK_FALSE(decodeAvatar(bytes({0, 0, 0, 0, 0, 0, 0, 9, 1, 'h', 0, 0, 0, 5, 0, 0, 0, 0, 0, 0})));
+    CHECK_FALSE(decodeAvatar(bytes({0, 0, 0, 0, 0, 0, 0, 9, 1, 'h', 0, 4, 0, 1, 0, 0, 0, 0, 0, 1, 1})));
 }

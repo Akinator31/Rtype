@@ -68,6 +68,20 @@ std::string readEmailCode(Reader &reader)
     return code;
 }
 
+/// A text that may be empty, of at most `maxLength` bytes.
+void writeOptionalText(Writer &writer, std::string_view text, std::size_t maxLength, const char *problem)
+{
+    require(text.size() <= maxLength && rtype::network::isValidText(text), problem);
+    writer.writeString(text);
+}
+
+namespace account_bit
+{
+constexpr std::uint8_t EmailVerified = 0x01;
+constexpr std::uint8_t HasPassword = 0x02;
+constexpr std::uint8_t All = EmailVerified | HasPassword;
+} // namespace account_bit
+
 void writeAccount(Writer &writer, const AccountInfo &account)
 {
     require(account.id != 0, "An account id is never 0");
@@ -75,6 +89,10 @@ void writeAccount(Writer &writer, const AccountInfo &account)
     writer.writeU64(account.id);
     writeText(writer, account.username, MaxUsernameLength, "A username is 1 to 16 bytes of text");
     writer.writeU8(static_cast<std::uint8_t>(account.role));
+    writer.writeU8(static_cast<std::uint8_t>((account.emailVerified ? account_bit::EmailVerified : 0) |
+                                             (account.hasPassword ? account_bit::HasPassword : 0)));
+    writeOptionalText(writer, account.email, MaxEmailLength, "An email is 0 to 254 bytes of text");
+    writer.writeU64(account.createdAt);
 }
 
 AccountInfo readAccount(Reader &reader)
@@ -83,10 +101,16 @@ AccountInfo readAccount(Reader &reader)
     account.id = reader.readU64();
     account.username = reader.readString(1, MaxUsernameLength);
     const std::uint8_t role = reader.readU8();
-    if (account.id == 0 || role > static_cast<std::uint8_t>(AccountRole::Admin)) {
+    const std::uint8_t flags = reader.readU8();
+    account.email = reader.readString(0, MaxEmailLength);
+    account.createdAt = reader.readU64();
+    if (account.id == 0 || role > static_cast<std::uint8_t>(AccountRole::Admin) ||
+        (flags & ~account_bit::All) != 0) {
         reader.fail();
     }
     account.role = static_cast<AccountRole>(role);
+    account.emailVerified = (flags & account_bit::EmailVerified) != 0;
+    account.hasPassword = (flags & account_bit::HasPassword) != 0;
     return account;
 }
 
@@ -102,7 +126,7 @@ constexpr std::uint8_t All = Guests | PasswordAccounts | Discord;
 
 bool isAccountRequest(std::uint8_t type)
 {
-    return type >= message_type::Register && type <= message_type::DeleteAccount;
+    return type >= message_type::Register && type <= message_type::GetAvatar;
 }
 
 bool isValidPlayerName(std::string_view name)
@@ -603,6 +627,117 @@ std::optional<DiscordAuthorizeMessage> decodeDiscordAuthorize(std::span<const st
     DiscordAuthorizeMessage message;
     message.applicationId = reader.readU64();
     if (reader.ok() && message.applicationId == 0) {
+        reader.fail();
+    }
+    return finished(reader, std::move(message));
+}
+
+std::vector<std::byte> encode(const GetProfileMessage &message)
+{
+    require(message.accountId != 0, "An account id is never 0");
+    Writer writer(8);
+    writer.writeU64(message.accountId);
+    return writer.take();
+}
+
+std::optional<GetProfileMessage> decodeGetProfile(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    GetProfileMessage message;
+    message.accountId = reader.readU64();
+    if (reader.ok() && message.accountId == 0) {
+        reader.fail();
+    }
+    return finished(reader, message);
+}
+
+std::vector<std::byte> encode(const GetAvatarMessage &message)
+{
+    Writer writer(12);
+    writer.writeU64(message.accountId);
+    writer.writeU32(message.offset);
+    return writer.take();
+}
+
+std::optional<GetAvatarMessage> decodeGetAvatar(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    GetAvatarMessage message;
+    message.accountId = reader.readU64();
+    message.offset = reader.readU32();
+    return finished(reader, message);
+}
+
+std::vector<std::byte> encode(const ProfileMessage &message)
+{
+    require(message.discord || (message.discordUsername.empty() && message.displayName.empty() &&
+                                message.avatarHash.empty() && message.avatarSize == 0),
+            "A profile without Discord has no Discord name nor picture");
+    require(message.avatarSize <= MaxAvatarSize, "A picture is at most 256 KiB");
+    require(message.avatarHash.empty() == (message.avatarSize == 0), "A picture has a version, and a size");
+    Writer writer;
+    writer.writeU64(message.accountId);
+    writer.writeBool(message.discord);
+    writeOptionalText(writer, message.discordUsername, MaxDiscordUsernameLength,
+                      "A Discord username is 0 to 64 bytes of text");
+    writeOptionalText(writer, message.displayName, MaxDisplayNameLength,
+                      "A display name is 0 to 128 bytes of text");
+    writeOptionalText(writer, message.avatarHash, MaxAvatarHashLength,
+                      "The version of a picture is 0 to 64 bytes of text");
+    writer.writeU32(message.avatarSize);
+    return writer.take();
+}
+
+std::optional<ProfileMessage> decodeProfile(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    ProfileMessage message;
+    message.accountId = reader.readU64();
+    message.discord = reader.readBool();
+    message.discordUsername = reader.readString(0, MaxDiscordUsernameLength);
+    message.displayName = reader.readString(0, MaxDisplayNameLength);
+    message.avatarHash = reader.readString(0, MaxAvatarHashLength);
+    message.avatarSize = reader.readU32();
+    if (reader.ok() &&
+        (message.avatarSize > MaxAvatarSize || message.avatarHash.empty() != (message.avatarSize == 0) ||
+         (!message.discord &&
+          (!message.discordUsername.empty() || !message.displayName.empty() || message.avatarSize != 0)))) {
+        reader.fail();
+    }
+    return finished(reader, std::move(message));
+}
+
+std::vector<std::byte> encode(const AvatarMessage &message)
+{
+    require(message.total >= 1 && message.total <= MaxAvatarSize, "A picture is 1 byte to 256 KiB");
+    require(!message.bytes.empty() && message.bytes.size() <= MaxAvatarChunk &&
+                message.offset < message.total && message.bytes.size() <= message.total - message.offset,
+            "A part of a picture is 1 to 16000 bytes, within the picture");
+    Writer writer(8 + 1 + message.avatarHash.size() + 4 + 4 + 2 + message.bytes.size());
+    writer.writeU64(message.accountId);
+    writeText(writer, message.avatarHash, MaxAvatarHashLength,
+              "The version of a picture is 1 to 64 bytes of text");
+    writer.writeU32(message.total);
+    writer.writeU32(message.offset);
+    writer.writeU16(static_cast<std::uint16_t>(message.bytes.size()));
+    writer.writeBytes(message.bytes);
+    return writer.take();
+}
+
+std::optional<AvatarMessage> decodeAvatar(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    AvatarMessage message;
+    message.accountId = reader.readU64();
+    message.avatarHash = reader.readString(1, MaxAvatarHashLength);
+    message.total = reader.readU32();
+    message.offset = reader.readU32();
+    const std::uint16_t size = reader.readU16();
+    const std::span<const std::byte> bytes = reader.readBytes(size);
+    message.bytes.assign(bytes.begin(), bytes.end());
+    if (reader.ok() &&
+        (message.total == 0 || message.total > MaxAvatarSize || size == 0 || size > MaxAvatarChunk ||
+         message.offset >= message.total || size > message.total - message.offset)) {
         reader.fail();
     }
     return finished(reader, std::move(message));
