@@ -91,6 +91,7 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 | `entities` | Each entity: id, kind, owner, position (its centre), velocity, health, flags, by id |
 | `destroyed` | The entities destroyed since the previous snapshot, with the cause (removed, or killed: an explosion) |
 | `waveStarted`, `gameOver` | A wave started, the game ended |
+| `rescue` | Where the rescue against the final boss is, offline (`RescueStage`, [The rescue against the final boss](#the-rescue-against-the-final-boss)) |
 
 - **Ids are never reused** within a game (`NetworkId`, unlike the ids of the ECS): a client keeps them to
   recognize its entities from one snapshot to the next.
@@ -112,11 +113,13 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 | A Bydo with no hit points left is destroyed, its score goes to the player of the shot | `CombatSystem` | — |
 | A ship with no hit points left is destroyed, the player loses a life and gets a new ship, invulnerable for a while | `CombatSystem` | `respawnDelay` 180 ticks (3 s), `invulnerableTicks` 120 |
 | Every player out of lives ends the game (defeat) | `CombatSystem` | `lives` 3 |
+| Offline, the last life lost against the final boss brings allies to the rescue instead | `CombatSystem`, `RescueSystem` | `rescue`, `rescueVoiceTicks`... |
 | What leaves the area is removed | `AreaSystem`, `LeavesArea` | `areaMargin` 128 units |
 | A player who leaves takes its ship away | `Simulation::removePlayer()` | — |
 
 A tick runs the systems in this order: `PlayerControlSystem` (inputs), `WaveSystem` (the waves),
-`EnemySystem` (the Bydos), `WeaponSystem` (the weapons), `ProjectileSystem` (the velocity of the projectiles),
+`EnemySystem` (the Bydos), `RescueSystem` (the rescue against the final boss), `WeaponSystem` (the weapons),
+`ProjectileSystem` (the velocity of the projectiles),
 `physics::MovementSystem` (movement), `physics::BoundsSystem` (the walls), `CombatSystem` (the hits, the
 lives), `AreaSystem` (what left), then the snapshot is taken.
 
@@ -513,6 +516,49 @@ stateDiagram-v2
 - Nothing happens without a wave in the registry (the tests made by hand), nor while no player is in. Once
   the game is over (`GameContext::over`), won or lost, the waves stop.
 
+### The rescue against the final boss
+
+Offline, in the story mode of the client, the fight against the shogun cannot be lost: `Rules::rescue` (set by
+the `LocalSession`, off online) turns the defeat into a scripted rescue. Online, the server leaves the waves of
+the final boss out of its configuration (`readGameConfig()`): the game is won once the waves before it are
+beaten.
+
+When the last ship of the last player is lost in the last wave, with a boss alive, the `CombatSystem` starts the
+rescue (`GameContext::rescue`, `RescueProgress`) instead of the defeat. From then on the `RescueSystem`, run
+right after the `EnemySystem`, flies the boss, the allies and the ship of the player, stage by stage
+(`RescueStage`, in each snapshot as `rescue`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> Voice: last life lost against the boss
+    Voice --> Arrival: rescueVoiceTicks (the voice of the client)
+    Arrival --> Assault: rescueArrivalTicks
+    Assault --> Dash: rescueAssaultTicks
+    Dash --> Prompt: every ship dashed through, the boss back
+    Prompt --> Combined: Fire released, then pressed
+    Combined --> Finished: rescueCombinedTicks, the boss killed
+    Finished --> [*]: rescueVictoryDelay, gameOver = Victory
+```
+
+| Stage | What happens |
+|---|---|
+| `Voice` | The client plays the voice of the rescue; the boss guards on its spot (1600, 540) |
+| `Arrival` | Five allies (`AllyShip`, `spawnAlly()`, with an `Ally` component) fly in from the left with a new ship for the player, who gets a life back, into an arrowhead: the player at its tip |
+| `Assault` | The allies shoot at the boss, which guards and cannot be hurt; the player flies and fires freely |
+| `Dash` | The boss raises its blade, then dashes through each ship of the formation in turn, throwing it back without hurting it, and flies back to its spot |
+| `Prompt` | The client asks for Fire (Space); a Fire held since before must be released first |
+| `Combined` | Every ship fires at the boss; its health drains by steps to 0, then it is killed and its score goes to the player |
+| `Finished` | The victory comes `rescueVictoryDelay` ticks later |
+
+- While the rescue runs, the `WaveSystem` and the behaviors of the Bydos wait, and the `CombatSystem` hurts no
+  ship of a player. The boss is ordered every tick (`EnemyOrders`): a stance, no shot, `invulnerable`.
+- The shots of the allies belong to the player rescued (its slot as `Owner`): they hit the Bydos as its own.
+  The allies have neither health nor hitbox: nothing hits them.
+- `AllyShip` is never sent online: the protocol does not know it.
+- The numbers are in `Rules` (`rescueVoiceTicks` 360, `rescueArrivalTicks` 150, `rescueAssaultTicks` 300,
+  `rescueCombinedTicks` 150, `rescueVictoryDelay` 180); the formation and the dashes in `RescueSystem.cpp`.
+  `rescueVoiceTicks` is the length of the voice of the client (`RTYPE_SOUND_RESCUE_VOICE`).
+
 ## Configuration
 
 The definitions of a game are not written in C++: each one is a Lua file of the `config/` folder, which the
@@ -672,6 +718,11 @@ their enemies, the wave drawn from the seed, nothing without a player, and the v
 behaviors of the Bydos: flying to a point and stopping there, firing only when ordered, aiming at a player,
 the memory of each enemy, their random numbers drawn from the seed, an enemy without orders keeping still, and
 a behavior that fails or never ends stopped while the game goes on.
+
+The tests in `tests/game_rescue.cpp` (tag `[game]`) play the rescue against the shogun of the repository: the
+last life lost is a defeat without `Rules::rescue`; with it, the voice, five allies and a new ship with a life,
+their shots that do not hurt the boss, its dashes through every ship that kill none, a Fire held that does not
+count, then the combined attack, the boss killed and scored, and the victory.
 
 The tests in `tests/game_config.cpp` (tag `[game]`) load the configuration of the repository, read each kind
 with its defaults, and check each error: the field that is missing, of the wrong type, out of range or

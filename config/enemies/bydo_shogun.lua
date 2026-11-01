@@ -2,7 +2,8 @@
 -- raises its blade and dashes straight at the nearest ship, past it, then flies back; the rest of the time it
 -- shoots bursts of plasma. Its health is filled again at each of its four phases: it guards a moment, then
 -- fights faster, and in the last two it chains two dashes. In the last one, under 40% of its health, it
--- becomes unkillable and attacks relentlessly, so that the players soon lose.
+-- becomes unkillable and attacks relentlessly, so that the players soon lose: then, offline, allies come to the
+-- rescue and the combined attack brings it down (RescueSystem, docs/architecture/game.md).
 
 -- Where it stands, in game units from the left edge
 local StandX = 1600

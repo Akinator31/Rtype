@@ -303,6 +303,23 @@ its wave handler (`setWaveHandler()`), and `GameScenes` shows the banner and pla
 playing. A wave without music leaves the current one; it stops when the game ends. A path that leaves the
 assets (absolute, or with `..`) is ignored, as the game may be a server.
 
+### The rescue against the final boss
+
+Offline, the last ship lost against the shogun brings allies to the rescue instead of the game over
+([The rescue against the final boss](game.md#the-rescue-against-the-final-boss)). The stage of the rescue is in
+each snapshot (`Snapshot::rescue`); the `GameSessionSystem` tells each new one to its rescue handler
+(`setRescueHandler()`), and `GameScenes` shows it:
+
+| Stage | What the client does |
+|---|---|
+| `Voice` | Plays the voice of the rescue, `RTYPE_SOUND_RESCUE_VOICE` (`sounds/rescue_voice.wav`), over the music. Without the file, a warning is logged and the rescue goes on silently. The allies come `Rules::rescueVoiceTicks` later: keep it the length of the file |
+| `Arrival` | A banner, `REINFORCEMENTS` / `THE SQUADRON ANSWERS THE CALL` (`rescue.title`, `rescue.detail`), `Success` |
+| `Prompt` | `PRESS SPACE - COMBINED ATTACK` (`rescue.prompt`) under the middle of the screen, in the titles, blinking, until the next stage |
+| `Combined` | A short banner, `COMBINED ATTACK` (`rescue.combined`) |
+
+The allies (`EntityKind::AllyShip`) are drawn with the model of the hangar ship VX-04 (`spaceship.glb`), untinted,
+with the size of a ship of a player.
+
 ### Death screen
 
 When the ship of the local player is lost with lives left, `GameScenes` shows the death screen until its next
