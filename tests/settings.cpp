@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -194,4 +195,18 @@ TEST_CASE("The engine owns settings without a file", "[settings][engine]")
     REQUIRE(engine.getSettings().getPath().empty());
     engine.getSettings().setInt("audio.volume", 80);
     REQUIRE(engine.getSettings().getInt("audio.volume") == 80);
+}
+
+TEST_CASE("The keys of a prefix are listed sorted, and only them", "[settings]")
+{
+    rtype::engine::Settings settings;
+    settings.setString("servers.known.b:4242", "x");
+    settings.setString("servers.known.a:4242", "y");
+    settings.setString("servers.knownother", "z");
+    settings.setString("audio.volume", "80");
+
+    CHECK(settings.keys("servers.known.") ==
+          std::vector<std::string>{"servers.known.a:4242", "servers.known.b:4242"});
+    CHECK(settings.keys("video.").empty());
+    CHECK(settings.keys().size() == 4);
 }

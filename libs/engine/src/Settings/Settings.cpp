@@ -147,6 +147,16 @@ bool Settings::hasKey(std::string_view key) const
     return _values.contains(key);
 }
 
+std::vector<std::string> Settings::keys(std::string_view prefix) const
+{
+    std::vector<std::string> found;
+    // The map is sorted: the keys of a prefix follow each other from its lower bound
+    for (auto it = _values.lower_bound(prefix); it != _values.end() && it->first.starts_with(prefix); ++it) {
+        found.push_back(it->first);
+    }
+    return found;
+}
+
 void Settings::removeKey(std::string_view key)
 {
     const auto entry = _values.find(key);
