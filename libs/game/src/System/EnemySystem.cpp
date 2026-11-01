@@ -19,6 +19,10 @@ EnemySystem::~EnemySystem() = default;
 
 void EnemySystem::update(float elapsed)
 {
+    if (_context.rescue.stage != RescueStage::None) {
+        // The rescue flies the boss (RescueSystem)
+        return;
+    }
     _scripts->startTick(_ecs);
     for (ecs::entity_t entity = 0; entity < _enemies.size(); ++entity) {
         if (!_enemies.has(entity) || !_velocities.has(entity) || !_ecs.isAlive(entity)) {

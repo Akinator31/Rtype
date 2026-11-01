@@ -33,6 +33,27 @@ struct PlayerSlot {
     std::uint32_t respawnIn = 0;
 };
 
+/// Where the rescue against the final boss is, run by the RescueSystem (Rules::rescue).
+struct RescueProgress {
+    RescueStage stage = RescueStage::None;
+    /// Ticks since the stage started.
+    std::uint32_t ticks = 0;
+    /// Dash stage: the ship the shogun dashes at, by index in the formation (0 is the player), and whether
+    /// it is flying at it or raising its blade before.
+    std::size_t target = 0;
+    bool dashing = false;
+    /// Dash stage: where the current dash ends.
+    float dashX = 0.0f;
+    float dashY = 0.0f;
+    /// Ticks the ship of the player is still thrown back by a dash.
+    std::uint32_t playerStunned = 0;
+    /// Prompt stage: Fire was released since the prompt showed, so that a Fire held from before does not
+    /// count.
+    bool fireReleased = false;
+    /// Combined stage: the health of the shogun when it started, drained to 0.
+    std::uint8_t bossHealth = 0;
+};
+
 /// What the systems of the game share besides the components: the rules, the tick, the players and their
 /// inputs, the ids, and the events of the tick that go to the next snapshot. Owned by the Simulation, given
 /// to each system when it is made.
@@ -49,6 +70,7 @@ struct GameContext {
     std::uint32_t tick = 0;
     std::array<PlayerSlot, MaxPlayers> players{};
     WaveProgress wave;
+    RescueProgress rescue;
     /// The game ended, won or lost: nothing more happens to the waves nor to the outcome.
     bool over = false;
 

@@ -62,6 +62,14 @@ ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
     return ship;
 }
 
+ecs::entity_t spawnAlly(ecs::Ecs &ecs, GameContext &context, std::uint8_t index, float x, float y)
+{
+    const ecs::entity_t ally = spawnVisible(ecs, context, EntityKind::AllyShip, NoOwner, x, y);
+    ecs.addComponent<Ally>(ally, index, 0U);
+    ecs.addComponent<physics::Velocity>(ally);
+    return ally;
+}
+
 ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string &enemyId, float x, float y)
 {
     const EnemyDefinition &enemy = context.enemies.getDefinition(enemyId);

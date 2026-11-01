@@ -41,6 +41,21 @@ struct Rules {
     /// Ticks between the end of a wave and the start of the next one.
     std::uint32_t wavePause = 180;
 
+    /// Offline story mode: when the last ship of the last player is lost against the final boss, allies come
+    /// to the rescue instead of the defeat (RescueStage, RescueSystem). Off for the games online.
+    bool rescue = false;
+    /// Ticks of the voice the client plays when the rescue starts: the allies come when it ends. Keep it the
+    /// length of the file of RTYPE_SOUND_RESCUE_VOICE in the client.
+    std::uint32_t rescueVoiceTicks = 360;
+    /// Ticks the allies and the new ship of the player take to fly in.
+    std::uint32_t rescueArrivalTicks = 150;
+    /// Ticks the allies shoot at the shogun before it strikes back.
+    std::uint32_t rescueAssaultTicks = 300;
+    /// Ticks of the combined attack, until the shogun falls.
+    std::uint32_t rescueCombinedTicks = 150;
+    /// Ticks between the fall of the shogun and the victory.
+    std::uint32_t rescueVictoryDelay = 180;
+
     /// Seed of the random numbers of a game: the same seed and the same inputs give the same game.
     std::uint32_t seed = 1;
 

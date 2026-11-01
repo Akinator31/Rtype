@@ -17,6 +17,11 @@ namespace rtype::game
 /// and the weapon of context.player (no weapon if its id is empty).
 ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot);
 
+/// An ally of the rescue against the final boss (RescueSystem), at a position, still: an AllyShip that
+/// belongs to no player, without health nor hitbox, as nothing hits it. The RescueSystem flies it, and fires
+/// its shots.
+ecs::entity_t spawnAlly(ecs::Ecs &ecs, GameContext &context, std::uint8_t index, float x, float y);
+
 /// A Bydo of context.enemies at a position, still: the EnemySystem moves it, with the behavior of its
 /// definition if it has one (then with EnemyOrders), to the left otherwise. It has the hitbox of its ship,
 /// the health and the weapon of its definition, and hurts the ships it runs into. It is removed once out of

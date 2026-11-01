@@ -23,7 +23,9 @@ namespace rtype::game
 ///   survives cannot be hit for Rules::hitInvulnerableTicks. One with no hit points left is destroyed, its
 ///   player loses a life, and gets a new ship after Rules::respawnDelay ticks, invulnerable for
 ///   Rules::invulnerableTicks, until it has no life left. Once every player is out of lives, the game is over
-///   (GameOutcome::Defeat).
+///   (GameOutcome::Defeat) — unless the rescue against the final boss starts instead (Rules::rescue, in the
+///   last wave, a boss alive: RescueSystem).
+/// - During the rescue, nothing hurts the ships of the players.
 ///
 /// The entities are destroyed after the systems of the tick.
 class CombatSystem : public ecs::System
@@ -70,6 +72,8 @@ class CombatSystem : public ecs::System
     void tickInvulnerability(const Targets &targets);
     void respawnShips();
     void endGameWhenDefeated();
+    /// The rescue may start: Rules::rescue, not started yet, in the last wave, with a boss alive.
+    [[nodiscard]] bool canStartRescue() const;
 
 public:
     CombatSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context);

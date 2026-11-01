@@ -115,6 +115,15 @@ struct Invulnerable {
     std::uint32_t ticks = 0;
 };
 
+/// An ally that comes to the rescue against the final boss (RescueSystem): flown and fired by the rescue,
+/// never hit.
+struct Ally {
+    /// Its place in the formation, 0 to 4.
+    std::uint8_t index = 0;
+    /// Ticks it is still thrown back by a dash of the shogun.
+    std::uint32_t stunned = 0;
+};
+
 /// Removed (DestroyCause::Removed) once entirely outside the game area, by more than Rules::areaMargin:
 /// shots that flew past.
 struct LeavesArea {

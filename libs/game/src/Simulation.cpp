@@ -8,6 +8,7 @@
 #include "rtype/game/System/EnemySystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
+#include "rtype/game/System/RescueSystem.hpp"
 #include "rtype/game/System/WaveSystem.hpp"
 #include "rtype/game/System/WeaponSystem.hpp"
 #include "rtype/log/Logger.hpp"
@@ -55,11 +56,13 @@ Simulation::Simulation(Rules rules, const GameConfig &config)
     _context.rules = rules;
     _context.seedRandom();
     registerConfig(config);
-    // The order of a tick: the inputs, the waves, the Bydos, the weapons, the projectiles, the movement, the
-    // walls, the hits, then what left the area
+    // The order of a tick: the inputs, the waves, the Bydos, the rescue against the final boss (which flies
+    // over the inputs and the Bydos), the weapons, the projectiles, the movement, the walls, the hits, then
+    // what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
     _ecs.registerSystem<WaveSystem>(_ecs, _context);
     _ecs.registerSystem<EnemySystem>(_ecs, _context);
+    _ecs.registerSystem<RescueSystem>(_ecs, _context);
     _ecs.registerSystem<WeaponSystem>(_ecs, _context);
     _ecs.registerSystem<ProjectileSystem>(_ecs, _context);
     _ecs.registerSystem<physics::MovementSystem>();
@@ -212,6 +215,7 @@ void Simulation::buildSnapshot()
     snapshot.waveStarted = std::exchange(_context.waveStarted, std::nullopt);
     snapshot.waveMusic = std::exchange(_context.waveMusic, {});
     snapshot.gameOver = std::exchange(_context.gameOver, std::nullopt);
+    snapshot.rescue = _context.rescue.stage;
     _snapshot = std::move(snapshot);
 }
 

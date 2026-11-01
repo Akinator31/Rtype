@@ -26,7 +26,9 @@ WaveSystem::WaveSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext 
 
 void WaveSystem::update(float)
 {
-    if (_context.over || _context.waves.isEmpty() || !hasPlayers()) {
+    // During the rescue against the final boss, its RescueSystem ends the game
+    if (_context.over || _context.rescue.stage != RescueStage::None || _context.waves.isEmpty() ||
+        !hasPlayers()) {
         return;
     }
     WaveProgress &progress = _context.wave;

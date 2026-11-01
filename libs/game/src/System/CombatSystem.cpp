@@ -96,6 +96,9 @@ void CombatSystem::hitEnemies(const Targets &targets, std::unordered_set<ecs::en
 
 void CombatSystem::hitShips(const Targets &targets, std::unordered_set<ecs::entity_t> &spent)
 {
+    if (_context.rescue.stage != RescueStage::None) {
+        return;
+    }
     for (const ecs::entity_t ship : targets.ships) {
         if (_invulnerables.has(ship) && _invulnerables.get(ship).ticks > 0) {
             continue;
@@ -214,10 +217,31 @@ void CombatSystem::endGameWhenDefeated()
     const bool anyone = std::ranges::any_of(players, [](const PlayerSlot &player) { return player.present; });
     const bool someoneLeft = std::ranges::any_of(
         players, [](const PlayerSlot &player) { return player.present && player.lives > 0; });
-    if (anyone && !someoneLeft && !_context.over) {
-        _context.over = true;
-        _context.gameOver = GameOutcome::Defeat;
+    if (!anyone || someoneLeft || _context.over || _context.rescue.stage != RescueStage::None) {
+        return;
     }
+    if (canStartRescue()) {
+        _context.rescue = {};
+        _context.rescue.stage = RescueStage::Voice;
+        return;
+    }
+    _context.over = true;
+    _context.gameOver = GameOutcome::Defeat;
+}
+
+bool CombatSystem::canStartRescue() const
+{
+    if (!_context.rules.rescue || _context.wave.number != MaxWaveDifficulty) {
+        return false;
+    }
+    for (ecs::entity_t entity = 0; entity < _enemies.size(); ++entity) {
+        if (_enemies.has(entity) && _ecs.isAlive(entity) && _healths.has(entity) &&
+            _healths.get(entity).points > 0 &&
+            _context.enemies.getDefinition(_enemies.get(entity).id).boss) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace rtype::game

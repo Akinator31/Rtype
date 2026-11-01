@@ -25,6 +25,7 @@ add_library(rtype_game
     src/System/EnemySystem.cpp
     src/System/PlayerControlSystem.cpp
     src/System/ProjectileSystem.cpp
+    src/System/RescueSystem.cpp
     src/System/WaveSystem.cpp
     src/System/WeaponSystem.cpp
     src/Wave/WaveRegistry.cpp
