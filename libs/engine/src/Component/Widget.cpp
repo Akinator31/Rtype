@@ -44,6 +44,11 @@ std::string fieldContent(const TextField &field, std::size_t bytes)
     return std::string(static_cast<std::size_t>(characters), '*');
 }
 
+bool isFormField(const TextField &field)
+{
+    return field.type == TextFieldType::Line || field.type == TextFieldType::Code;
+}
+
 std::string widgetLabel(const TextField &field)
 {
     return fieldPrefix(field) + fieldContent(field);

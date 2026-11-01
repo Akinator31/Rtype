@@ -78,6 +78,8 @@ struct Panel {
     /// No line of light nor star: the text alone fades smoothly from its normal look to the lit one, with a
     /// halo, and is centred on the button. For the arrows of a carousel.
     bool plain = false;
+    /// The text and the light in the red of the alerts (FlareStyle::danger): a button that deletes.
+    bool danger = false;
 };
 
 /// A 3D model, seen through the Camera of the scenes. It is drawn in the World layer, before the 2D entities,

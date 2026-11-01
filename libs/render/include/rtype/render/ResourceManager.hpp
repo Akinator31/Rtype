@@ -6,6 +6,7 @@
 #include <future>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace rtype::core
 {
@@ -72,6 +73,15 @@ public:
     /// @throws std::runtime_error if the file is missing or is not a supported image.
     [[nodiscard]] TextureId loadTexture(const std::string &path,
                                         TextureFiltering filtering = TextureFiltering::Sharp);
+
+    /// Makes a round picture of `size` x `size` pixels from a PNG in memory, unless one is already made under
+    /// this key: the middle square of the image, scaled, and transparent outside of its circle, its edge
+    /// smoothed. For the picture of a player, which comes from the network.
+    /// @param key Names the picture, for instance the account and the version of its picture: the same key
+    /// gives the same texture, whatever the bytes.
+    /// @throws std::runtime_error if the bytes are not a PNG image.
+    [[nodiscard]] TextureId loadRoundPicture(const std::string &key, const std::vector<unsigned char> &png,
+                                             int size);
 
     /// Loads a font file (TTF, OTF...) at the given size, unless it is already loaded at this size.
     /// @param path Path of the file, relative to the assets directory, for instance "fonts/main.ttf".

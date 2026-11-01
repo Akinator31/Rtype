@@ -2,6 +2,7 @@
 
 #include "rtype/ecs/Entity/Entity.hpp"
 #include "rtype/engine/Component/Layout.hpp"
+#include "rtype/engine/Component/Widget.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -39,6 +40,7 @@ class InterfaceBuilder
 
     ecs::entity_t element(Anchor anchor);
     ecs::entity_t createHeaderTitle(const std::string &text, Anchor backAnchor);
+    ecs::entity_t formField(TextField field, Anchor anchor);
 
 public:
     /// @param style It must outlive the builder.
@@ -90,6 +92,32 @@ public:
     /// @param caption Written above the rail with the value as a percentage; none if empty.
     /// @param get Reads the value, so that the gauge always shows the real one.
     ecs::entity_t gauge(const std::string &caption, std::function<float()> get, Anchor anchor);
+    /// A button like button(), in the red of the alerts (FlareStyle::danger): for an action that deletes.
+    ecs::entity_t dangerButton(const std::string &text, std::function<void()> onPress, Anchor anchor);
+    /// A field of a form (InterfaceStyle::field): its caption above its value, a rule that lights up with the
+    /// focus, and its error under it (TextField::error). It is edited while it has the focus, and gets the
+    /// focus in the same order as the buttons. Its TextInput is reachable through the TextField component.
+    /// @param maxLength Most characters, or 0 for no limit.
+    /// @param onSubmit Called with the content when the player confirms the field. Can be empty.
+    ecs::entity_t textField(const std::string &caption, const std::string &content, Anchor anchor,
+                            std::size_t maxLength = 0,
+                            std::function<void(const std::string &)> onSubmit = {});
+    /// A field like textField(), empty, for a password: shown as `*`, never copied (TextInput::setSecret()).
+    ecs::entity_t passwordField(const std::string &caption, Anchor anchor, std::size_t maxLength = 0,
+                                std::function<void(const std::string &)> onSubmit = {});
+    /// A code of `digits` digits, one per cell (InterfaceStyle::field): only digits are typed, a pasted code
+    /// fills the cells, and `onComplete` is called with the code as soon as the last cell is typed, or when
+    /// the player confirms the field.
+    ecs::entity_t codeField(const std::string &caption, std::size_t digits,
+                            std::function<void(const std::string &)> onComplete, Anchor anchor);
+    /// A row of a list (InterfaceStyle::list), `width` wide: its title, its detail and side texts, its
+    /// avatar. It is pressed and lit as a button, in the same focus order; without `onPress`, it is disabled:
+    /// dim, and it does not get the focus.
+    ecs::entity_t listRow(const std::string &title, ListRow row, std::function<void()> onPress,
+                          Anchor anchor);
+    /// The round picture of a player, or their initial, in a ring (InterfaceStyle::avatar). It does not get
+    /// the focus.
+    ecs::entity_t avatar(Avatar avatar, Anchor anchor);
     /// A button with a leftwards arrow, to go back to the previous screen. It gets the focus in the same
     /// order as the other buttons.
     ecs::entity_t backButton(std::function<void()> onPress, Anchor anchor);

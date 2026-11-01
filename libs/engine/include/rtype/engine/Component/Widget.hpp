@@ -1,9 +1,11 @@
 #pragma once
 
 #include "rtype/input/TextInput.hpp"
+#include "rtype/render/ResourceManager.hpp"
 
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -106,16 +108,68 @@ enum class TextFieldType {
     /// A command line, shown as "Caption content", the caption being the prompt: it keeps its size and has no
     /// frame, its prompt and cursor take the colours of InterfaceStyle::console.
     Console,
+    /// A field of a form (InterfaceStyle::field): its caption above, its value, and a rule under it that
+    /// lights
+    /// up as a line of light with the focus. Its error, if any, is written under the rule, in red. It keeps
+    /// its size.
+    Line,
+    /// A code of digits typed in cells (InterfaceStyle::field), one per character, as many as the maximum
+    /// length of its input: the cell being typed lights up. It is submitted as soon as it is full.
+    Code,
 };
 
 /// A text field, edited while it has the focus, with everything a TextInput offers (cursor, selection,
 /// clipboard); Confirm submits it. Without caption, it shows only its content.
 struct TextField {
-    std::string caption;
-    input::TextInput input;
+    std::string caption{};
+    input::TextInput input{};
     /// Called with the content when the player confirms the field. Can be empty.
-    std::function<void(const std::string &)> onSubmit;
+    std::function<void(const std::string &)> onSubmit{};
     TextFieldType type = TextFieldType::Menu;
+    /// A Line or Code field: what is wrong with its content, shown under it in red, or empty. Set by the
+    /// owner of the scene; cleared when the player changes the content.
+    std::string error{};
+    /// A Line or Code field: 0 at rest, 1 while it has the focus, in between while it lights up. Written by
+    /// the InterfaceSystem.
+    float light = 0.0f;
+};
+
+/// Whether a field is drawn as a field of a form (Line or Code) rather than as a text.
+[[nodiscard]] bool isFormField(const TextField &field);
+
+/// How the ring of an Avatar is drawn.
+enum class AvatarKind {
+    /// An account: a silver ring.
+    Account,
+    /// An account signed in with Discord: a bright ring with a light around it.
+    Discord,
+    /// A guest: a dotted ring, in the grey of what is disabled.
+    Guest,
+};
+
+/// The round picture of a player (InterfaceStyle::avatar): their picture if they have one, else their
+/// initial, in a ring.
+struct Avatar {
+    /// A square texture, already round (render::ResourceManager::loadRoundPicture()), of `pictureSize`
+    /// pixels.
+    std::optional<render::TextureId> picture{};
+    float pictureSize = 128.0f;
+    /// Shown without a picture: the first letter of the name, or "?" for a guest.
+    std::string initial{};
+    AvatarKind kind = AvatarKind::Account;
+    /// Diameter of the ring, in game units.
+    float size = 64.0f;
+};
+
+/// A row of a list (InterfaceStyle::list): a title in capitals, a line of detail under it, a text on its
+/// right, an avatar on its left if any, and a rule under it. Its Text is the title; with a Panel and a
+/// Button, the row is pressed as a button and lit as one: the rule becomes a line of light with a star at its
+/// end. Without them, the row is disabled, drawn dim.
+struct ListRow {
+    std::string detail{};
+    std::string side{};
+    float width = 0.0f;
+    std::optional<Avatar> avatar{};
 };
 
 /// Label of a widget that shows a value: "Caption: value".

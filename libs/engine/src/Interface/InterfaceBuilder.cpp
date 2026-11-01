@@ -134,6 +134,76 @@ ecs::entity_t InterfaceBuilder::arrowButton(const std::string &text, std::functi
     return entity;
 }
 
+ecs::entity_t InterfaceBuilder::dangerButton(const std::string &text, std::function<void()> onPress,
+                                             Anchor anchor)
+{
+    const ecs::entity_t entity = button(text, std::move(onPress), anchor);
+    _ecs.getComponent<Panel>(entity).danger = true;
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::formField(TextField field, Anchor anchor)
+{
+    const FieldStyle &style = _style.field;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, field.caption, style.captionFont, style.captionSize, style.caption);
+    _ecs.addComponent<TextField>(entity, std::move(field));
+    _ecs.addComponent<Focusable>(entity, _count++);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::textField(const std::string &caption, const std::string &content,
+                                          Anchor anchor, std::size_t maxLength,
+                                          std::function<void(const std::string &)> onSubmit)
+{
+    TextField field{.caption = caption, .onSubmit = std::move(onSubmit), .type = TextFieldType::Line};
+    field.input.setText(content);
+    field.input.setMaxLength(maxLength);
+    return formField(std::move(field), anchor);
+}
+
+ecs::entity_t InterfaceBuilder::passwordField(const std::string &caption, Anchor anchor,
+                                              std::size_t maxLength,
+                                              std::function<void(const std::string &)> onSubmit)
+{
+    TextField field{.caption = caption, .onSubmit = std::move(onSubmit), .type = TextFieldType::Line};
+    field.input.setSecret(true);
+    field.input.setMaxLength(maxLength);
+    return formField(std::move(field), anchor);
+}
+
+ecs::entity_t InterfaceBuilder::codeField(const std::string &caption, std::size_t digits,
+                                          std::function<void(const std::string &)> onComplete, Anchor anchor)
+{
+    TextField field{.caption = caption, .onSubmit = std::move(onComplete), .type = TextFieldType::Code};
+    field.input.setMaxLength(digits);
+    field.input.setFilter([](char32_t character) { return character >= U'0' && character <= U'9'; });
+    return formField(std::move(field), anchor);
+}
+
+ecs::entity_t InterfaceBuilder::listRow(const std::string &title, ListRow row, std::function<void()> onPress,
+                                        Anchor anchor)
+{
+    const ListStyle &style = _style.list;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, title, style.titleFont, style.titleSize, style.title);
+    _ecs.addComponent<ListRow>(entity, std::move(row));
+    if (onPress) {
+        _ecs.addComponent<Panel>(entity, style.height);
+        _ecs.addComponent<Focusable>(entity, _count++);
+        _ecs.addComponent<Button>(entity, std::move(onPress));
+    }
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::avatar(Avatar avatar, Anchor anchor)
+{
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Extent>(entity, avatar.size, avatar.size);
+    _ecs.addComponent<Avatar>(entity, std::move(avatar));
+    return entity;
+}
+
 ecs::entity_t InterfaceBuilder::backButton(std::function<void()> onPress, Anchor anchor)
 {
     return button(backArrow, std::move(onPress), anchor);

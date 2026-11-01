@@ -74,12 +74,28 @@ class SceneRenderer
     /// Poses the model at the time of its animation, unless it is already in this pose.
     void poseModel(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation);
     /// A button: its text and, while it is lit, the line of light across it and the star after it.
-    void drawFlare(render::Renderer &renderer, const Panel &panel, const Text &text, render::Vector2 centre,
-                   float opacity) const;
-    void drawFlareLight(render::Renderer &renderer, const Panel &panel, render::Rectangle textArea,
-                        render::Vector2 star, float opacity) const;
-    void drawFlareLine(render::Renderer &renderer, float left, float right, float middle, float y, float head,
-                       float shine, float opacity) const;
+    /// @param style FlareStyle of the style, or its copy in the red of the alerts for a Panel::danger.
+    void drawFlare(render::Renderer &renderer, const FlareStyle &style, const Panel &panel, const Text &text,
+                   render::Vector2 centre, float opacity) const;
+    void drawFlareLight(render::Renderer &renderer, const FlareStyle &style, const Panel &panel,
+                        render::Rectangle textArea, render::Vector2 star, float opacity) const;
+    void drawFlareLine(render::Renderer &renderer, const FlareStyle &style, float left, float right,
+                       float middle, float y, float head, float shine, float opacity) const;
+    /// Draws a field of a form (TextFieldType::Line): its caption, its value with the selection and the
+    /// cursor while it has the focus, its rule lit by its light, and its error.
+    void drawFormField(render::Renderer &renderer, const TextField &field, bool focused,
+                       render::Vector2 centre, float opacity) const;
+    /// Draws a code (TextFieldType::Code): its caption, a cell per digit with its rule, the cell being typed
+    /// lit while the field has the focus, and its error.
+    void drawCodeField(render::Renderer &renderer, const TextField &field, bool focused,
+                       render::Vector2 centre, float opacity) const;
+    /// Draws a row of a list: its avatar, its title and detail, its side text, and its rule, lit as the line
+    /// of a button by its Panel, if it has one; dim without.
+    void drawListRow(render::Renderer &renderer, const ListRow &row, const Text &text, const Panel *panel,
+                     render::Vector2 centre, float opacity) const;
+    /// Draws an avatar: its disc, its picture or its initial, and its ring.
+    void drawAvatar(render::Renderer &renderer, const Avatar &avatar, render::Vector2 centre,
+                    float opacity) const;
     /// Draws a title (see Title): its text in chrome, with a light around it.
     void drawTitle(render::Renderer &renderer, const Text &text, render::Vector2 centre, float scale,
                    float opacity) const;

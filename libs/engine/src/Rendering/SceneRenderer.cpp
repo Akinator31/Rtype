@@ -285,6 +285,19 @@ render::Rectangle computeCoverSource(render::Vector2 picture, render::Rectangle 
     return {(picture.x - width) / 2.0f, (picture.y - height) / 2.0f, width, height};
 }
 
+/// The look of a button in the red of the alerts: its text, its line and its star.
+FlareStyle inDanger(FlareStyle style)
+{
+    const render::Color red = style.danger;
+    const auto tinted = [red](render::Color color) { return render::Color{red.r, red.g, red.b, color.a}; };
+    style.text = tinted(style.text);
+    style.litText = red;
+    style.textGlow = tinted(style.textGlow);
+    style.line = tinted(style.line);
+    style.lineGlow = tinted(style.lineGlow);
+    return style;
+}
+
 } // namespace
 
 SceneRenderer::SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle &style)
@@ -421,10 +434,10 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
 
 /// The line fades in from its left end to the middle of the text, then stays bright up to the star; it is
 /// drawn from its left end up to `head`, where it is being traced.
-void SceneRenderer::drawFlareLine(render::Renderer &renderer, float left, float right, float middle, float y,
-                                  float head, float shine, float opacity) const
+void SceneRenderer::drawFlareLine(render::Renderer &renderer, const FlareStyle &style, float left,
+                                  float right, float middle, float y, float head, float shine,
+                                  float opacity) const
 {
-    const FlareStyle &style = _style.flare;
     const render::Color bright = faded(brightened(style.line, shine), opacity);
     drawFadingLine(renderer, left, middle, y, style.lineThickness, clear(bright), bright, head);
     drawFadingLine(renderer, middle, right, y, style.lineThickness, bright, bright, head);
@@ -433,10 +446,9 @@ void SceneRenderer::drawFlareLine(render::Renderer &renderer, float left, float 
 /// While the button lights up, the line runs from left to right with a bright head, and the star flares when
 /// the line reaches it. When the button is pressed, the star bursts and turns, and a pulse of light runs from
 /// it to the far end of the line.
-void SceneRenderer::drawFlareLight(render::Renderer &renderer, const Panel &panel, render::Rectangle textArea,
-                                   render::Vector2 star, float opacity) const
+void SceneRenderer::drawFlareLight(render::Renderer &renderer, const FlareStyle &style, const Panel &panel,
+                                   render::Rectangle textArea, render::Vector2 star, float opacity) const
 {
-    const FlareStyle &style = _style.flare;
     const float trace = std::clamp(panel.highlight, 0.0f, 1.0f);
     const float burst =
         std::clamp((panel.highlight - 1.0f) / std::max(style.pressedHighlight - 1.0f, 0.001f), 0.0f, 1.0f);
@@ -455,7 +467,8 @@ void SceneRenderer::drawFlareLight(render::Renderer &renderer, const Panel &pane
         drawBlurred(renderer, core, style.lineThickness, style.lineGlowBlur * shine,
                     faded(brightened(style.lineGlow, shine), opacity));
     }
-    drawFlareLine(renderer, left, right, textArea.x + (textArea.width / 2.0f), star.y, head, shine, opacity);
+    drawFlareLine(renderer, style, left, right, textArea.x + (textArea.width / 2.0f), star.y, head, shine,
+                  opacity);
     if (trace < 1.0f) {
         drawFadingLine(renderer, head - style.pulseLength, head, star.y, 2.0f * style.lineThickness,
                        clear(white), white, head);
@@ -479,10 +492,9 @@ void SceneRenderer::drawFlareLight(render::Renderer &renderer, const Panel &pane
     }
 }
 
-void SceneRenderer::drawFlare(render::Renderer &renderer, const Panel &panel, const Text &text,
-                              render::Vector2 centre, float opacity) const
+void SceneRenderer::drawFlare(render::Renderer &renderer, const FlareStyle &style, const Panel &panel,
+                              const Text &text, render::Vector2 centre, float opacity) const
 {
-    const FlareStyle &style = _style.flare;
     const float trace = std::clamp(panel.highlight, 0.0f, 1.0f);
     const render::Vector2 measured =
         renderer.measureText(text.font, text.text, text.size, style.letterSpacing);
@@ -501,10 +513,229 @@ void SceneRenderer::drawFlare(render::Renderer &renderer, const Panel &panel, co
                                   centre.y - (measured.y / 2.0f)};
     const render::Vector2 star{topLeft.x + measured.x + style.starGap + style.starSize, centre.y};
     if (trace > 0.0f) {
-        drawFlareLight(renderer, panel, {topLeft.x, topLeft.y, measured.x, measured.y}, star, opacity);
+        drawFlareLight(renderer, style, panel, {topLeft.x, topLeft.y, measured.x, measured.y}, star, opacity);
     }
     renderer.drawText(text.font, text.text, topLeft, text.size,
                       faded(mix(style.text, style.litText, trace), opacity), style.letterSpacing);
+}
+
+void SceneRenderer::drawFormField(render::Renderer &renderer, const TextField &field, bool focused,
+                                  render::Vector2 centre, float opacity) const
+{
+    const FieldStyle &style = _style.field;
+    const float left = centre.x - (style.width / 2.0f);
+    const float top = centre.y - (style.getHeight() / 2.0f);
+    const bool hasError = !field.error.empty();
+
+    const render::Color caption = hasError ? style.error : mix(style.caption, style.litCaption, field.light);
+    renderer.drawText(style.captionFont, field.caption, {left, top}, style.captionSize,
+                      faded(caption, opacity), style.captionSpacing);
+
+    // The value, with the selection behind it and the cursor in front of it while the field is edited: their
+    // places are the widths of the content before them
+    const float valueTop = top + style.captionSize + style.captionGap;
+    const auto offsetOf = [&](std::size_t byte) {
+        return left + renderer
+                          .measureText(style.valueFont, fieldContent(field, byte), style.valueSize,
+                                       style.valueSpacing)
+                          .x;
+    };
+    if (focused && !field.input.selection().empty()) {
+        const input::TextInput::Range selection = field.input.selection();
+        const float begin = offsetOf(selection.begin);
+        renderer.drawRectangle({begin, valueTop, offsetOf(selection.end) - begin, style.valueSize},
+                               faded(_style.selection, opacity));
+    }
+    renderer.drawText(style.valueFont, fieldContent(field), {left, valueTop}, style.valueSize,
+                      faded(hasError ? style.error : style.value, opacity), style.valueSpacing);
+    if (focused) {
+        const float cursor = offsetOf(field.input.cursor()) + 2.0f;
+        drawBlurred(renderer,
+                    {cursor - (style.cursorWidth / 2.0f), valueTop, style.cursorWidth, style.valueSize},
+                    style.cursorWidth / 2.0f, 8.0f, faded(style.glow, opacity));
+        renderer.drawLine({cursor, valueTop}, {cursor, valueTop + style.valueSize}, style.cursorWidth,
+                          faded(style.value, opacity));
+    }
+
+    // The rule, red with an error, or a line of light as the field lights up
+    const float ruleY = valueTop + style.valueSize + style.ruleGap;
+    renderer.drawRectangle({left, ruleY - (style.ruleThickness / 2.0f), style.width, style.ruleThickness},
+                           faded(hasError ? style.error : style.rule, opacity));
+    if (field.light > 0.0f) {
+        render::Color glow = hasError ? style.error : style.glow;
+        glow.a = style.glow.a;
+        drawLightLine(renderer, left - style.lightOverhang, left + style.width + style.lightOverhang, ruleY,
+                      style.lightThickness,
+                      faded(hasError ? style.error : style.light, opacity * field.light),
+                      faded(glow, opacity * field.light), 8.0f);
+    }
+    if (hasError) {
+        renderer.drawText(style.captionFont, field.error, {left, ruleY + style.errorGap}, style.errorSize,
+                          faded(style.error, opacity));
+    }
+}
+
+void SceneRenderer::drawCodeField(render::Renderer &renderer, const TextField &field, bool focused,
+                                  render::Vector2 centre, float opacity) const
+{
+    const FieldStyle &style = _style.field;
+    const std::size_t cells = field.input.maxLength();
+    const float left = centre.x - (style.getCodeWidth(cells) / 2.0f);
+    const float top = centre.y - (style.getCodeHeight() / 2.0f);
+    const bool hasError = !field.error.empty();
+
+    const render::Color caption = hasError ? style.error : mix(style.caption, style.litCaption, field.light);
+    renderer.drawText(style.captionFont, field.caption, {left, top}, style.captionSize,
+                      faded(caption, opacity), style.captionSpacing);
+
+    // A digit per cell, centred on it; the cell being typed is the first empty one, or the last
+    const std::string &digits = field.input.text();
+    const std::size_t current = std::min(digits.size(), cells == 0 ? 0 : cells - 1);
+    const float digitTop = top + style.captionSize + style.captionGap;
+    const float ruleY = digitTop + style.digitSize + style.ruleGap;
+    for (std::size_t cell = 0; cell < cells; ++cell) {
+        const float cellLeft = left + (static_cast<float>(cell) * (style.cellWidth + style.cellGap));
+        const float middle = cellLeft + (style.cellWidth / 2.0f);
+        if (cell < digits.size()) {
+            const std::string digit(1, digits[cell]);
+            const float width = renderer.measureText(style.valueFont, digit, style.digitSize, 0.0f).x;
+            renderer.drawText(style.valueFont, digit, {middle - (width / 2.0f), digitTop}, style.digitSize,
+                              faded(hasError ? style.error : style.value, opacity));
+        }
+        const bool isCurrent = focused && cell == current;
+        const render::Color rule = hasError               ? style.error
+                                   : cell < digits.size() ? style.filledRule
+                                                          : style.rule;
+        renderer.drawRectangle(
+            {cellLeft, ruleY - (style.ruleThickness / 2.0f), style.cellWidth, style.ruleThickness},
+            faded(rule, opacity));
+        if (isCurrent && field.light > 0.0f) {
+            drawLightLine(renderer, cellLeft - (style.cellGap / 2.0f),
+                          cellLeft + style.cellWidth + (style.cellGap / 2.0f), ruleY, style.lightThickness,
+                          faded(style.light, opacity * field.light), faded(style.glow, opacity * field.light),
+                          8.0f);
+            if (cell >= digits.size()) {
+                renderer.drawLine({middle, digitTop}, {middle, digitTop + style.digitSize}, style.cursorWidth,
+                                  faded(style.value, opacity * field.light));
+            }
+        }
+    }
+    if (hasError) {
+        renderer.drawText(style.captionFont, field.error, {left, ruleY + style.errorGap}, style.errorSize,
+                          faded(style.error, opacity));
+    }
+}
+
+void SceneRenderer::drawListRow(render::Renderer &renderer, const ListRow &row, const Text &text,
+                                const Panel *panel, render::Vector2 centre, float opacity) const
+{
+    const ListStyle &style = _style.list;
+    const float left = centre.x - (row.width / 2.0f);
+    const float right = centre.x + (row.width / 2.0f);
+    const float bottom = centre.y + (style.height / 2.0f);
+    const bool enabled = panel != nullptr;
+    const float trace = enabled ? std::clamp(panel->highlight, 0.0f, 1.0f) : 0.0f;
+
+    float textLeft = left;
+    if (row.avatar) {
+        Avatar avatar = *row.avatar;
+        avatar.size = style.avatarSize;
+        drawAvatar(renderer, avatar, {left + (style.avatarSize / 2.0f), centre.y},
+                   opacity * (enabled ? 1.0f : 0.4f));
+        textLeft += style.avatarSize + style.avatarGap;
+    }
+
+    // The title and its detail, one above the other, in the middle of the row
+    const float block = style.titleSize + (row.detail.empty() ? 0.0f : style.lineGap + style.detailSize);
+    const float titleTop = centre.y - (block / 2.0f);
+    const render::Color title = enabled ? mix(style.title, style.litTitle, trace) : style.disabled;
+    if (trace > 0.0f) {
+        const render::Vector2 measured =
+            renderer.measureText(style.titleFont, text.text, style.titleSize, style.titleSpacing);
+        drawBlurred(renderer, {textLeft, titleTop, measured.x, measured.y}, measured.y / 2.0f,
+                    _style.flare.textGlowBlur, faded(_style.flare.textGlow, opacity * trace));
+    }
+    renderer.drawText(style.titleFont, text.text, {textLeft, titleTop}, style.titleSize,
+                      faded(title, opacity), style.titleSpacing);
+    if (!row.detail.empty()) {
+        renderer.drawText(
+            style.detailFont, row.detail, {textLeft, titleTop + style.titleSize + style.lineGap},
+            style.detailSize,
+            faded(enabled ? mix(style.detail, style.litDetail, trace) : style.disabled, opacity));
+    }
+
+    // The side text, on the right, before the room of the star
+    const float starRoom = (2.0f * style.starSize) + 12.0f;
+    if (!row.side.empty()) {
+        const render::Vector2 measured =
+            renderer.measureText(style.titleFont, row.side, style.sideSize, style.sideSpacing);
+        renderer.drawText(style.titleFont, row.side,
+                          {right - starRoom - measured.x, centre.y - (measured.y / 2.0f)}, style.sideSize,
+                          faded(enabled ? mix(style.side, style.litTitle, trace) : style.disabled, opacity),
+                          style.sideSpacing);
+    }
+
+    // The rule under the row, and the line of light that traces itself along it while the row is lit
+    renderer.drawRectangle({left, bottom - style.ruleThickness, row.width, style.ruleThickness},
+                           faded(style.rule, opacity));
+    if (trace <= 0.0f) {
+        return;
+    }
+    const FlareStyle &flare = _style.flare;
+    const float shine = std::max(panel->highlight, 1.0f);
+    const float lineLeft = left - style.lightBefore;
+    const float head = lineLeft + ((right - lineLeft) * trace);
+    const float y = bottom - (style.ruleThickness / 2.0f);
+    drawFlareLine(renderer, flare, lineLeft, right, left + (row.width / 2.0f), y, head, shine, opacity);
+    if (head >= right - style.starSize) {
+        const render::Vector2 star{right - style.starSize, centre.y};
+        const float burst = std::clamp(
+            (panel->highlight - 1.0f) / std::max(flare.pressedHighlight - 1.0f, 0.001f), 0.0f, 1.0f);
+        const float size = style.starSize * (1.0f + ((flare.burstScale - 1.0f) * burst));
+        drawBlurred(renderer, {star.x - size / 2.0f, star.y - size / 2.0f, size, size}, size / 2.0f,
+                    flare.lineGlowBlur, faded(brightened(flare.lineGlow, shine), opacity));
+        drawStar(renderer, star, size, flare.starThickness, flare.burstTurn * burst,
+                 faded(flare.litText, opacity));
+    }
+}
+
+void SceneRenderer::drawAvatar(render::Renderer &renderer, const Avatar &avatar, render::Vector2 centre,
+                               float opacity) const
+{
+    const AvatarStyle &style = _style.avatar;
+    const float radius = avatar.size / 2.0f;
+    const float inner = radius - (avatar.size * style.ringGap);
+    if (avatar.kind == AvatarKind::Discord) {
+        drawHalo(renderer, centre, radius, avatar.size * style.glowSpread, faded(style.glow, opacity));
+    }
+    renderer.drawCircle(centre, inner, faded(style.disc, opacity));
+    if (avatar.picture) {
+        renderer.drawTexture(*avatar.picture, {0.0f, 0.0f, avatar.pictureSize, avatar.pictureSize},
+                             {centre.x - inner, centre.y - inner, 2.0f * inner, 2.0f * inner}, 0.0f,
+                             faded(render::colors::White, opacity));
+    } else if (!avatar.initial.empty()) {
+        const float size = avatar.size * style.initialSize;
+        const render::Vector2 measured = renderer.measureText(style.font, avatar.initial, size, 0.0f);
+        renderer.drawText(
+            style.font, avatar.initial, {centre.x - (measured.x / 2.0f), centre.y - (measured.y / 2.0f)},
+            size, faded(avatar.kind == AvatarKind::Guest ? style.guestInitial : style.initial, opacity));
+    }
+    if (avatar.kind == AvatarKind::Guest) {
+        // A dotted ring: short arcs, as many as the style says, with gaps as long as them
+        const int dots = std::max(style.guestDots, 1);
+        const float step = 2.0f * std::numbers::pi_v<float> / static_cast<float>(dots);
+        for (int dot = 0; dot < dots; ++dot) {
+            const float from = static_cast<float>(dot) * step;
+            const float to = from + (step / 2.0f);
+            renderer.drawLine({centre.x + (std::cos(from) * radius), centre.y + (std::sin(from) * radius)},
+                              {centre.x + (std::cos(to) * radius), centre.y + (std::sin(to) * radius)},
+                              style.ringThickness, faded(style.guestRing, opacity));
+        }
+        return;
+    }
+    renderer.drawCircleOutline(
+        centre, radius, style.ringThickness,
+        faded(avatar.kind == AvatarKind::Discord ? style.discordRing : style.ring, opacity));
 }
 
 void SceneRenderer::drawTitle(render::Renderer &renderer, const Text &text, render::Vector2 centre,
@@ -900,6 +1131,8 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     auto &switches = _ecs.cache<SwitchTrack>();
     auto &toggles = _ecs.cache<Toggle>();
     auto &gauges = _ecs.cache<Gauge>();
+    auto &rows = _ecs.cache<ListRow>();
+    auto &avatars = _ecs.cache<Avatar>();
 
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
@@ -936,8 +1169,27 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                                   sprite.height * scale},
                                  sprite.rotation, faded(sprite.tint, opacity));
         }
+        if (rows.has(entity) && texts.has(entity)) {
+            drawListRow(renderer, rows.get(entity), texts.get(entity),
+                        hasPanel ? &panels.get(entity) : nullptr, {centre.x, centre.y}, opacity);
+            continue;
+        }
+        if (avatars.has(entity)) {
+            drawAvatar(renderer, avatars.get(entity), {centre.x, centre.y}, opacity);
+            continue;
+        }
+        if (fields.has(entity) && fields.get(entity).type == TextFieldType::Line) {
+            drawFormField(renderer, fields.get(entity), isFocused, {centre.x, centre.y}, opacity);
+            continue;
+        }
+        if (fields.has(entity) && fields.get(entity).type == TextFieldType::Code) {
+            drawCodeField(renderer, fields.get(entity), isFocused, {centre.x, centre.y}, opacity);
+            continue;
+        }
         if (hasPanel && texts.has(entity)) {
-            drawFlare(renderer, panels.get(entity), texts.get(entity), {centre.x, centre.y}, opacity);
+            const Panel &panel = panels.get(entity);
+            drawFlare(renderer, panel.danger ? inDanger(_style.flare) : _style.flare, panel,
+                      texts.get(entity), {centre.x, centre.y}, opacity);
             continue;
         }
         if (gauges.has(entity)) {

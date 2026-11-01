@@ -245,6 +245,11 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 | `box` | A filled or outlined `Box` |
 | `sprite` | A `Sprite`: a texture or a part of it |
 | `button` | A focusable `Button` of text alone (`InterfaceStyle::flare`), as wide as its spaced letters and its star: when lit, a line of light traces itself across the text and a star flares after it; when pressed, the star bursts, a pulse runs along the line, and the action runs `pressDelay` later. The buttons of a builder get the focus in the order they are created |
+| `dangerButton` | A `button` in the red of the alerts (`Panel::danger`, `FlareStyle::danger`): its text, its line and its star. For an action that deletes |
+| `textField`, `passwordField` | A field of a form (`TextFieldType::Line`): see [Forms](#forms) |
+| `codeField` | A code of digits in cells (`TextFieldType::Code`): see [Forms](#forms) |
+| `listRow` | A row of a list (`ListRow`): see [Lists and avatars](#lists-and-avatars) |
+| `avatar` | The round picture of a player, or their initial (`Avatar`): see [Lists and avatars](#lists-and-avatars) |
 | `backButton` | A `Button` with a "<", to go back (the font of the buttons has no "←") |
 | `header` | The top of a secondary screen: a `backButton`, then the title to its right on the same line |
 
@@ -323,11 +328,52 @@ while the slider is under the pointer or has the focus.
 The client shows all of them, with the toasts, in the *Interface* menu of the settings
 (`MainMenu/UiShowcase.cpp`).
 
+### Forms
+
+`InterfaceBuilder::textField()` and `passwordField()` make a field of a form (`TextFieldType::Line`,
+`InterfaceStyle::field`, `FieldStyle`): its caption in small capitals, its value under it in the font of the
+buttons, and a fine rule under the value, which becomes a line of light while the field has the focus
+(`TextField::light`, moved by the `InterfaceSystem` in `fadeDuration`). The field keeps its size, and its
+`Text` stays its caption: the `SceneRenderer` draws its content itself, a password as one `*` per character.
+
+The owner of the scene writes what is wrong in `TextField::error`: the caption, the value and the rule turn
+red, and the error is written under the rule, in the room the field always keeps for it. The error is cleared
+as soon as the player changes the content.
+
+```cpp
+const ecs::entity_t password = form.passwordField("PASSWORD", {AnchorPoint::TopLeft, 84.0f, 380.0f}, 128);
+// The master refused it
+engine.getEcs().getComponent<TextField>(password).error = "Wrong username or password";
+```
+
+`InterfaceBuilder::codeField()` makes a code (`TextFieldType::Code`): a cell per digit, as many as the maximum
+length of its input, digits only. The cell being typed is lit; a pasted code fills the cells; the action is
+called with the code as soon as the last cell is typed, or when the player confirms the field.
+
+++tab++ moves to the next field, as Down.
+
+### Lists and avatars
+
+`InterfaceBuilder::listRow()` makes a row of a list (`ListRow`, `InterfaceStyle::list`, `ListStyle`), as wide as
+asked: an avatar on its left if it has one, its title in capitals with a line of detail under it, a text on its
+right, and a rule under it. With an action, it is a button: its `Panel` lights it as one, the rule becoming a
+line of light that traces itself up to a star at its right end, and it gets the focus in the order of the
+other widgets. Without an action, it is disabled: drawn dim, and skipped by the focus.
+
+`InterfaceBuilder::avatar()` makes the round picture of a player (`Avatar`, `InterfaceStyle::avatar`,
+`AvatarStyle`): a dark disc, the picture on it, or the initial without a picture, and a ring: silver for an
+account, bright with a light around it for an account signed in with Discord, dotted for a guest. The picture
+is a texture already round: `ResourceManager::loadRoundPicture()` makes one from a PNG received from the
+network (the middle square, scaled, transparent outside of its circle), once per key.
+
+The *Interface* menu of the settings shows a field, a password with an error, a code, two rows and the three
+avatars.
+
 ### Navigation
 
 | Action | Keyboard | Gamepad (first one) | Effect |
 |---|---|---|---|
-| `Up`, `Down` | Arrows | D-pad, left stick | Moves the focus, skipping labels, around at the ends |
+| `Up`, `Down` | Arrows (and ++tab++ for Down) | D-pad, left stick | Moves the focus, skipping labels, around at the ends |
 | `Left`, `Right` | Arrows | D-pad, left stick | Changes the value of the focused widget |
 | `Confirm` | ++enter++ | Bottom face button | Activates the focused widget |
 | `Back` | ++escape++ | Right face button, Start | Goes back from the scene, even one without widgets: Escape in the game opens its pause menu |

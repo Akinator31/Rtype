@@ -24,6 +24,8 @@ input::ActionMap<Navigation> defaultNavigationControls()
     controls.bind(Navigation::Up, Binding::gamepadAxis(GamepadAxis::LeftY, AxisDirection::Negative));
 
     controls.bind(Navigation::Down, Binding::key(Key::Down));
+    // Tab goes to the next field of a form, as everywhere else
+    controls.bind(Navigation::Down, Binding::key(Key::Tab));
     controls.bind(Navigation::Down, Binding::gamepadButton(GamepadButton::DPadDown));
     controls.bind(Navigation::Down, Binding::gamepadAxis(GamepadAxis::LeftY, AxisDirection::Positive));
 
