@@ -5,7 +5,7 @@
 
 // Fonts
 #define RTYPE_FONT_TITLE "fonts/FiraSans-Black.ttf"
-#define RTYPE_FONT_BUTTON "fonts/Inter-SemiBold.ttf"
+#define RTYPE_FONT_BUTTON "fonts/Exo2-SemiBold.ttf"
 #define RTYPE_FONT_FLARE "fonts/Orbitron-Medium.ttf"
 #define RTYPE_FONT_DISPLAY "fonts/Audiowide-Regular.ttf"
 
