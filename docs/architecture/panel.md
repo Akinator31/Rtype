@@ -103,7 +103,7 @@ The design gives the panel its values; `src/theme/system.ts` sets each of them o
   `#6b7177`, the labels of the groups `#4a4f55`, disabled `#33373b`; the red of the alerts `#e8726e`. Chakra's
   own semantic tokens (`bg`, `fg`, `border`) point at them, so its dialogs, fields and tables take them too.
 - **Text styles**: `pageTitle` and `cardTitle` in chrome, the gradient of the design clipped to the text, its
-  glow a drop shadow; `caption` and `label`, Inter Medium in capitals; `name`, `number` and `link` in Audiowide.
+  glow a drop shadow; `caption` and `label`, Exo 2 Medium in capitals; `name`, `number` and `link` in Audiowide.
 - **Recipes**, after the row of components of the design: the navigation entry (A0), its signal and its flare
   on the page shown; the action button (A1), principal, secondary or danger; the state badge (A2), active,
   neutral, alert or muted, pressable as a filter; the field (A3), its focus and its error lit; the actions of
@@ -116,7 +116,7 @@ The design gives the panel its values; `src/theme/system.ts` sets each of them o
 The master serves the panel with a strict CSP ([The headers](web.md#the-headers)). The panel keeps to it:
 
 - One script, the bundle of Vite, from the panel: no inline script, no `eval`.
-- Its fonts (Audiowide, Inter Regular and Medium, under the OFL) and its images in its own files: Vite inlines
+- Its fonts (Audiowide, Exo 2 Regular and Medium, under the OFL) and its images in its own files: Vite inlines
   none of them as a `data:` address (`assetsInlineLimit: 0`), which the CSP refuses for fonts.
 - Its styles inline, which the CSP allows: Chakra UI writes them at run time.
 - Its requests to its own origin only, the WebSocket included.

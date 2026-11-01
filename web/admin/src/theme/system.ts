@@ -275,7 +275,7 @@ const config = defineConfig({
       },
       fonts: {
         heading: { value: "'Audiowide', sans-serif" },
-        body: { value: "'Inter', sans-serif" },
+        body: { value: "'Exo 2', sans-serif" },
       },
       radii: {
         l1: { value: '4px' },
@@ -346,7 +346,7 @@ const config = defineConfig({
           filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.25))',
         },
       },
-      // The small labels: Inter Medium, capitals, wide tracking
+      // The small labels: Exo 2 Medium, capitals, wide tracking
       caption: {
         value: {
           fontFamily: 'body',

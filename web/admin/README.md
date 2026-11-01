@@ -20,7 +20,7 @@ The panel takes the look of the design, not all of its text: it keeps what a hos
 routes of the API, the technical details and the notes of the frames. The accounts frame waits for step 12.
 
 Black and silver, light as the only accent, red for alerts; Audiowide for titles, labels, buttons and numbers,
-Inter for text. Every value of the design is set once, in `src/theme/system.ts` (tokens, text styles, recipes),
+Exo 2 for text. Every value of the design is set once, in `src/theme/system.ts` (tokens, text styles, recipes),
 and never in a page. The elements of the design each have their component:
 
 | Design                                               | Component                                            |
