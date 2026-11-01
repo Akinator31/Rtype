@@ -120,6 +120,20 @@ crow::json::wvalue toJson(const AdminPlayer &player)
     return json;
 }
 
+crow::json::wvalue discordJson(const std::optional<DiscordProfile> &profile)
+{
+    if (!profile) {
+        return crow::json::wvalue(nullptr);
+    }
+    crow::json::wvalue json;
+    json["username"] = profile->username;
+    json["displayName"] =
+        profile->displayName.empty() ? crow::json::wvalue(nullptr) : crow::json::wvalue(profile->displayName);
+    json["avatar"] =
+        profile->avatarHash.empty() ? crow::json::wvalue(nullptr) : crow::json::wvalue(profile->avatarHash);
+    return json;
+}
+
 crow::json::wvalue toJson(const AdminAccount &adminAccount)
 {
     const Account &account = adminAccount.entry.account;
@@ -134,6 +148,7 @@ crow::json::wvalue toJson(const AdminAccount &adminAccount)
     json["password"] = account.passwordHash.has_value();
     json["discordId"] = adminAccount.entry.discordId ? crow::json::wvalue(*adminAccount.entry.discordId)
                                                      : crow::json::wvalue(nullptr);
+    json["discord"] = discordJson(adminAccount.entry.discord);
     json["role"] = std::string(roleName(adminAccount.locked ? AccountRole::Admin : account.role));
     json["locked"] = adminAccount.locked;
     json["bannedAt"] = optionalTime(account.bannedAt);

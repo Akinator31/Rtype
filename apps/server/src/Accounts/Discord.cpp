@@ -39,7 +39,7 @@ void initializeCurl()
     std::call_once(once, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
 }
 
-/// Most bytes of an answer of Discord kept: a token or a user is far smaller.
+/// Most bytes of an answer of the API of Discord kept: a token or a user is far smaller.
 constexpr std::size_t MaxAnswerSize = 64 * 1024;
 
 struct CurlDeleter {
@@ -57,17 +57,23 @@ struct Answer {
     long status = 0;
     std::string body;
     std::string problem;
+    /// Most bytes of the body kept: beyond, the transfer is cut.
+    std::size_t limit = MaxAnswerSize;
 };
 
-/// One request to the API of Discord, HTTPS only.
+/// One request to Discord, HTTPS only.
+/// @param url The whole address: the API (apiUrl) or the CDN (cdnUrl) of the settings, and a path.
 /// @param form A form for a POST, empty for a GET.
 /// @param basic Whether the application authenticates with its id and its secret (HTTP Basic).
 /// @param bearer A token of a user, for a GET.
-Answer request(const DiscordClientSettings &settings, const std::string &path, const std::string &form,
-               bool basic, const std::string &bearer, const std::atomic<bool> *stopping)
+/// @param limit Most bytes of the answer kept.
+Answer request(const DiscordClientSettings &settings, const std::string &url, const std::string &form,
+               bool basic, const std::string &bearer, const std::atomic<bool> *stopping,
+               std::size_t limit = MaxAnswerSize)
 {
     initializeCurl();
     Answer answer;
+    answer.limit = limit;
     const CurlHandle curl(curl_easy_init());
     if (!curl) {
         answer.problem = "libcurl cannot start";
@@ -75,7 +81,6 @@ Answer request(const DiscordClientSettings &settings, const std::string &path, c
     }
     CURL *handle = curl.get();
     char errors[CURL_ERROR_SIZE] = {};
-    const std::string url = settings.apiUrl + path;
     curl_easy_setopt(handle, CURLOPT_URL, url.c_str());
     // HTTP for the fake Discord of the tests, on the loopback: the address is never one of the settings
     curl_easy_setopt(handle, CURLOPT_PROTOCOLS_STR, "https,http");
@@ -101,16 +106,16 @@ Answer request(const DiscordClientSettings &settings, const std::string &path, c
         headers.reset(curl_slist_append(headers.release(), authorization.c_str()));
     }
     curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers.get());
-    curl_easy_setopt(handle, CURLOPT_WRITEDATA, &answer.body);
+    curl_easy_setopt(handle, CURLOPT_WRITEDATA, &answer);
     curl_easy_setopt(
         handle, CURLOPT_WRITEFUNCTION, +[](char *data, std::size_t size, std::size_t count, void *user) {
-            auto &body = *static_cast<std::string *>(user);
+            auto &answer = *static_cast<Answer *>(user);
             const std::size_t length = size * count;
-            if (body.size() + length > MaxAnswerSize) {
+            if (answer.body.size() + length > answer.limit) {
                 // Cut: no answer of Discord is that long
                 return std::size_t{0};
             }
-            body.append(data, length);
+            answer.body.append(data, length);
             return length;
         });
     if (stopping != nullptr) {
@@ -177,12 +182,33 @@ bool isSnowflake(std::string_view id)
            std::ranges::all_of(id, [](char c) { return c >= '0' && c <= '9'; });
 }
 
+/// The version of a picture as Discord names it: letters, digits and "_" (an animated one starts with "a_").
+bool isAvatarHash(std::string_view hash)
+{
+    return !hash.empty() && hash.size() <= 64 && std::ranges::all_of(hash, [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+    });
+}
+
 } // namespace
+
+DiscordProfile profileOf(const DiscordUser &user)
+{
+    return DiscordProfile{.username = user.username,
+                          .displayName = user.displayName,
+                          .avatarHash = user.avatarHash,
+                          .avatar = user.avatar};
+}
+
+bool isPng(std::string_view bytes)
+{
+    return bytes.starts_with("\x89PNG\r\n\x1a\n");
+}
 
 std::optional<std::string> checkDiscord(const DiscordClientSettings &settings)
 {
-    const Answer answer =
-        request(settings, "/oauth2/token", "grant_type=client_credentials&scope=identify", true, "", nullptr);
+    const Answer answer = request(settings, settings.apiUrl + "/oauth2/token",
+                                  "grant_type=client_credentials&scope=identify", true, "", nullptr);
     if (answer.status == 200 && textField(crow::json::load(answer.body), "access_token")) {
         return std::nullopt;
     }
@@ -280,7 +306,7 @@ DiscordAnswer DiscordClient::ask(const DiscordAuthorization &authorization) cons
     const std::string form = std::format(
         "grant_type=authorization_code&code={}&redirect_uri={}&code_verifier={}", escape(authorization.code),
         escape(authorization.redirectUri), escape(authorization.codeVerifier));
-    const Answer token = request(_settings, "/oauth2/token", form, true, "", &_stopping);
+    const Answer token = request(_settings, _settings.apiUrl + "/oauth2/token", form, true, "", &_stopping);
     if (token.status == 400 && textField(crow::json::load(token.body), "error") == "invalid_grant") {
         logger().info("Discord refused a code: {}", failure(token));
         return DiscordFailure::Refused;
@@ -292,14 +318,35 @@ DiscordAnswer DiscordClient::ask(const DiscordAuthorization &authorization) cons
         return DiscordFailure::Unavailable;
     }
 
-    const Answer me = request(_settings, "/users/@me", "", false, *accessToken, &_stopping);
+    const Answer me =
+        request(_settings, _settings.apiUrl + "/users/@me", "", false, *accessToken, &_stopping);
     const crow::json::rvalue user = me.status == 200 ? crow::json::load(me.body) : crow::json::rvalue();
     const std::optional<std::string> id = textField(user, "id");
     if (!id || !isSnowflake(*id)) {
         logger().error("Discord did not tell who signed in: {}", failure(me));
         return DiscordFailure::Unavailable;
     }
-    return DiscordUser{.id = *id, .username = textField(user, "username").value_or("")};
+    DiscordUser found{.id = *id,
+                      .username = textField(user, "username").value_or(""),
+                      .displayName = textField(user, "global_name").value_or(""),
+                      .avatarHash = textField(user, "avatar").value_or(""),
+                      .avatar = {}};
+    if (!isAvatarHash(found.avatarHash)) {
+        found.avatarHash.clear();
+        return found;
+    }
+    // The picture, as a PNG even when it is animated: without it, the user signs in all the same
+    const Answer picture = request(
+        _settings,
+        std::format("{}/avatars/{}/{}.png?size={}", _settings.cdnUrl, found.id, found.avatarHash, AvatarSize),
+        "", false, "", &_stopping, MaxAvatarBytes);
+    if (picture.status == 200 && isPng(picture.body)) {
+        found.avatar = picture.body;
+    } else {
+        logger().warning("Discord gave no picture for {}: {}", found.id,
+                         picture.status == 200 ? std::string("not a PNG") : failure(picture));
+    }
+    return found;
 }
 
 } // namespace rtype::server

@@ -11,7 +11,7 @@ how its lobby answers the requests of the accounts of [lobby protocol 3](../prot
 |---|---|
 | Code | `Accounts/AccountRules.{hpp,cpp}` (the rules, pure), `Accounts/PasswordHasher.{hpp,cpp}` (Argon2id, on its threads), `Accounts/AccountStore.{hpp,cpp}` (the tables), `Accounts/MailMessages.{hpp,cpp}` (what the mails say, pure), `Accounts/Mailer.{hpp,cpp}` (the interface, and a mail written for SMTP), `Accounts/CurlMailer.{hpp,cpp}` (the mail server, on its thread), `Accounts/Discord.{hpp,cpp}` (Discord, on its thread), `Accounts/AccountService.{hpp,cpp}` (the requests of the lobby, on the loop) in `apps/server/src`; `rtype/network/Crypto.hpp` (random bytes, SHA-256) |
 | Threads | The rules and the messages anywhere; the store on the database thread; the hashes on the two threads of the hasher; the mails on the thread of the mailer; the requests to Discord on the thread of the Discord client; the service and the lobby on the event loop |
-| Tables | `accounts`, `account_sessions`, `account_codes`, `discord_identities` (migrations 3 to 6 of `ServerMigrations`) |
+| Tables | `accounts`, `account_sessions`, `account_codes`, `discord_identities` (migrations 3 to 7 of `ServerMigrations`) |
 | Dependencies | The [reference implementation of Argon2](https://github.com/P-H-C/phc-winner-argon2) (CC0 or Apache 2.0), through CPM with a hash; TF-PSA-Crypto, through `libs/network`; libcurl for SMTP and for Discord ([Web server](web.md#libcurl)) |
 | Tests | `tests/server_account_store.cpp`, tags `[accounts]` and `[database]`; `tests/server_accounts.cpp` (the lobby), tags `[accounts]` and `[database]`; `tests/server_mail.cpp`, tag `[mail]`; `tests/crypto.cpp`, tag `[crypto]` |
 
@@ -75,6 +75,7 @@ lower-case hexadecimal.
 | `account_sessions` | `token_hash` (SHA-256 of the token, primary key), `account_id` (deleted with its account), `created_at`, `last_used_at`, `expires_at`, `client` (`game` or `panel`) | 4 |
 | `account_codes` | `account_id` (deleted with its account), `purpose` (`verify` or `reset`), `code_hash`, `expires_at`, `attempts`; one code per account and purpose | 5 |
 | `discord_identities` | `discord_id` (the id of the Discord user, primary key), `account_id` (unique: one identity per account; deleted with its account), `linked_at` | 6 |
+| | `discord_username`, `discord_display_name`, `avatar_hash` and `avatar_png` (the picture, PNG in base64), `profile_at`: the profile as of the last sign-in or link, all nullable; the hash is kept only with the picture | 7 |
 
 `Accounts/AccountStore.hpp` gives plain functions on a `Database`, as `Master/AdminStore.hpp` does: the master
 runs them on its database thread, the tests anywhere. Each takes the time it runs at, so that the tests choose
@@ -304,8 +305,15 @@ results posted to the loop:
 1. `POST /oauth2/token` with the code, the code verifier of PKCE and the redirect address of `DISCORD_CONFIRM`,
    the application authenticated with its id and its secret (HTTP Basic). `invalid_grant` is a code Discord
    refuses (`INVALID_CODE`); any other answer is `DISCORD_UNAVAILABLE`.
-2. `GET /users/@me` with the token, scope `identify`: the id of the user, kept, and its name, for the logs. The
-   token is dropped at once.
+2. `GET /users/@me` with the token, scope `identify`: the id of the user, its name (`username`), its display
+   name (`global_name`) and the version of its picture (`avatar`). The token is dropped at once.
+3. `GET <cdn>/avatars/<id>/<avatar>.png?size=128`, if it has a picture: kept when it is a PNG (its signature) of
+   at most 256 KiB, else dropped with a warning, the user signing in without picture.
+
+Every sign-in, link or new account with Discord keeps this profile (`saveDiscordProfile()`), replacing the
+last one: a new name or a new picture on Discord shows at the next sign-in. `findDiscordProfile()` reads it back
+with its picture, for the lobby and the panel; the lists of the panel read it without the picture, whose
+presence the hash tells.
 
 Where a connection stands is a `DiscordProgress`, kept by the lobby for each connection and changed by the
 service on the loop: the `DISCORD_SIGN_IN` not used yet and the codes refused since; a new user confirmed, for
@@ -320,7 +328,8 @@ made ([Web server](web.md#accounts)).
 At start, and with `--check`, `checkDiscord()` asks a token of the application itself (`client_credentials`),
 which proves the id and the secret, then drops it: an application Discord refuses stops the master, as a mail
 server does. The address of Discord is `https://discord.com/api/v10`; the tests give the address of their fake
-Discord through `DiscordClientSettings::apiUrl`, which neither the settings file nor the command line reach.
+Discord through `DiscordClientSettings::apiUrl` and `cdnUrl`, which neither the settings file nor the command
+line reach.
 
 ### The purge
 

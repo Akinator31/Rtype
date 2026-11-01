@@ -763,6 +763,41 @@ TEST_CASE("From the panel, an administrator searches, bans, unbans, promotes and
     }
 }
 
+TEST_CASE("The panel shows the Discord profile of the accounts, and serves their picture",
+          "[server][panel][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    PanelServer server(engine, "panel_profiles");
+    const Account admin = server.seed("Chief", "chief@example.org", AccountRole::Admin);
+    const Account pilot = server.seed("Pilot_7", "pilot@example.org");
+    const std::string png = std::string("\x89PNG\r\n\x1a\n", 8) + "picture";
+    REQUIRE(linkDiscord(server.direct, admin.id, "80351110224678912", std::chrono::system_clock::now()) ==
+            DiscordLink::Linked);
+    saveDiscordProfile(server.direct, "80351110224678912",
+                       {.username = "chief", .displayName = "The Chief", .avatarHash = "a1b2", .avatar = png},
+                       std::chrono::system_clock::now());
+    const Panel panel(server, server.signIn("Chief", Password));
+
+    // In the session, and in the list of the accounts: the names and the version of the picture
+    const crow::json::rvalue session = parse(panel.get("/api/session").body);
+    CHECK(session["account"]["discord"]["displayName"].s() == "The Chief");
+    CHECK(session["account"]["discord"]["avatar"].s() == "a1b2");
+    const crow::json::rvalue chief = parse(panel.get("/api/accounts?search=the%20chief").body);
+    REQUIRE(chief.size() == 1);
+    CHECK(chief[0]["discord"]["username"].s() == "chief");
+    CHECK(parse(panel.get(std::format("/api/accounts/{}", pilot.id)).body)["discord"].t() ==
+          crow::json::type::Null);
+
+    // The picture itself, kept by the browser until its version changes
+    const HttpResponse picture = panel.get(std::format("/api/accounts/{}/avatar", admin.id));
+    REQUIRE(picture.status == 200);
+    CHECK(picture.header("content-type") == "image/png");
+    CHECK(picture.header("etag") == "\"a1b2\"");
+    CHECK(picture.body == png);
+    CHECK(panel.get(std::format("/api/accounts/{}/avatar", pilot.id)).status == 404);
+    CHECK(server.call(std::format("/api/accounts/{}/avatar", admin.id)).status == 401);
+}
+
 TEST_CASE("A WebSocket opens with the session of an account, and closes once it is banned or signed out",
           "[server][panel][database]")
 {

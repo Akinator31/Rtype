@@ -187,6 +187,34 @@ enum class DiscordLink {
 DiscordLink linkDiscord(rtype::database::Database &database, long long accountId,
                         const std::string &discordId, std::chrono::system_clock::time_point now);
 
+/// The profile of a Discord user, as Discord told it at its last sign-in or link.
+struct DiscordProfile {
+    /// Its name on Discord (`@username`).
+    std::string username;
+    /// The name it shows (`global_name`), empty if none.
+    std::string displayName;
+    /// The version of its picture, empty if the master has none: it names the picture for the caches of the
+    /// clients, and is kept only with the picture.
+    std::string avatarHash;
+    /// The picture, a PNG; empty if none, or if Discord did not give it.
+    std::string avatar;
+
+    friend bool operator==(const DiscordProfile &, const DiscordProfile &) = default;
+};
+
+/// Keeps the profile of a Discord identity, replacing the one it had: its picture is kept in base64. Nothing
+/// if the identity is linked to no account.
+/// @throws soci::soci_error if the database refuses it.
+void saveDiscordProfile(rtype::database::Database &database, const std::string &discordId,
+                        const DiscordProfile &profile, std::chrono::system_clock::time_point now);
+
+/// The profile of the Discord identity of an account, with its picture.
+/// @return Nothing if the account has no identity; an empty profile if it has one, signed in before the
+/// profiles were kept.
+/// @throws soci::soci_error if the database cannot be read.
+[[nodiscard]] std::optional<DiscordProfile> findDiscordProfile(rtype::database::Database &database,
+                                                               long long accountId);
+
 /// Makes the account of a new Discord user, without email nor password, and links them.
 /// @return The account, or why it cannot be made: UsernameTaken, or EmailTaken when the identity has an
 /// account already.
@@ -201,6 +229,9 @@ createDiscordAccount(rtype::database::Database &database, const std::string &use
 struct AccountEntry {
     Account account;
     std::optional<std::string> discordId;
+    /// The profile of the Discord identity, without its picture: avatar is empty, avatarHash says if it has
+    /// one.
+    std::optional<DiscordProfile> discord;
 
     friend bool operator==(const AccountEntry &, const AccountEntry &) = default;
 };
@@ -210,8 +241,8 @@ struct AccountEntry {
                                                            long long accountId);
 
 /// The accounts, newest first.
-/// @param search Empty for every account; otherwise those whose username or email holds it, ignoring case,
-/// or whose Discord id is it.
+/// @param search Empty for every account; otherwise those whose username, email or Discord name holds it,
+/// ignoring case, or whose Discord id is it.
 /// @param limit How many at most.
 /// @param before Only those with a smaller id: the page after one ending at this id.
 /// @throws soci::soci_error if the database cannot be read.

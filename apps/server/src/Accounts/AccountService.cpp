@@ -3,9 +3,12 @@
 #include "Accounts/AccountRules.hpp"
 #include "Accounts/MailMessages.hpp"
 #include "Common/Secret.hpp"
+#include "Master/AdminStore.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Crypto.hpp"
+#include "rtype/network/Text.hpp"
 
+#include <algorithm>
 #include <format>
 #include <type_traits>
 #include <utility>
@@ -54,8 +57,57 @@ rtype::lobby::AccountInfo accountInfo(const Account &account)
         .username = account.username,
         .role = account.role == AccountRole::Admin ? rtype::lobby::AccountRole::Admin
                                                    : rtype::lobby::AccountRole::Player,
+        .email = account.email.value_or(""),
+        .emailVerified = account.verified(),
+        .hasPassword = account.passwordHash.has_value(),
+        .createdAt = static_cast<std::uint64_t>(std::max(unixMilliseconds(account.createdAt), 0LL)),
     };
 }
+
+/// A text of Discord as PROFILE carries it: whole, or empty if it does not fit.
+std::string profileText(const std::string &text, std::size_t maxLength)
+{
+    return text.size() <= maxLength && rtype::network::isValidText(text) ? text : std::string();
+}
+
+/// The Discord profile as PROFILE carries it, its picture announced by its size.
+rtype::lobby::ProfileMessage profileMessage(std::uint64_t accountId, const DiscordProfile &profile)
+{
+    rtype::lobby::ProfileMessage message{.accountId = accountId, .discord = true};
+    message.discordUsername = profileText(profile.username, rtype::lobby::MaxDiscordUsernameLength);
+    message.displayName = profileText(profile.displayName, rtype::lobby::MaxDisplayNameLength);
+    const std::string hash = profileText(profile.avatarHash, rtype::lobby::MaxAvatarHashLength);
+    if (!hash.empty() && !profile.avatar.empty() && profile.avatar.size() <= rtype::lobby::MaxAvatarSize) {
+        message.avatarHash = hash;
+        message.avatarSize = static_cast<std::uint32_t>(profile.avatar.size());
+    }
+    return message;
+}
+
+/// A part of a picture, from `offset`: NOT_FOUND without picture, or from beyond its end.
+AccountReply avatarPart(std::uint64_t accountId, const std::optional<DiscordProfile> &profile,
+                        std::uint32_t offset)
+{
+    const std::size_t size = profile ? profile->avatar.size() : 0;
+    if (size == 0 || size > rtype::lobby::MaxAvatarSize || profile->avatarHash.empty() ||
+        profile->avatarHash.size() > rtype::lobby::MaxAvatarHashLength || offset >= size) {
+        return ErrorCode::NotFound;
+    }
+    const std::size_t part = std::min(rtype::lobby::MaxAvatarChunk, size - offset);
+    const auto *first = reinterpret_cast<const std::byte *>(profile->avatar.data()) + offset;
+    return rtype::lobby::AvatarMessage{.accountId = accountId,
+                                       .avatarHash = profile->avatarHash,
+                                       .total = static_cast<std::uint32_t>(size),
+                                       .offset = offset,
+                                       .bytes = std::vector<std::byte>(first, first + part)};
+}
+
+/// What GET_PROFILE and GET_AVATAR read: whether the account exists, and its Discord profile with its
+/// picture.
+struct ProfileRead {
+    bool found = false;
+    std::optional<DiscordProfile> profile;
+};
 
 ErrorCode codeError(CodeCheck check)
 {
@@ -350,6 +402,15 @@ void AccountService::handle(std::uint8_t type, std::span<const std::byte> payloa
         break;
     default:
         break;
+    }
+    // The profiles only read: they do not use up the requests of an address
+    if (type == message_type::GetProfile) {
+        getProfile(payload, std::move(done));
+        return;
+    }
+    if (type == message_type::GetAvatar) {
+        getAvatar(connection, payload, std::move(done));
+        return;
     }
     if (!allowAddress(connection.address)) {
         logger().info("{}: too many requests of the accounts", connection.address.ip());
@@ -929,8 +990,13 @@ void AccountService::discordUser(const AccountConnection &connection, const Disc
         const auto id = static_cast<long long>(connection.signedIn->account.id);
         onDatabase(
             "link a Discord identity",
-            [id, discordId = user.id](rtype::database::Database &database) {
-                return linkDiscord(database, id, discordId, SystemClock::now());
+            [id, user](rtype::database::Database &database) {
+                const auto now = SystemClock::now();
+                const DiscordLink link = linkDiscord(database, id, user.id, now);
+                if (link == DiscordLink::Linked || link == DiscordLink::AlreadyLinked) {
+                    saveDiscordProfile(database, user.id, profileOf(user), now);
+                }
+                return link;
             },
             done,
             [done, connection, id](DiscordLink link) {
@@ -954,12 +1020,14 @@ void AccountService::discordUser(const AccountConnection &connection, const Disc
     }
     onDatabase(
         "sign in with Discord",
-        [discordId = user.id](rtype::database::Database &database)
+        [user](rtype::database::Database &database)
             -> std::pair<std::optional<Account>, std::optional<SessionToken>> {
-            std::optional<Account> account = findAccountByDiscord(database, discordId);
+            std::optional<Account> account = findAccountByDiscord(database, user.id);
             if (!account || account->banned()) {
                 return {std::move(account), std::nullopt};
             }
+            // The profile as Discord tells it now: its name or its picture may have changed
+            saveDiscordProfile(database, user.id, profileOf(user), SystemClock::now());
             return {std::move(account),
                     createSession(database, account->id, SessionClient::Game, SystemClock::now())};
         },
@@ -968,10 +1036,10 @@ void AccountService::discordUser(const AccountConnection &connection, const Disc
          user](const std::pair<std::optional<Account>, std::optional<SessionToken>> &found) {
             const auto &[account, token] = found;
             if (!account) {
-                // A new user: CHOOSE_USERNAME makes its account
+                // A new user: CHOOSE_USERNAME makes its account. Its profile shows while it chooses
                 connection.discord->newUser = user;
                 connection.discord->newUserAt = SteadyClock::now();
-                done(AccountDone{.closes = false});
+                done(profileMessage(0, profileOf(user)));
                 return;
             }
             if (!token) {
@@ -1009,11 +1077,11 @@ void AccountService::chooseUsername(const AccountConnection &connection, std::sp
     using Created = std::pair<std::variant<Account, AccountConflict>, std::optional<SessionToken>>;
     onDatabase(
         "create an account with Discord",
-        [username = request->username,
-         discordId = progress.newUser->id](rtype::database::Database &database) {
+        [username = request->username, user = *progress.newUser](rtype::database::Database &database) {
             const auto now = SystemClock::now();
-            Created created{createDiscordAccount(database, username, discordId, now), std::nullopt};
+            Created created{createDiscordAccount(database, username, user.id, now), std::nullopt};
             if (const auto *account = std::get_if<Account>(&created.first)) {
+                saveDiscordProfile(database, user.id, profileOf(user), now);
                 created.second = createSession(database, account->id, SessionClient::Game, now);
             }
             return created;
@@ -1030,6 +1098,57 @@ void AccountService::chooseUsername(const AccountConnection &connection, std::sp
             connection.discord->newUser.reset();
             logger().info("Account {} created with Discord, and signed in", account.id);
             done(SignedInAccount{.account = accountInfo(account), .token = *created.second});
+        });
+}
+
+void AccountService::getProfile(std::span<const std::byte> payload, Done done)
+{
+    const std::optional<rtype::lobby::GetProfileMessage> request = rtype::lobby::decodeGetProfile(payload);
+    if (!request) {
+        later(done, ErrorCode::Malformed);
+        return;
+    }
+    const auto id = static_cast<long long>(request->accountId);
+    onDatabase(
+        "read the profile of an account",
+        [id](rtype::database::Database &database) {
+            return ProfileRead{.found = findAccount(database, id).has_value(),
+                               .profile = findDiscordProfile(database, id)};
+        },
+        done,
+        [done, accountId = request->accountId](const ProfileRead &read) {
+            if (!read.found) {
+                done(ErrorCode::NotFound);
+                return;
+            }
+            done(read.profile ? profileMessage(accountId, *read.profile)
+                              : rtype::lobby::ProfileMessage{.accountId = accountId});
+        });
+}
+
+void AccountService::getAvatar(const AccountConnection &connection, std::span<const std::byte> payload,
+                               Done done)
+{
+    const std::optional<rtype::lobby::GetAvatarMessage> request = rtype::lobby::decodeGetAvatar(payload);
+    if (!request) {
+        later(done, ErrorCode::Malformed);
+        return;
+    }
+    if (request->accountId == 0) {
+        // The new Discord user of this connection: its picture is in memory, until it chooses its username
+        const DiscordProgress &progress = *connection.discord;
+        const bool current =
+            progress.newUser && SteadyClock::now() - progress.newUserAt <= _settings.limits.discordLifetime;
+        later(done, avatarPart(0, current ? std::optional(profileOf(*progress.newUser)) : std::nullopt,
+                               request->offset));
+        return;
+    }
+    const auto id = static_cast<long long>(request->accountId);
+    onDatabase(
+        "read the picture of an account",
+        [id](rtype::database::Database &database) { return findDiscordProfile(database, id); }, done,
+        [done, request = *request](const std::optional<DiscordProfile> &profile) {
+            done(avatarPart(request.accountId, profile, request.offset));
         });
 }
 

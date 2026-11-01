@@ -17,6 +17,9 @@ namespace rtype::server
 [[nodiscard]] crow::json::wvalue toJson(const AdminAction &action);
 [[nodiscard]] crow::json::wvalue toJson(const AddressBan &ban);
 [[nodiscard]] crow::json::wvalue toJson(const AdminAccount &account);
+/// The Discord profile of an account, without its picture: null without one, else `{"username",
+/// "displayName", "avatar"}`, the avatar the version of the picture, or null.
+[[nodiscard]] crow::json::wvalue discordJson(const std::optional<DiscordProfile> &profile);
 [[nodiscard]] crow::json::wvalue toJson(const AdminEvent &event);
 
 /// A list as a JSON array.

@@ -52,6 +52,8 @@ struct PanelAccount {
     AccountRole role = AccountRole::Player;
     /// One of `[admin] admins`: the panel can neither demote, ban nor delete it.
     bool listed = false;
+    /// The profile of its Discord identity, without its picture, if it has one.
+    std::optional<DiscordProfile> discord{};
 
     friend bool operator==(const PanelAccount &, const PanelAccount &) = default;
 };

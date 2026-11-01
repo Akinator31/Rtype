@@ -572,6 +572,7 @@ crow::json::wvalue accountJson(const PanelAccount &account)
     json["username"] = account.username;
     json["role"] = std::string(roleName(account.role));
     json["locked"] = account.listed;
+    json["discord"] = discordJson(account.discord);
     return json;
 }
 
@@ -1360,6 +1361,32 @@ struct WebServer::Impl {
                                 reply(error(404, "no such account"));
                             } else {
                                 reply(jsonOf(200, toJson(**account)));
+                            }
+                        });
+                });
+        });
+        CROW_ROUTE(app, "/api/accounts/<uint>/avatar")
+        ([this](const crow::request &request, crow::response &response, std::uint64_t id) {
+            api(request, response, false,
+                [id](Administration &administration, const SignedIn &, const Reply &reply) {
+                    if (id > static_cast<std::uint64_t>(std::numeric_limits<long long>::max())) {
+                        reply(error(404, "no such picture"));
+                        return;
+                    }
+                    administration.profile(
+                        static_cast<long long>(id),
+                        [reply](std::optional<std::optional<DiscordProfile>> profile) {
+                            if (!profile) {
+                                reply(error(503, "the database cannot read the picture now"));
+                            } else if (!*profile || (*profile)->avatar.empty()) {
+                                reply(error(404, "no such picture"));
+                            } else {
+                                // Named by its version: the browser keeps it until it changes
+                                reply(Answer{200,
+                                             "image/png",
+                                             (*profile)->avatar,
+                                             {{"Cache-Control", "private, max-age=86400"},
+                                              {"ETag", "\"" + (*profile)->avatarHash + "\""}}});
                             }
                         });
                 });

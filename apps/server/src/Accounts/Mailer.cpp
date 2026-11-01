@@ -1,5 +1,6 @@
 #include "Accounts/Mailer.hpp"
 
+#include "Common/Base64.hpp"
 #include "Common/Settings.hpp"
 
 #include <algorithm>
@@ -110,28 +111,6 @@ std::string part(std::string_view boundary, std::string_view type, std::string_v
 }
 
 } // namespace
-
-std::string base64(std::string_view bytes)
-{
-    static constexpr std::string_view Alphabet =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string result;
-    result.reserve((bytes.size() + 2) / 3 * 4);
-    for (std::size_t i = 0; i < bytes.size(); i += 3) {
-        const std::size_t count = std::min<std::size_t>(3, bytes.size() - i);
-        std::uint32_t group = 0;
-        for (std::size_t j = 0; j < 3; ++j) {
-            group <<= 8U;
-            if (j < count) {
-                group |= static_cast<unsigned char>(bytes[i + j]);
-            }
-        }
-        for (std::size_t j = 0; j < 4; ++j) {
-            result += j <= count ? Alphabet[(group >> (18U - 6U * j)) & 0x3FU] : '=';
-        }
-    }
-    return result;
-}
 
 std::string formatMail(const Mail &mail, std::string_view from, std::chrono::system_clock::time_point date,
                        std::string_view messageId)
