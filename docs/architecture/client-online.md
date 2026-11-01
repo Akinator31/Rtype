@@ -71,8 +71,8 @@ code under the code. Everything else is shown in a toast, in the language of the
 not the expected one, a game full, a game that crashed, the connection lost. A lobby connection lost brings the
 player back to the main menu.
 
-The screens follow the Série 14 of the design ([plan](../plan/accounts-ui.md)): the widgets of the engine for
-forms, lists and avatars ([Forms](scenes-and-interface.md#forms), [Lists and avatars](scenes-and-interface.md#lists-and-avatars)),
+The screens follow the Série 14 of the design: the widgets of the engine for forms, lists and avatars
+([Forms](scenes-and-interface.md#forms), [Lists and avatars](scenes-and-interface.md#lists-and-avatars)),
 a header with its back arrow, the keys of the screen at the bottom left. The Online menu opens over the main
 menu; the screens after Connect have the starry sky of the main menu behind them; the questions (a new key, a
 key changed, Discord, the deletion) open over the screen that asks them, under a veil.

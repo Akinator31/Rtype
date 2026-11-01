@@ -16,8 +16,8 @@
 namespace rtype::client
 {
 
-/// Where the parts of the Online screens go, in game units (docs/plan/accounts-ui.md, the frames of the
-/// Série 14 of the design, twice their size).
+/// Where the parts of the Online screens go, in game units: the frames of the Série 14 of the design, twice
+/// their size.
 namespace online_layout
 {
 /// The column of the forms, on the left, and its rows: the top of the first field, and the space between the

@@ -63,8 +63,8 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 
 /// Playing online (docs/architecture/client-online.md): the Online menu, where the player gives a server and
 /// its name, or picks one met before, then the lobby of the server, with its games. The screens follow the
-/// Série 14 of the design (docs/plan/accounts-ui.md): the fields of a form, its errors under them, Discord
-/// first, and the profile of the account (its Discord picture and names) wherever it shows.
+/// Série 14 of the design: the fields of a form, its errors under them, Discord first, and the profile
+/// of the account (its Discord picture and names) wherever it shows.
 ///
 /// - **Connect** opens a LobbyClient to the server, trusting the key KnownServers knows for it (ADR 0021).
 ///   A server never met shows its key, which the player may trust: it is remembered, and the client connects
