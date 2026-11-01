@@ -192,6 +192,9 @@ void run()
         .slider = {.font = display},
         .toggle = {.font = display},
         .gauge = {.font = display},
+        .field = {.captionFont = messageFont, .valueFont = display},
+        .list = {.titleFont = display, .detailFont = messageFont},
+        .avatar = {.font = display},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
     rtype::localization::Localization translations("en");
@@ -253,7 +256,8 @@ void run()
     assetsLoaded = true;
     // The scenes of the game are built from the loaded assets, which they find in the cache
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
-    rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, discord);
+    rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord,
+                                       rtype::render::userDataDirectory() / "pictures");
     rtype::client::ShipSelection ships;
     createScenes(engine, resources, style, window, metrics, games, config, translations, ships);
     rtype::client::registerClientCommands(console, engine, window);

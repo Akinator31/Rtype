@@ -1,10 +1,12 @@
 #include "Online/OnlineScenes.hpp"
 
+#include "Assets.hpp"
 #include "Game/RemoteSession.hpp"
+#include "MainMenu/Layout.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Widget.hpp"
-#include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Tls.hpp"
 
@@ -22,7 +24,7 @@ namespace
 {
 
 /// Most games listed: the others are reached with Refresh once some end.
-constexpr std::size_t MaxGamesShown = 6;
+constexpr std::size_t MaxGamesShown = 5;
 /// Players of a game created from the client.
 constexpr std::uint8_t CreatedGamePlayers = 4;
 
@@ -110,128 +112,289 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
     return lines;
 }
 
-OnlineScenes::OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
-                           const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                           localization::Localization &translations, discord::Authorizer &discord)
-    : _engine(engine), _loop(loop), _discord(discord), _games(games), _translations(translations),
-      _known(engine.getSettings()), _sessions(engine.getSettings())
+OnlineScenes::OnlineScenes(engine::Engine &engine, render::ResourceManager &resources,
+                           network::EventLoop &loop, GameScenes &games, const engine::InterfaceStyle &style,
+                           localization::Localization &translations, discord::Authorizer &discord,
+                           std::filesystem::path pictures)
+    : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord), _games(games),
+      _translations(translations), _known(engine.getSettings()), _sessions(engine.getSettings()),
+      _profiles(engine.getSettings(), std::move(pictures)),
+      _sky(resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth)),
+      _discordLogo(resources.loadTexture(RTYPE_IMAGE_DISCORD, render::TextureFiltering::Smooth))
 {
-    engine.createScene(OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
-                       [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
-                                                    _translations.text("menu.online"), true);
-                           const ecs::entity_t name = menu.textField(_translations.text("online.name"), _name,
-                                                                     {}, lobby::MaxPlayerNameLength);
-                           const auto readName = [this, &target, name] {
-                               _name = target.getEcs().getComponent<engine::TextField>(name).input.text();
-                           };
-                           const ecs::entity_t server =
-                               menu.textField(_translations.text("online.server"), _serverText, {}, 64);
-                           const auto readServer = [this, &target, server] {
-                               _serverText =
-                                   target.getEcs().getComponent<engine::TextField>(server).input.text();
-                           };
-                           menu.button(_translations.text("online.connect"), [this, readName, readServer] {
-                               readName();
-                               readServer();
-                               connect();
-                           });
-                           menu.button(_translations.text("online.forget"), [this, readServer] {
-                               readServer();
-                               forgetServer();
-                           });
-                           menu.button(_translations.text("online.back"), [&target] { target.popScene(); });
-                       });
+    declareServerScenes(style);
+    declareLobbyScene(style);
+    declareAccountScenes(style);
+}
 
-    engine.createScene(TrustServerScene, {.overlay = true, .hidesInterfaceBelow = true},
-                       [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
-                                                    _translations.text("trust.title"), true);
-                           menu.label(std::format("{} {}", _translations.text("trust.first"), _address));
-                           menu.label(_translations.text("trust.key"));
-                           if (_presented) {
-                               for (const std::string &line : fingerprintLines(*_presented)) {
-                                   menu.label(line);
-                               }
-                           }
-                           menu.label(_translations.text("trust.check"));
-                           menu.button(_translations.text("trust.accept"), [this, &target] {
-                               target.popScene();
-                               if (_presented && !_known.trust(_address, *_presented)) {
-                                   _engine.showToast("The key is only trusted until the game closes: cannot "
-                                                     "write the settings",
-                                                     engine::ToastType::Error);
-                               }
-                               connect();
-                           });
-                           menu.button(_translations.text("trust.cancel"), [&target] { target.popScene(); });
-                       });
+OnlineScreen OnlineScenes::screen(engine::Engine &target, engine::SceneId scene, bool sky) const
+{
+    if (sky) {
+        const ecs::entity_t backdrop = target.getEcs().createEntity();
+        target.getEcs().addComponent<engine::SceneMember>(backdrop, scene);
+        target.getEcs().addComponent<engine::Backdrop>(backdrop, _sky);
+    }
+    return OnlineScreen(target, scene, _style);
+}
 
-    engine.createScene(ChangedKeyScene, {.overlay = true, .hidesInterfaceBelow = true},
-                       [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
-                                                    _translations.text("changed.title"), true);
-                           menu.label(std::format("{} {}", _translations.text("changed.text"), _address));
-                           const std::vector<network::KeyFingerprint> expected = _known.trusted(_address);
-                           if (!expected.empty()) {
-                               menu.label(_translations.text("changed.expected"));
-                               for (const std::string &line : fingerprintLines(expected.front())) {
-                                   menu.label(line);
-                               }
-                           }
-                           if (_presented) {
-                               menu.label(_translations.text("changed.presented"));
-                               for (const std::string &line : fingerprintLines(*_presented)) {
-                                   menu.label(line);
-                               }
-                           }
-                           menu.label(_translations.text("changed.attack"));
-                           menu.label(_translations.text("changed.forget"));
-                           menu.button(_translations.text("changed.back"), [&target] { target.popScene(); });
-                       });
+void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
+{
+    using online_layout::columnLeft;
+    using online_layout::rightLeft;
+    using online_layout::rightWidth;
+    using Tone = OnlineScreen::Tone;
 
-    engine.createScene(
-        LobbyScene, {.onBack = [this] { disconnect(); }},
-        [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-            engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
-                                     _translations.text("menu.online"));
-            const std::string player = _lobby ? _lobby->name() : _name;
-            menu.label(std::format("{} {} {}", player, _translations.text("online.on"), _serverText));
-            menu.button(_translations.text("online.create"), [this] {
-                if (_lobby) {
-                    const std::string game =
-                        std::string(_lobby->name()).append("'s game").substr(0, lobby::MaxGameNameLength);
-                    _lobby->createGame(game, CreatedGamePlayers,
-                                       [this](const LobbyClient::JoinResult &result) { joined(result); });
+    // O1: the name and the server on the left, the servers met on the right
+    _engine.createScene(
+        OnlineMenuScene, {.overlay = true, .hidesInterfaceBelow = true},
+        [this, &style](engine::Engine &target, engine::SceneId scene) {
+            OnlineScreen page(target, scene, style);
+            page.header(_translations.text("menu.online"), [&target] { target.popScene(); });
+            const ecs::entity_t name =
+                page.field(_translations.text("online.name"), _name, 0, lobby::MaxPlayerNameLength);
+            const auto read = [this, &target, name](ecs::entity_t server) {
+                _name = target.getEcs().getComponent<engine::TextField>(name).input.text();
+                _serverText = target.getEcs().getComponent<engine::TextField>(server).input.text();
+            };
+            const auto server = std::make_shared<ecs::entity_t>(0);
+            *server = page.field(_translations.text("online.server"), _serverText, 1, 64,
+                                 [this, read, server](const std::string &) {
+                                     read(*server);
+                                     connect();
+                                 });
+            page.note(_translations.text("online.server_hint"),
+                      {engine::AnchorPoint::TopLeft, columnLeft, online_layout::fieldsTop + 250.0f},
+                      Tone::Hint, 20.0f);
+            page.button(_translations.text("online.connect"),
+                        [this, read, server] {
+                            read(*server);
+                            connect();
+                        },
+                        {engine::AnchorPoint::TopLeft, columnLeft, 600.0f});
+            page.button(_translations.text("online.forget"),
+                        [this, read, server] {
+                            read(*server);
+                            forgetServer();
+                        },
+                        {engine::AnchorPoint::TopLeft, columnLeft, 600.0f + online_layout::buttonsSpacing});
+
+            // The servers met: those whose key the player trusted, with the account remembered for each
+            page.note(toCapitals(_translations.text("online.known")),
+                      {engine::AnchorPoint::TopLeft, rightLeft, online_layout::fieldsTop - 14.0f},
+                      Tone::Detail, 20.0f);
+            const std::vector<std::string> keys = target.getSettings().keys(KnownServers::SettingsKeyPrefix);
+            if (keys.empty()) {
+                page.note(_translations.text("online.known_none"),
+                          {engine::AnchorPoint::TopLeft, rightLeft, online_layout::fieldsTop + 30.0f},
+                          Tone::Hint);
+            }
+            constexpr std::size_t MaxServersShown = 5;
+            float top = online_layout::fieldsTop + 30.0f;
+            for (std::size_t index = 0; index < std::min(keys.size(), MaxServersShown); ++index) {
+                const std::string address = keys[index].substr(KnownServers::SettingsKeyPrefix.size());
+                const std::optional<RememberedProfile> account = _profiles.profile(address);
+                engine::Avatar avatar{.initial = "?", .kind = engine::AvatarKind::Guest};
+                std::string detail = _translations.text("online.known_guest");
+                if (account) {
+                    avatar.kind =
+                        account->discord ? engine::AvatarKind::Discord : engine::AvatarKind::Account;
+                    avatar.initial = initialOf(account->username);
+                    if (const auto png = _profiles.picture(account->avatarHash)) {
+                        avatar.picture = roundPicture(account->avatarHash, std::as_bytes(std::span(*png)));
+                    }
+                    detail = std::format("{} · {}", account->username,
+                                         _translations.text(account->discord ? "online.known_discord"
+                                                                             : "online.known_account"));
                 }
-            });
-            for (std::size_t i = 0; i < std::min(_list.size(), MaxGamesShown); ++i) {
-                const lobby::GameInfo &game = _list[i];
-                menu.button(std::format("{} {} ({}/{})", _translations.text("online.join"), game.name,
-                                        game.players, game.maxPlayers),
-                            [this, id = game.id] {
-                                if (_lobby) {
-                                    _lobby->joinGame(id, [this](const LobbyClient::JoinResult &result) {
-                                        joined(result);
-                                    });
-                                }
-                            });
+                page.ui().listRow(toCapitals(address),
+                                  {.detail = detail + " · " + _translations.text("online.known_trusted"),
+                                   .width = rightWidth,
+                                   .avatar = avatar},
+                                  [this, address] {
+                                      _serverText = address;
+                                      connect();
+                                  },
+                                  {engine::AnchorPoint::TopLeft, rightLeft, top});
+                top += style.list.height;
             }
-            if (_list.empty()) {
-                menu.label(_translations.text("online.empty"));
-            }
-            menu.button(_translations.text("online.refresh"), [this] { refresh(); });
-            if (_lobby && _lobby->account()) {
-                menu.button(_translations.text("account.mine"),
-                            [this] { _engine.switchScene(MyAccountScene); });
-            } else if (_lobby && _lobby->features().passwordAccounts) {
-                menu.button(_translations.text("account.sign_in"),
-                            [this] { _engine.switchScene(AccountsScene); });
-            }
-            menu.button(_translations.text("online.disconnect"), [this] { disconnect(); });
+            page.keys(_translations.text("online.keys_menu"));
         });
 
-    declareAccountScenes(metrics, style);
+    // O2: a server met for the first time shows its key, and is trusted only if the player says so
+    _engine.createScene(TrustServerScene, {.overlay = true, .hidesInterfaceBelow = true},
+                        [this, &style](engine::Engine &target, engine::SceneId scene) {
+                            OnlineScreen page(target, scene, style);
+                            page.veil();
+                            page.question(_translations.text("trust.title"), 236.0f);
+                            page.rule({engine::AnchorPoint::Top, 0.0f, 318.0f}, 720.0f, {255, 255, 255, 120});
+                            const ecs::entity_t first =
+                                page.note(std::format("{} {}.", _translations.text("trust.first"), _address),
+                                          {engine::AnchorPoint::Top, 0.0f, 352.0f}, Tone::Detail, 24.0f);
+                            (void)first;
+                            page.note(_translations.text("trust.check"),
+                                      {engine::AnchorPoint::Top, 0.0f, 390.0f}, Tone::Detail, 24.0f);
+                            if (_presented) {
+                                float top = 470.0f;
+                                for (const std::string &line : fingerprintLines(*_presented)) {
+                                    const ecs::entity_t text = page.note(
+                                        line, {engine::AnchorPoint::Top, 0.0f, top}, Tone::Bright, 30.0f);
+                                    target.getEcs().getComponent<engine::Text>(text).font =
+                                        style.field.valueFont;
+                                    top += 56.0f;
+                                }
+                            }
+                            // Not trusting is the default: a key is trusted on purpose
+                            page.button(_translations.text("trust.cancel"), [&target] { target.popScene(); },
+                                        {engine::AnchorPoint::Top, -330.0f, 680.0f});
+                            page.button(_translations.text("trust.accept"),
+                                        [this, &target] {
+                                            target.popScene();
+                                            if (_presented && !_known.trust(_address, *_presented)) {
+                                                _engine.showToast(_translations.text("trust.not_kept"),
+                                                                  engine::ToastType::Error);
+                                            }
+                                            connect();
+                                        },
+                                        {engine::AnchorPoint::Top, 330.0f, 680.0f});
+                            page.note(toCapitals(_translations.text("online.keys_cancel")),
+                                      {engine::AnchorPoint::Bottom, 0.0f, -84.0f}, Tone::Hint, 20.0f);
+                        });
+
+    // O3: a known server with another key is refused, the two keys side by side, under a red banner
+    _engine.createScene(
+        ChangedKeyScene, {.overlay = true, .hidesInterfaceBelow = true},
+        [this, &style](engine::Engine &target, engine::SceneId scene) {
+            OnlineScreen page(target, scene, style);
+            page.veil();
+            constexpr render::Color red{232, 114, 110, 255};
+            constexpr float bandTop = 184.0f;
+            constexpr float bandHeight = 200.0f;
+            page.ui().box(8000.0f, bandHeight, {232, 114, 110, 18},
+                          {engine::AnchorPoint::Top, 0.0f, bandTop});
+            page.rule({engine::AnchorPoint::Top, 0.0f, bandTop}, 1920.0f, {232, 114, 110, 200});
+            page.rule({engine::AnchorPoint::Top, 0.0f, bandTop + bandHeight}, 1920.0f, {232, 114, 110, 200});
+            const ecs::entity_t title =
+                page.note(toCapitals(_translations.text("changed.title")),
+                          {engine::AnchorPoint::Top, 0.0f, bandTop + 48.0f}, Tone::Alert, 52.0f);
+            target.getEcs().getComponent<engine::Text>(title).font = style.field.valueFont;
+            target.getEcs().getComponent<engine::Text>(title).color = red;
+            page.note(toCapitals(std::format("{} · {}", _address, _translations.text("changed.refused"))),
+                      {engine::AnchorPoint::Top, 0.0f, bandTop + 128.0f}, Tone::Detail, 20.0f);
+            const auto keyColumn = [&](const std::string &caption, const network::KeyFingerprint &key,
+                                       float x, Tone tone) {
+                page.note(toCapitals(caption), {engine::AnchorPoint::Top, x, 450.0f}, tone, 20.0f);
+                float top = 492.0f;
+                for (const std::string &line : fingerprintLines(key, 4)) {
+                    const ecs::entity_t text =
+                        page.note(line, {engine::AnchorPoint::Top, x, top}, tone, 24.0f);
+                    target.getEcs().getComponent<engine::Text>(text).font = style.field.valueFont;
+                    top += 40.0f;
+                }
+            };
+            const std::vector<network::KeyFingerprint> expected = _known.trusted(_address);
+            if (!expected.empty()) {
+                keyColumn(_translations.text("changed.expected"), expected.front(), -300.0f, Tone::Detail);
+            }
+            if (_presented) {
+                keyColumn(_translations.text("changed.presented"), *_presented, 300.0f, Tone::Alert);
+            }
+            page.note(_translations.text("changed.attack"), {engine::AnchorPoint::Top, 0.0f, 700.0f},
+                      Tone::Detail, 24.0f);
+            page.note(_translations.text("changed.forget"), {engine::AnchorPoint::Top, 0.0f, 738.0f},
+                      Tone::Detail, 24.0f);
+            page.button(_translations.text("changed.back"), [&target] { target.popScene(); },
+                        {engine::AnchorPoint::Top, 0.0f, 820.0f});
+        });
+}
+
+void OnlineScenes::declareLobbyScene(const engine::InterfaceStyle &style)
+{
+    using online_layout::columnLeft;
+    using Tone = OnlineScreen::Tone;
+    constexpr float listWidth = 1120.0f;
+    constexpr float listTop = 280.0f;
+
+    // L1: the games of the server in a list, the pilot at the top right, its avatar opening My account
+    _engine.createScene(
+        LobbyScene, {.onBack = [this] { disconnect(); }},
+        [this, &style](engine::Engine &target, engine::SceneId scene) {
+            OnlineScreen page = screen(target, scene);
+            page.header(_serverText, [this] { disconnect(); });
+            page.note(toCapitals(_translations.text("online.games")),
+                      {engine::AnchorPoint::TopLeft, columnLeft, listTop - 44.0f}, Tone::Detail, 20.0f);
+            const ecs::entity_t count = page.note(
+                toCapitals(std::format("{} {}", _list.size(), _translations.text("online.games_count"))),
+                {engine::AnchorPoint::TopLeft, columnLeft, listTop - 44.0f}, Tone::Detail, 20.0f);
+            target.getEcs().getComponent<engine::Anchor>(count) = {
+                engine::AnchorPoint::TopRight, -(1920.0f - columnLeft - listWidth), listTop - 44.0f};
+            float top = listTop;
+            for (std::size_t i = 0; i < std::min(_list.size(), MaxGamesShown); ++i) {
+                const lobby::GameInfo &game = _list[i];
+                const bool full = game.players >= game.maxPlayers;
+                const std::string players = std::format("{} / {} {}", game.players, game.maxPlayers,
+                                                        _translations.text("online.pilots"));
+                std::function<void()> join;
+                if (!full) {
+                    join = [this, id = game.id] {
+                        if (_lobby) {
+                            _lobby->joinGame(
+                                id, [this](const LobbyClient::JoinResult &result) { joined(result); });
+                        }
+                    };
+                }
+                page.ui().listRow(
+                    toCapitals(game.name),
+                    {.detail = players,
+                     .side = toCapitals(_translations.text(full ? "online.full" : "online.join")),
+                     .width = listWidth},
+                    std::move(join), {engine::AnchorPoint::TopLeft, columnLeft, top});
+                top += style.list.height;
+            }
+            if (_list.empty()) {
+                page.note(_translations.text("online.empty"),
+                          {engine::AnchorPoint::TopLeft, columnLeft, listTop + 20.0f}, Tone::Hint);
+            }
+            const float buttons = listTop + (static_cast<float>(MaxGamesShown) * style.list.height) + 30.0f;
+            page.button(
+                _translations.text("online.create"),
+                [this] {
+                    if (_lobby) {
+                        const std::string game =
+                            std::string(_lobby->name()).append("'s game").substr(0, lobby::MaxGameNameLength);
+                        _lobby->createGame(game, CreatedGamePlayers,
+                                           [this](const LobbyClient::JoinResult &result) { joined(result); });
+                    }
+                },
+                {engine::AnchorPoint::TopLeft, columnLeft, buttons});
+            page.button(_translations.text("online.refresh"), [this] { refresh(); },
+                        {engine::AnchorPoint::TopLeft, columnLeft, buttons + online_layout::buttonsSpacing});
+
+            // The pilot, at the top right, its avatar on the right: My account for an account, signing in for
+            // a guest who can
+            constexpr float avatarSize = 72.0f;
+            const bool signedIn = _lobby && _lobby->account();
+            const bool canSignIn =
+                _lobby && (_lobby->features().passwordAccounts || _lobby->features().discord);
+            page.ui().avatar(accountAvatar(avatarSize),
+                             {engine::AnchorPoint::TopRight, -screenMargin, screenMargin - 8.0f});
+            const float nameRight = -screenMargin - avatarSize - 12.0f;
+            page.button(toCapitals(_lobby ? _lobby->name() : _name),
+                        [this, signedIn, canSignIn] {
+                            if (signedIn) {
+                                _engine.switchScene(MyAccountScene);
+                            } else if (canSignIn) {
+                                _engine.switchScene(AccountsScene);
+                            }
+                        },
+                        {engine::AnchorPoint::TopRight, nameRight, screenMargin - 18.0f});
+            std::string under = toCapitals(_translations.text(signedIn ? "account.mine" : "online.guest"));
+            if (!signedIn && canSignIn) {
+                under += " · " + toCapitals(_translations.text("account.sign_in"));
+            }
+            page.note(under, {engine::AnchorPoint::TopRight, nameRight - 12.0f, screenMargin + 40.0f},
+                      Tone::Hint, 20.0f);
+            page.keys(_translations.text("online.keys_lobby"));
+        });
 }
 
 void OnlineScenes::connect()
@@ -262,6 +425,10 @@ void OnlineScenes::connect()
     _address = serverAddress(parts->first, parts->second);
 
     forgetLobby();
+    _profile.reset();
+    _picture.reset();
+    _newUser.reset();
+    _newUserPicture.reset();
     _engine.showToast(std::format("Connecting to {}...", _serverText));
     _lobby = std::make_unique<LobbyClient>(
         _loop, *_server, _known.trusted(_address), _name,
@@ -390,6 +557,80 @@ void OnlineScenes::forgetLobby()
     // Destroyed once the loop runs again: this may be one of its handlers
     std::shared_ptr<LobbyClient> old(std::move(_lobby));
     _loop.post([old] {});
+}
+
+void OnlineScenes::readProfile()
+{
+    if (!_lobby || !_lobby->account()) {
+        return;
+    }
+    const lobby::AccountInfo account = *_lobby->account();
+    _lobby->profile(account.id, [this, account](const auto &result) {
+        if (!_lobby) {
+            return;
+        }
+        if (const auto *error = std::get_if<lobby::ErrorCode>(&result)) {
+            logger().warning("No profile for account {}: {}", account.id, describe(*error));
+            return;
+        }
+        _profile = std::get<lobby::ProfileMessage>(result);
+        _profiles.remember(
+            _address,
+            {.username = account.username, .discord = _profile->discord, .avatarHash = _profile->avatarHash});
+        refreshIfShown(LobbyScene);
+        refreshIfShown(MyAccountScene);
+        if (_profile->avatarHash.empty()) {
+            return;
+        }
+        // A picture kept already is not asked again
+        const std::string hash = _profile->avatarHash;
+        if (const auto png = _profiles.picture(hash)) {
+            _picture = roundPicture(hash, std::as_bytes(std::span(*png)));
+            refreshIfShown(LobbyScene);
+            refreshIfShown(MyAccountScene);
+            return;
+        }
+        _lobby->picture(account.id, [this, hash](const auto &picture) {
+            if (const auto *received = std::get_if<LobbyClient::Picture>(&picture)) {
+                _profiles.keepPicture(received->hash, received->png);
+                _picture = roundPicture(received->hash, received->png);
+                refreshIfShown(LobbyScene);
+                refreshIfShown(MyAccountScene);
+            }
+        });
+    });
+}
+
+std::optional<render::TextureId> OnlineScenes::roundPicture(const std::string &hash,
+                                                            std::span<const std::byte> png)
+{
+    constexpr int PictureSize = 128;
+    try {
+        const auto *first = reinterpret_cast<const unsigned char *>(png.data());
+        return _resources.loadRoundPicture(hash, std::vector<unsigned char>(first, first + png.size()),
+                                           PictureSize);
+    } catch (const std::exception &error) {
+        logger().warning("Cannot show the picture {}: {}", hash, error.what());
+        return std::nullopt;
+    }
+}
+
+engine::Avatar OnlineScenes::accountAvatar(float size) const
+{
+    if (!_lobby || !_lobby->account()) {
+        return {.initial = "?", .kind = engine::AvatarKind::Guest, .size = size};
+    }
+    return {.picture = _picture,
+            .initial = initialOf(_lobby->account()->username),
+            .kind = _profile && _profile->discord ? engine::AvatarKind::Discord : engine::AvatarKind::Account,
+            .size = size};
+}
+
+void OnlineScenes::refreshIfShown(const char *scene)
+{
+    if (_engine.isSceneOpen(scene)) {
+        _engine.switchScene(scene);
+    }
 }
 
 } // namespace rtype::client

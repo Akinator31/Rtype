@@ -11,9 +11,12 @@ How the client joins the lobby of a master and plays a game of it: the same game
 apps/client/src/
   Online/
     LobbyClient.cpp    the connection to the lobby: TLS with the key pinned, HELLO, the requests
-    OnlineScenes.cpp   the Online menu and the list of the games
+    OnlineScenes.cpp   the Online menu, the servers met, their keys, the list of the games, the profile
     AccountScenes.cpp  the scenes of the accounts: sign in, create an account, the code, Discord, my account
+    OnlineScreen.cpp   the look the Online screens share: header, fields, notes, keys, Discord buttons
+    FormErrors.cpp     the field of a form each error of the master is about
     SessionTokens.cpp  the session token of the account signed in on each server, kept in the settings
+    KnownProfiles.cpp  the account remembered for each server, and the pictures kept on disk
   main.cpp             gives OnlineScenes the SocialSdkAuthorizer of libs/discord, polled every frame
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
@@ -46,21 +49,33 @@ sequenceDiagram
 
 *The client goes through the master to get a game, then talks to its instance directly.*
 
-1. **Online** asks for the name of the player and the server (`host:port`, the port 4242 by default, `[::1]:4242` for IPv6). An IP address is used as it is; a
-   host name is looked up when Connect is pressed.
+1. **Online** asks for the name of the player and the server (`host:port`, the port 4242 by default,
+   `[::1]:4242` for IPv6), or offers the servers met before, on the right: those whose key the player trusted,
+   each with the account remembered for it ([Profiles](#profiles)). An IP address is used as it is; a host name
+   is looked up when Connect is pressed.
 2. **The key of the server** is the one `KnownServers` trusts for it ([Trusted servers](#trusted-servers)). A
    server that does not hold a matching private key is refused during the handshake, before `HELLO` leaves: the
    player is asked to trust it if it was never met, warned otherwise.
-3. **The lobby** lists the games of the server: Create a game (for 4 players, named after the player), Join one,
-   Refresh, Disconnect. Escape disconnects too.
+3. **The lobby** lists the games of the server in rows: a full game is dim and cannot be joined; Create a game
+   (for 4 players, named after the player), Refresh. Escape disconnects. The pilot is at the top right, with
+   its avatar: My account, or, for a guest, the way to sign in.
 4. **The game** plays a `RemoteSession` with what `GAME_JOINED` gave. When it ends, by the pause menu or because
    the game ended, the client leaves it (`LEAVE_GAME`) and shows the list again.
 
 On a server with accounts, `WELCOME` leads to the scenes of the [accounts](#accounts) first, unless the player
 comes back signed in.
 
-Everything that goes wrong is shown in a toast, in the language of the game: a server unreachable or not the expected one, a game full, a
-game that crashed, the connection lost. A lobby connection lost brings the player back to the main menu.
+What goes wrong with a field of a form is shown under it, in red (`showError()`, `fieldOf()` in
+`Online/FormErrors.hpp`): a wrong password under the password, a username taken under the username, a wrong
+code under the code. Everything else is shown in a toast, in the language of the game: a server unreachable or
+not the expected one, a game full, a game that crashed, the connection lost. A lobby connection lost brings the
+player back to the main menu.
+
+The screens follow the Série 14 of the design ([plan](../plan/accounts-ui.md)): the widgets of the engine for
+forms, lists and avatars ([Forms](scenes-and-interface.md#forms), [Lists and avatars](scenes-and-interface.md#lists-and-avatars)),
+a header with its back arrow, the keys of the screen at the bottom left. The Online menu opens over the main
+menu; the screens after Connect have the starry sky of the main menu behind them; the questions (a new key, a
+key changed, Discord, the deletion) open over the screen that asks them, under a veil.
 
 What the administrators of the server do is shown in a toast too ([Administration](administration.md)): a
 message they send (`Server: <text>`), a game they end (back to the list), a removal from the game then from the
@@ -118,10 +133,12 @@ lobby.signIn("Pilot_7", password, [&](const rtype::client::LobbyClient::SignInRe
   the emails of the master come in it.
 - **`WELCOME` tells what the master offers** (`features()`): guests, password accounts, Discord; and the
   account the token of `HELLO` signed in (`account()`), whose username is then the name of the player.
-- **The requests of the accounts** ([lobby protocol 3](../protocol/lobby.md#6-accounts)): `registerAccount()`,
+- **The requests of the accounts** ([lobby protocol 4](../protocol/lobby.md#6-accounts)): `registerAccount()`,
   `verifyEmail()`, `resendCode()`, `signIn()`, `forgotPassword()`, `resetPassword()`, `signOut()`,
   `deleteAccount()`, and those of Discord, `discordSignIn()` (the application of the master),
-  `discordConfirm()` (`SIGNED_IN`, `DiscordConfirmed` for `DONE`, or the error) and `chooseUsername()`. Those
+  `discordConfirm()` (`SIGNED_IN`, `DiscordConfirmed` for `DONE`, with the profile of a new user for `PROFILE`,
+  or the error) and `chooseUsername()`; `profile()` (`GET_PROFILE`) and `picture()`, which asks `GET_AVATAR` until
+  it has every part of the picture. Those
   that sign in give `SIGNED_IN` or the error, and sign the connection in; the others give nothing or the error. A field the protocol cannot carry (an empty password, a code that is not 6 digits,
   a username of 17 bytes) gets at once the error the master would give it, without being sent.
 - **`DONE` to `SIGN_OUT` or `DELETE_ACCOUNT`**: the master closes the connection, so the client closes it first,
@@ -135,8 +152,8 @@ lobby.signIn("Pilot_7", password, [&](const rtype::client::LobbyClient::SignInRe
 
 ## Accounts
 
-On a server with accounts ([lobby protocol 3, section 6](../protocol/lobby.md#6-accounts)), the client offers
-what `WELCOME` says the server offers. A server without accounts looks as it did before them.
+On a server with accounts ([lobby protocol 4, section 6](../protocol/lobby.md#6-accounts)), the client offers
+what `WELCOME` says the server offers, Discord first. A server without accounts looks as it did before them.
 
 ```mermaid
 flowchart LR
@@ -148,7 +165,7 @@ flowchart LR
     A -->|Create an account| G[online_register] -->|CODE_SENT| C -->|SIGNED_IN| L
     A -->|Play as a guest, if allowed| L
     A -->|Sign in with Discord| D[online_discord] -->|SIGNED_IN| L
-    D -->|DONE: a new Discord user| U[online_choose_username] -->|SIGNED_IN| L
+    D -->|PROFILE: a new Discord user| U[online_choose_username] -->|SIGNED_IN| L
     L -->|My account| M[online_my_account] -->|Sign out, Delete| A
     M -->|Link Discord| D
 ```
@@ -161,35 +178,56 @@ flowchart LR
 - **It is forgotten** at sign-out and at the deletion of the account (`DONE`), then the client connects again as
   a guest; and on `SESSION_EXPIRED` (a session older than 30 days, a new password, a ban, a sign-out from
   another machine), after which the client connects again without it and says so in a toast.
-- **The password fields** are `MenuBuilder::passwordField()`: drawn as `*`, never copied to the clipboard
-  ([Interface](scenes-and-interface.md)). A password lives in its field only: it is read when the button is
+- **The password fields** are `InterfaceBuilder::passwordField()`: drawn as `*`, never copied to the clipboard
+  ([Interface](scenes-and-interface.md#forms)). Creating an account shows the strength of the password in a
+  gauge, full at the 10 characters the master asks for. A password lives in its field only: it is read when the button is
   pressed, and never kept by the scenes.
 - **The settings file** is readable by the player only on Unix (mode `0600`), since it holds the tokens.
 - **The language of the game** is sent in `HELLO`, so that the emails of the master come in it; every error
   code has its message in `en.lang` and `fr.lang`.
-- **My account** shows the username, and the role when the account administers the server: **Sign out**,
-  **Link Discord** on a server that offers it, and **Delete the account**, which asks for the password once
-  more, or **Confirm with Discord** for an account made with Discord.
+- **The code of the email** is typed in six cells (`InterfaceBuilder::codeField()`), and sent as soon as they
+  are full.
+- **My account** shows the avatar of the pilot, its username in chrome, its Discord name, then a sheet: the
+  server, the date the account was made, its email (masked: `k***@example.org`) and whether it is verified, its
+  password (set, or none for an account made with Discord), its Discord name, its role. **Link Discord**
+  (**Refresh from Discord** once linked) on a server that offers it, **Sign out**, and **Delete the account** in
+  red, which asks over the sheet, No by default, for the password once more, or **Confirm with Discord** for an
+  account made with Discord.
 
 ### Discord
 
 On a server whose `WELCOME` offers Discord ([ADR 0026](../decisions/0026-discord-social-sdk.md)):
 
-1. **Sign in with Discord** sends `DISCORD_SIGN_IN`; `DISCORD_AUTHORIZE` gives the id of the Discord application
-   of the master, and the client shows `online_discord`, which waits, with **Cancel**.
+1. **Continue with Discord** sends `DISCORD_SIGN_IN`; `DISCORD_AUTHORIZE` gives the id of the Discord
+   application of the master, and the client opens `online_discord` over the screen: the ring of the logo, and
+   the three steps (Discord opened, the answer of the player, the server checking), with **Cancel**.
 2. `discord::Authorizer::authorize()` asks the player: the Discord client if it runs, the browser otherwise.
    `SocialSdkAuthorizer` (`libs/discord`) does it with `Client::Authorize` of the Discord Social SDK, scope
    `identify`, and the challenge of a code verifier of PKCE it makes; the SDK receives the code on the loopback
    of the player. Its callbacks run in `poll()`, which the game loop calls every frame, after the network.
 3. The code, the verifier and the redirect address go in `DISCORD_CONFIRM`. `SIGNED_IN` keeps the token as any
-   sign-in does; `DONE` leads a new Discord user to `online_choose_username`, a player signed in back to **My
-   account** (the identity linked), or, for **Confirm with Discord**, straight to `DELETE_ACCOUNT` with an empty
-   password.
+   sign-in does; `PROFILE` leads a new Discord user to `online_choose_username`, its Discord picture, display
+   name and `@username` above the username it chooses, proposed from its Discord name; `DONE` brings a player
+   signed in back to **My account** (the identity linked, its profile read again), or, for **Confirm with
+   Discord**, straight to `DELETE_ACCOUNT` with an empty password.
 
 The player who refuses in Discord, or a Discord that cannot be reached, gets a toast and the scene before. The
 SDK starts at the first sign-in with Discord only; its logs go to the logger `discord`, warnings and errors.
 Cancel, or the connection lost, gives up the authorization running (`cancel()`): what Discord answers then goes
 nowhere.
+
+### Profiles
+
+Signed in, by a token or by a sign-in, the client asks `GET_PROFILE` for its account: its Discord names and the
+version of its picture. A picture it does not keep already comes with `GET_AVATAR`, in parts
+(`LobbyClient::picture()`); it is kept on disk under its version, in the folder `pictures` of the user data, and
+made a round texture (`ResourceManager::loadRoundPicture()`). The lobby and My account show it as soon as it is
+there.
+
+`KnownProfiles` remembers the account of each server under `servers.profile.<address>` in the
+[settings](settings.md) (its username, whether it is linked to Discord, the version of its picture), so that the
+servers met in the Online menu show who will be signed in, with the picture, before connecting. It is forgotten
+at sign-out and at the deletion of the account; the pictures stay, as another server may show them.
 
 `libs/discord` is two targets, so that the tests never load the library of Discord: `rtype::discord`, the
 interface, which the client and its tests know, and `rtype::discord_sdk`, its implementation, linked by the

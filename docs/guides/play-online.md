@@ -13,7 +13,8 @@ Run a server and play the same game from several machines, or from several clien
 
     For players on other machines, open the TCP port 4242 and the UDP ports 4243 to 4299.
 
-2. **Connect.** Start the client, choose **Online**, type a name and the server, then **Connect**:
+2. **Connect.** Start the client, choose **Online**, type a name and the server, then **Connect**, or pick one
+   of the **Servers met** on the right, which shows the account you will be signed in to:
 
     | Field | Example | Meaning |
     |---|---|---|
@@ -21,7 +22,7 @@ Run a server and play the same game from several machines, or from several clien
     | Server | `127.0.0.1:4242` | The address of the server and its port; the port is 4242 if omitted |
 
 3. **Trust the server**, the first time only. A server the client does not know yet shows its fingerprint:
-   compare it with the one its owner gives (`r-type_server --fingerprint`), then **Trust and connect**. The
+   compare it with the one its owner gives (`r-type_server --fingerprint`), group by group, then **Trust**. The
    client remembers it in its settings, and connects at once the next times.
 
 4. **Do not trust a key that changed.** A known server that presents another key is refused, with a warning
@@ -29,17 +30,22 @@ Run a server and play the same game from several machines, or from several clien
    key** in the Online menu, then connect again.
 
 5. **Sign in**, on a server with accounts ([Set up accounts](set-up-accounts.md)). After **Connect**, the
-   client offers what the server offers: **Sign in** (a username or an email, and the password), **Create an
+   client offers what the server offers: **Continue with Discord** first, then **Sign in** (a username or an
+   email, and the password), **Create an
    account** (a username, an email, a password of 10 to 128 characters), and **Play as a guest** if the server
    accepts guests. A new account, or one whose email is not verified, asks for the code of 6 digits sent by
    email, valid 15 minutes: **Send a new code** if it did not come. **Forgot password** sends a code to choose a
-   new one. **Sign in with Discord**, on a server that offers it, asks in the Discord client, or in the browser:
-   accept, then come back to the game; the first time, choose the username of the account. Once signed in, the
-   client comes back signed in at the next connections, even after a restart; **My account** in the lobby signs
-   out, links Discord, or deletes the account, with its password or, for an account made with Discord, with
-   **Confirm with Discord**. A server without accounts goes straight to the lobby.
+   new one. A field the server refuses says why under it, in red. **Continue with Discord**, on a server that
+   offers it, asks in the Discord client, or in the browser: accept, then come back to the game; the first time,
+   your Discord picture and name show, and you choose the username of the account, your Discord name proposed.
+   Once signed in, the client comes back signed in at the next connections, even after a restart. Your avatar,
+   at the top right of the lobby, opens **My account**: your Discord profile, your email, the date of the
+   account; sign out, link Discord (or refresh your picture from it), or delete the account, with its password
+   or, for an account made with Discord, with **Confirm with Discord**. A server without accounts goes straight
+   to the lobby.
 
-6. **Play.** In the lobby, **Create a game**, or **Join** one of the list (**Refresh** to see the new ones). A
+6. **Play.** In the lobby, **Create a game**, or join one of the list (**Refresh** to see the new ones; a full
+   game is dim). A
    second client, on this machine or another, joins the same game: each player has a ship of its colour.
    Escape opens the pause menu, where **Leave the game** goes back to the list.
 
@@ -62,6 +68,6 @@ INFO  instance Pavel (1) connected from 127.0.0.1:40102, slot 0
 | `Your session expired: sign in again` | The session ended (30 days, a new password, a ban, signed out elsewhere): the client connected again as a guest |
 | `If this email has an account, a code was sent to it` but no email | Look in the spam folder, then **Send a new code** (once a minute); the server may not reach its mail server |
 | `This name belongs to an account` | A guest cannot take the username of an account: choose another name, or sign in |
-| `Discord sign-in cancelled` | Refused or closed in Discord: **Sign in with Discord** again |
+| `Discord sign-in cancelled` | Refused or closed in Discord: **Continue with Discord** again |
 | `This Discord account belongs to another account` | That Discord account signs in to another account of the server: sign in with it, or link another |
 | `The server cannot reach Discord now` | Try again in a moment; the server may not reach `discord.com` |

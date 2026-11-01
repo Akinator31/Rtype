@@ -11,7 +11,7 @@ const int volume = settings.getInt("audio.volume").value_or(100);
 settings.writeFile();
 ```
 
-Values are set and read as `String`, `Int`, `Float` or `Bool`. They are stored as text, so a getter returns `std::nullopt` when the key is missing or when its value is not of the requested type: `value_or()` gives the default. `hasKey()` and `removeKey()` complete the API.
+Values are set and read as `String`, `Int`, `Float` or `Bool`. They are stored as text, so a getter returns `std::nullopt` when the key is missing or when its value is not of the requested type: `value_or()` gives the default. `hasKey()`, `removeKey()` and `keys(prefix)` (the keys that start with a prefix, sorted: the servers met, for instance) complete the API.
 
 ## The file
 
@@ -25,6 +25,7 @@ Name keys by domain with dots, so that the file stays readable:
 |---|---|
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
 | `servers.session.<host>:<port>` | `SessionTokens`: the session token of the account signed in on that server, 64 hexadecimal digits, sent in the next `HELLO` ([Accounts](client-online.md#accounts)). A secret: never logged |
+| `servers.profile.<host>:<port>` | `KnownProfiles`: the account signed in on that server, shown in the Online menu: `<1 if Discord, else 0>:<version of its picture>:<username>`; the picture itself in `pictures/<version>.png` beside the settings ([Profiles](client-online.md#profiles)) |
 
 ## Not the data of the server
 
