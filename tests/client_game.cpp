@@ -179,6 +179,12 @@ TEST_CASE("A local session has its player in slot 0, moved by its input", "[clie
     CHECK_FALSE(session.isOver());
 }
 
+TEST_CASE("A local session is the story mode: allies come to the rescue against the final boss", "[client]")
+{
+    const LocalSession session;
+    CHECK(session.simulation().rules().rescue);
+}
+
 TEST_CASE("A local session paused does not step", "[client]")
 {
     LocalSession session;
@@ -235,6 +241,11 @@ TEST_CASE("Each entity of the game has its size, the ships of the players the co
     CHECK(bydo.box.color.r != rtype::render::colors::Gray.r);
     CHECK(bydo.order == shipLook.order);
     CHECK(bydoShot.order < bydo.order);
+    // The allies of the rescue against the final boss, of the size of a ship, in a colour of their own
+    const EntityLook ally = lookOf({6, rtype::game::EntityKind::AllyShip, rtype::game::NoOwner});
+    CHECK(ally.box.width == Approx(shipLook.box.width));
+    CHECK(ally.box.color.r != rtype::render::colors::Gray.r);
+    CHECK(ally.order == shipLook.order);
     // Its plasma orbs too, round
     const EntityLook orb = lookOf({5, rtype::game::EntityKind::BydoPlasmaShot, rtype::game::NoOwner});
     CHECK(orb.box.color.r != rtype::render::colors::Gray.r);

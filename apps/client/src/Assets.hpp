@@ -49,5 +49,8 @@
 #define RTYPE_SOUND_COLLISION "sounds/fx/collision.wav"
 #define RTYPE_SOUND_SABER "sounds/fx/saber/laser_saber.wav"
 #define RTYPE_SOUND_DASH_WIND "sounds/fx/saber/wing_giant_flap.wav"
+/// The voice played when the allies are called to the rescue against the final boss, offline: its length is
+/// game::Rules::rescueVoiceTicks. Not in the assets yet: the rescue goes on silently without it.
+#define RTYPE_SOUND_RESCUE_VOICE "sounds/rescue_voice.wav"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"

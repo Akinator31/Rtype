@@ -7,7 +7,9 @@
 #include "MainMenu/MainMenu.hpp"
 #include "ShipModel.hpp"
 #include "ShipSelector/ShipCatalog.hpp"
+#include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Rules.hpp"
@@ -20,6 +22,7 @@
 #include <format>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -73,6 +76,22 @@ constexpr render::Rectangle DropShipHull{-11.95f, -5.74f, 23.9f, 9.11f};
 /// and a little towards the camera. Its collider has the same proportions (config/ships/bydo_shogun.lua).
 constexpr render::Rectangle ShogunHull{-5.0f, -33.0f, 17.0f, 33.5f};
 constexpr float ShogunSpin = -70.0f;
+
+/// The model of the allies of the rescue against the final boss, one of the ships of the hangar.
+constexpr std::string_view AllyModel = RTYPE_MODEL_SHIP_SPACESHIP;
+
+/// The prompt of the combined attack, during the rescue: in the titles, under the middle of the screen,
+/// blinking.
+constexpr float PromptSize = 44.0f;
+constexpr float PromptSpacing = 6.0f;
+constexpr float PromptOffset = 260.0f;
+constexpr float PromptBlink = 0.45f;
+/// Over the HUD and the death screen, under the toasts.
+constexpr int PromptOrder = 20;
+/// How loud the voice of the rescue is.
+constexpr float RescueVoiceVolume = 1.0f;
+/// Time the banner of the combined attack stays fully shown, in seconds.
+constexpr float CombinedBannerDuration = 1.2f;
 
 /// The meshes of the trails behind the flames of the ship models, by index in their files.
 const std::vector<int> EznoTrails{6};
@@ -235,6 +254,15 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
                          {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoTrails});
     sessions.setLocalShipLook(
         {loadShipModel(resources, equipped.modelPath), equipped.hull, false, equipped.trailMeshes});
+    // The allies of the rescue against the final boss fly the ship of the hangar with the model AllyModel
+    const auto &catalog = getShipCatalog();
+    const auto ally = std::ranges::find_if(
+        catalog, [](const ShipEntry &entry) { return std::string_view(entry.modelPath) == AllyModel; });
+    if (ally != catalog.end()) {
+        sessions.setShipLook(game::EntityKind::AllyShip,
+                             {loadShipModel(resources, ally->modelPath), ally->hull, false,
+                              ally->trailMeshes});
+    }
     sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
                                                        DropShipHull, true, DropShipTrails});
     BossLook shogun = loadBossLook(resources, RTYPE_MODEL_BOSS_SHOGUN, ShogunHull, ShogunSpin);
@@ -324,6 +352,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         showWave(wave);
         playWaveMusic(music);
     });
+    sessions.setRescueHandler([this](game::RescueStage stage) { showRescue(stage); });
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
@@ -424,11 +453,79 @@ void GameScenes::showDeath()
                     {lives, rules.lives, _sessions.tick() + rules.respawnDelay, rules.respawnDelay});
 }
 
+void GameScenes::showRescue(game::RescueStage stage)
+{
+    if (stage != game::RescueStage::Prompt) {
+        closePrompt();
+    }
+    switch (stage) {
+    case game::RescueStage::Voice:
+        playRescueVoice();
+        break;
+    case game::RescueStage::Arrival:
+        _engine.showBanner(_translations.text("rescue.title"), _translations.text("rescue.detail"),
+                           engine::ToastType::Success);
+        break;
+    case game::RescueStage::Prompt:
+        openPrompt();
+        break;
+    case game::RescueStage::Combined:
+        _engine.showBanner(_translations.text("rescue.combined"), "", engine::ToastType::Info,
+                           CombinedBannerDuration);
+        break;
+    default:
+        break;
+    }
+}
+
+void GameScenes::playRescueVoice()
+{
+    try {
+        _audio.play(_audio.loadSound(RTYPE_SOUND_RESCUE_VOICE), {.volume = RescueVoiceVolume});
+    } catch (const std::runtime_error &error) {
+        log::Logger("game").warning("Voice of the rescue not played: {}", error.what());
+    }
+}
+
+void GameScenes::openPrompt()
+{
+    if (!_scene || _prompt) {
+        return;
+    }
+    ecs::Ecs &ecs = _engine.getEcs();
+    const ecs::entity_t prompt = ecs.createEntity();
+    ecs.addComponent<engine::SceneMember>(prompt, *_scene);
+    ecs.addComponent<engine::Anchor>(prompt, engine::AnchorPoint::Center, 0.0f, PromptOffset);
+    ecs.addComponent<ecs::Position>(prompt);
+    ecs.addComponent<engine::Drawable>(prompt, engine::Layer::Interface, PromptOrder);
+    ecs.addComponent<engine::Text>(prompt, _translations.text("rescue.prompt"), _style.toast.nameFont,
+                                   PromptSize, render::colors::White, PromptSpacing);
+    ecs.addComponent<engine::Title>(prompt);
+    ecs.addComponent<engine::Opacity>(prompt, 1.0f);
+    ecs.addComponent<engine::Tween>(prompt, engine::Tween{.target = engine::TweenTarget::Opacity,
+                                                          .from = 1.0f,
+                                                          .to = 0.25f,
+                                                          .duration = PromptBlink,
+                                                          .easing = engine::Easing::Linear,
+                                                          .pingPong = true});
+    _prompt = ecs.ref(prompt);
+}
+
+void GameScenes::closePrompt()
+{
+    const std::optional<ecs::EntityRef> prompt = std::exchange(_prompt, std::nullopt);
+    ecs::Ecs &ecs = _engine.getEcs();
+    if (prompt && ecs.isAlive(*prompt)) {
+        ecs.destroyEntity(prompt->id);
+    }
+}
+
 void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     configureGameLooks(_sessions, resources, audio, getShipCatalog()[_ships.equipped]);
     _scene = scene;
+    _prompt.reset();
     _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),
                   resources.loadTexture(RTYPE_IMAGE_LIFE_LOST, render::TextureFiltering::Smooth),
                   style.toast.messageFont,

@@ -13,9 +13,17 @@ namespace
 
 constexpr double Tick = 1.0 / game::TickRate;
 
+/// The rules of a game offline: the story mode, where allies come to the rescue against the final boss.
+game::Rules storyRules(game::Rules rules)
+{
+    rules.rescue = true;
+    return rules;
+}
+
 } // namespace
 
-LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config) : _simulation(rules, config)
+LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config)
+    : _simulation(storyRules(rules), config)
 {
     _simulation.addPlayer(localSlot());
 }

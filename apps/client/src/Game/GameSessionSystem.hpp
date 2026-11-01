@@ -73,8 +73,9 @@ struct Kill {
 ///    its health bar above it when it is hit, except the ship of the local player. The sounds are
 ///    engine::SoundEffect given to entities, which the engine::SoundSystem plays: a shot that appears has the
 ///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind. Each ship
-///    killed, a Bydo or the ship of a player, is told to the kill handler, if any, and each wave started to
-///    the wave handler, if any.
+///    killed, a Bydo or the ship of a player, is told to the kill handler, if any, each wave started to
+///    the wave handler, if any, and each new stage of the rescue against the final boss to the rescue
+///    handler, if any.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens
@@ -91,6 +92,9 @@ class GameSessionSystem : public ecs::System
     std::function<void()> _onOver;
     std::function<void(const Kill &)> _onKill;
     std::function<void(std::uint16_t, const std::string &)> _onWave;
+    std::function<void(game::RescueStage)> _onRescue;
+    /// The stage of the rescue against the final boss in the latest snapshot.
+    game::RescueStage _rescue = game::RescueStage::None;
     /// The entity of the scene of each entity of the game, by id.
     std::unordered_map<std::uint32_t, ecs::EntityRef> _entities;
     ShipLooks _shipLooks;
@@ -167,6 +171,8 @@ public:
     /// Calls this with the number of each wave started in the game from now on, from 1, and its music (empty
     /// if it has none).
     void setWaveHandler(std::function<void(std::uint16_t, const std::string &)> onWave);
+    /// Calls this with each new stage of the rescue against the final boss from now on (offline only).
+    void setRescueHandler(std::function<void(game::RescueStage)> onRescue);
 
     void update(float elapsed) override;
 
@@ -178,6 +184,8 @@ public:
     [[nodiscard]] const std::vector<game::PlayerState> &players() const { return _players; }
     /// The tick of the latest snapshot.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }
+    /// The stage of the rescue against the final boss in the latest snapshot.
+    [[nodiscard]] game::RescueStage rescue() const { return _rescue; }
     /// The entity of the scene that draws an entity of the game, if it is drawn.
     [[nodiscard]] std::optional<ecs::entity_t> entityOf(std::uint32_t networkId) const;
     /// Entities of the game drawn.

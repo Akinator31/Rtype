@@ -13,7 +13,9 @@
 namespace rtype::client
 {
 
-/// A game offline: the Simulation of libs/game runs in the client, for one player in slot 0 (ADR 0015).
+/// A game offline: the Simulation of libs/game runs in the client, for one player in slot 0 (ADR 0015). It is
+/// the story mode: the rules always have Rules::rescue, so that allies come to the rescue against the final
+/// boss when its last ship is lost.
 ///
 /// The simulation steps exactly once per tick of game time, 60 times per second, whatever the frame rate:
 /// the frame times add up, and each full tick is one step, like the PhysicsStep. After a frame too long (a

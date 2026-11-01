@@ -98,6 +98,7 @@ void GameSessionSystem::stop()
     _killed.clear();
     _players.clear();
     _tick = 0;
+    _rescue = game::RescueStage::None;
     _clock = 0.0f;
 }
 
@@ -154,6 +155,11 @@ void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
 void GameSessionSystem::setWaveHandler(std::function<void(std::uint16_t, const std::string &)> onWave)
 {
     _onWave = std::move(onWave);
+}
+
+void GameSessionSystem::setRescueHandler(std::function<void(game::RescueStage)> onRescue)
+{
+    _onRescue = std::move(onRescue);
 }
 
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
@@ -214,6 +220,9 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     reportKills(snapshot.destroyed);
     if (snapshot.waveStarted && _onWave) {
         _onWave(*snapshot.waveStarted, snapshot.waveMusic);
+    }
+    if (snapshot.rescue != std::exchange(_rescue, snapshot.rescue) && _onRescue) {
+        _onRescue(snapshot.rescue);
     }
 
     // Each snapshot holds the whole world: what is not in it any more is gone

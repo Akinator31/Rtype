@@ -35,6 +35,9 @@ inline constexpr const char *PauseScene = "pause";
 ///   (WaveDefinition::music); the music stops when the game ends.
 /// - When the ship of the local player is lost with lives left, the death screen (openDeathScreen()): the red
 ///   banner "SHIP DESTROYED" with the lives left in its band, and the countdown to the next ship.
+/// - Offline, the rescue against the final boss (game::RescueStage): when the last ship is lost against the
+///   shogun, its voice plays, then a banner greets the allies; once the shogun has dashed through them, a
+///   blinking prompt asks for Space, the combined attack.
 /// - Escape (or Start on a gamepad) opens the pause menu: Resume, or Leave the game. Offline, the game stops
 ///   while it is open.
 /// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
@@ -57,6 +60,8 @@ class GameScenes
     /// The game scene open, and the look of its death screen.
     std::optional<engine::SceneId> _scene;
     DeathScreenLook _deathLook;
+    /// The prompt of the combined attack, while it shows.
+    std::optional<ecs::EntityRef> _prompt;
     /// The session of the next game scene opened, and what to do when it ends.
     std::unique_ptr<GameSession> _next;
     std::function<void()> _nextEnd;
@@ -75,6 +80,15 @@ class GameScenes
     void playWaveMusic(const std::string &music);
     /// Shows the death screen of the local player, unless its ship was its last life.
     void showDeath();
+    /// Shows a new stage of the rescue against the final boss: its voice, the banner of the allies, the
+    /// prompt of the combined attack.
+    void showRescue(game::RescueStage stage);
+    /// Plays the voice of the rescue, if its file is in the assets.
+    void playRescueVoice();
+    /// The prompt of the combined attack, blinking under the middle of the screen until the player presses
+    /// Fire.
+    void openPrompt();
+    void closePrompt();
 
 public:
     /// Declares the scenes. Everything given must outlive the engine.
