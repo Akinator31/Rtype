@@ -78,6 +78,7 @@ export const accounts: Account[] = [
     emailVerifiedAt: now - 172_800_000,
     password: true,
     discordId: '4242',
+    discord: { username: 'chief', displayName: 'The Chief', avatar: 'a1b2' },
     role: 'admin',
     locked: true,
     bannedAt: null,

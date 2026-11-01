@@ -46,6 +46,15 @@ export interface Player {
 
 export type Role = 'player' | 'admin';
 
+/** The Discord profile of an account, as of its last sign-in with Discord: its picture is served apart. */
+export interface DiscordProfile {
+  /** `@username` on Discord. */
+  username: string;
+  displayName: string | null;
+  /** The version of its picture, null for none: GET /api/accounts/{id}/avatar. */
+  avatar: string | null;
+}
+
 /** An account, as GET /api/accounts lists it. */
 export interface Account {
   id: number;
@@ -55,6 +64,8 @@ export interface Account {
   /** Whether it signs in with a password. */
   password: boolean;
   discordId: string | null;
+  /** Null without Discord. Optional: a master before the profiles does not send it. */
+  discord?: DiscordProfile | null;
   role: Role;
   /** One of [admin] admins of the settings: never demoted, banned nor deleted from the panel. */
   locked: boolean;
@@ -70,6 +81,7 @@ export interface SessionAccount {
   username: string;
   role: Role;
   locked: boolean;
+  discord?: DiscordProfile | null;
 }
 
 export interface SessionInfo {

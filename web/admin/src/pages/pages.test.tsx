@@ -110,8 +110,12 @@ describe('the accounts of the administrators', () => {
     server.use(http.get('*/api/sign-in', () => HttpResponse.json({ password: true, discord: false })));
     renderPanel('/', [], { signedOut: true });
     const form = await screen.findByRole('form', { name: 'Sign in' });
-    expect(within(form).queryByRole('button', { name: 'Sign in with Discord' })).not.toBeInTheDocument();
-    // The local token stays offered
+    expect(within(form).queryByRole('button', { name: 'Continue with Discord' })).not.toBeInTheDocument();
+    // The local token stays offered, folded under the account
+    expect(screen.queryByRole('form', { name: 'Open a session' })).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByTestId('local-access')).getByRole('button', { name: 'Paste a token' }),
+    );
     expect(screen.getByRole('form', { name: 'Open a session' })).toBeInTheDocument();
 
     const button = within(form).getByRole('button', { name: 'Sign in' });
@@ -148,7 +152,10 @@ describe('the accounts of the administrators', () => {
     server.use(http.get('*/api/sign-in', () => HttpResponse.json({ password: true, discord: true })));
     renderPanel('/', [], { signedOut: true });
     const form = await screen.findByRole('form', { name: 'Sign in' });
-    await user.click(within(form).getByRole('button', { name: 'Sign in with Discord' }));
+    // Discord first, before the password
+    const buttons = within(form).getAllByRole('button');
+    expect(buttons[0]).toHaveTextContent('Continue with Discord');
+    await user.click(within(form).getByRole('button', { name: 'Continue with Discord' }));
     expect(discord).toHaveBeenCalledTimes(1);
     discord.mockRestore();
   });
@@ -199,11 +206,26 @@ describe('the accounts of the administrators', () => {
     expect(within(alice).getByRole('button', { name: 'Make admin Alice' })).toBeInTheDocument();
     const chief = screen.getByTestId('account-1');
     expect(chief).toHaveTextContent('Settings');
-    expect(chief).toHaveTextContent('4242');
+    expect(chief).toHaveTextContent('@chief');
     expect(within(chief).queryByRole('button')).not.toBeInTheDocument();
 
     await user.type(screen.getByRole('searchbox', { name: /Search a username/ }), 'ali');
     await waitFor(() => expect(searches).toContain('?search=ali'));
+  });
+
+  it('shows the account chosen in a sheet, with its Discord picture and names', async () => {
+    const user = userEvent.setup();
+    server.use(http.get('*/api/accounts', () => HttpResponse.json(fixtures.accounts)));
+    renderPanel('/accounts', [snapshot]);
+    // The first of the list at first: Alice, without Discord, its initial instead of a picture
+    const sheet = await screen.findByTestId('account-sheet');
+    expect(sheet).toHaveTextContent('Alice');
+    expect(within(sheet).getByTestId('avatar-3')).toHaveTextContent('A');
+
+    await user.click(screen.getByTestId('account-1'));
+    await waitFor(() => expect(screen.getByTestId('account-sheet')).toHaveTextContent('The Chief · @chief'));
+    const picture = within(screen.getByTestId('account-sheet')).getByTestId('avatar-1').querySelector('img');
+    expect(picture).toHaveAttribute('src', '/api/accounts/1/avatar?v=a1b2');
   });
 
   it('bans an account after its confirmation, with a reason', async () => {
