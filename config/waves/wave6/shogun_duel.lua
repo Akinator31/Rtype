@@ -1,4 +1,5 @@
 -- Once every wave is beaten, the shogun of the Bydos comes alone to finish the players.
+-- Offline only, in the story mode of the client: the server leaves the waves of difficulty 6 out.
 return {
     name = "shogun_duel",
     label = "Shogun duel",
