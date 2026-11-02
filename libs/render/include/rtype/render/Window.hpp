@@ -25,6 +25,9 @@ struct WindowSettings {
 /// The window is opened by the constructor and closed by the destructor (RAII). Only one window can exist
 /// at a time, as raylib supports a single window. Graphics resources (textures, fonts, shaders) need the
 /// window: create them after it and destroy them before it.
+///
+/// On Linux, a laptop with an NVIDIA GPU next to an integrated one draws with the NVIDIA GPU, unless
+/// __GLX_VENDOR_LIBRARY_NAME is already set (mesa keeps the integrated GPU).
 class Window
 {
 private:
