@@ -113,7 +113,7 @@ TEST_CASE("The small messages are written field by field", "[game][messages]")
     CHECK(encode(PlayerLeftMessage{3, LeaveReason::TimedOut}) == bytes({0x03, 0x01}));
     CHECK(encode(EntitiesDestroyedMessage{1000, {{7, DestroyCause::Killed}, {9, DestroyCause::Removed}}}) ==
           bytes({0x00, 0x00, 0x03, 0xE8, 0x02, 0x00, 0x00, 0x00, 0x07, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00}));
-    CHECK(encode(WaveStartedMessage{3}) == bytes({0x00, 0x03, 0x00}));
+    CHECK(encode(WaveStartedMessage{3, ""}) == bytes({0x00, 0x03, 0x00}));
     CHECK(encode(WaveStartedMessage{3, "a.mp3"}) == bytes({0x00, 0x03, 0x05, 'a', '.', 'm', 'p', '3'}));
     CHECK(encode(GameOverMessage{GameOutcome::Victory}) == bytes({0x01}));
 }
@@ -172,7 +172,7 @@ TEST_CASE("Every message survives a round trip", "[game][messages]")
 
     const EntitiesDestroyedMessage destroyed{5, {{1, DestroyCause::Removed}, {2, DestroyCause::Killed}}};
     CHECK(decodeEntitiesDestroyed(encode(destroyed)) == destroyed);
-    CHECK(decodeWaveStarted(encode(WaveStartedMessage{65535})) == WaveStartedMessage{65535});
+    CHECK(decodeWaveStarted(encode(WaveStartedMessage{65535, ""})) == WaveStartedMessage{65535, ""});
     CHECK(decodeWaveStarted(encode(WaveStartedMessage{2, "sounds/boss.mp3"})) ==
           WaveStartedMessage{2, "sounds/boss.mp3"});
     CHECK(decodeGameOver(encode(GameOverMessage{GameOutcome::Defeat})) ==
@@ -298,7 +298,7 @@ TEST_CASE("The encoders refuse the values the protocol forbids", "[game][message
     CHECK_THROWS_AS(encode(InputMessage{100, std::vector<PlayerInput>(33)}), std::invalid_argument);
     CHECK_THROWS_AS(encode(EntitiesDestroyedMessage{1, {}}), std::invalid_argument);
     CHECK_THROWS_AS(encode(EntitiesDestroyedMessage{1, {{0, DestroyCause::Killed}}}), std::invalid_argument);
-    CHECK_THROWS_AS(encode(WaveStartedMessage{0}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(WaveStartedMessage{0, ""}), std::invalid_argument);
 
     const auto invalid = [](auto change) {
         SnapshotPart part = examplePart();

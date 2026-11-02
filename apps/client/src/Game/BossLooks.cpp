@@ -57,7 +57,8 @@ BossLook loadBossLook(render::ResourceManager &resources, const std::string &pat
              resources.getModelAnimation(model, "Slash"), resources.getModelAnimation(model, "Guard"),
              resources.getModelAnimation(model, "Shoot")},
             hull,
-            spin};
+            spin,
+            {}};
 }
 
 void BossLooks::setLook(game::EntityKind kind, const BossLook &look)
