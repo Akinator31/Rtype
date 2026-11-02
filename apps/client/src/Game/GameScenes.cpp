@@ -583,8 +583,8 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
     ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
     const render::Rectangle area = metrics.visibleArea();
-    ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f,
-                                   render::Vector2{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)});
+    const render::Vector2 centre{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)};
+    ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre);
     _camera = ecs.ref(sky);
     ecs.addComponent<engine::Light>(sky, GameLight);
 

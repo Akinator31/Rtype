@@ -16,6 +16,8 @@ namespace rtype::client
 /// The camera of the game scene, with its engine::Camera, during the rescue against the final boss: at rest
 /// it sees the whole game (computeGameView()).
 ///
+/// - While the voice of the rescue plays (game::RescueStage::Voice), it pushes in slowly on the ship of the
+///   local player, where it was just lost; it pulls back as the allies arrive.
 /// - While the shogun dashes at the formation (game::RescueStage::Dash), it closes up on it, follows it a
 ///   little late, leaning into its dashes, and shakes at each ship its blade goes through.
 /// - During the combined attack (Combined), it pushes in slowly on the shogun, closer than for the dashes,
@@ -28,8 +30,10 @@ struct RescueCamera {
     float zoom = 1.0f;
     /// How much it is turned around its axis, in degrees, its lean and its shake aside.
     float tilt = 0.0f;
-    /// The point of the game it frames when close up: it follows the shogun.
+    /// The point of the game it frames when close up: it follows the subject of its shot.
     render::Vector2 focus;
+    /// Where the ship of the local player was last drawn: it is lost when the voice of the rescue plays.
+    render::Vector2 ship;
     /// How much it shakes, from 0 to 1: a blow adds to it (shakeCamera()), then it calms down.
     float shake = 0.0f;
     /// Seconds it has been moved: the time of its shake.
@@ -40,7 +44,8 @@ struct RescueCamera {
 void shakeCamera(RescueCamera &camera, float strength);
 
 /// Moves the cameras of the entities with a RescueCamera and an engine::Camera each frame, from the stage of
-/// the rescue and the shogun drawn by the GameSessionSystem: after it, which moves the shogun.
+/// the rescue, the shogun and the ship of the local player drawn by the GameSessionSystem: after it, which
+/// moves them.
 class RescueCameraSystem : public ecs::System
 {
     const GameSessionSystem &_sessions;
@@ -51,6 +56,8 @@ class RescueCameraSystem : public ecs::System
 
     /// Where the shogun is drawn, if it is.
     [[nodiscard]] std::optional<ecs::Position> findBoss() const;
+    /// Where the ship of the local player is drawn, if it is.
+    [[nodiscard]] std::optional<ecs::Position> findLocalShip() const;
 
 public:
     RescueCameraSystem(ecs::ComponentCaches &caches, const GameSessionSystem &sessions);

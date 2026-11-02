@@ -781,7 +781,8 @@ TEST_CASE("The camera closes up on the shogun while it dashes, shakes at a strik
     const rtype::render::Rectangle area{0.0f, 0.0f, 1920.0f, 1080.0f};
     const rtype::ecs::entity_t camera = client.ecs.createEntity();
     client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
-    client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, rtype::render::Vector2{960.0f, 540.0f});
+    const rtype::render::Vector2 centre{960.0f, 540.0f};
+    client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, centre, centre);
     const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
     rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
     boss.x = 1600.0f;
@@ -826,6 +827,49 @@ TEST_CASE("The camera closes up on the shogun while it dashes, shakes at a strik
     CHECK(view().target.x == Approx(960.0f).epsilon(0.001));
 }
 
+TEST_CASE("The camera pushes in on the ship of the player during the voice of the rescue, where it was lost",
+          "[client]")
+{
+    ImpactClient client;
+    client.ecs.registerSystem<RescueCameraSystem>(client.sessions);
+    const rtype::render::Rectangle area{0.0f, 0.0f, 1920.0f, 1080.0f};
+    const rtype::ecs::entity_t camera = client.ecs.createEntity();
+    client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
+    const rtype::render::Vector2 centre{960.0f, 540.0f};
+    client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, centre, centre);
+    const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
+    rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
+    boss.x = 1600.0f;
+    boss.y = 540.0f;
+    // The ship of the local player (slot 0), and one of another player, elsewhere
+    rtype::game::EntityState ship{5, rtype::game::EntityKind::PlayerShip, 0};
+    ship.x = 700.0f;
+    ship.y = 300.0f;
+    rtype::game::EntityState other{6, rtype::game::EntityKind::PlayerShip, 1};
+    other.x = 300.0f;
+    other.y = 800.0f;
+    client.receive(snapshotOf(1, {boss, ship, other}));
+
+    // Lost: the voice plays, the camera closes up where it was last drawn
+    rtype::game::Snapshot voice = snapshotOf(2, {boss, other});
+    voice.rescue = rtype::game::RescueStage::Voice;
+    for (int frame = 0; frame < 360; ++frame) {
+        client.receive(voice);
+    }
+    CHECK(view().fieldOfView < 0.55f * 1080.0f);
+    CHECK(view().target.x == Approx(700.0f).margin(1.0f));
+    CHECK(view().target.y == Approx(300.0f).margin(1.0f));
+    CHECK(view().up.x == Approx(0.0f).margin(0.001));
+
+    // The allies arrive: back to the whole game
+    voice.rescue = rtype::game::RescueStage::Arrival;
+    for (int frame = 0; frame < 300; ++frame) {
+        client.receive(voice);
+    }
+    CHECK(view().fieldOfView == Approx(1080.0f).epsilon(0.001));
+    CHECK(view().target.x == Approx(960.0f).epsilon(0.001));
+}
+
 TEST_CASE("The camera pushes in on the shogun during the combined attack, tilted and rumbling, then pulls back",
           "[client]")
 {
@@ -834,7 +878,8 @@ TEST_CASE("The camera pushes in on the shogun during the combined attack, tilted
     const rtype::render::Rectangle area{0.0f, 0.0f, 1920.0f, 1080.0f};
     const rtype::ecs::entity_t camera = client.ecs.createEntity();
     client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
-    client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, rtype::render::Vector2{960.0f, 540.0f});
+    const rtype::render::Vector2 centre{960.0f, 540.0f};
+    client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, centre, centre);
     const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
     rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
     boss.x = 1600.0f;

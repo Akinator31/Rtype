@@ -318,7 +318,8 @@ each snapshot (`Snapshot::rescue`); the `GameSessionSystem` tells each new one t
 | `Prompt` | `PRESS SPACE - COMBINED ATTACK` (`rescue.prompt`) under the middle of the screen, in the titles, blinking, until the next stage |
 | `Combined` | A short banner, `COMBINED ATTACK` (`rescue.combined`) |
 
-**The dashes of the shogun** (`Dash`) and **the combined attack** (`Combined`) are shot as scenes of a film:
+**The voice** (`Voice`), **the dashes of the shogun** (`Dash`) and **the combined attack** (`Combined`) are shot
+as scenes of a film:
 
 - **The cuts.** Each ship the blade goes through is in the snapshot (`Snapshot::struck`, by id). The
   `GameSessionSystem` leaves on it the strike look of its kind (`setStrikeLook()`: `impact_burst.glb`, larger
@@ -326,12 +327,14 @@ each snapshot (`Snapshot::rescue`); the `GameSessionSystem` tells each new one t
   sound), and tells its strike handler (`setStrikeHandler()`), with which `GameScenes` shakes the camera.
 - **The camera.** The camera entity of the game scene has a `RescueCamera`, which the `RescueCameraSystem`
   moves after the `GameSessionSystem`, from one shot per stage (how much of the game it sees, its tilt, how
-  fast it gets there, the shake it keeps). It frames a focus that follows the shogun a little late, the
-  framing kept inside the view at rest, and leans up to 4° into a dash while the shogun runs ahead of its
-  focus. A blow (`shakeCamera()`) shakes it: it moves, turns and closes in a little, then calms down.
+  fast it gets there, the shake it keeps, its subject). It frames a focus that follows its subject a little
+  late, the shogun or the ship of the local player, the framing kept inside the view at rest, and leans up to
+  4° into a dash while the shogun runs ahead of its focus. A blow (`shakeCamera()`) shakes it: it moves, turns and closes in a little, then calms down.
 
 | Stage | Shot |
 |---|---|
+| `Voice` | A slow push in to 50 % on the ship of the local player, where it was last drawn: it was just lost, so the camera frames its explosion while the voice calls the allies |
+| `Arrival`, `Assault` | Back to the whole game, the allies flying in |
 | `Dash` | Closes up to 62 % of the view on the shogun; each strike shakes it (0.75) |
 | `Prompt` | Back to the whole game |
 | `Combined` | A slow push in to 48 %, tilted by 3°, rumbling under the fire (a shake of 0.45 at the least); the fall of the shogun (its kill, told to `GameScenes`) shakes it fully |
@@ -399,7 +402,8 @@ prediction. The last life opens no death screen: the event of the ship lost is t
 - the rescue: a ship struck by the blade of the shogun shows the cut of its kind where it is drawn, with its
   sound, and is told, one without a strike look only told; the `RescueCamera` sees the whole game at rest,
   closes up on the shogun during its dashes inside the game, shakes at a strike then calms down, and goes back
-  once they are over; during the combined attack it pushes in slowly, closer, tilted and rumbling, then pulls
+  once they are over; during the voice it pushes in on the ship of the local player where it was last drawn,
+  and pulls back as the allies arrive; during the combined attack it pushes in slowly, closer, tilted and rumbling, then pulls
   back level and still once the shogun has fallen;
 - the death screen: the seconds left in the countdown and its ring follow the snapshots, not the frames, each new
   second pops, and the screen goes once the tick of the next ship is reached; the lives left are lit, the one

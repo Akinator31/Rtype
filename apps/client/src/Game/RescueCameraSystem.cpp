@@ -14,6 +14,16 @@ namespace rtype::client
 namespace
 {
 
+/// What a shot frames.
+enum class Subject {
+    /// Nothing: the camera stays on its focus.
+    None,
+    /// The shogun: the whole game instead while it is not drawn.
+    Boss,
+    /// The ship of the local player, or where it was last drawn.
+    Ship,
+};
+
 /// What the camera shows during a stage of the rescue.
 struct Shot {
     /// How much of the game it sees, as a share of what it sees at rest.
@@ -24,27 +34,30 @@ struct Shot {
     float rate = 2.5f;
     /// The shake it keeps at the least, from 0 to 1.
     float rumble = 0.0f;
-    /// A close up on the shogun: the whole game instead while the shogun is not drawn.
-    bool onBoss = false;
+    /// What it frames.
+    Subject subject = Subject::None;
 };
 
-/// At rest, the whole game; back there after the dashes, before the prompt.
+/// At rest, the whole game; back there when the allies arrive, and after the dashes, before the prompt.
 constexpr Shot Rest{};
+/// The voice of the rescue: a slow push in on the ship of the player, just lost.
+constexpr Shot VoiceShot{.zoom = 0.5f, .rate = 1.2f, .subject = Subject::Ship};
 /// The dashes: close up on the shogun.
-constexpr Shot DashShot{.zoom = 0.62f, .onBoss = true};
+constexpr Shot DashShot{.zoom = 0.62f, .subject = Subject::Boss};
 /// The combined attack: a slow push in, closer, tilted, rumbling under the fire.
-constexpr Shot CombinedShot{.zoom = 0.48f, .tilt = -3.0f, .rate = 0.9f, .rumble = 0.45f, .onBoss = true};
+constexpr Shot CombinedShot{
+    .zoom = 0.48f, .tilt = -3.0f, .rate = 0.9f, .rumble = 0.45f, .subject = Subject::Boss};
 /// The fall of the shogun: a slow pull back from its explosion to the whole game.
 constexpr Shot FallShot{.rate = 0.6f};
 
 /// The shot of each stage of the rescue, in the order of game::RescueStage: None, Voice, Arrival, Assault,
 /// Dash, Prompt, Combined, Finished.
 constexpr std::array<Shot, static_cast<std::size_t>(game::RescueStage::Finished) + 1> Shots{
-    {Rest, Rest, Rest, Rest, DashShot, Rest, CombinedShot, FallShot}};
+    {Rest, VoiceShot, Rest, Rest, DashShot, Rest, CombinedShot, FallShot}};
 
-/// How fast the camera follows the shogun, as Shot::rate.
+/// How fast the camera follows its subject, as Shot::rate.
 constexpr float FollowRate = 5.0f;
-/// How much it leans into a dash, in degrees, once the shogun is LeanDistance game units ahead of its focus.
+/// How much it leans into a dash, in degrees, once its subject is LeanDistance game units ahead of its focus.
 constexpr float MaxLean = 4.0f;
 constexpr float LeanDistance = 400.0f;
 /// How fast the shake calms down, per second.
@@ -64,7 +77,20 @@ float approach(float value, float target, float rate, float elapsed)
 Shot shotOf(game::RescueStage stage, bool boss)
 {
     const Shot &shot = Shots.at(static_cast<std::size_t>(stage));
-    return shot.onBoss && !boss ? Rest : shot;
+    return shot.subject == Subject::Boss && !boss ? Rest : shot;
+}
+
+/// Where the subject of a shot is, if it has one.
+std::optional<render::Vector2> findSubject(Subject subject, const RescueCamera &camera,
+                                           const std::optional<ecs::Position> &boss)
+{
+    if (subject == Subject::Boss && boss) {
+        return render::Vector2{boss->x, boss->y};
+    }
+    if (subject == Subject::Ship) {
+        return camera.ship;
+    }
+    return std::nullopt;
 }
 
 /// A shake from -1 to 1 at a time: two waves of unrelated frequencies, so that it does not look regular.
@@ -87,9 +113,9 @@ render::Rectangle frame(const RescueCamera &camera, float punch)
     return {x - (width / 2.0f), y - (height / 2.0f), width, height};
 }
 
-/// The view of a camera: its frame, shaken, and turned around its axis by its tilt, its lean into the dash of
-/// the shogun, as much as it is close up, and its shake.
-render::Camera computeView(const RescueCamera &camera, const std::optional<ecs::Position> &boss)
+/// The view of a camera: its frame, shaken, and turned around its axis by its tilt, its lean towards its
+/// subject running ahead of it (the shogun dashing), as much as it is close up, and its shake.
+render::Camera computeView(const RescueCamera &camera, const std::optional<render::Vector2> &subject)
 {
     const float closeUp = std::clamp((1.0f - camera.zoom) / (1.0f - DashShot.zoom), 0.0f, 1.0f);
     const float strength = camera.shake * camera.shake;
@@ -100,7 +126,7 @@ render::Camera computeView(const RescueCamera &camera, const std::optional<ecs::
     view.position.y += shakeY;
     view.target.x += shakeX;
     view.target.y += shakeY;
-    const float ahead = boss ? (boss->x - camera.focus.x) / LeanDistance : 0.0f;
+    const float ahead = subject ? (subject->x - camera.focus.x) / LeanDistance : 0.0f;
     const float lean = std::clamp(ahead, -1.0f, 1.0f) * MaxLean * closeUp;
     const float roll =
         (camera.tilt + lean + (strength * ShakeRoll * wobble(camera.time + 7.0f, 31.0f, 53.0f))) *
@@ -134,9 +160,26 @@ std::optional<ecs::Position> RescueCameraSystem::findBoss() const
     return std::nullopt;
 }
 
+std::optional<ecs::Position> RescueCameraSystem::findLocalShip() const
+{
+    const GameSession *session = _sessions.session();
+    if (session == nullptr) {
+        return std::nullopt;
+    }
+    for (ecs::entity_t entity = 0; entity < _replicated.size(); ++entity) {
+        if (_replicated.has(entity) && _positions.has(entity) &&
+            _replicated.get(entity).kind == game::EntityKind::PlayerShip &&
+            _replicated.get(entity).owner == session->localSlot()) {
+            return _positions.get(entity);
+        }
+    }
+    return std::nullopt;
+}
+
 void RescueCameraSystem::update(float elapsed)
 {
     const std::optional<ecs::Position> boss = findBoss();
+    const std::optional<ecs::Position> ship = findLocalShip();
     const Shot shot = shotOf(_sessions.rescue(), boss.has_value());
     for (ecs::entity_t entity = 0; entity < _rescueCameras.size(); ++entity) {
         if (!_rescueCameras.has(entity) || !_cameras.has(entity)) {
@@ -146,12 +189,16 @@ void RescueCameraSystem::update(float elapsed)
         camera.time += elapsed;
         camera.zoom = approach(camera.zoom, shot.zoom, shot.rate, elapsed);
         camera.tilt = approach(camera.tilt, shot.tilt, shot.rate, elapsed);
-        if (boss) {
-            camera.focus = {approach(camera.focus.x, boss->x, FollowRate, elapsed),
-                            approach(camera.focus.y, boss->y, FollowRate, elapsed)};
+        if (ship) {
+            camera.ship = {ship->x, ship->y};
+        }
+        const std::optional<render::Vector2> subject = findSubject(shot.subject, camera, boss);
+        if (subject) {
+            camera.focus = {approach(camera.focus.x, subject->x, FollowRate, elapsed),
+                            approach(camera.focus.y, subject->y, FollowRate, elapsed)};
         }
         camera.shake = std::max(camera.shake - (ShakeDecay * elapsed), shot.rumble);
-        _cameras.get(entity).view = computeView(camera, boss);
+        _cameras.get(entity).view = computeView(camera, subject);
     }
 }
 
