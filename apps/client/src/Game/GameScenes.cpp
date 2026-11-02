@@ -89,6 +89,9 @@ constexpr float PromptOffset = 260.0f;
 constexpr float PromptBlink = 0.45f;
 /// Over the HUD and the death screen, under the toasts.
 constexpr int PromptOrder = 20;
+/// How hard the camera shakes when the blade of the shogun goes through a ship, and when the shogun falls.
+constexpr float StrikeShake = 0.75f;
+constexpr float FallShake = 1.0f;
 /// How loud the voice of the rescue is.
 constexpr float RescueVoiceVolume = 1.0f;
 /// Time the banner of the combined attack stays fully shown, in seconds.
@@ -419,6 +422,9 @@ void GameScenes::showKill(const Kill &kill)
         return;
     }
     const std::uint8_t local = session->localSlot();
+    if (kill.kind == game::EntityKind::BydoBoss && _sessions.rescue() != game::RescueStage::None) {
+        shakeGameCamera(FallShake);
+    }
     if (kill.kind == game::EntityKind::PlayerShip) {
         _engine.showToast(playerName(kill.owner), _translations.text("event.player_down"), "",
                           kill.owner == local ? engine::ToastType::Error : engine::ToastType::Warning);
@@ -503,9 +509,14 @@ void GameScenes::showRescue(game::RescueStage stage)
 
 void GameScenes::showStrike()
 {
+    shakeGameCamera(StrikeShake);
+}
+
+void GameScenes::shakeGameCamera(float strength)
+{
     ecs::Ecs &ecs = _engine.getEcs();
     if (_camera && ecs.isAlive(*_camera)) {
-        shakeCamera(ecs.getComponent<RescueCamera>(_camera->id));
+        shakeCamera(ecs.getComponent<RescueCamera>(_camera->id), strength);
     }
 }
 
@@ -572,8 +583,8 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
     ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
     const render::Rectangle area = metrics.visibleArea();
-    ecs.addComponent<RescueCamera>(
-        sky, area, 0.0f, render::Vector2{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)});
+    ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f,
+                                   render::Vector2{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)});
     _camera = ecs.ref(sky);
     ecs.addComponent<engine::Light>(sky, GameLight);
 

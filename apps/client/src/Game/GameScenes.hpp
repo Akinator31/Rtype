@@ -38,7 +38,8 @@ inline constexpr const char *PauseScene = "pause";
 /// - Offline, the rescue against the final boss (game::RescueStage): when the last ship is lost against the
 ///   shogun, its voice plays, then a banner greets the allies. While the shogun dashes through them, the
 ///   camera closes up on it and follows it (RescueCamera), each ship its blade goes through shows the cut and
-///   shakes the camera; then a blinking prompt asks for Space, the combined attack.
+///   shakes the camera; then a blinking prompt asks for Space, the combined attack, during which the camera
+///   pushes in slowly on the shogun, rumbling, until its fall shakes it hard, then pulls back.
 /// - Escape (or Start on a gamepad) opens the pause menu: Resume, or Leave the game. Offline, the game stops
 ///   while it is open.
 /// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
@@ -77,6 +78,7 @@ class GameScenes
     void build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                const engine::Metrics &metrics, const engine::InterfaceStyle &style);
     /// Shows the event of a ship killed, if it is one: a Bydo killed by the local player, or a player ship.
+    /// The fall of the shogun at the end of the rescue shakes the camera.
     void showKill(const Kill &kill);
     void showWave(std::uint16_t wave);
     /// Plays the music of the wave started, a path of the assets, replacing the current one; nothing if empty.
@@ -88,6 +90,8 @@ class GameScenes
     void showRescue(game::RescueStage stage);
     /// Shakes the camera of the game as the blade of the shogun goes through a ship.
     void showStrike();
+    /// Shakes the camera of the game scene open by a blow of a strength from 0 to 1 (shakeCamera()).
+    void shakeGameCamera(float strength);
     /// Plays the voice of the rescue, if its file is in the assets.
     void playRescueVoice();
     /// The prompt of the combined attack, blinking under the middle of the screen until the player presses

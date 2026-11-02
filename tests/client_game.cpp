@@ -781,7 +781,7 @@ TEST_CASE("The camera closes up on the shogun while it dashes, shakes at a strik
     const rtype::render::Rectangle area{0.0f, 0.0f, 1920.0f, 1080.0f};
     const rtype::ecs::entity_t camera = client.ecs.createEntity();
     client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
-    client.ecs.addComponent<RescueCamera>(camera, area, 0.0f, rtype::render::Vector2{960.0f, 540.0f});
+    client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, rtype::render::Vector2{960.0f, 540.0f});
     const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
     rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
     boss.x = 1600.0f;
@@ -796,7 +796,7 @@ TEST_CASE("The camera closes up on the shogun while it dashes, shakes at a strik
 
     // While the shogun dashes, closer, towards it, still inside the game
     snapshot.rescue = rtype::game::RescueStage::Dash;
-    for (int frame = 0; frame < 120; ++frame) {
+    for (int frame = 0; frame < 240; ++frame) {
         client.receive(snapshot);
     }
     const rtype::render::Camera closeUp = view();
@@ -807,7 +807,7 @@ TEST_CASE("The camera closes up on the shogun while it dashes, shakes at a strik
     CHECK(closeUp.up.y == Approx(-1.0f));
 
     // A strike shakes it, then it calms down
-    shakeCamera(client.ecs.getComponent<RescueCamera>(camera));
+    shakeCamera(client.ecs.getComponent<RescueCamera>(camera), 0.75f);
     client.receive(snapshot);
     const rtype::render::Camera shaken = view();
     CHECK((shaken.target.x != Approx(closeUp.target.x) || shaken.target.y != Approx(closeUp.target.y)));
@@ -824,6 +824,54 @@ TEST_CASE("The camera closes up on the shogun while it dashes, shakes at a strik
     }
     CHECK(view().fieldOfView == Approx(1080.0f).epsilon(0.001));
     CHECK(view().target.x == Approx(960.0f).epsilon(0.001));
+}
+
+TEST_CASE("The camera pushes in on the shogun during the combined attack, tilted and rumbling, then pulls back",
+          "[client]")
+{
+    ImpactClient client;
+    client.ecs.registerSystem<RescueCameraSystem>(client.sessions);
+    const rtype::render::Rectangle area{0.0f, 0.0f, 1920.0f, 1080.0f};
+    const rtype::ecs::entity_t camera = client.ecs.createEntity();
+    client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
+    client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, rtype::render::Vector2{960.0f, 540.0f});
+    const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
+    rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
+    boss.x = 1600.0f;
+    boss.y = 540.0f;
+    rtype::game::Snapshot snapshot = snapshotOf(1, {boss});
+    snapshot.rescue = rtype::game::RescueStage::Combined;
+
+    // Slowly: still far after a fifth of a second, closer than for the dashes by the end
+    for (int frame = 0; frame < 12; ++frame) {
+        client.receive(snapshot);
+    }
+    CHECK(view().fieldOfView > 0.85f * 1080.0f);
+    for (int frame = 0; frame < 150; ++frame) {
+        client.receive(snapshot);
+    }
+    CHECK(view().fieldOfView < 0.62f * 1080.0f);
+    // Tilted, and it does not stop rumbling
+    CHECK(std::abs(view().up.x) > 0.02f);
+    const RescueCamera &rescue = client.ecs.getComponent<RescueCamera>(camera);
+    CHECK(rescue.shake > 0.0f);
+    const rtype::render::Vector3 before = view().target;
+    client.receive(snapshot);
+    CHECK((view().target.x != Approx(before.x) || view().target.y != Approx(before.y)));
+
+    // The shogun fallen, it pulls back to the whole game, level
+    snapshot = snapshotOf(2, {});
+    snapshot.rescue = rtype::game::RescueStage::Finished;
+    for (int frame = 0; frame < 30; ++frame) {
+        client.receive(snapshot);
+    }
+    CHECK(view().fieldOfView < 0.8f * 1080.0f);
+    for (int frame = 0; frame < 900; ++frame) {
+        client.receive(snapshot);
+    }
+    CHECK(view().fieldOfView == Approx(1080.0f).epsilon(0.001));
+    CHECK(view().up.x == Approx(0.0f).margin(0.001));
+    CHECK(client.ecs.getComponent<RescueCamera>(camera).shake == 0.0f);
 }
 
 TEST_CASE("A hit writes the hit points lost above the entity, which rises, fades out and goes", "[client]")

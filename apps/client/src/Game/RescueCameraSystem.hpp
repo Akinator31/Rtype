@@ -14,24 +14,30 @@ namespace rtype::client
 {
 
 /// The camera of the game scene, with its engine::Camera, during the rescue against the final boss: at rest
-/// it sees the whole game (computeGameView()); while the shogun dashes at the formation
-/// (game::RescueStage::Dash) it closes up on it, follows it a little late, leaning into its dashes, and
-/// shakes at each ship its blade goes through.
+/// it sees the whole game (computeGameView()).
+///
+/// - While the shogun dashes at the formation (game::RescueStage::Dash), it closes up on it, follows it a
+///   little late, leaning into its dashes, and shakes at each ship its blade goes through.
+/// - During the combined attack (Combined), it pushes in slowly on the shogun, closer than for the dashes,
+///   tilted, rumbling under the fire; the fall of the shogun shakes it hard.
+/// - Once the shogun has fallen (Finished), it pulls back slowly from its explosion to the whole game.
 struct RescueCamera {
     /// The part of the game the camera sees at rest.
     render::Rectangle area;
-    /// How close up it is, from 0 (at rest) to 1.
-    float closeUp = 0.0f;
+    /// How much of it the camera sees, from 1 at rest down to its closest up.
+    float zoom = 1.0f;
+    /// How much it is turned around its axis, in degrees, its lean and its shake aside.
+    float tilt = 0.0f;
     /// The point of the game it frames when close up: it follows the shogun.
     render::Vector2 focus;
-    /// How much it shakes, from 0 to 1: a strike adds to it (shakeCamera()), then it calms down.
+    /// How much it shakes, from 0 to 1: a blow adds to it (shakeCamera()), then it calms down.
     float shake = 0.0f;
     /// Seconds it has been moved: the time of its shake.
     float time = 0.0f;
 };
 
-/// Shakes a camera as the blade of the shogun going through a ship does.
-void shakeCamera(RescueCamera &camera);
+/// Shakes a camera by a blow of a strength from 0 to 1: the blade of the shogun through a ship, its fall.
+void shakeCamera(RescueCamera &camera, float strength);
 
 /// Moves the cameras of the entities with a RescueCamera and an engine::Camera each frame, from the stage of
 /// the rescue and the shogun drawn by the GameSessionSystem: after it, which moves the shogun.
