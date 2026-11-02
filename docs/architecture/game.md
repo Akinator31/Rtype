@@ -92,6 +92,7 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 | `destroyed` | The entities destroyed since the previous snapshot, with the cause (removed, or killed: an explosion) |
 | `waveStarted`, `gameOver` | A wave started, the game ended |
 | `rescue` | Where the rescue against the final boss is, offline (`RescueStage`, [The rescue against the final boss](#the-rescue-against-the-final-boss)) |
+| `struck` | The ships the blade of the shogun went through during the rescue, by id, offline: the client draws the cut |
 
 - **Ids are never reused** within a game (`NetworkId`, unlike the ids of the ECS): a client keeps them to
   recognize its entities from one snapshot to the next.
@@ -545,7 +546,7 @@ stateDiagram-v2
 | `Voice` | The client plays the voice of the rescue; the boss guards on its spot (1600, 540) |
 | `Arrival` | Five allies (`AllyShip`, `spawnAlly()`, with an `Ally` component) fly in from the left with a new ship for the player, who gets a life back, into an arrowhead: the player at its tip |
 | `Assault` | The allies shoot at the boss, which guards and cannot be hurt; the player flies and fires freely |
-| `Dash` | The boss raises its blade, then dashes through each ship of the formation in turn, throwing it back without hurting it, and flies back to its spot |
+| `Dash` | The boss raises its blade, then dashes through each ship of the formation in turn, throwing it back without hurting it (the ship struck is in the next snapshot, `struck`), and flies back to its spot |
 | `Prompt` | The client asks for Fire (Space); a Fire held since before must be released first |
 | `Combined` | Every ship fires at the boss; its health drains by steps to 0, then it is killed and its score goes to the player |
 | `Finished` | The victory comes `rescueVictoryDelay` ticks later |

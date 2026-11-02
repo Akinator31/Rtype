@@ -216,6 +216,7 @@ void Simulation::buildSnapshot()
     snapshot.waveMusic = std::exchange(_context.waveMusic, {});
     snapshot.gameOver = std::exchange(_context.gameOver, std::nullopt);
     snapshot.rescue = _context.rescue.stage;
+    snapshot.struck = std::exchange(_context.struck, {});
     _snapshot = std::move(snapshot);
 }
 

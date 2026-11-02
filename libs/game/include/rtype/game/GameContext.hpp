@@ -80,6 +80,8 @@ struct GameContext {
     /// The music of the wave started, empty if it has none: set with waveStarted.
     std::string waveMusic;
     std::optional<GameOutcome> gameOver;
+    /// The ships the blade of the shogun went through during the rescue, by NetworkId.
+    std::vector<std::uint32_t> struck;
 
     /// A number from `first` to `last` included. Same result on every platform, unlike the distributions of
     /// the standard library, so that a game replays the same everywhere.

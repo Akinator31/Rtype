@@ -4,6 +4,7 @@
 #include "Game/GameView.hpp"
 #include "Game/Hud.hpp"
 #include "Game/LocalSession.hpp"
+#include "Game/RescueCameraSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "ShipModel.hpp"
 #include "ShipSelector/ShipCatalog.hpp"
@@ -149,6 +150,10 @@ constexpr float SplashScale = 24.0f;
 constexpr float BydoExplosionScale = 25.0f;
 constexpr float BossExplosionScale = 70.0f;
 constexpr float ShipExplosionScale = 28.0f;
+/// The cut of the blade of the shogun on a ship it goes through, during the rescue: a burst larger than the
+/// ship, in the cold white of the blade.
+constexpr float StrikeScale = 42.0f;
+constexpr render::Color StrikeTint{170, 225, 255, 255};
 
 /// How loud the shots are: the players fire all the time, the Bydos often and many at once, their plasma orbs
 /// rarely.
@@ -163,6 +168,8 @@ constexpr float CollisionVolume = 1.0f;
 /// How loud the blade of the boss is when it strikes, and the wind of its dash.
 constexpr float SaberVolume = 0.9f;
 constexpr float DashWindVolume = 0.7f;
+/// How loud the blade of the boss is when it goes through a ship.
+constexpr float StrikeVolume = 1.0f;
 
 /// The energy of a shot with a light around its core.
 /// @param core The core of the shot model, as in ShotLook.
@@ -212,6 +219,20 @@ void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resour
     sessions.setImpactLook(game::EntityKind::PlayerShip,
                            loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, ShipExplosionScale,
                                           ExplosionTint, explosion));
+}
+
+/// Gives the ships of the formation of the rescue the cut the blade of the shogun leaves on them, and its
+/// sound.
+void setStrikeLooks(GameSessionSystem &sessions, render::ResourceManager &resources, audio::AudioPlayer &audio,
+                    const render::Energy &energy)
+{
+    const ImpactLook strike =
+        loadImpactLook(resources, RTYPE_MODEL_IMPACT_BURST, StrikeScale, StrikeTint, energy);
+    const audio::SoundId sound = audio.loadSound(RTYPE_SOUND_COLLISION);
+    for (const game::EntityKind kind : {game::EntityKind::PlayerShip, game::EntityKind::AllyShip}) {
+        sessions.setStrikeLook(kind, strike);
+        sessions.setStrikeSound(kind, {sound, StrikeVolume});
+    }
 }
 
 /// Gives each kind of shot the sound of the weapon that fires it: the cannon of the players, the blaster of
@@ -283,6 +304,7 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
                          {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true,
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
     setImpactLooks(sessions, resources, energy);
+    setStrikeLooks(sessions, resources, audio, energy);
     const render::FontId damageFont = resources.loadFont(RTYPE_FONT_DISPLAY, DamageFontSize);
     for (const game::EntityKind kind : {game::EntityKind::BydoFlyer, game::EntityKind::BydoBoss}) {
         sessions.setDamageLook(kind, {damageFont, DamageTextSize, DamageColor});
@@ -353,6 +375,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         playWaveMusic(music);
     });
     sessions.setRescueHandler([this](game::RescueStage stage) { showRescue(stage); });
+    sessions.setStrikeHandler([this] { showStrike(); });
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
@@ -478,6 +501,14 @@ void GameScenes::showRescue(game::RescueStage stage)
     }
 }
 
+void GameScenes::showStrike()
+{
+    ecs::Ecs &ecs = _engine.getEcs();
+    if (_camera && ecs.isAlive(*_camera)) {
+        shakeCamera(ecs.getComponent<RescueCamera>(_camera->id));
+    }
+}
+
 void GameScenes::playRescueVoice()
 {
     try {
@@ -540,6 +571,10 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     ecs.addComponent<engine::Backdrop>(
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
     ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
+    const render::Rectangle area = metrics.visibleArea();
+    ecs.addComponent<RescueCamera>(
+        sky, area, 0.0f, render::Vector2{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)});
+    _camera = ecs.ref(sky);
     ecs.addComponent<engine::Light>(sky, GameLight);
 
     openHud(ecs, scene, {_deathLook.life, _deathLook.lostLife, style.toast.nameFont}, game::Rules{}.lives);

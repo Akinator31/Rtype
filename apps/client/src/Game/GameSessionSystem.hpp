@@ -75,7 +75,9 @@ struct Kill {
 ///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind. Each ship
 ///    killed, a Bydo or the ship of a player, is told to the kill handler, if any, each wave started to
 ///    the wave handler, if any, and each new stage of the rescue against the final boss to the rescue
-///    handler, if any.
+///    handler, if any. A ship the blade of the shogun goes through during the rescue (game::Snapshot::struck)
+///    shows the strike impact and plays the strike sound of its kind, if it was given them, and is told to
+///    the strike handler, if any.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens
@@ -93,6 +95,7 @@ class GameSessionSystem : public ecs::System
     std::function<void(const Kill &)> _onKill;
     std::function<void(std::uint16_t, const std::string &)> _onWave;
     std::function<void(game::RescueStage)> _onRescue;
+    std::function<void()> _onStrike;
     /// The stage of the rescue against the final boss in the latest snapshot.
     game::RescueStage _rescue = game::RescueStage::None;
     /// The entity of the scene of each entity of the game, by id.
@@ -105,6 +108,9 @@ class GameSessionSystem : public ecs::System
     HealthBarLooks _healthBarLooks;
     EntitySounds _shotSounds;
     EntitySounds _destructionSounds;
+    /// The cut of the blade of the shogun on the ships it goes through during the rescue.
+    ImpactLooks _strikeLooks;
+    EntitySounds _strikeSounds;
     /// The entities drawn that the game killed: they leave an impact when they go.
     std::unordered_set<std::uint32_t> _killed;
     std::vector<game::PlayerState> _players;
@@ -116,6 +122,8 @@ class GameSessionSystem : public ecs::System
     /// Online, an entity is still drawn for a while after the game tells its destruction: the entities killed
     /// are remembered until they go.
     void rememberKilled(const std::vector<game::DestroyedEntity> &destroyed);
+    /// Shows the cut of the blade of the shogun on the ships it went through, and tells the strike handler.
+    void showStrikes(const std::vector<std::uint32_t> &struck);
     /// Tells the kill handler about the ships among the entities killed.
     void reportKills(const std::vector<game::DestroyedEntity> &destroyed);
     /// The entities drawn among those destroyed by the game, not removed.
@@ -166,6 +174,14 @@ public:
     /// Plays a sound where the game kills an entity of this kind from now on, with its impact: a kind without
     /// an ImpactLook makes no sound.
     void setDestructionSound(game::EntityKind kind, const EntitySound &sound);
+    /// Leaves this impact on a ship of this kind that the blade of the shogun goes through from now on, during
+    /// the rescue against the final boss.
+    void setStrikeLook(game::EntityKind kind, const ImpactLook &look);
+    /// Plays a sound where the blade of the shogun goes through a ship of this kind from now on, with its
+    /// strike impact: a kind without a strike look makes no sound.
+    void setStrikeSound(game::EntityKind kind, const EntitySound &sound);
+    /// Calls this for each ship drawn that the blade of the shogun goes through from now on.
+    void setStrikeHandler(std::function<void()> onStrike);
     /// Calls this for each ship killed in the game while drawn from now on: a Bydo or the ship of a player.
     void setKillHandler(std::function<void(const Kill &)> onKill);
     /// Calls this with the number of each wave started in the game from now on, from 1, and its music (empty

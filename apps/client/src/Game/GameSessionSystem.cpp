@@ -147,6 +147,21 @@ void GameSessionSystem::setDestructionSound(game::EntityKind kind, const EntityS
     _destructionSounds.setSound(kind, sound);
 }
 
+void GameSessionSystem::setStrikeLook(game::EntityKind kind, const ImpactLook &look)
+{
+    _strikeLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setStrikeSound(game::EntityKind kind, const EntitySound &sound)
+{
+    _strikeSounds.setSound(kind, sound);
+}
+
+void GameSessionSystem::setStrikeHandler(std::function<void()> onStrike)
+{
+    _onStrike = std::move(onStrike);
+}
+
 void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
 {
     _onKill = std::move(onKill);
@@ -216,6 +231,7 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         moveEntity(found->second.id, state);
     }
+    showStrikes(snapshot.struck);
     rememberKilled(snapshot.destroyed);
     reportKills(snapshot.destroyed);
     if (snapshot.waveStarted && _onWave) {
@@ -233,6 +249,25 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         removeEntity(entry->first, entry->second);
         entry = _entities.erase(entry);
+    }
+}
+
+void GameSessionSystem::showStrikes(const std::vector<std::uint32_t> &struck)
+{
+    for (const std::uint32_t networkId : struck) {
+        const std::optional<ecs::entity_t> ship = entityOf(networkId);
+        if (!ship) {
+            continue;
+        }
+        const game::EntityKind kind = _ecs.getComponent<Replicated>(*ship).kind;
+        if (_strikeLooks.hasLook(kind)) {
+            const ecs::Position position = _ecs.getComponent<ecs::Position>(*ship);
+            const ecs::entity_t impact = _strikeLooks.createImpact(_ecs, *_scene, kind, position);
+            _strikeSounds.addSound(_ecs, impact, kind, position.x);
+        }
+        if (_onStrike) {
+            _onStrike();
+        }
     }
 }
 

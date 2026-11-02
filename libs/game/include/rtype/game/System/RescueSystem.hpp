@@ -23,7 +23,7 @@ namespace rtype::game
 /// 3. **Assault**, Rules::rescueAssaultTicks: the allies shoot at the boss, which guards and cannot be hurt;
 ///    the player flies and fires freely.
 /// 4. **Dash**: the boss raises its blade, then dashes through every ship of the formation in turn, throwing
-///    each one back without hurting it, and goes back to its spot.
+///    each one back without hurting it (context.struck), and goes back to its spot.
 /// 5. **Prompt**: the client asks for Fire (Space); a Fire held since before must be released first.
 /// 6. **Combined**, Rules::rescueCombinedTicks: every ship fires at the boss at once, its health drains to 0,
 ///    then it is killed (the player scores it).
@@ -46,6 +46,7 @@ private:
     ecs::ComponentCache<physics::Velocity> &_velocities;
     ecs::ComponentCache<Health> &_healths;
     ecs::ComponentCache<Ally> &_allies;
+    ecs::ComponentCache<NetworkId> &_ids;
 
     void enter(RescueStage stage);
     [[nodiscard]] std::optional<ecs::entity_t> findBoss() const;

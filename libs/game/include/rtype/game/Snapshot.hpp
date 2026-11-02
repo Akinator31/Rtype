@@ -141,6 +141,9 @@ struct Snapshot {
     std::optional<GameOutcome> gameOver;
     /// Where the rescue against the final boss is (offline only).
     RescueStage rescue = RescueStage::None;
+    /// The ships the blade of the shogun went through since the previous snapshot, during the dashes of the
+    /// rescue, by id (offline only): the client draws the cut on them.
+    std::vector<std::uint32_t> struck;
 
     friend bool operator==(const Snapshot &, const Snapshot &) = default;
 };

@@ -123,12 +123,19 @@ TEST_CASE("Offline, the last life lost against the final boss calls the allies, 
     CHECK(shots > 0);
     CHECK(bossOf(game.snapshot())->health == health);
 
-    // It dashes at every ship, slashing, and kills none
+    // It dashes at every ship, slashing, strikes each one once, and kills none
     REQUIRE(game.snapshot().rescue == RescueStage::Dash);
     bool slashed = false;
     float leftmost = 2000.0f;
+    std::vector<std::uint32_t> struck;
     for (int tick = 0; tick < 30 * TickRate && game.snapshot().rescue == RescueStage::Dash; ++tick) {
         game.step();
+        for (const std::uint32_t id : game.snapshot().struck) {
+            const auto ship = std::ranges::find(game.snapshot().entities, id, &EntityState::id);
+            REQUIRE(ship != game.snapshot().entities.end());
+            CHECK((ship->kind == EntityKind::PlayerShip || ship->kind == EntityKind::AllyShip));
+            struck.push_back(id);
+        }
         const EntityState boss = *bossOf(game.snapshot());
         slashed = slashed || (boss.flags & EntityState::Slashing) != 0;
         leftmost = std::min(leftmost, boss.x);
@@ -138,6 +145,9 @@ TEST_CASE("Offline, the last life lost against the final boss calls the allies, 
     REQUIRE(game.snapshot().rescue == RescueStage::Prompt);
     CHECK(slashed);
     CHECK(leftmost < 300.0f);
+    CHECK(struck.size() == 6);
+    std::ranges::sort(struck);
+    CHECK(std::ranges::adjacent_find(struck) == struck.end());
     CHECK(countOf(game.snapshot(), EntityKind::AllyShip) == 5);
     CHECK(countOf(game.snapshot(), EntityKind::PlayerShip) == 1);
     CHECK(game.snapshot().players.at(0).lives == 1);

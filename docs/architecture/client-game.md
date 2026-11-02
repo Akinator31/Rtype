@@ -20,6 +20,7 @@ apps/client/src/Game/
   GameSessionSystem.cpp  controls → PlayerInput → session; snapshots → entities of the scene
   EntityLook.cpp         the box of each kind of entity (lookOf()), the colours of the players
   GameView.cpp           the orthographic camera of the game scene (computeGameView())
+  RescueCameraSystem.cpp the camera closing up on the shogun during its dashes of the rescue (RescueCamera)
   ShipLooks.cpp          the 3D models of the ships: fitted to their box, rolling, flames
   ShotLooks.cpp          the models of energy of the shots
   ImpactLooks.cpp        the impacts of the shots and the explosions of the ships (ImpactSystem plays them)
@@ -317,6 +318,20 @@ each snapshot (`Snapshot::rescue`); the `GameSessionSystem` tells each new one t
 | `Prompt` | `PRESS SPACE - COMBINED ATTACK` (`rescue.prompt`) under the middle of the screen, in the titles, blinking, until the next stage |
 | `Combined` | A short banner, `COMBINED ATTACK` (`rescue.combined`) |
 
+**The dashes of the shogun** (`Dash`) are shot as a scene of a film:
+
+- **The cuts.** Each ship the blade goes through is in the snapshot (`Snapshot::struck`, by id). The
+  `GameSessionSystem` leaves on it the strike look of its kind (`setStrikeLook()`: `impact_burst.glb`, larger
+  than the ship, in the cold white of the blade), plays its strike sound (`setStrikeSound()`: the collision
+  sound), and tells its strike handler (`setStrikeHandler()`), with which `GameScenes` shakes the camera.
+- **The camera.** The camera entity of the game scene has a `RescueCamera`, which the `RescueCameraSystem`
+  moves after the `GameSessionSystem`. At rest it sees what `computeGameView()` sees. While the stage is
+  `Dash`, it closes up to 62 % of the view, smoothly, on a focus that follows the shogun a little late (the
+  framing kept inside the view at rest), and leans up to 4° into the dash while the shogun runs ahead of its
+  focus. A strike (`shakeCamera()`) shakes it: it moves, turns and closes in a little, then calms down in
+  about half a second. Once the dashes are over, it goes back to the whole game for the prompt. The numbers
+  are at the top of `RescueCameraSystem.cpp`.
+
 The allies (`EntityKind::AllyShip`) are drawn with the model of the hangar ship VX-04 (`spaceship.glb`), untinted,
 with the size of a ship of a player.
 
@@ -372,6 +387,10 @@ prediction. The last life opens no death screen: the event of the ship lost is t
 - the kills: a Bydo killed is told with the owner of the shot of a player killed nearest to it, or no killer
   without one, a shot or an entity removed is not told, and the ship of a player killed is told with its owner;
 - the waves: each wave started is told once, with its number;
+- the rescue: a ship struck by the blade of the shogun shows the cut of its kind where it is drawn, with its
+  sound, and is told, one without a strike look only told; the `RescueCamera` sees the whole game at rest,
+  closes up on the shogun during its dashes inside the game, shakes at a strike then calms down, and goes back
+  once they are over;
 - the death screen: the seconds left in the countdown and its ring follow the snapshots, not the frames, each new
   second pops, and the screen goes once the tick of the next ship is reached; the lives left are lit, the one
   just lost goes out after the veil and the rest have faded in;

@@ -17,6 +17,7 @@
 #include "Game/ImpactLooks.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
+#include "Game/RescueCameraSystem.hpp"
 #include "Game/ShotLooks.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
@@ -736,6 +737,93 @@ TEST_CASE("A ship killed in the game sounds with its impact, on its side of the 
     CHECK(effect.settings.volume == 0.8f);
     // On the right of the game area: heard on the right
     CHECK(effect.settings.pan > 0.0f);
+}
+
+TEST_CASE("A ship struck by the blade of the shogun shows the cut where it is drawn, sounds, and is told",
+          "[client]")
+{
+    ImpactClient client;
+    const rtype::audio::SoundId cut{9};
+    client.sessions.setStrikeLook(rtype::game::EntityKind::AllyShip, SparkLook);
+    client.sessions.setStrikeSound(rtype::game::EntityKind::AllyShip, {cut, 1.0f});
+    int strikes = 0;
+    client.sessions.setStrikeHandler([&strikes] { ++strikes; });
+    rtype::game::EntityState ally{5, rtype::game::EntityKind::AllyShip, 0};
+    ally.x = 470.0f;
+    ally.y = 360.0f;
+    rtype::game::EntityState ship{6, rtype::game::EntityKind::PlayerShip, 0};
+    client.receive(snapshotOf(1, {ally, ship}));
+    CHECK(client.impacts().empty());
+
+    ally.x = 450.0f;
+    rtype::game::Snapshot struck = snapshotOf(2, {ally, ship});
+    // The ship of the player has no strike look: told, but without a cut
+    struck.struck = {5, 6};
+    client.receive(struck);
+
+    const std::vector<rtype::ecs::entity_t> impacts = client.impacts();
+    REQUIRE(impacts.size() == 1);
+    const rtype::engine::Model &model = client.ecs.getComponent<rtype::engine::Model>(impacts[0]);
+    CHECK(model.position.x == Approx(450.0f));
+    CHECK(model.position.y == Approx(360.0f));
+    REQUIRE(client.ecs.hasComponent<rtype::engine::SoundEffect>(impacts[0]));
+    CHECK(client.ecs.getComponent<rtype::engine::SoundEffect>(impacts[0]).sound == cut);
+    CHECK(strikes == 2);
+    // Both ships are unhurt
+    CHECK(client.sessions.entityCount() == 2);
+}
+
+TEST_CASE("The camera closes up on the shogun while it dashes, shakes at a strike, then sees the whole game",
+          "[client]")
+{
+    ImpactClient client;
+    client.ecs.registerSystem<RescueCameraSystem>(client.sessions);
+    const rtype::render::Rectangle area{0.0f, 0.0f, 1920.0f, 1080.0f};
+    const rtype::ecs::entity_t camera = client.ecs.createEntity();
+    client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
+    client.ecs.addComponent<RescueCamera>(camera, area, 0.0f, rtype::render::Vector2{960.0f, 540.0f});
+    const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
+    rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
+    boss.x = 1600.0f;
+    boss.y = 540.0f;
+    rtype::game::Snapshot snapshot = snapshotOf(1, {boss});
+
+    // At rest, it sees the whole game
+    client.receive(snapshot);
+    CHECK(view().fieldOfView == Approx(1080.0f));
+    CHECK(view().target.x == Approx(960.0f));
+    CHECK(view().up.y == Approx(-1.0f));
+
+    // While the shogun dashes, closer, towards it, still inside the game
+    snapshot.rescue = rtype::game::RescueStage::Dash;
+    for (int frame = 0; frame < 120; ++frame) {
+        client.receive(snapshot);
+    }
+    const rtype::render::Camera closeUp = view();
+    CHECK(closeUp.fieldOfView < 0.7f * 1080.0f);
+    CHECK(closeUp.target.x > 960.0f);
+    const float halfWidth = closeUp.fieldOfView * (1920.0f / 1080.0f) / 2.0f;
+    CHECK(closeUp.target.x + halfWidth <= Approx(1920.0f));
+    CHECK(closeUp.up.y == Approx(-1.0f));
+
+    // A strike shakes it, then it calms down
+    shakeCamera(client.ecs.getComponent<RescueCamera>(camera));
+    client.receive(snapshot);
+    const rtype::render::Camera shaken = view();
+    CHECK((shaken.target.x != Approx(closeUp.target.x) || shaken.target.y != Approx(closeUp.target.y)));
+    for (int frame = 0; frame < 60; ++frame) {
+        client.receive(snapshot);
+    }
+    CHECK(view().target.x == Approx(closeUp.target.x).margin(1.0f));
+    CHECK(view().target.y == Approx(closeUp.target.y).margin(1.0f));
+
+    // Once the dashes are over, back to the whole game
+    snapshot.rescue = rtype::game::RescueStage::Prompt;
+    for (int frame = 0; frame < 300; ++frame) {
+        client.receive(snapshot);
+    }
+    CHECK(view().fieldOfView == Approx(1080.0f).epsilon(0.001));
+    CHECK(view().target.x == Approx(960.0f).epsilon(0.001));
 }
 
 TEST_CASE("A hit writes the hit points lost above the entity, which rises, fades out and goes", "[client]")

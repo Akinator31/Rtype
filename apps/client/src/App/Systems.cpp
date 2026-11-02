@@ -6,6 +6,7 @@
 #include "Game/HealthBarSystem.hpp"
 #include "Game/HudSystem.hpp"
 #include "Game/ImpactSystem.hpp"
+#include "Game/RescueCameraSystem.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/LogoFlareSystem.hpp"
@@ -25,6 +26,8 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     ecs.registerSystem<engine::InterfaceSystem>(ecs, engine.getScenes(), devices, metrics, style);
     // After the menus, which read the input first: Escape opens the pause menu before the game reads it
     auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
+    // After the session, which moves the shogun it follows
+    ecs.registerSystem<RescueCameraSystem>(sessions);
     ecs.registerSystem<ImpactSystem>(ecs);
     ecs.registerSystem<DamageNumberSystem>(ecs);
     // After the session, which opens the death screens and gives the tick they count down to

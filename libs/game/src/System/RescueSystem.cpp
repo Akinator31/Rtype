@@ -70,7 +70,7 @@ constexpr std::uint32_t DrainInterval = 15;
 RescueSystem::RescueSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context)
     : _ecs(ecs), _context(context), _enemies(use<Enemy>(caches)), _orders(use<EnemyOrders>(caches)),
       _positions(use<ecs::Position>(caches)), _velocities(use<physics::Velocity>(caches)),
-      _healths(use<Health>(caches)), _allies(use<Ally>(caches))
+      _healths(use<Health>(caches)), _allies(use<Ally>(caches)), _ids(use<NetworkId>(caches))
 {
     use<PlayerShip>(caches);
 }
@@ -340,6 +340,9 @@ void RescueSystem::runDash(ecs::entity_t boss, float elapsed)
     }
     _velocities.get(*ship) = {pushX * KnockbackSpeed, pushY * KnockbackSpeed};
     (rescue.target == 0 ? rescue.playerStunned : _allies.get(*ship).stunned) = KnockbackTicks;
+    if (_ids.has(*ship)) {
+        _context.struck.push_back(_ids.get(*ship).value);
+    }
     ++rescue.target;
     rescue.dashing = false;
     rescue.ticks = 0;
