@@ -157,6 +157,9 @@ public:
     void stop();
     /// Draws the ships of this kind with a 3D model from now on, instead of a box.
     void setShipLook(game::EntityKind kind, const ShipLook &look);
+    /// Draws the ships of this kind with these 3D models from now on, each ship with one of them, picked by
+    /// its id.
+    void setShipLooks(game::EntityKind kind, std::vector<ShipLook> looks);
     /// Draws the ship of the local player with this 3D model from now on, instead of the look of its kind.
     void setLocalShipLook(const ShipLook &look);
     /// Draws the bosses of this kind with a 3D model from now on, instead of a box.

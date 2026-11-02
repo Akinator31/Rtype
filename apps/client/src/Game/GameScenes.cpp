@@ -78,8 +78,8 @@ constexpr render::Rectangle DropShipHull{-11.95f, -5.74f, 23.9f, 9.11f};
 constexpr render::Rectangle ShogunHull{-5.0f, -33.0f, 17.0f, 33.5f};
 constexpr float ShogunSpin = -70.0f;
 
-/// The model of the allies of the rescue against the final boss, one of the ships of the hangar.
-constexpr std::string_view AllyModel = RTYPE_MODEL_SHIP_SPACESHIP;
+/// The model of the Bydo drop ship, also in the hangar: never flown by the allies of the rescue.
+constexpr std::string_view BydoModel = RTYPE_MODEL_SHIP_DROP_SHIP;
 
 /// The prompt of the combined attack, during the rescue: in the titles, under the middle of the screen,
 /// blinking.
@@ -278,15 +278,14 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
                          {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoTrails});
     sessions.setLocalShipLook(
         {loadShipModel(resources, equipped.modelPath), equipped.hull, false, equipped.trailMeshes});
-    // The allies of the rescue against the final boss fly the ship of the hangar with the model AllyModel
-    const auto &catalog = getShipCatalog();
-    const auto ally = std::ranges::find_if(
-        catalog, [](const ShipEntry &entry) { return std::string_view(entry.modelPath) == AllyModel; });
-    if (ally != catalog.end()) {
-        sessions.setShipLook(game::EntityKind::AllyShip,
-                             {loadShipModel(resources, ally->modelPath), ally->hull, false,
-                              ally->trailMeshes});
+    // The allies of the rescue against the final boss fly all the ships of the hangar but the Bydo one, mixed
+    std::vector<ShipLook> allyLooks;
+    for (const ShipEntry &entry : getShipCatalog()) {
+        if (std::string_view(entry.modelPath) != BydoModel) {
+            allyLooks.push_back({loadShipModel(resources, entry.modelPath), entry.hull, false, entry.trailMeshes});
+        }
     }
+    sessions.setShipLooks(game::EntityKind::AllyShip, std::move(allyLooks));
     sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
                                                        DropShipHull, true, DropShipTrails});
     BossLook shogun = loadBossLook(resources, RTYPE_MODEL_BOSS_SHOGUN, ShogunHull, ShogunSpin);

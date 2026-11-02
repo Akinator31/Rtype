@@ -107,6 +107,11 @@ void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
     _shipLooks.setLook(kind, look);
 }
 
+void GameSessionSystem::setShipLooks(game::EntityKind kind, std::vector<ShipLook> looks)
+{
+    _shipLooks.setLooks(kind, std::move(looks));
+}
+
 void GameSessionSystem::setLocalShipLook(const ShipLook &look)
 {
     _shipLooks.setLocalLook(look);

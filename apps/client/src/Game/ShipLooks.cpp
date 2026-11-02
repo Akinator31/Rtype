@@ -89,7 +89,16 @@ render::Color tintOf(const EntityLook &look)
 
 void ShipLooks::setLook(game::EntityKind kind, const ShipLook &look)
 {
-    _looks.insert_or_assign(kind, look);
+    _looks.insert_or_assign(kind, std::vector<ShipLook>{look});
+}
+
+void ShipLooks::setLooks(game::EntityKind kind, std::vector<ShipLook> looks)
+{
+    if (looks.empty()) {
+        _looks.erase(kind);
+        return;
+    }
+    _looks.insert_or_assign(kind, std::move(looks));
 }
 
 void ShipLooks::setLocalLook(const ShipLook &look)
@@ -105,7 +114,8 @@ bool ShipLooks::hasLook(game::EntityKind kind) const
 void ShipLooks::addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state,
                          const EntityLook &look, float clock, bool local) const
 {
-    const ShipLook &ship = local && _localLook ? *_localLook : _looks.at(state.kind);
+    const std::vector<ShipLook> &looks = _looks.at(state.kind);
+    const ShipLook &ship = local && _localLook ? *_localLook : looks[state.id % looks.size()];
     const bool isPlayerShip = state.kind == game::EntityKind::PlayerShip;
     const render::Rectangle &hull = ship.hull;
     ecs.addComponent<engine::Model>(entity, ship.model.model, render::Vector3{}, LengthAxis,
