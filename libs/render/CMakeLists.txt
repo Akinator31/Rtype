@@ -10,6 +10,7 @@ add_library(rtype_render
     src/RaylibLog.cpp
     src/Renderer.cpp
     src/ResourceManager.cpp
+    src/SkeletonPose.cpp
     src/Viewport.cpp
     src/Window.cpp
 )

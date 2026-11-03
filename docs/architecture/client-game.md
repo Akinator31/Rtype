@@ -138,9 +138,18 @@ where its box would be, with the same size anywhere on the screen: what is drawn
   drawn: they stretch far behind the ship once it rolls its belly towards the camera. Their meshes
   (`ShipLook::trailMeshes`, by index in the model file) go into `Model::hiddenMeshes`, which the renderer does
   not draw.
+- **Recoil**: a ship of the players (or an ally of the rescue) plays the `Shoot` animation of its rig each
+  time it fires: its hull kicks back and a flash grows at its muzzle, for 0.3 s. The snapshots do not say who
+  fired a shot: a shot of the players that appears makes the ship of the players drawn in 3D nearest to it
+  recoil, if it is no farther than twice `Rules::shipHalfWidth` (the allies fire the shots of a player, so its
+  owner is not enough). `Shoot` only moves the hull and the muzzle, from the rest pose of the rig: it is added
+  over the flight (`addModelAnimation()`, `ModelAnimation::addedAnimation`), each bone keeping its pose plus
+  what `Shoot` changes from its first frame, in the space of its parent; played alone, it would show the
+  ship in the rest pose. The Bydos do not recoil.
 - **Cost**: the models are skinned on the CPU, a few milliseconds per pose. The ships of a model are
   kept in step (the time of their animation is that of the session), and the `SceneRenderer` poses a model
-  again only when its pose changes: ten Bydos cost one pose per frame.
+  again only when its pose changes: ten Bydos cost one pose per frame. A ship recoiling has a pose of its
+  own for 0.3 s.
 
 The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
 an entity flies.

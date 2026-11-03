@@ -9,6 +9,7 @@
 #include "rtype/engine/Control/Control.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/PlayerInput.hpp"
+#include "rtype/game/Rules.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -38,6 +39,16 @@ float distanceBetween(const ecs::Position &first, const ecs::Position &second)
 {
     return std::hypot(first.x - second.x, first.y - second.y);
 }
+
+/// The ships on the side of the players: theirs, and their allies during the rescue.
+bool isPlayerSideShip(game::EntityKind kind)
+{
+    return kind == game::EntityKind::PlayerShip || kind == game::EntityKind::AllyShip;
+}
+
+/// A shot appears at the nose of the ship that fired it, half a ship ahead of its centre, and has flown for a
+/// snapshot or so when it is drawn: no farther than this from its centre.
+const float ShooterReach = 2.0f * game::Rules{}.shipHalfWidth;
 
 } // namespace
 
@@ -354,6 +365,35 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     }
     _shotSounds.addSound(_ecs, entity, state.kind, state.x);
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
+    if (isPlayerShot(state.kind)) {
+        recoilShooter(state);
+    }
+}
+
+void GameSessionSystem::recoilShooter(const game::EntityState &shot)
+{
+    if (const std::optional<ecs::entity_t> shooter = findShooter(shot)) {
+        ShipLooks::fireModel(_ecs, *shooter);
+    }
+}
+
+std::optional<ecs::entity_t> GameSessionSystem::findShooter(const game::EntityState &shot) const
+{
+    const ecs::Position position{shot.x, shot.y};
+    std::optional<ecs::entity_t> shooter;
+    float nearest = ShooterReach;
+    for (const auto &[networkId, entity] : _entities) {
+        if (!_ecs.isAlive(entity) || !_ecs.hasComponent<ShipAttitude>(entity.id) ||
+            !isPlayerSideShip(_ecs.getComponent<Replicated>(entity.id).kind)) {
+            continue;
+        }
+        const float distance = distanceBetween(position, _ecs.getComponent<ecs::Position>(entity.id));
+        if (distance <= nearest) {
+            nearest = distance;
+            shooter = entity.id;
+        }
+    }
+    return shooter;
 }
 
 void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityRef &entity)

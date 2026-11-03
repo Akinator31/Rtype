@@ -372,6 +372,43 @@ TEST_CASE("A kind of ship given a look is a 3D model, its hull on the box of the
     CHECK(animationOf().blendAmount == 0.5f);
 }
 
+TEST_CASE("A ship given a look recoils each time it fires, over its flight", "[client]")
+{
+    Client client({}, armedConfig());
+    client.ecs.registerSystem<rtype::engine::ModelAnimationSystem>();
+    const ShipLook look{{{}, {0, 1, 2, 3, 6, 0.3f}}, {-1.0f, -2.0f, 4.0f, 2.0f}, false, {}};
+    client.sessions.setShipLook(rtype::game::EntityKind::PlayerShip, look);
+
+    client.run(1);
+    const std::optional<rtype::ecs::entity_t> ship =
+        client.sessions.entityOf(client.session->simulation().snapshot().entities[0].id);
+    REQUIRE(ship);
+    const auto animationOf = [&]() -> const rtype::engine::ModelAnimation & {
+        return client.ecs.getComponent<rtype::engine::ModelAnimation>(*ship);
+    };
+    CHECK(animationOf().addedAnimation == rtype::engine::NoAnimation);
+
+    // Its first shot appears at its nose: Shoot is added from its start, the flame stays
+    const auto countShots = [&] { return client.sessions.entityCount() - 1; };
+    client.input.keys = {Key::Space};
+    for (int frame = 0; frame < 30 && countShots() == 0; ++frame) {
+        client.run(1);
+    }
+    REQUIRE(countShots() == 1);
+    CHECK(animationOf().addedAnimation == 6);
+    CHECK(animationOf().addedDuration == 0.3f);
+    CHECK(animationOf().addedTime < 0.3f);
+    CHECK(animationOf().animation == look.model.animations.idle);
+    CHECK(animationOf().blendedAnimation == look.model.animations.move);
+    CHECK(animationOf().blendAmount == 0.5f);
+
+    // Released: the recoil ends once played
+    client.input.keys.clear();
+    client.run(30);
+    CHECK(animationOf().addedAnimation == rtype::engine::NoAnimation);
+    CHECK(animationOf().blendAmount == 0.5f);
+}
+
 TEST_CASE("A kind of shot given a look is a 3D model of energy, its core on the box of the shot", "[client]")
 {
     Client client({}, armedConfig());
