@@ -3,11 +3,13 @@
 #include "Console/Console.hpp"
 #include "Game/GameScenes.hpp"
 #include "ShipSelector/ShipSelection.hpp"
+#include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/localization/Localization.hpp"
+#include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
@@ -28,6 +30,6 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
                       const engine::InterfaceStyle &style, render::Window &window,
                       const engine::RendererMetrics &metrics, GameScenes &games,
                       const game::GameConfig &config, localization::Localization &translations,
-                      ShipSelection &ships);
+                      audio::AudioPlayer &audio, render::Renderer &renderer, ShipSelection &ships);
 
 } // namespace rtype::client

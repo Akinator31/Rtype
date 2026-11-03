@@ -13,6 +13,7 @@
 #include "Loading/SceneLoadStatus.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "Settings/PlayerSettings.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
@@ -89,6 +90,9 @@ void run()
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
+    // The language, the volumes and the colour filter chosen at the last run
+    rtype::client::applyPlayerSettings(engine.getSettings(), translations, audio);
+    renderer.setColorFilter(rtype::client::readColorFilter(engine.getSettings()));
 
     rtype::client::Console console;
     const rtype::game::GameConfig config = rtype::client::readGameConfig(console);
@@ -153,7 +157,7 @@ void run()
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
     rtype::client::createMenuScenes(engine, resources, style, window, metrics, games, config, translations,
-                                    ships);
+                                    audio, renderer, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, showColliderDebug);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {

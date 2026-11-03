@@ -37,6 +37,7 @@ add_executable(rtype_tests
     network.cpp
     paths.cpp
     platform_assumptions.cpp
+    player_settings.cpp
     process.cpp
     physics_broad_phase.cpp
     physics_bounds.cpp
@@ -83,7 +84,8 @@ target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
     RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"
     RTYPE_TEST_CONFIG="${PROJECT_SOURCE_DIR}/config"
-    RTYPE_TEST_FONTS="${PROJECT_SOURCE_DIR}/apps/client/assets/fonts")
+    RTYPE_TEST_FONTS="${PROJECT_SOURCE_DIR}/apps/client/assets/fonts"
+    RTYPE_TEST_LOCALES="${PROJECT_SOURCE_DIR}/apps/client/assets/locales")
 # The helpers the tests share
 target_include_directories(rtype_tests PRIVATE helpers)
 catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)

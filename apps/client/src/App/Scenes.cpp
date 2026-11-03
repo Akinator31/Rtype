@@ -31,12 +31,12 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
                       const engine::InterfaceStyle &style, render::Window &window,
                       const engine::RendererMetrics &metrics, GameScenes &games,
                       const game::GameConfig &config, localization::Localization &translations,
-                      ShipSelection &ships)
+                      audio::AudioPlayer &audio, render::Renderer &renderer, ShipSelection &ships)
 {
     createMainMenuScene(engine, resources, style, metrics, translations,
                         [&window] { window.requestClose(); });
     createSubmenuScenes(
-        engine, style, translations,
+        engine, style, translations, audio, renderer,
         [&engine, &ships, &games, &config] {
             openShipSelector(engine, ships, [&games, &config] {
                 games.play(std::make_unique<LocalSession>(game::Rules{}, config));
