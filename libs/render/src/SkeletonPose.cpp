@@ -26,7 +26,8 @@ float divideOrZero(float value, float divisor)
 
 Vector3 divideOrZero(Vector3 value, Vector3 divisor)
 {
-    return {divideOrZero(value.x, divisor.x), divideOrZero(value.y, divisor.y), divideOrZero(value.z, divisor.z)};
+    return {divideOrZero(value.x, divisor.x), divideOrZero(value.y, divisor.y),
+            divideOrZero(value.z, divisor.z)};
 }
 
 // The scale `added` has over `reference`, applied to `scale`: `added` itself where `reference` is 0
@@ -54,11 +55,10 @@ BonePoses toParentSpace(const BonePoses &poses, const ModelSkeleton &skeleton)
         const Transform &parent = poses[skeleton.bones[bone].parent];
         const Quaternion unturn = QuaternionInvert(parent.rotation);
         const Transform &pose = poses[bone];
-        local[bone] = {
-            divideOrZero(
-                Vector3RotateByQuaternion(Vector3Subtract(pose.translation, parent.translation), unturn),
-                parent.scale),
-            QuaternionMultiply(unturn, pose.rotation), divideOrZero(pose.scale, parent.scale)};
+        local[bone] = {divideOrZero(Vector3RotateByQuaternion(
+                                        Vector3Subtract(pose.translation, parent.translation), unturn),
+                                    parent.scale),
+                       QuaternionMultiply(unturn, pose.rotation), divideOrZero(pose.scale, parent.scale)};
     }
     return local;
 }
@@ -119,7 +119,8 @@ BonePoses blendPoses(const BonePoses &first, const BonePoses &second, float amou
     return poses;
 }
 
-BonePoses addPose(const BonePoses &pose, const ModelAnimation &added, float frame, const ModelSkeleton &skeleton)
+BonePoses addPose(const BonePoses &pose, const ModelAnimation &added, float frame,
+                  const ModelSkeleton &skeleton)
 {
     const BonePoses first = samplePose(added, 0.0f);
     if (!isPoseOf(pose, skeleton) || !isPoseOf(first, skeleton)) {
@@ -132,13 +133,12 @@ BonePoses addPose(const BonePoses &pose, const ModelAnimation &added, float fram
     for (std::size_t bone = 0; bone < local.size(); ++bone) {
         const Transform &from = reference[bone];
         const Transform &to = moved[bone];
-        local[bone] = {
-            Vector3Add(base[bone].translation, Vector3Subtract(to.translation, from.translation)),
-            QuaternionMultiply(base[bone].rotation,
-                               QuaternionMultiply(QuaternionInvert(from.rotation), to.rotation)),
-            {addScale(base[bone].scale.x, from.scale.x, to.scale.x),
-             addScale(base[bone].scale.y, from.scale.y, to.scale.y),
-             addScale(base[bone].scale.z, from.scale.z, to.scale.z)}};
+        local[bone] = {Vector3Add(base[bone].translation, Vector3Subtract(to.translation, from.translation)),
+                       QuaternionMultiply(base[bone].rotation,
+                                          QuaternionMultiply(QuaternionInvert(from.rotation), to.rotation)),
+                       {addScale(base[bone].scale.x, from.scale.x, to.scale.x),
+                        addScale(base[bone].scale.y, from.scale.y, to.scale.y),
+                        addScale(base[bone].scale.z, from.scale.z, to.scale.z)}};
     }
     return toModelSpace(local, skeleton);
 }

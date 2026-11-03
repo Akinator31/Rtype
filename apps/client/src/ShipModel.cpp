@@ -9,8 +9,8 @@ ShipModel loadShipModel(render::ResourceManager &resources, const std::string &p
     const int shoot = resources.getModelAnimation(model, "Shoot");
     return {model,
             {resources.getModelAnimation(model, "Idle"), resources.getModelAnimation(model, "Move"),
-             resources.getModelAnimation(model, "MoveUp"), resources.getModelAnimation(model, "MoveDown"), shoot,
-             resources.getModelAnimationDuration(model, shoot)}};
+             resources.getModelAnimation(model, "MoveUp"), resources.getModelAnimation(model, "MoveDown"),
+             shoot, resources.getModelAnimationDuration(model, shoot)}};
 }
 
 } // namespace rtype::client
