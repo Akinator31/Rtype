@@ -164,11 +164,10 @@ TEST_CASE("The crawl scrolls its items, then fades out and ends", "[client]")
     bool ended = false;
     const rtype::ecs::entity_t crawl = ecs.createEntity();
     ecs.addComponent<rtype::engine::SceneMember>(crawl, scene);
-    ecs.addComponent<Crawl>(crawl, Crawl{.bottom = 1000.0f,
-                                         .depth = 1000.0f,
-                                         .speed = 100.0f,
-                                         .length = 0.0f,
-                                         .onEnd = [&ended] { ended = true; }});
+    ecs.addComponent<Crawl>(
+        crawl, Crawl{.bottom = 1000.0f, .depth = 1000.0f, .speed = 100.0f, .length = 0.0f, .onEnd = [&ended] {
+                         ended = true;
+                     }});
     const rtype::ecs::entity_t item = ecs.createEntity();
     ecs.addComponent<rtype::engine::SceneMember>(item, scene);
     ecs.addComponent<rtype::ecs::Position>(item);

@@ -26,7 +26,6 @@ namespace
 /// Size of the fonts once loaded, large enough for the texts at the bottom of the screen.
 constexpr int loreFontSize = 96;
 
-
 /// The horizon is this far above the bottom of the screen: a little above its top, so that the text fades
 /// out in the upper part of the screen.
 constexpr float crawlDepth = 1200.0f;
@@ -149,11 +148,11 @@ void createLoreScene(engine::Engine &engine, render::ResourceManager &resources,
                      const engine::InterfaceStyle &style, const engine::Metrics &metrics,
                      const localization::Localization &translations)
 {
-    engine.createScene(LoreScene, {.assets = LoreAssets},
-                       [&resources, &audio, &style, &metrics, &translations](engine::Engine &target,
-                                                                             engine::SceneId scene) {
-                           buildLoreScene(target, scene, resources, audio, style, metrics, translations);
-                       });
+    engine.createScene(
+        LoreScene, {.assets = LoreAssets},
+        [&resources, &audio, &style, &metrics, &translations](engine::Engine &target, engine::SceneId scene) {
+            buildLoreScene(target, scene, resources, audio, style, metrics, translations);
+        });
 }
 
 } // namespace rtype::client
