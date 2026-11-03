@@ -13,6 +13,7 @@ add_library(r-type_client_core STATIC
     src/App/Systems.cpp
     src/Commands/BossCommand.cpp
     src/Commands/Commands.cpp
+    src/Commands/HitboxesCommand.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
     src/Commands/ToastCommand.cpp

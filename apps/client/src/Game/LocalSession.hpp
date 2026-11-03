@@ -48,6 +48,8 @@ public:
     [[nodiscard]] bool isOver() const override { return _over; }
     /// None: the game runs in the client.
     [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override { return std::nullopt; }
+    /// The collider of the entity in the simulation: its real hitbox.
+    [[nodiscard]] std::optional<physics::Collider> findCollider(const game::EntityState &state) override;
 
     /// The simulation, for the tests.
     [[nodiscard]] const game::Simulation &simulation() const { return _simulation; }

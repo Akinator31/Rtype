@@ -1,7 +1,9 @@
 #pragma once
 
+#include "Game/EntityLook.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/physics/Component/Collider.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -47,6 +49,14 @@ public:
 
     /// The round-trip time to the game, once measured; none offline, where there is no network.
     [[nodiscard]] virtual std::optional<std::chrono::milliseconds> ping() const = 0;
+
+    /// The hitbox of an entity of the game, for the debug overlay (F3, the "hitboxes" command), none if it
+    /// has none. By default the box it is drawn as (lookOf()): the snapshots do not carry the hitboxes.
+    [[nodiscard]] virtual std::optional<physics::Collider> findCollider(const game::EntityState &state)
+    {
+        const engine::Box box = lookOf(state).box;
+        return physics::Collider{physics::Aabb{{}, {box.width / 2.0f, box.height / 2.0f, 0.0f}}, {}, false};
+    }
 };
 
 } // namespace rtype::client

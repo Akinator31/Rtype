@@ -349,6 +349,9 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     } else {
         _ecs.addComponent<engine::Box>(entity, look.box);
     }
+    if (const std::optional<physics::Collider> collider = _session->findCollider(state)) {
+        _ecs.addComponent<physics::Collider>(entity, *collider);
+    }
     _shotSounds.addSound(_ecs, entity, state.kind, state.x);
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
 }

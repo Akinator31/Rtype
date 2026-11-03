@@ -11,8 +11,9 @@ namespace rtype::client
 
 /// Registers every console command of the client. Each command has its own file in Commands/: to add one,
 /// write its register function there and call it from here.
-/// @param engine, window, games, config They must outlive the console.
+/// @param engine, window, games, config, showHitboxes They must outlive the console.
+/// @param showHitboxes Whether the hitboxes are drawn, switched by the "hitboxes" command.
 void registerClientCommands(Console &console, engine::Engine &engine, render::Window &window,
-                            GameScenes &games, const game::GameConfig &config);
+                            GameScenes &games, const game::GameConfig &config, bool &showHitboxes);
 
 } // namespace rtype::client

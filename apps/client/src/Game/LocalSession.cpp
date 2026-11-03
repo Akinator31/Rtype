@@ -1,5 +1,6 @@
 #include "Game/LocalSession.hpp"
 
+#include "rtype/game/Component/Components.hpp"
 #include "rtype/game/Constants.hpp"
 
 #include <algorithm>
@@ -47,6 +48,19 @@ void LocalSession::update(float elapsed)
         // Too late to catch up: the rest is forgotten
         _pending = std::min(_pending, Tick);
     }
+}
+
+std::optional<physics::Collider> LocalSession::findCollider(const game::EntityState &state)
+{
+    ecs::Ecs &world = _simulation.ecs();
+    const auto &ids = world.cache<game::NetworkId>();
+    const auto &colliders = world.cache<physics::Collider>();
+    for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
+        if (ids.has(entity) && ids.get(entity).value == state.id) {
+            return colliders.has(entity) ? std::optional(colliders.get(entity)) : std::nullopt;
+        }
+    }
+    return std::nullopt;
 }
 
 std::vector<game::Snapshot> LocalSession::takeSnapshots()

@@ -654,7 +654,54 @@ rtype::game::Snapshot snapshotOf(std::uint32_t tick, std::vector<rtype::game::En
     return snapshot;
 }
 
+/// The half size of the box collider of the first entity of a kind drawn in the scene.
+std::optional<rtype::physics::Vec3> findHalfSize(rtype::ecs::Ecs &ecs, rtype::game::EntityKind kind)
+{
+    auto &replicated = ecs.cache<Replicated>();
+    auto &colliders = ecs.cache<rtype::physics::Collider>();
+    for (rtype::ecs::entity_t entity = 0; entity < replicated.size(); ++entity) {
+        if (replicated.has(entity) && ecs.isAlive(entity) && replicated.get(entity).kind == kind &&
+            colliders.has(entity)) {
+            return std::get<rtype::physics::Aabb>(colliders.get(entity).shape).halfSize;
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace
+
+TEST_CASE("Offline, an entity drawn has the collider of the game, for the hitbox overlay", "[client]")
+{
+    Client client({}, armedConfig());
+
+    client.input.keys = {Key::Space};
+    client.run(15);
+
+    const std::optional<rtype::physics::Vec3> ship =
+        findHalfSize(client.ecs, rtype::game::EntityKind::PlayerShip);
+    REQUIRE(ship.has_value());
+    CHECK(ship->x == Approx(rtype::game::Rules{}.shipHalfWidth));
+    // The collider of the projectile of the config, not the box the shot is drawn as
+    const std::optional<rtype::physics::Vec3> shot =
+        findHalfSize(client.ecs, rtype::game::EntityKind::PlayerShot);
+    REQUIRE(shot.has_value());
+    CHECK(shot->x == Approx(12.0f));
+    CHECK(shot->y == Approx(4.0f));
+}
+
+TEST_CASE("Online, an entity drawn has a collider of the box it is drawn as", "[client]")
+{
+    ImpactClient client;
+    const rtype::game::EntityState bydo{3, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner};
+
+    client.receive(snapshotOf(1, {bydo}));
+
+    const std::optional<rtype::physics::Vec3> halfSize =
+        findHalfSize(client.ecs, rtype::game::EntityKind::BydoFlyer);
+    REQUIRE(halfSize.has_value());
+    CHECK(halfSize->x == Approx(lookOf(bydo).box.width / 2.0f));
+    CHECK(halfSize->y == Approx(lookOf(bydo).box.height / 2.0f));
+}
 
 TEST_CASE("A shot killed in the game leaves its impact where it was last drawn, played once", "[client]")
 {
