@@ -34,6 +34,7 @@
 #include "rtype/engine/System/HitboxSystem.hpp"
 #include "rtype/engine/System/InterfaceSystem.hpp"
 #include "rtype/engine/System/ModelAnimationSystem.hpp"
+#include "rtype/engine/System/ScrollSystem.hpp"
 #include "rtype/engine/System/SoundSystem.hpp"
 #include "rtype/engine/System/SpinSystem.hpp"
 #include "rtype/engine/System/ToastSystem.hpp"

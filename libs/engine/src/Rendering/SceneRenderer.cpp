@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -300,6 +301,22 @@ render::Rectangle computeCoverSource(render::Vector2 picture, render::Rectangle 
     return {(picture.x - width) / 2.0f, (picture.y - height) / 2.0f, width, height};
 }
 
+/// The value brought between 0 and the period, which repeats it; a period of 0 keeps the value.
+float wrap(float value, float period)
+{
+    if (period <= 0.0f) {
+        return value;
+    }
+    return value - (period * std::floor(value / period));
+}
+
+/// A picture of the sky, a Backdrop or a BackdropSprite, to draw in order.
+struct SkyPicture {
+    ecs::entity_t entity;
+    int order;
+    bool isSprite;
+};
+
 } // namespace
 
 SceneRenderer::SceneRenderer(ecs::Ecs &ecs, Scenes &scenes, const InterfaceStyle &style)
@@ -374,18 +391,90 @@ std::vector<ecs::entity_t> SceneRenderer::getModelsInOrder()
     return entities;
 }
 
-void SceneRenderer::drawBackdrop(render::Renderer &renderer)
+std::optional<ecs::entity_t> SceneRenderer::findFirstBackdrop()
 {
     auto &backdrops = _ecs.cache<Backdrop>();
     for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
         if (backdrops.has(entity) && isShown(entity)) {
-            const Backdrop &backdrop = backdrops.get(entity);
-            const render::Rectangle area = renderer.visibleArea();
-            const render::Rectangle source = computeCoverSource(renderer.textureSize(backdrop.texture), area);
-            renderer.drawTexture(backdrop.texture, source, area, 0.0f, backdrop.tint);
-            return;
+            return entity;
         }
     }
+    return std::nullopt;
+}
+
+float SceneRenderer::getScrollOffset(ecs::entity_t entity)
+{
+    auto &scrolls = _ecs.cache<Scroll>();
+    return scrolls.has(entity) ? scrolls.get(entity).offset : 0.0f;
+}
+
+void SceneRenderer::drawBackdrop(render::Renderer &renderer)
+{
+    const std::optional<ecs::entity_t> first = findFirstBackdrop();
+    if (!first) {
+        return;
+    }
+    const std::optional<SceneId> sky = _scenes.sceneOf(*first);
+    auto &backdrops = _ecs.cache<Backdrop>();
+    auto &sprites = _ecs.cache<BackdropSprite>();
+    const auto isInSky = [&](ecs::entity_t entity) {
+        return isShown(entity) && _scenes.sceneOf(entity) == sky;
+    };
+
+    std::vector<SkyPicture> pictures;
+    for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
+        if (backdrops.has(entity) && isInSky(entity)) {
+            pictures.push_back({entity, backdrops.get(entity).order, false});
+        }
+    }
+    for (ecs::entity_t entity = 0; entity < sprites.size(); ++entity) {
+        if (sprites.has(entity) && isInSky(entity)) {
+            pictures.push_back({entity, sprites.get(entity).order, true});
+        }
+    }
+    std::ranges::stable_sort(pictures, {}, &SkyPicture::order);
+
+    for (const SkyPicture &picture : pictures) {
+        const float offset = getScrollOffset(picture.entity);
+        if (picture.isSprite) {
+            drawBackdropSprite(renderer, sprites.get(picture.entity), offset);
+        } else {
+            drawBackdropLayer(renderer, backdrops.get(picture.entity), offset);
+        }
+    }
+}
+
+void SceneRenderer::drawBackdropLayer(render::Renderer &renderer, const Backdrop &backdrop, float offset)
+{
+    const render::Rectangle area = renderer.visibleArea();
+    const render::Vector2 picture = renderer.textureSize(backdrop.texture);
+    render::Rectangle source = computeCoverSource(picture, area);
+    const float scale = area.width / source.width;
+    source.x = wrap(source.x + (offset / scale), picture.x);
+
+    const float firstWidth = std::min(source.width, picture.x - source.x);
+    renderer.drawTexture(backdrop.texture, {source.x, source.y, firstWidth, source.height},
+                         {area.x, area.y, firstWidth * scale, area.height}, 0.0f, backdrop.tint);
+    if (firstWidth < source.width) {
+        const float restWidth = source.width - firstWidth;
+        renderer.drawTexture(backdrop.texture, {0.0f, source.y, restWidth, source.height},
+                             {area.x + (firstWidth * scale), area.y, restWidth * scale, area.height}, 0.0f,
+                             backdrop.tint);
+    }
+}
+
+void SceneRenderer::drawBackdropSprite(render::Renderer &renderer, const BackdropSprite &sprite, float offset)
+{
+    const render::Rectangle area = renderer.visibleArea();
+    const render::Vector2 picture = renderer.textureSize(sprite.texture);
+    const float width = sprite.height * picture.x / picture.y;
+    const float travel = wrap(sprite.start + offset, sprite.period);
+    const render::Rectangle destination{area.x + area.width - travel,
+                                        area.y + sprite.y - (sprite.height / 2.0f), width, sprite.height};
+    if (destination.x >= area.x + area.width || destination.x + destination.width <= area.x) {
+        return;
+    }
+    renderer.drawTexture(sprite.texture, {0.0f, 0.0f, picture.x, picture.y}, destination, 0.0f, sprite.tint);
 }
 
 void SceneRenderer::poseModel(render::Renderer &renderer, render::ModelId model,

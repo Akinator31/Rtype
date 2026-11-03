@@ -41,6 +41,7 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     ecs.registerSystem<engine::BoundTextSystem>();
     ecs.registerSystem<engine::TweenSystem>();
     ecs.registerSystem<engine::SpinSystem>();
+    ecs.registerSystem<engine::ScrollSystem>();
     ecs.registerSystem<FlightSystem>();
     ecs.registerSystem<IntroSystem>(engine.getScenes(), devices);
     ecs.registerSystem<LogoFlareSystem>();

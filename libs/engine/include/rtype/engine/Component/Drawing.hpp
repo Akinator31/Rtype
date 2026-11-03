@@ -138,11 +138,33 @@ struct Light {
 
 /// A picture that covers the whole screen, behind everything else of the World layer, 3D models included: the
 /// sky of a scene. It is scaled to cover the visible area and cut on the sides that overflow, so it keeps its
-/// proportions on any screen. The first shown entity with a Backdrop is drawn; it needs no Drawable nor
-/// Position.
+/// proportions on any screen. It needs no Drawable nor Position.
+///
+/// The sky is the scene of the first shown Backdrop: its Backdrops and BackdropSprites are drawn by order,
+/// the lowest at the back. A Backdrop with a Scroll slides to the left and repeats itself, so its picture
+/// must join its left side on its right side; layers going faster the nearer they are make a parallax.
 struct Backdrop {
     render::TextureId texture;
     render::Color tint = render::colors::White;
+    int order = 0;
+};
+
+/// A picture passing in the sky, between the layers of the Backdrops (a planet, a galaxy): with a Scroll, it
+/// comes in from the right of the visible area, goes out on its left, and comes back after `period` game
+/// units of scrolling. Without a Scroll, it waits just out of the screen, on the right.
+struct BackdropSprite {
+    render::TextureId texture;
+    /// Height of the picture, in game units; its width keeps its proportions.
+    float height = 0.0f;
+    /// Height of its centre, from the top of the visible area, in game units.
+    float y = 0.0f;
+    /// Scrolling between two passes, in game units. Below the width of the visible area plus the width of
+    /// the picture, it comes back before it has gone out.
+    float period = 0.0f;
+    /// Scrolling done at the start, in game units: from 0 (out of the screen, on the right) to `period`.
+    float start = 0.0f;
+    render::Color tint = render::colors::White;
+    int order = 0;
 };
 
 /// Size factor of what the entity draws, 1 by default. Animated by tweens, for instance to make a button

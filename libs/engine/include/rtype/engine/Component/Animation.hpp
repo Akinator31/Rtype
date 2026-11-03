@@ -51,6 +51,15 @@ struct Spin {
     float speed = 0.0f;
 };
 
+/// Moves the entity along a scrolling picture of the sky (a Backdrop, a BackdropSprite), forever, to show the
+/// travel of the camera: the ScrollSystem adds the speed times the elapsed time to the offset.
+struct Scroll {
+    /// In game units per second, the picture going to the left; negative goes to the right.
+    float speed = 0.0f;
+    /// How far the picture has gone, in game units.
+    float offset = 0.0f;
+};
+
 /// No animation, for ModelAnimation::addedAnimation.
 inline constexpr int NoAnimation = -1;
 
