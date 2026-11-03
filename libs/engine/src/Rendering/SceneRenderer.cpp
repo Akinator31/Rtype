@@ -417,7 +417,9 @@ void SceneRenderer::drawBackdrop(render::Renderer &renderer)
     const std::optional<SceneId> sky = _scenes.sceneOf(*first);
     auto &backdrops = _ecs.cache<Backdrop>();
     auto &sprites = _ecs.cache<BackdropSprite>();
-    const auto isInSky = [&](ecs::entity_t entity) { return isShown(entity) && _scenes.sceneOf(entity) == sky; };
+    const auto isInSky = [&](ecs::entity_t entity) {
+        return isShown(entity) && _scenes.sceneOf(entity) == sky;
+    };
 
     std::vector<SkyPicture> pictures;
     for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
@@ -467,8 +469,8 @@ void SceneRenderer::drawBackdropSprite(render::Renderer &renderer, const Backdro
     const render::Vector2 picture = renderer.textureSize(sprite.texture);
     const float width = sprite.height * picture.x / picture.y;
     const float travel = wrap(sprite.start + offset, sprite.period);
-    const render::Rectangle destination{area.x + area.width - travel, area.y + sprite.y - (sprite.height / 2.0f),
-                                        width, sprite.height};
+    const render::Rectangle destination{area.x + area.width - travel,
+                                        area.y + sprite.y - (sprite.height / 2.0f), width, sprite.height};
     if (destination.x >= area.x + area.width || destination.x + destination.width <= area.x) {
         return;
     }

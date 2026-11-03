@@ -3,9 +3,7 @@
 namespace rtype::engine
 {
 
-ScrollSystem::ScrollSystem(ecs::ComponentCaches &caches) : _scrolls(use<Scroll>(caches))
-{
-}
+ScrollSystem::ScrollSystem(ecs::ComponentCaches &caches) : _scrolls(use<Scroll>(caches)) {}
 
 void ScrollSystem::update(float elapsed)
 {

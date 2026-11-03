@@ -141,8 +141,8 @@ struct Light {
 /// proportions on any screen. It needs no Drawable nor Position.
 ///
 /// The sky is the scene of the first shown Backdrop: its Backdrops and BackdropSprites are drawn by order,
-/// the lowest at the back. A Backdrop with a Scroll slides to the left and repeats itself, so its picture must
-/// join its left side on its right side; layers going faster the nearer they are make a parallax.
+/// the lowest at the back. A Backdrop with a Scroll slides to the left and repeats itself, so its picture
+/// must join its left side on its right side; layers going faster the nearer they are make a parallax.
 struct Backdrop {
     render::TextureId texture;
     render::Color tint = render::colors::White;

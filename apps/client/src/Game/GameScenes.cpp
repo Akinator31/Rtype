@@ -387,13 +387,13 @@ void createGameSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager
         const ecs::entity_t entity = ecs.createEntity();
         ecs.addComponent<engine::SceneMember>(entity, scene);
         ecs.addComponent<engine::BackdropSprite>(
-            entity, engine::BackdropSprite{.texture = resources.loadTexture(object.path,
-                                                                            render::TextureFiltering::Smooth),
-                                           .height = object.height,
-                                           .y = object.y,
-                                           .period = object.period,
-                                           .start = object.start,
-                                           .order = skyOrder(layer) + 1});
+            entity, engine::BackdropSprite{
+                        .texture = resources.loadTexture(object.path, render::TextureFiltering::Smooth),
+                        .height = object.height,
+                        .y = object.y,
+                        .period = object.period,
+                        .start = object.start,
+                        .order = skyOrder(layer) + 1});
         ecs.addComponent<engine::Scroll>(entity, object.speed);
     }
 }
