@@ -74,6 +74,20 @@ struct Enemy {
     std::string id;
     /// Ticks since it appeared.
     std::uint32_t age = 0;
+    /// Its phase, from 1 to EnemyDefinition::phases: each one starts with all its health.
+    std::uint8_t phase = 1;
+};
+
+/// A stance a Bydo takes for a tick, ordered by its behavior, which the clients animate
+/// (EntityState::Guarding, Slashing, Shooting).
+enum class EnemyStance : std::uint8_t {
+    None,
+    /// Behind its guard: the shots of the players that hit it do no damage.
+    Guard,
+    /// Striking with a blade, usually while it charges.
+    Slash,
+    /// Aiming its gun.
+    Shoot,
 };
 
 /// What the behavior of a Bydo orders it, if its EnemyDefinition has one (EnemySystem): it then fires only
@@ -84,6 +98,10 @@ struct EnemyOrders {
     /// Fire at this tick, if its weapon is ready: straight ahead, or towards `target`.
     bool fire = false;
     std::optional<ecs::Position> target;
+    /// Its stance at this tick, ordered again at every tick.
+    EnemyStance stance = EnemyStance::None;
+    /// The shots of the players do no damage at this tick, whatever its stance, ordered again at every tick.
+    bool invulnerable = false;
 };
 
 /// Hurts what it hits: the shots of a player hurt the Bydos, the Bydos and their shots hurt the players.
@@ -95,6 +113,15 @@ struct Damage {
 /// Cannot be hit for some ticks: a ship that just appeared.
 struct Invulnerable {
     std::uint32_t ticks = 0;
+};
+
+/// An ally that comes to the rescue against the final boss (RescueSystem): flown and fired by the rescue,
+/// never hit.
+struct Ally {
+    /// Its place in the formation, 0 to 4.
+    std::uint8_t index = 0;
+    /// Ticks it is still thrown back by a dash of the shogun.
+    std::uint32_t stunned = 0;
 };
 
 /// Removed (DestroyCause::Removed) once entirely outside the game area, by more than Rules::areaMargin:

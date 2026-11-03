@@ -4,6 +4,7 @@
 #include "rtype/shaders/Lighting.hpp"
 
 #include <raymath.h>
+#include <rlgl.h>
 
 #include <algorithm>
 #include <array>
@@ -199,7 +200,14 @@ void LightingShader::drawMeshes(const Model &model, ::Vector3 position, ::Vector
             prepareMaterial(material);
         }
         maps[MATERIAL_MAP_DIFFUSE].color = multiply(maps[MATERIAL_MAP_DIFFUSE].color, tint);
+        const bool doubleSided = material.params[DoubleSidedParameter] > 0.0f;
+        if (doubleSided) {
+            rlDisableBackfaceCulling();
+        }
         DrawMesh(model.meshes[mesh], material, transform);
+        if (doubleSided) {
+            rlEnableBackfaceCulling();
+        }
     }
 }
 

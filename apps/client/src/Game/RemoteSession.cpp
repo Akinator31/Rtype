@@ -144,6 +144,7 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
     case game::message_type::WaveStarted:
         if (const auto started = game::decodeWaveStarted(payload)) {
             _waveStarted = started->wave;
+            _waveMusic = started->music;
         }
         return;
     default:
@@ -254,6 +255,7 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
     }
     snapshot.destroyed = std::exchange(_destroyed, {});
     snapshot.waveStarted = std::exchange(_waveStarted, std::nullopt);
+    snapshot.waveMusic = std::exchange(_waveMusic, {});
     return {std::move(snapshot)};
 }
 

@@ -154,7 +154,7 @@ void run()
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
     rtype::client::createMenuScenes(engine, resources, style, window, metrics, games, config, translations,
                                     ships);
-    rtype::client::registerClientCommands(console, engine, window);
+    rtype::client::registerClientCommands(console, engine, window, games, config, showColliderDebug);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
         playFrame();

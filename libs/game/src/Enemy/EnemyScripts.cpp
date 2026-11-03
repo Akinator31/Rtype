@@ -68,6 +68,11 @@ public:
     /// Seconds since it appeared.
     float age = 0.0f;
     std::uint8_t health = 0;
+    /// The health it gets at each phase, to compare `health` with.
+    std::uint8_t maxHealth = 0;
+    /// Its phase, from 1 to `phases`: it gets all its health back at each one.
+    std::uint8_t phase = 1;
+    std::uint8_t phases = 1;
     /// It is on the destination of its last moveTo().
     bool arrived = false;
     ScriptWeapon weapon;
@@ -102,6 +107,15 @@ public:
         orders.fire = true;
         orders.target = ecs::Position{targetX, targetY};
     }
+
+    /// Its stance at this tick, the last one ordered: behind its guard, striking with a blade, aiming its
+    /// gun.
+    void guard() { orders.stance = EnemyStance::Guard; }
+    void slash() { orders.stance = EnemyStance::Slash; }
+    void aim() { orders.stance = EnemyStance::Shoot; }
+
+    /// The shots of the players do no damage at this tick, in any stance.
+    void protect() { orders.invulnerable = true; }
 };
 
 /// What a behavior sees of the game.
@@ -163,6 +177,9 @@ ScriptEnemy describeEnemy(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ent
     enemy.speed = definition.speed;
     enemy.age = toSeconds(ecs.getComponent<Enemy>(entity).age);
     enemy.health = ecs.getComponent<Health>(entity).points;
+    enemy.maxHealth = definition.health;
+    enemy.phase = ecs.getComponent<Enemy>(entity).phase;
+    enemy.phases = definition.phases;
     enemy.weapon = describeWeapon(context, ecs.getComponent<Armed>(entity));
     // The destination is kept from one tick to the next; a shot is ordered again at every tick
     enemy.orders.destination = ecs.getComponent<EnemyOrders>(entity).destination;
@@ -222,6 +239,9 @@ void EnemyScripts::bindTypes()
         .addProperty("speed", &ScriptEnemy::speed)
         .addProperty("age", &ScriptEnemy::age)
         .addProperty("health", &ScriptEnemy::health)
+        .addProperty("maxHealth", &ScriptEnemy::maxHealth)
+        .addProperty("phase", &ScriptEnemy::phase)
+        .addProperty("phases", &ScriptEnemy::phases)
         .addProperty("arrived", &ScriptEnemy::arrived)
         .addProperty("weapon", &ScriptEnemy::weapon)
         .addProperty("memory", &ScriptEnemy::memory)
@@ -229,6 +249,10 @@ void EnemyScripts::bindTypes()
         .addFunction("moveTo", &ScriptEnemy::moveTo)
         .addFunction("fire", &ScriptEnemy::fire)
         .addFunction("fireAt", &ScriptEnemy::fireAt)
+        .addFunction("guard", &ScriptEnemy::guard)
+        .addFunction("slash", &ScriptEnemy::slash)
+        .addFunction("aim", &ScriptEnemy::aim)
+        .addFunction("protect", &ScriptEnemy::protect)
         .endClass()
         .beginClass<ScriptGame>("Game")
         .addProperty("tick", &ScriptGame::tick)

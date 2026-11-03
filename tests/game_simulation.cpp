@@ -1149,6 +1149,19 @@ TEST_CASE("spawnEnemy() makes a Bydo of its definition, and refuses an unknown o
     CHECK_THROWS_AS(spawnEnemy(ecs, simulation.context(), "nope", 0.0f, 0.0f), std::out_of_range);
 }
 
+TEST_CASE("spawnEnemy() makes a boss of a definition that says so", "[game]")
+{
+    GameConfig config = battleConfig();
+    config.enemies.front().boss = true;
+    Simulation simulation({}, config);
+
+    const rtype::ecs::entity_t enemy =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 2000.0f, 300.0f);
+
+    CHECK(simulation.ecs().getComponent<Kind>(enemy).value == EntityKind::BydoBoss);
+    CHECK(simulation.ecs().getComponent<Enemy>(enemy).phase == 1);
+}
+
 TEST_CASE("A Bydo speeds up to the left, and fires to the left once in the game area", "[game]")
 {
     Simulation simulation({}, battleConfig());
@@ -1293,7 +1306,7 @@ TEST_CASE("The waves go by difficulty, a difficulty without a wave is skipped, a
     CHECK(simulation.tick() == ended + rules.wavePause);
     CHECK_FALSE(simulation.snapshot().gameOver);
 
-    // No wave of difficulty 4 nor 5: the end of the third wins the game, and it is told once
+    // No wave of difficulty 4 to 6: the end of the third wins the game, and it is told once
     destroyEnemies(simulation);
     std::optional<GameOutcome> outcome;
     for (int tick = 0; tick < 100 && !outcome; ++tick) {
@@ -1306,14 +1319,14 @@ TEST_CASE("The waves go by difficulty, a difficulty without a wave is skipped, a
     CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).empty());
 }
 
-TEST_CASE("A wave at difficulty five is played before victory", "[game]")
+TEST_CASE("A wave of the last difficulty, the final boss, is played before victory", "[game]")
 {
     Rules rules;
     rules.firstWaveDelay = 1;
-    Simulation simulation(rules, battleConfig({waveOf("last", 5)}));
+    Simulation simulation(rules, battleConfig({waveOf("last", MaxWaveDifficulty)}));
     simulation.addPlayer(0);
 
-    CHECK(runUntilWave(simulation, 5) == 5);
+    CHECK(runUntilWave(simulation, 5) == MaxWaveDifficulty);
     CHECK_FALSE(simulation.snapshot().gameOver);
     destroyEnemies(simulation);
     simulation.step();
@@ -1533,4 +1546,89 @@ TEST_CASE("A Bydo of a behavior that gives no order keeps still and does not fir
     CHECK(enemy.x == Approx(1500.0f));
     CHECK(enemy.velocityX == Approx(0.0f));
     CHECK(enemyShotsOf(simulation.snapshot()).empty());
+}
+
+TEST_CASE("A Bydo of several phases gets its health back at each one, and is destroyed in the last", "[game]")
+{
+    GameConfig config = scriptedConfig("return { update = function(enemy, game) end }");
+    config.enemies.front().phases = 2;
+    Simulation simulation({}, config);
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x + 400.0f, ship.y);
+    const std::uint32_t enemy = networkIdOf(simulation, spawned);
+    simulation.setInput(0, held(PlayerInput::Fire));
+
+    // 10 damage a shot: three take its 30 hit points, then it starts again with 30
+    std::vector<std::uint8_t> healths;
+    for (int tick = 0; tick < 240 && !wasDestroyed(simulation.snapshot(), enemy, DestroyCause::Killed);
+         ++tick) {
+        simulation.step();
+        const std::optional<EntityState> state = findEntity(simulation.snapshot(), enemy);
+        if (state && (healths.empty() || healths.back() != state->health)) {
+            healths.push_back(state->health);
+        }
+    }
+
+    CHECK(healths == std::vector<std::uint8_t>{30, 20, 10, 30, 20, 10});
+    CHECK(wasDestroyed(simulation.snapshot(), enemy, DestroyCause::Killed));
+    CHECK(simulation.snapshot().players[0].score == 100);
+}
+
+TEST_CASE("A Bydo behind its guard takes no damage, and the snapshots tell its stance", "[game]")
+{
+    Simulation simulation({}, scriptedConfig("return { update = function(enemy, game)\n"
+                                             "    if game.tick <= 90 then enemy:guard()\n"
+                                             "    elseif game.tick == 91 then enemy:slash()\n"
+                                             "    elseif game.tick == 92 then enemy:aim() end\n"
+                                             "end }"));
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x + 400.0f, ship.y);
+    const std::uint32_t enemy = networkIdOf(simulation, spawned);
+    simulation.setInput(0, held(PlayerInput::Fire));
+
+    // The shots that hit it are spent, without damage
+    int spent = 0;
+    while (simulation.tick() < 90) {
+        simulation.step();
+        spent += static_cast<int>(std::ranges::count(simulation.snapshot().destroyed, DestroyCause::Killed,
+                                                     &DestroyedEntity::cause));
+    }
+    CHECK(spent > 0);
+    const EntityState guarding = *findEntity(simulation.snapshot(), enemy);
+    CHECK(guarding.health == 30);
+    CHECK(guarding.flags == EntityState::Guarding);
+
+    simulation.step();
+    CHECK(findEntity(simulation.snapshot(), enemy)->flags == EntityState::Slashing);
+    simulation.step();
+    CHECK(findEntity(simulation.snapshot(), enemy)->flags == EntityState::Shooting);
+    simulation.step();
+    CHECK(findEntity(simulation.snapshot(), enemy)->flags == 0);
+
+    // Out of its guard, the next shots hurt it
+    run(simulation, 20);
+    const std::optional<EntityState> hurt = findEntity(simulation.snapshot(), enemy);
+    CHECK((!hurt || hurt->health < 30));
+}
+
+TEST_CASE("A behavior sees the phase of its Bydo", "[game]")
+{
+    GameConfig config = scriptedConfig("return { update = function(enemy, game)\n"
+                                       "    enemy:moveTo(1500, 100 * enemy.phase + enemy.phases)\n"
+                                       "end }");
+    config.enemies.front().phases = 3;
+    Simulation simulation({}, config);
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", 1500.0f, 103.0f);
+    simulation.ecs().getComponent<Enemy>(spawned).phase = 2;
+
+    // From y = 103 to 100 * 2 + 3, at 240 units per second
+    run(simulation, 60);
+    CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0).y == Approx(203.0f));
 }

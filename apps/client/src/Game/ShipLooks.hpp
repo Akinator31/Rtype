@@ -47,19 +47,23 @@ struct ShipLook {
 /// or dives, with a little flame, whatever they do (docs/architecture/client-game.md, "Ships in 3D").
 class ShipLooks
 {
-    std::unordered_map<game::EntityKind, ShipLook> _looks;
+    /// The looks of each kind: an entity of the kind is drawn with one of them, picked by its id.
+    std::unordered_map<game::EntityKind, std::vector<ShipLook>> _looks;
     std::optional<ShipLook> _localLook;
 
 public:
     void setLook(game::EntityKind kind, const ShipLook &look);
+    /// The ships of this kind are drawn with these looks, each one with the look picked by its id: a ship
+    /// keeps its look, and ships next to each other differ. None removes the looks of the kind.
+    void setLooks(game::EntityKind kind, std::vector<ShipLook> looks);
     /// The ship of the local player is drawn with this look instead of the one of its kind: the ship it
     /// equipped in the hangar.
     void setLocalLook(const ShipLook &look);
     /// The ships of this kind are drawn in 3D.
     [[nodiscard]] bool hasLook(game::EntityKind kind) const;
 
-    /// Gives an entity the model of its kind, or the local look for the ship of the local player, with its
-    /// ShipAttitude, placed on it.
+    /// Gives an entity the model of its kind (one of them, by its id), or the local look for the ship of the
+    /// local player, with its ShipAttitude, placed on it.
     /// @param clock Seconds the session has been played: the time of the animations.
     /// @param local The entity is the ship of the local player.
     void addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, const EntityLook &look,

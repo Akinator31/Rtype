@@ -64,6 +64,7 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::Model>(caches);
     use<engine::ModelAnimation>(caches);
     use<ShipAttitude>(caches);
+    use<BossModel>(caches);
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
     use<Impact>(caches);
@@ -97,6 +98,7 @@ void GameSessionSystem::stop()
     _killed.clear();
     _players.clear();
     _tick = 0;
+    _rescue = game::RescueStage::None;
     _clock = 0.0f;
 }
 
@@ -105,9 +107,19 @@ void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
     _shipLooks.setLook(kind, look);
 }
 
+void GameSessionSystem::setShipLooks(game::EntityKind kind, std::vector<ShipLook> looks)
+{
+    _shipLooks.setLooks(kind, std::move(looks));
+}
+
 void GameSessionSystem::setLocalShipLook(const ShipLook &look)
 {
     _shipLooks.setLocalLook(look);
+}
+
+void GameSessionSystem::setBossLook(game::EntityKind kind, const BossLook &look)
+{
+    _bossLooks.setLook(kind, look);
 }
 
 void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
@@ -140,14 +152,34 @@ void GameSessionSystem::setDestructionSound(game::EntityKind kind, const EntityS
     _destructionSounds.setSound(kind, sound);
 }
 
+void GameSessionSystem::setStrikeLook(game::EntityKind kind, const ImpactLook &look)
+{
+    _strikeLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setStrikeSound(game::EntityKind kind, const EntitySound &sound)
+{
+    _strikeSounds.setSound(kind, sound);
+}
+
+void GameSessionSystem::setStrikeHandler(std::function<void()> onStrike)
+{
+    _onStrike = std::move(onStrike);
+}
+
 void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
 {
     _onKill = std::move(onKill);
 }
 
-void GameSessionSystem::setWaveHandler(std::function<void(std::uint16_t)> onWave)
+void GameSessionSystem::setWaveHandler(std::function<void(std::uint16_t, const std::string &)> onWave)
 {
     _onWave = std::move(onWave);
+}
+
+void GameSessionSystem::setRescueHandler(std::function<void(game::RescueStage)> onRescue)
+{
+    _onRescue = std::move(onRescue);
 }
 
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
@@ -204,10 +236,14 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         moveEntity(found->second.id, state);
     }
+    showStrikes(snapshot.struck);
     rememberKilled(snapshot.destroyed);
     reportKills(snapshot.destroyed);
     if (snapshot.waveStarted && _onWave) {
-        _onWave(*snapshot.waveStarted);
+        _onWave(*snapshot.waveStarted, snapshot.waveMusic);
+    }
+    if (snapshot.rescue != std::exchange(_rescue, snapshot.rescue) && _onRescue) {
+        _onRescue(snapshot.rescue);
     }
 
     // Each snapshot holds the whole world: what is not in it any more is gone
@@ -218,6 +254,25 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         removeEntity(entry->first, entry->second);
         entry = _entities.erase(entry);
+    }
+}
+
+void GameSessionSystem::showStrikes(const std::vector<std::uint32_t> &struck)
+{
+    for (const std::uint32_t networkId : struck) {
+        const std::optional<ecs::entity_t> ship = entityOf(networkId);
+        if (!ship) {
+            continue;
+        }
+        const game::EntityKind kind = _ecs.getComponent<Replicated>(*ship).kind;
+        if (_strikeLooks.hasLook(kind)) {
+            const ecs::Position position = _ecs.getComponent<ecs::Position>(*ship);
+            const ecs::entity_t impact = _strikeLooks.createImpact(_ecs, *_scene, kind, position);
+            _strikeSounds.addSound(_ecs, impact, kind, position.x);
+        }
+        if (_onStrike) {
+            _onStrike();
+        }
     }
 }
 
@@ -287,10 +342,15 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
     if (_shipLooks.hasLook(state.kind)) {
         _shipLooks.addModel(_ecs, entity, state, look, _clock, isLocalShip(state));
+    } else if (_bossLooks.hasLook(state.kind)) {
+        _bossLooks.addModel(_ecs, entity, state, look);
     } else if (_shotLooks.hasLook(state.kind)) {
         _shotLooks.addModel(_ecs, entity, state, look);
     } else {
         _ecs.addComponent<engine::Box>(entity, look.box);
+    }
+    if (const std::optional<physics::Collider> collider = _session->findCollider(state)) {
+        _ecs.addComponent<physics::Collider>(entity, *collider);
     }
     _shotSounds.addSound(_ecs, entity, state.kind, state.x);
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
@@ -328,6 +388,8 @@ void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState
     }
     if (_ecs.hasComponent<ShipAttitude>(entity)) {
         _shipLooks.moveModel(_ecs, entity, state, _clock);
+    } else if (_ecs.hasComponent<BossModel>(entity)) {
+        _bossLooks.moveModel(_ecs, entity, state);
     } else if (_ecs.hasComponent<engine::Model>(entity)) {
         _shotLooks.placeModel(_ecs, entity, state);
     }
@@ -370,8 +432,13 @@ bool GameSessionSystem::isLocalShip(const game::EntityState &state) const
 void GameSessionSystem::placeShipModels(float elapsed)
 {
     for (const auto &[networkId, entity] : _entities) {
-        if (_ecs.isAlive(entity) && _ecs.hasComponent<ShipAttitude>(entity.id)) {
+        if (!_ecs.isAlive(entity)) {
+            continue;
+        }
+        if (_ecs.hasComponent<ShipAttitude>(entity.id)) {
             ShipLooks::placeModel(_ecs, entity.id, elapsed);
+        } else if (_ecs.hasComponent<BossModel>(entity.id)) {
+            BossLooks::placeModel(_ecs, entity.id);
         }
     }
 }

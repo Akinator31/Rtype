@@ -5,10 +5,12 @@
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
 #include "Server.hpp"
+#include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/network/Tls.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -74,6 +76,11 @@ TEST_CASE("A server reads a valid configuration, and refuses one with errors", "
     const auto valid = readGameConfig(RTYPE_TEST_CONFIG, logger);
     REQUIRE(valid);
     CHECK_FALSE(valid->enemies.empty());
+    // The final boss is offline only
+    CHECK(std::ranges::none_of(valid->waves, [](const rtype::game::WaveDefinition &wave) {
+        return wave.difficulty == rtype::game::MaxWaveDifficulty;
+    }));
+    CHECK_FALSE(valid->waves.empty());
     CHECK_FALSE(readGameConfig(broken, logger));
     std::filesystem::remove_all(broken);
 }

@@ -148,15 +148,16 @@ These requests take effect at the start of the next `Engine::update`, then the e
 
 ### Collider and grid debug overlay
 
-The client can draw visible physics colliders over the world layer. Press **F3** to toggle the overlay, or
-start the client with `RTYPE_DEBUG_COLLIDERS=1` to show it immediately. The overlay draws AABB outlines in
+The client can draw visible physics colliders over the world layer. Press **F3** or type `hitboxes [on|off]` in
+the console to toggle the overlay, or start the client with `RTYPE_DEBUG_COLLIDERS=1` to show it immediately. The overlay draws AABB outlines in
 green, sphere outlines in green, triggers in yellow, and the spatial grid in pale blue. Grid lines use the
 same cell size as `CollisionSystem` and game coordinates, so they stay aligned with the broad phase.
 
 `ColliderDebugRenderer` lives in `libs/engine`, reads ECS `Position` and `Collider`, and skips hidden
 entities or entities in hidden scenes. It draws after the world and before the interface. The physics library
-still has no rendering dependency. The current game scene is empty; collider outlines appear as soon as
-the game creates entities with `Position` and `Collider`.
+still has no rendering dependency. The `GameSessionSystem` gives each entity of the game scene the `Collider`
+its session finds (`GameSession::findCollider()`): offline, the real collider of the entity in the `Simulation`;
+online, the box it is drawn as, as the snapshots do not carry the hitboxes.
 
 | Component | Draws |
 |---|---|

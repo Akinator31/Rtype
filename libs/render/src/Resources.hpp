@@ -3,6 +3,7 @@
 // Private to the render library: the raylib resources behind the handles of the ResourceManager, shared
 // between the ResourceManager, which loads them, and the Renderer, which draws them.
 
+#include "LightingShader.hpp"
 #include "PreparedAssets.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
@@ -189,6 +190,10 @@ private:
         for (cgltf_size index = 0; index < count; ++index) {
             const cgltf_material &source = data->materials[index];
             MaterialMap *maps = model.materials[index + 1].maps;
+            // A transparent sheet, such as a flame, is seen from both sides
+            if (source.double_sided && source.alpha_mode != cgltf_alpha_mode_opaque) {
+                model.materials[index + 1].params[DoubleSidedParameter] = 1.0f;
+            }
             if (source.has_pbr_metallic_roughness && maps[MATERIAL_MAP_ROUGHNESS].texture.id == 0) {
                 maps[MATERIAL_MAP_ROUGHNESS].value = source.pbr_metallic_roughness.roughness_factor;
                 maps[MATERIAL_MAP_METALNESS].value = source.pbr_metallic_roughness.metallic_factor;

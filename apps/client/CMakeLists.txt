@@ -11,13 +11,16 @@ add_library(r-type_client_core STATIC
     src/App/Configuration.cpp
     src/App/Scenes.cpp
     src/App/Systems.cpp
+    src/Commands/BossCommand.cpp
     src/Commands/Commands.cpp
+    src/Commands/HitboxesCommand.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
     src/Commands/ToastCommand.cpp
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
+    src/Game/BossLooks.cpp
     src/Game/DamageLooks.cpp
     src/Game/DamageNumberSystem.cpp
     src/Game/DeathScreen.cpp
@@ -37,6 +40,7 @@ add_library(r-type_client_core STATIC
     src/Game/LocalSession.cpp
     src/Game/Prediction.cpp
     src/Game/RemoteSession.cpp
+    src/Game/RescueCameraSystem.cpp
     src/Game/ShipLooks.cpp
     src/Game/ShotLooks.cpp
     src/Loading/AssetPreload.cpp

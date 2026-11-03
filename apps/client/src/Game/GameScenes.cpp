@@ -4,18 +4,26 @@
 #include "Game/GameView.hpp"
 #include "Game/Hud.hpp"
 #include "Game/LocalSession.hpp"
+#include "Game/RescueCameraSystem.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "ShipModel.hpp"
 #include "ShipSelector/ShipCatalog.hpp"
+#include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/Wave/WaveDefinition.hpp"
+#include "rtype/log/Logger.hpp"
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
 #include <format>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -35,6 +43,7 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE_LOST},
     {AssetType::Model, RTYPE_MODEL_SHIP_EZNO},
     {AssetType::Model, RTYPE_MODEL_SHIP_DROP_SHIP},
+    {AssetType::Model, RTYPE_MODEL_BOSS_SHOGUN},
     // The ships of the hangar, which the local player may fly
     {AssetType::Model, RTYPE_MODEL_SHIP_CAVED},
     {AssetType::Model, RTYPE_MODEL_SHIP_BATTLESHIP},
@@ -52,6 +61,8 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::Sound, RTYPE_SOUND_BIG_BLASTER},
     {AssetType::Sound, RTYPE_SOUND_DESTRUCTION},
     {AssetType::Sound, RTYPE_SOUND_COLLISION},
+    {AssetType::Sound, RTYPE_SOUND_SABER},
+    {AssetType::Sound, RTYPE_SOUND_DASH_WIND},
 };
 
 /// The hulls of the ship models seen through the camera of the game, flames excluded, in model units:
@@ -60,6 +71,32 @@ const std::vector<engine::SceneAsset> GameAssets{
 /// config/ships/bydo_scout.lua).
 constexpr render::Rectangle EznoHull{-8.66f, -3.31f, 17.31f, 10.01f};
 constexpr render::Rectangle DropShipHull{-11.95f, -5.74f, 23.9f, 9.11f};
+
+/// The body of the shogun, the final boss, in its Idle pose, blade and gun excluded, in model units. The
+/// model faces +z (its toes, its visor): turned by -70° around its vertical axis, it faces left, towards the
+/// players, and a little towards the camera. Its collider has the same proportions
+/// (config/ships/bydo_shogun.lua).
+constexpr render::Rectangle ShogunHull{-5.0f, -33.0f, 17.0f, 33.5f};
+constexpr float ShogunSpin = -70.0f;
+
+/// The model of the Bydo drop ship, also in the hangar: never flown by the allies of the rescue.
+constexpr std::string_view BydoModel = RTYPE_MODEL_SHIP_DROP_SHIP;
+
+/// The prompt of the combined attack, during the rescue: in the titles, under the middle of the screen,
+/// blinking.
+constexpr float PromptSize = 44.0f;
+constexpr float PromptSpacing = 6.0f;
+constexpr float PromptOffset = 260.0f;
+constexpr float PromptBlink = 0.45f;
+/// Over the HUD and the death screen, under the toasts.
+constexpr int PromptOrder = 20;
+/// How hard the camera shakes when the blade of the shogun goes through a ship, and when the shogun falls.
+constexpr float StrikeShake = 0.75f;
+constexpr float FallShake = 1.0f;
+/// How loud the voice of the rescue is.
+constexpr float RescueVoiceVolume = 1.0f;
+/// Time the banner of the combined attack stays fully shown, in seconds.
+constexpr float CombinedBannerDuration = 1.2f;
 
 /// The meshes of the trails behind the flames of the ship models, by index in their files.
 const std::vector<int> EznoTrails{6};
@@ -97,6 +134,7 @@ constexpr render::Color DamageColor{255, 220, 90, 255};
 /// The health bars shown above the Bydos hit and above the ships of the other players, over their hull, under
 /// the damage numbers: red under a third of their hit points.
 constexpr HealthBarLook BydoHealthBar{100.0f, 42.0f, 0.3f};
+constexpr HealthBarLook BossHealthBar{240.0f, 180.0f, 0.3f};
 constexpr HealthBarLook AllyHealthBar{110.0f, 62.0f, 0.3f};
 
 /// The animation of the impact models, played once.
@@ -114,7 +152,12 @@ constexpr float SparkScale = 20.0f;
 constexpr float BurstScale = 15.0f;
 constexpr float SplashScale = 24.0f;
 constexpr float BydoExplosionScale = 25.0f;
+constexpr float BossExplosionScale = 70.0f;
 constexpr float ShipExplosionScale = 28.0f;
+/// The cut of the blade of the shogun on a ship it goes through, during the rescue: a burst larger than the
+/// ship, in the cold white of the blade.
+constexpr float StrikeScale = 42.0f;
+constexpr render::Color StrikeTint{170, 225, 255, 255};
 
 /// How loud the shots are: the players fire all the time, the Bydos often and many at once, their plasma orbs
 /// rarely.
@@ -126,6 +169,11 @@ constexpr float BydoDestructionVolume = 0.8f;
 constexpr float ShipDestructionVolume = 1.0f;
 /// How loud a shot is when it hits something: its file is much quieter than the others.
 constexpr float CollisionVolume = 1.0f;
+/// How loud the blade of the boss is when it strikes, and the wind of its dash.
+constexpr float SaberVolume = 0.9f;
+constexpr float DashWindVolume = 0.7f;
+/// How loud the blade of the boss is when it goes through a ship.
+constexpr float StrikeVolume = 1.0f;
 
 /// The energy of a shot with a light around its core.
 /// @param core The core of the shot model, as in ShotLook.
@@ -169,9 +217,26 @@ void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resour
     sessions.setImpactLook(game::EntityKind::BydoFlyer,
                            loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, BydoExplosionScale,
                                           ExplosionTint, explosion));
+    sessions.setImpactLook(game::EntityKind::BydoBoss,
+                           loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, BossExplosionScale,
+                                          ExplosionTint, explosion));
     sessions.setImpactLook(game::EntityKind::PlayerShip,
                            loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, ShipExplosionScale,
                                           ExplosionTint, explosion));
+}
+
+/// Gives the ships of the formation of the rescue the cut the blade of the shogun leaves on them, and its
+/// sound.
+void setStrikeLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                    audio::AudioPlayer &audio, const render::Energy &energy)
+{
+    const ImpactLook strike =
+        loadImpactLook(resources, RTYPE_MODEL_IMPACT_BURST, StrikeScale, StrikeTint, energy);
+    const audio::SoundId sound = audio.loadSound(RTYPE_SOUND_COLLISION);
+    for (const game::EntityKind kind : {game::EntityKind::PlayerShip, game::EntityKind::AllyShip}) {
+        sessions.setStrikeLook(kind, strike);
+        sessions.setStrikeSound(kind, {sound, StrikeVolume});
+    }
 }
 
 /// Gives each kind of shot the sound of the weapon that fires it: the cannon of the players, the blaster of
@@ -191,6 +256,7 @@ void setDestructionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio
 {
     const audio::SoundId destruction = audio.loadSound(RTYPE_SOUND_DESTRUCTION);
     sessions.setDestructionSound(game::EntityKind::BydoFlyer, {destruction, BydoDestructionVolume});
+    sessions.setDestructionSound(game::EntityKind::BydoBoss, {destruction, ShipDestructionVolume});
     sessions.setDestructionSound(game::EntityKind::PlayerShip, {destruction, ShipDestructionVolume});
 }
 
@@ -213,8 +279,21 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
                          {loadShipModel(resources, RTYPE_MODEL_SHIP_EZNO), EznoHull, false, EznoTrails});
     sessions.setLocalShipLook(
         {loadShipModel(resources, equipped.modelPath), equipped.hull, false, equipped.trailMeshes});
+    // The allies of the rescue against the final boss fly all the ships of the hangar but the Bydo one, mixed
+    std::vector<ShipLook> allyLooks;
+    for (const ShipEntry &entry : getShipCatalog()) {
+        if (std::string_view(entry.modelPath) != BydoModel) {
+            allyLooks.push_back(
+                {loadShipModel(resources, entry.modelPath), entry.hull, false, entry.trailMeshes});
+        }
+    }
+    sessions.setShipLooks(game::EntityKind::AllyShip, std::move(allyLooks));
     sessions.setShipLook(game::EntityKind::BydoFlyer, {loadShipModel(resources, RTYPE_MODEL_SHIP_DROP_SHIP),
                                                        DropShipHull, true, DropShipTrails});
+    BossLook shogun = loadBossLook(resources, RTYPE_MODEL_BOSS_SHOGUN, ShogunHull, ShogunSpin);
+    shogun.slashSounds = {{audio.loadSound(RTYPE_SOUND_SABER), SaberVolume},
+                          {audio.loadSound(RTYPE_SOUND_DASH_WIND), DashWindVolume}};
+    sessions.setBossLook(game::EntityKind::BydoBoss, shogun);
     const render::Energy energy{
         resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
     const render::TextureId light =
@@ -229,12 +308,16 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
                          {resources.loadModel(RTYPE_MODEL_ORB_PLASMA), OrbPlasmaCore, true,
                           shine(energy, light, OrbPlasmaCore, PlasmaOrbLight)});
     setImpactLooks(sessions, resources, energy);
+    setStrikeLooks(sessions, resources, audio, energy);
     const render::FontId damageFont = resources.loadFont(RTYPE_FONT_DISPLAY, DamageFontSize);
-    sessions.setDamageLook(game::EntityKind::BydoFlyer, {damageFont, DamageTextSize, DamageColor});
-    for (const game::EntityKind kind : {game::EntityKind::BydoFlyer, game::EntityKind::BydoShooter,
-                                        game::EntityKind::BydoTank, game::EntityKind::BydoBoss}) {
+    for (const game::EntityKind kind : {game::EntityKind::BydoFlyer, game::EntityKind::BydoBoss}) {
+        sessions.setDamageLook(kind, {damageFont, DamageTextSize, DamageColor});
+    }
+    for (const game::EntityKind kind :
+         {game::EntityKind::BydoFlyer, game::EntityKind::BydoShooter, game::EntityKind::BydoTank}) {
         sessions.setHealthBarLook(kind, BydoHealthBar);
     }
+    sessions.setHealthBarLook(game::EntityKind::BydoBoss, BossHealthBar);
     sessions.setHealthBarLook(game::EntityKind::PlayerShip, AllyHealthBar);
     setShotSounds(sessions, audio);
     setDestructionSounds(sessions, audio);
@@ -272,17 +355,31 @@ const char *bydoNameKey(game::EntityKind kind)
     return name == BydoNameKeys.end() ? "event.flyer" : name->second;
 }
 
+/// Tells whether a path sent by the game stays in the assets: relative, without ".." (the game may be a
+/// server).
+bool isAssetPath(const std::string &path)
+{
+    const std::filesystem::path file = std::filesystem::path(path).lexically_normal();
+    return file.is_relative() && !file.has_root_name() && !file.has_root_directory() &&
+           std::ranges::none_of(file, [](const std::filesystem::path &part) { return part == ".."; });
+}
+
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations,
                        const ShipSelection &ships)
-    : _engine(engine), _metrics(metrics), _style(style), _sessions(sessions), _translations(translations),
-      _ships(ships)
+    : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
+      _translations(translations), _ships(ships)
 {
     sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
-    sessions.setWaveHandler([this](std::uint16_t wave) { showWave(wave); });
+    sessions.setWaveHandler([this](std::uint16_t wave, const std::string &music) {
+        showWave(wave);
+        playWaveMusic(music);
+    });
+    sessions.setRescueHandler([this](game::RescueStage stage) { showRescue(stage); });
+    sessions.setStrikeHandler([this] { showStrike(); });
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
@@ -309,6 +406,7 @@ void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()
 
 void GameScenes::end()
 {
+    _audio.stopMusic();
     _sessions.stop();
     const std::function<void()> onEnd = std::exchange(_onEnd, nullptr);
     if (onEnd) {
@@ -325,6 +423,9 @@ void GameScenes::showKill(const Kill &kill)
         return;
     }
     const std::uint8_t local = session->localSlot();
+    if (kill.kind == game::EntityKind::BydoBoss && _sessions.rescue() != game::RescueStage::None) {
+        shakeGameCamera(FallShake);
+    }
     if (kill.kind == game::EntityKind::PlayerShip) {
         _engine.showToast(playerName(kill.owner), _translations.text("event.player_down"), "",
                           kill.owner == local ? engine::ToastType::Error : engine::ToastType::Warning);
@@ -339,8 +440,30 @@ void GameScenes::showKill(const Kill &kill)
 
 void GameScenes::showWave(std::uint16_t wave)
 {
+    if (wave == game::MaxWaveDifficulty) {
+        _engine.showBanner(_translations.text("event.boss_wave"),
+                           _translations.text("event.boss_wave_detail"), engine::ToastType::Error);
+        return;
+    }
     _engine.showBanner(std::format("{} {:02}", _translations.text("event.wave"), wave),
                        _translations.text("event.wave_detail"), engine::ToastType::Info, WaveBannerDuration);
+}
+
+void GameScenes::playWaveMusic(const std::string &music)
+{
+    if (music.empty()) {
+        return;
+    }
+    const log::Logger logger("game");
+    if (!isAssetPath(music)) {
+        logger.warning("Music \"{}\" of the wave is not a path of the assets, ignored", music);
+        return;
+    }
+    try {
+        _audio.playMusic(_audio.loadMusic(music));
+    } catch (const std::runtime_error &error) {
+        logger.warning("Music of the wave not played: {}", error.what());
+    }
 }
 
 void GameScenes::showDeath()
@@ -360,11 +483,92 @@ void GameScenes::showDeath()
                     {lives, rules.lives, _sessions.tick() + rules.respawnDelay, rules.respawnDelay});
 }
 
+void GameScenes::showRescue(game::RescueStage stage)
+{
+    if (stage != game::RescueStage::Prompt) {
+        closePrompt();
+    }
+    switch (stage) {
+    case game::RescueStage::Voice:
+        playRescueVoice();
+        break;
+    case game::RescueStage::Arrival:
+        _engine.showBanner(_translations.text("rescue.title"), _translations.text("rescue.detail"),
+                           engine::ToastType::Success);
+        break;
+    case game::RescueStage::Prompt:
+        openPrompt();
+        break;
+    case game::RescueStage::Combined:
+        _engine.showBanner(_translations.text("rescue.combined"), "", engine::ToastType::Info,
+                           CombinedBannerDuration);
+        break;
+    default:
+        break;
+    }
+}
+
+void GameScenes::showStrike()
+{
+    shakeGameCamera(StrikeShake);
+}
+
+void GameScenes::shakeGameCamera(float strength)
+{
+    ecs::Ecs &ecs = _engine.getEcs();
+    if (_camera && ecs.isAlive(*_camera)) {
+        shakeCamera(ecs.getComponent<RescueCamera>(_camera->id), strength);
+    }
+}
+
+void GameScenes::playRescueVoice()
+{
+    try {
+        _audio.play(_audio.loadSound(RTYPE_SOUND_RESCUE_VOICE), {.volume = RescueVoiceVolume});
+    } catch (const std::runtime_error &error) {
+        log::Logger("game").warning("Voice of the rescue not played: {}", error.what());
+    }
+}
+
+void GameScenes::openPrompt()
+{
+    if (!_scene || _prompt) {
+        return;
+    }
+    ecs::Ecs &ecs = _engine.getEcs();
+    const ecs::entity_t prompt = ecs.createEntity();
+    ecs.addComponent<engine::SceneMember>(prompt, *_scene);
+    ecs.addComponent<engine::Anchor>(prompt, engine::AnchorPoint::Center, 0.0f, PromptOffset);
+    ecs.addComponent<ecs::Position>(prompt);
+    ecs.addComponent<engine::Drawable>(prompt, engine::Layer::Interface, PromptOrder);
+    ecs.addComponent<engine::Text>(prompt, _translations.text("rescue.prompt"), _style.toast.nameFont,
+                                   PromptSize, render::colors::White, PromptSpacing);
+    ecs.addComponent<engine::Title>(prompt);
+    ecs.addComponent<engine::Opacity>(prompt, 1.0f);
+    ecs.addComponent<engine::Tween>(prompt, engine::Tween{.target = engine::TweenTarget::Opacity,
+                                                          .from = 1.0f,
+                                                          .to = 0.25f,
+                                                          .duration = PromptBlink,
+                                                          .easing = engine::Easing::Linear,
+                                                          .pingPong = true});
+    _prompt = ecs.ref(prompt);
+}
+
+void GameScenes::closePrompt()
+{
+    const std::optional<ecs::EntityRef> prompt = std::exchange(_prompt, std::nullopt);
+    ecs::Ecs &ecs = _engine.getEcs();
+    if (prompt && ecs.isAlive(*prompt)) {
+        ecs.destroyEntity(prompt->id);
+    }
+}
+
 void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     configureGameLooks(_sessions, resources, audio, getShipCatalog()[_ships.equipped]);
     _scene = scene;
+    _prompt.reset();
     _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),
                   resources.loadTexture(RTYPE_IMAGE_LIFE_LOST, render::TextureFiltering::Smooth),
                   style.toast.messageFont,
@@ -379,6 +583,10 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     ecs.addComponent<engine::Backdrop>(
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
     ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
+    const render::Rectangle area = metrics.visibleArea();
+    const render::Vector2 centre{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)};
+    ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre);
+    _camera = ecs.ref(sky);
     ecs.addComponent<engine::Light>(sky, GameLight);
 
     openHud(ecs, scene, {_deathLook.life, _deathLook.lostLife, style.toast.nameFont}, game::Rules{}.lives);

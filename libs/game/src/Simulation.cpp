@@ -8,6 +8,7 @@
 #include "rtype/game/System/EnemySystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
+#include "rtype/game/System/RescueSystem.hpp"
 #include "rtype/game/System/WaveSystem.hpp"
 #include "rtype/game/System/WeaponSystem.hpp"
 #include "rtype/log/Logger.hpp"
@@ -32,6 +33,22 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
+/// The flag of the snapshot that tells the stance of a Bydo, 0 for none.
+std::uint8_t stanceFlag(EnemyStance stance)
+{
+    switch (stance) {
+    case EnemyStance::Guard:
+        return EntityState::Guarding;
+    case EnemyStance::Slash:
+        return EntityState::Slashing;
+    case EnemyStance::Shoot:
+        return EntityState::Shooting;
+    case EnemyStance::None:
+        break;
+    }
+    return 0;
+}
+
 } // namespace
 
 Simulation::Simulation(Rules rules, const GameConfig &config)
@@ -39,11 +56,13 @@ Simulation::Simulation(Rules rules, const GameConfig &config)
     _context.rules = rules;
     _context.seedRandom();
     registerConfig(config);
-    // The order of a tick: the inputs, the waves, the Bydos, the weapons, the projectiles, the movement, the
-    // walls, the hits, then what left the area
+    // The order of a tick: the inputs, the waves, the Bydos, the rescue against the final boss (which flies
+    // over the inputs and the Bydos), the weapons, the projectiles, the movement, the walls, the hits, then
+    // what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
     _ecs.registerSystem<WaveSystem>(_ecs, _context);
     _ecs.registerSystem<EnemySystem>(_ecs, _context);
+    _ecs.registerSystem<RescueSystem>(_ecs, _context);
     _ecs.registerSystem<WeaponSystem>(_ecs, _context);
     _ecs.registerSystem<ProjectileSystem>(_ecs, _context);
     _ecs.registerSystem<physics::MovementSystem>();
@@ -157,6 +176,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<Health> &healths = _ecs.cache<Health>();
     ecs::ComponentCache<Invulnerable> &invulnerables = _ecs.cache<Invulnerable>();
     ecs::ComponentCache<PlayerShip> &ships = _ecs.cache<PlayerShip>();
+    ecs::ComponentCache<EnemyOrders> &orders = _ecs.cache<EnemyOrders>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -183,6 +203,9 @@ void Simulation::buildSnapshot()
                 state.flags |= EntityState::AimingDown;
             }
         }
+        if (orders.has(entity)) {
+            state.flags |= stanceFlag(orders.get(entity).stance);
+        }
         snapshot.entities.push_back(state);
     }
     // By id, whatever the reuse of the ids of the ECS: the same game always gives the same snapshot
@@ -190,7 +213,10 @@ void Simulation::buildSnapshot()
 
     snapshot.destroyed = std::exchange(_context.destroyed, {});
     snapshot.waveStarted = std::exchange(_context.waveStarted, std::nullopt);
+    snapshot.waveMusic = std::exchange(_context.waveMusic, {});
     snapshot.gameOver = std::exchange(_context.gameOver, std::nullopt);
+    snapshot.rescue = _context.rescue.stage;
+    snapshot.struck = std::exchange(_context.struck, {});
     _snapshot = std::move(snapshot);
 }
 

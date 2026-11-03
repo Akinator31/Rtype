@@ -62,12 +62,21 @@ ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
     return ship;
 }
 
+ecs::entity_t spawnAlly(ecs::Ecs &ecs, GameContext &context, std::uint8_t index, float x, float y)
+{
+    const ecs::entity_t ally = spawnVisible(ecs, context, EntityKind::AllyShip, NoOwner, x, y);
+    ecs.addComponent<Ally>(ally, index, 0U);
+    ecs.addComponent<physics::Velocity>(ally);
+    return ally;
+}
+
 ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string &enemyId, float x, float y)
 {
     const EnemyDefinition &enemy = context.enemies.getDefinition(enemyId);
     const physics::Collider &collider = context.ships.getDefinition(enemy.ship).collider;
     static_cast<void>(context.weapons.getDefinition(enemy.weapon));
-    const ecs::entity_t entity = spawnVisible(ecs, context, EntityKind::BydoFlyer, NoOwner, x, y);
+    const EntityKind kind = enemy.boss ? EntityKind::BydoBoss : EntityKind::BydoFlyer;
+    const ecs::entity_t entity = spawnVisible(ecs, context, kind, NoOwner, x, y);
     ecs.addComponent<Enemy>(entity, enemyId);
     ecs.addComponent<Health>(entity, enemy.health);
     ecs.addComponent<Damage>(entity, enemy.collisionDamage);

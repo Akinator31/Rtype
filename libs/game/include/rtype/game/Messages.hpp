@@ -68,6 +68,8 @@ inline constexpr std::size_t MaxSnapshotParts = 16;
 inline constexpr std::size_t MaxDestroyedPerMessage = 228;
 /// Longest name of a player, in bytes of UTF-8.
 inline constexpr std::size_t MaxPlayerNameLength = 16;
+/// Most bytes of the music of a wave in WAVE_STARTED.
+inline constexpr std::size_t MaxWaveMusicLength = 128;
 
 /// `ACCEPTED`: the place of the client in the game.
 struct AcceptedMessage {
@@ -155,6 +157,9 @@ struct EntitiesDestroyedMessage {
 struct WaveStartedMessage {
     /// From 1.
     std::uint16_t wave = 1;
+    /// 0 to MaxWaveMusicLength bytes of UTF-8, without control characters: the music to play, a path
+    /// relative to the assets of the client. Empty: none.
+    std::string music;
 
     friend bool operator==(const WaveStartedMessage &, const WaveStartedMessage &) = default;
 };

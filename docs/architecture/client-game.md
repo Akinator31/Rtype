@@ -20,6 +20,7 @@ apps/client/src/Game/
   GameSessionSystem.cpp  controls → PlayerInput → session; snapshots → entities of the scene
   EntityLook.cpp         the box of each kind of entity (lookOf()), the colours of the players
   GameView.cpp           the orthographic camera of the game scene (computeGameView())
+  RescueCameraSystem.cpp the camera of the rescue: close ups on the shogun, dashes and combined attack
   ShipLooks.cpp          the 3D models of the ships: fitted to their box, rolling, flames
   ShotLooks.cpp          the models of energy of the shots
   ImpactLooks.cpp        the impacts of the shots and the explosions of the ships (ImpactSystem plays them)
@@ -143,6 +144,18 @@ where its box would be, with the same size anywhere on the screen: what is drawn
 
 The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
 an entity flies.
+
+**The boss** (`EntityKind::BydoBoss`, the shogun) is a standing figure, not a ship: a `BossLook`
+(`Game/BossLooks.hpp`), without roll nor tilt. Its model is turned by the same half turn around x, then by
+`BossLook::spin` (-70°) around its vertical axis, to face left, a little towards the camera: the model faces
++z, as its toes and its visor show; its hull is its body
+in its `Idle` pose, blade and gun excluded, the proportions of its collider (`config/ships/bydo_shogun.lua`). It
+plays the animation of its stance, from the flags of the snapshots: `Guard`, `Slash` or `Shoot`, `Fly` while it
+moves without one, `Idle` otherwise, fading from one to the next in 0.25 s. Its blade makes a sound (`BossLook::slashSounds`: `sounds/fx/saber/laser_saber.wav`, with the wind of
+`wing_giant_flap.wav`) as a dash starts: the `Slashing` flag with a speed above 400 units per second, not the
+blade raised before it. Each sound has a child entity of the boss to play it, as an entity plays one
+`SoundEffect` at a time. Its health bar is wider and higher,
+and the start of its wave, the last one, shows a banner of its own.
 
 The local player flies the ship equipped in the hangar: `GameScenes` gives it its own look
 (`GameSessionSystem::setLocalShipLook()`), from the entry of the ship catalog (`ShipSelector/ShipCatalog.cpp`),
@@ -283,10 +296,56 @@ its killer), when the game tells its destruction; `GameScenes` turns it into the
 
 When a wave starts, a banner crosses the screen (`engine::Engine::showBanner()`, `Info`): `WAVE 03` and
 `BYDOS INCOMING` (`event.wave`, `event.wave_detail`), fully shown for 1.5 s instead of the 3 s of the style, as
-it comes back with each wave. Only the number of the wave reaches the client: its name
-stays in the game. Offline, it is `Snapshot::waveStarted`; online, `RemoteSession` keeps the number of
-`WAVE_STARTED` and puts it in the next snapshot it gives. The `GameSessionSystem` tells it to its wave handler
-(`setWaveHandler()`), and `GameScenes` shows the banner.
+it comes back with each wave. Only the number and the music of the wave reach the client: its name
+stays in the game. Offline, they are `Snapshot::waveStarted` and `Snapshot::waveMusic`; online, `RemoteSession`
+keeps those of `WAVE_STARTED` and puts them in the next snapshot it gives. The `GameSessionSystem` tells them to
+its wave handler (`setWaveHandler()`), and `GameScenes` shows the banner and plays the music of the wave
+(`music` in its Lua file, for instance `sounds/boss_theme.mp3` for the shogun), looped, in place of the one
+playing. A wave without music leaves the current one; it stops when the game ends. A path that leaves the
+assets (absolute, or with `..`) is ignored, as the game may be a server.
+
+### The rescue against the final boss
+
+Offline, the last ship lost against the shogun brings allies to the rescue instead of the game over
+([The rescue against the final boss](game.md#the-rescue-against-the-final-boss)). The stage of the rescue is in
+each snapshot (`Snapshot::rescue`); the `GameSessionSystem` tells each new one to its rescue handler
+(`setRescueHandler()`), and `GameScenes` shows it:
+
+| Stage | What the client does |
+|---|---|
+| `Voice` | Plays the voice of the rescue, `RTYPE_SOUND_RESCUE_VOICE` (`sounds/rescue_voice.wav`), over the music. Without the file, a warning is logged and the rescue goes on silently. The allies come `Rules::rescueVoiceTicks` later: keep it the length of the file |
+| `Arrival` | A banner, `REINFORCEMENTS` / `THE SQUADRON ANSWERS THE CALL` (`rescue.title`, `rescue.detail`), `Success` |
+| `Prompt` | `PRESS SPACE - COMBINED ATTACK` (`rescue.prompt`) under the middle of the screen, in the titles, blinking, until the next stage |
+| `Combined` | A short banner, `COMBINED ATTACK` (`rescue.combined`) |
+
+**The voice** (`Voice`), **the dashes of the shogun** (`Dash`) and **the combined attack** (`Combined`) are shot
+as scenes of a film:
+
+- **The cuts.** Each ship the blade goes through is in the snapshot (`Snapshot::struck`, by id). The
+  `GameSessionSystem` leaves on it the strike look of its kind (`setStrikeLook()`: `impact_burst.glb`, larger
+  than the ship, in the cold white of the blade), plays its strike sound (`setStrikeSound()`: the collision
+  sound), and tells its strike handler (`setStrikeHandler()`), with which `GameScenes` shakes the camera.
+- **The camera.** The camera entity of the game scene has a `RescueCamera`, which the `RescueCameraSystem`
+  moves after the `GameSessionSystem`, from one shot per stage (how much of the game it sees, its tilt, how
+  fast it gets there, the shake it keeps, its subject). It frames a focus that follows its subject a little
+  late, the shogun or the ship of the local player, the framing kept inside the view at rest, and leans up to
+  4° into a dash while the shogun runs ahead of its focus. A blow (`shakeCamera()`) shakes it: it moves, turns and closes in a little, then calms down.
+
+| Stage | Shot |
+|---|---|
+| `Voice` | A slow push in to 50 % on the ship of the local player, where it was last drawn: it was just lost, so the camera frames its explosion while the voice calls the allies |
+| `Arrival`, `Assault` | Back to the whole game, the allies flying in |
+| `Dash` | Closes up to 62 % of the view on the shogun; each strike shakes it (0.75) |
+| `Prompt` | Back to the whole game |
+| `Combined` | A slow push in to 48 %, tilted by 3°, rumbling under the fire (a shake of 0.45 at the least); the fall of the shogun (its kill, told to `GameScenes`) shakes it fully |
+| `Finished` | A slow pull back from the explosion to the whole game, level |
+| others | The whole game |
+
+The numbers of the shots are at the top of `RescueCameraSystem.cpp`, the strengths of the blows in
+`GameScenes.cpp`.
+
+The allies (`EntityKind::AllyShip`) are drawn with the model of the hangar ship VX-04 (`spaceship.glb`), untinted,
+with the size of a ship of a player.
 
 ### Death screen
 
@@ -340,6 +399,12 @@ prediction. The last life opens no death screen: the event of the ship lost is t
 - the kills: a Bydo killed is told with the owner of the shot of a player killed nearest to it, or no killer
   without one, a shot or an entity removed is not told, and the ship of a player killed is told with its owner;
 - the waves: each wave started is told once, with its number;
+- the rescue: a ship struck by the blade of the shogun shows the cut of its kind where it is drawn, with its
+  sound, and is told, one without a strike look only told; the `RescueCamera` sees the whole game at rest,
+  closes up on the shogun during its dashes inside the game, shakes at a strike then calms down, and goes back
+  once they are over; during the voice it pushes in on the ship of the local player where it was last drawn,
+  and pulls back as the allies arrive; during the combined attack it pushes in slowly, closer, tilted and rumbling, then pulls
+  back level and still once the shogun has fallen;
 - the death screen: the seconds left in the countdown and its ring follow the snapshots, not the frames, each new
   second pops, and the screen goes once the tick of the next ship is reached; the lives left are lit, the one
   just lost goes out after the veil and the rest have faded in;

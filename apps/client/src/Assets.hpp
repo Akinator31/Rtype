@@ -31,6 +31,7 @@
 #define RTYPE_MODEL_SHIP_DROP_SHIP "models/drop_ship_v2.glb"
 #define RTYPE_MODEL_SHIP_BATTLESHIP "models/battleship.glb"
 #define RTYPE_MODEL_SHIP_CAVED "models/spaceship_caved.glb"
+#define RTYPE_MODEL_BOSS_SHOGUN "models/boss_shogun.glb"
 #define RTYPE_MODEL_PEDESTAL "models/scifi_gadget.glb"
 #define RTYPE_MODEL_SHOT_BASIC "models/projectiles/player/shot_basic.glb"
 #define RTYPE_MODEL_SHOT_SPIRAL "models/projectiles/enemy/shot_spiral.glb"
@@ -46,5 +47,10 @@
 #define RTYPE_SOUND_BIG_BLASTER "sounds/fx/blaster/big_blaster.wav"
 #define RTYPE_SOUND_DESTRUCTION "sounds/fx/destruction.wav"
 #define RTYPE_SOUND_COLLISION "sounds/fx/collision.wav"
+#define RTYPE_SOUND_SABER "sounds/fx/saber/laser_saber.wav"
+#define RTYPE_SOUND_DASH_WIND "sounds/fx/saber/wing_giant_flap.wav"
+/// The voice played when the allies are called to the rescue against the final boss, offline: its length is
+/// game::Rules::rescueVoiceTicks. Not in the assets yet: the rescue goes on silently without it.
+#define RTYPE_SOUND_RESCUE_VOICE "sounds/rescue_voice.wav"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"

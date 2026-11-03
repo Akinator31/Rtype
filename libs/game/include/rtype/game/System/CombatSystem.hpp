@@ -15,13 +15,17 @@ namespace rtype::game
 
 /// The hits of the game: what has Damage takes that many hit points from what it touches.
 ///
-/// - A shot of a player hurts a Bydo, and is spent. A Bydo with no hit points left is destroyed, and its
-///   EnemyDefinition::score goes to the player of the shot.
+/// - A shot of a player hurts a Bydo, and is spent. A Bydo behind its guard (EnemyStance::Guard) takes no
+///   damage. A Bydo with no hit points left starts its next phase with all its health, if it has one left
+///   (EnemyDefinition::phases); otherwise it is destroyed, and its EnemyDefinition::score goes to the player
+///   of the shot.
 /// - A Bydo shot hurts a ship, and is spent; a Bydo hurts a ship it runs into, and keeps going. A ship that
 ///   survives cannot be hit for Rules::hitInvulnerableTicks. One with no hit points left is destroyed, its
 ///   player loses a life, and gets a new ship after Rules::respawnDelay ticks, invulnerable for
 ///   Rules::invulnerableTicks, until it has no life left. Once every player is out of lives, the game is over
-///   (GameOutcome::Defeat).
+///   (GameOutcome::Defeat) — unless the rescue against the final boss starts instead (Rules::rescue, in the
+///   last wave, a boss alive: RescueSystem).
+/// - During the rescue, nothing hurts the ships of the players.
 ///
 /// The entities are destroyed after the systems of the tick.
 class CombatSystem : public ecs::System
@@ -45,6 +49,7 @@ class CombatSystem : public ecs::System
     ecs::ComponentCache<Invulnerable> &_invulnerables;
     ecs::ComponentCache<PlayerShip> &_playerShips;
     ecs::ComponentCache<Enemy> &_enemies;
+    ecs::ComponentCache<EnemyOrders> &_orders;
 
     [[nodiscard]] Targets gatherTargets();
     void sortTarget(ecs::entity_t entity, Targets &targets) const;
@@ -56,6 +61,10 @@ class CombatSystem : public ecs::System
     void hitShips(const Targets &targets, std::unordered_set<ecs::entity_t> &spent);
     /// Takes the damage of `source` from the health of `target`. Returns true if it has none left.
     bool hurt(ecs::entity_t target, ecs::entity_t source);
+    [[nodiscard]] bool isGuarding(ecs::entity_t enemy) const;
+    /// Starts the next phase of a Bydo with no hit points left, with all its health. Returns false if it was
+    /// in its last one.
+    bool startNextPhase(ecs::entity_t enemy);
     void rewardKill(ecs::entity_t shot, ecs::entity_t enemy);
     void protectShip(ecs::entity_t ship);
     void loseShip(ecs::entity_t ship);
@@ -63,6 +72,8 @@ class CombatSystem : public ecs::System
     void tickInvulnerability(const Targets &targets);
     void respawnShips();
     void endGameWhenDefeated();
+    /// The rescue may start: Rules::rescue, not started yet, in the last wave, with a boss alive.
+    [[nodiscard]] bool canStartRescue() const;
 
 public:
     CombatSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context);

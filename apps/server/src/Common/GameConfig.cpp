@@ -2,9 +2,11 @@
 
 #include "Master/Process.hpp"
 #include "rtype/game/Config/GameConfigLoader.hpp"
+#include "rtype/game/Wave/WaveDefinition.hpp"
 
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace rtype::server
 {
@@ -29,6 +31,11 @@ std::optional<rtype::game::GameConfig> readGameConfig(const std::filesystem::pat
                      directory.string());
         return std::nullopt;
     }
+    // The final boss, the waves of the last difficulty, is played offline only, in the story mode of the
+    // client, with its rescue (Rules::rescue): online, the game is won once the waves before it are beaten
+    std::erase_if(loaded.config.waves, [](const rtype::game::WaveDefinition &wave) {
+        return wave.difficulty == rtype::game::MaxWaveDifficulty;
+    });
     const rtype::game::GameConfig &config = loaded.config;
     logger.info("Game configuration {}: {} projectiles, {} weapons, {} ships, {} enemies, {} waves",
                 directory.string(), config.projectiles.size(), config.weapons.size(), config.ships.size(),
