@@ -1825,6 +1825,24 @@ TEST_CASE("A spinning model turns at its speed and stays between 0 and 360 degre
     CHECK(ecs.getComponent<Model>(backwards).spinAngle == 315.0f);
 }
 
+TEST_CASE("A scrolling picture moves its offset by its speed", "[engine][scroll]")
+{
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<ScrollSystem>();
+    const entity_t far = ecs.createEntity();
+    ecs.addComponent<Scroll>(far, 10.0f);
+    const entity_t backwards = ecs.createEntity();
+    ecs.addComponent<Scroll>(backwards, -40.0f);
+
+    engine.update(0.5f);
+    CHECK(ecs.getComponent<Scroll>(far).offset == 5.0f);
+    CHECK(ecs.getComponent<Scroll>(backwards).offset == -20.0f);
+
+    engine.update(1.5f);
+    CHECK(ecs.getComponent<Scroll>(far).offset == 20.0f);
+}
+
 TEST_CASE("A model animation moves its time by the elapsed time", "[engine][animation]")
 {
     Engine engine;

@@ -23,6 +23,7 @@ add_library(rtype_engine
     src/System/HitboxSystem.cpp
     src/System/InterfaceSystem.cpp
     src/System/ModelAnimationSystem.cpp
+    src/System/ScrollSystem.cpp
     src/System/SoundSystem.cpp
     src/System/SpinSystem.cpp
     src/System/ToastSystem.cpp

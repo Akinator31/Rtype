@@ -70,7 +70,7 @@ the input. When the game scene closes, the engine destroys its entities and the 
 
 | Scene | What it holds |
 |---|---|
-| `game` | The starry sky, the world of the session, and the [HUD](#hud). Escape opens the pause menu. |
+| `game` | The [scrolling sky](#the-sky), the world of the session, and the [HUD](#hud). Escape opens the pause menu. |
 | `pause` | Over the game, dimmed: **Resume**, or **Leave the game**. Offline, the game stops while it is open. |
 
 `GameScenes::play(session, onEnd)` starts a game with a session: the game scene replaces every scene. "Solo"
@@ -97,6 +97,23 @@ repository.
 or a `ShotLook` (`GameSessionSystem::setShipLook()` / `setShotLook()`, called by `GameScenes`, kept by
 `ShipLooks` / `ShotLooks`, which give the entities their models) is drawn with
 its 3D model instead of a box; without one, as in the tests, it stays a box.
+
+### The sky
+
+The sky of the game scene (`createGameSky()` in `GameScenes.cpp`) scrolls to the left, the nearer the faster,
+so that the ships seem to fly to the right; even the deep sky moves visibly, nothing stays still ([The sky](scenes-and-interface.md#the-sky) in the engine). The
+pictures are in `assets/images/backgrounds/`; the layers are 5120 × 1440 and join on their sides.
+
+| Order | Picture | Speed (units/s) | |
+|---|---|---|---|
+| 0 | `space_bg_0_deep.png` | 40 | The deep sky, opaque |
+| 1 | `space_galaxy.png` | 50 | 360 high, seen from the start, back every 4200 units |
+| 2 | `space_bg_1_nebula.png` | 80 | |
+| 4 | `space_bg_2_stars.png` | 140 | |
+| 5 | `space_moon.png`, `space_planet_ringed.png` | 160, 170 | 200 and 640 high, hiding the stars, back every 9000 and 13000 units |
+| 6 | `space_bg_3_near.png` | 300 | The nearest stars |
+
+The sky keeps scrolling while the game is paused. The main menu and the hangar keep the still `starfield.png`.
 
 ### Shots in 3D
 

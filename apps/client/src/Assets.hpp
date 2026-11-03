@@ -11,6 +11,14 @@
 
 // Images
 #define RTYPE_IMAGE_STARFIELD "images/starfield.png"
+// The sky of the game, from the back to the front: the layers cover the screen and join on their sides
+#define RTYPE_IMAGE_SKY_DEEP "images/backgrounds/space_bg_0_deep.png"
+#define RTYPE_IMAGE_SKY_NEBULA "images/backgrounds/space_bg_1_nebula.png"
+#define RTYPE_IMAGE_SKY_STARS "images/backgrounds/space_bg_2_stars.png"
+#define RTYPE_IMAGE_SKY_NEAR "images/backgrounds/space_bg_3_near.png"
+#define RTYPE_IMAGE_SKY_GALAXY "images/backgrounds/space_galaxy.png"
+#define RTYPE_IMAGE_SKY_MOON "images/backgrounds/space_moon.png"
+#define RTYPE_IMAGE_SKY_PLANET "images/backgrounds/space_planet_ringed.png"
 #define RTYPE_IMAGE_LOGO "images/rtpye_logo_without_flare.png"
 #define RTYPE_IMAGE_LOGO_FLARE "images/flare.png"
 #define RTYPE_IMAGE_ENERGY_NOISE "images/fx/energy_noise.png"
