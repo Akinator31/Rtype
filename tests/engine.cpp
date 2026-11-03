@@ -1862,6 +1862,34 @@ TEST_CASE("Switching a model animation fades from the previous one", "[engine][a
     CHECK(animation.fadeDuration == 0.75f);
 }
 
+TEST_CASE("An animation added over a model animation plays once, then is removed", "[engine][animation]")
+{
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<ModelAnimationSystem>();
+    const entity_t ship = ecs.createEntity();
+    ModelAnimation &animation = ecs.addComponent<ModelAnimation>(ship, 2);
+    CHECK(animation.addedAnimation == NoAnimation);
+
+    addModelAnimation(animation, 4, 0.3f);
+    engine.update(0.25f);
+    const ModelAnimation &played = ecs.getComponent<ModelAnimation>(ship);
+    CHECK(played.animation == 2);
+    CHECK(played.time == 0.25f);
+    CHECK(played.addedAnimation == 4);
+    CHECK(played.addedTime == 0.25f);
+
+    // Added again: from its start
+    addModelAnimation(ecs.getComponent<ModelAnimation>(ship), 4, 0.3f);
+    engine.update(0.25f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).addedTime == 0.25f);
+
+    // Played for its duration: removed, the pose is the one of the other entities of the model again
+    engine.update(0.25f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).addedAnimation == NoAnimation);
+    CHECK(ecs.getComponent<ModelAnimation>(ship) == ModelAnimation{2, 0.75f});
+}
+
 TEST_CASE("The sound system plays each sound effect once, then takes it from its entity", "[engine][sound]")
 {
     // Audio is disabled: the sound file is only checked to exist, and nothing is heard

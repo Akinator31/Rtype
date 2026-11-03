@@ -8,12 +8,16 @@ namespace rtype::client
 {
 
 /// The animations of a ship model, by index (render::ResourceManager::getModelAnimation()): small flame when
-/// it hovers or rests, big flame when it flies, nose up or down when it climbs or goes down.
+/// it hovers or rests, big flame when it flies, nose up or down when it climbs or goes down, and the recoil
+/// of its gun with the flash at its muzzle when it fires, added over the others.
 struct ShipAnimations {
     int idle = 0;
     int move = 0;
     int moveUp = 0;
     int moveDown = 0;
+    int shoot = 0;
+    /// Length of the Shoot animation, in seconds.
+    float shootDuration = 0.0f;
 };
 
 /// A ship model with its animations: the menu and the game fly the same models, made with the same rig.

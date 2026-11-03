@@ -770,6 +770,13 @@ void Renderer::blendModelAnimations(ModelId model, int from, float fromTime, int
     _impl->models.get(model).blendAnimations(from, fromTime, to, toTime, amount);
 }
 
+void Renderer::poseModel(ModelId model, const ModelPose &pose)
+{
+    ModelPose clamped = pose;
+    clamped.amount = std::clamp(pose.amount, 0.0f, 1.0f);
+    _impl->models.get(model).applyPose(clamped);
+}
+
 void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color,
                         float spacing)
 {

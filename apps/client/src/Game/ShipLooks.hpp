@@ -13,8 +13,8 @@
 namespace rtype::client
 {
 
-/// A ship of the game drawn with a 3D model: it rolls around its length with its vertical speed, and turns
-/// its nose up or down as its player aims, smoothly.
+/// A ship of the game drawn with a 3D model: it rolls around its length with its vertical speed, turns its
+/// nose up or down as its player aims, smoothly, and recoils when it fires.
 struct ShipAttitude {
     /// The centre of the hull of the model (ShipLook::hull), in model units: it is put on the entity.
     render::Vector2 hullCentre;
@@ -26,6 +26,9 @@ struct ShipAttitude {
     /// game: negative turns its nose up, positive down.
     float targetAim = 0.0f;
     float aim = 0.0f;
+    /// The Shoot animation of its model and its length (ShipAnimations): its recoil.
+    int shoot = 0;
+    float shootDuration = 0.0f;
 };
 
 /// How the ships of a kind are drawn in 3D, instead of a box.
@@ -44,7 +47,8 @@ struct ShipLook {
 
 /// The ShipLook of each kind of ship drawn in 3D, and the models they give to the entities of the game scene:
 /// seen from the side and a little from above, rolling around their length, smoothly, as their ship climbs
-/// or dives, with a little flame, whatever they do (docs/architecture/client-game.md, "Ships in 3D").
+/// or dives, with a little flame, whatever they do, and a recoil when they fire (docs/architecture/
+/// client-game.md, "Ships in 3D").
 class ShipLooks
 {
     /// The looks of each kind: an entity of the kind is drawn with one of them, picked by its id.
@@ -74,6 +78,8 @@ public:
     /// Rolls and turns the model of an entity towards its roll and its aim for `elapsed` seconds, and puts
     /// its hull on the entity.
     static void placeModel(ecs::Ecs &ecs, ecs::entity_t entity, float elapsed);
+    /// Plays the recoil of the model of an entity over its flight, from its start: its ship fired.
+    static void fireModel(ecs::Ecs &ecs, ecs::entity_t entity);
 };
 
 } // namespace rtype::client

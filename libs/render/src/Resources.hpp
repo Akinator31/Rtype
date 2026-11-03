@@ -5,6 +5,7 @@
 
 #include "LightingShader.hpp"
 #include "PreparedAssets.hpp"
+#include "SkeletonPose.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -117,17 +118,7 @@ public:
 class Model
 {
 public:
-    // A pose of a skinned model: a blend between times of two animations, from 0 for the first one to 1 for
-    // the second one. A single animation is the second one, at an amount of 1.
-    struct Pose {
-        int first = -1;
-        float firstTime = 0.0f;
-        int second = -1;
-        float secondTime = 0.0f;
-        float amount = 1.0f;
-
-        friend bool operator==(const Pose &, const Pose &) = default;
-    };
+    using Pose = ModelPose;
 
 private:
     // raylib samples the animations of glTF files at this rate
@@ -276,13 +267,20 @@ public:
     // Moves the vertices of the model to their place at a time of an animation, in seconds. The animation
     // loops. The model keeps this pose until it is animated again. Const like drawing: only the vertices in
     // graphics memory change, and the renderer, which poses models, only reads the resources.
-    void animate(int animation, float time) const { applyPose({animation, time, animation, time, 1.0f}); }
+    void animate(int animation, float time) const
+    {
+        applyPose({.from = animation, .fromTime = time, .to = animation, .toTime = time});
+    }
 
     // Like animate(), with a pose between two animations: `amount` goes from 0 for the first one to 1 for the
     // second one.
     void blendAnimations(int first, float firstTime, int second, float secondTime, float amount) const
     {
-        applyPose({first, firstTime, second, secondTime, std::clamp(amount, 0.0f, 1.0f)});
+        applyPose({.from = first,
+                   .fromTime = firstTime,
+                   .to = second,
+                   .toTime = secondTime,
+                   .amount = std::clamp(amount, 0.0f, 1.0f)});
     }
 
     // The pose of the vertices, none if the model was never animated.
@@ -296,15 +294,34 @@ public:
             return;
         }
         _pose = pose;
-        if (!hasAnimation(pose.second)) {
+        if (!hasAnimation(pose.to)) {
             return;
         }
-        if (pose.amount >= 1.0f || !hasAnimation(pose.first)) {
-            UpdateModelAnimation(_model, _animations[pose.second], pose.secondTime * framesPerSecond);
+        if (hasAnimation(pose.added)) {
+            applyAddedPose(pose);
             return;
         }
-        UpdateModelAnimationEx(_model, _animations[pose.first], pose.firstTime * framesPerSecond,
-                               _animations[pose.second], pose.secondTime * framesPerSecond, pose.amount);
+        if (pose.amount >= 1.0f || !hasAnimation(pose.from)) {
+            UpdateModelAnimation(_model, _animations[pose.to], pose.toTime * framesPerSecond);
+            return;
+        }
+        UpdateModelAnimationEx(_model, _animations[pose.from], pose.fromTime * framesPerSecond,
+                               _animations[pose.to], pose.toTime * framesPerSecond, pose.amount);
+    }
+
+private:
+    // raylib blends two animations at most: the pose with an animation added over them is computed bone by
+    // bone
+    void applyAddedPose(const Pose &pose) const
+    {
+        BonePoses bones = samplePose(_animations[pose.to], pose.toTime * framesPerSecond);
+        if (pose.amount < 1.0f && hasAnimation(pose.from)) {
+            bones = blendPoses(samplePose(_animations[pose.from], pose.fromTime * framesPerSecond), bones,
+                               std::clamp(pose.amount, 0.0f, 1.0f));
+        }
+        BonePoses added =
+            addPose(bones, _animations[pose.added], pose.addedTime * framesPerSecond, _model.skeleton);
+        applyBonePoses(_model, added);
     }
 };
 

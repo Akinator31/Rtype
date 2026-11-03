@@ -93,4 +93,23 @@ struct Light {
     Color rim = colors::Black;
 };
 
+/// A pose of an animated model, from its animations (indexes from ResourceManager::getModelAnimation()), at
+/// times in seconds; the animations loop.
+struct ModelPose {
+    /// Between a time of `from`, at an amount of 0, and a time of `to`, at an amount of 1. A single
+    /// animation is `to`, at an amount of 1.
+    int from = -1;
+    float fromTime = 0.0f;
+    int to = -1;
+    float toTime = 0.0f;
+    float amount = 1.0f;
+    /// Added over them, -1 for none: what this animation changes from its first frame adds to the bones it
+    /// moves, each in the space of its parent, such as the recoil of a gun and the flash at its muzzle over
+    /// a flight. The other bones keep their pose.
+    int added = -1;
+    float addedTime = 0.0f;
+
+    friend bool operator==(const ModelPose &, const ModelPose &) = default;
+};
+
 } // namespace rtype::render

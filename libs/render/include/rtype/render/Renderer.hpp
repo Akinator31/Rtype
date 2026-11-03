@@ -224,6 +224,10 @@ public:
     /// @param amount How far the pose is from the first animation (0) to the second one (1).
     void blendModelAnimations(ModelId model, int from, float fromTime, int to, float toTime, float amount);
 
+    /// Poses an animated model, like blendModelAnimations(), with another animation added over the pose if
+    /// it says so (ModelPose::added): the recoil of a gun over a flight.
+    void poseModel(ModelId model, const ModelPose &pose);
+
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.
     /// @param size Height of the characters, in game units.

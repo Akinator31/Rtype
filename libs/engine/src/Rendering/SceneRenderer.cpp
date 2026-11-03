@@ -256,23 +256,38 @@ void drawCaption(render::Renderer &renderer, render::FontId font, const std::str
     }
 }
 
-// Poses the model at the time of its animation, between the previous and the current one while it fades, or
-// mixed with its blended animation
-void applyPose(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
+// The pose at the time of an animation, between the previous and the current one while it fades, or mixed
+// with its blended animation
+render::ModelPose computeBasePose(const ModelAnimation &animation)
 {
     if (animation.time >= animation.fadeDuration && animation.blendAmount > 0.0f) {
-        renderer.blendModelAnimations(model, animation.animation, animation.time, animation.blendedAnimation,
-                                      animation.time, animation.blendAmount);
-        return;
+        return {.from = animation.animation,
+                .fromTime = animation.time,
+                .to = animation.blendedAnimation,
+                .toTime = animation.time,
+                .amount = animation.blendAmount};
     }
     if (animation.time >= animation.fadeDuration) {
-        renderer.animateModel(model, animation.animation, animation.time);
-        return;
+        return {.from = animation.animation,
+                .fromTime = animation.time,
+                .to = animation.animation,
+                .toTime = animation.time};
     }
     const float progress = animation.time / animation.fadeDuration;
-    const float amount = progress * progress * (3.0f - (2.0f * progress));
-    renderer.blendModelAnimations(model, animation.previousAnimation, animation.previousTime + animation.time,
-                                  animation.animation, animation.time, amount);
+    return {.from = animation.previousAnimation,
+            .fromTime = animation.previousTime + animation.time,
+            .to = animation.animation,
+            .toTime = animation.time,
+            .amount = progress * progress * (3.0f - (2.0f * progress))};
+}
+
+// Poses the model at the time of its animation, with its added animation over it
+void applyPose(render::Renderer &renderer, render::ModelId model, const ModelAnimation &animation)
+{
+    render::ModelPose pose = computeBasePose(animation);
+    pose.added = animation.addedAnimation;
+    pose.addedTime = animation.addedTime;
+    renderer.poseModel(model, pose);
 }
 
 /// The part of a picture that fills an area without being stretched: all of it in one direction, its centre
