@@ -26,6 +26,11 @@
 #define RTYPE_IMAGE_LIFE "images/hud/life.png"
 #define RTYPE_IMAGE_LIFE_LOST "images/hud/life_lost.png"
 
+// Texts
+// The story of the game, in each language, laid out for the crawl of the lore scene (see LoreLineKind)
+#define RTYPE_LORE_FRENCH "lore/fr.txt"
+#define RTYPE_LORE_ENGLISH "lore/en.txt"
+
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
 #define RTYPE_MODEL_PLANET_DUST "models/SC_PlanetSystem_export/planet_dust.glb"
@@ -60,5 +65,7 @@
 /// The voice played when the allies are called to the rescue against the final boss, offline: its length is
 /// game::Rules::rescueVoiceTicks. Not in the assets yet: the rescue goes on silently without it.
 #define RTYPE_SOUND_RESCUE_VOICE "sounds/rescue_voice.wav"
+/// The music of the lore scene, played once while the story scrolls: about as long as the crawl.
+#define RTYPE_MUSIC_LORE "sounds/lore.mp3"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"

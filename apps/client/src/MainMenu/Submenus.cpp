@@ -1,5 +1,6 @@
 #include "MainMenu/Submenus.hpp"
 
+#include "Lore/LoreScene.hpp"
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/UiShowcase.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -84,7 +85,9 @@ void createSubmenuScenes(engine::Engine &engine, const engine::InterfaceStyle &s
                          std::function<void()> openHangar)
 {
     createSubmenuScene(engine, style, PlayMenuScene, translations, "menu.play",
-                       {{"menu.solo", std::move(playSolo)}, {"menu.ships", std::move(openHangar)}});
+                       {{"menu.solo", std::move(playSolo)},
+                        {"menu.ships", std::move(openHangar)},
+                        {"menu.lore", [&engine] { engine.pushScene(LoreScene); }}});
     createSettingsScene(engine, style, translations);
     createUiShowcaseScene(engine, style, translations);
 }

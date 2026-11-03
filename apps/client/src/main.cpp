@@ -152,8 +152,8 @@ void run()
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
-    rtype::client::createMenuScenes(engine, resources, style, window, metrics, games, config, translations,
-                                    ships);
+    rtype::client::createMenuScenes(engine, resources, audio, style, window, metrics, games, config,
+                                    translations, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, showColliderDebug);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
