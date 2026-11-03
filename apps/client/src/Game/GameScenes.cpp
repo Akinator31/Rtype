@@ -72,9 +72,10 @@ const std::vector<engine::SceneAsset> GameAssets{
 constexpr render::Rectangle EznoHull{-8.66f, -3.31f, 17.31f, 10.01f};
 constexpr render::Rectangle DropShipHull{-11.95f, -5.74f, 23.9f, 9.11f};
 
-/// The body of the shogun, the final boss, in its Idle pose, blade and gun excluded, in model units. The model
-/// faces +z (its toes, its visor): turned by -70° around its vertical axis, it faces left, towards the players,
-/// and a little towards the camera. Its collider has the same proportions (config/ships/bydo_shogun.lua).
+/// The body of the shogun, the final boss, in its Idle pose, blade and gun excluded, in model units. The
+/// model faces +z (its toes, its visor): turned by -70° around its vertical axis, it faces left, towards the
+/// players, and a little towards the camera. Its collider has the same proportions
+/// (config/ships/bydo_shogun.lua).
 constexpr render::Rectangle ShogunHull{-5.0f, -33.0f, 17.0f, 33.5f};
 constexpr float ShogunSpin = -70.0f;
 
@@ -226,8 +227,8 @@ void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resour
 
 /// Gives the ships of the formation of the rescue the cut the blade of the shogun leaves on them, and its
 /// sound.
-void setStrikeLooks(GameSessionSystem &sessions, render::ResourceManager &resources, audio::AudioPlayer &audio,
-                    const render::Energy &energy)
+void setStrikeLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                    audio::AudioPlayer &audio, const render::Energy &energy)
 {
     const ImpactLook strike =
         loadImpactLook(resources, RTYPE_MODEL_IMPACT_BURST, StrikeScale, StrikeTint, energy);
@@ -282,7 +283,8 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
     std::vector<ShipLook> allyLooks;
     for (const ShipEntry &entry : getShipCatalog()) {
         if (std::string_view(entry.modelPath) != BydoModel) {
-            allyLooks.push_back({loadShipModel(resources, entry.modelPath), entry.hull, false, entry.trailMeshes});
+            allyLooks.push_back(
+                {loadShipModel(resources, entry.modelPath), entry.hull, false, entry.trailMeshes});
         }
     }
     sessions.setShipLooks(game::EntityKind::AllyShip, std::move(allyLooks));
@@ -368,8 +370,8 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations,
                        const ShipSelection &ships)
-    : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions), _translations(translations),
-      _ships(ships)
+    : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
+      _translations(translations), _ships(ships)
 {
     sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
     sessions.setWaveHandler([this](std::uint16_t wave, const std::string &music) {

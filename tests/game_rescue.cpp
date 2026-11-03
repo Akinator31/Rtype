@@ -115,8 +115,7 @@ TEST_CASE("Offline, the last life lost against the final boss calls the allies, 
     CHECK_FALSE(runUntil(game, RescueStage::Assault, static_cast<int>(rules.rescueArrivalTicks) + 1));
     std::size_t shots = 0;
     for (std::uint32_t tick = 0;
-         tick < rules.rescueAssaultTicks && game.snapshot().rescue == RescueStage::Assault;
-         ++tick) {
+         tick < rules.rescueAssaultTicks && game.snapshot().rescue == RescueStage::Assault; ++tick) {
         game.step();
         shots = std::max(shots, countOf(game.snapshot(), EntityKind::PlayerShot));
     }

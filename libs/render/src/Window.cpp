@@ -1,7 +1,6 @@
 #include "rtype/render/Window.hpp"
 
 #include "RaylibLog.hpp"
-
 #include "rtype/log/Logger.hpp"
 
 #include <raylib.h>

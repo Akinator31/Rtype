@@ -177,8 +177,8 @@ public:
     /// Plays a sound where the game kills an entity of this kind from now on, with its impact: a kind without
     /// an ImpactLook makes no sound.
     void setDestructionSound(game::EntityKind kind, const EntitySound &sound);
-    /// Leaves this impact on a ship of this kind that the blade of the shogun goes through from now on, during
-    /// the rescue against the final boss.
+    /// Leaves this impact on a ship of this kind that the blade of the shogun goes through from now on,
+    /// during the rescue against the final boss.
     void setStrikeLook(game::EntityKind kind, const ImpactLook &look);
     /// Plays a sound where the blade of the shogun goes through a ship of this kind from now on, with its
     /// strike impact: a kind without a strike look makes no sound.

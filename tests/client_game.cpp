@@ -830,7 +830,9 @@ TEST_CASE("The camera closes up on the shogun while it dashes, shakes at a strik
     client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
     const rtype::render::Vector2 centre{960.0f, 540.0f};
     client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, centre, centre);
-    const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
+    const auto view = [&client, camera] {
+        return client.ecs.getComponent<rtype::engine::Camera>(camera).view;
+    };
     rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
     boss.x = 1600.0f;
     boss.y = 540.0f;
@@ -884,7 +886,9 @@ TEST_CASE("The camera pushes in on the ship of the player during the voice of th
     client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
     const rtype::render::Vector2 centre{960.0f, 540.0f};
     client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, centre, centre);
-    const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
+    const auto view = [&client, camera] {
+        return client.ecs.getComponent<rtype::engine::Camera>(camera).view;
+    };
     rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
     boss.x = 1600.0f;
     boss.y = 540.0f;
@@ -917,8 +921,9 @@ TEST_CASE("The camera pushes in on the ship of the player during the voice of th
     CHECK(view().target.x == Approx(960.0f).epsilon(0.001));
 }
 
-TEST_CASE("The camera pushes in on the shogun during the combined attack, tilted and rumbling, then pulls back",
-          "[client]")
+TEST_CASE(
+    "The camera pushes in on the shogun during the combined attack, tilted and rumbling, then pulls back",
+    "[client]")
 {
     ImpactClient client;
     client.ecs.registerSystem<RescueCameraSystem>(client.sessions);
@@ -927,7 +932,9 @@ TEST_CASE("The camera pushes in on the shogun during the combined attack, tilted
     client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
     const rtype::render::Vector2 centre{960.0f, 540.0f};
     client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, centre, centre);
-    const auto view = [&client, camera] { return client.ecs.getComponent<rtype::engine::Camera>(camera).view; };
+    const auto view = [&client, camera] {
+        return client.ecs.getComponent<rtype::engine::Camera>(camera).view;
+    };
     rtype::game::EntityState boss{7, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner};
     boss.x = 1600.0f;
     boss.y = 540.0f;
@@ -1176,7 +1183,8 @@ TEST_CASE("Each wave started in the game is told with its number, once", "[clien
 {
     ImpactClient client;
     std::vector<std::uint16_t> waves;
-    client.sessions.setWaveHandler([&waves](std::uint16_t wave, const std::string &) { waves.push_back(wave); });
+    client.sessions.setWaveHandler(
+        [&waves](std::uint16_t wave, const std::string &) { waves.push_back(wave); });
     rtype::game::Snapshot first = snapshotOf(1, {});
     first.waveStarted = 1;
 

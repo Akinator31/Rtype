@@ -157,8 +157,7 @@ std::optional<ecs::entity_t> RescueSystem::findBoss() const
 {
     for (ecs::entity_t entity = 0; entity < _enemies.size(); ++entity) {
         if (_enemies.has(entity) && _ecs.isAlive(entity) && _positions.has(entity) &&
-            _velocities.has(entity) &&
-            _context.enemies.getDefinition(_enemies.get(entity).id).boss) {
+            _velocities.has(entity) && _context.enemies.getDefinition(_enemies.get(entity).id).boss) {
             return entity;
         }
     }

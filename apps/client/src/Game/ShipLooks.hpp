@@ -62,8 +62,8 @@ public:
     /// The ships of this kind are drawn in 3D.
     [[nodiscard]] bool hasLook(game::EntityKind kind) const;
 
-    /// Gives an entity the model of its kind (one of them, by its id), or the local look for the ship of the local player, with its
-    /// ShipAttitude, placed on it.
+    /// Gives an entity the model of its kind (one of them, by its id), or the local look for the ship of the
+    /// local player, with its ShipAttitude, placed on it.
     /// @param clock Seconds the session has been played: the time of the animations.
     /// @param local The entity is the ship of the local player.
     void addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, const EntityLook &look,

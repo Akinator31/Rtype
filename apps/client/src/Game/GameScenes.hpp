@@ -81,7 +81,8 @@ class GameScenes
     /// The fall of the shogun at the end of the rescue shakes the camera.
     void showKill(const Kill &kill);
     void showWave(std::uint16_t wave);
-    /// Plays the music of the wave started, a path of the assets, replacing the current one; nothing if empty.
+    /// Plays the music of the wave started, a path of the assets, replacing the current one; nothing if
+    /// empty.
     void playWaveMusic(const std::string &music);
     /// Shows the death screen of the local player, unless its ship was its last life.
     void showDeath();

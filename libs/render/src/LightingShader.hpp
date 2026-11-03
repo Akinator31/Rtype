@@ -12,9 +12,9 @@
 namespace rtype::render::detail
 {
 
-/// The generic parameter of a raylib Material (Material::params) that a model sets to 1 for a transparent glTF
-/// material marked doubleSided, such as the flame of a blade, a sheet seen from both sides: raylib ignores that
-/// flag and culls the back of its faces, so the draw turns the culling off for it.
+/// The generic parameter of a raylib Material (Material::params) that a model sets to 1 for a transparent
+/// glTF material marked doubleSided, such as the flame of a blade, a sheet seen from both sides: raylib
+/// ignores that flag and culls the back of its faces, so the draw turns the culling off for it.
 inline constexpr int DoubleSidedParameter = 0;
 
 /// Owns the lighting shader of the 3D models (libs/shaders/glsl/Lighting.frag): physically based, with the

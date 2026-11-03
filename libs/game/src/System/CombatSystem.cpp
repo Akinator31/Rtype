@@ -12,8 +12,7 @@ CombatSystem::CombatSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameCont
     : _ecs(ecs), _context(context), _owners(use<Owner>(caches)), _positions(use<ecs::Position>(caches)),
       _colliders(use<physics::Collider>(caches)), _healths(use<Health>(caches)),
       _damages(use<Damage>(caches)), _invulnerables(use<Invulnerable>(caches)),
-      _playerShips(use<PlayerShip>(caches)), _enemies(use<Enemy>(caches)),
-      _orders(use<EnemyOrders>(caches))
+      _playerShips(use<PlayerShip>(caches)), _enemies(use<Enemy>(caches)), _orders(use<EnemyOrders>(caches))
 {
 }
 
@@ -236,8 +235,7 @@ bool CombatSystem::canStartRescue() const
     }
     for (ecs::entity_t entity = 0; entity < _enemies.size(); ++entity) {
         if (_enemies.has(entity) && _ecs.isAlive(entity) && _healths.has(entity) &&
-            _healths.get(entity).points > 0 &&
-            _context.enemies.getDefinition(_enemies.get(entity).id).boss) {
+            _healths.get(entity).points > 0 && _context.enemies.getDefinition(_enemies.get(entity).id).boss) {
             return true;
         }
     }

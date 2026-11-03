@@ -1548,8 +1548,7 @@ TEST_CASE("A Bydo of a behavior that gives no order keeps still and does not fir
     CHECK(enemyShotsOf(simulation.snapshot()).empty());
 }
 
-TEST_CASE("A Bydo of several phases gets its health back at each one, and is destroyed in the last",
-          "[game]")
+TEST_CASE("A Bydo of several phases gets its health back at each one, and is destroyed in the last", "[game]")
 {
     GameConfig config = scriptedConfig("return { update = function(enemy, game) end }");
     config.enemies.front().phases = 2;
