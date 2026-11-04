@@ -1,6 +1,7 @@
 // Tests of the choices of the Settings page kept from one run of the client to the next: the language and the
 // volumes and the colour filter. The audio is disabled, so that the tests play nothing.
 
+#include "Settings/NextValue.hpp"
 #include "Settings/PlayerSettings.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
@@ -71,7 +72,8 @@ TEST_CASE("The language and the volumes chosen are found again at the next run",
     client.translations.setLanguage("fr");
     client.audio.setMusicVolume(0.25f);
     client.audio.setEffectsVolume(0.75f);
-    writePlayerSettings(client.settings, client.translations, client.audio, rtype::render::ColorFilter::None);
+    keepPlayerSettings(client.settings, client.translations, client.audio, rtype::render::ColorFilter::None);
+    writeSettings(client.settings);
 
     // The next run: a new client reads the file the last one wrote
     rtype::engine::Settings next(client.settings.getPath());
@@ -91,7 +93,8 @@ TEST_CASE("Writing the settings keeps the values of the other parts of the clien
     Client client("other_values");
     client.settings.setString("ship.equipped", "VX-03");
 
-    writePlayerSettings(client.settings, client.translations, client.audio, rtype::render::ColorFilter::None);
+    keepPlayerSettings(client.settings, client.translations, client.audio, rtype::render::ColorFilter::None);
+    writeSettings(client.settings);
     rtype::engine::Settings read(client.settings.getPath());
     read.readFile();
 
@@ -128,8 +131,9 @@ TEST_CASE("A volume out of range in the settings is clamped", "[settings]")
 TEST_CASE("The colour filter chosen is found again at the next run", "[settings]")
 {
     Client client("color_filter");
-    writePlayerSettings(client.settings, client.translations, client.audio,
-                        rtype::render::ColorFilter::Deuteranopia);
+    keepPlayerSettings(client.settings, client.translations, client.audio,
+                       rtype::render::ColorFilter::Deuteranopia);
+    writeSettings(client.settings);
 
     rtype::engine::Settings next(client.settings.getPath());
     next.readFile();
@@ -157,11 +161,11 @@ TEST_CASE("The colour filter button goes through the filters of the players and 
     for (const ColorFilter expected :
          {ColorFilter::Protanopia, ColorFilter::Deuteranopia, ColorFilter::Tritanopia,
           ColorFilter::HighContrast, ColorFilter::None}) {
-        filter = nextColorFilter(filter);
+        filter = nextValue(PlayerColorFilters, filter);
         CHECK(filter == expected);
     }
     // From a simulation, set by the team, the button starts again from the first
-    CHECK(nextColorFilter(ColorFilter::SimulateTritanopia) == ColorFilter::None);
+    CHECK(nextValue(PlayerColorFilters, ColorFilter::SimulateTritanopia) == ColorFilter::None);
 }
 
 TEST_CASE("Every colour filter of the players has a name in both languages", "[settings]")

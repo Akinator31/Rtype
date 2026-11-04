@@ -6,6 +6,7 @@
 #include "MainMenu/Logo.hpp"
 #include "MainMenu/LogoFlare.hpp"
 #include "MainMenu/Planet.hpp"
+#include "MainMenu/SettingsMenu.hpp"
 #include "MainMenu/Ships.hpp"
 #include "MainMenu/Station.hpp"
 #include "MainMenu/Submenus.hpp"

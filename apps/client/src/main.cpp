@@ -13,6 +13,7 @@
 #include "Loading/SceneLoadStatus.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "Settings/DisplaySettings.hpp"
 #include "Settings/PlayerSettings.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/audio/AudioDevice.hpp"
@@ -60,6 +61,8 @@ void run()
     Window window({.fullscreen = true});
     rtype::engine::Engine engine;
     rtype::client::readSettings(engine.getSettings());
+    // The screen and the resolution chosen at the last run
+    rtype::client::applyDisplaySettings(engine.getSettings(), window);
     const rtype::audio::AudioDevice audioDevice;
     rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
                                     engine.getThreads().getAssetsWorker());

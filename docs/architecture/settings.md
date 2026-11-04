@@ -23,44 +23,59 @@ Name keys by domain with dots, so that the file stays readable:
 
 | Keys | Written by |
 |---|---|
-| `audio.effects_volume` | The Settings page (`writePlayerSettings()`): the volume of the sound effects, from 0 to 1 |
+| `audio.effects_volume` | The Settings page (`keepPlayerSettings()`): the volume of the sound effects, from 0 to 1 |
 | `audio.music_volume` | The Settings page: the volume of the music, from 0 to 1 |
 | `display.color_filter` | The Settings page: the colour filter of the image, `none`, `protanopia`, `deuteranopia`, `tritanopia` or `high_contrast` |
+| `display.monitor` | The Settings page (`keepDisplaySettings()`): the screen of the game, by its index, from 0 for the primary screen |
+| `display.resolution` | The Settings page: `fullscreen`, or the size of the window, such as `1600x900` |
 | `interface.language` | The Settings page: the language of the interface, `en` or `fr` |
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
 | `ship.equipped` | The hangar (`writeEquippedShip()`): the code of the ship the player equipped last, such as `VX-03`, on which the hangar opens at the next run |
 
 ## The Settings page
 
-The Settings page of the main menu (`apps/client/src/MainMenu/Submenus.cpp`) sets the language, the
-volumes of the music and of the sound effects, and the colour filter of the image
-([Rendering](rendering.md#colour-filters)). `apps/client/src/Settings/PlayerSettings.hpp` keeps them:
+The Settings page of the main menu (`apps/client/src/MainMenu/SettingsMenu.cpp`) sets the language, the
+volumes of the music and of the sound effects, the colour filter of the image
+([Rendering](rendering.md#colour-filters)), the screen the game is on and its resolution. Two files of
+`apps/client/src/Settings/` keep them: `PlayerSettings.hpp` the language, the volumes and the filter,
+`DisplaySettings.hpp` the screen and the resolution.
 
 ```mermaid
 flowchart LR
     File["settings.txt"] -- "readSettings()" --> Settings["engine::Settings"]
-    Settings -- "applyPlayerSettings()<br/>at start" --> Apply["Localization · AudioPlayer · Renderer"]
-    Page["Settings page<br/>two buttons, two sliders"] -- "each change, at once" --> Apply
-    Page -- "closes: writePlayerSettings()" --> Settings
-    Settings -- "writeFile()" --> File
+    Settings -- "applyDisplaySettings()<br/>applyPlayerSettings()<br/>at start" --> Apply["Window · Localization<br/>AudioPlayer · Renderer"]
+    Page["Settings page<br/>four buttons, two sliders"] -- "each change, at once" --> Apply
+    Page -- "closes: keep...Settings()" --> Settings
+    Settings -- "writeSettings()" --> File
 ```
 
 *The choices are read and applied when the client starts, applied at once on the page, and written when the
 page closes.*
 
-- **At start**, right after the translations are loaded, `applyPlayerSettings()` gives the kept language to the
-  `Localization` and the volumes to the `AudioPlayer`, and `readColorFilter()` gives the filter to the
-  `Renderer`. A missing or wrong value (a language not loaded, a volume that is not a number, an unknown
-  filter) leaves the default: English, both volumes at 100%, no filter. A volume out of 0..1 is clamped.
-- **On the page**, the language button, the two sliders and the colour filter button change the translations,
-  the audio and the image at once, so that the player hears the new volume while dragging and sees the
-  filter. The filter button goes through `PlayerColorFilters`: none, protanopia, deuteranopia, tritanopia,
-  high contrast. The filters that simulate a colour blindness are for the team, and not offered there.
-- **When the page closes** (its back button or Escape), `writePlayerSettings()` keeps the four values and
-  writes the file, once, rather than at every step of a slider. A file that cannot be written is logged: the
-  choices then last until the client closes.
+| Row | Widget | What it changes |
+|---|---|---|
+| Language | Button: English, French | `Localization::setLanguage()`, and the captions of the sliders |
+| Music, Sound effects | Sliders, by steps of 5% | `AudioPlayer::setMusicVolume()`, `setEffectsVolume()` |
+| Colour filter | Button: none, protanopia, deuteranopia, tritanopia, high contrast (`PlayerColorFilters`) | `Renderer::setColorFilter()` |
+| Screen | Button: "2 (DELL U2720Q)", the next connected screen | `Window::moveToMonitor()` |
+| Resolution | Button: fullscreen, then the window sizes smaller than the screen (`resolutionsFor()`) | `Window::setFullscreen()`, `setSize()` |
 
-The tests are in `tests/player_settings.cpp` (tag `[settings]`).
+- **At start**, right after the settings are read, `applyDisplaySettings()` moves the window to the kept
+  screen and gives it the kept resolution; then, once the translations are loaded, `applyPlayerSettings()`
+  gives the language and the volumes, and `readColorFilter()` the filter. A missing or wrong value leaves the
+  default: English, both volumes at 100%, no filter, the screen the window opened on, fullscreen. A volume out
+  of 0..1 is clamped; a screen no longer connected, or a window size too large for the screen, is ignored.
+- **Fullscreen is the resolution of the screen.** The window is borderless in fullscreen
+  ([Rendering](rendering.md#window-options)): the screen keeps its own video mode. The other resolutions are
+  the sizes of a window, from `WindowSizes` (1280 × 720 to 3840 × 2160), only those smaller than the screen;
+  the image is scaled to any size. A window moved to a screen too small for it goes fullscreen.
+- **The filters that simulate a colour blindness** are for the team, and not offered on the page.
+- **When the page closes** (its back button or Escape), `keepPlayerSettings()` and `keepDisplaySettings()` keep
+  the values, and `writeSettings()` writes the file, once, rather than at every step of a slider. A file that
+  cannot be written is logged: the choices then last until the client closes.
+
+The tests are in `tests/player_settings.cpp` and `tests/display_settings.cpp` (tag `[settings]`). Moving the
+window needs a screen, and is not tested there.
 
 ## Not the data of the server
 

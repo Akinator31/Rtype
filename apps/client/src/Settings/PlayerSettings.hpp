@@ -26,8 +26,6 @@ inline constexpr std::array<render::ColorFilter, 5> PlayerColorFilters{
 /// How a filter of PlayerColorFilters is written in the settings ("deuteranopia"), and the key of its name in
 /// the translations ("settings.filter.deuteranopia"). Empty for a filter not offered to the players.
 [[nodiscard]] std::string_view colorFilterSettingName(render::ColorFilter filter);
-/// The filter after this one in PlayerColorFilters, back to the first after the last.
-[[nodiscard]] render::ColorFilter nextColorFilter(render::ColorFilter filter);
 /// The colour filter kept in the settings: ColorFilter::None if there is none, or a value that is not one of
 /// PlayerColorFilters.
 [[nodiscard]] render::ColorFilter readColorFilter(const engine::Settings &settings);
@@ -42,9 +40,12 @@ inline constexpr float DefaultEffectsVolume = 1.0f;
 void applyPlayerSettings(const engine::Settings &settings, localization::Localization &translations,
                          audio::AudioPlayer &audio);
 
-/// Keeps the current language, volumes and colour filter in the settings, and writes them. A file that cannot
-/// be written is logged: the choices then only last until the client closes.
-void writePlayerSettings(engine::Settings &settings, const localization::Localization &translations,
-                         const audio::AudioPlayer &audio, render::ColorFilter filter);
+/// Keeps the current language, volumes and colour filter in the settings, without writing them.
+void keepPlayerSettings(engine::Settings &settings, const localization::Localization &translations,
+                        const audio::AudioPlayer &audio, render::ColorFilter filter);
+
+/// Writes the settings to their file. A file that cannot be written is logged: the choices then only last
+/// until the client closes.
+void writeSettings(engine::Settings &settings);
 
 } // namespace rtype::client

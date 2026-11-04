@@ -21,6 +21,7 @@ add_executable(rtype_tests
     database.cpp
     database_thread.cpp
     datagram.cpp
+    display_settings.cpp
     ecs.cpp
     ecs_world.cpp
     engine.cpp

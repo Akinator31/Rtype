@@ -4,6 +4,7 @@
 #include "Game/LocalSession.hpp"
 #include "Loading/LoadingScene.hpp"
 #include "MainMenu/MainMenu.hpp"
+#include "MainMenu/SettingsMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "ShipSelector/ShipSelector.hpp"
 
@@ -36,13 +37,14 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     createMainMenuScene(engine, resources, style, metrics, translations,
                         [&window] { window.requestClose(); });
     createSubmenuScenes(
-        engine, style, translations, audio, renderer,
+        engine, style, translations,
         [&engine, &ships, &games, &config] {
             openShipSelector(engine, ships, [&games, &config] {
                 games.play(std::make_unique<LocalSession>(game::Rules{}, config));
             });
         },
         [&engine, &ships] { openShipSelector(engine, ships); });
+    createSettingsScene(engine, style, {translations, audio, renderer, window});
     createShipSelectorScene(engine, resources, style, translations, ships);
 }
 

@@ -75,6 +75,14 @@ void preferDedicatedGpu()
 #endif
 }
 
+// The size of the window is given: right after SetWindowSize(), raylib may still know the previous one
+void centreOnMonitor(int monitor, int width, int height)
+{
+    const Vector2 origin = GetMonitorPosition(monitor);
+    SetWindowPosition(static_cast<int>(origin.x) + ((GetMonitorWidth(monitor) - width) / 2),
+                      static_cast<int>(origin.y) + ((GetMonitorHeight(monitor) - height) / 2));
+}
+
 } // namespace
 
 Window::Window(const WindowSettings &settings)
@@ -155,6 +163,34 @@ void Window::setSize(int width, int height)
 {
     setFullscreen(false);
     SetWindowSize(width, height);
+    centreOnMonitor(GetCurrentMonitor(), width, height);
+}
+
+std::vector<Monitor> Window::monitors() const
+{
+    std::vector<Monitor> list;
+    for (int index = 0; index < GetMonitorCount(); ++index) {
+        const char *name = GetMonitorName(index);
+        list.push_back({name != nullptr ? name : "", GetMonitorWidth(index), GetMonitorHeight(index)});
+    }
+    return list;
+}
+
+int Window::monitor() const
+{
+    return GetCurrentMonitor();
+}
+
+// Borderless fullscreen covers the screen the window is on: leave it, move the window, then cover the new one
+void Window::moveToMonitor(int monitor)
+{
+    if (monitor < 0 || monitor >= GetMonitorCount() || monitor == GetCurrentMonitor()) {
+        return;
+    }
+    const bool fullscreen = isFullscreen();
+    setFullscreen(false);
+    centreOnMonitor(monitor, width(), height());
+    setFullscreen(fullscreen);
 }
 
 void Window::setTitle(const std::string &title)

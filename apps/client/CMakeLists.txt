@@ -54,6 +54,7 @@ add_library(r-type_client_core STATIC
     src/MainMenu/LogoFlareSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
+    src/MainMenu/SettingsMenu.cpp
     src/MainMenu/Ships.cpp
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
@@ -61,6 +62,7 @@ add_library(r-type_client_core STATIC
     src/Online/KnownServers.cpp
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
+    src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace rtype::render
 {
@@ -18,6 +19,15 @@ struct WindowSettings {
     int targetFps = 60;
     /// Opens the window in fullscreen (see Window::setFullscreen()).
     bool fullscreen = false;
+};
+
+/// A screen connected to the computer, as Window::monitors() lists it.
+struct Monitor {
+    /// Its name as the system gives it, for instance "DELL U2720Q". It can be empty.
+    std::string name;
+    /// The resolution of its current video mode, in pixels.
+    int width = 0;
+    int height = 0;
 };
 
 /// The game window, open for as long as this object exists.
@@ -69,8 +79,16 @@ public:
     /// Tells whether the window is in fullscreen.
     [[nodiscard]] bool isFullscreen() const;
 
-    /// Resizes the window, in pixels. Leaves fullscreen first if needed.
+    /// Resizes the window, in pixels, and centres it on its screen. Leaves fullscreen first if needed.
     void setSize(int width, int height);
+
+    /// The screens connected to the computer, the first one being the primary screen.
+    [[nodiscard]] std::vector<Monitor> monitors() const;
+    /// The index in monitors() of the screen the window is on.
+    [[nodiscard]] int monitor() const;
+    /// Moves the window to a screen of monitors(): in fullscreen, it covers the new screen; otherwise it
+    /// keeps its size and is centred on it. Does nothing for an index out of the list.
+    void moveToMonitor(int monitor);
     /// Changes the title of the window.
     void setTitle(const std::string &title);
 

@@ -60,7 +60,9 @@ Most settings can be changed while the game runs, for instance from an options m
 | Function                                      | Effect                                                                                          |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `setFullscreen(bool)`, `isFullscreen()`       | Switches between a window and fullscreen.                                                       |
-| `setSize(width, height)`                      | Resizes the window, in pixels. Leaves fullscreen first.                                         |
+| `setSize(width, height)`                      | Resizes the window, in pixels, and centres it on its screen. Leaves fullscreen first.           |
+| `monitors()`, `monitor()`                     | The connected screens (name, resolution), and the index of the one the window is on.            |
+| `moveToMonitor(index)`                        | Moves the window to another screen: it covers it in fullscreen, or is centred on it.            |
 | `setTitle(title)`                             | Changes the title of the window.                                                                |
 | `setCursorVisible(bool)`, `isCursorVisible()` | Shows or hides the mouse pointer over the window.                                               |
 | `setVsync(bool)`                              | Turns vertical synchronisation on or off.                                                       |

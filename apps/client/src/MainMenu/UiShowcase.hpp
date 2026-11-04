@@ -7,7 +7,7 @@
 namespace rtype::client
 {
 
-/// Name of the scene that shows the elements of the interface, opened from the settings.
+/// Name of the scene that shows the elements of the interface, opened from the console (`scene ui_showcase`).
 inline constexpr const char *UiShowcaseScene = "ui_showcase";
 
 /// Declares the scene that shows the elements of the interface in their states, to see them as the player

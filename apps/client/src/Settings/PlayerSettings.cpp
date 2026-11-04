@@ -3,7 +3,6 @@
 #include "rtype/log/Logger.hpp"
 
 #include <cmath>
-#include <cstddef>
 #include <exception>
 #include <optional>
 #include <string>
@@ -50,16 +49,6 @@ std::string_view colorFilterSettingName(render::ColorFilter filter)
     }
 }
 
-render::ColorFilter nextColorFilter(render::ColorFilter filter)
-{
-    for (std::size_t index = 0; index < PlayerColorFilters.size(); ++index) {
-        if (PlayerColorFilters[index] == filter) {
-            return PlayerColorFilters[(index + 1) % PlayerColorFilters.size()];
-        }
-    }
-    return PlayerColorFilters.front();
-}
-
 render::ColorFilter readColorFilter(const engine::Settings &settings)
 {
     const std::optional<std::string> name = settings.getString(ColorFilterSettingsKey);
@@ -88,8 +77,8 @@ void applyPlayerSettings(const engine::Settings &settings, localization::Localiz
     audio.setEffectsVolume(readVolume(settings, EffectsVolumeSettingsKey, DefaultEffectsVolume));
 }
 
-void writePlayerSettings(engine::Settings &settings, const localization::Localization &translations,
-                         const audio::AudioPlayer &audio, render::ColorFilter filter)
+void keepPlayerSettings(engine::Settings &settings, const localization::Localization &translations,
+                        const audio::AudioPlayer &audio, render::ColorFilter filter)
 {
     settings.setString(LanguageSettingsKey, translations.language());
     settings.setFloat(MusicVolumeSettingsKey, audio.musicVolume());
@@ -97,6 +86,10 @@ void writePlayerSettings(engine::Settings &settings, const localization::Localiz
     if (const std::string_view name = colorFilterSettingName(filter); !name.empty()) {
         settings.setString(ColorFilterSettingsKey, name);
     }
+}
+
+void writeSettings(engine::Settings &settings)
+{
     try {
         settings.writeFile();
     } catch (const std::exception &error) {
