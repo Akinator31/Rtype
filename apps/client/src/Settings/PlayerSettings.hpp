@@ -17,8 +17,8 @@ inline constexpr std::string_view MusicVolumeSettingsKey = "audio.music_volume";
 inline constexpr std::string_view EffectsVolumeSettingsKey = "audio.effects_volume";
 inline constexpr std::string_view ColorFilterSettingsKey = "display.color_filter";
 
-/// The colour filters a player can choose on the Settings page, in the order its button goes through them. The
-/// filters that simulate a colour blindness are for the team, not offered there.
+/// The colour filters a player can choose on the Settings page, in the order its button goes through them.
+/// The filters that simulate a colour blindness are for the team, not offered there.
 inline constexpr std::array<render::ColorFilter, 5> PlayerColorFilters{
     render::ColorFilter::None, render::ColorFilter::Protanopia, render::ColorFilter::Deuteranopia,
     render::ColorFilter::Tritanopia, render::ColorFilter::HighContrast};

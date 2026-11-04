@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -28,28 +29,38 @@ struct SubmenuButton {
 constexpr float buttonsTop = 260.0f;
 constexpr float buttonsSpacing = 103.0f;
 
+/// A button in the column on the left whose text is written from a function every frame, so that it follows
+/// the language and the value it shows.
+ecs::entity_t boundButton(engine::InterfaceBuilder &interface, ecs::Ecs &ecs,
+                          std::function<std::string()> label, std::function<void()> onPress, float top)
+{
+    const ecs::entity_t button =
+        interface.button(label(), std::move(onPress), {engine::AnchorPoint::TopLeft, screenMargin, top});
+    ecs.addComponent<engine::BoundText>(button, std::move(label));
+    return button;
+}
+
 void createSubmenuScene(engine::Engine &engine, const engine::InterfaceStyle &style, const char *name,
                         localization::Localization &translations, const std::string &titleKey,
                         std::vector<SubmenuButton> buttons = {})
 {
-    engine.createScene(
-        name, {.overlay = true, .hidesInterfaceBelow = true},
-        [&style, &translations, titleKey, buttons = std::move(buttons)](engine::Engine &target,
-                                                                        engine::SceneId scene) {
-            engine::InterfaceBuilder interface(target.getEcs(), scene, style);
-            interface.boundHeader([&translations, titleKey] { return translations.text(titleKey); },
-                                  [&target] { target.popScene(); },
-                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-            float top = buttonsTop;
-            for (const SubmenuButton &button : buttons) {
-                const ecs::entity_t entity =
-                    interface.button(translations.text(button.key), button.onPress,
-                                     {engine::AnchorPoint::TopLeft, screenMargin, top});
-                target.getEcs().addComponent<engine::BoundText>(
-                    entity, [&translations, key = button.key] { return translations.text(key); });
-                top += buttonsSpacing;
-            }
-        });
+    engine.createScene(name, {.overlay = true, .hidesInterfaceBelow = true},
+                       [&style, &translations, titleKey,
+                        buttons = std::move(buttons)](engine::Engine &target, engine::SceneId scene) {
+                           engine::InterfaceBuilder interface(target.getEcs(), scene, style);
+                           interface.boundHeader(
+                               [&translations, titleKey] { return translations.text(titleKey); },
+                               [&target] { target.popScene(); },
+                               {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
+                           float top = buttonsTop;
+                           for (const SubmenuButton &button : buttons) {
+                               boundButton(
+                                   interface, target.getEcs(),
+                                   [&translations, key = button.key] { return translations.text(key); },
+                                   button.onPress, top);
+                               top += buttonsSpacing;
+                           }
+                       });
 }
 
 /// The rows of the Settings page, under the header: the language, the two volumes, the colour filter, then
@@ -61,74 +72,108 @@ constexpr float showcaseTop = filterTop + buttonsSpacing;
 /// How much a key or a notch of the wheel changes a volume.
 constexpr float volumeStep = 0.05f;
 
-void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &style,
-                         localization::Localization &translations, audio::AudioPlayer &audio,
-                         render::Renderer &renderer)
+/// What the Settings page changes.
+struct SettingsTargets {
+    localization::Localization &translations;
+    audio::AudioPlayer &audio;
+    render::Renderer &renderer;
+};
+
+/// The sliders of a page, with the key of their caption: their caption is plain text, written again when the
+/// language changes.
+using SliderCaptions = std::vector<std::pair<ecs::entity_t, std::string>>;
+
+/// "Language: French", a button that switches between English and French, and writes the captions of the
+/// sliders again in the new language.
+void addLanguageButton(engine::InterfaceBuilder &interface, ecs::Ecs &ecs,
+                       localization::Localization &translations,
+                       std::shared_ptr<const SliderCaptions> sliders)
 {
-    // Each choice applies at once; the settings are written when the page closes, not at every step of a slider
-    const auto close = [&engine, &translations, &audio, &renderer] {
-        writePlayerSettings(engine.getSettings(), translations, audio, renderer.colorFilter());
+    const auto label = [&translations] {
+        const char *language = translations.language() == "fr" ? "language.french" : "language.english";
+        return translations.text("settings.language") + ": " + translations.text(language);
+    };
+    const auto next = [&ecs, &translations, sliders = std::move(sliders)] {
+        translations.setLanguage(translations.language() == "fr" ? "en" : "fr");
+        for (const auto &[slider, key] : *sliders) {
+            ecs.getComponent<engine::Slider>(slider).caption = translations.text(key);
+        }
+    };
+    boundButton(interface, ecs, label, next, buttonsTop);
+}
+
+/// A slider of a volume, in the column on the left, with the key of its caption.
+std::pair<ecs::entity_t, std::string> volumeSlider(engine::InterfaceBuilder &interface,
+                                                   const engine::InterfaceStyle &style,
+                                                   const localization::Localization &translations,
+                                                   const std::string &key, std::function<float()> get,
+                                                   std::function<void(float)> set, float top)
+{
+    // The area of a slider goes beyond its rail by the handle: the rail starts at the margin, like the
+    // buttons
+    const float left = screenMargin - style.slider.handleDragRadius;
+    return {interface.slider(translations.text(key), std::move(get), std::move(set), volumeStep,
+                             {engine::AnchorPoint::TopLeft, left, top}),
+            key};
+}
+
+/// The sliders of the music and of the sound effects.
+SliderCaptions addVolumeSliders(engine::InterfaceBuilder &interface, const engine::InterfaceStyle &style,
+                                const SettingsTargets &targets)
+{
+    audio::AudioPlayer &audio = targets.audio;
+    return {volumeSlider(
+                interface, style, targets.translations, "settings.music_volume",
+                [&audio] { return audio.musicVolume(); },
+                [&audio](float volume) { audio.setMusicVolume(volume); }, volumesTop),
+            volumeSlider(
+                interface, style, targets.translations, "settings.effects_volume",
+                [&audio] { return audio.effectsVolume(); },
+                [&audio](float volume) { audio.setEffectsVolume(volume); }, volumesTop + volumesSpacing)};
+}
+
+/// "Colour filter: Deuteranopia", a button that goes through the filters of PlayerColorFilters.
+void addColorFilterButton(engine::InterfaceBuilder &interface, ecs::Ecs &ecs, const SettingsTargets &targets)
+{
+    localization::Localization &translations = targets.translations;
+    render::Renderer &renderer = targets.renderer;
+    const auto label = [&translations, &renderer] {
+        const std::string_view name = colorFilterSettingName(renderer.colorFilter());
+        return translations.text("settings.color_filter") + ": " +
+               translations.text("settings.filter." + std::string(name.empty() ? "none" : name));
+    };
+    boundButton(
+        interface, ecs, label,
+        [&renderer] { renderer.setColorFilter(nextColorFilter(renderer.colorFilter())); }, filterTop);
+}
+
+void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &style, SettingsTargets targets)
+{
+    // Each choice applies at once; the settings are written when the page closes, not at every step of a
+    // slider
+    const auto close = [&engine, targets] {
+        writePlayerSettings(engine.getSettings(), targets.translations, targets.audio,
+                            targets.renderer.colorFilter());
         engine.popScene();
     };
-    engine.createScene(
-        SettingsMenuScene, {.overlay = true, .hidesInterfaceBelow = true, .onBack = close},
-        [&style, &translations, &audio, &renderer, close](engine::Engine &target, engine::SceneId scene) {
-            ecs::Ecs &ecs = target.getEcs();
-            engine::InterfaceBuilder interface(ecs, scene, style);
-            interface.boundHeader([&translations] { return translations.text("menu.settings"); }, close,
-                                  {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-
-            // The captions of the sliders are plain text: they are written again when the language changes
-            const auto volumes = std::make_shared<std::vector<std::pair<ecs::entity_t, std::string>>>();
-            const auto label = [&translations] {
-                const std::string key =
-                    translations.language() == "fr" ? "language.french" : "language.english";
-                return translations.text("settings.language") + ": " + translations.text(key);
-            };
-            const ecs::entity_t choice = interface.button(
-                label(),
-                [&ecs, &translations, volumes] {
-                    translations.setLanguage(translations.language() == "fr" ? "en" : "fr");
-                    for (const auto &[slider, key] : *volumes) {
-                        ecs.getComponent<engine::Slider>(slider).caption = translations.text(key);
-                    }
-                },
-                {engine::AnchorPoint::TopLeft, screenMargin, buttonsTop});
-            ecs.addComponent<engine::BoundText>(choice, label);
-
-            // The area of a slider goes beyond its rail by the handle: the rail starts at the margin, like the
-            // buttons
-            const float sliderLeft = screenMargin - style.slider.handleDragRadius;
-            volumes->emplace_back(
-                interface.slider(
-                    translations.text("settings.music_volume"), [&audio] { return audio.musicVolume(); },
-                    [&audio](float volume) { audio.setMusicVolume(volume); }, volumeStep,
-                    {engine::AnchorPoint::TopLeft, sliderLeft, volumesTop}),
-                "settings.music_volume");
-            volumes->emplace_back(
-                interface.slider(
-                    translations.text("settings.effects_volume"), [&audio] { return audio.effectsVolume(); },
-                    [&audio](float volume) { audio.setEffectsVolume(volume); }, volumeStep,
-                    {engine::AnchorPoint::TopLeft, sliderLeft, volumesTop + volumesSpacing}),
-                "settings.effects_volume");
-
-            const auto filterLabel = [&translations, &renderer] {
-                const std::string name(colorFilterSettingName(renderer.colorFilter()));
-                return translations.text("settings.color_filter") + ": " +
-                       translations.text("settings.filter." + (name.empty() ? std::string("none") : name));
-            };
-            const ecs::entity_t filter = interface.button(
-                filterLabel(),
-                [&renderer] { renderer.setColorFilter(nextColorFilter(renderer.colorFilter())); },
-                {engine::AnchorPoint::TopLeft, screenMargin, filterTop});
-            ecs.addComponent<engine::BoundText>(filter, filterLabel);
-
-            const ecs::entity_t showcase = interface.button(
-                translations.text("showcase.open"), [&target] { target.pushScene(UiShowcaseScene); },
-                {engine::AnchorPoint::TopLeft, screenMargin, showcaseTop});
-            ecs.addComponent<engine::BoundText>(
-                showcase, [&translations] { return translations.text("showcase.open"); });
-        });
+    engine.createScene(SettingsMenuScene, {.overlay = true, .hidesInterfaceBelow = true, .onBack = close},
+                       [&style, targets, close](engine::Engine &target, engine::SceneId scene) {
+                           ecs::Ecs &ecs = target.getEcs();
+                           localization::Localization &translations = targets.translations;
+                           engine::InterfaceBuilder interface(ecs, scene, style);
+                           interface.boundHeader(
+                               [&translations] { return translations.text("menu.settings"); }, close,
+                               {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
+                           // The buttons get the focus in the order they are made: the sliders are known
+                           // after the language
+                           const auto sliders = std::make_shared<SliderCaptions>();
+                           addLanguageButton(interface, ecs, translations, sliders);
+                           *sliders = addVolumeSliders(interface, style, targets);
+                           addColorFilterButton(interface, ecs, targets);
+                           boundButton(
+                               interface, ecs, [&translations] { return translations.text("showcase.open"); },
+                               [&target] { target.pushScene(UiShowcaseScene); }, showcaseTop);
+                       });
 }
 
 } // namespace
@@ -140,7 +185,7 @@ void createSubmenuScenes(engine::Engine &engine, const engine::InterfaceStyle &s
 {
     createSubmenuScene(engine, style, PlayMenuScene, translations, "menu.play",
                        {{"menu.solo", std::move(playSolo)}, {"menu.ships", std::move(openHangar)}});
-    createSettingsScene(engine, style, translations, audio, renderer);
+    createSettingsScene(engine, style, {translations, audio, renderer});
     createUiShowcaseScene(engine, style, translations);
 }
 

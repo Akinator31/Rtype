@@ -18,8 +18,9 @@ inline constexpr const char *SettingsMenuScene = "settings_menu";
 
 /// Declares the submenus of the main menu. Each one opens over the main menu, whose world stays visible but
 /// not its buttons, and shows its title after a back button that closes it, like Escape. Play offers a game
-/// offline. Settings sets the language, the volumes and the colour filter, applied at once and written to the settings of the
-/// engine when it closes (see PlayerSettings.hpp). The Online menu is declared by OnlineScenes.
+/// offline. Settings sets the language, the volumes and the colour filter, applied at once and written to the
+/// settings of the engine when it closes (see PlayerSettings.hpp). The Online menu is declared by
+/// OnlineScenes.
 /// @param style Look of the interface. It must outlive the engine.
 /// @param audio Whose volumes Settings sets. It must outlive the engine.
 /// @param renderer Whose colour filter Settings sets. It must outlive the engine.

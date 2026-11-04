@@ -154,8 +154,9 @@ TEST_CASE("The colour filter button goes through the filters of the players and 
 {
     using rtype::render::ColorFilter;
     ColorFilter filter = ColorFilter::None;
-    for (const ColorFilter expected : {ColorFilter::Protanopia, ColorFilter::Deuteranopia, ColorFilter::Tritanopia,
-                                       ColorFilter::HighContrast, ColorFilter::None}) {
+    for (const ColorFilter expected :
+         {ColorFilter::Protanopia, ColorFilter::Deuteranopia, ColorFilter::Tritanopia,
+          ColorFilter::HighContrast, ColorFilter::None}) {
         filter = nextColorFilter(filter);
         CHECK(filter == expected);
     }
@@ -167,7 +168,8 @@ TEST_CASE("Every colour filter of the players has a name in both languages", "[s
 {
     for (const auto &language : {"en", "fr"}) {
         rtype::localization::Localization translations(language);
-        translations.load(language, std::filesystem::path(RTYPE_TEST_LOCALES) / (std::string(language) + ".lang"));
+        translations.load(language,
+                          std::filesystem::path(RTYPE_TEST_LOCALES) / (std::string(language) + ".lang"));
         for (const rtype::render::ColorFilter filter : PlayerColorFilters) {
             const std::string key = "settings.filter." + std::string(colorFilterSettingName(filter));
             CHECK(translations.text(key) != key);
