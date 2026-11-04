@@ -1,6 +1,7 @@
 #include "MainMenu/SettingsMenu.hpp"
 
 #include "MainMenu/Column.hpp"
+#include "MainMenu/ControlsMenu.hpp"
 #include "Settings/DisplaySettings.hpp"
 #include "Settings/NextValue.hpp"
 #include "Settings/PlayerSettings.hpp"
@@ -20,23 +21,20 @@ namespace
 {
 
 /// The rows of the page, under its header: the language, the two volumes, the colour filter, the screen, the
-/// resolution, the limit of frames per second, then the vertical synchronisation.
-enum Row : int { LanguageRow, MusicRow, EffectsRow, FilterRow, MonitorRow, ResolutionRow, FpsRow, VsyncRow };
-constexpr float rowSpacing = 88.0f;
+/// resolution, the limit of frames per second, the vertical synchronisation, then the controls.
+enum Row : int {
+    LanguageRow,
+    MusicRow,
+    EffectsRow,
+    FilterRow,
+    MonitorRow,
+    ResolutionRow,
+    FpsRow,
+    VsyncRow,
+    ControlsRow
+};
 /// How much a key or a notch of the wheel changes a volume.
 constexpr float volumeStep = 0.05f;
-
-float rowTop(Row row)
-{
-    return columnTop + (static_cast<float>(row) * rowSpacing);
-}
-
-/// "Caption: value", the text of a button that goes through choices.
-std::string choiceLabel(const localization::Localization &translations, const std::string &captionKey,
-                        const std::string &value)
-{
-    return translations.text(captionKey) + ": " + value;
-}
 
 /// The sliders of the page, with the key of their caption: their caption is plain text, written again when
 /// the language changes.
@@ -185,6 +183,9 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     addResolutionButton(interface, ecs, targets);
     addFpsButton(interface, ecs, targets);
     addVsyncButton(interface, ecs, targets);
+    boundButton(
+        interface, ecs, [&translations] { return translations.text("settings.controls"); },
+        [&engine] { engine.pushScene(ControlsMenuScene); }, rowTop(ControlsRow));
 }
 
 } // namespace

@@ -3,6 +3,7 @@
 #include "Console/ConsoleScene.hpp"
 #include "Game/LocalSession.hpp"
 #include "Loading/LoadingScene.hpp"
+#include "MainMenu/ControlsMenu.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/SettingsMenu.hpp"
 #include "MainMenu/Submenus.hpp"
@@ -29,13 +30,13 @@ void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resour
 }
 
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
-                      const engine::InterfaceStyle &style, render::Window &window,
-                      const engine::RendererMetrics &metrics, GameScenes &games,
-                      const game::GameConfig &config, localization::Localization &translations,
-                      audio::AudioPlayer &audio, render::Renderer &renderer, ShipSelection &ships)
+                      const engine::InterfaceStyle &style, const engine::RendererMetrics &metrics,
+                      GameScenes &games, const game::GameConfig &config, const SettingsTargets &targets,
+                      ShipSelection &ships)
 {
+    localization::Localization &translations = targets.translations;
     createMainMenuScene(engine, resources, style, metrics, translations,
-                        [&window] { window.requestClose(); });
+                        [&window = targets.window] { window.requestClose(); });
     createSubmenuScenes(
         engine, style, translations,
         [&engine, &ships, &games, &config] {
@@ -44,7 +45,8 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
             });
         },
         [&engine, &ships] { openShipSelector(engine, ships); });
-    createSettingsScene(engine, style, {translations, audio, renderer, window});
+    createSettingsScene(engine, style, targets);
+    createControlsScenes(engine, style, translations);
     createShipSelectorScene(engine, resources, style, translations, ships);
 }
 

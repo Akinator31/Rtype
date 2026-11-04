@@ -14,6 +14,7 @@
 #include "Loading/SceneLoadStatus.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "Settings/ControlSettings.hpp"
 #include "Settings/DisplaySettings.hpp"
 #include "Settings/PlayerSettings.hpp"
 #include "ShipSelector/ShipSelection.hpp"
@@ -62,6 +63,8 @@ void run()
     Window window({.fullscreen = true});
     rtype::engine::Engine engine;
     rtype::client::readSettings(engine.getSettings());
+    // The keys chosen at the last run
+    rtype::client::applyControlSettings(engine.getSettings(), engine.getControls());
     // The screen and the resolution chosen at the last run
     rtype::client::applyDisplaySettings(engine.getSettings(), window);
     const rtype::audio::AudioDevice audioDevice;

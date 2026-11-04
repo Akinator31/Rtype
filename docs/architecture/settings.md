@@ -26,6 +26,7 @@ Name keys by domain with dots, so that the file stays readable:
 | `audio.effects_volume` | The Settings page (`keepPlayerSettings()`): the volume of the sound effects, from 0 to 1 |
 | `audio.music_volume` | The Settings page: the volume of the music, from 0 to 1 |
 | `display.color_filter` | The Settings page: the colour filter of the image, `none`, `protanopia`, `deuteranopia`, `tritanopia` or `high_contrast` |
+| `controls.<action>` | The Controls page (`keepControlSettings()`): the keyboard keys of an action of `GameActions`, by name, such as `controls.move_up=Up,W` or `controls.fire=Space`; empty for no key |
 | `display.fps_limit` | The Settings page: the limit of frames per second, `0` for none (60 by default) |
 | `display.monitor` | The Settings page (`keepDisplaySettings()`): the screen of the game, by its index, from 0 for the primary screen |
 | `display.resolution` | The Settings page: `fullscreen`, or the size of the window, such as `1600x900` |
@@ -63,6 +64,7 @@ page closes.*
 | Resolution | Button: fullscreen, then the window sizes smaller than the screen (`resolutionsFor()`) | `Window::setFullscreen()`, `setSize()` |
 | Frame rate | Button: 60, 120, 144, 165, 240, unlimited (`FpsLimits`) | `Window::setTargetFps()` |
 | VSync | Button: on, off | `Window::setVsync()` |
+| Controls | Button: opens the Controls page, to choose the key of each action ([Input](input.md#choosing-the-keys)) | `assignKey()` |
 
 - **At start**, right after the settings are read, `applyDisplaySettings()` moves the window to the kept
   screen and gives it the kept resolution; then, once the translations are loaded, `applyPlayerSettings()`

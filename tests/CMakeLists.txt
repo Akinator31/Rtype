@@ -17,6 +17,7 @@ add_executable(rtype_tests
     client_prediction.cpp
     color_filter.cpp
     collider_debug_renderer.cpp
+    control_settings.cpp
     controls.cpp
     database.cpp
     database_thread.cpp
