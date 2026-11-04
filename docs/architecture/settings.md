@@ -26,8 +26,10 @@ Name keys by domain with dots, so that the file stays readable:
 | `audio.effects_volume` | The Settings page (`keepPlayerSettings()`): the volume of the sound effects, from 0 to 1 |
 | `audio.music_volume` | The Settings page: the volume of the music, from 0 to 1 |
 | `display.color_filter` | The Settings page: the colour filter of the image, `none`, `protanopia`, `deuteranopia`, `tritanopia` or `high_contrast` |
+| `display.fps_limit` | The Settings page: the limit of frames per second, `0` for none (60 by default) |
 | `display.monitor` | The Settings page (`keepDisplaySettings()`): the screen of the game, by its index, from 0 for the primary screen |
 | `display.resolution` | The Settings page: `fullscreen`, or the size of the window, such as `1600x900` |
+| `display.vsync` | The Settings page: the vertical synchronisation, `true` (by default) or `false` |
 | `interface.language` | The Settings page: the language of the interface, `en` or `fr` |
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
 | `ship.equipped` | The hangar (`writeEquippedShip()`): the code of the ship the player equipped last, such as `VX-03`, on which the hangar opens at the next run |
@@ -59,6 +61,8 @@ page closes.*
 | Colour filter | Button: none, protanopia, deuteranopia, tritanopia, high contrast (`PlayerColorFilters`) | `Renderer::setColorFilter()` |
 | Screen | Button: "2 (DELL U2720Q)", the next connected screen | `Window::moveToMonitor()` |
 | Resolution | Button: fullscreen, then the window sizes smaller than the screen (`resolutionsFor()`) | `Window::setFullscreen()`, `setSize()` |
+| Frame rate | Button: 60, 120, 144, 165, 240, unlimited (`FpsLimits`) | `Window::setTargetFps()` |
+| VSync | Button: on, off | `Window::setVsync()` |
 
 - **At start**, right after the settings are read, `applyDisplaySettings()` moves the window to the kept
   screen and gives it the kept resolution; then, once the translations are loaded, `applyPlayerSettings()`
@@ -69,6 +73,8 @@ page closes.*
   own video mode ([Rendering](rendering.md#window-options)). The other resolutions are
   the sizes of a window, from `WindowSizes` (1280 × 720 to 3840 × 2160), only those smaller than the screen;
   the image is scaled to any size. A window moved to a screen too small for it goes fullscreen.
+- **The frame rate needs VSync off above the refresh rate of the screen.** With the vertical synchronisation
+  on, the frames wait for the screen: a 60 Hz screen stays at 60 frames per second, whatever the limit.
 - **The filters that simulate a colour blindness** are for the team, and not offered on the page.
 - **When the page closes** (its back button or Escape), `keepPlayerSettings()` and `keepDisplaySettings()` keep
   the values, and `writeSettings()` writes the file, once, rather than at every step of a slider. A file that

@@ -8,6 +8,7 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -155,7 +156,7 @@ Window::Window(const WindowSettings &settings)
     }
     // raylib closes the window when Escape is pressed: disable it, the game decides what Escape does
     SetExitKey(KEY_NULL);
-    SetTargetFPS(settings.targetFps);
+    setTargetFps(settings.targetFps);
     windowOpen = true;
     if (settings.fullscreen) {
         setFullscreen(true);
@@ -308,9 +309,20 @@ void Window::setVsync(bool vsync)
     }
 }
 
+bool Window::isVsync() const
+{
+    return IsWindowState(FLAG_VSYNC_HINT);
+}
+
 void Window::setTargetFps(int fps)
 {
-    SetTargetFPS(fps);
+    _targetFps = std::max(fps, 0);
+    SetTargetFPS(_targetFps);
+}
+
+int Window::targetFps() const
+{
+    return _targetFps;
 }
 
 } // namespace rtype::render

@@ -56,6 +56,7 @@ private:
     };
 
     bool _closeRequested = false;
+    int _targetFps = 0;
     /// Where the window was before fullscreen, to go back there.
     Area _windowed;
     PendingSize _pendingSize;
@@ -123,8 +124,13 @@ public:
 
     /// Turns vertical synchronisation on or off, see WindowSettings::vsync.
     void setVsync(bool vsync);
+    /// Tells whether vertical synchronisation is on: the frames are then limited to the refresh rate of the
+    /// screen, whatever setTargetFps() asks.
+    [[nodiscard]] bool isVsync() const;
     /// Sets the maximum number of frames per second, or 0 for no limit.
     void setTargetFps(int fps);
+    /// The maximum number of frames per second, 0 for no limit.
+    [[nodiscard]] int targetFps() const;
 };
 
 } // namespace rtype::render

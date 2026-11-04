@@ -12,9 +12,20 @@
 namespace rtype::client
 {
 
-/// Where the screen and the resolution chosen on the Settings page are kept in the settings of the engine.
+/// Where the display chosen on the Settings page is kept in the settings of the engine.
 inline constexpr std::string_view MonitorSettingsKey = "display.monitor";
 inline constexpr std::string_view ResolutionSettingsKey = "display.resolution";
+inline constexpr std::string_view FpsLimitSettingsKey = "display.fps_limit";
+inline constexpr std::string_view VsyncSettingsKey = "display.vsync";
+
+/// The limits of frames per second offered on the Settings page, in the order its button goes through them.
+inline constexpr int UnlimitedFps = 0;
+inline constexpr std::array<int, 6> FpsLimits{60, 120, 144, 165, 240, UnlimitedFps};
+/// The limit of a first run, and of a wrong one in the settings.
+inline constexpr int DefaultFpsLimit = 60;
+
+/// The limit of frames per second kept in the settings: DefaultFpsLimit if there is none or it is negative.
+[[nodiscard]] int readFpsLimit(const engine::Settings &settings);
 
 /// A size of the window in pixels, or fullscreen: a width and a height of 0. Fullscreen covers the screen at
 /// its own resolution (see render::Window::setFullscreen()).
@@ -51,11 +62,13 @@ void setResolution(render::Window &window, Resolution resolution);
 /// screen goes fullscreen.
 void moveToNextMonitor(render::Window &window);
 
-/// Moves the window to the screen kept in the settings, and gives it the resolution kept if that screen
-/// offers it. A screen that is no longer connected leaves the window where it is; no resolution, a wrong one
-/// or one too large leaves fullscreen.
+/// Gives the window the limit of frames per second and the vertical synchronisation kept in the settings (on
+/// by default), then moves it to the screen kept in the settings, and gives it the resolution kept if that
+/// screen offers it. A screen that is no longer connected leaves the window where it is; no resolution, a
+/// wrong one or one too large leaves fullscreen.
 void applyDisplaySettings(const engine::Settings &settings, render::Window &window);
-/// Keeps the screen and the resolution of the window in the settings, without writing them.
+/// Keeps the screen, the resolution, the limit of frames per second and the vertical synchronisation of the
+/// window in the settings, without writing them.
 void keepDisplaySettings(engine::Settings &settings, const render::Window &window);
 
 } // namespace rtype::client

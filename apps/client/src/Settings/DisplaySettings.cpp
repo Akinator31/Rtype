@@ -100,8 +100,16 @@ void moveToNextMonitor(render::Window &window)
     }
 }
 
+int readFpsLimit(const engine::Settings &settings)
+{
+    const int limit = settings.getInt(FpsLimitSettingsKey).value_or(DefaultFpsLimit);
+    return limit >= 0 ? limit : DefaultFpsLimit;
+}
+
 void applyDisplaySettings(const engine::Settings &settings, render::Window &window)
 {
+    window.setTargetFps(readFpsLimit(settings));
+    window.setVsync(settings.getBool(VsyncSettingsKey).value_or(true));
     if (const std::optional<int> monitor = settings.getInt(MonitorSettingsKey)) {
         window.moveToMonitor(*monitor);
     }
@@ -114,6 +122,8 @@ void keepDisplaySettings(engine::Settings &settings, const render::Window &windo
 {
     settings.setInt(MonitorSettingsKey, window.monitor());
     settings.setString(ResolutionSettingsKey, resolutionSettingName(currentResolution(window)));
+    settings.setInt(FpsLimitSettingsKey, window.targetFps());
+    settings.setBool(VsyncSettingsKey, window.isVsync());
 }
 
 } // namespace rtype::client

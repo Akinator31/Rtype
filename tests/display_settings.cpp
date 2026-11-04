@@ -49,3 +49,28 @@ TEST_CASE("A wrong resolution in the settings is not read", "[settings]")
         CHECK_FALSE(parseResolution(text));
     }
 }
+
+TEST_CASE("The frame rate kept is read back, the default for none or a wrong one", "[settings]")
+{
+    rtype::engine::Settings settings;
+    CHECK(rtype::client::readFpsLimit(settings) == rtype::client::DefaultFpsLimit);
+
+    settings.setInt(rtype::client::FpsLimitSettingsKey, 144);
+    CHECK(rtype::client::readFpsLimit(settings) == 144);
+    settings.setInt(rtype::client::FpsLimitSettingsKey, rtype::client::UnlimitedFps);
+    CHECK(rtype::client::readFpsLimit(settings) == rtype::client::UnlimitedFps);
+    settings.setInt(rtype::client::FpsLimitSettingsKey, -30);
+    CHECK(rtype::client::readFpsLimit(settings) == rtype::client::DefaultFpsLimit);
+    settings.setString(rtype::client::FpsLimitSettingsKey, "fast");
+    CHECK(rtype::client::readFpsLimit(settings) == rtype::client::DefaultFpsLimit);
+}
+
+TEST_CASE("The frame rate button goes from 60 to unlimited and around", "[settings]")
+{
+    using rtype::client::FpsLimits;
+    CHECK(nextValue(FpsLimits, 60) == 120);
+    CHECK(nextValue(FpsLimits, 240) == rtype::client::UnlimitedFps);
+    CHECK(nextValue(FpsLimits, rtype::client::UnlimitedFps) == 60);
+    // A limit set elsewhere starts again from the first
+    CHECK(nextValue(FpsLimits, 75) == 60);
+}

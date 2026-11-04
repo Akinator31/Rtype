@@ -19,10 +19,10 @@ namespace rtype::client
 namespace
 {
 
-/// The rows of the page, under its header: the language, the two volumes, the colour filter, the screen, then
-/// the resolution.
-enum Row : int { LanguageRow, MusicRow, EffectsRow, FilterRow, MonitorRow, ResolutionRow };
-constexpr float rowSpacing = 96.0f;
+/// The rows of the page, under its header: the language, the two volumes, the colour filter, the screen, the
+/// resolution, the limit of frames per second, then the vertical synchronisation.
+enum Row : int { LanguageRow, MusicRow, EffectsRow, FilterRow, MonitorRow, ResolutionRow, FpsRow, VsyncRow };
+constexpr float rowSpacing = 88.0f;
 /// How much a key or a notch of the wheel changes a volume.
 constexpr float volumeStep = 0.05f;
 
@@ -140,6 +140,34 @@ void addResolutionButton(engine::InterfaceBuilder &interface, ecs::Ecs &ecs, con
     boundButton(interface, ecs, label, next, rowTop(ResolutionRow));
 }
 
+/// "Frame rate: 144": goes through FpsLimits. Above the refresh rate of the screen, it needs the vertical
+/// synchronisation off.
+void addFpsButton(engine::InterfaceBuilder &interface, ecs::Ecs &ecs, const SettingsTargets &targets)
+{
+    const localization::Localization &translations = targets.translations;
+    render::Window &window = targets.window;
+    const auto label = [&translations, &window] {
+        const int limit = window.targetFps();
+        return choiceLabel(translations, "settings.fps_limit",
+                           limit == UnlimitedFps ? translations.text("settings.unlimited")
+                                                 : std::to_string(limit));
+    };
+    const auto next = [&window] { window.setTargetFps(nextValue(FpsLimits, window.targetFps())); };
+    boundButton(interface, ecs, label, next, rowTop(FpsRow));
+}
+
+/// "VSync: On": switches the vertical synchronisation on and off.
+void addVsyncButton(engine::InterfaceBuilder &interface, ecs::Ecs &ecs, const SettingsTargets &targets)
+{
+    const localization::Localization &translations = targets.translations;
+    render::Window &window = targets.window;
+    const auto label = [&translations, &window] {
+        return choiceLabel(translations, "settings.vsync",
+                           translations.text(window.isVsync() ? "settings.on" : "settings.off"));
+    };
+    boundButton(interface, ecs, label, [&window] { window.setVsync(!window.isVsync()); }, rowTop(VsyncRow));
+}
+
 void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
                        const SettingsTargets &targets, const std::function<void()> &close)
 {
@@ -155,6 +183,8 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     addColorFilterButton(interface, ecs, targets);
     addMonitorButton(interface, ecs, targets);
     addResolutionButton(interface, ecs, targets);
+    addFpsButton(interface, ecs, targets);
+    addVsyncButton(interface, ecs, targets);
 }
 
 } // namespace
