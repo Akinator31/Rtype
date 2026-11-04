@@ -65,8 +65,8 @@ page closes.*
   gives the language and the volumes, and `readColorFilter()` the filter. A missing or wrong value leaves the
   default: English, both volumes at 100%, no filter, the screen the window opened on, fullscreen. A volume out
   of 0..1 is clamped; a screen no longer connected, or a window size too large for the screen, is ignored.
-- **Fullscreen is the resolution of the screen.** The window is borderless in fullscreen
-  ([Rendering](rendering.md#window-options)): the screen keeps its own video mode. The other resolutions are
+- **Fullscreen is the resolution of the screen.** In fullscreen the window covers the screen, which keeps its
+  own video mode ([Rendering](rendering.md#window-options)). The other resolutions are
   the sizes of a window, from `WindowSizes` (1280 × 720 to 3840 × 2160), only those smaller than the screen;
   the image is scaled to any size. A window moved to a screen too small for it goes fullscreen.
 - **The filters that simulate a colour blindness** are for the team, and not offered on the page.

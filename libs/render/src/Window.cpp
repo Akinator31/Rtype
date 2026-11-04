@@ -4,8 +4,12 @@
 #include "rtype/log/Logger.hpp"
 
 #include <raylib.h>
+// raylib is built on GLFW: its fullscreen is driven here directly (see setFullscreen())
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 
 #include <stdexcept>
+#include <utility>
 
 #ifdef __linux__
 #include <cstdlib>
@@ -75,12 +79,56 @@ void preferDedicatedGpu()
 #endif
 }
 
-// The size of the window is given: right after SetWindowSize(), raylib may still know the previous one
-void centreOnMonitor(int monitor, int width, int height)
+// How many frames a size asked is asked again, and every how many frames: on Wayland, the compositor applies
+// the end of fullscreen a few frames late, and can shrink the window by its title bar meanwhile
+constexpr int SizeWatchFrames = 60;
+constexpr int SizeRetryInterval = 5;
+
+// The window of raylib: GetWindowHandle() gives the one of the system, not the one of GLFW
+GLFWwindow *handle()
 {
-    const Vector2 origin = GetMonitorPosition(monitor);
-    SetWindowPosition(static_cast<int>(origin.x) + ((GetMonitorWidth(monitor) - width) / 2),
-                      static_cast<int>(origin.y) + ((GetMonitorHeight(monitor) - height) / 2));
+    return glfwGetCurrentContext();
+}
+
+GLFWmonitor *monitorAt(int index)
+{
+    int count = 0;
+    GLFWmonitor **monitors = glfwGetMonitors(&count);
+    return index >= 0 && index < count ? monitors[index] : nullptr;
+}
+
+int indexOf(GLFWmonitor *monitor)
+{
+    int count = 0;
+    GLFWmonitor **monitors = glfwGetMonitors(&count);
+    for (int index = 0; index < count; ++index) {
+        if (monitors[index] == monitor) {
+            return index;
+        }
+    }
+    return 0;
+}
+
+// Makes the window cover a screen, at the resolution of that screen: its video mode does not change
+void cover(GLFWmonitor *monitor)
+{
+    const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+    glfwSetWindowMonitor(handle(), monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+    // A new video mode can lose the synchronisation of the frames
+    if (IsWindowState(FLAG_VSYNC_HINT)) {
+        glfwSwapInterval(1);
+    }
+}
+
+// The top left corner of a window of this size centred on the free area of a screen
+std::pair<int, int> centredOn(GLFWmonitor *monitor, int width, int height)
+{
+    int x = 0;
+    int y = 0;
+    int areaWidth = 0;
+    int areaHeight = 0;
+    glfwGetMonitorWorkarea(monitor, &x, &y, &areaWidth, &areaHeight);
+    return {x + ((areaWidth - width) / 2), y + ((areaHeight - height) / 2)};
 }
 
 } // namespace
@@ -145,25 +193,60 @@ float Window::frameTime() const
     return GetFrameTime();
 }
 
-// Fullscreen is raylib's "borderless windowed" mode: its exclusive fullscreen changes the video mode of the
-// screen, which is slow, can rearrange the other screens, and behaves badly when switching to another window
+void Window::update()
+{
+    if (_pendingSize.framesLeft <= 0 || isFullscreen()) {
+        return;
+    }
+    --_pendingSize.framesLeft;
+    int width = 0;
+    int height = 0;
+    glfwGetWindowSize(handle(), &width, &height);
+    const bool wrong = width != _pendingSize.width || height != _pendingSize.height;
+    if (wrong && _pendingSize.framesLeft % SizeRetryInterval == 0) {
+        glfwSetWindowSize(handle(), _pendingSize.width, _pendingSize.height);
+    }
+}
+
+void Window::watchSize(int width, int height)
+{
+    _pendingSize = {width, height, SizeWatchFrames};
+}
+
+// Fullscreen is driven with GLFW, not with raylib: raylib also removes the title bar and puts it back, after
+// which the compositor of Wayland keeps the window in fullscreen and refuses any other size. Its exclusive
+// fullscreen changes the video mode of the screen, which is slow and can rearrange the other screens
 void Window::setFullscreen(bool fullscreen)
 {
-    if (fullscreen != isFullscreen()) {
-        ToggleBorderlessWindowed();
+    if (fullscreen == isFullscreen()) {
+        return;
     }
+    if (fullscreen) {
+        glfwGetWindowPos(handle(), &_windowed.x, &_windowed.y);
+        glfwGetWindowSize(handle(), &_windowed.width, &_windowed.height);
+        cover(monitorAt(monitor()));
+        return;
+    }
+    glfwSetWindowMonitor(handle(), nullptr, _windowed.x, _windowed.y, _windowed.width, _windowed.height,
+                         GLFW_DONT_CARE);
+    watchSize(_windowed.width, _windowed.height);
 }
 
 bool Window::isFullscreen() const
 {
-    return IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE);
+    return glfwGetWindowMonitor(handle()) != nullptr;
 }
 
 void Window::setSize(int width, int height)
 {
-    setFullscreen(false);
-    SetWindowSize(width, height);
-    centreOnMonitor(GetCurrentMonitor(), width, height);
+    const auto [x, y] = centredOn(monitorAt(monitor()), width, height);
+    if (isFullscreen()) {
+        glfwSetWindowMonitor(handle(), nullptr, x, y, width, height, GLFW_DONT_CARE);
+    } else {
+        glfwSetWindowSize(handle(), width, height);
+        glfwSetWindowPos(handle(), x, y);
+    }
+    watchSize(width, height);
 }
 
 std::vector<Monitor> Window::monitors() const
@@ -178,19 +261,22 @@ std::vector<Monitor> Window::monitors() const
 
 int Window::monitor() const
 {
-    return GetCurrentMonitor();
+    GLFWmonitor *covered = glfwGetWindowMonitor(handle());
+    return covered != nullptr ? indexOf(covered) : GetCurrentMonitor();
 }
 
-// Borderless fullscreen covers the screen the window is on: leave it, move the window, then cover the new one
 void Window::moveToMonitor(int monitor)
 {
-    if (monitor < 0 || monitor >= GetMonitorCount() || monitor == GetCurrentMonitor()) {
+    GLFWmonitor *target = monitorAt(monitor);
+    if (target == nullptr || monitor == this->monitor()) {
         return;
     }
-    const bool fullscreen = isFullscreen();
-    setFullscreen(false);
-    centreOnMonitor(monitor, width(), height());
-    setFullscreen(fullscreen);
+    if (isFullscreen()) {
+        cover(target);
+        return;
+    }
+    const auto [x, y] = centredOn(target, width(), height());
+    glfwSetWindowPos(handle(), x, y);
 }
 
 void Window::setTitle(const std::string &title)

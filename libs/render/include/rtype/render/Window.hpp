@@ -41,7 +41,26 @@ struct Monitor {
 class Window
 {
 private:
+    /// A place and a size of the window, in screen pixels.
+    struct Area {
+        int x = 0;
+        int y = 0;
+        int width = 0;
+        int height = 0;
+    };
+    /// A size asked for the window, asked again for a while: the system may still change it on its own.
+    struct PendingSize {
+        int width = 0;
+        int height = 0;
+        int framesLeft = 0;
+    };
+
     bool _closeRequested = false;
+    /// Where the window was before fullscreen, to go back there.
+    Area _windowed;
+    PendingSize _pendingSize;
+
+    void watchSize(int width, int height);
 
 public:
     /// Opens the window.
@@ -54,6 +73,9 @@ public:
     Window &operator=(const Window &) = delete;
     Window(Window &&) = delete;
     Window &operator=(Window &&) = delete;
+
+    /// Finishes the changes of size the system has not applied yet. Call it once per frame.
+    void update();
 
     /// Tells whether the window should close: the player used its close button or the system shortcut (Alt+F4
     /// for instance), or the game called requestClose(). The Escape key does not close the window: what it
@@ -79,7 +101,8 @@ public:
     /// Tells whether the window is in fullscreen.
     [[nodiscard]] bool isFullscreen() const;
 
-    /// Resizes the window, in pixels, and centres it on its screen. Leaves fullscreen first if needed.
+    /// Resizes the window, in pixels, and centres it on its screen. Leaves fullscreen first if needed. The
+    /// system may take a few frames to apply it: see update().
     void setSize(int width, int height);
 
     /// The screens connected to the computer, the first one being the primary screen.

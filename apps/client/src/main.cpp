@@ -125,6 +125,7 @@ void run()
         }
         debugKeyWasDown = debugKeyDown;
         sceneLoadStatus.update();
+        window.update();
         network.poll();
         engine.update(window.frameTime());
         if (assetsLoaded) {
