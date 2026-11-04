@@ -3,6 +3,7 @@
 #include "App/Systems.hpp"
 #include "Assets.hpp"
 #include "Commands/Commands.hpp"
+#include "Commands/FpsCommand.hpp"
 #include "Console/Console.hpp"
 #include "Game/GameScenes.hpp"
 #include "Game/GameSessionSystem.hpp"
@@ -113,7 +114,8 @@ void run()
     rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
                                                                CollisionCellSize);
     const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
-    bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
+    rtype::client::DebugViews debugViews{.hitboxes =
+                                             debugEnvironment && std::string_view(debugEnvironment) == "1"};
     bool debugKeyWasDown = false;
     rtype::client::SceneLoadStatus sceneLoadStatus(engine, devices);
     bool assetsLoaded = false;
@@ -121,7 +123,7 @@ void run()
     const auto playFrame = [&] {
         const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
         if (debugKeyDown && !debugKeyWasDown) {
-            showColliderDebug = !showColliderDebug;
+            debugViews.hitboxes = !debugViews.hitboxes;
         }
         debugKeyWasDown = debugKeyDown;
         sceneLoadStatus.update();
@@ -135,10 +137,13 @@ void run()
         audio.update();
         renderer.beginFrame();
         sceneRenderer.draw(renderer, rtype::engine::Layer::World);
-        if (showColliderDebug) {
+        if (debugViews.hitboxes) {
             colliderDebugRenderer.draw(renderer);
         }
         sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
+        if (debugViews.fps) {
+            rtype::client::drawFpsCounter(renderer);
+        }
         sceneLoadStatus.draw(renderer);
         renderer.endFrame();
     };
@@ -162,7 +167,7 @@ void run()
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
     rtype::client::createMenuScenes(engine, resources, style, window, metrics, games, config, translations,
                                     audio, renderer, ships);
-    rtype::client::registerClientCommands(console, engine, window, games, config, showColliderDebug);
+    rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
         playFrame();

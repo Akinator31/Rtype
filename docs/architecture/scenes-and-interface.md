@@ -159,6 +159,16 @@ still has no rendering dependency. The `GameSessionSystem` gives each entity of 
 its session finds (`GameSession::findCollider()`): offline, the real collider of the entity in the `Simulation`;
 online, the box it is drawn as, as the snapshots do not carry the hitboxes.
 
+### Frame rate counter
+
+Type `fps [on|off]` in the console to show or hide the number of frames per second, in the top right corner
+of the screen, over the interface (`drawFpsCounter()`, `apps/client/src/Commands/FpsCommand.cpp`). It is green,
+then orange and red as the frame rate drops. It checks the limit of frames per second and the vertical
+synchronisation chosen on the Settings page ([Settings](settings.md#the-settings-page)).
+
+Both views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
+and hide something read their `on` / `off` argument with `readSwitch()` (`Commands/Switch.hpp`).
+
 | Component | Draws |
 |---|---|
 | `Drawable` | Required: the layer (`World` or `Interface`) and the order inside it (higher on top). |

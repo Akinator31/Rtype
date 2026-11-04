@@ -1,6 +1,7 @@
 #include "Commands/Commands.hpp"
 
 #include "Commands/BossCommand.hpp"
+#include "Commands/FpsCommand.hpp"
 #include "Commands/HitboxesCommand.hpp"
 #include "Commands/QuitCommand.hpp"
 #include "Commands/SceneCommand.hpp"
@@ -10,10 +11,11 @@ namespace rtype::client
 {
 
 void registerClientCommands(Console &console, engine::Engine &engine, render::Window &window,
-                            GameScenes &games, const game::GameConfig &config, bool &showHitboxes)
+                            GameScenes &games, const game::GameConfig &config, DebugViews &views)
 {
     registerBossCommand(console, games, config);
-    registerHitboxesCommand(console, showHitboxes);
+    registerFpsCommand(console, views.fps);
+    registerHitboxesCommand(console, views.hitboxes);
     registerQuitCommand(console, window);
     registerSceneCommand(console, engine);
     registerToastCommand(console, engine);
