@@ -64,7 +64,8 @@ constexpr std::array<SceneQuestDefinition, 4> SceneQuests{{
 }};
 
 /// Makes the quest wait for its events; once it is completed, writes the settings and shows its banner.
-void addQuest(engine::Engine &engine, const localization::Localization &translations, engine::QuestSystem &quest)
+void addQuest(engine::Engine &engine, const localization::Localization &translations,
+              engine::QuestSystem &quest)
 {
     quest.setCompletionHandler([&engine, &translations](const engine::QuestSystem &completed) {
         writeSettings(engine.getSettings());

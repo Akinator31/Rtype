@@ -76,9 +76,9 @@ struct Kill {
 ///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind. Each ship
 ///    killed, a Bydo or the ship of a player, is told to the kill handler, if any, each wave started to
 ///    the wave handler, if any, each new stage of the rescue against the final boss to the rescue
-///    handler, if any, and how the game ended to the outcome handler, if any. A ship the blade of the shogun goes through during the rescue (game::Snapshot::struck)
-///    shows the strike impact and plays the strike sound of its kind, if it was given them, and is told to
-///    the strike handler, if any.
+///    handler, if any, and how the game ended to the outcome handler, if any. A ship the blade of the shogun
+///    goes through during the rescue (game::Snapshot::struck) shows the strike impact and plays the strike
+///    sound of its kind, if it was given them, and is told to the strike handler, if any.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens

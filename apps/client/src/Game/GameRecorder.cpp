@@ -22,7 +22,7 @@ constexpr std::array<KindStat, 3> BydoKindStats{{
     {game::EntityKind::BydoTank, TanksKilledStat},
 }};
 
-constexpr std::array<const char *, 8> GameEvents{GameStartedEvent, BydoKilledEvent, BossKilledEvent,
+constexpr std::array<const char *, 8> GameEvents{GameStartedEvent,  BydoKilledEvent,  BossKilledEvent,
                                                  PlayerKilledEvent, WaveStartedEvent, GameWonEvent,
                                                  GameLostEvent,     GameEndedEvent};
 

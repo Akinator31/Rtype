@@ -190,7 +190,8 @@ void drawAlertIcon(render::Renderer &renderer, render::Vector2 centre, float siz
 void drawToastIcon(render::Renderer &renderer, ToastType type, render::Vector2 centre, float size,
                    float thickness, render::Color color)
 {
-    // One icon per type, in the order of ToastType: a warning and an error share theirs, a gain and a quest too
+    // One icon per type, in the order of ToastType: a warning and an error share theirs, a gain and a quest
+    // too
     using Icon = void (*)(render::Renderer &, render::Vector2, float, float, render::Color);
     constexpr std::array<Icon, toastTypeCount> icons{drawInfoIcon, drawGainIcon, drawAlertIcon, drawAlertIcon,
                                                      drawGainIcon};
