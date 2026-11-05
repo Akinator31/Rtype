@@ -190,7 +190,22 @@ if (length > 1.0f) {
 }
 ```
 
-To add an action, follow [Add a player action](../guides/add-a-player-action.md).
+### Choosing the keys
+
+The Controls page, opened from the Settings page, lets the player choose the keyboard key of each action of the
+game (`GameActions`, `apps/client/src/Settings/ControlSettings.hpp`): move up, down, left and right, fire, aim
+up and aim down. Pressing a row opens a scene that waits for a key (`KeyCaptureSystem`): the first key pressed,
+other than one already held when the scene opened, replaces the keys of the action (`assignKey()`), and leaves
+the other actions that had it, so that a key does one thing. ++escape++ cancels, and is never bound. The
+gamepads keep their buttons. A last row puts every key back to its default (`Controls::resetDefaults()`).
+
+A key is shown as it is printed on the keyboard of the player (`input::keyLabel()`, from GLFW): `Key::W` shows
+"Z" on AZERTY. A key that prints no character is shown by its translated name, `key.<name>` in the
+translations ("Espace"). The keys are kept in the settings by their name (`input::keyName()`), see
+[Settings](settings.md).
+
+To add an action, follow [Add a player action](../guides/add-a-player-action.md); to let the player rebind it,
+add it to `GameActions`, with its name in the translations.
 
 ## Mouse
 
@@ -343,7 +358,7 @@ buttons and gestures.
 - **The pause menu does not pause the game**, which is shared with the other players.
 - **Text fields are single-line**, without undo, mouse selection, nor scrolling: a text wider than its field
   overflows it. This is enough for a player name or a server address.
-- **Bindings are not saved**: the controls chosen by a player are lost when the game closes.
+- **Only the keyboard can be rebound** from the Controls page: the gamepads keep their default buttons.
 - **No mouse in text fields**: clicking does not place the cursor, dragging does not select.
 - **The actions are not sent to the server yet**: they will be encoded in the `INPUT` message of the
   [protocol](../protocol/index.md), one bit per action.

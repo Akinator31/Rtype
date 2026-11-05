@@ -21,6 +21,9 @@ void checkDefinition(const EnemyDefinition &definition)
     if (definition.health == 0) {
         throw std::invalid_argument(std::format("the enemy '{}' needs health", definition.id));
     }
+    if (definition.phases == 0) {
+        throw std::invalid_argument(std::format("the enemy '{}' needs at least one phase", definition.id));
+    }
     if (!(definition.speed > 0.0f)) {
         throw std::invalid_argument(std::format("the enemy '{}' needs a speed above 0", definition.id));
     }

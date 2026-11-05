@@ -26,9 +26,12 @@ struct PlayerInput {
         Right = 1 << 3,
         /// Held: the game decides what holding it does (shoot again, later charge a shot).
         Fire = 1 << 4,
+        /// Held: the ship turns its nose up, or down, by AimAngle, and fires that way.
+        AimUp = 1 << 5,
+        AimDown = 1 << 6,
     };
     /// The bits the protocol reserves: ignored.
-    static constexpr std::uint8_t Reserved = 0xE0;
+    static constexpr std::uint8_t Reserved = 0x80;
 
     /// The bits of the buttons held.
     std::uint8_t buttons = 0;
@@ -54,6 +57,10 @@ struct PlayerInput {
         int y = 0;
     };
     [[nodiscard]] Direction direction() const;
+
+    /// Where the player turns its ship: -1 nose up, 1 nose down, 0 straight ahead; both together cancel each
+    /// other.
+    [[nodiscard]] int aim() const;
 
     friend bool operator==(const PlayerInput &, const PlayerInput &) = default;
 };

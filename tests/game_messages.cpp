@@ -113,7 +113,8 @@ TEST_CASE("The small messages are written field by field", "[game][messages]")
     CHECK(encode(PlayerLeftMessage{3, LeaveReason::TimedOut}) == bytes({0x03, 0x01}));
     CHECK(encode(EntitiesDestroyedMessage{1000, {{7, DestroyCause::Killed}, {9, DestroyCause::Removed}}}) ==
           bytes({0x00, 0x00, 0x03, 0xE8, 0x02, 0x00, 0x00, 0x00, 0x07, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00}));
-    CHECK(encode(WaveStartedMessage{3}) == bytes({0x00, 0x03}));
+    CHECK(encode(WaveStartedMessage{3, ""}) == bytes({0x00, 0x03, 0x00}));
+    CHECK(encode(WaveStartedMessage{3, "a.mp3"}) == bytes({0x00, 0x03, 0x05, 'a', '.', 'm', 'p', '3'}));
     CHECK(encode(GameOverMessage{GameOutcome::Victory}) == bytes({0x01}));
 }
 
@@ -171,7 +172,9 @@ TEST_CASE("Every message survives a round trip", "[game][messages]")
 
     const EntitiesDestroyedMessage destroyed{5, {{1, DestroyCause::Removed}, {2, DestroyCause::Killed}}};
     CHECK(decodeEntitiesDestroyed(encode(destroyed)) == destroyed);
-    CHECK(decodeWaveStarted(encode(WaveStartedMessage{65535})) == WaveStartedMessage{65535});
+    CHECK(decodeWaveStarted(encode(WaveStartedMessage{65535, ""})) == WaveStartedMessage{65535, ""});
+    CHECK(decodeWaveStarted(encode(WaveStartedMessage{2, "sounds/boss.mp3"})) ==
+          WaveStartedMessage{2, "sounds/boss.mp3"});
     CHECK(decodeGameOver(encode(GameOverMessage{GameOutcome::Defeat})) ==
           GameOverMessage{GameOutcome::Defeat});
 }
@@ -184,18 +187,19 @@ TEST_CASE("Unknown reasons, causes and outcomes are read as the specification sa
     CHECK(decodeGameOver(bytes({0x09}))->outcome == GameOutcome::Defeat);
 }
 
-TEST_CASE("The reserved bits of inputs and flags are dropped", "[game][messages]")
+TEST_CASE("The reserved bits of inputs are dropped; every bit of the flags is defined", "[game][messages]")
 {
-    CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0x1F);
-    CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0x1F});
+    CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0x7F);
+    CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0x7F});
 
+    // The stances of the Bydos take the last three bits
     std::vector<std::byte> payload = ExampleSnapshot;
     payload.back() = std::byte{0xFF};
-    CHECK(decodeSnapshotPart(payload)->entities[0].flags == 0x07);
+    CHECK(decodeSnapshotPart(payload)->entities[0].flags == 0xFF);
 
     SnapshotPart part = examplePart();
-    part.entities[0].flags = 0xFF;
-    CHECK(encode(part).back() == std::byte{0x07});
+    part.entities[0].flags = EntityState::Guarding | EntityState::Slashing | EntityState::Shooting;
+    CHECK(encode(part).back() == std::byte{0xE0});
 }
 
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")
@@ -222,7 +226,7 @@ TEST_CASE("A message is refused if it is cut or longer than its fields", "[game]
     checkSizeIsExact(
         encode(EntitiesDestroyedMessage{3, {{1, DestroyCause::Killed}, {2, DestroyCause::Killed}}}),
         decodeEntitiesDestroyed);
-    checkSizeIsExact(encode(WaveStartedMessage{2}), decodeWaveStarted);
+    checkSizeIsExact(encode(WaveStartedMessage{2, "a.mp3"}), decodeWaveStarted);
     checkSizeIsExact(encode(GameOverMessage{}), decodeGameOver);
 }
 
@@ -234,7 +238,7 @@ TEST_CASE("The small messages refuse the values the specification forbids", "[ga
     CHECK_FALSE(decodePlayerJoined(bytes({0x00, 0, 0, 0, 1, 0})));               // empty name
     CHECK_FALSE(decodePlayerJoined(bytes({0x00, 0, 0, 0, 1, 1, 0x07})));         // control character
     CHECK_FALSE(decodePlayerLeft(bytes({0x04, 0})));                             // slot 4
-    CHECK_FALSE(decodeWaveStarted(bytes({0, 0})));                               // wave 0
+    CHECK_FALSE(decodeWaveStarted(bytes({0, 0, 0})));                            // wave 0
     CHECK_FALSE(decodeEntitiesDestroyed(bytes({0, 0, 0, 1, 0})));                // no entity
     CHECK_FALSE(decodeEntitiesDestroyed(bytes({0, 0, 0, 1, 1, 0, 0, 0, 0, 1}))); // id 0
     CHECK_FALSE(decodeEntitiesDestroyed(bytes({0, 0, 0, 1, 2, 0, 0, 0, 9, 1}))); // fewer entities than said
@@ -294,7 +298,7 @@ TEST_CASE("The encoders refuse the values the protocol forbids", "[game][message
     CHECK_THROWS_AS(encode(InputMessage{100, std::vector<PlayerInput>(33)}), std::invalid_argument);
     CHECK_THROWS_AS(encode(EntitiesDestroyedMessage{1, {}}), std::invalid_argument);
     CHECK_THROWS_AS(encode(EntitiesDestroyedMessage{1, {{0, DestroyCause::Killed}}}), std::invalid_argument);
-    CHECK_THROWS_AS(encode(WaveStartedMessage{0}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(WaveStartedMessage{0, ""}), std::invalid_argument);
 
     const auto invalid = [](auto change) {
         SnapshotPart part = examplePart();

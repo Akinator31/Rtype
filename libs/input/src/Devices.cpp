@@ -1,8 +1,12 @@
 #include "rtype/input/Devices.hpp"
 
 #include <raylib.h>
+// The names of the keys on the layout of the player come from GLFW, which raylib is built on
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <cctype>
 
 namespace rtype::input
 {
@@ -211,6 +215,17 @@ std::string Devices::clipboardText() const
 void Devices::setClipboardText(const std::string &text)
 {
     SetClipboardText(text.c_str());
+}
+
+// raylib's key codes are GLFW's
+std::string keyLabel(Key key)
+{
+    const char *name = glfwGetKeyName(toRaylib(key), 0);
+    std::string label = name != nullptr ? name : "";
+    std::ranges::transform(label, label.begin(), [](unsigned char character) {
+        return static_cast<char>(std::toupper(character));
+    });
+    return label;
 }
 
 } // namespace rtype::input

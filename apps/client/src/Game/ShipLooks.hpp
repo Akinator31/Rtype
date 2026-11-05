@@ -6,13 +6,15 @@
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 namespace rtype::client
 {
 
-/// A ship of the game drawn with a 3D model: it rolls around its length with its vertical speed, smoothly.
+/// A ship of the game drawn with a 3D model: it rolls around its length with its vertical speed, turns its
+/// nose up or down as its player aims, smoothly, and recoils when it fires.
 struct ShipAttitude {
     /// The centre of the hull of the model (ShipLook::hull), in model units: it is put on the entity.
     render::Vector2 hullCentre;
@@ -20,6 +22,13 @@ struct ShipAttitude {
     /// belly to the camera, as it climbs, positive its top, as it dives.
     float targetRoll = 0.0f;
     float roll = 0.0f;
+    /// The aim it turns towards, from the latest snapshot, and its aim now, in degrees in the plane of the
+    /// game: negative turns its nose up, positive down.
+    float targetAim = 0.0f;
+    float aim = 0.0f;
+    /// The Shoot animation of its model and its length (ShipAnimations): its recoil.
+    int shoot = 0;
+    float shootDuration = 0.0f;
 };
 
 /// How the ships of a kind are drawn in 3D, instead of a box.
@@ -38,25 +47,39 @@ struct ShipLook {
 
 /// The ShipLook of each kind of ship drawn in 3D, and the models they give to the entities of the game scene:
 /// seen from the side and a little from above, rolling around their length, smoothly, as their ship climbs
-/// or dives, with a little flame, whatever they do (docs/architecture/client-game.md, "Ships in 3D").
+/// or dives, with a little flame, whatever they do, and a recoil when they fire (docs/architecture/
+/// client-game.md, "Ships in 3D").
 class ShipLooks
 {
-    std::unordered_map<game::EntityKind, ShipLook> _looks;
+    /// The looks of each kind: an entity of the kind is drawn with one of them, picked by its id.
+    std::unordered_map<game::EntityKind, std::vector<ShipLook>> _looks;
+    std::optional<ShipLook> _localLook;
 
 public:
     void setLook(game::EntityKind kind, const ShipLook &look);
+    /// The ships of this kind are drawn with these looks, each one with the look picked by its id: a ship
+    /// keeps its look, and ships next to each other differ. None removes the looks of the kind.
+    void setLooks(game::EntityKind kind, std::vector<ShipLook> looks);
+    /// The ship of the local player is drawn with this look instead of the one of its kind: the ship it
+    /// equipped in the hangar.
+    void setLocalLook(const ShipLook &look);
     /// The ships of this kind are drawn in 3D.
     [[nodiscard]] bool hasLook(game::EntityKind kind) const;
 
-    /// Gives an entity the model of its kind, with its ShipAttitude, placed on it.
+    /// Gives an entity the model of its kind (one of them, by its id), or the local look for the ship of the
+    /// local player, with its ShipAttitude, placed on it.
     /// @param clock Seconds the session has been played: the time of the animations.
+    /// @param local The entity is the ship of the local player.
     void addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, const EntityLook &look,
-                  float clock) const;
-    /// Turns the model of an entity towards the roll of the latest state of its ship, its animation in step
-    /// with the session.
+                  float clock, bool local = false) const;
+    /// Turns the model of an entity towards the roll and the aim of the latest state of its ship, its
+    /// animation in step with the session.
     void moveModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, float clock) const;
-    /// Rolls the model of an entity towards its roll for `elapsed` seconds, and puts its hull on the entity.
+    /// Rolls and turns the model of an entity towards its roll and its aim for `elapsed` seconds, and puts
+    /// its hull on the entity.
     static void placeModel(ecs::Ecs &ecs, ecs::entity_t entity, float elapsed);
+    /// Plays the recoil of the model of an entity over its flight, from its start: its ship fired.
+    static void fireModel(ecs::Ecs &ecs, ecs::entity_t entity);
 };
 
 } // namespace rtype::client

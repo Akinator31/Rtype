@@ -14,8 +14,9 @@ namespace rtype::game
 /// first one Rules::firstWaveDelay ticks after the game starts. Once the last one ends, the game is won
 /// (GameOutcome::Victory).
 ///
-/// Nothing happens without a wave in context.waves, nor while no player is in the game. The enemies are
-/// created after the systems of the tick.
+/// Nothing happens without a wave in context.waves, nor while no player is in the game, nor during the
+/// rescue against the final boss (RescueSystem), which ends the game itself. The enemies are created after
+/// the systems of the tick.
 class WaveSystem : public ecs::System
 {
     ecs::Ecs &_ecs;

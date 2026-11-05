@@ -364,9 +364,11 @@ An input is the state of the player's controls during one tick, one byte:
 | 2 | Left |
 | 3 | Right |
 | 4 | Fire (held: the game decides what holding it does, for instance charging a shot) |
-| 5–7 | Reserved: senders set them to 0, receivers ignore them |
+| 5 | Aim up (held: the ship turns its nose up by 30° and fires that way) |
+| 6 | Aim down (held: the ship turns its nose down by 30° and fires that way) |
+| 7 | Reserved: senders set it to 0, receivers ignore it |
 
-Up and down together, or left and right together, cancel each other.
+Up and down together, left and right together, or aim up and aim down together, cancel each other.
 
 **Client.** Once per tick, the client samples its controls and sends `INPUT` with the inputs of the last
 **8** ticks, newest first: a lost datagram loses no input, since the next ones carry it again. It stamps each
@@ -462,7 +464,7 @@ Each entity, 16 bytes:
 | 10 | Velocity X | `i16` | Eighths of a unit per second |
 | 12 | Velocity Y | `i16` | |
 | 14 | Health | `u8` | Hit points left, for health bars; 0 for kinds without |
-| 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bits 3–7: reserved, set to 0 and ignored |
+| 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bit 3: aiming up. Bit 4: aiming down (a ship of a player turned by 30°, [section 9.2](#92-inputs)). Bit 5: guarding, bit 6: slashing, bit 7: shooting (the stance of a Bydo, at most one, drawn with its animation) |
 
 **Receiver behaviour:** the client applies the part as [section 9.3](#93-snapshots) says. A part number not below
 the number of parts, a number of parts of 0 or above 16, more than 4 players, a slot above 3 or given twice, an
@@ -510,9 +512,11 @@ makes the message malformed.
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Wave | `u16` | Number of the wave, from 1 |
+| 2 | Music | `str8` | Music to play, a path relative to the assets of the client; 0 to 128 bytes, empty for none |
 
-**Receiver behaviour:** the client shows the number, for instance "Wave 3". A wave of 0 makes the message
-malformed.
+**Receiver behaviour:** the client shows the number, for instance "Wave 3", and plays the music if there is one,
+unless the path leaves its assets (absolute, or with `..`). A wave of 0, or a music of more than 128 bytes,
+makes the message malformed.
 
 ### GAME_OVER (`0x83`)
 

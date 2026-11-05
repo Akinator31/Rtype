@@ -3,15 +3,19 @@
 // Private to the render library: the raylib resources behind the handles of the ResourceManager, shared
 // between the ResourceManager, which loads them, and the Renderer, which draws them.
 
+#include "LightingShader.hpp"
 #include "PreparedAssets.hpp"
+#include "SkeletonPose.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
+#include <external/cgltf.h>
 #include <raylib.h>
 #include <rlgl.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <optional>
 #include <stdexcept>
@@ -114,17 +118,7 @@ public:
 class Model
 {
 public:
-    // A pose of a skinned model: a blend between times of two animations, from 0 for the first one to 1 for
-    // the second one. A single animation is the second one, at an amount of 1.
-    struct Pose {
-        int first = -1;
-        float firstTime = 0.0f;
-        int second = -1;
-        float secondTime = 0.0f;
-        float amount = 1.0f;
-
-        friend bool operator==(const Pose &, const Pose &) = default;
-    };
+    using Pose = ModelPose;
 
 private:
     // raylib samples the animations of glTF files at this rate
@@ -163,6 +157,47 @@ private:
         }
     }
 
+    static unsigned char toChannel(cgltf_float factor)
+    {
+        return static_cast<unsigned char>(std::lround(std::clamp(factor, 0.0f, 1.0f) * 255.0f));
+    }
+
+    // raylib keeps the roughness, metalness and emissive factors of a glTF material only along with their
+    // textures: a plain material would lose its finish, and a plain emissive one, such as an engine flame,
+    // would not glow. They are read again from the file. raylib puts its default material first, then those
+    // of the file in their order.
+    static void restoreMaterialFactors(::Model &model, const std::filesystem::path &file)
+    {
+        const std::string extension = file.extension().string();
+        if (extension != ".glb" && extension != ".gltf") {
+            return;
+        }
+        const cgltf_options options{};
+        cgltf_data *data = nullptr;
+        if (cgltf_parse_file(&options, file.string().c_str(), &data) != cgltf_result_success) {
+            return;
+        }
+        const auto count = std::min(data->materials_count, static_cast<cgltf_size>(model.materialCount - 1));
+        for (cgltf_size index = 0; index < count; ++index) {
+            const cgltf_material &source = data->materials[index];
+            MaterialMap *maps = model.materials[index + 1].maps;
+            // A transparent sheet, such as a flame, is seen from both sides
+            if (source.double_sided && source.alpha_mode != cgltf_alpha_mode_opaque) {
+                model.materials[index + 1].params[DoubleSidedParameter] = 1.0f;
+            }
+            if (source.has_pbr_metallic_roughness && maps[MATERIAL_MAP_ROUGHNESS].texture.id == 0) {
+                maps[MATERIAL_MAP_ROUGHNESS].value = source.pbr_metallic_roughness.roughness_factor;
+                maps[MATERIAL_MAP_METALNESS].value = source.pbr_metallic_roughness.metallic_factor;
+            }
+            if (maps[MATERIAL_MAP_EMISSION].texture.id == 0) {
+                const cgltf_float *emissive = source.emissive_factor;
+                maps[MATERIAL_MAP_EMISSION].color = {toChannel(emissive[0]), toChannel(emissive[1]),
+                                                     toChannel(emissive[2]), 255};
+            }
+        }
+        cgltf_free(data);
+    }
+
 public:
     explicit Model(const std::filesystem::path &file) : _model(LoadModel(file.string().c_str()))
     {
@@ -170,9 +205,12 @@ public:
             UnloadModel(_model);
             throw std::runtime_error("Cannot load model " + file.string());
         }
+        restoreMaterialFactors(_model, file);
         for (int index = 0; index < _model.materialCount; ++index) {
-            smoothTexture(_model.materials[index].maps[MATERIAL_MAP_ALBEDO].texture);
-            smoothTexture(_model.materials[index].maps[MATERIAL_MAP_NORMAL].texture);
+            for (const int map : {MATERIAL_MAP_ALBEDO, MATERIAL_MAP_NORMAL, MATERIAL_MAP_METALNESS,
+                                  MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION, MATERIAL_MAP_EMISSION}) {
+                smoothTexture(_model.materials[index].maps[map].texture);
+            }
         }
         if (_model.skeleton.boneCount > 0) {
             _animations = LoadModelAnimations(file.string().c_str(), &_animationCount);
@@ -229,13 +267,20 @@ public:
     // Moves the vertices of the model to their place at a time of an animation, in seconds. The animation
     // loops. The model keeps this pose until it is animated again. Const like drawing: only the vertices in
     // graphics memory change, and the renderer, which poses models, only reads the resources.
-    void animate(int animation, float time) const { applyPose({animation, time, animation, time, 1.0f}); }
+    void animate(int animation, float time) const
+    {
+        applyPose({.from = animation, .fromTime = time, .to = animation, .toTime = time});
+    }
 
     // Like animate(), with a pose between two animations: `amount` goes from 0 for the first one to 1 for the
     // second one.
     void blendAnimations(int first, float firstTime, int second, float secondTime, float amount) const
     {
-        applyPose({first, firstTime, second, secondTime, std::clamp(amount, 0.0f, 1.0f)});
+        applyPose({.from = first,
+                   .fromTime = firstTime,
+                   .to = second,
+                   .toTime = secondTime,
+                   .amount = std::clamp(amount, 0.0f, 1.0f)});
     }
 
     // The pose of the vertices, none if the model was never animated.
@@ -249,15 +294,34 @@ public:
             return;
         }
         _pose = pose;
-        if (!hasAnimation(pose.second)) {
+        if (!hasAnimation(pose.to)) {
             return;
         }
-        if (pose.amount >= 1.0f || !hasAnimation(pose.first)) {
-            UpdateModelAnimation(_model, _animations[pose.second], pose.secondTime * framesPerSecond);
+        if (hasAnimation(pose.added)) {
+            applyAddedPose(pose);
             return;
         }
-        UpdateModelAnimationEx(_model, _animations[pose.first], pose.firstTime * framesPerSecond,
-                               _animations[pose.second], pose.secondTime * framesPerSecond, pose.amount);
+        if (pose.amount >= 1.0f || !hasAnimation(pose.from)) {
+            UpdateModelAnimation(_model, _animations[pose.to], pose.toTime * framesPerSecond);
+            return;
+        }
+        UpdateModelAnimationEx(_model, _animations[pose.from], pose.fromTime * framesPerSecond,
+                               _animations[pose.to], pose.toTime * framesPerSecond, pose.amount);
+    }
+
+private:
+    // raylib blends two animations at most: the pose with an animation added over them is computed bone by
+    // bone
+    void applyAddedPose(const Pose &pose) const
+    {
+        BonePoses bones = samplePose(_animations[pose.to], pose.toTime * framesPerSecond);
+        if (pose.amount < 1.0f && hasAnimation(pose.from)) {
+            bones = blendPoses(samplePose(_animations[pose.from], pose.fromTime * framesPerSecond), bones,
+                               std::clamp(pose.amount, 0.0f, 1.0f));
+        }
+        BonePoses added =
+            addPose(bones, _animations[pose.added], pose.addedTime * framesPerSecond, _model.skeleton);
+        applyBonePoses(_model, added);
     }
 };
 

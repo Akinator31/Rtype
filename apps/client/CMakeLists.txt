@@ -1,35 +1,61 @@
 # The code of the client is a library of its own, so that the tests can use it, like the server's:
+#   App/                 what the program puts together: its configuration, its systems and its scenes
 #   Commands/, Console/  the console and its commands
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
-#   Loading/             the loading screen, shown while the assets load at startup
+#   Loading/             the loading screen at startup, and the loading of the assets of the scenes
+#   Lore/                the story of the game, scrolling away towards the horizon
 #   MainMenu/            the home screen and its submenus
 #   Online/              playing online: the lobby of a server, and its scenes
 #   ShipSelector/        the hangar: the catalog of ships and the scene where the player picks one
 #   ShipModel            the ship models and their animations, flown by the menu and by the game
 add_library(r-type_client_core STATIC
+    src/App/Configuration.cpp
+    src/App/Scenes.cpp
+    src/App/Systems.cpp
+    src/Commands/BossCommand.cpp
     src/Commands/Commands.cpp
+    src/Commands/FpsCommand.cpp
+    src/Commands/HitboxesCommand.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
+    src/Commands/Switch.cpp
     src/Commands/ToastCommand.cpp
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
+    src/Controls/KeyCaptureSystem.cpp
+    src/Game/BossLooks.cpp
+    src/Game/DamageLooks.cpp
+    src/Game/DamageNumberSystem.cpp
+    src/Game/DeathScreen.cpp
+    src/Game/DeathScreenSystem.cpp
     src/Game/EntityLook.cpp
     src/Game/EntitySounds.cpp
     src/Game/GameScenes.cpp
     src/Game/GameSessionSystem.cpp
     src/Game/GameView.cpp
+    src/Game/HealthBarLooks.cpp
+    src/Game/HealthBarSystem.cpp
+    src/Game/Hud.cpp
+    src/Game/HudSystem.cpp
     src/Game/ImpactLooks.cpp
     src/Game/ImpactSystem.cpp
     src/Game/Interpolation.cpp
     src/Game/LocalSession.cpp
     src/Game/Prediction.cpp
     src/Game/RemoteSession.cpp
+    src/Game/RescueCameraSystem.cpp
     src/Game/ShipLooks.cpp
     src/Game/ShotLooks.cpp
     src/Loading/AssetPreload.cpp
     src/Loading/LoadingScene.cpp
     src/Loading/LoadingSystem.cpp
+    src/Loading/SceneAssetLoader.cpp
+    src/Loading/SceneLoadStatus.cpp
+    src/Lore/CrawlSystem.cpp
+    src/Lore/LoreLayout.cpp
+    src/Lore/LoreScene.cpp
+    src/Lore/LoreText.cpp
     src/MainMenu/Capitals.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
@@ -37,6 +63,8 @@ add_library(r-type_client_core STATIC
     src/MainMenu/LogoFlareSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
+    src/MainMenu/ControlsMenu.cpp
+    src/MainMenu/SettingsMenu.cpp
     src/MainMenu/Ships.cpp
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
@@ -49,6 +77,9 @@ add_library(r-type_client_core STATIC
     src/Online/OnlineScenes.cpp
     src/Online/OnlineScreen.cpp
     src/Online/SessionTokens.cpp
+    src/Settings/ControlSettings.cpp
+    src/Settings/DisplaySettings.cpp
+    src/Settings/PlayerSettings.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp
     src/ShipSelector/ShipSelection.cpp

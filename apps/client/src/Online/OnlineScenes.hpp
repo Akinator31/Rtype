@@ -8,6 +8,7 @@
 #include "Online/OnlineScreen.hpp"
 #include "Online/SessionTokens.hpp"
 #include "rtype/discord/Authorizer.hpp"
+#include "ShipSelector/ShipSelection.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
@@ -70,8 +71,9 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 ///   A server never met shows its key, which the player may trust: it is remembered, and the client connects
 ///   again. A known server with another key is refused, with a warning, until the player forgets its key
 ///   (**Forget the server key**).
-/// - **The lobby** lists the games: Create a game, Join one, Refresh, Disconnect. Joining plays a
-///   RemoteSession in the game scene; when the game ends, the player is back in the lobby.
+/// - **The lobby** lists the games: Create a game, Join one, Refresh, Disconnect. Creating or joining one
+///   first opens the hangar, where the player picks its ship. Joining plays a RemoteSession in the game
+///   scene; when the game ends, the player is back in the lobby.
 /// - **The accounts**: on a server that offers them, WELCOME leads to a choice (sign in, create an account,
 ///   play as a guest). The session token of SIGNED_IN is kept for the server (SessionTokens) and sent in the
 ///   next HELLO: the player comes back signed in. It is forgotten at sign-out, at the deletion of the
@@ -102,6 +104,7 @@ class OnlineScenes
     discord::Authorizer &_discord;
     GameScenes &_games;
     localization::Localization &_translations;
+    ShipSelection &_ships;
     KnownServers _known;
     SessionTokens _sessions;
     KnownProfiles _profiles;
@@ -190,9 +193,10 @@ public:
     /// @param resources Loads the sky, the logo of Discord and the pictures of the accounts.
     /// @param pictures The folder the pictures of the accounts are kept in.
     /// @param discord Asks the player to accept the Discord application of a server; polled by the game loop.
+    /// @param ships The ship the player picks in the hangar, before creating or joining a game.
     OnlineScenes(engine::Engine &engine, render::ResourceManager &resources, network::EventLoop &loop,
                  GameScenes &games, const engine::InterfaceStyle &style,
-                 localization::Localization &translations, discord::Authorizer &discord,
+                 localization::Localization &translations, discord::Authorizer &discord, ShipSelection &ships,
                  std::filesystem::path pictures);
 
     OnlineScenes(const OnlineScenes &) = delete;

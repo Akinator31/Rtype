@@ -18,8 +18,8 @@ The format and its rules are decided in [ADR 0018](../decisions/0018-lua-game-co
 
 ```
 config/
-  projectiles/   what a weapon fires: its shape, how it moves
-  weapons/       how fast and how often it fires, its range, its magazine
+  projectiles/   what a weapon fires, grouped by bullet/, missile/, laser/ and plasma/
+  weapons/       how it fires, grouped by bullet/, missile/, laser/ and plasma/
   ships/         what a ship looks and sounds like, whoever flies it
   enemies/       a kind of Bydo: its ship, its health, its speed, its weapon
   waves/         a group of enemies that appear one after the other
@@ -32,12 +32,12 @@ config/
 - The server and the client read the **same files**. The build copies `config/` next to them
   (`build/bin/config/`), and the release archives ship it there; the server takes another folder with
   `--config <dir>`.
-- The files already in `config/` are the game as it is played: three projectiles, three weapons, two ships
-  (one for the players), two enemies, a wave of each difficulty or more, and the player.
+- The files already in `config/` define the game and additional projectile variants, including weapons,
+  ships, enemies, waves and the player's starting equipment.
 
 ## Steps
 
-1. **A projectile.** Create `config/projectiles/spark.lua`:
+1. **A projectile.** Create `config/projectiles/bullet/spark.lua`:
 
     ```lua
     return {
@@ -47,7 +47,7 @@ config/
     }
     ```
 
-2. **A weapon** that fires it, `config/weapons/spark_gun.lua`:
+2. **A weapon** that fires it, `config/weapons/bullet/spark_gun.lua`:
 
     ```lua
     return {
@@ -84,7 +84,7 @@ config/
     }
     ```
 
-5. **A wave** to make it appear, `config/waves/hunters.lua`. A game plays five waves, one of each difficulty,
+5. **A wave** to make it appear, `config/waves/wave3/hunters.lua`. A game plays five waves, one of each difficulty,
    drawn among the waves of that difficulty: this one may be the third wave of a game.
 
     ```lua
@@ -175,6 +175,8 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `score` | whole number, 0 or more | `100` | Points for the player who destroys it |
 | `collisionDamage` | whole number from 0 to 255 | `20` | Hit points a player ship loses when it runs into it; the enemy keeps going |
 | `update` | function | none | Its behavior, called at every tick: see [Script the behavior of an enemy](script-enemy-behaviors.md). Without one, it flies left and fires as soon as it is in the game area |
+| `phases` | whole number from 1 to 255 | `1` | How many times its `health` is filled: once it runs out, it gets all of it back, until its last phase. A boss lasts `health × phases` hit points |
+| `boss` | boolean | `false` | The clients draw it as a boss (the shogun model) instead of a Bydo ship |
 
 ### Waves (`config/waves/`)
 
@@ -183,9 +185,10 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `name` | string | *required* | Unique among the waves |
 | `label` | string | `""` | Short text shown to the players |
 | `description` | string | `""` | Longer text |
-| `difficulty` | whole number from 1 to 5 | *required* | How hard the wave is, 1 the easiest |
+| `difficulty` | whole number from 1 to 6 | *required* | How hard the wave is, 1 the easiest, 6 the final boss |
 | `placement` | `"manual"` or `"random"` | *required* | Each enemy listed with its position, or one kind of enemy placed at random |
 | `spawnInterval` | number, 0 or more | `1` | Seconds between two enemies, 0 for all at once |
+| `music` | string, at most 128 bytes | `""` | Music the players hear when the wave starts, a path in the assets of the client (`"sounds/boss_theme.mp3"`); none: the music playing goes on |
 | `spawns` | list of `{ enemy = "...", x = ..., y = ... }` | | Manual only, *required*: each enemy and where it appears, in order |
 | `enemy` | string | | Random only, *required*: the id of the kind of every enemy |
 | `area` | `{ minX, maxX, minY, maxY }` | a band just past the right edge, over the whole height | Random only: where they appear; each bound optional |
@@ -193,7 +196,10 @@ The `collider` is a box or a sphere, centred on the projectile:
 
 A manual wave sets no `enemy` and a random wave no `spawns`: a wave does not mix both modes.
 
-A game plays the waves by difficulty, from 1 to 5: for each one, a wave drawn among those of that difficulty.
+A game plays the waves by difficulty, from 1 to 6: for each one, a wave drawn among those of that difficulty.
+The repository keeps its examples in `config/waves/wave1/` through `wave5/`, with four choices
+per level, and the final boss in `wave6/`: the shogun (`config/enemies/bydo_shogun.lua`), alone, in four
+phases. The loader also accepts Lua files elsewhere under `config/waves/`.
 A difficulty without a wave is skipped, and the game is won once the last wave is over.
 
 ### The players (`config/player.lua`)

@@ -1,6 +1,7 @@
 // Tests of the configuration of the game: Lua files read into definitions (ADR 0018,
 // docs/guides/configure-enemies-and-weapons.md).
 
+#include "TempDirectory.hpp"
 #include "rtype/game/Game.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -13,7 +14,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <variant>
 
 using namespace rtype::game;
@@ -24,22 +24,11 @@ namespace
 {
 
 // A configuration directory of its own for each test, removed at the end
-struct ConfigDirectory {
-    std::filesystem::path path;
-
+struct ConfigDirectory : testing::TempDirectory {
     explicit ConfigDirectory(std::string_view name)
-        : path(std::filesystem::temp_directory_path() / std::string("rtype_tests_config_").append(name))
+        : testing::TempDirectory(std::string("rtype_tests_config_").append(name))
     {
-        std::filesystem::remove_all(path);
-        std::filesystem::create_directories(path);
     }
-    ~ConfigDirectory()
-    {
-        std::error_code ignored;
-        std::filesystem::remove_all(path, ignored);
-    }
-    ConfigDirectory(const ConfigDirectory &) = delete;
-    ConfigDirectory &operator=(const ConfigDirectory &) = delete;
 
     void write(const std::string &file, const std::string &code) const
     {
@@ -107,11 +96,12 @@ TEST_CASE("The configuration of the repository loads, and a Simulation registers
     CHECK(context.waves.hasDefinition("scouts_line"));
     CHECK(context.weapons.hasDefinition(context.player.weapon));
     CHECK(context.ships.hasDefinition(context.player.ship));
-    // A wave of each difficulty: the game draws one of each
-    for (std::uint8_t difficulty = MinWaveDifficulty; difficulty <= MaxWaveDifficulty; ++difficulty) {
+    // Four choices per level; the game draws one of each, and ends with the final boss
+    for (std::uint8_t difficulty = MinWaveDifficulty; difficulty < MaxWaveDifficulty; ++difficulty) {
         INFO("difficulty " << int{difficulty});
-        CHECK_FALSE(context.waves.listWavesOfDifficulty(difficulty).empty());
+        CHECK(context.waves.listWavesOfDifficulty(difficulty).size() >= 4);
     }
+    CHECK(context.waves.listWavesOfDifficulty(MaxWaveDifficulty) == std::vector<std::string>{"shogun_duel"});
 }
 
 TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest player, then leaves", "[game]")
@@ -141,6 +131,106 @@ TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest p
     CHECK(ecs.getComponent<rtype::ecs::Position>(gunner).x < 1500.0f);
 }
 
+TEST_CASE("The new Bydo behaviors issue their first orders", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    Rules rules;
+    rules.firstWaveDelay = 10000;
+    Simulation simulation(rules, loaded.config);
+    simulation.addPlayer(0);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+
+    for (const char *id : {"bydo_interceptor", "bydo_sporecaster", "bydo_siege", "bydo_carrier",
+                           "bydo_berserker", "bydo_wanderer", "bydo_mosquito", "bydo_raider"}) {
+        const rtype::ecs::entity_t enemy = spawnEnemy(ecs, simulation.context(), id, 2000.0f, 540.0f);
+        simulation.step();
+        INFO(id);
+        CHECK(ecs.isAlive(enemy));
+        CHECK(ecs.hasComponent<EnemyOrders>(enemy));
+    }
+
+    const rtype::ecs::entity_t wounded =
+        spawnEnemy(ecs, simulation.context(), "bydo_berserker", 1600.0f, 216.0f);
+    ecs.getComponent<Health>(wounded).points = 40;
+    simulation.step();
+    CHECK(ecs.getComponent<rtype::physics::Velocity>(wounded).x < -250.0f);
+    CHECK(ecs.getComponent<EnemyOrders>(wounded).target.has_value());
+}
+
+TEST_CASE("The shogun of the repository is a boss that comes in, guards, shoots and dashes at the ship",
+          "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    Rules rules;
+    rules.firstWaveDelay = 10000;
+    Simulation simulation(rules, loaded.config);
+    simulation.addPlayer(0);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    CHECK(simulation.context().enemies.getDefinition("bydo_shogun").phases == 4);
+    const rtype::ecs::entity_t shogun = spawnEnemy(ecs, simulation.context(), "bydo_shogun", 2050.0f, 540.0f);
+    CHECK(ecs.getComponent<Kind>(shogun).value == EntityKind::BydoBoss);
+    const std::uint32_t id = ecs.getComponent<NetworkId>(shogun).value;
+
+    // 40 seconds: every stance of its behavior, which never fails, and its dashes reach the ship, which waits
+    // on the left
+    std::uint8_t stances = 0;
+    float leftmost = GameWidth;
+    for (int tick = 0; tick < 40 * TickRate && ecs.isAlive(shogun); ++tick) {
+        simulation.step();
+        for (const EntityState &state : simulation.snapshot().entities) {
+            if (state.id == id) {
+                stances |= state.flags;
+                leftmost = std::min(leftmost, state.x);
+            }
+        }
+    }
+    REQUIRE(ecs.isAlive(shogun));
+    CHECK(ecs.hasComponent<EnemyOrders>(shogun));
+    CHECK((stances & EntityState::Guarding) != 0);
+    CHECK((stances & EntityState::Shooting) != 0);
+    CHECK((stances & EntityState::Slashing) != 0);
+    CHECK(leftmost < 400.0f);
+}
+
+TEST_CASE("The Bydo raider fires at close range and retreats to the right", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    Rules rules;
+    rules.firstWaveDelay = 10000;
+    Simulation simulation(rules, loaded.config);
+    simulation.addPlayer(0);
+    rtype::ecs::Ecs &ecs = simulation.ecs();
+    const rtype::ecs::entity_t raider = spawnEnemy(ecs, simulation.context(), "bydo_raider", 500.0f, 216.0f);
+
+    simulation.step();
+    CHECK_FALSE(ecs.getComponent<EnemyOrders>(raider).target.has_value());
+    CHECK(ecs.getComponent<rtype::physics::Velocity>(raider).x < 0.0f);
+
+    bool fired = false;
+    for (int tick = 0; tick < 60; ++tick) {
+        simulation.step();
+        if (ecs.getComponent<EnemyOrders>(raider).target.has_value()) {
+            fired = true;
+            break;
+        }
+    }
+    REQUIRE(fired);
+    CHECK(ecs.getComponent<rtype::physics::Velocity>(raider).x > 0.0f);
+    CHECK(ecs.getComponent<Armed>(raider).cooldown > 0);
+
+    simulation.step();
+    CHECK_FALSE(ecs.getComponent<EnemyOrders>(raider).fire);
+    CHECK(ecs.getComponent<rtype::physics::Velocity>(raider).x > 0.0f);
+
+    for (int tick = 0; tick < 240 && ecs.isAlive(raider); ++tick) {
+        simulation.step();
+    }
+    CHECK_FALSE(ecs.isAlive(raider));
+}
+
 TEST_CASE("Each kind of file is read into its definition, with the defaults of the optional fields", "[game]")
 {
     const ConfigDirectory directory("kinds");
@@ -163,7 +253,7 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     directory.write("waves/tanks.lua",
                     "return { name = 'tanks', label = 'Tanks', description = 'Three tanks', difficulty = 5,"
                     " placement = 'random', enemy = 'tank', quantity = 3, spawnInterval = 0.5,"
-                    " area = { minX = 2000, maxY = 500 } }");
+                    " music = 'sounds/tank.mp3', area = { minX = 2000, maxY = 500 } }");
 
     const LoadedGameConfig loaded = loadGameConfig(directory.path);
 
@@ -240,6 +330,8 @@ TEST_CASE("Each kind of file is read into its definition, with the defaults of t
     CHECK(tanks.difficulty == 5);
     CHECK(tanks.quantity == 3);
     CHECK(tanks.spawnInterval == Approx(0.5f));
+    CHECK(tanks.music == "sounds/tank.mp3");
+    CHECK(line.music.empty());
     CHECK(tanks.area.minX == Approx(2000.0f));
     CHECK(tanks.area.maxX == Approx(WaveArea{}.maxX));
     CHECK(tanks.area.maxY == Approx(500.0f));
@@ -343,8 +435,8 @@ TEST_CASE("A wrong field is an error naming the file and the field", "[game]")
                     "return { id = 'scout', ship = 'scout', health = 1, weapon = 'blaster', update = 3 }") ==
           "enemies/scout.lua: update: expected a function");
     CHECK(errorWith("difficulty", "waves/line.lua",
-                    "return { name = 'line', difficulty = 6, placement = 'random', enemy = 'scout',"
-                    " quantity = 1 }") == "waves/line.lua: difficulty: expected an integer from 1 to 5");
+                    "return { name = 'line', difficulty = 7, placement = 'random', enemy = 'scout',"
+                    " quantity = 1 }") == "waves/line.lua: difficulty: expected an integer from 1 to 6");
 }
 
 TEST_CASE("A file that does not return a table, or does not run, is an error naming it", "[game]")

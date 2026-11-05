@@ -7,6 +7,7 @@
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 
+#include <optional>
 #include <vector>
 
 namespace rtype::ecs
@@ -22,9 +23,9 @@ class Renderer;
 namespace rtype::engine
 {
 
-/// Draws the entities with the Renderer: those with a Drawable, a Position and a Text, Sprite, Box, Panel or
-/// Toast, and the 3D models (Drawable and Model) seen through the Camera, before the rest of the World layer.
-/// A Backdrop is drawn first, behind the models.
+/// Draws the entities with the Renderer: those with a Drawable, a Position and a Text, Sprite, Box, Panel,
+/// Ring or Toast, and the 3D models (Drawable and Model) seen through the Camera, before the rest of the
+/// World layer. The sky (Backdrop, BackdropSprite) is drawn first, behind the models.
 ///
 /// It is not a system of the Ecs: drawing happens between Renderer::beginFrame() and endFrame(), after the
 /// update, and may happen several times per frame (once per eye in VR). Each layer is drawn separately;
@@ -67,8 +68,16 @@ class SceneRenderer
     [[nodiscard]] render::Light findLight();
     /// The shown entities with a Model, by Drawable order.
     [[nodiscard]] std::vector<ecs::entity_t> getModelsInOrder();
-    /// Draws the first shown Backdrop over the whole visible area.
+    /// The first shown Backdrop, whose scene is the sky, or nothing if no Backdrop is shown.
+    [[nodiscard]] std::optional<ecs::entity_t> findFirstBackdrop();
+    /// How far the entity has scrolled: the offset of its Scroll, or 0 without one.
+    [[nodiscard]] float getScrollOffset(ecs::entity_t entity);
+    /// Draws the sky behind the 3D models: the Backdrops and BackdropSprites of its scene, by order.
     void drawBackdrop(render::Renderer &renderer);
+    /// Covers the visible area with the picture, slid to the left by the offset and repeated.
+    void drawBackdropLayer(render::Renderer &renderer, const Backdrop &backdrop, float offset);
+    /// Draws the picture where its pass through the visible area has brought it.
+    void drawBackdropSprite(render::Renderer &renderer, const BackdropSprite &sprite, float offset);
     /// Draws the 3D models, seen through the camera and lit by the light, then the glow of the energy models.
     void drawModels(render::Renderer &renderer);
     /// Poses the model at the time of its animation, unless it is already in this pose.
@@ -108,6 +117,8 @@ class SceneRenderer
     /// Draws a gauge: its caption and value, its rail, and its light up to its value with a spark at the end.
     void drawGauge(render::Renderer &renderer, const Gauge &gauge, render::Vector2 centre,
                    float opacity) const;
+    /// Draws a ring: its dark track, then its light up to its value, with a glow and a spark at its end.
+    void drawRing(render::Renderer &renderer, const Ring &ring, render::Vector2 centre, float opacity) const;
     /// Draws an announcement: an icon and a title, a line of light under them, and the detail. `progress`
     /// goes from 0 to 1 while it appears, and back to 0 while it leaves: each part has its moment in this
     /// entrance.

@@ -12,7 +12,7 @@ The client library is organised like the ECS, with one file per system:
 libs/engine/include/rtype/engine/
   Component/    the data attached to entities
     Drawing.hpp     Layer, Drawable, Text, BoundText, Sprite, Box, Scale, Opacity
-    Animation.hpp   Easing, ease(), Tween, Spin, ModelAnimation, switchModelAnimation()
+    Animation.hpp   Easing, ease(), Tween, Spin, Scroll, ModelAnimation, switchModelAnimation(), addModelAnimation()
     Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
     Layout.hpp      Column, ColumnItem, AnchorPoint, Anchor
     Toast.hpp       ToastType, Toast
@@ -20,7 +20,7 @@ libs/engine/include/rtype/engine/
   System/       the systems, one per file
     InterfaceSystem.hpp  WidgetTextSystem.hpp  BoundTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp
     ColumnLayoutSystem.hpp  AnchorSystem.hpp  ToastSystem.hpp  SpinSystem.hpp  ModelAnimationSystem.hpp
-    SoundSystem.hpp
+    ScrollSystem.hpp  SoundSystem.hpp
   Interface/    what the interface is built with
     MenuBuilder.hpp  InterfaceBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
@@ -47,6 +47,7 @@ ecs.registerSystem<WidgetTextSystem>();
 ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
 ecs.registerSystem<SpinSystem>();
+ecs.registerSystem<ScrollSystem>();
 ecs.registerSystem<FlightSystem>();
 ecs.registerSystem<IntroSystem>(scenes, devices);
 ecs.registerSystem<ModelAnimationSystem>();
@@ -70,9 +71,9 @@ renderer.endFrame();
 | 1 | `Scenes` | Records which scene receives input for the whole update. |
 | 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation; they read the input before the game. |
 | 3 | `GameSessionSystem`, `SoundSystem` | The game: the input of the player to its session, the snapshots to the entities of the game scene ([A game in the client](client-game.md)). Then the sounds: the `SoundSystem` plays each `SoundEffect` given to an entity and removes it, in the frame the game gave it ([Audio](audio.md#in-the-engine)). |
-| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem` | Texts of the widgets and bound texts, tweens, spinning models. |
+| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem`, `ScrollSystem` | Texts of the widgets and bound texts, tweens, spinning models, scrolling skies. |
 | 5 | `FlightSystem`, `IntroSystem` | Client systems of the main menu: the ships flying around the station, the intro. |
-| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`, unless the model already has this pose (entities sharing a model and an animation at the same time are posed once). `ModelAnimation::speed` 0 holds the pose; `blendedAnimation` and `blendAmount` mix a second animation in, in step. |
+| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`, unless the model already has this pose (entities sharing a model and an animation at the same time are posed once). `ModelAnimation::speed` 0 holds the pose; `blendedAnimation` and `blendAmount` mix a second animation in, in step; `addModelAnimation()` plays a third one once over them (`addedAnimation`, removed after `addedDuration`): what it changes from its first frame adds to their pose, bone by bone (a recoil over a flight). |
 | 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
 | 8 | `ToastSystem` | Places, fades and destroys the toasts. |
 | 9 | `TransformSystem` | Positions of the children from their parents, last. |
@@ -148,25 +149,51 @@ These requests take effect at the start of the next `Engine::update`, then the e
 
 ### Collider and grid debug overlay
 
-The client can draw visible physics colliders over the world layer. Press **F3** to toggle the overlay, or
-start the client with `RTYPE_DEBUG_COLLIDERS=1` to show it immediately. The overlay draws AABB outlines in
+The client can draw visible physics colliders over the world layer. Press **F3** or type `hitboxes [on|off]` in
+the console to toggle the overlay, or start the client with `RTYPE_DEBUG_COLLIDERS=1` to show it immediately. The overlay draws AABB outlines in
 green, sphere outlines in green, triggers in yellow, and the spatial grid in pale blue. Grid lines use the
 same cell size as `CollisionSystem` and game coordinates, so they stay aligned with the broad phase.
 
 `ColliderDebugRenderer` lives in `libs/engine`, reads ECS `Position` and `Collider`, and skips hidden
 entities or entities in hidden scenes. It draws after the world and before the interface. The physics library
-still has no rendering dependency. The current game scene is empty; collider outlines appear as soon as
-the game creates entities with `Position` and `Collider`.
+still has no rendering dependency. The `GameSessionSystem` gives each entity of the game scene the `Collider`
+its session finds (`GameSession::findCollider()`): offline, the real collider of the entity in the `Simulation`;
+online, the box it is drawn as, as the snapshots do not carry the hitboxes.
+
+### Frame rate counter
+
+Type `fps [on|off]` in the console to show or hide the number of frames per second, in the top right corner
+of the screen, over the interface (`drawFpsCounter()`, `apps/client/src/Commands/FpsCommand.cpp`). It is green,
+then orange and red as the frame rate drops. It checks the limit of frames per second and the vertical
+synchronisation chosen on the Settings page ([Settings](settings.md#the-settings-page)).
+
+Both views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
+and hide something read their `on` / `off` argument with `readSwitch()` (`Commands/Switch.hpp`).
 
 | Component | Draws |
 |---|---|
 | `Drawable` | Required: the layer (`World` or `Interface`) and the order inside it (higher on top). |
 | `Text` | A text, centred on the position. |
 | `Sprite` | A texture or a frame of a sprite sheet, centred on the position, turned by its `rotation`. |
-| `Box` | A rectangle, filled or outlined, centred on the position. |
+| `Box` | A rectangle, filled or outlined, centred on the position. A filled box with a `bottom` colour fades from its colour at the top into it: a shadow along an edge of the screen. |
 | `Scale`, `Opacity` | Size factor and transparency, animated by tweens. |
 
 The HUD is made of entities of the game scene in the `Interface` layer: it is drawn after the world.
+
+### The sky
+
+A `Backdrop` covers the visible area with a picture, behind the 3D models; it needs no `Drawable` nor
+`Position`. The sky is the scene of the first shown `Backdrop`: all its `Backdrop`s and `BackdropSprite`s are
+drawn by `order`, the lowest at the back.
+
+| Component | Draws |
+|---|---|
+| `Backdrop` | A picture scaled to cover the visible area, cut on the sides that overflow. With a `Scroll`, it slides to the left by `Scroll::offset` and repeats itself: its right side must join its left side. |
+| `BackdropSprite` | A picture of `height` game units, centred `y` units under the top of the visible area. With a `Scroll`, it comes in from the right, goes out on the left, and comes back every `period` units of scrolling; `start` is the scrolling already done at the start (0: just out of the screen, on the right). |
+| `Scroll` | `speed` in game units per second; the `ScrollSystem` adds `speed × elapsed` to `offset`. |
+
+Layers going faster the nearer they are make a parallax: the game scene scrolls four layers and three objects
+([A game in the client](client-game.md#the-sky)).
 
 ## Animations
 
@@ -274,6 +301,7 @@ maximum (`maxVisible`, `maxAnnouncements`, `maxBanners`):
 ```cpp
 engine.showAnnouncement("PLAYER 2 JOINED", "Room · 2 / 4 pilots");     // title, line of light, detail
 engine.showBanner("BOSS APPROACHING", "GET THE BEAM READY", ToastType::Error); // across the whole screen
+engine.showBanner("WAVE 03", "BYDOS INCOMING", ToastType::Info, 1.5f);        // shown 1.5 s, not the style's
 ```
 
 An announcement is centred at the top of the screen: its icon and title, a line of light under them, and its
@@ -289,7 +317,8 @@ the two lines move apart, the sparks fly out from the middle, the title tightens
 rises. The `ToastSystem` writes the progress of the entrance as the `Opacity` of the toast, and the
 `SceneRenderer` splits it into parts (`stage()`).
 
-The toast entity holds only a `Toast` (its words and type). Everything about its look lives in one place,
+The toast entity holds only a `Toast` (its words and type, and the time a banner stays fully shown when it is
+given one: `Toast::duration`, `ToastStyle::duration` otherwise). Everything about its look lives in one place,
 `InterfaceStyle::toast` (`ToastStyle`): corner, margin, fonts, sizes, colours of each type, durations, slide,
 maximum number shown. The `SceneRenderer` draws it from that style (`drawToast`), and the `ToastSystem` places,
 fades and destroys it. To change how every toast looks, change the style, or `drawToast` for its shape; the
@@ -320,7 +349,18 @@ set it, as for every `Toggle`.
 
 `InterfaceBuilder::gauge()` makes a value between 0 and 1 drawn as a rail lit from its start (transparent) to
 its value, with a spark at the end (`InterfaceStyle::gauge`, `GaugeStyle`; a full gauge shines more). A gauge
-shows only: it gets no focus. An `Extent` gives its size to the `AnchorSystem`.
+shows only: it gets no focus. An `Extent` gives its size to the `AnchorSystem`. `Gauge::width` gives it its
+own length instead of the one of the style, and `Gauge::low` a value at or below which its light and spark turn
+red (`GaugeStyle::lowLight`, `lowGlow`). Without a caption, its rail is on the position of the entity: the
+health bars of the game are such gauges, in the World layer.
+
+An `engine::Ring` draws a circle lit along a part of its length, centred on its position: a dark track, then a
+light from the right of the circle anticlockwise over the top, up to `Ring::value`, with a glow and a spark at
+its end. Its owner writes the value: the countdown of the death screen of the game runs out this way. Like a
+gauge, it takes an `Extent` to be placed by an `Anchor`.
+
+`Text::spacing` spaces the letters of a text, as in the widely spaced capitals of the design; the
+`AnchorSystem` and the `HitboxSystem` measure the text with it.
 
 The handle of a slider lights up only while the pointer is over it (or it is dragged); its caption lights up
 while the slider is under the pointer or has the focus.

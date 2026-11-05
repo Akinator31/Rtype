@@ -1,33 +1,85 @@
 #version 330
 
-// Fragment stage of the lighting of the 3D models. The renderer sets lightDirection (normalised, the
-// direction the light travels in), lightColor and ambientColor (sRGB, 0 to 1) and useNormalMap (0 or 1).
+// Fragment stage of the lighting of the 3D models: physically based (metal/roughness, as in glTF), with a
+// sun, a rim light and an ambient light. The renderer sets:
+// - lightDirection, rimDirection (normalised, the directions the lights travel in), lightColor, rimColor and
+//   ambientColor (sRGB, 0 to 1). A black rim light is off;
+// - upDirection, the top of the screen in world space: the ambient light comes more from above than from
+//   below;
+// - viewPosition and viewDirection (world space), and orthographic (0 or 1): where the camera looks from;
+// - useNormalMap (0 or 1), roughness and metalness, the factors of the material, and emissionColor, the
+//   emissive factor (sRGB, 0 to 1) its emission map is multiplied by;
+// - emissionOnly (0 or 1): 1 draws only the emitted light, black elsewhere, for the glow of the frame. The
+//   alpha of the tint then sets how bright it is.
 //
-// Lambert lighting, computed on linear colours (the texture and the light colours are sRGB, the vertex
-// colours are already linear, as in glTF) so that the shadow fades naturally. The normal map adds the relief,
-// but the shape of the model decides which side is in the dark: otherwise the relief would catch the light on
-// the night side.
+// Colours are computed linear (the textures and the light colours are sRGB, the vertex colours are already
+// linear, as in glTF). The light of the sun and of the rim light is a GGX microfacet model (Cook-Torrance),
+// with a Lambert diffuse: rough surfaces spread a dim highlight, smooth ones a small bright one, and every
+// surface reflects more at grazing angles (Fresnel). It is scaled so that a white light on a white, rough,
+// non-metal surface gives the same light as Lambert alone.
+//
+// raylib loads the glTF metallicRoughness texture as two grey textures: metalness in texture1
+// (MATERIAL_MAP_METALNESS) and roughness in roughnessMap (MATERIAL_MAP_ROUGHNESS), both multiplied by their
+// factor. The occlusion map (occlusionMap) darkens the ambient light in the creases. Materials without these
+// maps get white textures, and the renderer gives them a default roughness and metalness.
+//
+// There is no environment map: what surfaces reflect is the ambient light, plus a lobe of the sun standing
+// for the light scattered around it, so that a metal hull is not black outside of its highlight. It is
+// weighted by an analytic approximation of the pre-integrated BRDF (Karis, 2014), the one of image based
+// lighting, and rough metals get back the light that a single bounce of GGX loses (Fdez-Aguera, 2019), so
+// that they do not darken as their roughness grows. The occlusion map darkens the ambient light in the
+// creases, bouncing a little of it back on bright materials (Jimenez, 2016), and hides the reflections there
+// too (Lagarde, 2014), as well as those that the normal map points below the surface.
+//
+// The normal map adds the relief, but the shape of the model decides which side is in the dark: otherwise the
+// relief would catch the light on the night side. Its roughness is widened where the normal changes quickly
+// on screen, so that small details do not sparkle as the model turns.
 //
 // The emission map (emissionMap) is added on top of the light: engine flames, windows and beacons glow even
-// on the night side. Materials without one get a black texture. The emissive factor and strength of glTF are
-// not applied: the colours of the map are taken as they are. Light is added to what is behind it, even
-// through a transparent surface such as an engine flame: see addEmission().
+// on the night side. Materials without one get a black texture. The emissive strength of glTF is not
+// applied. Light is added to what is behind it, even through a transparent surface such as an engine flame:
+// see addEmission().
 
 in vec2 fragTexCoord;
 in vec4 fragColor;
+in vec3 fragPosition;
 in vec3 fragNormal;
 in vec4 fragTangent;
 
 uniform sampler2D texture0;
+uniform sampler2D texture1;
 uniform sampler2D texture2;
+uniform sampler2D roughnessMap;
+uniform sampler2D occlusionMap;
 uniform sampler2D emissionMap;
 uniform vec4 colDiffuse;
 uniform int useNormalMap;
+uniform vec3 emissionColor;
+uniform float roughness;
+uniform float metalness;
 uniform vec3 lightDirection;
 uniform vec3 lightColor;
 uniform vec3 ambientColor;
+uniform vec3 rimDirection;
+uniform vec3 rimColor;
+uniform vec3 upDirection;
+uniform vec3 viewPosition;
+uniform vec3 viewDirection;
+uniform int orthographic;
+uniform int emissionOnly;
 
 out vec4 finalColor;
+
+const float pi = 3.14159265;
+// Share of its diffuse light that a metal keeps: none in reality, but without reflections of a whole sky
+// around them, metals would look black
+const float metalDiffuse = 0.2;
+// Brightness of the light scattered around the sun, reflected by smooth surfaces in the direction of the sun
+const float sunScatter = 0.12;
+// How tight this scattered light is around the sun, reflected by the smoothest and by the roughest surfaces
+const vec2 sunScatterSharpness = vec2(24.0, 3.0);
+// Where bright colours start being compressed so that they reach white smoothly instead of clipping
+const float highlightKnee = 0.8;
 
 vec3 toLinear(vec3 color)
 {
@@ -42,17 +94,109 @@ vec3 toSrgb(vec3 color)
 // The normal of the surface bent by the relief of the normal map, which is given in tangent space
 vec3 applyNormalMap(vec3 surface)
 {
-    vec3 tangent = normalize(fragTangent.xyz - surface * dot(surface, fragTangent.xyz));
+    vec3 tangent = fragTangent.xyz - surface * dot(surface, fragTangent.xyz);
+    if (dot(tangent, tangent) < 1e-8) {
+        return surface;
+    }
+    tangent = normalize(tangent);
     vec3 bitangent = cross(surface, tangent) * fragTangent.w;
     vec3 relief = texture(texture2, fragTexCoord).rgb * 2.0 - 1.0;
     return normalize(mat3(tangent, bitangent, surface) * relief);
 }
 
-// How much of the directional light reaches the point, from 0 to 1
-float computeDiffuse(vec3 surface, vec3 normal)
+// The roughness, squared as the GGX model uses it, widened where the normal changes quickly between two
+// pixels (Kaplanyan and Hoffman, 2016)
+float filterRoughness(vec3 normal, float perceptual)
 {
-    vec3 toLight = -lightDirection;
-    return max(dot(normal, toLight), 0.0) * smoothstep(-0.05, 0.2, dot(surface, toLight));
+    vec3 dx = dFdx(normal);
+    vec3 dy = dFdy(normal);
+    float variance = 0.25 * (dot(dx, dx) + dot(dy, dy));
+    float alpha = perceptual * perceptual;
+    return sqrt(clamp(alpha * alpha + min(2.0 * variance, 0.18), 0.0, 1.0));
+}
+
+// Ambient light coming from a direction: brighter from the top of the screen than from below
+vec3 ambientFrom(vec3 direction)
+{
+    float height = dot(direction, upDirection) * 0.5 + 0.5;
+    return toLinear(ambientColor) * mix(0.5, 1.35, height);
+}
+
+vec3 fresnel(vec3 f0, float cosine)
+{
+    return f0 + (1.0 - f0) * pow(1.0 - cosine, 5.0);
+}
+
+// Light of a directional light reflected towards the camera, diffuse and specular, before the colour of the
+// light. `energy` gives back to the highlight the light lost by GGX, which only counts one bounce.
+vec3 reflectLight(vec3 normal, vec3 toView, vec3 toLight, vec3 albedo, vec3 f0, float diffuseShare,
+                  float alpha, vec3 energy)
+{
+    float normalLight = max(dot(normal, toLight), 0.0);
+    if (normalLight <= 0.0) {
+        return vec3(0.0);
+    }
+    float normalView = max(dot(normal, toView), 1e-4);
+    vec3 halfway = normalize(toLight + toView);
+    float normalHalf = max(dot(normal, halfway), 0.0);
+
+    float alpha2 = alpha * alpha;
+    float spread = normalHalf * normalHalf * (alpha2 - 1.0) + 1.0;
+    float distribution = alpha2 / (pi * spread * spread);
+    // Height-correlated Smith visibility, which includes the 1 / (4 n.l n.v) of Cook-Torrance
+    float visibility = 0.5 / (normalLight * sqrt(normalView * normalView * (1.0 - alpha2) + alpha2) +
+                              normalView * sqrt(normalLight * normalLight * (1.0 - alpha2) + alpha2));
+    vec3 reflected = fresnel(f0, max(dot(halfway, toView), 0.0));
+
+    // Multiplied by pi, as the colours of the lights are given for a Lambert surface
+    vec3 specular = distribution * visibility * reflected * energy * pi;
+    vec3 diffuse = albedo * diffuseShare * (1.0 - reflected);
+    return (diffuse + specular) * normalLight;
+}
+
+// The share of the light from all around reflected towards the camera, for a white surface (x) and a black
+// one (y): the reflectance is f0 * x + y. Karis's fit of the pre-integrated GGX BRDF, from the perceptual
+// roughness.
+vec2 environmentBrdf(float normalView, float perceptual)
+{
+    const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+    vec4 r = perceptual * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * normalView)) * r.x + r.y;
+    return vec2(-1.04, 1.04) * a004 + r.zw;
+}
+
+// The ambient occlusion of the creases, lighter on bright materials, which bounce light inside them
+vec3 bounceOcclusion(float occlusion, vec3 albedo)
+{
+    vec3 a = 2.0404 * albedo - 0.3324;
+    vec3 b = -4.7951 * albedo + 0.6417;
+    vec3 c = 2.7552 * albedo + 0.6903;
+    return max(vec3(occlusion), ((occlusion * a + b) * occlusion + c) * occlusion);
+}
+
+// How much of the reflections the creases let through: smooth surfaces see out of them in fewer directions
+float specularOcclusion(float normalView, float occlusion, float perceptual)
+{
+    return clamp(pow(normalView + occlusion, exp2(-16.0 * perceptual - 1.0)) - 1.0 + occlusion, 0.0, 1.0);
+}
+
+// How much the shape of the model faces a light, from 0 to 1: the relief does not light the night side
+float computeDaylight(vec3 surface, vec3 toLight)
+{
+    return smoothstep(-0.05, 0.2, dot(surface, toLight));
+}
+
+// Makes the brightest colours reach white smoothly instead of clipping, keeping their hue
+vec3 compressHighlights(vec3 color)
+{
+    float peak = max(color.r, max(color.g, color.b));
+    if (peak <= highlightKnee) {
+        return color;
+    }
+    float range = 1.0 - highlightKnee;
+    float compressed = highlightKnee + range * (1.0 - exp(-(peak - highlightKnee) / range));
+    return color * (compressed / peak);
 }
 
 // The colour and opacity that, blended over the background, give the lit surface over it plus the emitted
@@ -71,11 +215,63 @@ vec4 addEmission(vec3 lit, float alpha, vec3 emission)
 void main()
 {
     vec4 texel = texture(texture0, fragTexCoord) * colDiffuse;
+    float alpha = texel.a * fragColor.a;
+    vec3 emission = toLinear(texture(emissionMap, fragTexCoord).rgb * emissionColor);
+    if (emissionOnly == 1) {
+        // Invisible surfaces do not hide the glow behind them
+        if (alpha + max(emission.r, max(emission.g, emission.b)) < 0.01) {
+            discard;
+        }
+        // The alpha of the tint sets how much of the emitted light glows
+        finalColor = vec4(toSrgb(emission * colDiffuse.a), 1.0);
+        return;
+    }
+
     vec3 albedo = toLinear(texel.rgb) * fragColor.rgb;
+    float metal = clamp(texture(texture1, fragTexCoord).r * metalness, 0.0, 1.0);
+    float perceptual = clamp(texture(roughnessMap, fragTexCoord).r * roughness, 0.04, 1.0);
+    float occlusion = texture(occlusionMap, fragTexCoord).r;
+
     vec3 surface = normalize(fragNormal);
+    vec3 toView = orthographic == 1 ? -viewDirection : normalize(viewPosition - fragPosition);
     vec3 normal = useNormalMap == 1 ? applyNormalMap(surface) : surface;
-    vec3 light = toLinear(ambientColor) + toLinear(lightColor) * computeDiffuse(surface, normal);
-    vec3 emission = toLinear(texture(emissionMap, fragTexCoord).rgb);
-    vec4 color = addEmission(albedo * light, texel.a * fragColor.a, emission);
+    float alphaRoughness = filterRoughness(normal, perceptual);
+
+    // The roughness as seen by the light from all around, widened like the highlights
+    float filtered = sqrt(alphaRoughness);
+
+    vec3 f0 = mix(vec3(0.04), albedo, metal);
+    float diffuseShare = mix(1.0, metalDiffuse, metal);
+    float normalView = max(dot(normal, toView), 1e-4);
+    vec2 brdf = environmentBrdf(normalView, filtered);
+    vec3 energy = 1.0 + f0 * (1.0 / (brdf.x + brdf.y) - 1.0);
+
+    vec3 toSun = -lightDirection;
+    vec3 sun = toLinear(lightColor) * computeDaylight(surface, toSun);
+    vec3 lit = sun * reflectLight(normal, toView, toSun, albedo, f0, diffuseShare, alphaRoughness, energy);
+
+    vec3 toRim = -rimDirection;
+    vec3 rim = toLinear(rimColor) * computeDaylight(surface, toRim);
+    lit += rim * reflectLight(normal, toView, toRim, albedo, f0, diffuseShare, alphaRoughness, energy);
+    // The rim light grazes the edges of the silhouette on its side, cutting the model out of the background
+    float edge = pow(1.0 - normalView, 3.0) * max(dot(normal, toRim) * 0.5 + 0.5, 0.0);
+    lit += rim * edge * mix(albedo, vec3(1.0), 0.5);
+
+    // Ambient light, darkened in the creases, and what the surface reflects of it and of the sky around the
+    // sun. Rough surfaces reflect the light of a wide part of the sky: the ambient light around their normal.
+    vec3 reflection = reflect(-toView, normal);
+    vec3 reflectance = (f0 * brdf.x + brdf.y) * energy;
+    float sharpness = mix(sunScatterSharpness.x, sunScatterSharpness.y, filtered);
+    float aroundSun = max(dot(reflection, toSun), 0.0) * 0.5 + 0.5;
+    vec3 scattered = toLinear(lightColor) * sunScatter * pow(aroundSun, sharpness);
+    vec3 sky = mix(ambientFrom(reflection), ambientFrom(normal), filtered) + scattered;
+    // The reflections that the normal map points below the surface are hidden by it
+    float horizon = clamp(1.0 + dot(reflection, surface), 0.0, 1.0);
+    float hidden = specularOcclusion(normalView, occlusion, filtered) * horizon * horizon;
+    vec3 diffuseAmbient = albedo * diffuseShare * (1.0 - (f0 * brdf.x + brdf.y));
+    lit += diffuseAmbient * ambientFrom(normal) * bounceOcclusion(occlusion, albedo);
+    lit += reflectance * sky * hidden;
+
+    vec4 color = addEmission(compressHighlights(lit), alpha, emission);
     finalColor = vec4(toSrgb(color.rgb), color.a);
 }

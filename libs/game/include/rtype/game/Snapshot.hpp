@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rtype::game
@@ -15,6 +16,9 @@ enum class EntityKind : std::uint8_t {
     PlayerShip = 0x01,
     PlayerShot = 0x02,
     PlayerChargedShot = 0x03,
+    /// A ship of the allies that come to the rescue against the final boss, offline only (RescueStage): it
+    /// is never sent online.
+    AllyShip = 0x04,
     BydoFlyer = 0x10,
     BydoShooter = 0x11,
     BydoTank = 0x12,
@@ -39,6 +43,27 @@ enum class GameOutcome : std::uint8_t {
     Victory = 1,
 };
 
+/// Where the rescue against the final boss is, offline only (Rules::rescue, RescueSystem): when the last ship
+/// of the last player is lost against the shogun, instead of the defeat.
+enum class RescueStage : std::uint8_t {
+    /// No rescue: the game goes on as usual.
+    None = 0,
+    /// The client plays the voice of the rescue; the shogun waits, guarding.
+    Voice = 1,
+    /// Five allies fly in, with a new ship for the player.
+    Arrival = 2,
+    /// The allies shoot at the shogun, which cannot be hurt.
+    Assault = 3,
+    /// The shogun dashes at every ship in turn, killing none.
+    Dash = 4,
+    /// The client asks the player to press Fire (Space) for the combined attack.
+    Prompt = 5,
+    /// Every ship fires at once: the shogun falls.
+    Combined = 6,
+    /// The shogun is dead: the victory comes a moment later.
+    Finished = 7,
+};
+
 /// A player, in a snapshot.
 struct PlayerState {
     /// 0 to 3: its place in the game, which sets the colour of its ship.
@@ -60,6 +85,14 @@ struct EntityState {
         Charging = 1 << 1,
         /// Hit since the previous snapshot: drawn flashing.
         Hit = 1 << 2,
+        /// A ship of a player turned nose up, or nose down, by Rules::aimAngle: it fires that way.
+        AimingUp = 1 << 3,
+        AimingDown = 1 << 4,
+        /// A Bydo in a stance its behavior ordered (EnemyStance): behind its guard, striking with a blade,
+        /// aiming its gun.
+        Guarding = 1 << 5,
+        Slashing = 1 << 6,
+        Shooting = 1 << 7,
     };
 
     /// Never 0, and never reused within a game: a client can keep it to recognize the entity.
@@ -102,8 +135,15 @@ struct Snapshot {
     std::vector<DestroyedEntity> destroyed;
     /// A wave started during the tick: its number, from 1.
     std::optional<std::uint16_t> waveStarted;
+    /// The music of the wave started (WaveDefinition::music), empty if it has none.
+    std::string waveMusic;
     /// The game ended during the tick.
     std::optional<GameOutcome> gameOver;
+    /// Where the rescue against the final boss is (offline only).
+    RescueStage rescue = RescueStage::None;
+    /// The ships the blade of the shogun went through since the previous snapshot, during the dashes of the
+    /// rescue, by id (offline only): the client draws the cut on them.
+    std::vector<std::uint32_t> struck;
 
     friend bool operator==(const Snapshot &, const Snapshot &) = default;
 };

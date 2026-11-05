@@ -14,17 +14,15 @@ namespace rtype::client
 /// Name of the main menu scene.
 inline constexpr const char *MainMenuScene = "main_menu";
 
-/// Fills the main menu: a desert planet on the left, seen from orbit, a space station far on the right with
-/// ships landing on it and leaving, and a column of buttons in the bottom left corner: Play, Online and
+/// Declares the main menu: a desert planet on the left, seen from orbit, a space station far on the right
+/// with ships landing on it and leaving, and a column of buttons in the bottom left corner: Play, Online and
 /// Settings, which open their submenu (see createSubmenuScenes()), and Quit. The ships need a FlightSystem.
-/// The scene must keep updating when covered, so that the ships keep flying behind the submenus. It opens on
-/// black, around the logo, then fades in.
-/// @param resources Where the models are loaded from. It must outlive the scene.
-/// @param style Look of the buttons. It must outlive the scene.
-/// @param metrics Gives the size of the screen that the black covers.
+/// The scene keeps updating when covered, so that the ships keep flying behind the submenus. It opens on
+/// black, around the logo, then fades in. Its models are loaded before it opens (SceneSettings::assets).
+/// @param resources, style, metrics, translations They must outlive the engine.
 /// @param quit Called when the player presses the quit button.
-void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
-                   const engine::InterfaceStyle &style, const engine::Metrics &metrics,
-                   localization::Localization &translations, const std::function<void()> &quit);
+void createMainMenuScene(engine::Engine &engine, render::ResourceManager &resources,
+                         const engine::InterfaceStyle &style, const engine::Metrics &metrics,
+                         localization::Localization &translations, std::function<void()> quit);
 
 } // namespace rtype::client

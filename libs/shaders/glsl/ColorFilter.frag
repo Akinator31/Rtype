@@ -14,6 +14,10 @@
 // The uniform "mode" selects the filter: 0 none, then the order of render::ColorFilter (1 protanopia ...
 // 7 high contrast).
 //
+// Whatever the filter, a faint noise (dithering) is added last: the 256 levels of a channel are visible as
+// steps in the dark gradients of space and of the glow, and the noise blends them into a smooth gradient. It
+// is triangular, plus or minus one level, so that it does not show by itself.
+//
 // GLSL fills matrices column by column: the matrices of the paper are written transposed, so that each group
 // of three numbers is what red, green and blue (in this order) become.
 
@@ -70,6 +74,19 @@ vec3 highContrast(vec3 color)
     return clamp((saturated - 0.5) * 1.5 + 0.5, 0.0, 1.0);
 }
 
+// A pseudo-random value from 0 to 1 for a pixel (Jimenez, 2014)
+float noise(vec2 pixel)
+{
+    return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
+}
+
+// From -1 to 1 level of a channel, more often near 0
+vec3 dither(vec2 pixel)
+{
+    float value = noise(pixel) + noise(pixel + vec2(37.0, 17.0)) - 1.0;
+    return vec3(value / 255.0);
+}
+
 void main()
 {
     vec4 texel = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
@@ -82,5 +99,5 @@ void main()
     else if (mode == 5) color = toSrgb(simulate(linear, deuteranopia));
     else if (mode == 6) color = toSrgb(simulate(linear, tritanopia));
     else if (mode == 7) color = highContrast(color);
-    finalColor = vec4(color, texel.a);
+    finalColor = vec4(clamp(color + dither(gl_FragCoord.xy), 0.0, 1.0), texel.a);
 }

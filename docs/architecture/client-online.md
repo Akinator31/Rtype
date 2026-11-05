@@ -58,7 +58,8 @@ sequenceDiagram
    player is asked to trust it if it was never met, warned otherwise.
 3. **The lobby** lists the games of the server in rows: a full game is dim and cannot be joined; Create a game
    (for 4 players, named after the player), Refresh. Escape disconnects. The pilot is at the top right, with
-   its avatar: My account, or, for a guest, the way to sign in.
+   its avatar: My account, or, for a guest, the way to sign in. Creating or joining a game first opens the
+   hangar: the game is asked for when the player launches it with a ship.
 4. **The game** plays a `RemoteSession` with what `GAME_JOINED` gave. When it ends, by the pause menu or because
    the game ended, the client leaves it (`LEAVE_GAME`) and shows the list again.
 

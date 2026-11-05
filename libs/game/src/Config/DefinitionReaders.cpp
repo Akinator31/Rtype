@@ -144,6 +144,8 @@ EnemyDefinition readEnemyDefinition(TableReader &table)
     definition.id = table.readString("id");
     definition.ship = table.readString("ship");
     definition.health = static_cast<std::uint8_t>(table.readInteger("health", 1, MaxU8));
+    definition.phases = static_cast<std::uint8_t>(table.readInteger("phases", 1, MaxU8, definition.phases));
+    definition.boss = table.readBoolean("boss", definition.boss);
     definition.speed = table.readNumber("speed", NumberRange::AboveZero, definition.speed);
     definition.acceleration =
         table.readNumber("acceleration", NumberRange::ZeroOrMore, definition.acceleration);
@@ -173,6 +175,7 @@ WaveDefinition readWaveDefinition(TableReader &table)
     for (TableReader &spawn : table.readList("spawns")) {
         definition.spawns.push_back(readWaveSpawn(spawn));
     }
+    definition.music = table.readString("music", "");
     definition.enemy = table.readString("enemy", "");
     if (table.hasField("area")) {
         definition.area = readWaveArea(table.readTable("area"));

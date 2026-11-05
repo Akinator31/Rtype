@@ -84,10 +84,16 @@ struct SwitchTrack {
 
 /// A value between 0 and 1 shown as a rail lit up to its value (InterfaceStyle::gauge): a life, a charge, a
 /// progress. It shows, but cannot be changed: it does not get the focus. The value is read through a
-/// function, so that the gauge always shows the real one.
+/// function, so that the gauge always shows the real one. Without a caption, the rail is on the position of
+/// the entity: a health bar above a ship.
 struct Gauge {
     std::string caption;
     std::function<float()> get;
+    /// Length of the rail, in game units, or 0 for the width of the style.
+    float width = 0.0f;
+    /// At or below this value, the light turns red (GaugeStyle::lowLight): a life about to run out. 0 for a
+    /// light that stays white.
+    float low = 0.0f;
 };
 
 /// One option among several, shown as "Caption: Option". Left, Right, the mouse wheel and a click go through

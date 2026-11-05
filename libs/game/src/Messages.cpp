@@ -30,7 +30,9 @@ constexpr std::size_t DestroyedHeaderSize = 5;
 /// One entity in ENTITIES_DESTROYED: id, cause.
 constexpr std::size_t DestroyedEntitySize = 5;
 /// The bits of the flags of an entity that the protocol defines: the others are reserved.
-constexpr std::uint8_t KnownFlags = EntityState::Invulnerable | EntityState::Charging | EntityState::Hit;
+constexpr std::uint8_t KnownFlags = EntityState::Invulnerable | EntityState::Charging | EntityState::Hit |
+                                    EntityState::AimingUp | EntityState::AimingDown | EntityState::Guarding |
+                                    EntityState::Slashing | EntityState::Shooting;
 /// Eighths of a unit: the positions and velocities of the protocol (docs/protocol/game.md, section 9.1).
 constexpr float FixedScale = 8.0f;
 
@@ -424,8 +426,10 @@ std::vector<EntitiesDestroyedMessage> destroyedMessages(const Snapshot &snapshot
 std::vector<std::byte> encode(const WaveStartedMessage &message)
 {
     require(message.wave != 0, "A wave is numbered from 1");
-    Writer writer(2);
+    require(message.music.size() <= MaxWaveMusicLength, "The music of a wave is 0 to 128 bytes");
+    Writer writer(3 + message.music.size());
     writer.writeU16(message.wave);
+    writer.writeString(message.music);
     return writer.take();
 }
 
@@ -434,6 +438,7 @@ std::optional<WaveStartedMessage> decodeWaveStarted(std::span<const std::byte> p
     Reader reader(payload);
     WaveStartedMessage message;
     message.wave = reader.readU16();
+    message.music = reader.readString(0, MaxWaveMusicLength);
     if (message.wave == 0) {
         reader.fail();
     }

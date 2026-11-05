@@ -86,6 +86,15 @@ std::vector<input::Binding> Controls::getBindings(Control control) const
     return _controls.bindings(control);
 }
 
+void Controls::resetDefaults()
+{
+    for (int control = static_cast<int>(Control::Up); control <= static_cast<int>(Control::Select);
+         ++control) {
+        clear(static_cast<Control>(control));
+    }
+    bindDefaults();
+}
+
 void Controls::setDeadZone(float deadZone)
 {
     _controls.setDeadZone(deadZone);

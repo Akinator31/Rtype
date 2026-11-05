@@ -6,6 +6,7 @@
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
+#include "ShipSelector/ShipSelector.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Tls.hpp"
@@ -115,9 +116,9 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
 OnlineScenes::OnlineScenes(engine::Engine &engine, render::ResourceManager &resources,
                            network::EventLoop &loop, GameScenes &games, const engine::InterfaceStyle &style,
                            localization::Localization &translations, discord::Authorizer &discord,
-                           std::filesystem::path pictures)
+                           ShipSelection &ships, std::filesystem::path pictures)
     : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord), _games(games),
-      _translations(translations), _known(engine.getSettings()), _sessions(engine.getSettings()),
+      _translations(translations), _ships(ships), _known(engine.getSettings()), _sessions(engine.getSettings()),
       _profiles(engine.getSettings(), std::move(pictures)),
       _sky(resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth)),
       _discordLogo(resources.loadTexture(RTYPE_IMAGE_DISCORD, render::TextureFiltering::Smooth))
@@ -336,10 +337,12 @@ void OnlineScenes::declareLobbyScene(const engine::InterfaceStyle &style)
                 std::function<void()> join;
                 if (!full) {
                     join = [this, id = game.id] {
-                        if (_lobby) {
-                            _lobby->joinGame(
-                                id, [this](const LobbyClient::JoinResult &result) { joined(result); });
-                        }
+                        openShipSelector(_engine, _ships, [this, id] {
+                            if (_lobby) {
+                                _lobby->joinGame(
+                                    id, [this](const LobbyClient::JoinResult &result) { joined(result); });
+                            }
+                        });
                     };
                 }
                 page.ui().listRow(
@@ -358,12 +361,16 @@ void OnlineScenes::declareLobbyScene(const engine::InterfaceStyle &style)
             page.button(
                 _translations.text("online.create"),
                 [this] {
-                    if (_lobby) {
-                        const std::string game =
-                            std::string(_lobby->name()).append("'s game").substr(0, lobby::MaxGameNameLength);
-                        _lobby->createGame(game, CreatedGamePlayers,
-                                           [this](const LobbyClient::JoinResult &result) { joined(result); });
-                    }
+                    openShipSelector(_engine, _ships, [this] {
+                        if (_lobby) {
+                            const std::string game = std::string(_lobby->name())
+                                                         .append("'s game")
+                                                         .substr(0, lobby::MaxGameNameLength);
+                            _lobby->createGame(
+                                game, CreatedGamePlayers,
+                                [this](const LobbyClient::JoinResult &result) { joined(result); });
+                        }
+                    });
                 },
                 {engine::AnchorPoint::TopLeft, columnLeft, buttons});
             page.button(_translations.text("online.refresh"), [this] { refresh(); },

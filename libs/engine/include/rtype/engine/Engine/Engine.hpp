@@ -4,11 +4,15 @@
 #include "rtype/engine/Component/Toast.hpp"
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Event/Event.hpp"
+#include "rtype/engine/Scene/SceneAssetLoader.hpp"
+#include "rtype/engine/Scene/SceneAssets.hpp"
+#include "rtype/engine/Scene/SceneLoadState.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/engine/Settings/Settings.hpp"
 #include "rtype/engine/ThreadManager.hpp"
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -60,6 +64,16 @@ class Engine
     struct NamedScene {
         SceneId id;
         std::string name;
+        /// Acquired before it opened, released when it closes.
+        std::vector<SceneAsset> assets;
+    };
+
+    /// A scene request waiting for the assets of its scene.
+    struct PendingScene {
+        SceneRequest request;
+        std::vector<SceneAsset> assets{};
+        SceneLoadState state = SceneLoadState::Loading;
+        std::string error{};
     };
 
     rtype::ecs::Ecs _ecs;
@@ -74,9 +88,18 @@ class Engine
     input::InputSource *_inputSource = nullptr;
     ThreadManager _threads;
     Settings _settings;
+    SceneAssets _sceneAssets;
+    std::string _loadingScene;
+    std::optional<PendingScene> _pendingScene;
 
     void applySceneRequests();
-    void openScene(const std::string &name);
+    void openScene(const std::string &name, std::vector<SceneAsset> assets = {});
+    void beginSceneRequest(const SceneRequest &request);
+    void finishPendingScene();
+    void failPendingScene(std::string error);
+    void applyReadyScene(const SceneRequest &request, std::vector<SceneAsset> assets);
+    void cancelPendingScene();
+    void closeLoadingScene();
     void destroyClosedScenes();
     void applyPendingReactions();
     void restoreOnceReactions();
@@ -98,6 +121,24 @@ public:
     /// The settings start empty, without a file: the client gives them one with Settings::setPath(), then
     /// reads it.
     [[nodiscard]] Settings &getSettings();
+
+    /// Lets the scenes declare assets (SceneSettings::assets). Before a scene with assets opens, the engine
+    /// requests them from the loader and shows the loading scene until they are all loaded. An asset shared
+    /// by several open scenes is loaded once, and unloaded when the last scene that needs it closes.
+    /// @param loader Must outlive the engine, or unloadSceneAssets() must be called before it is destroyed.
+    /// @param loadingScene Shown while the assets load. It must exist and have no assets.
+    /// @throws std::invalid_argument if the loading scene does not exist or has assets.
+    /// @throws std::logic_error if scene assets are already loaded or loading.
+    void setSceneAssetLoader(SceneAssetLoader &loader, const std::string &loadingScene);
+    /// Tells whether a scene waits for its assets, and whether one of them could not load.
+    [[nodiscard]] SceneLoadState getSceneLoadState() const;
+    /// Why an asset of the waiting scene could not load. Empty unless getSceneLoadState() is Failed.
+    [[nodiscard]] const std::string &getSceneLoadError() const;
+    /// Loads the assets of the waiting scene again. Does nothing unless getSceneLoadState() is Failed.
+    void retrySceneLoad();
+    /// Closes every scene and unloads their assets: at shutdown, before the loader and what it loads with
+    /// are destroyed.
+    void unloadSceneAssets();
 
     /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without
     /// a source, the controls are never updated and stay released.
@@ -165,11 +206,13 @@ public:
     ecs::entity_t showAnnouncement(const std::string &title, const std::string &detail,
                                    ToastType type = ToastType::Info);
     /// Shows a banner across the whole screen, for what the player must not miss: a title and a detail.
+    /// @param duration Time it stays fully shown, in seconds: ToastStyle::duration when empty.
     /// @code
     /// engine.showBanner("BOSS APPROACHING", "GET THE BEAM READY", ToastType::Error);
+    /// engine.showBanner("WAVE 03", "BYDOS INCOMING", ToastType::Info, 1.5f);
     /// @endcode
     ecs::entity_t showBanner(const std::string &title, const std::string &detail,
-                             ToastType type = ToastType::Info);
+                             ToastType type = ToastType::Info, std::optional<float> duration = std::nullopt);
 
     /// Runs one frame: updates the controls from the input source, if any, so that the whole frame reads the
     /// same state; destroys the entities of the closed scenes and applies the scene requests (which

@@ -79,6 +79,17 @@ public:
     /// The colour filter applied to the image, ColorFilter::None by default.
     [[nodiscard]] ColorFilter colorFilter() const;
 
+    /// Darkens the corners of the world, under the interface, to draw the eye to the middle of the screen. It
+    /// is drawn by drawGlow().
+    /// @param strength How dark the corners are, from 0 (no vignette) to 1 (black); 0.22 by default.
+    void setVignette(float strength);
+    /// How dark the vignette makes the corners, from 0 to 1.
+    [[nodiscard]] float vignette() const;
+    /// Smooths the jagged edges of the 3D models (FXAA), when drawGlow() is called. On by default.
+    void setAntialiasing(bool enabled);
+    /// Whether the edges of the 3D models are smoothed.
+    [[nodiscard]] bool antialiasing() const;
+
     /// Starts a new frame and fills it with the background colour.
     /// @throws std::logic_error if a frame is already started.
     void beginFrame(Color background = colors::Black);
@@ -103,6 +114,11 @@ public:
     /// Draws a filled rectangle.
     /// @throws std::logic_error if no frame is started.
     void drawRectangle(Rectangle rectangle, Color color);
+
+    /// Draws a filled rectangle coloured with a vertical gradient: a shadow along an edge of the screen.
+    /// @param top Colour of the top edge, blended into bottom towards the bottom edge.
+    /// @throws std::logic_error if no frame is started.
+    void drawGradientRectangle(Rectangle rectangle, Color top, Color bottom);
 
     /// Draws a filled circle.
     /// @param center Centre of the circle, in game units.
@@ -185,10 +201,12 @@ public:
     void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
                          Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
                          float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
-    /// Makes the energy models drawn since the start of the frame (or the previous call) shine: their light
-    /// is blurred around them and added over everything drawn so far. Call it after the 3D models and before
-    /// the interface, which it would otherwise cover. Does nothing without energy models; if the graphics
-    /// card cannot blur, a warning is logged once and nothing glows.
+    /// Smooths the edges of everything drawn so far (setAntialiasing()). Then makes the energy models, and
+    /// the light the models emit (engine flames, windows), drawn since the start of the frame (or the
+    /// previous call) shine: their light is blurred around them and added over everything drawn so far. Then
+    /// darkens the corners (setVignette()). Call it after the 3D models and
+    /// before the interface, which it would otherwise cover. If the graphics card cannot blur, a warning is
+    /// logged once and nothing glows.
     /// @throws std::logic_error if no frame is started.
     void drawGlow();
 
@@ -205,6 +223,10 @@ public:
     /// @param fromTime, toTime Time in each animation, in seconds. The animations loop.
     /// @param amount How far the pose is from the first animation (0) to the second one (1).
     void blendModelAnimations(ModelId model, int from, float fromTime, int to, float toTime, float amount);
+
+    /// Poses an animated model, like blendModelAnimations(), with another animation added over the pose if
+    /// it says so (ModelPose::added): the recoil of a gun over a flight.
+    void poseModel(ModelId model, const ModelPose &pose);
 
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.

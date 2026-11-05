@@ -39,7 +39,7 @@ FilterShader::~FilterShader()
 
 bool FilterShader::begin(ColorFilter filter)
 {
-    if (!_available || filter == ColorFilter::None) {
+    if (!_available) {
         return false;
     }
     // The mode numbers follow the order of the enum

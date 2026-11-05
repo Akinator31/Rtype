@@ -31,7 +31,7 @@ struct KindLook {
     int order;
 };
 
-const std::array<KindLook, 6> KindLooks{{
+const std::array<KindLook, 8> KindLooks{{
     {game::EntityKind::PlayerShip,
      DefaultRules.shipHalfWidth * 2.0f,
      DefaultRules.shipHalfHeight * 2.0f,
@@ -40,13 +40,21 @@ const std::array<KindLook, 6> KindLooks{{
      ShipOrder},
     {game::EntityKind::PlayerShot, 68.0f, 18.8f, true, {}, ShotOrder},
     {game::EntityKind::PlayerChargedShot, 48.0f, 16.0f, true, {}, ShotOrder},
+    // The allies of the rescue against the final boss: the size of a ship of a player, in silver
+    {game::EntityKind::AllyShip,
+     DefaultRules.shipHalfWidth * 2.0f,
+     DefaultRules.shipHalfHeight * 2.0f,
+     false,
+     {200, 210, 225, 255},
+     ShipOrder},
     {game::EntityKind::BydoFlyer, 140.0f, 54.0f, false, {171, 71, 188, 255}, ShipOrder},
+    {game::EntityKind::BydoBoss, 160.0f, 316.0f, false, {171, 71, 188, 255}, ShipOrder},
     {game::EntityKind::BydoShot, 68.0f, 22.0f, false, {255, 112, 67, 255}, ShotOrder},
     {game::EntityKind::BydoPlasmaShot, 44.0f, 44.0f, false, {236, 64, 122, 255}, ShotOrder},
 }};
 
 /// The other kinds come with the gameplay: a grey box until they have a look.
-const KindLook UnknownLook{game::EntityKind::BydoBoss, 48.0f, 48.0f, false, render::colors::Gray, ShipOrder};
+const KindLook UnknownLook{game::EntityKind::BydoTank, 48.0f, 48.0f, false, render::colors::Gray, ShipOrder};
 
 } // namespace
 

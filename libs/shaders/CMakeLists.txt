@@ -37,9 +37,9 @@ function(rtype_embed_shader program)
     set_property(GLOBAL APPEND PROPERTY RTYPE_SHADER_HEADERS ${output})
 endfunction()
 
+rtype_embed_shader(Antialiasing Antialiasing.frag)
 rtype_embed_shader(ColorFilter ColorFilter.frag)
 rtype_embed_shader(Lighting Lighting.vert Lighting.frag)
-rtype_embed_shader(PbrLighting PbrLighting.vert PbrLighting.frag)
 rtype_embed_shader(Energy Energy.vert Energy.frag)
 rtype_embed_shader(Blur Blur.frag)
 

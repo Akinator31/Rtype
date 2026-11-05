@@ -17,6 +17,9 @@ struct Rules {
     /// as the client draws it.
     float shipHalfWidth = 84.0f;
     float shipHalfHeight = 49.0f;
+    /// How far a ship turns its nose, up or down, while its player holds AimUp or AimDown, in degrees: it
+    /// fires that way. Its hitbox does not turn.
+    float aimAngle = 30.0f;
 
     /// A missile speeds up by this fraction of its launch speed per tick, up to missileMaxBoost times it.
     float missileBoostPerTick = 0.02f;
@@ -27,7 +30,7 @@ struct Rules {
     std::uint32_t plasmaZigzagInterval = 20;
 
     /// Ticks between the loss of a ship and the next one, if the player has lives left.
-    std::uint32_t respawnDelay = 90;
+    std::uint32_t respawnDelay = 180;
     /// Ticks a new ship cannot be hit.
     std::uint32_t invulnerableTicks = 120;
     /// Ticks a ship that was hit, and survived, cannot be hit again.
@@ -37,6 +40,21 @@ struct Rules {
     std::uint32_t firstWaveDelay = 120;
     /// Ticks between the end of a wave and the start of the next one.
     std::uint32_t wavePause = 180;
+
+    /// Offline story mode: when the last ship of the last player is lost against the final boss, allies come
+    /// to the rescue instead of the defeat (RescueStage, RescueSystem). Off for the games online.
+    bool rescue = false;
+    /// Ticks of the voice the client plays when the rescue starts: the allies come when it ends. Keep it the
+    /// length of the file of RTYPE_SOUND_RESCUE_VOICE in the client.
+    std::uint32_t rescueVoiceTicks = 360;
+    /// Ticks the allies and the new ship of the player take to fly in.
+    std::uint32_t rescueArrivalTicks = 150;
+    /// Ticks the allies shoot at the shogun before it strikes back.
+    std::uint32_t rescueAssaultTicks = 300;
+    /// Ticks of the combined attack, until the shogun falls.
+    std::uint32_t rescueCombinedTicks = 150;
+    /// Ticks between the fall of the shogun and the victory.
+    std::uint32_t rescueVictoryDelay = 180;
 
     /// Seed of the random numbers of a game: the same seed and the same inputs give the same game.
     std::uint32_t seed = 1;

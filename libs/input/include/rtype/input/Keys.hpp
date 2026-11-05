@@ -1,5 +1,9 @@
 #pragma once
 
+#include <optional>
+#include <span>
+#include <string_view>
+
 namespace rtype::input
 {
 
@@ -75,6 +79,14 @@ enum class Key {
     F11,
     F12,
 };
+
+/// Every key, in the order of Key: to look for the one the player presses.
+[[nodiscard]] std::span<const Key> allKeys();
+/// The name of a key, as in Key: "A", "Num1", "Space", "LeftShift", "F11". Meant to be saved, not shown: the
+/// player's keyboard may name it otherwise (see keyLabel()).
+[[nodiscard]] std::string_view keyName(Key key);
+/// The key of a name given by keyName(), or nothing for another text.
+[[nodiscard]] std::optional<Key> keyFromName(std::string_view name);
 
 /// A gamepad button, named after its position so that it means the same on every brand of gamepad.
 enum class GamepadButton {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace rtype::render
 {
@@ -20,15 +21,47 @@ struct WindowSettings {
     bool fullscreen = false;
 };
 
+/// A screen connected to the computer, as Window::monitors() lists it.
+struct Monitor {
+    /// Its name as the system gives it, for instance "DELL U2720Q". It can be empty.
+    std::string name;
+    /// The resolution of its current video mode, in pixels.
+    int width = 0;
+    int height = 0;
+};
+
 /// The game window, open for as long as this object exists.
 ///
 /// The window is opened by the constructor and closed by the destructor (RAII). Only one window can exist
 /// at a time, as raylib supports a single window. Graphics resources (textures, fonts, shaders) need the
 /// window: create them after it and destroy them before it.
+///
+/// On Linux, a laptop with an NVIDIA GPU next to an integrated one draws with the NVIDIA GPU, unless
+/// __GLX_VENDOR_LIBRARY_NAME is already set (mesa keeps the integrated GPU).
 class Window
 {
 private:
+    /// A place and a size of the window, in screen pixels.
+    struct Area {
+        int x = 0;
+        int y = 0;
+        int width = 0;
+        int height = 0;
+    };
+    /// A size asked for the window, asked again for a while: the system may still change it on its own.
+    struct PendingSize {
+        int width = 0;
+        int height = 0;
+        int framesLeft = 0;
+    };
+
     bool _closeRequested = false;
+    int _targetFps = 0;
+    /// Where the window was before fullscreen, to go back there.
+    Area _windowed;
+    PendingSize _pendingSize;
+
+    void watchSize(int width, int height);
 
 public:
     /// Opens the window.
@@ -41,6 +74,9 @@ public:
     Window &operator=(const Window &) = delete;
     Window(Window &&) = delete;
     Window &operator=(Window &&) = delete;
+
+    /// Finishes the changes of size the system has not applied yet. Call it once per frame.
+    void update();
 
     /// Tells whether the window should close: the player used its close button or the system shortcut (Alt+F4
     /// for instance), or the game called requestClose(). The Escape key does not close the window: what it
@@ -66,8 +102,17 @@ public:
     /// Tells whether the window is in fullscreen.
     [[nodiscard]] bool isFullscreen() const;
 
-    /// Resizes the window, in pixels. Leaves fullscreen first if needed.
+    /// Resizes the window, in pixels, and centres it on its screen. Leaves fullscreen first if needed. The
+    /// system may take a few frames to apply it: see update().
     void setSize(int width, int height);
+
+    /// The screens connected to the computer, the first one being the primary screen.
+    [[nodiscard]] std::vector<Monitor> monitors() const;
+    /// The index in monitors() of the screen the window is on.
+    [[nodiscard]] int monitor() const;
+    /// Moves the window to a screen of monitors(): in fullscreen, it covers the new screen; otherwise it
+    /// keeps its size and is centred on it. Does nothing for an index out of the list.
+    void moveToMonitor(int monitor);
     /// Changes the title of the window.
     void setTitle(const std::string &title);
 
@@ -79,8 +124,13 @@ public:
 
     /// Turns vertical synchronisation on or off, see WindowSettings::vsync.
     void setVsync(bool vsync);
+    /// Tells whether vertical synchronisation is on: the frames are then limited to the refresh rate of the
+    /// screen, whatever setTargetFps() asks.
+    [[nodiscard]] bool isVsync() const;
     /// Sets the maximum number of frames per second, or 0 for no limit.
     void setTargetFps(int fps);
+    /// The maximum number of frames per second, 0 for no limit.
+    [[nodiscard]] int targetFps() const;
 };
 
 } // namespace rtype::render

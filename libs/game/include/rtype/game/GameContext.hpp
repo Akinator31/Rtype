@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <optional>
 #include <random>
+#include <string>
 #include <vector>
 
 namespace rtype::game
@@ -30,6 +31,27 @@ struct PlayerSlot {
     std::uint32_t score = 0;
     /// Ticks left before its next ship appears, 0 when it has one or no lives left.
     std::uint32_t respawnIn = 0;
+};
+
+/// Where the rescue against the final boss is, run by the RescueSystem (Rules::rescue).
+struct RescueProgress {
+    RescueStage stage = RescueStage::None;
+    /// Ticks since the stage started.
+    std::uint32_t ticks = 0;
+    /// Dash stage: the ship the shogun dashes at, by index in the formation (0 is the player), and whether
+    /// it is flying at it or raising its blade before.
+    std::size_t target = 0;
+    bool dashing = false;
+    /// Dash stage: where the current dash ends.
+    float dashX = 0.0f;
+    float dashY = 0.0f;
+    /// Ticks the ship of the player is still thrown back by a dash.
+    std::uint32_t playerStunned = 0;
+    /// Prompt stage: Fire was released since the prompt showed, so that a Fire held from before does not
+    /// count.
+    bool fireReleased = false;
+    /// Combined stage: the health of the shogun when it started, drained to 0.
+    std::uint8_t bossHealth = 0;
 };
 
 /// What the systems of the game share besides the components: the rules, the tick, the players and their
@@ -48,13 +70,18 @@ struct GameContext {
     std::uint32_t tick = 0;
     std::array<PlayerSlot, MaxPlayers> players{};
     WaveProgress wave;
+    RescueProgress rescue;
     /// The game ended, won or lost: nothing more happens to the waves nor to the outcome.
     bool over = false;
 
     /// Events since the previous snapshot.
     std::vector<DestroyedEntity> destroyed;
     std::optional<std::uint16_t> waveStarted;
+    /// The music of the wave started, empty if it has none: set with waveStarted.
+    std::string waveMusic;
     std::optional<GameOutcome> gameOver;
+    /// The ships the blade of the shogun went through during the rescue, by NetworkId.
+    std::vector<std::uint32_t> struck;
 
     /// A number from `first` to `last` included. Same result on every platform, unlike the distributions of
     /// the standard library, so that a game replays the same everywhere.

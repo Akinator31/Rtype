@@ -91,6 +91,8 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 | `entities` | Each entity: id, kind, owner, position (its centre), velocity, health, flags, by id |
 | `destroyed` | The entities destroyed since the previous snapshot, with the cause (removed, or killed: an explosion) |
 | `waveStarted`, `gameOver` | A wave started, the game ended |
+| `rescue` | Where the rescue against the final boss is, offline (`RescueStage`, [The rescue against the final boss](#the-rescue-against-the-final-boss)) |
+| `struck` | The ships the blade of the shogun went through during the rescue, by id, offline: the client draws the cut |
 
 - **Ids are never reused** within a game (`NetworkId`, unlike the ids of the ECS): a client keeps them to
   recognize its entities from one snapshot to the next.
@@ -110,13 +112,15 @@ A `Snapshot` is the world at the end of a tick, with the fields of the `SNAPSHOT
 | A Bydo flies to the left, and fires its weapon once in the area | `EnemySystem`, `WeaponSystem` | — (its definition's) |
 | What has `Damage` hurts what it touches: player shots the Bydos, the Bydos and their shots the ships | `CombatSystem` | `hitInvulnerableTicks` 60 |
 | A Bydo with no hit points left is destroyed, its score goes to the player of the shot | `CombatSystem` | — |
-| A ship with no hit points left is destroyed, the player loses a life and gets a new ship, invulnerable for a while | `CombatSystem` | `respawnDelay` 90 ticks, `invulnerableTicks` 120 |
+| A ship with no hit points left is destroyed, the player loses a life and gets a new ship, invulnerable for a while | `CombatSystem` | `respawnDelay` 180 ticks (3 s), `invulnerableTicks` 120 |
 | Every player out of lives ends the game (defeat) | `CombatSystem` | `lives` 3 |
+| Offline, the last life lost against the final boss brings allies to the rescue instead | `CombatSystem`, `RescueSystem` | `rescue`, `rescueVoiceTicks`... |
 | What leaves the area is removed | `AreaSystem`, `LeavesArea` | `areaMargin` 128 units |
 | A player who leaves takes its ship away | `Simulation::removePlayer()` | — |
 
 A tick runs the systems in this order: `PlayerControlSystem` (inputs), `WaveSystem` (the waves),
-`EnemySystem` (the Bydos), `WeaponSystem` (the weapons), `ProjectileSystem` (the velocity of the projectiles),
+`EnemySystem` (the Bydos), `RescueSystem` (the rescue against the final boss), `WeaponSystem` (the weapons),
+`ProjectileSystem` (the velocity of the projectiles),
 `physics::MovementSystem` (movement), `physics::BoundsSystem` (the walls), `CombatSystem` (the hits, the
 lives), `AreaSystem` (what left), then the snapshot is taken.
 
@@ -127,9 +131,10 @@ The `CombatSystem` tests what touches what with the colliders of the entities, b
 of what it hits:
 
 - **A player shot** (its `Owner` is a slot) hurts a Bydo and is spent (`DestroyCause::Killed`: the client draws
-  its impact). The Bydo
-  with no hit points left is destroyed (`DestroyCause::Killed`) and `EnemyDefinition::score` goes to the
-  player of the shot.
+  its impact). A Bydo behind its guard (`EnemyStance::Guard`, ordered by its behavior) takes no damage. The
+  Bydo with no hit points left starts its next phase with all its health if it has one left
+  (`EnemyDefinition::phases`, `Enemy::phase`): a boss outlasts the 255 hit points of a `Health`. Otherwise it is
+  destroyed (`DestroyCause::Killed`) and `EnemyDefinition::score` goes to the player of the shot.
 - **A Bydo shot** (`NoOwner`) hurts a ship and is spent, killed as well; **a Bydo** hurts a ship it runs into
   (`EnemyDefinition::collisionDamage`) and keeps going. A ship that survives is invulnerable for
   `hitInvulnerableTicks`, so that a Bydo on it does not take its health away tick after tick.
@@ -351,6 +356,8 @@ A kind of enemy is **data** as well, an `EnemyDefinition`, kept by id in an `Ene
 | `score` | `std::uint32_t` | Points for the player who destroys it (default 100) |
 | `collisionDamage` | `std::uint8_t` | Hit points a ship loses when it runs into it (default 20) |
 | `behavior` | `std::optional<EnemyBehavior>` | What moves it and makes it fire (see [Enemy behaviors](#enemy-behaviors)); none: it flies left and fires as soon as it can |
+| `phases` | `std::uint8_t` | How many times its health is filled (not 0, default 1): it gets all of it back at each new phase |
+| `boss` | `bool` | Sent as `EntityKind::BydoBoss` instead of `BydoFlyer`: the clients draw it as a boss (default false) |
 
 ```mermaid
 flowchart LR
@@ -401,13 +408,15 @@ flowchart LR
 
 **What a behavior sees and orders**, with recipes, is in the guide
 [Script the behavior of an enemy](../guides/script-enemy-behaviors.md#reference): the enemy (position, velocity,
-top speed, age, health, weapon, a `memory` of its own), the players and their weapons, the time and the random
-numbers of the game; the orders `setVelocity`, `moveTo`, `fire` and `fireAt`. On the C++ side:
+top speed, age, health, phase, weapon, a `memory` of its own), the players and their weapons, the time and the
+random numbers of the game; the orders `setVelocity`, `moveTo`, `fire`, `fireAt`, and the stances `guard`,
+`slash` and `aim`. On the C++ side:
 
 - **The bound types are copies.** `EnemyScripts` gives each call an `enemy` userdata built from the components
   (`Position`, `Velocity`, `Health`, `Armed`, `Enemy::age`, `EnemyOrders`), owned by Lua, read-only, and reads
   its orders back after the call: a new velocity, and the `EnemyOrders` (destination, kept from one tick to the
-  next; `fire` and `target`, reset at every call). A script that keeps `enemy` changes nothing. `game` is built
+  next; `fire`, `target` and `stance`, reset at every call). The stance goes into the flags of the snapshot
+  (`EntityState::Guarding`, `Slashing`, `Shooting`), for the clients to animate. A script that keeps `enemy` changes nothing. `game` is built
   once per tick (`startTick()`), with the players in slot order.
 - **Moving and firing stay in C++.** The `EnemySystem` flies an enemy with a destination to it at its top
   speed, slower on the last tick so that it stops on it; the `WeaponSystem` fires an enemy with `EnemyOrders`
@@ -435,13 +444,14 @@ A wave is a group of enemies that appear one after the other. Like the enemies, 
 | `name` | `std::string` | Unique name in the registry |
 | `label` | `std::string` | Short text shown to the players |
 | `description` | `std::string` | Longer text |
-| `difficulty` | `std::uint8_t` | How hard the wave is, from 1 (`MinWaveDifficulty`) to 5 (`MaxWaveDifficulty`) |
+| `difficulty` | `std::uint8_t` | How hard the wave is, from 1 (`MinWaveDifficulty`) to 6 (`MaxWaveDifficulty`, the final boss) |
 | `quantity` | `std::uint16_t` | How many enemies (above 0) |
 | `spawnInterval` | `float` | Seconds between two enemies (0 or more; 0 = all at once) |
 | `placement` | `WavePlacement` | `Manual` or `Random`, one mode per wave |
 | `spawns` | `std::vector<WaveSpawn>` | Manual only: each enemy (`enemy`, `x`, `y`), in the order they appear |
 | `enemy` | `std::string` | Random only: the id of the `EnemyDefinition` of every enemy |
 | `area` | `WaveArea` | Random only: the rectangle (`minX`, `maxX`, `minY`, `maxY`) where they appear |
+| `music` | `std::string` | Path of the music the clients play when the wave starts, relative to their assets; empty = the music playing goes on. Sent in `WAVE_STARTED` |
 
 ```mermaid
 flowchart LR
@@ -506,6 +516,49 @@ stateDiagram-v2
   sends it to the clients (`WAVE_STARTED`).
 - Nothing happens without a wave in the registry (the tests made by hand), nor while no player is in. Once
   the game is over (`GameContext::over`), won or lost, the waves stop.
+
+### The rescue against the final boss
+
+Offline, in the story mode of the client, the fight against the shogun cannot be lost: `Rules::rescue` (set by
+the `LocalSession`, off online) turns the defeat into a scripted rescue. Online, the server leaves the waves of
+the final boss out of its configuration (`readGameConfig()`): the game is won once the waves before it are
+beaten.
+
+When the last ship of the last player is lost in the last wave, with a boss alive, the `CombatSystem` starts the
+rescue (`GameContext::rescue`, `RescueProgress`) instead of the defeat. From then on the `RescueSystem`, run
+right after the `EnemySystem`, flies the boss, the allies and the ship of the player, stage by stage
+(`RescueStage`, in each snapshot as `rescue`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> Voice: last life lost against the boss
+    Voice --> Arrival: rescueVoiceTicks (the voice of the client)
+    Arrival --> Assault: rescueArrivalTicks
+    Assault --> Dash: rescueAssaultTicks
+    Dash --> Prompt: every ship dashed through, the boss back
+    Prompt --> Combined: Fire released, then pressed
+    Combined --> Finished: rescueCombinedTicks, the boss killed
+    Finished --> [*]: rescueVictoryDelay, gameOver = Victory
+```
+
+| Stage | What happens |
+|---|---|
+| `Voice` | The client plays the voice of the rescue; the boss guards on its spot (1600, 540) |
+| `Arrival` | Five allies (`AllyShip`, `spawnAlly()`, with an `Ally` component) fly in from the left with a new ship for the player, who gets a life back, into an arrowhead: the player at its tip |
+| `Assault` | The allies shoot at the boss, which guards and cannot be hurt; the player flies and fires freely |
+| `Dash` | The boss raises its blade, then dashes through each ship of the formation in turn, throwing it back without hurting it (the ship struck is in the next snapshot, `struck`), and flies back to its spot |
+| `Prompt` | The client asks for Fire (Space); a Fire held since before must be released first |
+| `Combined` | Every ship fires at the boss; its health drains by steps to 0, then it is killed and its score goes to the player |
+| `Finished` | The victory comes `rescueVictoryDelay` ticks later |
+
+- While the rescue runs, the `WaveSystem` and the behaviors of the Bydos wait, and the `CombatSystem` hurts no
+  ship of a player. The boss is ordered every tick (`EnemyOrders`): a stance, no shot, `invulnerable`.
+- The shots of the allies belong to the player rescued (its slot as `Owner`): they hit the Bydos as its own.
+  The allies have neither health nor hitbox: nothing hits them.
+- `AllyShip` is never sent online: the protocol does not know it.
+- The numbers are in `Rules` (`rescueVoiceTicks` 360, `rescueArrivalTicks` 150, `rescueAssaultTicks` 300,
+  `rescueCombinedTicks` 150, `rescueVictoryDelay` 180); the formation and the dashes in `RescueSystem.cpp`.
+  `rescueVoiceTicks` is the length of the voice of the client (`RTYPE_SOUND_RESCUE_VOICE`).
 
 ## Configuration
 
@@ -666,6 +719,11 @@ their enemies, the wave drawn from the seed, nothing without a player, and the v
 behaviors of the Bydos: flying to a point and stopping there, firing only when ordered, aiming at a player,
 the memory of each enemy, their random numbers drawn from the seed, an enemy without orders keeping still, and
 a behavior that fails or never ends stopped while the game goes on.
+
+The tests in `tests/game_rescue.cpp` (tag `[game]`) play the rescue against the shogun of the repository: the
+last life lost is a defeat without `Rules::rescue`; with it, the voice, five allies and a new ship with a life,
+their shots that do not hurt the boss, its dashes through every ship that kill none, a Fire held that does not
+count, then the combined attack, the boss killed and scored, and the victory.
 
 The tests in `tests/game_config.cpp` (tag `[game]`) load the configuration of the repository, read each kind
 with its defaults, and check each error: the field that is missing, of the wrong type, out of range or

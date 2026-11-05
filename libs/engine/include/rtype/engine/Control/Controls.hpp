@@ -40,6 +40,8 @@ public:
     /// Removes every input of the control, for instance before the player chooses new ones.
     void clear(Control control);
     [[nodiscard]] std::vector<input::Binding> getBindings(Control control) const;
+    /// Puts every control back to its default bindings, those listed above.
+    void resetDefaults();
 
     /// Sets the part of the stick and trigger range that is ignored, 0.25 by default.
     void setDeadZone(float deadZone);

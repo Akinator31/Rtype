@@ -13,16 +13,20 @@ add_executable(rtype_tests
     audio.cpp
     client_game.cpp
     client_interpolation.cpp
+    client_lore.cpp
     client_online.cpp
     client_profiles.cpp
     client_prediction.cpp
     color_filter.cpp
     collider_debug_renderer.cpp
+    control_settings.cpp
     controls.cpp
     crypto.cpp
     database.cpp
     database_thread.cpp
     datagram.cpp
+    debug_commands.cpp
+    display_settings.cpp
     ecs.cpp
     ecs_world.cpp
     engine.cpp
@@ -30,6 +34,7 @@ add_executable(rtype_tests
     framing.cpp
     game_config.cpp
     game_messages.cpp
+    game_rescue.cpp
     game_simulation.cpp
     known_servers.cpp
     lobby_messages.cpp
@@ -38,6 +43,7 @@ add_executable(rtype_tests
     network.cpp
     paths.cpp
     platform_assumptions.cpp
+    player_settings.cpp
     process.cpp
     physics_broad_phase.cpp
     physics_bounds.cpp
@@ -52,6 +58,7 @@ add_executable(rtype_tests
     physics_step.cpp
     reliability.cpp
     resource_cache.cpp
+    scene_assets.cpp
     scenes.cpp
     scripting.cpp
     serialization.cpp

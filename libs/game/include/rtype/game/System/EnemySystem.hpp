@@ -17,7 +17,8 @@ class EnemyScripts;
 /// which may change its velocity and its EnemyOrders, then flies to the destination of its orders, at its top
 /// speed (docs/architecture/game.md, "Enemy behaviors"). One without speeds up to the left, by the
 /// acceleration of its definition, up to its top speed. A behavior that fails is logged and stopped for the
-/// rest of the game: its enemies lose their orders and fly as if they had none.
+/// rest of the game: its enemies lose their orders and fly as if they had none. During the rescue against
+/// the final boss, nothing: the RescueSystem flies the boss.
 class EnemySystem : public ecs::System
 {
     ecs::Ecs &_ecs;

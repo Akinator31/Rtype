@@ -42,6 +42,7 @@
 #include "rtype/game/System/EnemySystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
+#include "rtype/game/System/RescueSystem.hpp"
 #include "rtype/game/System/WaveSystem.hpp"
 #include "rtype/game/System/WeaponSystem.hpp"
 #include "rtype/game/Wave/WaveArea.hpp"

@@ -60,18 +60,28 @@ Most settings can be changed while the game runs, for instance from an options m
 | Function                                      | Effect                                                                                          |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `setFullscreen(bool)`, `isFullscreen()`       | Switches between a window and fullscreen.                                                       |
-| `setSize(width, height)`                      | Resizes the window, in pixels. Leaves fullscreen first.                                         |
+| `setSize(width, height)`                      | Resizes the window, in pixels, and centres it on its screen. Leaves fullscreen first.           |
+| `update()`                                    | Finishes a change of size the system has not applied yet. Called once per frame.                |
+| `monitors()`, `monitor()`                     | The connected screens (name, resolution), and the index of the one the window is on.            |
+| `moveToMonitor(index)`                        | Moves the window to another screen: it covers it in fullscreen, or is centred on it.            |
 | `setTitle(title)`                             | Changes the title of the window.                                                                |
 | `setCursorVisible(bool)`, `isCursorVisible()` | Shows or hides the mouse pointer over the window.                                               |
 | `setVsync(bool)`                              | Turns vertical synchronisation on or off.                                                       |
 | `setTargetFps(fps)`                           | Sets the maximum number of frames per second, 0 for no limit.                                   |
 | `requestClose()`                              | Asks the window to close, for instance from a _Quit_ button: `shouldClose()` then returns true. |
 
-**Fullscreen** is a borderless window covering the screen it is on, at the resolution of that screen. raylib
-also has an exclusive fullscreen, which changes the video mode of the screen to match the window: it is slow
-to switch, can rearrange the other screens, and behaves badly when switching to another application. Since the
-game is already scaled to any window size, the borderless mode loses nothing. Leaving fullscreen restores the
-previous size and position of the window.
+**Fullscreen** covers the screen the window is on, at the resolution of that screen: the screen keeps its
+video mode. A fullscreen that changes the video mode to match the window is slow to switch, can rearrange the
+other screens, and behaves badly when switching to another application; since the game is already scaled to
+any window size, it would bring nothing. Leaving fullscreen restores the previous size and position of the
+window.
+
+The window drives this fullscreen with GLFW, which raylib is built on (`glfwSetWindowMonitor()`), rather than
+with raylib's own functions. Those also remove the title bar of the window and put it back: on Wayland (through
+XWayland), the compositor then keeps the window in fullscreen and refuses any other size, and raylib believes
+the window has a size it does not have, so the image is drawn in a corner of a black screen. The compositor
+also applies the end of fullscreen a few frames late, and can shrink the window by its title bar meanwhile:
+for a second after a change of size, `update()` asks for the size again until the window has it.
 
 The client switches fullscreen with ++f11++ (the `ToggleFullscreen` action) or from the menu, and hides the
 mouse pointer during the game, where it would hide part of the screen.
@@ -264,6 +274,50 @@ green of the test palette goes from 60 to 129 (on a scale of 0 to 441) with the 
     rely on colour only: player ships, enemies and projectiles should also differ by shape, as planned in
     [Accessibility](../accessibility.md). The simulation filters are the way to check it.
 
+### Lighting of the 3D models
+
+`drawModel()` lights a model with the `render::Light` it is given, through `Lighting.frag`:
+
+| Field                   | Effect                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `direction`, `color`    | The sun: a directional light, with a highlight that depends on the material.                |
+| `ambient`               | Light received everywhere, brighter from the top of the screen (`Camera::up`) than below.   |
+| `rimDirection`, `rim`   | A rim light from behind, which outlines the edges of the silhouette. Black (off) by default. |
+
+The shading is physically based, as glTF describes materials: a GGX highlight (Cook-Torrance) with a
+Fresnel term, so that smooth parts catch a small, bright highlight, rough parts a wide, dim one, and every
+surface reflects more at grazing angles. The roughness, metalness and occlusion maps of the materials are
+used when they have some, and their roughness and metalness factors otherwise; others are a satin paint
+(roughness 0.65, not metal). With no environment map, surfaces reflect the ambient light and a lobe around
+the sun, weighted as in image based lighting (an analytic fit of the pre-integrated BRDF), and metals keep a
+little diffuse light, so that a metal hull is not black outside of its highlight. Rough metals get back the
+light that a single bounce of GGX loses, and the occlusion map also hides the reflections in the creases.
+The brightest colours are compressed into white instead of clipping, and the roughness is widened where the
+normal map changes quickly on screen, so that small details do not sparkle as the model turns.
+
+Models emit their emission map multiplied by their emissive colour, or that colour all over without a map
+(the engine flames of some ships): it shows on the night side and glows (`drawGlow()`). The emissive
+strength of glTF is not applied.
+
+### Antialiasing, glow, vignette and dithering
+
+`drawGlow()`, called after the 3D models and before the interface:
+
+1. smooths the jagged edges of what the frame holds (FXAA, `Antialiasing.frag`, `setAntialiasing()`, on by
+   default). The frame is drawn in an image without multisampling: without it, the edges of the models are
+   staircases of pixels that crawl as they move. The interface, drawn afterwards, keeps its sharp text;
+2. draws the energy models and the light the lit models emit (engine flames, windows, beacons) again, at a
+   quarter of the resolution. The lit models write their depth there, so that a hull hides the glow of what
+   is behind it;
+3. blurs this image, then blurs it again at an eighth of the resolution and adds it back as a wider, fainter
+   halo, so that the light fades out slowly instead of stopping at the edge of the blur;
+4. adds the result over the frame, then darkens its corners (`setVignette()`, 0.22 by default, 0 to turn it
+   off). The interface, drawn afterwards, is not darkened.
+
+`endFrame()` always adds a faint noise of plus or minus one level per channel (dithering) when it copies the
+frame to the window, in the same pass as the colour filter: the dark gradients of space and of the glow show
+no steps.
+
 ## Implementation notes
 
 These details only matter when working inside `libs/render`:
@@ -279,6 +333,15 @@ These details only matter when working inside `libs/render`:
 - **Triangle winding.** raylib only draws triangles whose corners are given counter-clockwise on screen: the
   others are culled without any warning. `drawTriangle()` reorders the corners, so they can be given in any
   order.
+- **Meshes drawn one by one.** `LightingShader` draws each mesh with `DrawMesh()` rather than
+  `DrawModelEx()`, to send the roughness and metalness of its material and replace its missing maps with
+  plain textures: raylib leaves the texture of the previous mesh bound where a map has none. raylib 6 loads
+  the glTF metal/roughness texture as two grey textures, in `MATERIAL_MAP_METALNESS` and
+  `MATERIAL_MAP_ROUGHNESS`, with their factors in `value`.
+- **glTF factors read again.** raylib keeps the roughness, metalness and emissive factors of a glTF
+  material only along with their textures. `detail::Model` reads them again with cgltf, compiled inside
+  raylib, and puts them where raylib puts those of textured materials (`value` of the roughness and
+  metalness maps, `color` of the emission map). A roughness factor of 0 is taken as none.
 - **Upside-down render target.** OpenGL stores off-screen images upside down: `endFrame()` copies the image
   with a negative source height to flip it back.
 

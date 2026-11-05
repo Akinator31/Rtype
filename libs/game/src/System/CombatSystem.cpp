@@ -12,7 +12,7 @@ CombatSystem::CombatSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameCont
     : _ecs(ecs), _context(context), _owners(use<Owner>(caches)), _positions(use<ecs::Position>(caches)),
       _colliders(use<physics::Collider>(caches)), _healths(use<Health>(caches)),
       _damages(use<Damage>(caches)), _invulnerables(use<Invulnerable>(caches)),
-      _playerShips(use<PlayerShip>(caches)), _enemies(use<Enemy>(caches))
+      _playerShips(use<PlayerShip>(caches)), _enemies(use<Enemy>(caches)), _orders(use<EnemyOrders>(caches))
 {
 }
 
@@ -82,7 +82,10 @@ void CombatSystem::hitEnemies(const Targets &targets, std::unordered_set<ecs::en
         }
         spent.insert(shot);
         destroyLater(shot, DestroyCause::Killed);
-        if (hurt(*enemy, shot)) {
+        if (isGuarding(*enemy)) {
+            continue;
+        }
+        if (hurt(*enemy, shot) && !startNextPhase(*enemy)) {
             spent.insert(*enemy);
             destroyLater(*enemy, DestroyCause::Killed);
             rewardKill(shot, *enemy);
@@ -92,6 +95,9 @@ void CombatSystem::hitEnemies(const Targets &targets, std::unordered_set<ecs::en
 
 void CombatSystem::hitShips(const Targets &targets, std::unordered_set<ecs::entity_t> &spent)
 {
+    if (_context.rescue.stage != RescueStage::None) {
+        return;
+    }
     for (const ecs::entity_t ship : targets.ships) {
         if (_invulnerables.has(ship) && _invulnerables.get(ship).ticks > 0) {
             continue;
@@ -118,6 +124,24 @@ bool CombatSystem::hurt(ecs::entity_t target, ecs::entity_t source)
     Health &health = _healths.get(target);
     health.points -= std::min(health.points, _damages.get(source).points);
     return health.points == 0;
+}
+
+bool CombatSystem::isGuarding(ecs::entity_t enemy) const
+{
+    return _orders.has(enemy) &&
+           (_orders.get(enemy).stance == EnemyStance::Guard || _orders.get(enemy).invulnerable);
+}
+
+bool CombatSystem::startNextPhase(ecs::entity_t enemy)
+{
+    Enemy &state = _enemies.get(enemy);
+    const EnemyDefinition &definition = _context.enemies.getDefinition(state.id);
+    if (state.phase >= definition.phases) {
+        return false;
+    }
+    ++state.phase;
+    _healths.get(enemy).points = definition.health;
+    return true;
 }
 
 void CombatSystem::rewardKill(ecs::entity_t shot, ecs::entity_t enemy)
@@ -192,10 +216,30 @@ void CombatSystem::endGameWhenDefeated()
     const bool anyone = std::ranges::any_of(players, [](const PlayerSlot &player) { return player.present; });
     const bool someoneLeft = std::ranges::any_of(
         players, [](const PlayerSlot &player) { return player.present && player.lives > 0; });
-    if (anyone && !someoneLeft && !_context.over) {
-        _context.over = true;
-        _context.gameOver = GameOutcome::Defeat;
+    if (!anyone || someoneLeft || _context.over || _context.rescue.stage != RescueStage::None) {
+        return;
     }
+    if (canStartRescue()) {
+        _context.rescue = {};
+        _context.rescue.stage = RescueStage::Voice;
+        return;
+    }
+    _context.over = true;
+    _context.gameOver = GameOutcome::Defeat;
+}
+
+bool CombatSystem::canStartRescue() const
+{
+    if (!_context.rules.rescue || _context.wave.number != MaxWaveDifficulty) {
+        return false;
+    }
+    for (ecs::entity_t entity = 0; entity < _enemies.size(); ++entity) {
+        if (_enemies.has(entity) && _ecs.isAlive(entity) && _healths.has(entity) &&
+            _healths.get(entity).points > 0 && _context.enemies.getDefinition(_enemies.get(entity).id).boss) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace rtype::game

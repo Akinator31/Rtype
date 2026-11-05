@@ -353,6 +353,9 @@ struct GaugeStyle {
     render::Color rail{38, 41, 45, 255};
     render::Color light{255, 255, 255, 255};
     render::Color glow{255, 255, 255, 60};
+    /// The light and its glow of a gauge at or below its Gauge::low value.
+    render::Color lowLight{239, 83, 80, 255};
+    render::Color lowGlow{239, 83, 80, 90};
     float glowSpread = 6.0f;
     /// The spark at the end of the light: its half length, and its half height. Zero for none.
     float sparkLength = 26.0f;

@@ -31,7 +31,8 @@ enum class Control {
     RightTrigger,
     /// Right centre button: Menu on Xbox, Start or Options on PlayStation.
     Start,
-    /// Left centre button: View on Xbox, Select or Share on PlayStation.
+    /// Left centre button: View on Xbox, Select or Share on PlayStation. Last: Controls::resetDefaults() goes
+    /// through the controls up to it.
     Select,
 };
 
