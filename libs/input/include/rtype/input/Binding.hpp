@@ -3,6 +3,7 @@
 #include "rtype/input/InputSource.hpp"
 #include "rtype/input/Keys.hpp"
 
+#include <optional>
 #include <variant>
 
 namespace rtype::input
@@ -54,6 +55,9 @@ public:
     [[nodiscard]] static Binding gamepadAxis(GamepadAxis axis, AxisDirection direction, int gamepad = 0);
     /// A mouse button.
     [[nodiscard]] static Binding mouseButton(MouseButton button);
+
+    /// The key of a keyboard binding, nothing for another input.
+    [[nodiscard]] std::optional<Key> asKey() const;
 
     /// How strongly the input is held, from 0 (released) to 1 (fully pressed).
     ///

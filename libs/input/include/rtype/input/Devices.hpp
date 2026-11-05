@@ -2,6 +2,8 @@
 
 #include "rtype/input/InputSource.hpp"
 
+#include <string>
+
 namespace rtype::render
 {
 class Window;
@@ -30,5 +32,10 @@ public:
     [[nodiscard]] std::string clipboardText() const override;
     void setClipboardText(const std::string &text) override;
 };
+
+/// The name of a key on the keyboard of the player, as printed on it: "Z" for Key::W on a French (AZERTY)
+/// keyboard. Empty for a key that prints no character, such as Space or the arrows: name those yourself. A
+/// window must be open.
+[[nodiscard]] std::string keyLabel(Key key);
 
 } // namespace rtype::input

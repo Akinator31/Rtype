@@ -3,6 +3,7 @@
 #include "App/Systems.hpp"
 #include "Assets.hpp"
 #include "Commands/Commands.hpp"
+#include "Commands/FpsCommand.hpp"
 #include "Console/Console.hpp"
 #include "Game/GameScenes.hpp"
 #include "Game/GameSessionSystem.hpp"
@@ -89,6 +90,9 @@ void run()
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
+    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer, window};
+    // The choices of the player at the last run
+    rtype::client::applySavedSettings(engine, settingsTargets);
 
     rtype::client::Console console;
     const rtype::game::GameConfig config = rtype::client::readGameConfig(console);
@@ -106,7 +110,8 @@ void run()
     rtype::engine::ColliderDebugRenderer colliderDebugRenderer(engine.getEcs(), engine.getScenes(),
                                                                CollisionCellSize);
     const char *debugEnvironment = std::getenv("RTYPE_DEBUG_COLLIDERS");
-    bool showColliderDebug = debugEnvironment && std::string_view(debugEnvironment) == "1";
+    rtype::client::DebugViews debugViews{.hitboxes =
+                                             debugEnvironment && std::string_view(debugEnvironment) == "1"};
     bool debugKeyWasDown = false;
     rtype::client::SceneLoadStatus sceneLoadStatus(engine, devices);
     bool assetsLoaded = false;
@@ -114,10 +119,11 @@ void run()
     const auto playFrame = [&] {
         const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
         if (debugKeyDown && !debugKeyWasDown) {
-            showColliderDebug = !showColliderDebug;
+            debugViews.hitboxes = !debugViews.hitboxes;
         }
         debugKeyWasDown = debugKeyDown;
         sceneLoadStatus.update();
+        window.update();
         network.poll();
         engine.update(window.frameTime());
         if (assetsLoaded) {
@@ -127,10 +133,13 @@ void run()
         audio.update();
         renderer.beginFrame();
         sceneRenderer.draw(renderer, rtype::engine::Layer::World);
-        if (showColliderDebug) {
+        if (debugViews.hitboxes) {
             colliderDebugRenderer.draw(renderer);
         }
         sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
+        if (debugViews.fps) {
+            rtype::client::drawFpsCounter(renderer);
+        }
         sceneLoadStatus.draw(renderer);
         renderer.endFrame();
     };
@@ -152,9 +161,8 @@ void run()
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
-    rtype::client::createMenuScenes(engine, resources, audio, style, window, metrics, games, config,
-                                    translations, ships);
-    rtype::client::registerClientCommands(console, engine, window, games, config, showColliderDebug);
+    rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
+    rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
         playFrame();

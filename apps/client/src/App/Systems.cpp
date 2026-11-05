@@ -1,6 +1,7 @@
 #include "App/Systems.hpp"
 
 #include "Console/ConsoleSystem.hpp"
+#include "Controls/KeyCaptureSystem.hpp"
 #include "Game/DamageNumberSystem.hpp"
 #include "Game/DeathScreenSystem.hpp"
 #include "Game/HealthBarSystem.hpp"
@@ -25,6 +26,7 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     ecs::Ecs &ecs = engine.getEcs();
     ecs.registerSystem<ConsoleSystem>(engine, devices);
     ecs.registerSystem<engine::InterfaceSystem>(ecs, engine.getScenes(), devices, metrics, style);
+    ecs.registerSystem<KeyCaptureSystem>(ecs, engine.getScenes(), devices);
     // After the menus, which read the input first: Escape opens the pause menu before the game reads it
     auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
     // After the session, which moves the shogun it follows

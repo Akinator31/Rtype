@@ -1,5 +1,8 @@
 #include "App/Configuration.hpp"
 
+#include "Settings/ControlSettings.hpp"
+#include "Settings/DisplaySettings.hpp"
+#include "Settings/PlayerSettings.hpp"
 #include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/render/Paths.hpp"
@@ -35,6 +38,15 @@ void readSettings(engine::Settings &settings)
     } catch (const std::exception &error) {
         logger.warning("Cannot read the settings {}: {}", settings.getPath().string(), error.what());
     }
+}
+
+void applySavedSettings(engine::Engine &engine, const SettingsTargets &targets)
+{
+    const engine::Settings &settings = engine.getSettings();
+    applyControlSettings(settings, engine.getControls());
+    applyDisplaySettings(settings, targets.window);
+    applyPlayerSettings(settings, targets.translations, targets.audio);
+    targets.renderer.setColorFilter(readColorFilter(settings));
 }
 
 } // namespace rtype::client

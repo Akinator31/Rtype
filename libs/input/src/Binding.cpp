@@ -13,6 +13,14 @@ Binding Binding::key(Key key)
     return Binding(KeyInput{key});
 }
 
+std::optional<Key> Binding::asKey() const
+{
+    if (const auto *input = std::get_if<KeyInput>(&_input)) {
+        return input->key;
+    }
+    return std::nullopt;
+}
+
 Binding Binding::gamepadButton(GamepadButton button, int gamepad)
 {
     return Binding(ButtonInput{button, gamepad});

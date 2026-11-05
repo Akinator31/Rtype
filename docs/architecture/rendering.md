@@ -60,18 +60,28 @@ Most settings can be changed while the game runs, for instance from an options m
 | Function                                      | Effect                                                                                          |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `setFullscreen(bool)`, `isFullscreen()`       | Switches between a window and fullscreen.                                                       |
-| `setSize(width, height)`                      | Resizes the window, in pixels. Leaves fullscreen first.                                         |
+| `setSize(width, height)`                      | Resizes the window, in pixels, and centres it on its screen. Leaves fullscreen first.           |
+| `update()`                                    | Finishes a change of size the system has not applied yet. Called once per frame.                |
+| `monitors()`, `monitor()`                     | The connected screens (name, resolution), and the index of the one the window is on.            |
+| `moveToMonitor(index)`                        | Moves the window to another screen: it covers it in fullscreen, or is centred on it.            |
 | `setTitle(title)`                             | Changes the title of the window.                                                                |
 | `setCursorVisible(bool)`, `isCursorVisible()` | Shows or hides the mouse pointer over the window.                                               |
 | `setVsync(bool)`                              | Turns vertical synchronisation on or off.                                                       |
 | `setTargetFps(fps)`                           | Sets the maximum number of frames per second, 0 for no limit.                                   |
 | `requestClose()`                              | Asks the window to close, for instance from a _Quit_ button: `shouldClose()` then returns true. |
 
-**Fullscreen** is a borderless window covering the screen it is on, at the resolution of that screen. raylib
-also has an exclusive fullscreen, which changes the video mode of the screen to match the window: it is slow
-to switch, can rearrange the other screens, and behaves badly when switching to another application. Since the
-game is already scaled to any window size, the borderless mode loses nothing. Leaving fullscreen restores the
-previous size and position of the window.
+**Fullscreen** covers the screen the window is on, at the resolution of that screen: the screen keeps its
+video mode. A fullscreen that changes the video mode to match the window is slow to switch, can rearrange the
+other screens, and behaves badly when switching to another application; since the game is already scaled to
+any window size, it would bring nothing. Leaving fullscreen restores the previous size and position of the
+window.
+
+The window drives this fullscreen with GLFW, which raylib is built on (`glfwSetWindowMonitor()`), rather than
+with raylib's own functions. Those also remove the title bar of the window and put it back: on Wayland (through
+XWayland), the compositor then keeps the window in fullscreen and refuses any other size, and raylib believes
+the window has a size it does not have, so the image is drawn in a corner of a black screen. The compositor
+also applies the end of fullscreen a few frames late, and can shrink the window by its title bar meanwhile:
+for a second after a change of size, `update()` asks for the size again until the window has it.
 
 The client switches fullscreen with ++f11++ (the `ToggleFullscreen` action) or from the menu, and hides the
 mouse pointer during the game, where it would hide part of the screen.

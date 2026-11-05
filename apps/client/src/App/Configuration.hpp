@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Console/Console.hpp"
+#include "Settings/SettingsTargets.hpp"
+#include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Settings/Settings.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 
@@ -15,5 +17,9 @@ namespace rtype::client
 /// Reads the settings of the player, in its data directory: the servers it trusts, for now. Settings that
 /// cannot be read are logged, and the client starts without them.
 void readSettings(engine::Settings &settings);
+
+/// Applies the choices of the player read by readSettings(): the keys of the game, the window, the language,
+/// the volumes and the colour filter. Call it once the translations are loaded.
+void applySavedSettings(engine::Engine &engine, const SettingsTargets &targets);
 
 } // namespace rtype::client

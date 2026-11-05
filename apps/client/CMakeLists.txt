@@ -14,13 +14,16 @@ add_library(r-type_client_core STATIC
     src/App/Systems.cpp
     src/Commands/BossCommand.cpp
     src/Commands/Commands.cpp
+    src/Commands/FpsCommand.cpp
     src/Commands/HitboxesCommand.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
+    src/Commands/Switch.cpp
     src/Commands/ToastCommand.cpp
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
+    src/Controls/KeyCaptureSystem.cpp
     src/Game/BossLooks.cpp
     src/Game/DamageLooks.cpp
     src/Game/DamageNumberSystem.cpp
@@ -59,6 +62,8 @@ add_library(r-type_client_core STATIC
     src/MainMenu/LogoFlareSystem.cpp
     src/MainMenu/MainMenu.cpp
     src/MainMenu/Planet.cpp
+    src/MainMenu/ControlsMenu.cpp
+    src/MainMenu/SettingsMenu.cpp
     src/MainMenu/Ships.cpp
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
@@ -66,6 +71,9 @@ add_library(r-type_client_core STATIC
     src/Online/KnownServers.cpp
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
+    src/Settings/ControlSettings.cpp
+    src/Settings/DisplaySettings.cpp
+    src/Settings/PlayerSettings.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp
     src/ShipSelector/ShipSelection.cpp
