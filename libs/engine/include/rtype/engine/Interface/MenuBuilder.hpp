@@ -77,6 +77,9 @@ public:
     ecs::entity_t textField(const std::string &caption, const std::string &content,
                             std::function<void(const std::string &)> onSubmit = {},
                             std::size_t maxLength = 0);
+    /// An empty text field for a password: shown as `*`, never copied to the clipboard
+    /// (TextInput::setSecret()).
+    ecs::entity_t passwordField(const std::string &caption, std::size_t maxLength = 0);
 };
 
 } // namespace rtype::engine

@@ -259,5 +259,29 @@ Each step is one PR that builds without warnings and keeps the tests green.
 ## Server
 
 The server does not link the engine and keeps its own threads ([Server](server.md)): the master runs its
-network loop and its database thread ([Database](database.md#the-database-thread)), each instance its network
-loop and its game thread.
+network loop, its database thread ([Database](database.md#the-database-thread)) and the two threads of its web
+server ([Web server](web.md#responses-from-the-loop)), each instance its network loop and its game thread.
+
+The web threads never touch the lobby, the games or the administration: a request that needs them posts its
+work to the loop, which replies, and the reply is sent back by the web thread of the connection. Neither waits
+for the other. The live events go the other way: the loop hands each frame of a WebSocket to the web thread of
+its connection, under the lock that keeps the connection alive meanwhile
+([Web server](web.md#the-websocket)). The administration records its actions through the database thread, and
+gets their ids back on the loop ([Administration](administration.md)).
+
+The accounts add the two threads of the `PasswordHasher` ([Accounts](accounts.md#passwords)), which the master
+starts when its settings enable `[accounts]`: each hashes or
+checks a password, a few tens of milliseconds of Argon2, and posts its result to the loop. They touch nothing
+of the loop; a full queue refuses at once rather than make the loop wait.
+
+The mails of the accounts go through one more thread, the one of the `CurlMailer`
+([Accounts](accounts.md#the-mailer)): the loop queues a mail and goes on, the thread talks to the mail server,
+up to 30 seconds a mail, and tries again later. Nothing comes back to the loop: whether a mail left only the
+logs tell. A full queue, or an address with its mails of the hour, refuses at once.
+
+The requests of the accounts are answered on the loop by the `AccountService`
+([Accounts](accounts.md#in-the-lobby)), which hands their work to the database thread, the hasher and the
+mailer, and gets the results back on the loop: it holds no lock, and no thread of its own. The administrators of
+the panel are signed in the same way, by `PanelAccounts` on the loop ([Web server](web.md#accounts)): a request
+of the web server posted to the loop waits there for the database thread, the hasher or Discord, without
+blocking either side.

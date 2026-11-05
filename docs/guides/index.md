@@ -13,7 +13,11 @@ Step-by-step guides for common tasks in the client and the server. They assume t
 | [Configure enemies and weapons](configure-enemies-and-weapons.md) | Add a projectile, a weapon, a ship, an enemy and a wave with Lua files, and check them. |
 | [Script the behavior of an enemy](script-enemy-behaviors.md) | Write in Lua when an enemy moves, where it goes and when it fires, and try it. |
 | [Manage the server key](generate-the-server-keys.md) | Keep the key the server makes at its first start, give its fingerprint to the players, replace it. |
-| [Run a server](run-a-server.md) | Check the configuration, open the ports, start the server and stop it. |
+| [Run a server](run-a-server.md) | Check the configuration, open the ports, start the server, open its panel and stop it. |
+| [Configure a server](configure-a-server.md) | Give a server its settings in one file, its secrets in files of their own, and check them. |
+| [Set up accounts](set-up-accounts.md) | Give the players of a server their accounts: the mail server their codes are sent through, what they can do, and the data kept. |
+| [Administer a server](administer-a-server.md) | Open the panel of a server, watch its games and players live, end a game, message, remove, ban. |
+| [Deploy with Docker](deploy-with-docker.md) | Run the server from its image in Dokploy, publish its ports, keep its volume, back up its database; then with its accounts, its secrets as files, and the panel on its domain. |
 | [Use an external database](use-an-external-database.md) | Give a server a PostgreSQL database hosted elsewhere, without its password on the command line. |
 | [Play online](play-online.md) | Start a server, connect to it, trust its key, create and join a game. |
 

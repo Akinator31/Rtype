@@ -6,14 +6,16 @@ namespace rtype::engine
 HitboxSystem::HitboxSystem(ecs::ComponentCaches &caches, const Metrics &metrics, const InterfaceStyle &style)
     : _metrics(metrics), _style(style), _focusables(use<Focusable>(caches)), _items(use<ColumnItem>(caches)),
       _texts(use<Text>(caches)), _panels(use<Panel>(caches)), _tracks(use<SliderTrack>(caches)),
-      _switches(use<SwitchTrack>(caches)), _scales(use<Scale>(caches)), _hitboxes(use<Hitbox>(caches))
+      _switches(use<SwitchTrack>(caches)), _scales(use<Scale>(caches)), _hitboxes(use<Hitbox>(caches)),
+      _fields(use<TextField>(caches)), _rows(use<ListRow>(caches))
 {
 }
 
 void HitboxSystem::update(float /*elapsed*/)
 {
     for (ecs::entity_t entity = 0; entity < _texts.size(); ++entity) {
-        if (!_texts.has(entity) || (!_focusables.has(entity) && !_items.has(entity))) {
+        // A disabled row of a list gets no focus, but is placed by its size as the others
+        if (!_texts.has(entity) || (!_focusables.has(entity) && !_items.has(entity) && !_rows.has(entity))) {
             continue;
         }
         const render::Vector2 size = measure(entity);
@@ -25,6 +27,16 @@ void HitboxSystem::update(float /*elapsed*/)
 render::Vector2 HitboxSystem::measure(ecs::entity_t entity) const
 {
     const Text &text = _texts.get(entity);
+    if (_rows.has(entity)) {
+        return {_rows.get(entity).width, _style.list.height};
+    }
+    if (_fields.has(entity) && _fields.get(entity).type == TextFieldType::Line) {
+        return {_style.field.width, _style.field.getHeight()};
+    }
+    if (_fields.has(entity) && _fields.get(entity).type == TextFieldType::Code) {
+        return {_style.field.getCodeWidth(_fields.get(entity).input.maxLength()),
+                _style.field.getCodeHeight()};
+    }
     if (_panels.has(entity)) {
         const FlareStyle &style = _style.flare;
         const float width = _metrics.measureText(text.font, text.text, text.size, style.letterSpacing).x;

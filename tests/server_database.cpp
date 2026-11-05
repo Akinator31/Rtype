@@ -2,6 +2,7 @@
 // to date at start (docs/architecture/server.md#the-database, ADR 0023).
 
 #include "Common/Options.hpp"
+#include "Http.hpp"
 #include "Master/ServerDatabase.hpp"
 #include "Server.hpp"
 #include "TestDatabase.hpp"
@@ -64,7 +65,9 @@ int check(const MasterDirectory &directory, std::vector<std::string> databaseOpt
                                        "--config",
                                        RTYPE_TEST_CONFIG,
                                        "--key",
-                                       (directory.path / "server.key").string()};
+                                       (directory.path / "server.key").string(),
+                                       "--settings",
+                                       testing::webOnAnyPort(directory.path / "web.toml").string()};
     arguments.insert(arguments.end(), databaseOptions.begin(), databaseOptions.end());
     const std::vector<std::string_view> views(arguments.begin(), arguments.end());
     std::ostringstream out;

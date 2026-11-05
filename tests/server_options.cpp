@@ -4,6 +4,7 @@
 #include "Common/GameConfig.hpp"
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
+#include "Http.hpp"
 #include "Server.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/network/Tls.hpp"
@@ -97,14 +98,16 @@ TEST_CASE("A master with a configuration that has errors does not start", "[serv
     const std::string keyArgument = key.string();
     const std::string configArgument = directory.string();
     const std::string databaseArgument = "sqlite:" + (directory / "rtype.db").string();
+    const std::string settingsArgument = testing::webOnAnyPort(directory / "web.toml").string();
     std::ostringstream out;
     std::istringstream in;
 
     CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument, "--database",
-                                            databaseArgument},
+                                            databaseArgument, "--settings", settingsArgument},
               out, in) == Success);
     CHECK(run(std::vector<std::string_view>{"--check", "--port", "0", "--key", keyArgument, "--config",
-                                            configArgument, "--database", databaseArgument},
+                                            configArgument, "--database", databaseArgument, "--settings",
+                                            settingsArgument},
               out, in) == Failure);
     std::filesystem::remove_all(directory);
 }
@@ -172,6 +175,7 @@ TEST_CASE("An instance needs its id and ports, and refuses the options of the ma
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--key", "server.key"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--check"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--fingerprint"},
+        {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--health"},
     };
 
     for (const auto &arguments : invalid) {
@@ -202,6 +206,16 @@ TEST_CASE("The option --fingerprint shows the key of the master instead of runni
     CHECK(options.mode == Options::Mode::Fingerprint);
     CHECK(options.master.key == "/etc/rtype/server.key");
     CHECK(parse({"--fingerprint"}).master.key == "server.key");
+}
+
+TEST_CASE("The option --health asks the master at the address of its panel instead of running it", "[server]")
+{
+    CHECK(parse({"--health"}).mode == Options::Mode::Health);
+    CHECK(parse({"--health", "--settings", "/config/server.toml"}).master.settingsFile ==
+          "/config/server.toml");
+    // Without settings, the panel of a master without them
+    CHECK(parse({"--health"}).master.settings.web.listen == Address::loopbackIpv4(8080));
+    CHECK_THROWS_AS(parse({"--health", "--fingerprint"}), std::invalid_argument);
 }
 
 TEST_CASE("--help and --version win over everything else", "[server]")

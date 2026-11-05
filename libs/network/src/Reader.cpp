@@ -102,14 +102,25 @@ std::span<const std::byte> Reader::readBytes(std::size_t size)
 std::string Reader::readString(std::size_t minLength, std::size_t maxLength)
 {
     const std::size_t length = readU8();
+    return readText(length, minLength, std::min<std::size_t>(maxLength, 255));
+}
+
+std::string Reader::readString16(std::size_t minLength, std::size_t maxLength)
+{
+    const std::size_t length = readU16();
+    return readText(length, minLength, std::min<std::size_t>(maxLength, 65535));
+}
+
+std::string Reader::readText(std::size_t length, std::size_t minLength, std::size_t maxLength)
+{
     if (!ok()) {
         return {};
     }
-    if (length < minLength || length > std::min<std::size_t>(maxLength, 255)) {
+    if (length < minLength || length > maxLength) {
         _error = ReadError::InvalidLength;
         return {};
     }
-    // Checked before building the string: at most 255 bytes, and only if they are there
+    // Checked before building the string: within the range of the field, and only if the bytes are there
     const std::span<const std::byte> bytes = take(length);
     if (!ok()) {
         return {};

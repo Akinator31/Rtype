@@ -201,7 +201,7 @@ of a `TcpConnection`: the code above it only sees whole messages.
 
 ```
 size (u16) | type (u8) | payload (size − 1 bytes)
-00 09        01          00 01 05 50 61 76 65 6C      HELLO, version 1, "Pavel"
+00 0D        01          00 03 05 50 61 76 65 6C 02 66 72 00      HELLO, version 3, "Pavel", "fr"
 ```
 
 ```cpp
@@ -359,6 +359,23 @@ Mbed TLS is built without its own locks. Every call into it, from any connection
 the library, so identities can be loaded and connections used from any thread. A handshake holds it for about a
 millisecond: negligible at the scale of a lobby, and a reason to enable the locks of Mbed TLS
 (`MBEDTLS_THREADING_C`) if measurements ever show waiting.
+
+### Random bytes and SHA-256
+
+`rtype/network/Crypto.hpp` gives the programs the cryptography they need outside the protocols, from the same
+TF-PSA-Crypto, without its types in the header: `randomBytes(span)` and `randomBytes<Size>()` draw from its
+random generator, for the keys of the games, the local access token of the panel, the session tokens, salts and
+codes of the [accounts](accounts.md); `sha256(bytes)` and `sha256(text)` hash, for the session tokens and codes
+the database keeps. Both take the lock of the library, from any thread, and throw `std::runtime_error` if the
+cryptography cannot be used. Never `std::rand()` nor `std::random_device` for a secret: they promise nothing an
+attacker cannot guess.
+
+```cpp
+#include "rtype/network/Crypto.hpp"
+
+const auto token = rtype::network::randomBytes<32>();                         // std::array<std::byte, 32>
+const rtype::network::Sha256 kept = rtype::network::sha256(std::span(token)); // what the database keeps
+```
 
 ## Encrypted datagrams
 
@@ -678,6 +695,7 @@ connection.send(writer.bytes());
 | `bool` | `writeBool()` | `readBool()`: a value other than 0 or 1 is an error |
 | `bytes[N]` | `writeBytes(span)` | `readBytes(n)` (a view into the data) or `readBytes<N>()` (a copy) |
 | `str8` | `writeString(text)` | `readString(min, max)`: length range of the field, text checked |
+| `str16` | `writeString16(text)` | `readString16(min, max)`: the same, with a length on two bytes |
 
 **Why not `memcpy` a struct?** The compiler adds padding between fields, differently on GCC and MSVC, and an
 x86 processor stores integers little-endian. Writing each field explicitly gives the same bytes everywhere.
@@ -705,8 +723,8 @@ cannot go wrong:
   character, length within the range of the field. A name cannot carry a line break that would forge a line
   in the logs, nor terminal escape codes.
 - **Decoders refuse values themselves** with `reader.fail()`, for instance a number of players above 4.
-- **Nothing is allocated from an unchecked length.** A `str8` is at most 255 bytes and only built once its
-  bytes are there. For a list, never `reserve(count)` with a count read from the network: loop while
+- **Nothing is allocated from an unchecked length.** A `str8` is at most 255 bytes, a `str16` at most the
+  maximum of its field, and either is only built once its length is in range and its bytes are there. For a list, never `reserve(count)` with a count read from the network: loop while
   `reader.ok()`, and the loop stops at the end of the data even if the count announces 65535 entries.
 - **No side effect**: a reader only reads its bytes. Decoders built on it are pure functions, bytes in and
   message or error out, which a fuzzer can call millions of times
@@ -755,6 +773,9 @@ in both directions, bytes sent before the handshake, a server with another key, 
 reads nothing and whose changed byte is detected, peers that do not speak TLS, closing, frames over TLS, the end of the handshake reported once and never
 for a failed one, and
 Mbed TLS used from two threads at once.
+
+The tests in `tests/crypto.cpp` (tags `[network]`, `[crypto]`) check SHA-256 against the digests of FIPS 180-2,
+and that random bytes differ from one draw to the next.
 
 The tests in `tests/datagram.cpp` (same tag) check two datagrams byte for byte against another implementation
 of RFC 8439 (Python's `cryptography` package), the round trip of bodies from 0 to 1168 bytes, that every bit

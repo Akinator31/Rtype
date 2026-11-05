@@ -1,0 +1,14 @@
+--- a/include/crow/http_response.h
++++ b/include/crow/http_response.h
+@@ -260,7 +260,10 @@
+                 }
+                 if (complete_request_handler_)
+                 {
+-                    complete_request_handler_();
++                    // Called through a copy: completing the request clears complete_request_handler_, whose
++                    // closure can hold the last reference to its connection (CrowCpp/Crow#843)
++                    auto handler = std::move(complete_request_handler_);
++                    handler();
+                     manual_length_header = false;
+                     skip_body = false;
+                 }

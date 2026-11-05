@@ -18,6 +18,7 @@
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
+#include "rtype/discord/SocialSdkAuthorizer.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
@@ -85,6 +86,9 @@ void run()
         .slider = {.font = display},
         .toggle = {.font = display},
         .gauge = {.font = display},
+        .field = {.captionFont = messageFont, .valueFont = display},
+        .list = {.titleFont = display, .detailFont = messageFont},
+        .avatar = {.font = display},
     };
     const rtype::engine::RendererMetrics metrics(renderer);
     rtype::localization::Localization translations("en");
@@ -99,6 +103,8 @@ void run()
     const rtype::game::GameConfig config = rtype::client::readGameConfig(console);
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
+    // Signing in with Discord, polled by the game loop too
+    rtype::discord::SocialSdkAuthorizer discord;
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions =
         rtype::client::registerClientSystems(engine, devices, audio, metrics, style);
@@ -126,6 +132,7 @@ void run()
         sceneLoadStatus.update();
         window.update();
         network.poll();
+        discord.poll();
         engine.update(window.frameTime());
         if (assetsLoaded) {
             resources.finishPendingLoads();
@@ -161,7 +168,8 @@ void run()
     rtype::client::ShipSelection ships;
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
-    rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
+    rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord, ships,
+                                       rtype::render::userDataDirectory() / "pictures");
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     rtype::client::registerQuests(engine, translations);

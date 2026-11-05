@@ -395,6 +395,26 @@ TEST_CASE("A text field is edited only while it has the focus", "[engine][interf
     REQUIRE(world.textOf(name) == "Name: Pavel");
 }
 
+TEST_CASE("A password field shows a mask, one per character, never its text", "[engine][interface]")
+{
+    World world;
+    MenuBuilder menu(world.ecs, world.scenes, world.metrics, world.style, "Sign in");
+    const entity_t password = menu.passwordField("Password");
+    world.update();
+    REQUIRE(world.isFocused(password));
+
+    world.input.typed = U"s\u00e9cret";
+    world.update();
+    const TextField &field = world.ecs.getComponent<TextField>(password);
+    CHECK(field.input.text() == "s\xC3\xA9"
+                                "cret");
+    CHECK(world.textOf(password) == "Password: ******");
+    // The cursor and the selection are measured on the mask: "\xC3\xA9" is one character
+    CHECK(fieldContent(field, 3) == "**");
+    CHECK(fieldContent(field) == "******");
+    CHECK(field.input.isSecret());
+}
+
 TEST_CASE("Widgets are stacked in a column, centred", "[engine][layout]")
 {
     World world;
@@ -1312,7 +1332,7 @@ TEST_CASE("A named scene is open from the update that opens it to the update tha
 
 TEST_CASE("A text field shows its caption as its type says", "[engine][interface]")
 {
-    TextField field{"", {}, {}};
+    TextField field{.caption = ""};
     field.input.setText("help");
     CHECK(fieldPrefix(field).empty());
     CHECK(widgetLabel(field) == "help");
@@ -2021,4 +2041,115 @@ TEST_CASE("A quest completed at a previous run never wakes", "[engine][quest]")
     engine.update(0.1f);
     CHECK(quest.wakes == 0);
     CHECK_FALSE(quest.enabled);
+}
+
+TEST_CASE("A field of a form keeps its caption and its size, and lights up while it has the focus",
+          "[engine][interface][field]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t name = ui.textField("PSEUDO", "Kaze", {AnchorPoint::TopLeft, 100.0f, 200.0f}, 16);
+    const entity_t password = ui.passwordField("MOT DE PASSE", {AnchorPoint::TopLeft, 100.0f, 400.0f});
+    world.update();
+
+    const FieldStyle &style = world.style.field;
+    const Hitbox &hitbox = world.ecs.getComponent<Hitbox>(name);
+    CHECK(hitbox.baseWidth == style.width);
+    CHECK(hitbox.baseHeight == style.getHeight());
+    CHECK(isNear(positionOf(world, name).y - (style.getHeight() / 2.0f), 200.0f));
+    REQUIRE(world.isFocused(name));
+
+    world.input.typed = U"!";
+    world.update(style.fadeDuration);
+    CHECK(world.ecs.getComponent<TextField>(name).input.text() == "Kaze!");
+    CHECK(world.textOf(name) == "PSEUDO");
+    CHECK(world.ecs.getComponent<TextField>(name).light == 1.0f);
+    CHECK_FALSE(world.ecs.hasComponent<Tween>(name));
+
+    // Tab goes to the next field, which lights up while the first one goes out
+    world.press({Key::Tab});
+    REQUIRE(world.isFocused(password));
+    world.update(style.fadeDuration);
+    CHECK(world.ecs.getComponent<TextField>(name).light == 0.0f);
+    CHECK(world.ecs.getComponent<TextField>(password).light == 1.0f);
+    CHECK(world.ecs.getComponent<TextField>(password).input.isSecret());
+}
+
+TEST_CASE("A field of a form loses its error once its content changes", "[engine][interface][field]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t email = ui.textField("EMAIL", "kaze@", {AnchorPoint::TopLeft, 100.0f, 200.0f});
+    world.update();
+    world.ecs.getComponent<TextField>(email).error = "Invalid email";
+
+    world.update();
+    CHECK(world.ecs.getComponent<TextField>(email).error == "Invalid email");
+    world.input.typed = U"x";
+    world.update();
+    CHECK(world.ecs.getComponent<TextField>(email).error.empty());
+}
+
+TEST_CASE("A code takes digits only, and is sent as soon as it is full", "[engine][interface][field]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    std::vector<std::string> sent;
+    const entity_t code = ui.codeField("CODE", 6, [&](const std::string &text) { sent.push_back(text); },
+                                       {AnchorPoint::TopLeft, 100.0f, 200.0f});
+    world.update();
+
+    const FieldStyle &style = world.style.field;
+    CHECK(world.ecs.getComponent<Hitbox>(code).baseWidth == style.getCodeWidth(6));
+    CHECK(world.ecs.getComponent<Hitbox>(code).baseHeight == style.getCodeHeight());
+
+    world.input.typed = U"48a1";
+    world.update();
+    CHECK(world.ecs.getComponent<TextField>(code).input.text() == "481");
+    CHECK(sent.empty());
+
+    world.input.typed = U"2930";
+    world.update();
+    CHECK(world.ecs.getComponent<TextField>(code).input.text() == "481293");
+    REQUIRE(sent == std::vector<std::string>{"481293"});
+}
+
+TEST_CASE("A row of a list is pressed as a button; without action it is dim and skipped",
+          "[engine][interface][list]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    int joined = 0;
+    const entity_t full =
+        ui.listRow("DEBRIS 9", {.side = "FULL", .width = 560.0f}, {}, {AnchorPoint::TopLeft, 100.0f, 200.0f});
+    const entity_t open = ui.listRow("NEBULA 4", {.detail = "3 / 4", .width = 560.0f},
+                                     [&joined] { ++joined; }, {AnchorPoint::TopLeft, 100.0f, 300.0f});
+    world.update();
+
+    CHECK(world.ecs.getComponent<Hitbox>(full).baseWidth == 560.0f);
+    CHECK(world.ecs.getComponent<Hitbox>(open).baseHeight == world.style.list.height);
+    CHECK(isNear(positionOf(world, full).x - 280.0f, 100.0f));
+    CHECK_FALSE(world.ecs.hasComponent<Focusable>(full));
+    REQUIRE(world.isFocused(open));
+
+    world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
+    CHECK(joined == 1);
+}
+
+TEST_CASE("An avatar is placed by its size and takes no focus; a danger button is a red button",
+          "[engine][interface]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t avatar = ui.avatar({.initial = "K", .kind = AvatarKind::Discord, .size = 120.0f},
+                                      {AnchorPoint::TopRight, -40.0f, 40.0f});
+    const entity_t remove = ui.dangerButton("DELETE", [] {}, {AnchorPoint::TopLeft, 100.0f, 400.0f});
+    world.update();
+
+    CHECK_FALSE(world.ecs.hasComponent<Focusable>(avatar));
+    CHECK(isNear(positionOf(world, avatar).x, 1920.0f - 40.0f - 60.0f));
+    CHECK(isNear(positionOf(world, avatar).y, 40.0f + 60.0f));
+    CHECK(world.ecs.getComponent<Panel>(remove).danger);
+    CHECK(world.isFocused(remove));
 }

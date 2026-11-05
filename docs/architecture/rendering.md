@@ -119,6 +119,15 @@ path) to a handle and loads missing resources with a function given by the calle
 raylib, which is why it is unit tested without a window (`tests/resource_cache.cpp`). It is part of the core
 library (`libs/core`), with the `Handle` type, so that the [audio library](audio.md) uses it too.
 
+### Pictures from the network
+
+`loadRoundPicture(key, png, size)` makes a texture from a PNG in memory rather than from a file: the picture
+of a player, sent by the master. It keeps the middle square of the image, scales it to `size` pixels, and makes
+it transparent outside of its circle, with a pixel of transition so that its edge is smooth; the interface
+draws it in the ring of an avatar ([Lists and avatars](scenes-and-interface.md#lists-and-avatars)). The key
+names the picture (the server, the account and the version of its picture): the same key returns the same
+texture without reading the bytes again.
+
 ### Errors
 
 raylib does not report loading errors: a missing file gives an empty texture and a warning in the console.

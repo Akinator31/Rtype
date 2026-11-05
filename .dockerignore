@@ -1,0 +1,24 @@
+# What the image does not need: the history, the builds and the data of the machine that builds it. The
+# settings of the image are docker/server.toml
+.git
+build
+build-*
+cmake-build-*
+out
+.cpm-cache
+.cache
+.vscode
+.idea
+site
+docs
+**/node_modules
+web/admin/dist
+web/admin/playwright-report
+web/admin/test-results
+apps/client/assets
+keys
+/server.toml
+*.key
+*.db
+*.db-*
+admin-url.txt

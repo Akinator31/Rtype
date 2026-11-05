@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -129,6 +130,24 @@ TEST_CASE("The file has one line per value, sorted by key", "[settings]")
     REQUIRE(readText(directory.path / "settings.txt") == "audio.volume=80\nvideo.width=1920\n");
 }
 
+#ifndef _WIN32
+TEST_CASE("The file is readable by its owner only: it holds session tokens", "[settings]")
+{
+    const SettingsDirectory directory;
+    const std::filesystem::path path = directory.path / "settings.txt";
+    // A file left readable by everyone, by an older client, is written again for its owner only
+    std::ofstream(path) << "audio.volume=80\n";
+    std::filesystem::permissions(path, std::filesystem::perms::all);
+    rtype::engine::Settings settings(path);
+    settings.setString("servers.session.127.0.0.1:4242", "secret");
+
+    settings.writeFile();
+
+    using std::filesystem::perms;
+    CHECK(std::filesystem::status(path).permissions() == (perms::owner_read | perms::owner_write));
+}
+#endif
+
 TEST_CASE("Reading the file replaces the values in memory", "[settings]")
 {
     const SettingsDirectory directory;
@@ -176,4 +195,18 @@ TEST_CASE("The engine owns settings without a file", "[settings][engine]")
     REQUIRE(engine.getSettings().getPath().empty());
     engine.getSettings().setInt("audio.volume", 80);
     REQUIRE(engine.getSettings().getInt("audio.volume") == 80);
+}
+
+TEST_CASE("The keys of a prefix are listed sorted, and only them", "[settings]")
+{
+    rtype::engine::Settings settings;
+    settings.setString("servers.known.b:4242", "x");
+    settings.setString("servers.known.a:4242", "y");
+    settings.setString("servers.knownother", "z");
+    settings.setString("audio.volume", "80");
+
+    CHECK(settings.keys("servers.known.") ==
+          std::vector<std::string>{"servers.known.a:4242", "servers.known.b:4242"});
+    CHECK(settings.keys("video.").empty());
+    CHECK(settings.keys().size() == 4);
 }

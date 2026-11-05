@@ -22,6 +22,9 @@ namespace rtype::input
 ///
 /// Keys that move the cursor or erase repeat while they are held. The text is stored in UTF-8, ready to be
 /// drawn; the cursor and the selection are given as byte offsets in it.
+///
+/// A secret input, for a password, never puts its text in the clipboard: Control+C and Control+X do nothing.
+/// Pasting still works. Whoever draws it shows a mask instead of the text (engine::fieldContent()).
 /// @code
 /// TextInput address;
 /// address.setMaxLength(21);
@@ -71,6 +74,7 @@ private:
     Filter _filter;
     ActionMap<Edit> _edits;
     bool _changed = false;
+    bool _secret = false;
 
     void moveCursor(std::size_t position, bool select);
     void replaceSelection(const std::string &replacement);
@@ -115,10 +119,17 @@ public:
     /// Sets the maximum number of characters: typed and pasted characters are ignored once it is reached. 0,
     /// the default, means no limit.
     void setMaxLength(std::size_t characters) { _maxLength = characters; }
+    /// Most characters the text can hold, 0 for no limit.
+    [[nodiscard]] std::size_t maxLength() const { return _maxLength; }
 
     /// Sets which characters can be typed or pasted, on top of the control characters (line feed,
     /// tabulation...), which are always refused. By default, every other character is accepted.
     void setFilter(Filter filter) { _filter = std::move(filter); }
+
+    /// Makes the text secret, for a password: it is never copied nor cut to the clipboard.
+    void setSecret(bool secret) { _secret = secret; }
+    /// Tells whether the text is secret: drawn as a mask, never copied.
+    [[nodiscard]] bool isSecret() const { return _secret; }
 };
 
 } // namespace rtype::input

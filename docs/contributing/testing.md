@@ -22,12 +22,14 @@ The subject sets requirements that are hard to prove without automated tests:
 | Unit and integration tests | [Catch2 v3](https://github.com/catchorg/Catch2), fetched by CPM | :white_check_mark: In place |
 | Test runner | CTest | :white_check_mark: In place |
 | Code formatting | clang-format 23 (`.clang-format`, `requirements-dev.txt`), applied by the format bot | :white_check_mark: In place |
-| Memory errors and undefined behaviour | AddressSanitizer + UndefinedBehaviorSanitizer | :hourglass: Step 2 |
+| Memory errors and undefined behaviour | AddressSanitizer + UndefinedBehaviorSanitizer, `RTYPE_SANITIZERS` | :white_check_mark: In place |
 | Packet decoder robustness | libFuzzer (Clang) | :hourglass: Step 2 |
-| Data races in the server | ThreadSanitizer | :hourglass: Step 3 |
+| Data races in the server | ThreadSanitizer, `RTYPE_SANITIZERS` | :white_check_mark: In place |
 | Static analysis | clang-tidy | :hourglass: Step 3 |
 | Coverage report | gcovr, published with this documentation | :hourglass: Step 4 |
 | Performance measurements | Catch2 benchmarks | :hourglass: Step 4 |
+| The panel: its store, its components, its pages | Vitest, Testing Library, MSW (`web/admin`) | :white_check_mark: In place |
+| The panel against a real master | Playwright, Chromium (`web/admin/e2e`) | :white_check_mark: In place |
 
 ## Test levels
 
@@ -63,7 +65,7 @@ engine.
 
 - A pull request that adds or changes behaviour comes with tests for it.
 - A bug fix comes with a test that fails without the fix.
-- Every pull request must pass the *Build* (both platforms, tests included) and *Format* workflows.
+- Every pull request must pass the *Build* (both platforms, tests included), *Sanitizers* and *Format* workflows.
   Formatting is fixed by the format bot, see [Formatting](#formatting).
 - Tests are deterministic: no dependency on time, network outside `127.0.0.1`, or execution order.
 
@@ -115,6 +117,37 @@ export RTYPE_TEST_POSTGRESQL_URL=postgresql://rtype:rtype@127.0.0.1:55432/rtype
 ctest --test-dir build -C Release --output-on-failure
 ```
 
+### Sanitizers
+
+`RTYPE_SANITIZERS` builds everything, the libraries, the programs, the tests and the dependencies, under the
+sanitizers, with GCC or Clang:
+
+| Value | Finds |
+|---|---|
+| `address,undefined` | Memory errors (use after free, overflows), leaks, undefined behaviour |
+| `thread` | Data races and lock order inversions between threads |
+
+The two cannot be combined: use one build directory for each.
+
+```sh
+cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DRTYPE_SANITIZERS=address,undefined
+cmake --build build-asan --parallel
+ctest --test-dir build-asan --output-on-failure
+```
+
+Any report stops the program and fails its test, undefined behaviour included. The `sanitizers.*` tests run a
+program with a bug made on purpose (`tests/helpers/sanitizer_canary.cpp`) and pass only when the sanitizers
+report it: a build where they would stay silent fails there.
+
+The options of the sanitizers and their suppressions are in one file, `cmake/Sanitizers.cpp`, linked into every
+program of these builds: the tests, the programs started by hand and those the tests start all run the same
+way. A suppression comes with a comment that says why the report is not our bug. The variables `ASAN_OPTIONS`,
+`UBSAN_OPTIONS`, `LSAN_OPTIONS` and `TSAN_OPTIONS` still override the options for one run.
+
+??? question "ThreadSanitizer: unexpected memory mapping"
+    Recent kernels place the programs where older versions of ThreadSanitizer refuse to run. Run the tests
+    without the randomization of the addresses, as the CI does: `setarch "$(uname -m)" -R ctest ...`.
+
 ### Formatting
 
 Nothing to install: on pull requests, the *Format* workflow **formats the code automatically**. When a file
@@ -139,8 +172,37 @@ clang-format -i path/to/file.cpp
 
 | Workflow | Runs | Checks |
 |---|---|---|
-| *Build* | Every push and pull request, Linux and Windows | Compilation, all CTest tests, packaging. On Linux, the tests of the database also run on a PostgreSQL in Docker, when the runner has Docker |
+| *Build* | Every push and pull request, Linux and Windows | First the *Panel* job: lint, format, types, Vitest and build of `web/admin`, its `dist/` kept as an artifact. Then compilation, all CTest tests, packaging with the panel in the server archive. On Linux, the tests of the database also run on a PostgreSQL in Docker, and Playwright runs the panel against the server just built ([Contributing to the panel](panel.md)) |
+| *Sanitizers* | Every pull request, and pushes to `main` | All CTest tests under ASan and UBSan, on SQLite and PostgreSQL (Linux) |
+| *Thread sanitizer* | Every night on `main`, and on demand | All CTest tests under TSan. A failed run blocks the next release until a run on `main` passes again, see [Releasing](releasing.md) |
+| *Docker* | Every pull request, pushes to `main` and the tags `v*` | Builds the image of the server and the one of its smoke tests, then runs `docker/smoke-test.sh`: `--health`, two players in a game, the stop on `SIGTERM`; then `docker/smoke-test-accounts.sh`: the settings of the official server with a fake Discord and a fake mail server, a player signed in to its account in a game, an administrator signed in to the panel. From `main`, publishes the image on GHCR as `main`; from a tag, as its version and `latest` ([Deploy with Docker](../guides/deploy-with-docker.md)) |
 | *Format* | Every pull request, and pushes to `main` that change C++ files | Formats tracked C++ files; on pull requests the bot commits the fixes, elsewhere unformatted code fails the job |
+
+### Runners
+
+The workflows run on the team's self-hosted runners. The Linux runner needs:
+
+- **Docker**, usable by the user of the runner: the tests of the database start their PostgreSQL in it, and
+  *Docker* builds the image with BuildKit (Docker 25 or newer, for `--start-interval` in its health check).
+  Without Docker, *Build*, *Sanitizers* and *Docker* fail on Linux instead of testing on SQLite only. The
+  smoke tests publish the UDP ports 47243 to 47245, then 47253 to 47255, on the loopback of the runner; the
+  build keeps its downloads and its build folder in the cache of BuildKit, `docker builder prune` empties it.
+- **curl** and GNU **tar**: the smoke test with accounts asks the panel with curl, and gives the image its
+  secret with tar.
+- `sudo` without a password for `apt-get`, which installs the system libraries (X11, OpenGL, OpenSSL, libpq,
+  PulseAudio and ALSA for the Discord Social SDK of the client, and those **Chromium** needs for the end-to-end
+  tests of the panel). The packages are named for Debian 13
+  (trixie) and Ubuntu 24.04 or newer, the ones with the `t64` libraries.
+- GCC or Clang with their sanitizer runtimes (`libasan`, `libubsan`, `libtsan`), Ninja and CMake 3.25 or newer.
+- Nothing else for the panel: `actions/setup-node` provides Node LTS, and Playwright downloads Chromium into the
+  cache of the user of the runner.
+
+The Windows runner needs Visual Studio 2022 and CMake; it tests the database on SQLite only.
+
+Several runners can share one machine, and run their jobs at once. The tests name their files in the temporary
+directory (the SQLite databases, keys, settings), the same in every run: the *Test* steps set `TMPDIR` to the
+directory of their runner, so that two jobs never read each other's files. By hand, two builds tested at once
+(`build` and `build-asan`, for instance) need the same: `TMPDIR=$(mktemp -d) ctest --test-dir build`.
 
 ## Roadmap
 
@@ -149,7 +211,7 @@ when done.
 
 ### Step 2 — when the protocol decoder and the ECS exist
 
-- [ ] CI job `sanitizers`: Debug build with Clang, `-fsanitize=address,undefined`, runs all tests (Linux).
+- [x] CI job `sanitizers`: build with `-fsanitize=address,undefined`, runs all tests (Linux).
 - [ ] Fuzz target `tests/fuzz/packet_decoder.cpp` (`LLVMFuzzerTestOneInput`) calling the packet decoder.
 - [ ] CI job `fuzz`: runs the fuzzer for a few minutes on pull requests that touch the network code, and
       longer every night; crashing inputs are kept as regression tests.
@@ -157,7 +219,7 @@ when done.
 
 ### Step 3 — when the server runs several threads
 
-- [ ] CI job `tsan`: `-fsanitize=thread` build running the server tests.
+- [x] CI job `tsan`: `-fsanitize=thread` build running all the tests, every night.
 - [ ] Integration test: server and bot clients over `127.0.0.1`, including a client killed mid-game.
 - [ ] clang-tidy with a small set of checks (`bugprone-*`, `performance-*`), extended progressively.
 

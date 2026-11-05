@@ -1,0 +1,28 @@
+name: Start PostgreSQL for the tests
+description: >
+  Starts a PostgreSQL of its own in Docker, on a free port, and gives its address to the tests in
+  RTYPE_TEST_POSTGRESQL_URL. Fails when the runner has no Docker: the database is tested on PostgreSQL on every
+  pull request. Stop it at the end with docker rm -f "$POSTGRES_CONTAINER".
+
+runs:
+  using: composite
+  steps:
+    - name: Start PostgreSQL
+      shell: bash
+      run: |
+        if ! command -v docker >/dev/null || ! docker info >/dev/null 2>&1; then
+          echo "::error::No Docker on this runner: the tests of the database need PostgreSQL. See docs/contributing/testing.md#runners"
+          exit 1
+        fi
+        name="rtype-ci-postgres-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}"
+        docker run -d --name "$name" -e POSTGRES_USER=rtype -e POSTGRES_PASSWORD=rtype -e POSTGRES_DB=rtype \
+          -p 127.0.0.1::5432 postgres:18
+        echo "POSTGRES_CONTAINER=$name" >> "$GITHUB_ENV"
+        # Over TCP: while it initializes, the image runs a server on its Unix socket only, then restarts it
+        for attempt in $(seq 1 30); do
+          docker exec "$name" pg_isready -h 127.0.0.1 -U rtype -d rtype >/dev/null 2>&1 && break
+          sleep 1
+        done
+        docker exec "$name" pg_isready -h 127.0.0.1 -U rtype -d rtype
+        port=$(docker port "$name" 5432/tcp | head -n 1 | sed 's/.*://')
+        echo "RTYPE_TEST_POSTGRESQL_URL=postgresql://rtype:rtype@127.0.0.1:$port/rtype" >> "$GITHUB_ENV"

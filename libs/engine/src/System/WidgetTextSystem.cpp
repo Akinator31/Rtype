@@ -22,7 +22,8 @@ void WidgetTextSystem::update(float /*elapsed*/)
             text = widgetLabel(_sliders.get(entity));
         } else if (_choices.has(entity)) {
             text = widgetLabel(_choices.get(entity));
-        } else if (_fields.has(entity)) {
+        } else if (_fields.has(entity) && !isFormField(_fields.get(entity))) {
+            // A field of a form is left alone: its text stays its caption, and it draws its content itself
             text = widgetLabel(_fields.get(entity));
         }
     }

@@ -93,6 +93,27 @@ TEST_CASE("A str8 with a control character or invalid UTF-8 is refused", "[netwo
     CHECK_THROWS_AS(writer.writeString("\xC3"), std::invalid_argument);
 }
 
+TEST_CASE("A str16 is written as its length on two bytes then its bytes", "[network]")
+{
+    Writer writer;
+    writer.writeString16("ab");
+    writer.writeString16("");
+
+    CHECK(written(writer) == bytes({0, 2, 'a', 'b', 0, 0}));
+}
+
+TEST_CASE("A str16 holds more than 255 bytes, and refuses what a str8 refuses", "[network]")
+{
+    Writer writer;
+
+    CHECK_NOTHROW(writer.writeString16(std::string(300, 'a')));
+    CHECK(writer.size() == 302);
+    CHECK_NOTHROW(writer.writeString16(std::string(65535, 'a')));
+    CHECK_THROWS_AS(writer.writeString16(std::string(65536, 'a')), std::length_error);
+    CHECK_THROWS_AS(writer.writeString16("line\nbreak"), std::invalid_argument);
+    CHECK_THROWS_AS(writer.writeString16("\xC3"), std::invalid_argument);
+}
+
 TEST_CASE("patchU16 replaces two bytes already written", "[network]")
 {
     Writer writer;
@@ -239,6 +260,31 @@ TEST_CASE("A str8 with a control character or invalid UTF-8 is not read", "[netw
     Reader invalidReader(invalid);
     CHECK(invalidReader.readString().empty());
     CHECK(invalidReader.error() == ReadError::InvalidText);
+}
+
+TEST_CASE("A str16 is read back, within the length range of its field", "[network]")
+{
+    Writer writer;
+    writer.writeString16(std::string(300, 'p'));
+    const std::vector<std::byte> long300 = writer.take();
+
+    Reader reader(long300);
+    CHECK(reader.readString16(1, 512) == std::string(300, 'p'));
+    CHECK(reader.finish());
+
+    Reader tooLong(long300);
+    CHECK(tooLong.readString16(1, 299).empty());
+    CHECK(tooLong.error() == ReadError::InvalidLength);
+
+    const std::vector<std::byte> cut = bytes({0, 3, 'a', 'b'});
+    Reader cutReader(cut);
+    CHECK(cutReader.readString16().empty());
+    CHECK(cutReader.error() == ReadError::TooShort);
+
+    const std::vector<std::byte> control = bytes({0, 2, 'a', 0x07});
+    Reader controlReader(control);
+    CHECK(controlReader.readString16().empty());
+    CHECK(controlReader.error() == ReadError::InvalidText);
 }
 
 TEST_CASE("Bytes left after the last field make finish() fail", "[network]")

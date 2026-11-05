@@ -14,6 +14,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace rtype::server
 {
@@ -39,6 +40,9 @@ namespace rtype::server
 /// - A session that closes takes the ship away, and the others receive `PLAYER_LEFT`.
 /// - The game over is sent to every client (`GAME_OVER`), then told to the instance with the scores; nothing
 ///   is published after it.
+/// - status() tells where the game stands, from the last result published and the round-trip times of the
+///   sessions (`GAME_STATUS` for the master). The game thread hands over its numbers with each result: it
+///   holds no lock for them, and the network thread keeps only the last.
 class GameHost
 {
 public:
@@ -72,6 +76,10 @@ private:
     /// By session id.
     std::map<std::uint32_t, Player> _players;
     bool _over = false;
+    /// From the last result published, for status().
+    std::uint32_t _tick = 0;
+    std::uint16_t _wave = 0;
+    std::vector<rtype::game::PlayerState> _states;
 
     void gameOver(const TickResult &result);
 
@@ -110,6 +118,10 @@ public:
     /// Closes every session with `DISCONNECT` and this reason, then the socket, after the datagrams queued:
     /// the game stops.
     void closeAll(rtype::network::DisconnectReason reason);
+
+    /// Where the game stands: the last tick published, the wave under way, and each player whose client
+    /// connected, with its score, its lives and its round-trip time.
+    [[nodiscard]] GameStatusMessage status() const;
 
     /// Number of players added, connected or not.
     [[nodiscard]] std::size_t playerCount() const { return _players.size(); }

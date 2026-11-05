@@ -1,0 +1,16 @@
+# The settings of the Docker image (docs/guides/deploy-with-docker.md), in /config/server.toml. Mount a file
+# of your own there to change them; every key is in docs/guides/configure-a-server.md.
+#
+# Everything the server keeps is in the /data volume: the key the players trust, the SQLite database, and
+# admin-url.txt, the address of the panel.
+
+[server]
+port = 4242
+game_ports = "4243-4299"
+key = "/data/server.key"
+database = "sqlite:/data/rtype.db"
+
+[web]
+# Without accounts, the panel listens on the loopback of the container only: docker exec, or an SSH tunnel
+# through it, reaches it, nothing else does
+listen = "127.0.0.1:8080"

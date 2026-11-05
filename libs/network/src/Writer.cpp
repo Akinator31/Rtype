@@ -81,6 +81,20 @@ void Writer::writeString(std::string_view text)
     }
 }
 
+void Writer::writeString16(std::string_view text)
+{
+    if (text.size() > 65535) {
+        throw std::length_error(std::format("a str16 field holds at most 65535 bytes, not {}", text.size()));
+    }
+    if (!isValidText(text)) {
+        throw std::invalid_argument("a str16 field must be valid UTF-8 without control characters");
+    }
+    writeU16(static_cast<std::uint16_t>(text.size()));
+    for (const char c : text) {
+        _bytes.push_back(static_cast<std::byte>(c));
+    }
+}
+
 void Writer::patchU16(std::size_t offset, std::uint16_t value)
 {
     if (offset > _bytes.size() || _bytes.size() - offset < 2) {

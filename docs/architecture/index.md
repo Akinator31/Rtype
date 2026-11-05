@@ -57,7 +57,10 @@ flowchart LR
 *The client joins a game through the master, then exchanges the game traffic directly with that game's
 process.*
 
-How the server starts, what it is given and how it stops: [Server](server.md).
+How the server starts, what it is given and how it stops: [Server](server.md). How the master serves its
+administration panel over HTTP: [Web server](web.md). What an administrator sees and does:
+[Administration](administration.md), and the web page it does it from: [The panel](panel.md). What the master
+keeps of the accounts of the players: [Accounts](accounts.md).
 
 New to networking? Start with [Networking concepts](networking-concepts.md).
 
@@ -114,18 +117,24 @@ The programs are built on twelve libraries:
 | `libs/physics` | Movement and collisions as components and systems on the ECS. Knows no game: each game names its collision layers and reacts to the collisions. Shared with the server. | — |
 | `libs/game` | The rules of the R-Type: a `Simulation` that takes the inputs of the players and steps the world one tick at a time, and the loader of the Lua configuration of its enemies and weapons. Shared by the server and the client offline; no raylib, no network. | [Game](game.md) |
 | `libs/scripting` | Lua 5.4 and LuaBridge3, built from source, and a sandboxed `State` that runs a file in its own environment. Knows no game. Shared with the server. | [Game](game.md#configuration) |
-| `libs/lobby` | The messages of the lobby protocol, between a client and the master: hello, list, create and join games. Shared by the client and the server. | [Server](server.md#the-lobby) |
+| `libs/lobby` | The messages of the lobby protocol, between a client and the master: hello, list, create and join games, the messages of the administrators. Shared by the client and the server. | [Server](server.md#the-lobby) |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
+| `libs/discord` | Signing in with Discord from the client: an interface, and its implementation through the Discord Social SDK, kept in `libs/discord/sdk/`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
 Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
 raylib: the ECS, the physics, the game, the scripting, the lobby, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
-private dependencies of `network`, and reproc, which starts the instances of the server, a private dependency of
-`r-type_server`.
+private dependencies of `network`, and reproc, which starts the instances of the server, toml++, which reads
+its settings file, Crow, which serves its panel ([Web server](web.md)), and Argon2, which hashes the passwords of
+the accounts ([Accounts](accounts.md#passwords)), private dependencies of `r-type_server`. libcurl, which sends
+the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who a player is, and is the HTTP
+client of the tests, comes through CPM too, with OpenSSL from the system on Linux. The Discord Social SDK is a
+private dependency of `rtype::discord_sdk`, linked by `r-type_client` alone
+([ADR 0026](../decisions/0026-discord-social-sdk.md)).
 
 ## Repository layout
 

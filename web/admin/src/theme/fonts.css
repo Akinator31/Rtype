@@ -1,0 +1,26 @@
+/* The fonts of the design, served by the panel itself: the CSP takes fonts from the panel only. Both under the
+   SIL Open Font License 1.1, in this folder's assets/fonts */
+
+@font-face {
+  font-family: 'Audiowide';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/audiowide-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/exo-2-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/exo-2-latin-500-normal.woff2') format('woff2');
+}

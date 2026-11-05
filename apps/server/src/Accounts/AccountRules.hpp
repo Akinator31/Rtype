@@ -1,0 +1,73 @@
+#pragma once
+
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+/// What a username, an email and a password must be (docs/architecture/accounts.md#the-rules). Pure
+/// functions: the lobby checks a request with them before it reaches the database or the hasher.
+namespace rtype::server
+{
+
+inline constexpr std::size_t MinUsernameLength = 3;
+inline constexpr std::size_t MaxUsernameLength = 16;
+/// In characters, not bytes.
+inline constexpr std::size_t MinPasswordLength = 10;
+inline constexpr std::size_t MaxPasswordLength = 128;
+/// The longest address SMTP carries.
+inline constexpr std::size_t MaxEmailLength = 254;
+
+/// Tells whether a username is allowed: 3 to 16 of `A-Z a-z 0-9 _ -`.
+[[nodiscard]] bool isValidUsername(std::string_view username);
+
+/// What two usernames that differ only by case share: the username in lower case. Unique in the database.
+[[nodiscard]] std::string usernameKey(std::string_view username);
+
+/// The email as it is kept: without the spaces around it.
+/// @return Nothing if it is not an address: one `@` with something before it, a domain with a dot after it,
+/// at most 254 characters, no space nor control character. Whether it receives mail, only a code sent to it
+/// tells.
+[[nodiscard]] std::optional<std::string> normalizeEmail(std::string_view email);
+
+/// What two emails that differ only by case share: the normalized email in lower case. Unique in the
+/// database.
+[[nodiscard]] std::string emailKey(std::string_view email);
+
+/// Tells whether an account is one of the administrators of `[admin] admins`, which are named by a verified
+/// email, ignoring case, or by `discord:<id>`; never by a username, which anyone can take.
+/// @param verifiedEmail The email of the account if it is verified, nothing otherwise.
+/// @param discordId The Discord user linked to the account, if any.
+[[nodiscard]] bool isListedAdmin(const std::vector<std::string> &admins,
+                                 const std::optional<std::string> &verifiedEmail,
+                                 const std::optional<std::string> &discordId);
+
+/// What a guest carries before its name on a server with accounts, in the lobby and on the score board: no
+/// username has it, so that a guest named like an account never looks like it.
+inline constexpr char GuestMark = '~';
+
+/// The name of a guest on a server with accounts: GuestMark, then the name, cut on a whole character so that
+/// both fit in the 16 bytes of a name.
+/// @param name A valid name of a player, 1 to 16 bytes of UTF-8.
+[[nodiscard]] std::string markGuest(std::string_view name);
+
+/// Why a password is refused.
+enum class PasswordProblem {
+    None,
+    TooShort,
+    TooLong,
+    /// Not valid UTF-8, or with a control character.
+    InvalidText,
+    /// The username, ignoring case.
+    SameAsUsername,
+    /// The email, ignoring case.
+    SameAsEmail,
+};
+
+/// Checks a new password: 10 to 128 characters, neither the username nor the email of its account.
+/// @param email Empty for an account without one.
+[[nodiscard]] PasswordProblem checkPassword(std::string_view password, std::string_view username,
+                                            std::string_view email);
+
+} // namespace rtype::server

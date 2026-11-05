@@ -2,6 +2,7 @@
 // (docs/decisions/0021-server-generated-key-trust-on-first-use.md).
 
 #include "Common/Options.hpp"
+#include "Http.hpp"
 #include "Master/ServerKey.hpp"
 #include "Server.hpp"
 #include "rtype/log/Logger.hpp"
@@ -62,8 +63,10 @@ int check(const std::filesystem::path &key)
     const std::string keyArgument = key.string();
     // In the directory of the key, rather than rtype.db in the working directory of the tests
     const std::string databaseArgument = "sqlite:" + (key.parent_path() / "rtype.db").string();
+    const std::string settingsArgument = testing::webOnAnyPort(key.parent_path() / "web.toml").string();
     return run(std::vector<std::string_view>{"--check", "--port", "0", "--config", RTYPE_TEST_CONFIG, "--key",
-                                             keyArgument, "--database", databaseArgument},
+                                             keyArgument, "--database", databaseArgument, "--settings",
+                                             settingsArgument},
                out, in);
 }
 
