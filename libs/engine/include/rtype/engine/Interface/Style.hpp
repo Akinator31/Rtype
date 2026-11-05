@@ -136,6 +136,7 @@ struct ToastStyle {
     render::Color success{255, 255, 255, 255};
     render::Color warning{232, 114, 110, 255};
     render::Color error{232, 114, 110, 255};
+    render::Color quest{96, 170, 255, 255};
 
     /// Time a toast stays fully shown, between its fade in and its fade out.
     float duration = 3.0f;
@@ -228,7 +229,7 @@ struct ToastStyle {
     [[nodiscard]] render::Color getAccent(ToastType type) const
     {
         // One colour per type, in the order of ToastType
-        const std::array<render::Color, toastTypeCount> accents{info, success, warning, error};
+        const std::array<render::Color, toastTypeCount> accents{info, success, warning, error, quest};
         return accents[static_cast<std::size_t>(type)];
     }
 };

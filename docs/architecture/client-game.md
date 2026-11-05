@@ -410,8 +410,8 @@ A completed quest is written in the settings as `quest.<id>=true`; at the next r
 disabled and subscribed to nothing.
 
 The quests of the client are registered by `registerQuests()` (`Quests/Quests.cpp`), after the scenes. Each
-one, once completed, writes the settings file at once and shows a toast with its name (`quest.<id>` in the
-locales) and `quest.completed`. For now, two `EventQuest`s, completed the first time their event is
+one, once completed, writes the settings file at once and shows a blue banner (`ToastType::Quest`):
+`quest.completed` as its title, the name of the quest (`quest.<id>` in the locales) as its detail. For now, two `EventQuest`s, completed the first time their event is
 triggered: `first_blood` (`game:bydo_killed`) and `boss_slayer` (`game:boss_killed`).
 
 ## Tests

@@ -28,8 +28,8 @@ void addEventQuest(engine::Engine &engine, const localization::Localization &tra
     EventQuest &quest = engine.getEcs().registerSystem<EventQuest>(id, event, engine.getSettings());
     quest.setCompletionHandler([&engine, &translations](const engine::QuestSystem &completed) {
         writeSettings(engine.getSettings());
-        engine.showToast(translations.text(completed.getSettingsKey()), translations.text("quest.completed"), "",
-                         engine::ToastType::Success);
+        engine.showBanner(translations.text("quest.completed"), translations.text(completed.getSettingsKey()),
+                          engine::ToastType::Quest);
     });
     engine.addQuest(quest);
 }
