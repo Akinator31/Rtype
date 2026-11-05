@@ -4,15 +4,12 @@
 #include "Game/GameScenes.hpp"
 #include "Settings/SettingsTargets.hpp"
 #include "ShipSelector/ShipSelection.hpp"
-#include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/localization/Localization.hpp"
-#include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
-#include "rtype/render/Window.hpp"
 
 namespace rtype::client
 {

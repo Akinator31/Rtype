@@ -14,9 +14,6 @@
 #include "Loading/SceneLoadStatus.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "Online/OnlineScenes.hpp"
-#include "Settings/ControlSettings.hpp"
-#include "Settings/DisplaySettings.hpp"
-#include "Settings/PlayerSettings.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
@@ -63,10 +60,6 @@ void run()
     Window window({.fullscreen = true});
     rtype::engine::Engine engine;
     rtype::client::readSettings(engine.getSettings());
-    // The keys chosen at the last run
-    rtype::client::applyControlSettings(engine.getSettings(), engine.getControls());
-    // The screen and the resolution chosen at the last run
-    rtype::client::applyDisplaySettings(engine.getSettings(), window);
     const rtype::audio::AudioDevice audioDevice;
     rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
                                     engine.getThreads().getAssetsWorker());
@@ -97,9 +90,9 @@ void run()
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
-    // The language, the volumes and the colour filter chosen at the last run
-    rtype::client::applyPlayerSettings(engine.getSettings(), translations, audio);
-    renderer.setColorFilter(rtype::client::readColorFilter(engine.getSettings()));
+    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer, window};
+    // The choices of the player at the last run
+    rtype::client::applySavedSettings(engine, settingsTargets);
 
     rtype::client::Console console;
     const rtype::game::GameConfig config = rtype::client::readGameConfig(console);
@@ -168,8 +161,7 @@ void run()
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
-    rtype::client::createMenuScenes(engine, resources, style, window, metrics, games, config, translations,
-                                    audio, renderer, ships);
+    rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
