@@ -110,6 +110,7 @@ void GameSessionSystem::stop()
     _players.clear();
     _tick = 0;
     _rescue = game::RescueStage::None;
+    _outcomeTold = false;
     _clock = 0.0f;
 }
 
@@ -193,6 +194,11 @@ void GameSessionSystem::setRescueHandler(std::function<void(game::RescueStage)> 
     _onRescue = std::move(onRescue);
 }
 
+void GameSessionSystem::setOutcomeHandler(std::function<void(game::GameOutcome)> onOutcome)
+{
+    _onOutcome = std::move(onOutcome);
+}
+
 std::optional<ecs::entity_t> GameSessionSystem::entityOf(std::uint32_t networkId) const
 {
     const auto found = _entities.find(networkId);
@@ -255,6 +261,9 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     }
     if (snapshot.rescue != std::exchange(_rescue, snapshot.rescue) && _onRescue) {
         _onRescue(snapshot.rescue);
+    }
+    if (snapshot.gameOver && !std::exchange(_outcomeTold, true) && _onOutcome) {
+        _onOutcome(*snapshot.gameOver);
     }
 
     // Each snapshot holds the whole world: what is not in it any more is gone

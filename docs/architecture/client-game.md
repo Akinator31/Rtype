@@ -395,6 +395,48 @@ the countdown stops while the game is paused offline, then fades everything out 
 is reached. The client takes the lives at the start and the delay from the default `game::Rules`, like its
 prediction. The last life opens no death screen: the event of the ship lost is told as for any other.
 
+## Quests
+
+### Events and stats
+
+The `GameRecorder` of the game scenes (`Game/GameRecorder.hpp`) tells the engine what happens in the games:
+each time, it counts it in a stat of the player, kept in the settings as an integer (`stats.*`), then triggers
+an event of the engine (ADR 0008), created with the scenes, before any game.
+
+| Event | When | Stats |
+|---|---|---|
+| `game:started` | the game scene opens | `stats.games_played` |
+| `game:bydo_killed` | a Bydo shot down by the local player | `stats.bydos_killed`, and `stats.flyers_killed`, `stats.shooters_killed` or `stats.tanks_killed` |
+| `game:boss_killed` | a boss shot down, by anyone | `stats.bosses_defeated` |
+| `game:player_killed` | the ship of the local player shot down | `stats.deaths` |
+| `game:wave_started` | a wave starts | `stats.best_wave` (the highest) |
+| `game:won`, `game:lost` | a snapshot tells how the game ended (`GameSessionSystem::setOutcomeHandler`) | `stats.victories`, `stats.defeats` |
+| `game:ended` | the player leaves the game, or its session is over | `stats.best_score` (the highest), `stats.total_score` |
+
+The events carry nothing: a listener reads the stats. They are counted at once, before the trigger, because
+an event triggered several times before an update wakes its listeners once. The settings are written to their
+file at the end of each game, and when a quest is completed.
+
+### Quests
+
+A quest is an `engine::QuestSystem`: a system with an id, the events that wake it, and `progress()`, which
+tells whether it is now completed. `Engine::addQuest()` disables it and subscribes it to its events with
+`Reaction::Enable` and `Duration::Once`, so it runs once at the update after a trigger. A completed quest is
+written in the settings as `quest.<id>=true`; at the next run, `addQuest()` leaves it disabled and subscribed
+to nothing.
+
+`registerQuests()` (`Quests/Quests.cpp`) registers the quests of the client, after the scenes, from two
+tables:
+
+- `StatQuest`s, completed once a stat reaches a target, checked when its event is triggered: 20 of them
+  (games played, Bydos shot down in all and by kind, bosses, first death, waves, victories, defeats, scores);
+- `EventQuest`s, completed the first time their event is triggered: here the `<scene>:open` events of the
+  lore, the hangar, the online lobby and the settings menu.
+
+A completed quest writes the settings file at once and shows a blue banner (`ToastType::Quest`):
+`quest.completed` as its title, the name of the quest (`quest.<id>` in the locales) as its detail. A quest is
+added with a line in one of the tables and its name in `en.lang` and `fr.lang`.
+
 ## Tests
 
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:

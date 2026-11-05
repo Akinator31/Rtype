@@ -12,6 +12,7 @@ add_library(rtype_engine
     src/Interface/MenuBuilder.cpp
     src/Interface/Metrics.cpp
     src/Interface/Navigation.cpp
+    src/Quest/QuestSystem.cpp
     src/Rendering/SceneRenderer.cpp
     src/Rendering/ColliderDebugRenderer.cpp
     src/Scene/SceneAssets.cpp

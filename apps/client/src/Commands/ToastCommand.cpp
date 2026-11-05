@@ -24,6 +24,9 @@ std::optional<engine::ToastType> findToastType(const std::string &name)
     if (name == "error") {
         return engine::ToastType::Error;
     }
+    if (name == "quest") {
+        return engine::ToastType::Quest;
+    }
     return std::nullopt;
 }
 
@@ -42,7 +45,7 @@ void showToast(engine::Engine &engine, Console &console, const Console::Argument
         arguments.empty() ? std::nullopt : findToastType(arguments[0]);
     const std::string text = joinArguments(arguments, type ? 1 : 0);
     if (text.empty()) {
-        console.print("Usage: toast [info|success|warning|error] <text>");
+        console.print("Usage: toast [info|success|warning|error|quest] <text>");
         return;
     }
     engine.showToast(text, type.value_or(engine::ToastType::Info));
@@ -52,7 +55,7 @@ void showToast(engine::Engine &engine, Console &console, const Console::Argument
 
 void registerToastCommand(Console &console, engine::Engine &engine)
 {
-    console.registerConsoleCommand("toast", "toast [info|success|warning|error] <text>: shows a toast",
+    console.registerConsoleCommand("toast", "toast [info|success|warning|error|quest] <text>: shows a toast",
                                    [&engine](Console &target, const Console::Arguments &arguments) {
                                        showToast(engine, target, arguments);
                                    });

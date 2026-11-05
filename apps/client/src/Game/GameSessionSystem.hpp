@@ -75,10 +75,10 @@ struct Kill {
 ///    engine::SoundEffect given to entities, which the engine::SoundSystem plays: a shot that appears has the
 ///    shot sound of its kind, the impact of an entity killed the destruction sound of its kind. Each ship
 ///    killed, a Bydo or the ship of a player, is told to the kill handler, if any, each wave started to
-///    the wave handler, if any, and each new stage of the rescue against the final boss to the rescue
-///    handler, if any. A ship the blade of the shogun goes through during the rescue (game::Snapshot::struck)
-///    shows the strike impact and plays the strike sound of its kind, if it was given them, and is told to
-///    the strike handler, if any.
+///    the wave handler, if any, each new stage of the rescue against the final boss to the rescue
+///    handler, if any, and how the game ended to the outcome handler, if any. A ship the blade of the shogun
+///    goes through during the rescue (game::Snapshot::struck) shows the strike impact and plays the strike
+///    sound of its kind, if it was given them, and is told to the strike handler, if any.
 ///
 /// @code
 /// gameSessions.start(std::make_unique<LocalSession>(), scene); // when the game scene opens
@@ -96,6 +96,9 @@ class GameSessionSystem : public ecs::System
     std::function<void(const Kill &)> _onKill;
     std::function<void(std::uint16_t, const std::string &)> _onWave;
     std::function<void(game::RescueStage)> _onRescue;
+    std::function<void(game::GameOutcome)> _onOutcome;
+    /// The outcome of the game was told: a game ends once, though several snapshots may tell it.
+    bool _outcomeTold = false;
     std::function<void()> _onStrike;
     /// The stage of the rescue against the final boss in the latest snapshot.
     game::RescueStage _rescue = game::RescueStage::None;
@@ -199,6 +202,8 @@ public:
     void setWaveHandler(std::function<void(std::uint16_t, const std::string &)> onWave);
     /// Calls this with each new stage of the rescue against the final boss from now on (offline only).
     void setRescueHandler(std::function<void(game::RescueStage)> onRescue);
+    /// Calls this once per session from now on, with how the game ended, when a snapshot tells it.
+    void setOutcomeHandler(std::function<void(game::GameOutcome)> onOutcome);
 
     void update(float elapsed) override;
 

@@ -291,7 +291,7 @@ for `Info`, a star for `Success`, a triangle for `Warning` and `Error`, in red.
 
 ```cpp
 engine.showToast("Settings saved");                    // a message alone is shown as the subject
-engine.showToast("Connection lost", ToastType::Error); // Info, Success, Warning or Error
+engine.showToast("Connection lost", ToastType::Error); // Info, Success, Warning, Error or Quest
 engine.showToast("ORBITAL MODULE", "taken by", "KAZE", ToastType::Success); // subject, message, actor
 ```
 
@@ -325,7 +325,7 @@ fades and destroys it. To change how every toast looks, change the style, or `dr
 calls stay the same.
 
 Toasts are stacked from the corner, the newest nearest to it; the others glide to their new place. Beyond
-`maxVisible`, the oldest fade out early. In the client, the console command `toast [info|success|warning|error]
+`maxVisible`, the oldest fade out early. In the client, the console command `toast [info|success|warning|error|quest]
 <text>` shows one.
 
 ### Titles and sliders

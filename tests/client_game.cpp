@@ -7,6 +7,7 @@
 #include "Game/DeathScreen.hpp"
 #include "Game/DeathScreenSystem.hpp"
 #include "Game/EntityLook.hpp"
+#include "Game/GameRecorder.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
 #include "Game/GameView.hpp"
@@ -19,6 +20,7 @@
 #include "Game/LocalSession.hpp"
 #include "Game/RescueCameraSystem.hpp"
 #include "Game/ShotLooks.hpp"
+#include "Quests/StatQuest.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -1474,4 +1476,59 @@ TEST_CASE("The signal bars light up as the ping gets shorter", "[client]")
     CHECK(countSignalBars(milliseconds(90)) == 2);
     CHECK(countSignalBars(milliseconds(500)) == 1);
     CHECK(formatScore(42) == "0000042");
+}
+
+TEST_CASE("The recorder counts what happens in the games in the stats", "[client][quest]")
+{
+    rtype::engine::Engine engine;
+    rtype::client::GameRecorder recorder(engine);
+    const rtype::engine::Settings &settings = engine.getSettings();
+    using rtype::game::EntityKind;
+    constexpr std::uint8_t local = 1;
+
+    recorder.recordStart();
+    recorder.recordKill({EntityKind::BydoFlyer, rtype::game::NoOwner, local}, local);
+    recorder.recordKill({EntityKind::BydoTank, rtype::game::NoOwner, 2}, local);
+    recorder.recordKill({EntityKind::BydoBoss, rtype::game::NoOwner, std::nullopt}, local);
+    recorder.recordKill({EntityKind::PlayerShip, local, std::nullopt}, local);
+    recorder.recordKill({EntityKind::PlayerShip, 2, std::nullopt}, local);
+    recorder.recordWave(4);
+    recorder.recordWave(2);
+    recorder.recordOutcome(rtype::game::GameOutcome::Victory);
+    recorder.recordEnd(1200);
+    recorder.recordEnd(800);
+
+    CHECK(rtype::client::getStat(settings, rtype::client::GamesPlayedStat) == 1);
+    CHECK(rtype::client::getStat(settings, rtype::client::BydosKilledStat) == 1);
+    CHECK(rtype::client::getStat(settings, rtype::client::FlyersKilledStat) == 1);
+    CHECK(rtype::client::getStat(settings, rtype::client::TanksKilledStat) == 0);
+    CHECK(rtype::client::getStat(settings, rtype::client::BossesDefeatedStat) == 1);
+    CHECK(rtype::client::getStat(settings, rtype::client::DeathsStat) == 1);
+    CHECK(rtype::client::getStat(settings, rtype::client::BestWaveStat) == 4);
+    CHECK(rtype::client::getStat(settings, rtype::client::VictoriesStat) == 1);
+    CHECK(rtype::client::getStat(settings, rtype::client::DefeatsStat) == 0);
+    CHECK(rtype::client::getStat(settings, rtype::client::BestScoreStat) == 1200);
+    CHECK(rtype::client::getStat(settings, rtype::client::TotalScoreStat) == 2000);
+}
+
+TEST_CASE("A stat quest counts every kill, even several in a frame", "[client][quest]")
+{
+    rtype::engine::Engine engine;
+    rtype::client::GameRecorder recorder(engine);
+    auto &quest = engine.getEcs().registerSystem<rtype::client::StatQuest>(
+        "triple", rtype::client::BydoKilledEvent, rtype::client::BydosKilledStat, 3, engine.getSettings());
+    int completions = 0;
+    quest.setCompletionHandler([&completions](const rtype::engine::QuestSystem &) { ++completions; });
+    engine.addQuest(quest);
+    const rtype::client::Kill kill{rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner, 0};
+
+    recorder.recordKill(kill, 0);
+    recorder.recordKill(kill, 0);
+    engine.update(0.016f);
+    CHECK_FALSE(quest.isCompleted());
+
+    recorder.recordKill(kill, 0);
+    engine.update(0.016f);
+    CHECK(quest.isCompleted());
+    CHECK(completions == 1);
 }

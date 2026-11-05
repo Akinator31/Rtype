@@ -445,14 +445,19 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                        GameSessionSystem &sessions, localization::Localization &translations,
                        const ShipSelection &ships)
     : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
-      _translations(translations), _ships(ships)
+      _translations(translations), _ships(ships), _recorder(engine)
 {
-    sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
+    sessions.setKillHandler([this](const Kill &kill) {
+        recordKill(kill);
+        showKill(kill);
+    });
     sessions.setWaveHandler([this](std::uint16_t wave, const std::string &music) {
+        _recorder.recordWave(wave);
         showWave(wave);
         playWaveMusic(music);
     });
     sessions.setRescueHandler([this](game::RescueStage stage) { showRescue(stage); });
+    sessions.setOutcomeHandler([this](game::GameOutcome outcome) { _recorder.recordOutcome(outcome); });
     sessions.setStrikeHandler([this] { showStrike(); });
     engine.createScene(
         GameScene,
@@ -481,6 +486,7 @@ void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()
 void GameScenes::end()
 {
     _audio.stopMusic();
+    recordEnd();
     _sessions.stop();
     const std::function<void()> onEnd = std::exchange(_onEnd, nullptr);
     if (onEnd) {
@@ -488,6 +494,24 @@ void GameScenes::end()
     } else {
         _engine.switchScene(MainMenuScene);
     }
+}
+
+void GameScenes::recordKill(const Kill &kill)
+{
+    if (const GameSession *session = _sessions.session()) {
+        _recorder.recordKill(kill, session->localSlot());
+    }
+}
+
+void GameScenes::recordEnd()
+{
+    const GameSession *session = _sessions.session();
+    if (session == nullptr) {
+        return;
+    }
+    const std::vector<game::PlayerState> &players = _sessions.players();
+    const auto local = std::ranges::find(players, session->localSlot(), &game::PlayerState::slot);
+    _recorder.recordEnd(local == players.end() ? 0 : local->score);
 }
 
 void GameScenes::showKill(const Kill &kill)
@@ -666,6 +690,7 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
 
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
+    _recorder.recordStart();
 }
 
 } // namespace rtype::client

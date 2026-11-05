@@ -10,6 +10,7 @@
 /// - Rendering/: the SceneRenderer, which draws the entities.
 /// - Scene/: the stack of open scenes (home screen, game, pause menu...).
 /// - Control/: the virtual gamepad the keyboard and the real gamepads are mapped onto.
+/// - Quest/: the base of the quests, systems woken by events.
 
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -25,6 +26,7 @@
 #include "rtype/engine/Interface/Navigation.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/Interface/SwitchLayout.hpp"
+#include "rtype/engine/Quest/QuestSystem.hpp"
 #include "rtype/engine/Rendering/ColliderDebugRenderer.hpp"
 #include "rtype/engine/Rendering/SceneRenderer.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"

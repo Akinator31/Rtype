@@ -17,10 +17,12 @@ enum class ToastType {
     Warning,
     /// An error: a triangle with an exclamation mark.
     Error,
+    /// A quest completed: a star, in blue.
+    Quest,
 };
 
 /// Number of values of ToastType: the size of the tables indexed by a type, which follow its order.
-inline constexpr std::size_t toastTypeCount = 4;
+inline constexpr std::size_t toastTypeCount = 5;
 
 /// The shape of a toast.
 enum class ToastKind {
