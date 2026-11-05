@@ -1,6 +1,7 @@
 #include "Game/GameScenes.hpp"
 
 #include "Assets.hpp"
+#include "Game/GameEvents.hpp"
 #include "Game/GameView.hpp"
 #include "Game/Hud.hpp"
 #include "Game/LocalSession.hpp"
@@ -447,8 +448,13 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
       _translations(translations), _ships(ships)
 {
-    sessions.setKillHandler([this](const Kill &kill) { showKill(kill); });
+    createGameEvents();
+    sessions.setKillHandler([this](const Kill &kill) {
+        triggerKillEvents(kill);
+        showKill(kill);
+    });
     sessions.setWaveHandler([this](std::uint16_t wave, const std::string &music) {
+        _engine.triggerEvent(WaveStartedEvent);
         showWave(wave);
         playWaveMusic(music);
     });
@@ -487,6 +493,35 @@ void GameScenes::end()
         onEnd();
     } else {
         _engine.switchScene(MainMenuScene);
+    }
+}
+
+void GameScenes::createGameEvents()
+{
+    _engine.createEvent(BydoKilledEvent);
+    _engine.createEvent(BossKilledEvent);
+    _engine.createEvent(PlayerKilledEvent);
+    _engine.createEvent(WaveStartedEvent);
+}
+
+void GameScenes::triggerKillEvents(const Kill &kill)
+{
+    const GameSession *session = _sessions.session();
+    if (session == nullptr) {
+        return;
+    }
+    const std::uint8_t local = session->localSlot();
+    if (kill.kind == game::EntityKind::PlayerShip) {
+        if (kill.owner == local) {
+            _engine.triggerEvent(PlayerKilledEvent);
+        }
+        return;
+    }
+    if (kill.kind == game::EntityKind::BydoBoss) {
+        _engine.triggerEvent(BossKilledEvent);
+    }
+    if (kill.killer == local) {
+        _engine.triggerEvent(BydoKilledEvent);
     }
 }
 

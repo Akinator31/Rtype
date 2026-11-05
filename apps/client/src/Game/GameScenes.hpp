@@ -77,6 +77,10 @@ class GameScenes
 
     void build(engine::SceneId scene, render::ResourceManager &resources, audio::AudioPlayer &audio,
                const engine::Metrics &metrics, const engine::InterfaceStyle &style);
+    /// Creates the events of GameEvents.hpp, so that the quests can listen to them before any game.
+    void createGameEvents();
+    /// Triggers the events of a ship killed: BydoKilledEvent, BossKilledEvent, PlayerKilledEvent.
+    void triggerKillEvents(const Kill &kill);
     /// Shows the event of a ship killed, if it is one: a Bydo killed by the local player, or a player ship.
     /// The fall of the shogun at the end of the rescue shakes the camera.
     void showKill(const Kill &kill);

@@ -4,6 +4,7 @@
 #include "rtype/engine/Component/Toast.hpp"
 #include "rtype/engine/Control/Controls.hpp"
 #include "rtype/engine/Event/Event.hpp"
+#include "rtype/engine/Quest/QuestSystem.hpp"
 #include "rtype/engine/Scene/SceneAssetLoader.hpp"
 #include "rtype/engine/Scene/SceneAssets.hpp"
 #include "rtype/engine/Scene/SceneLoadState.hpp"
@@ -160,6 +161,11 @@ public:
     /// Triggers an event: the reactions of its current subscribers are applied at the start of the next
     /// update(), in the order of the triggers. Does nothing if the event does not exist.
     void triggerEvent(const std::string &name);
+
+    /// Makes a quest wait for its events: disabled, it runs at the update after one of them is triggered
+    /// (Reaction::Enable, Duration::Once). Creates its events that do not exist yet. A quest already
+    /// completed stays disabled, subscribed to nothing.
+    void addQuest(QuestSystem &quest);
 
     /// Declares a named scene, and creates its events "<name>:open" and "<name>:close". If it already exists,
     /// keeps it unchanged.

@@ -131,3 +131,6 @@ ship.vx05=SPECTRE
 ship.vx06=TITAN
 menu.ships=Hangar
 menu.lore=Histoire
+quest.completed=QUÊTE ACCOMPLIE
+quest.first_blood=PREMIER SANG
+quest.boss_slayer=TUEUR DE BOSS

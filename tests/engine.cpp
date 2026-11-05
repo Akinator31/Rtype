@@ -1930,3 +1930,95 @@ TEST_CASE("The sound system plays each sound effect once, then takes it from its
         CHECK_FALSE(ecs.hasComponent<SoundEffect>(shot));
     }
 }
+
+namespace
+{
+
+// Completed at its third wake
+class ThirdWakeQuest : public QuestSystem
+{
+    bool progress() override { return ++wakes == 3; }
+
+public:
+    int wakes = 0;
+
+    ThirdWakeQuest(rtype::ecs::ComponentCaches & /*caches*/, Settings &settings)
+        : QuestSystem("third_wake", {"hit", "miss"}, settings)
+    {
+    }
+};
+
+} // namespace
+
+TEST_CASE("A quest sleeps until one of its events is triggered", "[engine][quest]")
+{
+    Engine engine;
+    auto &quest = engine.getEcs().registerSystem<ThirdWakeQuest>(engine.getSettings());
+    engine.addQuest(quest);
+    CHECK(engine.hasEvent("hit"));
+    CHECK(engine.hasEvent("miss"));
+
+    engine.update(0.1f);
+    CHECK(quest.wakes == 0);
+
+    engine.triggerEvent("hit");
+    engine.update(0.1f);
+    CHECK(quest.wakes == 1);
+    CHECK_FALSE(quest.enabled);
+    engine.update(0.1f);
+    CHECK(quest.wakes == 1);
+
+    engine.triggerEvent("miss");
+    engine.update(0.1f);
+    CHECK(quest.wakes == 2);
+}
+
+TEST_CASE("Triggers between two updates wake a quest once", "[engine][quest]")
+{
+    Engine engine;
+    auto &quest = engine.getEcs().registerSystem<ThirdWakeQuest>(engine.getSettings());
+    engine.addQuest(quest);
+
+    engine.triggerEvent("hit");
+    engine.triggerEvent("hit");
+    engine.triggerEvent("miss");
+    engine.update(0.1f);
+    CHECK(quest.wakes == 1);
+}
+
+TEST_CASE("A completed quest is written in the settings and told once", "[engine][quest]")
+{
+    Engine engine;
+    auto &quest = engine.getEcs().registerSystem<ThirdWakeQuest>(engine.getSettings());
+    int completions = 0;
+    quest.setCompletionHandler([&completions](const QuestSystem &completed) {
+        CHECK(completed.getId() == "third_wake");
+        ++completions;
+    });
+    engine.addQuest(quest);
+
+    for (int wake = 0; wake < 5; ++wake) {
+        engine.triggerEvent("hit");
+        engine.update(0.1f);
+    }
+    CHECK(quest.wakes == 3);
+    CHECK(completions == 1);
+    CHECK(quest.isCompleted());
+    CHECK(engine.getSettings().getBool("quest.third_wake") == true);
+}
+
+TEST_CASE("A quest completed at a previous run never wakes", "[engine][quest]")
+{
+    Engine engine;
+    engine.getSettings().setBool("quest.third_wake", true);
+    auto &quest = engine.getEcs().registerSystem<ThirdWakeQuest>(engine.getSettings());
+    engine.addQuest(quest);
+    CHECK(quest.isCompleted());
+    CHECK_FALSE(engine.hasEvent("hit"));
+
+    engine.createEvent("hit");
+    engine.triggerEvent("hit");
+    engine.update(0.1f);
+    CHECK(quest.wakes == 0);
+    CHECK_FALSE(quest.enabled);
+}

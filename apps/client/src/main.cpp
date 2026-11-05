@@ -14,6 +14,7 @@
 #include "Loading/SceneLoadStatus.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "Quests/Quests.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
@@ -163,6 +164,7 @@ void run()
     rtype::client::OnlineScenes online(engine, network, games, metrics, style, translations, ships);
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
+    rtype::client::registerQuests(engine, translations);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
         playFrame();

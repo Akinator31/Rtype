@@ -6,6 +6,7 @@
 #   Lore/                the story of the game, scrolling away towards the horizon
 #   MainMenu/            the home screen and its submenus
 #   Online/              playing online: the lobby of a server, and its scenes
+#   Quests/              the quests of the player, woken by the events of the game
 #   ShipSelector/        the hangar: the catalog of ships and the scene where the player picks one
 #   ShipModel            the ship models and their animations, flown by the menu and by the game
 add_library(r-type_client_core STATIC
@@ -74,6 +75,8 @@ add_library(r-type_client_core STATIC
     src/Settings/ControlSettings.cpp
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
+    src/Quests/EventQuest.cpp
+    src/Quests/Quests.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp
     src/ShipSelector/ShipSelection.cpp

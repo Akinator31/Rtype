@@ -131,3 +131,6 @@ ship.vx05=SPECTRE
 ship.vx06=TITAN
 menu.ships=Hangar
 menu.lore=Story
+quest.completed=QUEST COMPLETED
+quest.first_blood=FIRST BLOOD
+quest.boss_slayer=BOSS SLAYER

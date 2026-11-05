@@ -395,6 +395,25 @@ the countdown stops while the game is paused offline, then fades everything out 
 is reached. The client takes the lives at the start and the delay from the default `game::Rules`, like its
 prediction. The last life opens no death screen: the event of the ship lost is told as for any other.
 
+## Quests
+
+The game scene triggers events of the engine (ADR 0008) for whatever listens to the game, named in
+`Game/GameEvents.hpp` and created with the scenes of a game, before any game: `game:bydo_killed` (a Bydo shot
+down by the local player), `game:boss_killed` (a boss shot down, by anyone), `game:player_killed` (the ship of
+the local player shot down) and `game:wave_started`. They carry nothing.
+
+A quest is an `engine::QuestSystem`: a system with an id, the events that wake it, and `progress()`, which
+tells whether it is now completed. `Engine::addQuest()` disables it and subscribes it to its events with
+`Reaction::Enable` and `Duration::Once`, so it runs once at the update after a trigger. Several triggers
+before an update wake it once: a quest that counts something reads a counter rather than count its wakes.
+A completed quest is written in the settings as `quest.<id>=true`; at the next run, `addQuest()` leaves it
+disabled and subscribed to nothing.
+
+The quests of the client are registered by `registerQuests()` (`Quests/Quests.cpp`), after the scenes. Each
+one, once completed, writes the settings file at once and shows a toast with its name (`quest.<id>` in the
+locales) and `quest.completed`. For now, two `EventQuest`s, completed the first time their event is
+triggered: `first_blood` (`game:bydo_killed`) and `boss_slayer` (`game:boss_killed`).
+
 ## Tests
 
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:

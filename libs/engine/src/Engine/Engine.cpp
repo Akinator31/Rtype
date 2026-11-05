@@ -115,6 +115,18 @@ void Engine::subscribeToEvent(const std::string &name, rtype::ecs::System &syste
     getEvent(name).addSubscriber(system, reaction, duration);
 }
 
+void Engine::addQuest(QuestSystem &quest)
+{
+    quest.enabled = false;
+    if (quest.isCompleted()) {
+        return;
+    }
+    for (const std::string &event : quest.getEvents()) {
+        createEvent(event);
+        subscribeToEvent(event, quest, Reaction::Enable, Duration::Once);
+    }
+}
+
 void Engine::triggerEvent(const std::string &name)
 {
     auto it = _events.find(name);
