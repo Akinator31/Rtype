@@ -4,7 +4,8 @@ name: Thread sanitizer
 # fails blocks the next release (release.yml) until a run on main passes again
 on:
   schedule:
-    - cron: "0 2 * * *"
+    # GitHub reads cron in UTC: 05:01 UTC is 06:01 in Paris in winter (07:01 in summer)
+    - cron: "1 5 * * *"
   workflow_dispatch:
 
 permissions:
