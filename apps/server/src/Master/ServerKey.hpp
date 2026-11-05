@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <string_view>
 
 namespace rtype::server
 {
@@ -27,5 +28,12 @@ struct ServerKey {
 /// @throws std::filesystem::filesystem_error if the file exists (std::errc::file_exists) or cannot be
 /// written: path1() is the file.
 void writePrivateKey(const rtype::network::ServerIdentity &identity, const std::filesystem::path &path);
+
+/// Creates a file that does not exist yet and writes it. On Unix it is created readable by its owner only, so
+/// that what it holds is never readable by others, even for a moment; on Windows it gets the access rights of
+/// its directory.
+/// @throws std::filesystem::filesystem_error if the file exists (std::errc::file_exists) or cannot be
+/// written: path1() is the file.
+void writeNewSecretFile(const std::filesystem::path &path, std::string_view content);
 
 } // namespace rtype::server

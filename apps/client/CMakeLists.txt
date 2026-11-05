@@ -56,6 +56,7 @@ add_library(r-type_client_core STATIC
     src/Lore/LoreLayout.cpp
     src/Lore/LoreScene.cpp
     src/Lore/LoreText.cpp
+    src/MainMenu/Capitals.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
     src/MainMenu/Logo.cpp
@@ -68,9 +69,14 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
     src/MainMenu/UiShowcase.cpp
+    src/Online/AccountScenes.cpp
+    src/Online/FormErrors.cpp
+    src/Online/KnownProfiles.cpp
     src/Online/KnownServers.cpp
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
+    src/Online/OnlineScreen.cpp
+    src/Online/SessionTokens.cpp
     src/Settings/ControlSettings.cpp
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
@@ -82,14 +88,16 @@ add_library(r-type_client_core STATIC
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
-    PUBLIC rtype::audio rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network
-           rtype::physics rtype::render
+    PUBLIC rtype::audio rtype::discord rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
+           rtype::log rtype::network rtype::physics rtype::render
     PRIVATE rtype_options)
 
 add_executable(r-type_client
     src/main.cpp
 )
-target_link_libraries(r-type_client PRIVATE rtype_options r-type_client_core)
+# The Discord Social SDK in the executable only (libs/discord): the tests of the client never load it
+target_link_libraries(r-type_client PRIVATE rtype_options r-type_client_core rtype::discord_sdk)
+rtype_add_discord_runtime(r-type_client client)
 
 # The client finds its assets next to its executable, both in the build tree and once installed.
 # A custom target runs on every build, so that a modified asset is copied even if the code did not change.

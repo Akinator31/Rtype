@@ -3,6 +3,15 @@
 namespace rtype::server
 {
 
+bool sameSecret(const Secret &first, const Secret &second)
+{
+    std::byte difference{0};
+    for (std::size_t i = 0; i < first.size(); ++i) {
+        difference |= first[i] ^ second[i];
+    }
+    return difference == std::byte{0};
+}
+
 std::string formatSecret(const Secret &secret)
 {
     constexpr std::string_view Digits = "0123456789abcdef";

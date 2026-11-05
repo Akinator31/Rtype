@@ -4,10 +4,12 @@
 
 #include "Common/Options.hpp"
 #include "GameServers.hpp"
+#include "Http.hpp"
 #include "LobbyClient.hpp"
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "Master/Process.hpp"
+#include "Web/LocalAccess.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/Address.hpp"
@@ -22,6 +24,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -64,6 +67,8 @@ struct GameClient {
     Address game;
     ClientSession session;
     std::optional<rtype::game::AcceptedMessage> accepted;
+    /// The latest snapshot part received.
+    std::optional<rtype::game::SnapshotPart> snapshot;
     std::optional<SessionEnd> end;
     bool updating = true;
 
@@ -79,7 +84,21 @@ struct GameClient {
         });
         session.start(
             [this](std::span<const std::byte> payload) { accepted = rtype::game::decodeAccepted(payload); },
-            {}, [this](SessionEnd ended) { end = ended; }, Clock::now());
+            [this](std::uint8_t type, std::span<const std::byte> payload) {
+                if (type == rtype::game::message_type::Snapshot) {
+                    if (auto part = rtype::game::decodeSnapshotPart(payload)) {
+                        snapshot = std::move(part);
+                    }
+                }
+            },
+            [this](SessionEnd ended) { end = ended; }, Clock::now());
+    }
+
+    void sendInput(std::uint32_t tick, rtype::game::PlayerInput input)
+    {
+        session.send(rtype::game::message_type::Input,
+                     rtype::game::encode(rtype::game::InputMessage{tick, {input}}),
+                     rtype::network::Delivery::Unreliable);
     }
 
     void update()
@@ -378,6 +397,150 @@ TEST_CASE("A player whose client goes silent is told it timed out", "[games]")
     CHECK(master.wait([&] { return master.games.empty(); }));
 }
 
+TEST_CASE("The master reads the score of a player who just destroyed a Bydo, within two seconds", "[games]")
+{
+    MasterFixture master;
+    auto alice = master.player("Alice");
+    alice->send(message_type::CreateGame, encode(CreateGameMessage{"Scores", 1}));
+    const GameJoinedMessage joined = master.joined(*alice, 1);
+    GameClient client(master.loop, joined);
+    master.gameClients.push_back(&client);
+    REQUIRE(master.wait([&] { return client.accepted && client.snapshot; }));
+
+    // Like a player: one INPUT per tick, firing, the ship following the nearest Bydo up and down
+    const auto scoreOf = [](const rtype::game::SnapshotPart &part) {
+        return part.players.empty() ? 0U : part.players[0].score;
+    };
+    std::uint32_t stamped = 0;
+    std::optional<float> target;
+    auto nextInput = Clock::now();
+    const auto play = [&] {
+        client.update();
+        const rtype::game::SnapshotPart &part = *client.snapshot;
+        std::optional<rtype::game::EntityState> ship;
+        target.reset();
+        float nearest = 1e9F;
+        for (const rtype::game::EntityState &entity : part.entities) {
+            if (entity.kind == rtype::game::EntityKind::PlayerShip) {
+                ship = entity;
+            }
+        }
+        for (const rtype::game::EntityState &entity : part.entities) {
+            const auto kind = static_cast<std::uint8_t>(entity.kind);
+            if (ship && kind >= 0x10 && kind < 0x40 && entity.x > ship->x && entity.x - ship->x < nearest) {
+                nearest = entity.x - ship->x;
+                target = entity.y;
+            }
+        }
+        if (Clock::now() < nextInput) {
+            return;
+        }
+        nextInput += std::chrono::nanoseconds(std::chrono::seconds(1)) / 60;
+        rtype::game::PlayerInput input{rtype::game::PlayerInput::Fire};
+        if (ship && target && *target < ship->y - 8.0F) {
+            input.set(rtype::game::PlayerInput::Up, true);
+        } else if (ship && target && *target > ship->y + 8.0F) {
+            input.set(rtype::game::PlayerInput::Down, true);
+        }
+        stamped = std::max(stamped + 1, part.tick + 5);
+        client.sendInput(stamped, input);
+    };
+    REQUIRE(testing::waitUntil(
+        master.loop,
+        [&] {
+            play();
+            return scoreOf(*client.snapshot) > 0;
+        },
+        60s));
+    const std::uint32_t score = scoreOf(*client.snapshot);
+
+    // Within two seconds, the master knows it from the GAME_STATUS of the instance
+    const auto destroyed = Clock::now();
+    std::optional<GameStatus> status;
+    REQUIRE(testing::waitUntil(
+        master.loop,
+        [&] {
+            client.update();
+            status = master.games.status(joined.gameId);
+            return status && status->last && status->last->players.size() == 1 &&
+                   status->last->players[0].score >= score;
+        },
+        2s));
+    CHECK(Clock::now() - destroyed <= 2s);
+    CHECK(status->last->players[0].playerId == decodeWelcome(alice->received[0].second)->playerId);
+    CHECK(status->last->wave >= 1);
+    CHECK(status->last->players[0].latency);
+    CHECK_FALSE(status->stale);
+}
+
+TEST_CASE("A game whose instance stops reporting is shown as stale", "[games]")
+{
+    const std::filesystem::path secretFile = std::filesystem::temp_directory_path() /
+                                             ("rtype_tests_stale_" + std::to_string(std::random_device{}()));
+    GamesSettings settings = instances(1);
+    // An instance that gives its secret to the test, which plays it
+    settings.executable = RTYPE_TEST_CHILD;
+    settings.leadingArguments = {"relay", secretFile.string()};
+    settings.statusTimeout = 500ms;
+    MasterFixture master(settings);
+    auto alice = master.player("Alice");
+    alice->send(message_type::CreateGame, encode(CreateGameMessage{"Stuck", 2}));
+    REQUIRE(master.wait([&] { return std::filesystem::exists(secretFile); }));
+    std::string line;
+    std::getline(std::ifstream(secretFile), line);
+    std::filesystem::remove(secretFile);
+    const std::optional<Secret> secret = parseSecret(line);
+    REQUIRE(secret);
+
+    std::optional<rtype::network::FramedConnection> instance;
+    std::vector<std::uint8_t> received;
+    rtype::network::TcpConnection::connect(
+        master.loop, Address::loopbackIpv4(master.games.instancePort()),
+        [&](std::error_code, std::optional<rtype::network::TcpConnection> tcp) {
+            instance.emplace(std::move(*tcp));
+            instance->start([&](std::uint8_t type, std::span<const std::byte>) { received.push_back(type); },
+                            [](std::error_code) {});
+            instance->send(instance_message::InstanceHello,
+                           encode(InstanceHelloMessage{.id = 1, .secret = *secret}));
+        });
+    REQUIRE(master.wait([&] { return !received.empty(); }));
+    REQUIRE(received[0] == instance_message::Configure);
+    CHECK_FALSE(master.games.status(1));
+    instance->send(instance_message::Ready, encode(ReadyMessage{settings.firstPort}));
+    const GameJoinedMessage joined = master.joined(*alice, 1);
+
+    // Ready, nothing reported yet: no status, not stale yet
+    std::optional<GameStatus> status = master.games.status(joined.gameId);
+    REQUIRE(status);
+    CHECK_FALSE(status->last);
+    CHECK_FALSE(status->stale);
+
+    const std::uint32_t aliceId = decodeWelcome(alice->received[0].second)->playerId;
+    const GameStatusMessage reported{600, 1, {{aliceId, 300, true, 12}}};
+    instance->send(instance_message::GameStatus, encode(reported));
+    REQUIRE(master.wait([&] {
+        status = master.games.status(joined.gameId);
+        return status && status->last;
+    }));
+    CHECK(status->last == reported);
+    CHECK_FALSE(status->stale);
+    CHECK(status->age < 500ms);
+
+    // Nothing more: past the timeout, the last status stays, marked stale
+    REQUIRE(master.wait([&] {
+        status = master.games.status(joined.gameId);
+        return status && status->stale;
+    }));
+    CHECK(status->last == reported);
+    CHECK(status->age > 500ms);
+
+    // A malformed one fails the game, as any malformed message of an instance
+    instance->send(instance_message::GameStatus, Bytes{std::byte{1}});
+    REQUIRE(master.wait([&] { return alice->received.size() > 2; }));
+    CHECK(decodeLeftGame(alice->received[2].second)->reason == LeftGameReason::GameCrashed);
+    CHECK_FALSE(master.games.status(joined.gameId));
+}
+
 TEST_CASE("A master that stops shuts its games down", "[games]")
 {
     MasterFixture master;
@@ -405,6 +568,8 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
     const std::filesystem::path database =
         std::filesystem::temp_directory_path() / "rtype_tests_games_master.db";
     std::filesystem::remove(database);
+    const std::filesystem::path settings =
+        testing::webOnAnyPort(std::filesystem::temp_directory_path() / "rtype_tests_games_master.toml");
     std::uint16_t lobbyPort = 0;
     {
         const TcpListener probe(loop, Address::loopbackIpv4(0));
@@ -418,6 +583,7 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
         "--game-ports", std::to_string(gamePort) + "-" + std::to_string(gamePort),
         "--key",        key.string(),
         "--database",   "sqlite:" + database.string(),
+        "--settings",   settings.string(),
         "--log-level",  "warning"};
     Process server(RTYPE_TEST_SERVER, arguments, {.input = {}, .stopGrace = testing::Patience});
 
@@ -453,4 +619,6 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
     CHECK(server.wait(testing::Patience) == Success);
     std::filesystem::remove(key);
     std::filesystem::remove(database);
+    std::filesystem::remove(settings);
+    std::filesystem::remove(std::filesystem::temp_directory_path() / AdminUrlFileName);
 }

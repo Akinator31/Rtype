@@ -2,6 +2,7 @@
 
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Address.hpp"
+#include "rtype/network/Crypto.hpp"
 #include "rtype/network/Datagram.hpp"
 #include "rtype/network/TcpConnection.hpp"
 
@@ -28,22 +29,7 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
-/// 32 bytes from the random generator of the cryptography: a key is exactly that.
-std::array<std::byte, 32> randomBytes()
-{
-    return rtype::network::DatagramKey::generate().bytes();
-}
-
 } // namespace
-
-bool sameSecret(const Secret &first, const Secret &second)
-{
-    std::byte difference{0};
-    for (std::size_t i = 0; i < first.size(); ++i) {
-        difference |= first[i] ^ second[i];
-    }
-    return difference == std::byte{0};
-}
 
 struct Games::Game {
     enum class State {
@@ -57,6 +43,7 @@ struct Games::Game {
 
     struct Member {
         std::uint32_t sessionId = 0;
+        std::string name;
     };
 
     struct Creator {
@@ -78,6 +65,10 @@ struct Games::Game {
     std::map<std::uint32_t, Member> members;
     std::uint32_t lastSession = 0;
     std::optional<Creator> creator;
+    /// The last GAME_STATUS, and when it came, or when the game got ready before the first.
+    std::optional<GameStatusMessage> status;
+    Clock::time_point statusAt;
+    std::chrono::system_clock::time_point createdAt = std::chrono::system_clock::now();
 
     explicit Game(rtype::network::EventLoop &loop) : startTimeout(loop) {}
 
@@ -162,7 +153,7 @@ void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMess
     game.name = request.name;
     game.maxPlayers = request.maxPlayers;
     game.port = *_freePorts.begin();
-    game.secret = randomBytes();
+    game.secret = rtype::network::randomBytes<32>();
 
     std::vector<std::string> arguments = _settings.leadingArguments;
     for (std::string argument :
@@ -199,13 +190,15 @@ rtype::lobby::GameJoinedMessage Games::addPlayer(Game &game, const LobbyPlayer &
 {
     // Never 0, never reused in this instance
     const std::uint32_t session = ++game.lastSession;
-    const AddPlayerMessage added{player.id, session, randomBytes(), randomBytes(), player.name};
+    const AddPlayerMessage added{player.id, session, rtype::network::randomBytes<32>(),
+                                 rtype::network::randomBytes<32>(), player.name};
     // To the instance first: it expects the session before the client connects
     send(game, instance_message::AddPlayer, encode(added));
-    game.members[player.id] = Game::Member{session};
+    game.members[player.id] = Game::Member{session, player.name};
     _playerGames[player.id] = game.id;
     logger().info("{} ({}) joins {} ({}/{})", player.name, player.id, game.describe(), game.members.size(),
                   game.maxPlayers);
+    changed(game);
     return {game.id, game.port, session, added.clientKey, added.serverKey};
 }
 
@@ -228,7 +221,9 @@ void Games::removed(Game &game, std::uint32_t playerId)
     if (game.members.empty() && game.state == Game::State::Running) {
         logger().info("{} has no player left", game.describe());
         shutDown(game, ShutdownReason::Empty);
+        return;
     }
+    changed(game);
 }
 
 std::optional<std::uint32_t> Games::leave(std::uint32_t playerId)
@@ -246,6 +241,77 @@ std::optional<std::uint32_t> Games::leave(std::uint32_t playerId)
     const std::uint32_t gameId = game->id;
     removed(*game, playerId);
     return gameId;
+}
+
+bool Games::kick(std::uint32_t playerId)
+{
+    const auto found = _playerGames.find(playerId);
+    Game *game = found == _playerGames.end() ? nullptr : find(found->second);
+    if (game == nullptr || game->state != Game::State::Running || !game->members.contains(playerId)) {
+        return false;
+    }
+    send(*game, instance_message::RemovePlayer,
+         encode(RemovePlayerMessage{playerId, RemovePlayerReason::Kicked}));
+    logger().info("{} ({}) removed from {} by an administrator", game->members.at(playerId).name, playerId,
+                  game->describe());
+    const std::uint32_t gameId = game->id;
+    removed(*game, playerId);
+    if (_onLeft) {
+        _onLeft(playerId, LeftGameMessage{gameId, LeftGameReason::Kicked});
+    }
+    return true;
+}
+
+bool Games::end(std::uint32_t gameId)
+{
+    Game *game = find(gameId);
+    if (game == nullptr || game->state != Game::State::Running) {
+        return false;
+    }
+    logger().info("{} ended by an administrator", game->describe());
+    shutDown(*game, ShutdownReason::EndedByAdmin);
+    return true;
+}
+
+std::vector<AdminGame> Games::adminGames() const
+{
+    std::vector<AdminGame> games;
+    const Clock::time_point now = Clock::now();
+    for (const auto &[id, game] : _games) {
+        if (game->state != Game::State::Running) {
+            continue;
+        }
+        AdminGame shown{
+            .id = id,
+            .name = game->name,
+            .maxPlayers = game->maxPlayers,
+            .port = game->port,
+            .players = {},
+            .createdAt = game->createdAt,
+            .status = game->status,
+            .statusAge = std::chrono::duration_cast<std::chrono::milliseconds>(now - game->statusAt),
+            .stale = now - game->statusAt > _settings.statusTimeout,
+        };
+        for (const auto &[playerId, member] : game->members) {
+            shown.players.push_back({playerId, member.name});
+        }
+        games.push_back(std::move(shown));
+    }
+    return games;
+}
+
+void Games::changed(const Game &game)
+{
+    if (_observer != nullptr && game.state == Game::State::Running) {
+        _observer->gameChanged(game.id);
+    }
+}
+
+void Games::ended(const Game &game, GameEnd reason)
+{
+    if (_observer != nullptr) {
+        _observer->gameEnded(game.id, reason);
+    }
 }
 
 void Games::lobbyClosed(std::uint32_t playerId)
@@ -345,6 +411,9 @@ void Games::instanceFrame(std::uint64_t connection, std::uint8_t type, std::span
     case instance_message::GameOver:
         gameOver(*game, payload);
         return;
+    case instance_message::GameStatus:
+        statusReceived(*game, payload);
+        return;
     default:
         break;
     }
@@ -386,8 +455,12 @@ void Games::ready(Game &game, std::span<const std::byte> payload)
         return;
     }
     game.state = Game::State::Running;
+    game.statusAt = Clock::now();
     game.startTimeout.cancel();
     logger().info("{} ready on UDP {}", game.describe(), game.port);
+    if (_observer != nullptr) {
+        _observer->gameStarted(game.id);
+    }
     if (!game.creator) {
         // Its creator left while it started
         shutDown(game, ShutdownReason::Empty);
@@ -428,14 +501,44 @@ void Games::gameOver(Game &game, std::span<const std::byte> payload)
     logger().info("{} is over", game.describe());
     const std::map<std::uint32_t, Game::Member> members = std::move(game.members);
     game.members.clear();
+    const bool running = game.state == Game::State::Running;
     game.state = Game::State::Ending;
     game.endingSince = Clock::now();
+    if (running) {
+        ended(game, GameEnd::Over);
+    }
     for (const auto &[playerId, member] : members) {
         _playerGames.erase(playerId);
         if (_onLeft) {
             _onLeft(playerId, LeftGameMessage{game.id, LeftGameReason::GameOver});
         }
     }
+}
+
+void Games::statusReceived(Game &game, std::span<const std::byte> payload)
+{
+    std::optional<GameStatusMessage> status = decodeGameStatus(payload);
+    if (!status) {
+        fail(game, "malformed GAME_STATUS from its instance");
+        return;
+    }
+    if (game.state != Game::State::Running) {
+        // It ends: nothing more to show
+        return;
+    }
+    game.status = std::move(status);
+    game.statusAt = Clock::now();
+    changed(game);
+}
+
+std::optional<GameStatus> Games::status(std::uint32_t gameId) const
+{
+    const Game *game = find(gameId);
+    if (game == nullptr || game->state != Game::State::Running) {
+        return std::nullopt;
+    }
+    const Clock::duration age = Clock::now() - game->statusAt;
+    return GameStatus{.last = game->status, .age = age, .stale = age > _settings.statusTimeout};
 }
 
 void Games::send(Game &game, std::uint8_t type, std::span<const std::byte> payload)
@@ -469,12 +572,31 @@ void Games::shutDown(Game &game, ShutdownReason reason)
         return;
     }
     send(game, instance_message::Shutdown, encode(ShutdownMessage{reason}));
+    const bool running = game.state == Game::State::Running;
     game.state = Game::State::Ending;
     game.endingSince = Clock::now();
-    for (const auto &[playerId, member] : game.members) {
-        _playerGames.erase(playerId);
-    }
+    const std::map<std::uint32_t, Game::Member> members = std::move(game.members);
     game.members.clear();
+    for (const auto &[playerId, member] : members) {
+        _playerGames.erase(playerId);
+        // The master stopping closes the lobby too: only an administrator's end is told
+        if (reason == ShutdownReason::EndedByAdmin && _onLeft) {
+            _onLeft(playerId, LeftGameMessage{game.id, LeftGameReason::EndedByAdmin});
+        }
+    }
+    if (running) {
+        switch (reason) {
+        case ShutdownReason::Empty:
+            ended(game, GameEnd::Empty);
+            break;
+        case ShutdownReason::MasterStopping:
+            ended(game, GameEnd::MasterStopping);
+            break;
+        case ShutdownReason::EndedByAdmin:
+            ended(game, GameEnd::EndedByAdmin);
+            break;
+        }
+    }
     if (game.creator) {
         // Still starting: its creator gets an answer all the same
         const Game::Creator creator = std::move(*game.creator);
@@ -533,6 +655,9 @@ void Games::fail(Game &game, const std::string &reason)
         if (_onLeft) {
             _onLeft(playerId, LeftGameMessage{game.id, LeftGameReason::GameCrashed});
         }
+    }
+    if (started) {
+        ended(game, GameEnd::Crashed);
     }
 }
 

@@ -15,11 +15,13 @@ add_executable(rtype_tests
     client_interpolation.cpp
     client_lore.cpp
     client_online.cpp
+    client_profiles.cpp
     client_prediction.cpp
     color_filter.cpp
     collider_debug_renderer.cpp
     control_settings.cpp
     controls.cpp
+    crypto.cpp
     database.cpp
     database_thread.cpp
     datagram.cpp
@@ -60,14 +62,21 @@ add_executable(rtype_tests
     scenes.cpp
     scripting.cpp
     serialization.cpp
+    server_account_store.cpp
+    server_accounts.cpp
+    server_admin.cpp
     server_database.cpp
     server_instance.cpp
     server_key.cpp
     server_lifecycle.cpp
     server_games.cpp
     server_lobby.cpp
+    server_mail.cpp
+    server_panel_accounts.cpp
     server_options.cpp
     server_replication.cpp
+    server_settings.cpp
+    server_web.cpp
     session.cpp
     settings.cpp
     shaders.cpp
@@ -75,15 +84,45 @@ add_executable(rtype_tests
     timer.cpp
     tls.cpp
     viewport.cpp
+    helpers/FakeDiscord.cpp
 )
+# The fake Discord is a Crow server: Asio for Windows 10 and later, as libs/network, and on MSVC, Crow and Asio in
+# one file go past the number of sections of an object file
+if(WIN32)
+  set_source_files_properties(helpers/FakeDiscord.cpp PROPERTIES COMPILE_DEFINITIONS _WIN32_WINNT=0x0A00)
+endif()
+if(MSVC)
+  set_source_files_properties(helpers/FakeDiscord.cpp PROPERTIES COMPILE_OPTIONS /bigobj)
+endif()
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
     rtype::scripting rtype::shaders r-type_client_core r-type_server_core
-    Catch2::Catch2WithMain)
+    CURL::libcurl Crow::Crow Catch2::Catch2WithMain)
+# The fake mail server of the tests speaks TLS with OpenSSL, there where libcurl uses it: not on Windows, whose
+# libcurl uses Schannel
+if(NOT WIN32)
+  find_package(OpenSSL REQUIRED)
+  target_link_libraries(rtype_tests PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+  target_compile_definitions(rtype_tests PRIVATE RTYPE_TEST_OPENSSL)
+endif()
 # The programs the tests of Process start: a helper that does what its arguments say, and the server itself
 add_executable(rtype_test_child helpers/process_child.cpp)
 target_link_libraries(rtype_test_child PRIVATE rtype_options)
 add_dependencies(rtype_tests rtype_test_child r-type_server)
+# The players of a game for the end-to-end tests of the panel (web/admin/e2e), which run a real master
+add_executable(rtype_panel_players helpers/panel_players.cpp)
+target_include_directories(rtype_panel_players PRIVATE helpers)
+target_link_libraries(rtype_panel_players PRIVATE rtype_options rtype::lobby rtype::network)
+add_executable(rtype_panel_accounts helpers/panel_accounts.cpp)
+target_link_libraries(rtype_panel_accounts PRIVATE rtype_options r-type_server_core)
+# Discord and a mail server for the smoke test of the Docker image with accounts (docker/smoke-test-accounts.sh):
+# the fake Discord over HTTPS, as discord.com, with the OpenSSL of Linux
+if(NOT WIN32)
+  add_executable(rtype_fake_services helpers/fake_services.cpp helpers/FakeDiscord.cpp)
+  target_link_libraries(rtype_fake_services PRIVATE
+      rtype_options r-type_server_core rtype::network Crow::Crow OpenSSL::SSL OpenSSL::Crypto)
+  target_compile_definitions(rtype_fake_services PRIVATE CROW_ENABLE_SSL)
+endif()
 target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
     RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"
@@ -98,7 +137,30 @@ catch_discover_tests(rtype_tests DISCOVERY_MODE PRE_TEST)
 add_test(NAME smoke.server_help COMMAND r-type_server --help)
 add_test(NAME smoke.server_invalid_arguments COMMAND r-type_server --unknown)
 set_tests_properties(smoke.server_invalid_arguments PROPERTIES WILL_FAIL TRUE)
-# The server makes its key at its first start: the check makes it there, then reads it
+# The server makes its key at its first start: the check makes it there, then reads it. Its panel on a free
+# port, as the other tests run beside it
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/web.toml "[web]\nlisten = \"127.0.0.1:0\"\n")
 add_test(NAME smoke.server_check
     COMMAND r-type_server --check --port 0 --key ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/server.key
-        --database sqlite:${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/rtype.db)
+        --database sqlite:${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/rtype.db
+        --settings ${CMAKE_CURRENT_BINARY_DIR}/smoke_keys/web.toml)
+
+# The sanitizers find a bug made on purpose: a build where they would miss it fails here
+if(NOT RTYPE_SANITIZERS STREQUAL "")
+  add_executable(rtype_sanitizer_canary helpers/sanitizer_canary.cpp)
+  if(RTYPE_SANITIZERS STREQUAL "thread")
+    set(canaries "race=ThreadSanitizer: data race")
+  else()
+    set(canaries
+        "leak=LeakSanitizer: detected memory leaks"
+        "freed=AddressSanitizer: heap-use-after-free"
+        "undefined=runtime error: signed integer overflow")
+  endif()
+  foreach(canary IN LISTS canaries)
+    string(REPLACE "=" ";" canary "${canary}")
+    list(GET canary 0 bug)
+    list(GET canary 1 report)
+    add_test(NAME sanitizers.${bug} COMMAND rtype_sanitizer_canary ${bug})
+    set_tests_properties(sanitizers.${bug} PROPERTIES PASS_REGULAR_EXPRESSION "${report}")
+  endforeach()
+endif()

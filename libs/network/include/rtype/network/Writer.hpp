@@ -55,6 +55,10 @@ public:
     /// @throws std::invalid_argument if the text is not valid UTF-8, or contains a control character (see
     /// isValidText()).
     void writeString(std::string_view text);
+    /// Writes a `str16` field: its length on two bytes, then its UTF-8 bytes.
+    /// @throws std::length_error if the text is longer than 65535 bytes.
+    /// @throws std::invalid_argument as writeString().
+    void writeString16(std::string_view text);
 
     /// Replaces two bytes already written with a `u16`, for a field known only at the end, such as the size
     /// of a TCP frame.

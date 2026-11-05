@@ -44,6 +44,8 @@ namespace rtype::engine
 /// - A switch (a Toggle with a SwitchTrack) lights up while the pointer is over its "OFF - ON" part, and its
 ///   dot slides to the side that is on. Clicking anywhere on its row, Confirm, Left and Right set it, as for
 ///   every Toggle.
+/// - A field of a form (TextFieldType::Line or Code) lights up while it has the focus, and keeps its size.
+///   Its error is cleared when its content changes; a code is submitted as soon as it is full.
 /// - A pressed button bursts (its highlight goes up to FlareStyle::pressedHighlight, then back to 1),
 ///   and its action runs FlareStyle::pressDelay later, once the burst has been seen.
 ///
@@ -113,9 +115,13 @@ class InterfaceSystem : public ecs::System
     void updatePointerMode(bool mouseMoved);
     void activate(ecs::entity_t widget);
     void click(ecs::entity_t widget);
+    /// Gives the keys typed to the focused text field. A field of a form loses its error when its content
+    /// changes; a code is submitted once full.
+    void editField(ecs::entity_t widget, float elapsed);
     void adjust(ecs::entity_t widget, int direction);
     /// Lights the handle of the slider under the pointer, the caption of the sliders and switches under it or
-    /// with the focus, slides the dots of the switches, and moves the handle of the slider being dragged.
+    /// with the focus, slides the dots of the switches, lights the fields of a form that have the focus, and
+    /// moves the handle of the slider being dragged.
     void updateSliders(const std::vector<ecs::entity_t> &widgets, std::optional<ecs::entity_t> hovered,
                        render::Vector2 pointer, float elapsed, bool appeared);
     /// Whether the pointer is over the handle of a slider, or over the switch of a toggle with a SwitchTrack.

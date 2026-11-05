@@ -29,6 +29,17 @@ constexpr float titlesLeft = 820.0f;
 constexpr float titlesTop = 520.0f;
 constexpr float titlesSpacing = 160.0f;
 
+/// Above the titles, the avatars, then two rows of a list.
+constexpr float avatarsTop = 230.0f;
+constexpr float avatarsSpacing = 100.0f;
+constexpr float avatarSize = 72.0f;
+constexpr float rowsTop = 330.0f;
+constexpr float rowWidth = 340.0f;
+
+/// The fields of a form, in a column against the right edge.
+constexpr float fieldsTop = 230.0f;
+constexpr float fieldsSpacing = 130.0f;
+
 /// The buttons of the notifications are in a column on the right, the last one at buttonsBottom from the
 /// bottom.
 constexpr float buttonsBottom = 150.0f;
@@ -93,6 +104,39 @@ void createTitles(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, const engi
         interface.title("R-TYPE", {engine::AnchorPoint::TopLeft, titlesLeft, titlesTop});
     ecs.getComponent<engine::Text>(large).size = style.titleSize;
     interface.title("Sector 9", {engine::AnchorPoint::TopLeft, titlesLeft, titlesTop + titlesSpacing});
+}
+
+/// The three looks of an avatar, then a row of a list that can be pressed and one that cannot.
+void createAvatarsAndRows(engine::InterfaceBuilder &interface)
+{
+    constexpr std::array<std::pair<const char *, engine::AvatarKind>, 3> avatars{
+        {{"K", engine::AvatarKind::Discord},
+         {"N", engine::AvatarKind::Account},
+         {"?", engine::AvatarKind::Guest}}};
+    int column = 0;
+    for (const auto &[initial, kind] : avatars) {
+        interface.avatar({.initial = initial, .kind = kind, .size = avatarSize},
+                         {engine::AnchorPoint::TopLeft,
+                          titlesLeft + (static_cast<float>(column++) * avatarsSpacing), avatarsTop});
+    }
+    interface.listRow("NEBULA 4", {.detail = "3 / 4", .side = "JOIN", .width = rowWidth}, [] {},
+                      {engine::AnchorPoint::TopLeft, titlesLeft, rowsTop});
+    interface.listRow("DEBRIS 9", {.detail = "4 / 4", .side = "FULL", .width = rowWidth}, {},
+                      {engine::AnchorPoint::TopLeft, titlesLeft, rowsTop + 92.0f});
+}
+
+/// A field of a form, a password field with an error, and a code.
+void createFields(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, const engine::InterfaceStyle &style)
+{
+    const float left = 1920.0f - screenMargin - style.field.width;
+    interface.textField("SERVER ADDRESS", "play.rtype.gg:4242",
+                        {engine::AnchorPoint::TopLeft, left, fieldsTop}, 64);
+    const ecs::entity_t password =
+        interface.passwordField("PASSWORD", {engine::AnchorPoint::TopLeft, left, fieldsTop + fieldsSpacing});
+    ecs.getComponent<engine::TextField>(password).input.setText("secret");
+    ecs.getComponent<engine::TextField>(password).error = "Wrong username or password";
+    interface.codeField("CODE", 6, [](const std::string &) {},
+                        {engine::AnchorPoint::TopLeft, left, fieldsTop + (2.0f * fieldsSpacing)});
 }
 
 /// A flare button on the right, `rowsBelow` rows above the bottom one.
@@ -170,6 +214,8 @@ void createUiShowcaseScene(engine::Engine &engine, const engine::InterfaceStyle 
                            createSwitches(interface);
                            createGauges(interface);
                            createTitles(target.getEcs(), interface, style);
+                           createAvatarsAndRows(interface);
+                           createFields(target.getEcs(), interface, style);
                            createNotificationButtons(target, interface, translations);
                        });
 }

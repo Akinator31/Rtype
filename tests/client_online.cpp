@@ -1,22 +1,36 @@
 // Tests of the client online: its LobbyClient and its RemoteSession against a real master (the Lobby and the
 // Games of r-type_server, with real instances), all on the loop of the test
-// (docs/architecture/client-online.md).
+// (docs/architecture/client-online.md). The accounts against a master with accounts, a mailer of the tests
+// that keeps the codes, a fake Discord, on every engine of the database.
 
+#include "Accounts/AccountService.hpp"
+#include "Accounts/Discord.hpp"
+#include "Accounts/PasswordHasher.hpp"
+#include "FakeDiscord.hpp"
+#include "FakeMailer.hpp"
 #include "Game/RemoteSession.hpp"
 #include "GameServers.hpp"
 #include "LobbyClient.hpp"
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
+#include "Master/ServerDatabase.hpp"
 #include "Online/LobbyClient.hpp"
 #include "Online/OnlineScenes.hpp"
+#include "Online/SessionTokens.hpp"
+#include "TestDatabase.hpp"
+#include "rtype/database/DatabaseThread.hpp"
+#include "rtype/engine/Settings/Settings.hpp"
+#include "rtype/localization/Localization.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/TcpListener.hpp"
 #include "rtype/network/Tls.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -53,10 +67,98 @@ struct Master {
     }
 };
 
+/// The last code of an ERROR (lobby protocol 3).
+constexpr std::uint16_t LastErrorCode = static_cast<std::uint16_t>(lobby::ErrorCode::DiscordUnavailable);
+
+/// The password of the accounts of the tests.
+const std::string Password = "correct horse battery";
+
+/// A master with accounts on the loopback: its database of its own, cheap hashes, a mailer that keeps the
+/// codes, and Discord through a fake one if asked. Its games are not played.
+struct AccountsMaster {
+    EventLoop loop;
+    rtype::test::TestDatabase test;
+    ServerIdentity identity = ServerIdentity::generate();
+    rtype::server::Games games{loop, rtype::server::GamesSettings{.executable = RTYPE_TEST_CHILD,
+                                                                  .leadingArguments = {},
+                                                                  .trailingArguments = {}}};
+    testing::FakeMailer mailer;
+    std::optional<testing::FakeDiscord> fakeDiscord;
+    std::optional<rtype::database::DatabaseThread> database;
+    std::optional<rtype::server::PasswordHasher> hasher;
+    std::optional<rtype::server::DiscordClient> discord;
+    std::optional<rtype::server::AccountService> accounts;
+    std::optional<rtype::server::Lobby> lobby;
+
+    AccountsMaster(rtype::database::Engine engine, std::string_view name, bool withDiscord = false)
+        : test(engine, name)
+    {
+        test.open().migrate(rtype::server::ServerMigrations);
+        const auto post = [this](std::function<void()> function) { loop.post(std::move(function)); };
+        database.emplace(test.open(), post);
+        hasher.emplace(
+            post, rtype::server::PasswordHasher::Settings{
+                      .threads = 2, .maxPending = 32, .parameters = {.memory = 64, .passes = 1, .lanes = 1}});
+        if (withDiscord) {
+            fakeDiscord.emplace();
+            discord.emplace(fakeDiscord->settings(), post);
+        }
+        // Limits per address far away: every client of the tests comes from the loopback
+        accounts.emplace(loop, *database, *hasher, mailer,
+                         rtype::server::AccountServiceSettings{.guests = true,
+                                                               .limits = {.requestsPerAddress = 1000,
+                                                                          .addressWindow = 1min,
+                                                                          .wrongPasswords = 10,
+                                                                          .wrongPasswordPause = 15min,
+                                                                          .resendInterval = 1min,
+                                                                          .purgeInterval = 1h}},
+                         discord ? &*discord : nullptr);
+        lobby.emplace(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games);
+        lobby->setAccounts(&*accounts);
+    }
+
+    ~AccountsMaster()
+    {
+        lobby.reset();
+        accounts.reset();
+        discord.reset();
+        hasher.reset();
+        database.reset();
+    }
+
+    AccountsMaster(const AccountsMaster &) = delete;
+    AccountsMaster &operator=(const AccountsMaster &) = delete;
+
+    /// A client of this master, its key pinned.
+    std::unique_ptr<LobbyClient> client(const std::string &name, LobbyClient::Handlers handlers,
+                                        std::optional<lobby::SessionToken> token = std::nullopt)
+    {
+        return std::make_unique<LobbyClient>(loop, lobby->localAddress(), std::vector{identity.fingerprint()},
+                                             name, std::move(handlers), "en", token);
+    }
+};
+
+/// Settings in a file of their own, removed after the test: a directory per test, since CTest runs them at
+/// once.
+struct TemporarySettings {
+    std::filesystem::path path;
+    rtype::engine::Settings settings;
+
+    explicit TemporarySettings(const std::string &test)
+        : path(std::filesystem::temp_directory_path() / ("rtype_tests_client_online_" + test) /
+               "settings.txt"),
+          settings(path)
+    {
+        std::filesystem::remove_all(path.parent_path());
+    }
+    ~TemporarySettings() { std::filesystem::remove_all(path.parent_path()); }
+};
+
 /// What a LobbyClient told.
 struct Events {
     std::optional<std::uint32_t> welcomed;
     std::vector<lobby::LeftGameMessage> left;
+    std::vector<std::string> messages;
     std::optional<std::string> closed;
 
     LobbyClient::Handlers handlers()
@@ -64,8 +166,11 @@ struct Events {
         return {
             .onWelcome = [this](std::uint32_t player) { welcomed = player; },
             .onLeftGame = [this](const lobby::LeftGameMessage &message) { left.push_back(message); },
+            .onServerMessage = [this](const std::string &text) { messages.push_back(text); },
             .onClosed = [this](const std::string &reason) { closed = reason; },
             .onUntrusted = {},
+            .onSessionExpired = {},
+            .describe = {},
         };
     }
 };
@@ -144,14 +249,37 @@ TEST_CASE("A server is given as host:port, the port of the lobby by default", "[
 TEST_CASE("Every error of the master has a message for the player", "[online]")
 {
     std::set<std::string> messages;
-    for (std::uint16_t code = 1; code <= 12; ++code) {
+    std::set<std::string_view> keys;
+    for (std::uint16_t code = 1; code <= LastErrorCode; ++code) {
         const std::string message = rtype::client::describe(static_cast<lobby::ErrorCode>(code));
         CHECK_FALSE(message.empty());
+        CHECK_FALSE(message.starts_with("The server refused (error"));
         messages.insert(message);
+        const std::string_view key = rtype::client::errorKey(static_cast<lobby::ErrorCode>(code));
+        CHECK(key != "error.unknown");
+        keys.insert(key);
     }
     // HELLO_REQUIRED and ALREADY_WELCOMED share theirs: the player can do nothing about either
-    CHECK(messages.size() == 11);
+    CHECK(messages.size() == LastErrorCode - 1);
+    CHECK(keys.size() == LastErrorCode);
     CHECK_FALSE(rtype::client::describe(static_cast<lobby::ErrorCode>(999)).empty());
+    CHECK(rtype::client::errorKey(static_cast<lobby::ErrorCode>(999)) == "error.unknown");
+}
+
+TEST_CASE("Every error of the master has a message in English and in French", "[online]")
+{
+    const std::filesystem::path locales = RTYPE_TEST_LOCALES;
+    for (const char *language : {"en", "fr"}) {
+        CAPTURE(language);
+        rtype::localization::Localization translations(language);
+        translations.load(language, locales / (std::string(language) + ".lang"));
+        for (std::uint16_t code = 1; code <= LastErrorCode + 1; ++code) {
+            const std::string_view key = rtype::client::errorKey(static_cast<lobby::ErrorCode>(code));
+            CAPTURE(key);
+            // A key missing from the catalog is shown as the key itself
+            CHECK(translations.text(key) != key);
+        }
+    }
 }
 
 // --- The lobby ---
@@ -363,4 +491,401 @@ TEST_CASE("A game that stops ends the session of its players", "[online]")
 
     REQUIRE(play(master.loop, {&session}, [&] { return session.isOver(); }));
     CHECK(session.endReason() == "The game stopped");
+}
+
+TEST_CASE("A client is told what the administrators do: a message, a game ended, a removal", "[online]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed(); }));
+
+    // A message: a notification, between the replies
+    REQUIRE(master.lobby.sendMessage(*alice.playerId(), "Restart in 5 minutes"));
+    REQUIRE(waitUntil(master.loop, [&] { return !events.messages.empty(); }));
+    CHECK(events.messages == std::vector<std::string>{"Restart in 5 minutes"});
+    CHECK(list(master.loop, alice).empty());
+
+    // A game ended: back in the lobby
+    const lobby::GameJoinedMessage game = create(master.loop, alice, "Doomed");
+    REQUIRE(master.games.end(game.gameId));
+    REQUIRE(waitUntil(master.loop, [&] { return !events.left.empty(); }));
+    CHECK(events.left[0] == lobby::LeftGameMessage{game.gameId, lobby::LeftGameReason::EndedByAdmin});
+
+    // Removed: out of its game, then of the server, with the reason
+    const lobby::GameJoinedMessage second = create(master.loop, alice, "Second");
+    REQUIRE(master.games.kick(*alice.playerId()));
+    REQUIRE(master.lobby.disconnect(*alice.playerId(), lobby::ErrorCode::Kicked));
+    REQUIRE(waitUntil(master.loop, [&] { return events.closed.has_value(); }));
+    CHECK(events.left.back() == lobby::LeftGameMessage{second.gameId, lobby::LeftGameReason::Kicked});
+    CHECK(*events.closed == rtype::client::describe(lobby::ErrorCode::Kicked));
+    CHECK_FALSE(alice.welcomed());
+}
+
+// --- The accounts ---
+
+namespace
+{
+
+#define FOR_EACH_ENGINE()                                                                                    \
+    const auto engine = GENERATE(from_range(rtype::test::testEngines()));                                    \
+    CAPTURE(rtype::test::engineName(engine))
+
+/// Creates an account from a client welcomed as a guest, and verifies it with the code of its email.
+lobby::SignedInMessage createAccount(AccountsMaster &master, LobbyClient &client, const std::string &username,
+                                     const std::string &email)
+{
+    std::optional<std::optional<lobby::ErrorCode>> registered;
+    client.registerAccount(username, email, Password, [&](auto error) { registered = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return registered.has_value(); }));
+    REQUIRE_FALSE(*registered);
+    const std::optional<std::string> code = master.mailer.code(email);
+    REQUIRE(code);
+
+    const auto verified = answer<LobbyClient::SignInResult>(
+        master.loop, [&](auto done) { client.verifyEmail(username, *code, std::move(done)); });
+    REQUIRE(verified);
+    REQUIRE(std::holds_alternative<lobby::SignedInMessage>(*verified));
+    return std::get<lobby::SignedInMessage>(*verified);
+}
+
+} // namespace
+
+TEST_CASE("A player creates an account, verifies it, and comes back signed in after a restart",
+          "[online][accounts]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_create");
+    TemporarySettings file("create");
+    const std::string address =
+        rtype::client::serverAddress("127.0.0.1", master.lobby->localAddress().port());
+
+    {
+        Events events;
+        const auto guest = master.client("Pilot", events.handlers());
+        REQUIRE(waitUntil(master.loop, [&] { return guest->welcomed(); }));
+        // The client offers what the master offers
+        CHECK(guest->features() ==
+              lobby::ServerFeatures{.guests = true, .passwordAccounts = true, .discord = false});
+        CHECK_FALSE(guest->account());
+
+        const lobby::SignedInMessage signedIn = createAccount(master, *guest, "Pilot_7", "pilot@example.org");
+        CHECK(signedIn.account.username == "Pilot_7");
+        REQUIRE(guest->account());
+        CHECK(guest->account()->username == "Pilot_7");
+        CHECK(guest->name() == "Pilot_7");
+        rtype::client::SessionTokens sessions(file.settings);
+        CHECK(sessions.keep(address, signedIn.token));
+        CHECK_FALSE(events.closed);
+    }
+
+    // The game restarts: its settings read again, the token sent in HELLO, without a name
+    rtype::engine::Settings next(file.path);
+    next.readFile();
+    const std::optional<lobby::SessionToken> token = rtype::client::SessionTokens(next).token(address);
+    REQUIRE(token);
+    Events events;
+    const auto back = master.client("", events.handlers(), token);
+    REQUIRE(waitUntil(master.loop, [&] { return back->welcomed() || events.closed.has_value(); }));
+    REQUIRE(back->account());
+    CHECK(back->account()->username == "Pilot_7");
+    CHECK(back->name() == "Pilot_7");
+    // Signed in, it plays as its account
+    CHECK(list(master.loop, *back).empty());
+}
+
+TEST_CASE("An expired token is told to the client, which forgets it and connects again as a guest",
+          "[online][accounts]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_expired");
+    TemporarySettings file("expired");
+    rtype::client::SessionTokens sessions(file.settings);
+    const std::string address =
+        rtype::client::serverAddress("127.0.0.1", master.lobby->localAddress().port());
+    lobby::SessionToken unknown{};
+    unknown.fill(std::byte{0x5A});
+    REQUIRE(sessions.keep(address, unknown));
+
+    Events events;
+    bool expired = false;
+    LobbyClient::Handlers handlers = events.handlers();
+    handlers.onSessionExpired = [&] {
+        expired = true;
+        sessions.forget(address);
+    };
+    const auto client = master.client("Pilot", std::move(handlers), sessions.token(address));
+    REQUIRE(waitUntil(master.loop, [&] { return expired || events.closed.has_value(); }));
+    CHECK(expired);
+    // Told as an expired session, not as a connection lost
+    CHECK_FALSE(events.closed);
+    CHECK_FALSE(client->welcomed());
+    CHECK_FALSE(sessions.token(address));
+
+    Events again;
+    const auto guest = master.client("Pilot", again.handlers(), sessions.token(address));
+    REQUIRE(waitUntil(master.loop, [&] { return guest->welcomed() || again.closed.has_value(); }));
+    CHECK(guest->welcomed());
+    CHECK_FALSE(guest->account());
+}
+
+TEST_CASE("A player signs out: the connection closes without an error, and its token is refused after",
+          "[online][accounts]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_sign_out");
+    Events events;
+    const auto client = master.client("Pilot", events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
+    const lobby::SignedInMessage signedIn = createAccount(master, *client, "Pilot_7", "pilot@example.org");
+
+    std::optional<std::optional<lobby::ErrorCode>> done;
+    client->signOut([&](auto error) { done = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return done.has_value(); }));
+    CHECK_FALSE(*done);
+    CHECK_FALSE(client->welcomed());
+    CHECK_FALSE(client->account());
+    // The master closed the connection after DONE: not reported as a connection lost
+    testing::runFor(master.loop, 200ms);
+    CHECK_FALSE(events.closed);
+
+    Events back;
+    bool expired = false;
+    LobbyClient::Handlers handlers = back.handlers();
+    handlers.onSessionExpired = [&] { expired = true; };
+    const auto again = master.client("", std::move(handlers), signedIn.token);
+    REQUIRE(waitUntil(master.loop, [&] { return expired || back.closed.has_value(); }));
+    CHECK(expired);
+}
+
+TEST_CASE("A wrong password gets its message, and fields the protocol cannot carry are refused at once",
+          "[online][accounts]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_wrong_password");
+    Events events;
+    const auto client = master.client("Pilot", events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
+    {
+        Events creatorEvents;
+        const auto creator = master.client("Creator", creatorEvents.handlers());
+        REQUIRE(waitUntil(master.loop, [&] { return creator->welcomed(); }));
+        (void)createAccount(master, *creator, "Pilot_7", "pilot@example.org");
+    }
+
+    const auto wrong = answer<LobbyClient::SignInResult>(
+        master.loop, [&](auto done) { client->signIn("Pilot_7", "not the password", std::move(done)); });
+    REQUIRE(wrong);
+    REQUIRE(std::holds_alternative<lobby::ErrorCode>(*wrong));
+    CHECK(std::get<lobby::ErrorCode>(*wrong) == lobby::ErrorCode::InvalidCredentials);
+    CHECK(rtype::client::describe(lobby::ErrorCode::InvalidCredentials) ==
+          "Wrong username, email or password");
+    CHECK(rtype::client::errorKey(lobby::ErrorCode::InvalidCredentials) == "error.invalid_credentials");
+    CHECK_FALSE(client->account());
+
+    // Answered at once, nothing sent
+    std::optional<LobbyClient::SignInResult> empty;
+    client->signIn("Pilot_7", "", [&](const auto &result) { empty = result; });
+    REQUIRE(empty);
+    CHECK(std::get<lobby::ErrorCode>(*empty) == lobby::ErrorCode::InvalidCredentials);
+    std::optional<LobbyClient::SignInResult> code;
+    client->verifyEmail("Pilot_7", "12a456", [&](const auto &result) { code = result; });
+    REQUIRE(code);
+    CHECK(std::get<lobby::ErrorCode>(*code) == lobby::ErrorCode::InvalidCode);
+    std::optional<std::optional<lobby::ErrorCode>> username;
+    client->registerAccount(std::string(17, 'a'), "a@example.org", Password,
+                            [&](auto error) { username = error; });
+    REQUIRE(username);
+    CHECK(*username == lobby::ErrorCode::InvalidName);
+
+    // The right password signs in
+    const auto right = answer<LobbyClient::SignInResult>(
+        master.loop, [&](auto done) { client->signIn("pilot@example.org", Password, std::move(done)); });
+    REQUIRE(right);
+    REQUIRE(std::holds_alternative<lobby::SignedInMessage>(*right));
+    CHECK(client->account()->username == "Pilot_7");
+    CHECK_FALSE(events.closed);
+}
+
+TEST_CASE("A forgotten password is changed with the code of its email, which signs in", "[online][accounts]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_reset");
+    {
+        Events creatorEvents;
+        const auto creator = master.client("Creator", creatorEvents.handlers());
+        REQUIRE(waitUntil(master.loop, [&] { return creator->welcomed(); }));
+        (void)createAccount(master, *creator, "Pilot_7", "pilot@example.org");
+    }
+    Events events;
+    const auto client = master.client("Pilot", events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
+
+    std::optional<std::optional<lobby::ErrorCode>> sent;
+    client->forgotPassword("pilot@example.org", [&](auto error) { sent = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return sent.has_value(); }));
+    CHECK_FALSE(*sent);
+    const std::optional<std::string> code = master.mailer.code("pilot@example.org");
+    REQUIRE(code);
+
+    const auto reset = answer<LobbyClient::SignInResult>(master.loop, [&](auto done) {
+        client->resetPassword("pilot@example.org", *code, "a brand new password", std::move(done));
+    });
+    REQUIRE(reset);
+    REQUIRE(std::holds_alternative<lobby::SignedInMessage>(*reset));
+    CHECK(client->account()->username == "Pilot_7");
+}
+
+TEST_CASE("A player deletes its account with its password, then the connection closes", "[online][accounts]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_delete");
+    Events events;
+    const auto client = master.client("Pilot", events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
+    (void)createAccount(master, *client, "Pilot_7", "pilot@example.org");
+
+    std::optional<std::optional<lobby::ErrorCode>> wrong;
+    client->deleteAccount("not the password", [&](auto error) { wrong = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return wrong.has_value(); }));
+    CHECK(*wrong == lobby::ErrorCode::InvalidCredentials);
+    CHECK(client->welcomed());
+
+    std::optional<std::optional<lobby::ErrorCode>> deleted;
+    client->deleteAccount(Password, [&](auto error) { deleted = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return deleted.has_value(); }));
+    CHECK_FALSE(*deleted);
+    CHECK_FALSE(client->welcomed());
+    testing::runFor(master.loop, 200ms);
+    CHECK_FALSE(events.closed);
+
+    // The account is gone: its name is free for a guest
+    Events guestEvents;
+    const auto guest = master.client("Pilot_7", guestEvents.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return guest->welcomed() || guestEvents.closed.has_value(); }));
+    CHECK(guest->welcomed());
+}
+
+TEST_CASE("The session token of a server is kept in the settings, readable by the player only",
+          "[online][accounts]")
+{
+    TemporarySettings file("tokens");
+    rtype::client::SessionTokens sessions(file.settings);
+    lobby::SessionToken token{};
+    for (std::size_t i = 0; i < token.size(); ++i) {
+        token[i] = static_cast<std::byte>(i * 7);
+    }
+    const std::string address = rtype::client::serverAddress("RType.example.org", 4242);
+    CHECK_FALSE(sessions.token(address));
+
+    CHECK(sessions.keep(address, token));
+    CHECK(sessions.token(address) == token);
+    CHECK_FALSE(sessions.token(rtype::client::serverAddress("other.example.org", 4242)));
+    rtype::engine::Settings next(file.path);
+    next.readFile();
+    CHECK(next.getString("servers.session.rtype.example.org:4242").value_or("").size() == 64);
+#ifndef _WIN32
+    using std::filesystem::perms;
+    CHECK(std::filesystem::status(file.path).permissions() == (perms::owner_read | perms::owner_write));
+#endif
+
+    // Anything but 64 hexadecimal digits is no token
+    file.settings.setString("servers.session.rtype.example.org:4242", "not a token");
+    CHECK_FALSE(sessions.token(address));
+
+    CHECK(sessions.forget(address));
+    CHECK_FALSE(sessions.forget(address));
+    CHECK_FALSE(sessions.token(address));
+}
+
+TEST_CASE(
+    "A player signs in with Discord: a new account, its username, then its deletion confirmed by Discord",
+    "[online][accounts][discord]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_discord", true);
+    const std::string png = std::string("\x89PNG\r\n\x1a\n", 8) + std::string(20000, 'p');
+    const rtype::server::DiscordUser wing{.id = "80351110224678912",
+                                          .username = "wing",
+                                          .displayName = "Wing Commander",
+                                          .avatarHash = "a1b2c3",
+                                          .avatar = png};
+    const auto confirmation = [](const rtype::server::DiscordAuthorization &accepted) {
+        return lobby::DiscordConfirmMessage{.code = accepted.code,
+                                            .codeVerifier = accepted.codeVerifier,
+                                            .redirectUri = accepted.redirectUri};
+    };
+    Events events;
+    const auto client = master.client("Pilot", events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
+    CHECK(client->features() ==
+          lobby::ServerFeatures{.guests = true, .passwordAccounts = true, .discord = true});
+
+    // The application of the master, for the Discord Social SDK, then what Discord gave
+    const auto signInWithDiscord = [&] {
+        std::optional<std::variant<lobby::DiscordAuthorizeMessage, lobby::ErrorCode>> authorize;
+        client->discordSignIn([&](const auto &result) { authorize = result; });
+        REQUIRE(waitUntil(master.loop, [&] { return authorize.has_value(); }));
+        REQUIRE(std::holds_alternative<lobby::DiscordAuthorizeMessage>(*authorize));
+        CHECK(std::to_string(std::get<lobby::DiscordAuthorizeMessage>(*authorize).applicationId) ==
+              testing::FakeDiscord::ClientId);
+        std::optional<LobbyClient::DiscordConfirmResult> confirmed;
+        client->discordConfirm(confirmation(master.fakeDiscord->accept(wing)),
+                               [&](const auto &result) { confirmed = result; });
+        REQUIRE(waitUntil(master.loop, [&] { return confirmed.has_value(); }));
+        return *confirmed;
+    };
+
+    // A new Discord user: not signed in until it chooses its username, its profile and picture shown
+    // meanwhile
+    const LobbyClient::DiscordConfirmResult newUser = signInWithDiscord();
+    REQUIRE(std::holds_alternative<LobbyClient::DiscordConfirmed>(newUser));
+    const auto &profile = std::get<LobbyClient::DiscordConfirmed>(newUser).newUser;
+    REQUIRE(profile);
+    CHECK(profile->displayName == "Wing Commander");
+    CHECK(profile->discordUsername == "wing");
+    CHECK(profile->avatarSize == png.size());
+    std::optional<std::variant<LobbyClient::Picture, lobby::ErrorCode>> picture;
+    client->picture(0, [&](const auto &result) { picture = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return picture.has_value(); }));
+    REQUIRE(std::holds_alternative<LobbyClient::Picture>(*picture));
+    CHECK(std::get<LobbyClient::Picture>(*picture).hash == "a1b2c3");
+    CHECK(std::get<LobbyClient::Picture>(*picture).png.size() == png.size());
+    CHECK_FALSE(client->account());
+    std::optional<LobbyClient::SignInResult> created;
+    client->chooseUsername("Wing", [&](const auto &result) { created = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return created.has_value(); }));
+    REQUIRE(std::holds_alternative<lobby::SignedInMessage>(*created));
+    REQUIRE(client->account());
+    CHECK(client->account()->username == "Wing");
+    CHECK(client->name() == "Wing");
+    CHECK_FALSE(client->account()->hasPassword);
+    std::optional<std::variant<lobby::ProfileMessage, lobby::ErrorCode>> kept;
+    client->profile(client->account()->id, [&](const auto &result) { kept = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return kept.has_value(); }));
+    REQUIRE(std::holds_alternative<lobby::ProfileMessage>(*kept));
+    CHECK(std::get<lobby::ProfileMessage>(*kept).avatarHash == "a1b2c3");
+
+    // What the protocol cannot carry is refused at once, without asking the master
+    std::optional<LobbyClient::DiscordConfirmResult> malformed;
+    client->discordConfirm(
+        {.code = "code", .codeVerifier = "short", .redirectUri = "http://127.0.0.1/callback"},
+        [&](const auto &result) { malformed = result; });
+    REQUIRE(malformed);
+    CHECK(std::get<lobby::ErrorCode>(*malformed) == lobby::ErrorCode::InvalidCode);
+
+    // No password: Discord confirms the deletion
+    std::optional<std::optional<lobby::ErrorCode>> refused;
+    client->deleteAccount("", [&](auto error) { refused = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return refused.has_value(); }));
+    CHECK(*refused == lobby::ErrorCode::DiscordNotConfirmed);
+    CHECK(std::holds_alternative<LobbyClient::DiscordConfirmed>(signInWithDiscord()));
+    std::optional<std::optional<lobby::ErrorCode>> deleted;
+    client->deleteAccount("", [&](auto error) { deleted = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return deleted.has_value(); }));
+    CHECK_FALSE(*deleted);
+    CHECK_FALSE(client->welcomed());
+    rtype::database::Database direct = master.test.open();
+    CHECK_FALSE(rtype::server::findAccountByDiscord(direct, wing.id));
 }

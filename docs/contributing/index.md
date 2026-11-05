@@ -33,6 +33,11 @@ networking layer does not depend on the platform.
 - Messages are written with a logger (`rtype::log::Logger`), not with `std::cout` or `std::cerr`, see
   [Logging](../architecture/logging.md).
 
+## The panel
+
+The administration panel, `web/admin/`, is TypeScript built by Node, apart from the C++: its toolchain and its
+rules are in [Contributing to the panel](panel.md).
+
 ## Repository administration
 
 The one-time configuration of the repository (format bot, GitHub Pages, protection of `main`) is described

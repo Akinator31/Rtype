@@ -309,6 +309,25 @@ TEST_CASE("Control+X cuts the selection", "[input][text]")
     REQUIRE(input.text().empty());
 }
 
+TEST_CASE("A secret text is never copied nor cut to the clipboard, but can be pasted", "[input][text]")
+{
+    TextInput input;
+    input.setSecret(true);
+    input.setText("hunter2hunter2");
+    FakeInput source;
+    source.clipboard = "kept";
+
+    press(input, source, {Key::LeftControl, Key::A});
+    press(input, source, {Key::LeftControl, Key::C});
+    CHECK(source.clipboard == "kept");
+    press(input, source, {Key::LeftControl, Key::X});
+    CHECK(source.clipboard == "kept");
+    CHECK(input.text() == "hunter2hunter2");
+
+    press(input, source, {Key::LeftControl, Key::V});
+    CHECK(input.text() == "kept");
+}
+
 TEST_CASE("Control+V pastes the clipboard at the cursor, filtered", "[input][text]")
 {
     TextInput input;

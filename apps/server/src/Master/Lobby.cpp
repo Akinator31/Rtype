@@ -1,5 +1,6 @@
 #include "Master/Lobby.hpp"
 
+#include "Accounts/AccountRules.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/FramedConnection.hpp"
@@ -7,8 +8,10 @@
 #include "rtype/network/Timer.hpp"
 #include "rtype/network/TlsConnection.hpp"
 
+#include <chrono>
 #include <deque>
 #include <format>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -47,10 +50,19 @@ struct Lobby::Client {
     rtype::network::Timer timeout;
     State state = State::Handshake;
     std::uint32_t playerId = 0;
+    /// The username of its account, or the name of a guest, with GuestMark on a server with accounts.
     std::string name;
+    /// The account signed in, if any.
+    std::optional<SignedInAccount> account;
+    /// The language of the player, from HELLO: its emails are written in it.
+    std::string locale;
+    /// Where it stands with Discord, for the AccountService.
+    std::shared_ptr<DiscordProgress> discord = std::make_shared<DiscordProgress>();
+    std::chrono::system_clock::time_point welcomedAt;
     /// The game the player is in.
     std::optional<std::uint32_t> gameId;
-    /// A CREATE_GAME waits for its game.
+    /// A request waits for its answer: CREATE_GAME for its game, HELLO or a request of the accounts for the
+    /// AccountService.
     bool busy = false;
     /// The requests received meanwhile.
     std::deque<std::pair<std::uint8_t, std::vector<std::byte>>> waiting;
@@ -175,7 +187,7 @@ void Lobby::received(std::uint64_t id, std::uint8_t type, std::span<const std::b
         client.timeout.start(_limits.idleTimeout, [this, id] { disconnect(id, "silent for too long"); });
     }
     if (client.busy) {
-        // A CREATE_GAME waits for its game: the requests after it wait for its answer
+        // A request waits for its answer: the requests after it wait too
         if (client.waiting.size() >= _limits.maxWaitingRequests) {
             disconnect(id, "too many requests waiting");
             return;
@@ -246,6 +258,8 @@ void Lobby::handle(Client &client, std::uint8_t type, std::span<const std::byte>
         }
         if (client.gameId) {
             error(ErrorCode::AlreadyInGame);
+        } else if (_accounts != nullptr && !_accounts->guests() && !client.account) {
+            error(ErrorCode::GuestsDisabled);
         } else {
             createGame(client, payload);
         }
@@ -256,6 +270,8 @@ void Lobby::handle(Client &client, std::uint8_t type, std::span<const std::byte>
         }
         if (client.gameId) {
             error(ErrorCode::AlreadyInGame);
+        } else if (_accounts != nullptr && !_accounts->guests() && !client.account) {
+            error(ErrorCode::GuestsDisabled);
         } else if (const auto join = rtype::lobby::decodeJoinGame(payload); !join) {
             malformed();
         } else {
@@ -277,9 +293,22 @@ void Lobby::handle(Client &client, std::uint8_t type, std::span<const std::byte>
             reply(client, message_type::LeftGame,
                   rtype::lobby::encode(
                       rtype::lobby::LeftGameMessage{gameId, rtype::lobby::LeftGameReason::Requested}));
+            changed(client);
         }
         return;
     default:
+        if (rtype::lobby::isAccountRequest(type)) {
+            if (notWelcomed()) {
+                return;
+            }
+            if (client.gameId) {
+                // Signed in, out or deleted from the lobby only: nobody changes identity in a game
+                error(ErrorCode::AlreadyInGame);
+            } else {
+                accountRequest(client, type, payload);
+            }
+            return;
+        }
         error(ErrorCode::UnknownMessage);
         return;
     }
@@ -324,6 +353,7 @@ void Lobby::joined(Client &client, std::uint8_t request, const Games::JoinResult
     if (const auto *game = std::get_if<rtype::lobby::GameJoinedMessage>(&result)) {
         client.gameId = game->gameId;
         reply(client, message_type::GameJoined, rtype::lobby::encode(*game));
+        changed(client);
         return;
     }
     fail(client, request, std::get<ErrorCode>(result));
@@ -344,6 +374,7 @@ void Lobby::left(std::uint32_t playerId, const std::optional<rtype::lobby::LeftG
     if (notification) {
         reply(client, message_type::LeftGame, rtype::lobby::encode(*notification));
     }
+    changed(client);
 }
 
 void Lobby::hello(Client &client, std::span<const std::byte> payload)
@@ -359,19 +390,149 @@ void Lobby::hello(Client &client, std::span<const std::byte> payload)
         fail(client, message_type::Hello, ErrorCode::UnsupportedVersion);
         return;
     }
+    if (_bans != nullptr) {
+        if (const std::optional<AddressBan> ban = _bans->find(client.address)) {
+            logger().info("{} refused: its address is banned until {:%F %T} UTC", client.address,
+                          std::chrono::floor<std::chrono::seconds>(ban->expiresAt));
+            fail(client, message_type::Hello, ErrorCode::Banned);
+            return;
+        }
+    }
+    client.locale = hello->locale;
+    if (hello->token) {
+        if (_accounts == nullptr) {
+            // No account is kept, so no session: the client forgets its token and comes back without it
+            logger().info("{} refused: its session is unknown", client.address);
+            fail(client, message_type::Hello, ErrorCode::SessionExpired);
+            return;
+        }
+        const SessionToken token = *hello->token;
+        _accounts->resume(token, [this, resume = waitFor(client),
+                                  token](const std::variant<rtype::lobby::AccountInfo, ErrorCode> &result) {
+            resume([&](Client &resumed) {
+                if (const auto *code = std::get_if<ErrorCode>(&result)) {
+                    if (*code == ErrorCode::SessionExpired) {
+                        logger().info("{} refused: its session is unknown or expired", resumed.address);
+                    }
+                    fail(resumed, message_type::Hello, *code);
+                    return;
+                }
+                const auto &account = std::get<rtype::lobby::AccountInfo>(result);
+                welcome(resumed, account.username, SignedInAccount{.account = account, .token = token});
+            });
+        });
+        return;
+    }
     if (!rtype::lobby::isValidPlayerName(hello->name)) {
         fail(client, message_type::Hello, ErrorCode::InvalidName);
         return;
     }
+    if (_accounts == nullptr) {
+        welcome(client, hello->name, std::nullopt);
+        return;
+    }
+    // A guest cannot take the username of an account, and carries the mark of the guests
+    _accounts->checkGuestName(
+        hello->name, [this, resume = waitFor(client), name = hello->name](std::optional<ErrorCode> refused) {
+            resume([&](Client &guest) {
+                if (refused) {
+                    fail(guest, message_type::Hello, *refused);
+                } else {
+                    welcome(guest, markGuest(name), std::nullopt);
+                }
+            });
+        });
+}
+
+std::function<void(std::function<void(Lobby::Client &)>)> Lobby::waitFor(Client &client)
+{
+    client.busy = true;
+    return [this, id = client.id,
+            alive = std::weak_ptr<bool>(_alive)](const std::function<void(Client &)> &then) {
+        if (alive.expired()) {
+            return;
+        }
+        const auto found = _clients.find(id);
+        if (found == _clients.end() || found->second->closed) {
+            return;
+        }
+        found->second->busy = false;
+        then(*found->second);
+        drain(id);
+    };
+}
+
+void Lobby::welcome(Client &client, std::string name, std::optional<SignedInAccount> account)
+{
     // Never 0, never given twice: 4 billion players before it would wrap
     client.playerId = ++_lastPlayerId;
-    client.name = hello->name;
+    client.name = std::move(name);
+    client.account = std::move(account);
+    client.welcomedAt = std::chrono::system_clock::now();
     _players[client.playerId] = client.id;
     client.state = Client::State::Welcomed;
     const std::uint64_t id = client.id;
     client.timeout.start(_limits.idleTimeout, [this, id] { disconnect(id, "silent for too long"); });
-    reply(client, message_type::Welcome, rtype::lobby::encode(rtype::lobby::WelcomeMessage{client.playerId}));
-    logger().info("{} joined the lobby from {}", client.describe(), client.address);
+    reply(client, message_type::Welcome,
+          rtype::lobby::encode(rtype::lobby::WelcomeMessage{
+              .playerId = client.playerId,
+              .features = _accounts != nullptr ? _accounts->features() : rtype::lobby::ServerFeatures{},
+              .account = client.account ? std::optional(client.account->account) : std::nullopt}));
+    if (client.account) {
+        logger().info("{} joined the lobby from {}, signed in to account {}", client.describe(),
+                      client.address, client.account->account.id);
+    } else {
+        logger().info("{} joined the lobby from {}", client.describe(), client.address);
+    }
+    if (_observer != nullptr) {
+        _observer->playerJoined(client.playerId);
+    }
+}
+
+void Lobby::accountRequest(Client &client, std::uint8_t type, std::span<const std::byte> payload)
+{
+    if (_accounts == nullptr) {
+        // The state is checked, the payload is not read
+        fail(client, type, ErrorCode::AccountsDisabled);
+        return;
+    }
+    _accounts->handle(
+        type, payload,
+        AccountConnection{.address = client.address,
+                          .locale = client.locale,
+                          .signedIn = client.account,
+                          .discord = client.discord},
+        [this, resume = waitFor(client), type](const AccountReply &answer) {
+            resume([&](Client &asking) {
+                if (const auto *code = std::get_if<ErrorCode>(&answer)) {
+                    fail(asking, type, *code);
+                } else if (const auto *signedIn = std::get_if<SignedInAccount>(&answer)) {
+                    asking.account = *signedIn;
+                    asking.name = signedIn->account.username;
+                    reply(asking, message_type::SignedIn,
+                          rtype::lobby::encode(rtype::lobby::SignedInMessage{.token = signedIn->token,
+                                                                             .account = signedIn->account}));
+                    logger().info("{} signed in to account {}", asking.describe(), signedIn->account.id);
+                    changed(asking);
+                } else if (std::holds_alternative<CodeSent>(answer)) {
+                    reply(asking, message_type::CodeSent);
+                } else if (const auto *authorize =
+                               std::get_if<rtype::lobby::DiscordAuthorizeMessage>(&answer)) {
+                    reply(asking, message_type::DiscordAuthorize, rtype::lobby::encode(*authorize));
+                } else if (const auto *profile = std::get_if<rtype::lobby::ProfileMessage>(&answer)) {
+                    reply(asking, message_type::Profile, rtype::lobby::encode(*profile));
+                } else if (const auto *avatar = std::get_if<rtype::lobby::AvatarMessage>(&answer)) {
+                    reply(asking, message_type::Avatar, rtype::lobby::encode(*avatar));
+                } else {
+                    reply(asking, message_type::Done);
+                    if (std::get<AccountDone>(answer).closes) {
+                        asking.account.reset();
+                        disconnect(asking.id,
+                                   type == message_type::SignOut ? "signed out" : "account deleted");
+                    }
+                }
+            });
+        });
 }
 
 void Lobby::disconnect(std::uint64_t id, const std::string &reason)
@@ -404,6 +565,9 @@ void Lobby::forget(std::uint64_t id)
         _players.erase(client.playerId);
         // Out of its game, or of the game it was creating
         _games.lobbyClosed(client.playerId);
+        if (_observer != nullptr) {
+            _observer->playerLeft(client.playerId);
+        }
     }
     const rtype::network::Address ip = client.address.withPort(0);
     if (--_perAddress[ip] == 0) {
@@ -415,6 +579,61 @@ void Lobby::forget(std::uint64_t id)
             _clients.erase(id);
         }
     });
+}
+
+Lobby::Client *Lobby::player(std::uint32_t playerId) const
+{
+    const auto connection = _players.find(playerId);
+    if (connection == _players.end()) {
+        return nullptr;
+    }
+    const auto found = _clients.find(connection->second);
+    return found == _clients.end() || found->second->closed ? nullptr : found->second.get();
+}
+
+void Lobby::changed(const Client &client)
+{
+    if (_observer != nullptr && !client.closed) {
+        _observer->playerChanged(client.playerId);
+    }
+}
+
+std::vector<AdminPlayer> Lobby::adminPlayers() const
+{
+    std::vector<AdminPlayer> players;
+    players.reserve(_players.size());
+    for (const auto &[playerId, connection] : _players) {
+        if (const Client *client = player(playerId)) {
+            players.push_back(
+                {client->playerId, client->name, banKey(client->address), client->gameId, client->welcomedAt,
+                 client->account ? std::optional(static_cast<long long>(client->account->account.id))
+                                 : std::nullopt});
+        }
+    }
+    return players;
+}
+
+bool Lobby::disconnect(std::uint32_t playerId, ErrorCode code)
+{
+    Client *client = player(playerId);
+    if (client == nullptr) {
+        return false;
+    }
+    reply(*client, message_type::Error, rtype::lobby::encode(rtype::lobby::ErrorMessage{0, code}));
+    disconnect(client->id,
+               code == ErrorCode::Banned ? "its address was banned" : "removed by an administrator");
+    return true;
+}
+
+bool Lobby::sendMessage(std::uint32_t playerId, const std::string &text)
+{
+    Client *client = player(playerId);
+    if (client == nullptr) {
+        return false;
+    }
+    reply(*client, message_type::ServerMessage,
+          rtype::lobby::encode(rtype::lobby::ServerMessageMessage{text}));
+    return true;
 }
 
 void Lobby::close()

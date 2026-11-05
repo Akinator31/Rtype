@@ -37,7 +37,7 @@ anyone building the interface.
     - **Overlay or not**: pass `{.overlay = true}` as the last argument of the `MenuBuilder` to keep the scene
       below visible, dimmed, like the pause menu over the game. Without it, the menu hides what is below, like
       the options.
-    - **Widgets**: `label`, `button`, `toggle`, `slider`, `choice` and `textField` (see the table in
+    - **Widgets**: `label`, `button`, `toggle`, `slider`, `choice`, `textField` and `passwordField` (see the table in
       [Menus](../architecture/scenes-and-interface.md#menus)). Settings are given as functions that read and
       write them, never as copies.
     - **Captures**: the lambdas capture `targets` **by copy** (it only holds references) and the scene id.

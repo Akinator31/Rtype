@@ -28,6 +28,7 @@ find_package(Threads REQUIRED)
 
 add_library(rtype_network
     src/Address.cpp
+    src/Crypto.cpp
     src/Datagram.cpp
     src/DatagramBody.cpp
     src/Errors.cpp

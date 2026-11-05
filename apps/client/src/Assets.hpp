@@ -5,12 +5,13 @@
 
 // Fonts
 #define RTYPE_FONT_TITLE "fonts/FiraSans-Black.ttf"
-#define RTYPE_FONT_BUTTON "fonts/Inter-SemiBold.ttf"
+#define RTYPE_FONT_BUTTON "fonts/Exo2-SemiBold.ttf"
 #define RTYPE_FONT_FLARE "fonts/Orbitron-Medium.ttf"
 #define RTYPE_FONT_DISPLAY "fonts/Audiowide-Regular.ttf"
 
 // Images
 #define RTYPE_IMAGE_STARFIELD "images/starfield.png"
+#define RTYPE_IMAGE_DISCORD "images/discord.png"
 // The sky of the game, from the back to the front: the layers cover the screen and join on their sides
 #define RTYPE_IMAGE_SKY_DEEP "images/backgrounds/space_bg_0_deep.png"
 #define RTYPE_IMAGE_SKY_NEBULA "images/backgrounds/space_bg_1_nebula.png"

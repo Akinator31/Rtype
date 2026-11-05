@@ -82,7 +82,10 @@ struct LobbyClient {
     void hello(const std::string &name)
     {
         send(rtype::lobby::message_type::Hello,
-             rtype::lobby::encode(rtype::lobby::HelloMessage{rtype::lobby::ProtocolVersion, name}));
+             rtype::lobby::encode(rtype::lobby::HelloMessage{.version = rtype::lobby::ProtocolVersion,
+                                                             .name = name,
+                                                             .locale = "en",
+                                                             .token = std::nullopt}));
     }
 
     /// The reply number `index`, once received.

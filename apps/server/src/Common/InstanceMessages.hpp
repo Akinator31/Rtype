@@ -18,7 +18,7 @@ namespace rtype::server
 {
 
 /// The version of this protocol, in INSTANCE_HELLO.
-inline constexpr std::uint16_t InstanceProtocolVersion = 1;
+inline constexpr std::uint16_t InstanceProtocolVersion = 3;
 /// Longest name of a game, in bytes of UTF-8.
 inline constexpr std::size_t MaxGameNameLength = 32;
 /// Longest name of a player, in bytes of UTF-8.
@@ -34,6 +34,7 @@ inline constexpr std::uint8_t Ready = 0x02;
 inline constexpr std::uint8_t PlayerConnected = 0x03;
 inline constexpr std::uint8_t PlayerDisconnected = 0x04;
 inline constexpr std::uint8_t GameOver = 0x05;
+inline constexpr std::uint8_t GameStatus = 0x06;
 inline constexpr std::uint8_t Configure = 0x81;
 inline constexpr std::uint8_t AddPlayer = 0x82;
 inline constexpr std::uint8_t RemovePlayer = 0x83;
@@ -99,6 +100,33 @@ struct GameOverReport {
     friend bool operator==(const GameOverReport &, const GameOverReport &) = default;
 };
 
+/// A player in a GAME_STATUS.
+struct PlayerStatus {
+    std::uint32_t playerId = 0;
+    std::uint32_t score = 0;
+    /// Lives left: false once out of the game.
+    bool alive = false;
+    /// The round-trip time to its client, in milliseconds, at most MaxStatusLatency; nothing until measured.
+    std::optional<std::uint16_t> latency;
+
+    friend bool operator==(const PlayerStatus &, const PlayerStatus &) = default;
+};
+
+/// The highest latency a GAME_STATUS carries: 0xFFFF on the wire means "not measured yet".
+inline constexpr std::uint16_t MaxStatusLatency = 0xFFFE;
+
+/// `GAME_STATUS`: where the game stands, every second (version 2).
+struct GameStatusMessage {
+    /// The last tick simulated.
+    std::uint32_t tick = 0;
+    /// The wave under way, from 1; 0 before the first.
+    std::uint16_t wave = 0;
+    /// The players whose client connected, at most 4, each id once.
+    std::vector<PlayerStatus> players;
+
+    friend bool operator==(const GameStatusMessage &, const GameStatusMessage &) = default;
+};
+
 // --- Master to instance ---
 
 /// `CONFIGURE`: the game to run.
@@ -131,6 +159,8 @@ enum class RemovePlayerReason : std::uint8_t {
     Left = 0,
     /// The connection of the player to the master closed.
     LobbyClosed = 1,
+    /// An administrator removed the player (version 3).
+    Kicked = 2,
 };
 
 /// `REMOVE_PLAYER`.
@@ -147,6 +177,8 @@ enum class ShutdownReason : std::uint8_t {
     Empty = 0,
     /// The master stops.
     MasterStopping = 1,
+    /// An administrator ended the game (version 3).
+    EndedByAdmin = 2,
 };
 
 /// `SHUTDOWN`.
@@ -163,6 +195,7 @@ struct ShutdownMessage {
 [[nodiscard]] std::vector<std::byte> encode(const PlayerConnectedMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const PlayerDisconnectedMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const GameOverReport &message);
+[[nodiscard]] std::vector<std::byte> encode(const GameStatusMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const ConfigureMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const AddPlayerMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const RemovePlayerMessage &message);
@@ -176,6 +209,7 @@ struct ShutdownMessage {
 [[nodiscard]] std::optional<PlayerDisconnectedMessage>
 decodePlayerDisconnected(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<GameOverReport> decodeGameOverReport(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<GameStatusMessage> decodeGameStatus(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<ConfigureMessage> decodeConfigure(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<AddPlayerMessage> decodeAddPlayer(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<RemovePlayerMessage> decodeRemovePlayer(std::span<const std::byte> payload);

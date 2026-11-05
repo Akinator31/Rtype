@@ -13,12 +13,23 @@ To run a server, see [Run a server](../guides/run-a-server.md).
 apps/server/src/
   main.cpp                 reads the environment, then calls run()
   Server.cpp               run(): the options, then the master or an instance
+  Accounts/                the accounts of the players (Accounts page)
+    AccountRules.cpp       what a username, an email and a password must be
+    AccountStore.cpp       their tables: accounts, account_sessions, account_codes, discord_identities
+    PasswordHasher.cpp     Argon2id, on two threads of its own
+    MailMessages.cpp       what the mails say, in English and French
+    Mailer.cpp             the interface of the mailer, and a mail written for SMTP
+    CurlMailer.cpp         the mail server, with libcurl, on a thread of its own; its check at start
+    Discord.cpp            who a player is for Discord, with libcurl, on a thread of its own; its check at start
+    AccountService.cpp     the requests of the accounts in the lobby, on the loop
+    PanelAccounts.cpp      the administrators of the panel: their sign-in, their sessions, on the loop
   Common/                  what both modes share
     GameConfig.cpp         the configuration of the game: where it is, loaded and logged
     InstanceMessages.cpp   the messages between the master and its instances
     Options.cpp            the command line of both modes, the exit codes
     Lifecycle.cpp          runUntilStopped(): the event loop and the stop signals
     Secret.cpp             the secret the master gives to its instances
+    Settings.cpp           the settings file of the master (--settings) and its secret files
   Master/                  the master: the lobby, and the instances it starts
     Master.cpp             runMaster()
     Lobby.cpp              the lobby: the TLS connections of the clients and their requests
@@ -26,6 +37,16 @@ apps/server/src/
     Process.cpp            Process: starts a program and stops it, on Linux and Windows
     ServerKey.cpp          the key of the master: loaded, or generated at its first start
     ServerDatabase.cpp     the database of the master: its address, its migrations
+    Administration.cpp     what an administrator sees and does (Administration page)
+    AdminModel.hpp         its view of the games and the lobby, and the interfaces it acts through
+    AddressBans.cpp        the bans of IP addresses, checked by the lobby at HELLO
+    AdminStore.cpp         its tables: admin_actions, address_bans
+  Web/                     the web server of the master, for its panel (Web server page)
+    WebServer.cpp          Crow on two threads: the files of the panel, the sessions, the API, its WebSocket
+    AdminJson.cpp          the JSON of the administration API
+    Health.cpp             --health: asks /api/health of the master running on this machine
+    LocalAccess.cpp        the local access token and admin-url.txt
+    Visitor.cpp            the address of a visitor behind the trusted proxies
   Instance/                an instance: one game
     Instance.cpp           runInstance(): the life of the instance, with or without a master
     MasterLink.cpp         the connection to the master
@@ -35,7 +56,9 @@ apps/server/src/
 
 Everything but `main.cpp` is the library `r-type_server_core`, so that the tests can call it
 (`tests/server_options.cpp`, `tests/server_key.cpp`, `tests/server_database.cpp`, `tests/server_lifecycle.cpp`,
-`tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`). Includes are written from `src/`, like in the client:
+`tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`,
+`tests/server_settings.cpp`, `tests/server_web.cpp`, `tests/server_admin.cpp`,
+`tests/server_account_store.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -68,19 +91,30 @@ a server that cannot work stops at once with the reason.*
 | `--fingerprint` | | Shows the fingerprint of the key, for the players to check, then exits. Never generates a key |
 | `--database <address>` | `sqlite:rtype.db` | Where the master keeps its data: `sqlite:<file>`, or `postgresql://<user>@<host>:<port>/<database>` ([The database](#the-database)) |
 | `--database-file <file>` | | Reads the address of the database from the first line of the file: for an address with a password, which the command line would show to every user of the machine |
-| `--check` | | Loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, and opens the port, then exits: checks a configuration without running it |
+| `--settings <file>` | | Reads the settings file of the master ([Configure a server](../guides/configure-a-server.md)): the options above in `[server]`, and the sections of the panel and the accounts. The command line wins over the file |
+| `--check` | | Reads the settings file, loads the key, or generates it, the game configuration and the database, which it creates or brings up to date, opens the port of the lobby and the one of the panel, and with accounts signs in to the mail server without sending anything, and with `[discord]` asks Discord a token of its application, then exits: checks a configuration without running it |
+| `--health` | | Asks `/api/health` of the master running on this machine, at the `listen` address of `[web]` in the settings file (the loopback for `0.0.0.0`), shows `healthy` and exits with 0 when it answers within 5 seconds, else exits with 1. The health check of the [Docker image](../guides/deploy-with-docker.md), which has no curl |
 
 The master loads its key, or generates it at its first start (`loadOrCreateKey()`, in `Master/ServerKey.hpp`,
 [ADR 0021](../decisions/0021-server-generated-key-trust-on-first-use.md)), checks the configuration of the game,
-opens its database and opens its port before anything else, and logs them:
+opens its database, its port and the one of its panel ([Web server](web.md)), and with accounts checks its mail
+server ([Accounts](accounts.md#at-start)), before anything else, and logs them. With accounts, it then logs
+`Accounts on, guests allowed` (or `no guests`) before it starts, and gives the role `admin` to the accounts of
+`[admin] admins`, warning of those that have none yet ([Web server](web.md#accounts)):
 
 ```
 INFO  master   Game configuration /opt/r-type/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
 INFO  master   Database sqlite:rtype.db, schema 0
 INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
+INFO  master   Panel on HTTP 127.0.0.1:8080
+INFO  master   The panel is not built: no index.html in /opt/r-type/admin
 INFO  master   Server key 4026de0635ae89391bff98b7b9ddc0689fa8529f9804e4c4721eadce94d92dff
+INFO  master   Panel at http://127.0.0.1:8080: open the address written in admin-url.txt
 INFO  master   Master started: Ctrl+C to stop
 ```
+
+`admin-url.txt`, beside the key, holds the address that opens the panel with the local access token, new at
+each start, readable by its owner only ([Local access](web.md#local-access)).
 
 The fingerprint is the one the players trust at their first connection. The key file:
 
@@ -120,6 +154,18 @@ public test keys, for development, the tests, the measures and the fuzzing. It o
 | `-h`, `--help` | Shows the usage |
 | `--version` | Shows the version, the one of the project |
 
+**The settings file** of the master, given with `--settings`, is read by `loadSettings()` (`Common/Settings.hpp`),
+with toml++, before anything else: `run()` reads the command line once to find the file, then again over what the
+file gives, so that the command line wins. Its `[server]` section holds the options above; the other sections
+(`[web]`, `[accounts]`, `[mail]`, `[discord]`, `[admin]`) are checked and kept in `MasterOptions::settings`, for
+the panel and the accounts. A file with a mistake stops the master (exit 1), with its line and its column; the
+secrets are in files of their own, read by `readSecretFile()` and never logged
+([Configure a server](../guides/configure-a-server.md)):
+
+```
+ERROR server   server.toml:12:5: [admin] admins: "pavel" is neither an email nor discord:<id>; an administrator is never named by username
+```
+
 **The configuration of the game** is read by `readGameConfig()` (`Common/GameConfig.hpp`), with
 `loadGameConfig()` of `libs/game`. The master reads it only to check it, the instance reads it again and gives
 it to the `GameThread`, which makes its `Simulation` with it. With an error, neither starts (exit 1), as
@@ -143,10 +189,15 @@ that crashes cannot damage the data.
 |---|---|
 | Its address | `--database`, by default `sqlite:rtype.db` in the current directory, like the key; or the first line of the file of `--database-file`, whose content is never logged, since it may hold a password. A password given on the command line is warned about, and never logged |
 | At start | `openServerDatabase()` opens it, a SQLite file being created with its directories, and applies the migrations of the master it does not have yet (`ServerMigrations`, in `Master/ServerDatabase.hpp`). A database that cannot be opened, or that a newer server changed, stops the master before it opens its port |
-| Running | A `DatabaseThread` owns it: the features that keep data will give it their tasks, which run on its thread, and get their results back on the event loop. It is destroyed before the loop, after the tasks already given are done |
+| Running | A `DatabaseThread` owns it: the features that keep data give it their tasks, which run on its thread, and get their results back on the event loop. It is destroyed before the loop, after the tasks already given are done |
 
-`ServerMigrations` is empty for now: the first feature that keeps data adds the first migration, and its
-queries.
+| Migration | Tables | Used by |
+|---|---|---|
+| 1 | `admin_actions`: the record of the actions of the administrators | [Administration](administration.md) |
+| 2 | `address_bans`: the IP addresses banned for a time, read at start | [Administration](administration.md#bans) |
+| 3 | `accounts`: the accounts of the players | [Accounts](accounts.md#the-tables) |
+| 4 | `account_sessions`: their sessions, by the SHA-256 of their token | [Accounts](accounts.md#sessions) |
+| 5 | `account_codes`: the codes sent by email, by their hash | [Accounts](accounts.md#codes) |
 
 ```
 INFO  master   Database postgresql://rtype:***@db.example.org/rtype, schema 0
@@ -178,24 +229,38 @@ stateDiagram-v2
 
 | Request | Before `HELLO` | In the lobby | In a game |
 |---|---|---|---|
-| `HELLO` | `WELCOME` with a new player id; `INVALID_NAME`; `UNSUPPORTED_VERSION`, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
+| `HELLO` | `WELCOME` with a new player id, the features, and the account of its token; `INVALID_NAME`; with accounts, `NAME_RESERVED` for the username of an account; `UNSUPPORTED_VERSION`, `BANNED`, or `SESSION_EXPIRED` for a session token refused, then closed | `ALREADY_WELCOMED` | `ALREADY_WELCOMED` |
 | `PING` | `PONG` | `PONG` | `PONG` |
 | `LIST_GAMES` | `HELLO_REQUIRED` | `GAME_LIST` | `GAME_LIST` |
-| `CREATE_GAME` | `HELLO_REQUIRED` | `GAME_JOINED` once the game is ready; `INVALID_NAME`, `SERVER_FULL`, `GAME_START_FAILED` | `ALREADY_IN_GAME` |
-| `JOIN_GAME` | `HELLO_REQUIRED` | `GAME_JOINED`; `GAME_NOT_FOUND`, `GAME_FULL` | `ALREADY_IN_GAME` |
+| `CREATE_GAME` | `HELLO_REQUIRED` | `GAME_JOINED` once the game is ready; `INVALID_NAME`, `SERVER_FULL`, `GAME_START_FAILED`; `GUESTS_DISABLED` for a guest of a master without guests | `ALREADY_IN_GAME` |
+| `JOIN_GAME` | `HELLO_REQUIRED` | `GAME_JOINED`; `GAME_NOT_FOUND`, `GAME_FULL`; `GUESTS_DISABLED` for a guest of a master without guests | `ALREADY_IN_GAME` |
 | `LEAVE_GAME` | `HELLO_REQUIRED` | `NOT_IN_GAME` | `LEFT_GAME (REQUESTED)` |
+| `REGISTER` … `DELETE_ACCOUNT` (the accounts) | `HELLO_REQUIRED` | With accounts, their replies ([Accounts](accounts.md#the-requests)); without, `ACCOUNTS_DISABLED`, the payload not read | `ALREADY_IN_GAME`: nobody changes identity in a game |
 | Any other type | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` | `UNKNOWN_MESSAGE` |
 | A malformed payload | `MALFORMED`, then closed | `MALFORMED`, then closed | `MALFORMED`, then closed |
 
 - **One reply per request, in order**: the requests of a connection are handled one after the other, so a
   client can send several without waiting. `CREATE_GAME` is answered once its game is ready, up to 10 seconds
-  later: the requests sent meanwhile wait for its answer (32 at most, then the client is disconnected).
+  later, and on a server with accounts `HELLO` and the requests of the accounts once the database, the hasher
+  or the mailer answered: the requests sent meanwhile wait for its answer (32 at most, then the client is
+  disconnected).
 - **The state comes first**: a second `HELLO` is `ALREADY_WELCOMED` whatever it holds, a `LIST_GAMES` before
   `HELLO` is `HELLO_REQUIRED` whatever its payload.
 - **A player id** is given by `HELLO`: never 0, never given twice by a master. Names do not have to be unique.
-- **Leaving without asking**: a game over, a crash or a client that timed out send `LEFT_GAME` with their
-  reason, and the player is back in the lobby. A client that closed its UDP session itself (`QUIT`) is back in
+- **The accounts** ([lobby protocol 3](../protocol/lobby.md#6-accounts)) are answered by the `AccountService`
+  when the settings enable `[accounts]` ([Accounts](accounts.md#in-the-lobby)): `WELCOME` offers password
+  accounts, and guests unless `accounts.guests = false`; a guest carries `~` before its name. Without accounts,
+  `WELCOME` offers guests only, every request of the accounts gets `ACCOUNTS_DISABLED`, and a `HELLO` with a
+  session token gets `SESSION_EXPIRED`, after which the client connects again without it. The locale of `HELLO`
+  is kept with the connection, for the language of the [emails](accounts.md#the-mails).
+- **Leaving without asking**: a game over, a crash, a client that timed out, or an administrator who removes
+  the player or ends its game, send `LEFT_GAME` with their reason, and the player is back in the lobby. A client that closed its UDP session itself (`QUIT`) is back in
   the lobby without a message: it knows. A lobby connection that closes takes its player out of its game.
+
+- **The administrators** ([Administration](administration.md)) see the players through `AdminLobby`: their
+  name, address and game. They send them `SERVER_MESSAGE`, or remove them: `ERROR (KICKED)`, then the
+  connection closes. An address banned (`setBans()`) is refused at `HELLO` with `ERROR (BANNED)`, and a player
+  connected from it when the ban comes is removed with it.
 
 **Limits** (`LobbyLimits`, the defaults of the [protocol](../protocol/index.md)):
 
@@ -257,6 +322,16 @@ sequenceDiagram
 | It exits, or closes its connection, without `GAME_OVER` | `LEFT_GAME (GAME_CRASHED)` | Killed if still there |
 | `PLAYER_DISCONNECTED (TIMED_OUT)` | `LEFT_GAME (TIMED_OUT)` | — |
 | The master stops | Their UDP sessions get `DISCONNECT (SHUTDOWN)` | `SHUTDOWN (MASTER_STOPPING)` |
+| An administrator removes a player | `LEFT_GAME (KICKED)`, then `ERROR (KICKED)` | `REMOVE_PLAYER (KICKED)` |
+| An administrator ends the game | `LEFT_GAME (ENDED_BY_ADMIN)` | `SHUTDOWN (ENDED_BY_ADMIN)` |
+| A malformed or unexpected message, `GAME_STATUS` included | `LEFT_GAME (GAME_CRASHED)` | Killed |
+
+**The status of each game.** Every second, a running instance sends `GAME_STATUS`: its tick, its wave, and for
+each connected player its score, whether it is alive, and its latency. `Games` keeps the last one and when it
+came; `Games::status(id)` gives it with its age, for a running game only. A game without `GAME_STATUS` for 3
+seconds (`GamesSettings::statusTimeout`) is **stale**: shown so, not stopped, since a process that dies is
+already caught by its exit. The [administration](administration.md) reads it from there, through
+`AdminGames`, and is told of each game that starts, changes or ends through its `AdminObserver`.
 
 The processes are checked every 50 ms (`exitCode()` never blocks). An instance that does not exit within 5
 seconds of `SHUTDOWN` or `GAME_OVER` is killed. On Ctrl+C, the master closes its lobby, shuts every game down,
@@ -289,6 +364,9 @@ sequenceDiagram
     loop every tick
         C->>I: INPUT
         I->>C: SNAPSHOT (every 2 ticks), ENTITIES_DESTROYED
+    end
+    loop every second
+        I->>M: GAME_STATUS (tick, wave, scores, latencies)
     end
     M->>I: SHUTDOWN
     I->>C: DISCONNECT (SHUTDOWN)
@@ -338,7 +416,11 @@ flowchart LR
   - the game over goes to every client (`GAME_OVER`, with the last snapshot), then to the instance with the
     score of each player; nothing is published after it;
   - a session that closes takes the ship away; the others receive `PLAYER_LEFT`, and the master
-    `PLAYER_DISCONNECTED`, unless it removed the player itself (`REMOVE_PLAYER`).
+    `PLAYER_DISCONNECTED`, unless it removed the player itself (`REMOVE_PLAYER`);
+  - `status()` builds the `GAME_STATUS` sent every second by a `Timer` of the instance: the tick, the wave
+    and the players of the last result published, and the round-trip time each session measures from the
+    acknowledgements. The game thread copies nothing more for it: its numbers already come with each result,
+    and the network thread keeps the last, so no lock is held during a tick.
 - Its `SessionHost` is updated at 60 Hz by a `Timer` of the loop, not by the game thread: the heartbeats and
   resends go on even if the game stalls.
 
@@ -411,7 +493,7 @@ stateDiagram-v2
 *The first signal starts a proper stop; a second one, or the grace period, cuts it.*
 
 1. **The first signal** calls `shutdown`, which ends the work properly and calls `loop.stop()` once done. An
-   instance sends `DISCONNECT (SHUTDOWN)` to its players. The master closes the lobby, which disconnects its
+   instance sends `DISCONNECT (SHUTDOWN)` to its players. The master stops its web server, closes the lobby, which disconnects its
    clients; with the games, it will also send `SHUTDOWN` to its instances and wait for them.
 2. **A second signal** stops at once: the person who pressed Ctrl+C twice does not want to wait.
 3. **After 10 seconds** (`GracePeriod`) without the loop stopped, the server stops at once too: a stop that
@@ -474,8 +556,8 @@ lobby.
 
 | Code | When |
 |---|---|
-| `0` | Stopped properly: after a stop signal, after `--help`, `--version` or `--check`, or at the end of its game for an instance |
-| `1` | Could not start (key missing or invalid, port in use, no secret), stopped on an unexpected error, or stop forced |
+| `0` | Stopped properly: after a stop signal, after `--help`, `--version` or `--check`, at the end of its game for an instance; with `--health`, the master is healthy |
+| `1` | Could not start (settings file refused, key missing or invalid, port of the lobby or of the panel in use, panel off the loopback without accounts, no secret), stopped on an unexpected error, or stop forced; with `--health`, the master is not healthy or cannot be reached |
 | `2` | Invalid arguments |
 
 The master reads the exit code of its instances: anything but 0 is a crash, which it reports to the players
@@ -486,8 +568,40 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 - `tests/server_options.cpp` (tag `[server]`): the defaults, every option of both modes, every invalid
   combination, `--help` and `--version` first, the standalone mode refused in release, the exit codes of
   `run()`, a master without its key, an instance without a secret, and the secret itself.
+- `tests/server_settings.cpp` (tags `[server]`, `[settings]`): every key of the settings file and their
+  defaults, an unknown key or section, a wrong type, a TOML error, each with its line and column; invalid
+  values, the rules between the sections (accounts without mail, Discord without accounts, the
+  panel off the loopback without accounts), an administrator named by username; relative paths from the folder
+  of the file; the secret files, missing, empty, readable by everyone, never logged; the sender of the mails and
+  its address, mail in the clear without a password; the command line winning; and `--settings --check`, with
+  the fake mail server.
+- `tests/server_mail.cpp` (tags `[server]`, `[mail]`): the mails, their format, and `CurlMailer` against the
+  fake mail server of `tests/helpers/SmtpServer.hpp` ([Accounts](accounts.md#tests)).
 - `tests/server_key.cpp` (tag `[server]`): the key generated at the first start, then loaded, only readable by
   its owner, never replaced, and `--fingerprint`.
+- `tests/server_web.cpp` (tags `[server]`, `[web]`): a real `WebServer` with its loop on a thread, asked with
+  libcurl (`tests/helpers/Http.hpp`). `/api/health` answered after the loop has worked, the others meanwhile;
+  a request waiting for the loop answered `503` at the stop; the files of the panel and their types,
+  `index.html` for its pages, the page "not built", no path out of its folder, pages and files asked one after
+  the other on a connection kept alive, as a browser does; the headers of security on every
+  response; the token traded for a session cookie, a wrong token refused, neither in the logs at any level;
+  `X-Forwarded-For` from the right and only from a trusted proxy, in `visitorAddress()` and end to end; a port
+  taken. Real masters: `admin-url.txt` (`0600`) whose address opens the page "not built" with a session, a port
+  taken, a missing `panel_dir`, and a panel off the loopback refused without accounts, allowed with them and
+  their mail server. Every test that runs a
+  master gives its panel port 0, with `testing::webOnAnyPort()`. `--health`: the answers of `/api/health`
+  read (healthy, another status, not HTTP, cut), a master asked at the address of its settings file, one whose
+  loop is stuck past the timeout, one gone, and a panel on port 0, which it cannot find.
+- `tests/helpers/panel_players.cpp`, `rtype_panel_players`: not a test, the players of a game for the end-to-end
+  tests of the panel ([The panel](panel.md#tests)), which run a real master.
+- `tests/server_admin.cpp` (tags `[server]`, `[admin]`): the administration, alone with fakes of the games and
+  the lobby, then end to end over HTTP and the WebSocket with real clients and instances
+  ([Administration](administration.md#tests)).
+- `tests/server_account_store.cpp` (tags `[server]`, `[accounts]`): the rules of the accounts, the hasher of
+  the passwords, and their tables on every engine ([Accounts](accounts.md#tests)).
+- `tests/server_accounts.cpp` (tags `[server]`, `[accounts]`, `[database]`): the accounts in a real lobby, with a
+  mailer of the tests that keeps the codes, on every engine: every flow and its errors, the order of the replies,
+  the limits, the purge, the deletion of an account ([Accounts](accounts.md#tests)).
 - `tests/server_database.cpp` (tag `[server]`): `sqlite:rtype.db` by default, `--database`, `--database-file`
   with a Windows line end, the invalid combinations; a database created at start, then opened again; a file
   without an address, empty or missing, stopping the master without its content logged; a password on the
@@ -513,7 +627,7 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   scores, acknowledged, nothing after), every failure of `MasterLink`, and whole instances run by `runInstance()` on
   a thread of the test, with a fake master over TCP and real clients over UDP: two players who join, see each
   other and move, one removed by the master, one who quits, then `SHUTDOWN`; the master going away; a full
-  game; a UDP port taken; and the standalone mode with its public keys, stopped by Ctrl+C.
+  game; a UDP port taken; a player removed by an administrator; and the standalone mode with its public keys, stopped by Ctrl+C.
 - `tests/lobby_messages.cpp` (tag `[lobby]`): the `HELLO` frame of the specification, the bytes of the other
   messages, round trips, the names checked apart, every malformed case, and random bytes.
 - `tests/server_lobby.cpp` (tag `[lobby]`): a `Lobby` on the loopback and real TLS clients pinning its key.
@@ -532,6 +646,17 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   replaced; `--fingerprint` shows the key and never makes one.
 - The smoke tests of CTest run `r-type_server --help`, refuse an unknown argument, and run `--check`, which
   makes its key in the build directory the first time.
+- `docker/smoke-test.sh`, in the *Docker* workflow: the image started with a test settings file, `--health`
+  and the health check of the image, a user that is not root, the key, the database and `admin-url.txt` in
+  `/data`, two players of `rtype_panel_players` in a game over the published ports, and `SIGTERM` stopping it
+  with code 0 ([Deploy with Docker](../guides/deploy-with-docker.md)).
+- `docker/smoke-test-accounts.sh`, after it: the image started with `docker/server-accounts.toml`, the settings
+  of the official server, its Discord secret in `/run/secrets`. `rtype_fake_services`
+  (`tests/helpers/fake_services.cpp`) runs a fake Discord over HTTPS, under the network alias `discord.com`,
+  and a fake mail server; the image is given their certificate to trust, so the master reaches Discord at the
+  address it always uses. The test checks that the master checked both at start, that a player signs in to its
+  account and plays with a guest, that the panel offers the password and Discord, refuses a player and lets an
+  administrator of `[admin] admins` in with a `Secure` cookie, and the stop on `SIGTERM`.
 
 ## Limits and next steps
 

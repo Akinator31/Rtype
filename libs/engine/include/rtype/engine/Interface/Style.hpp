@@ -38,7 +38,8 @@ struct FlareStyle {
     /// The area the mouse points at: the text and the star, with this space around them, as high as `height`.
     float padding = 12.0f;
     float height = 56.0f;
-    render::Color text{255, 255, 255, 150};
+    /// The text at rest: bright enough to read on a dark sky, dimmer than when lit.
+    render::Color text{255, 255, 255, 200};
     render::Color litText = render::colors::White;
     /// Halo behind the lit text.
     render::Color textGlow{255, 255, 255, 24};
@@ -72,6 +73,8 @@ struct FlareStyle {
     float burstTurn = 90.0f;
     /// The pulse of light that runs from the star to the far end of the line.
     float pulseLength = 70.0f;
+    /// The colour of a button that deletes (Panel::danger), for its text, its line and its star.
+    render::Color danger{232, 114, 110, 255};
 
     /// Width of a button whose text is this wide.
     [[nodiscard]] float computeWidth(float textWidth) const
@@ -369,6 +372,113 @@ struct GaugeStyle {
     }
 };
 
+/// Look of the fields of a form (TextFieldType::Line and Code): a caption in small capitals, the value in the
+/// font of the buttons, a fine rule under it which becomes a line of light with the focus, and the error in
+/// red under the rule. Sizes are in game units.
+struct FieldStyle {
+    /// Font of the caption and of the error.
+    render::FontId captionFont;
+    /// Font of the value and of the digits of a code.
+    render::FontId valueFont;
+    float captionSize = 20.0f;
+    float captionSpacing = 4.0f;
+    float valueSize = 30.0f;
+    float valueSpacing = 3.6f;
+    float width = 600.0f;
+    /// Space between the caption and the value, the value and the rule, the rule and the error.
+    float captionGap = 12.0f;
+    float ruleGap = 16.0f;
+    float errorGap = 10.0f;
+    float errorSize = 21.0f;
+    float ruleThickness = 1.5f;
+    /// The line of light of a focused field starts this far before it and ends this far after it.
+    float lightOverhang = 80.0f;
+    float lightThickness = 2.0f;
+    float cursorWidth = 3.0f;
+    render::Color caption{174, 179, 184, 255};
+    render::Color litCaption{255, 255, 255, 255};
+    render::Color value{255, 255, 255, 255};
+    render::Color rule{94, 99, 105, 255};
+    /// The rule of a cell of a code already typed.
+    render::Color filledRule{195, 200, 205, 255};
+    render::Color light{255, 255, 255, 217};
+    render::Color glow{255, 255, 255, 60};
+    render::Color error{232, 114, 110, 255};
+    /// The cells of a code: their width, the space between them, and the size of the digits.
+    float cellWidth = 88.0f;
+    float cellGap = 24.0f;
+    float digitSize = 60.0f;
+    /// Time for a field to light up or go out, in seconds.
+    float fadeDuration = 0.18f;
+
+    /// Height of a Line field, with the room of its error.
+    [[nodiscard]] float getHeight() const
+    {
+        return captionSize + captionGap + valueSize + ruleGap + errorGap + errorSize;
+    }
+    /// Height of a Code field, with the room of its error.
+    [[nodiscard]] float getCodeHeight() const
+    {
+        return captionSize + captionGap + digitSize + ruleGap + errorGap + errorSize;
+    }
+    /// Width of a Code field of this many cells.
+    [[nodiscard]] float getCodeWidth(std::size_t cells) const
+    {
+        const auto count = static_cast<float>(cells);
+        return (count * cellWidth) + (std::max(count - 1.0f, 0.0f) * cellGap);
+    }
+};
+
+/// Look of the rows of a list (ListRow): the title in the font of the buttons, its detail under it, a text on
+/// the right, and a rule under the row, lit as the line of a button while the row is lit. Sizes are in game
+/// units.
+struct ListStyle {
+    render::FontId titleFont;
+    render::FontId detailFont;
+    float height = 92.0f;
+    float titleSize = 26.0f;
+    float titleSpacing = 4.8f;
+    float detailSize = 21.0f;
+    float sideSize = 20.0f;
+    float sideSpacing = 3.6f;
+    /// Space between the title and its detail.
+    float lineGap = 8.0f;
+    float avatarSize = 56.0f;
+    float avatarGap = 26.0f;
+    float ruleThickness = 1.5f;
+    /// The line of light of a lit row starts this far before it.
+    float lightBefore = 120.0f;
+    float starSize = 9.0f;
+    render::Color title{230, 232, 234, 255};
+    render::Color litTitle{255, 255, 255, 255};
+    render::Color detail{154, 160, 166, 255};
+    render::Color litDetail{195, 200, 205, 255};
+    render::Color side{174, 179, 184, 255};
+    render::Color rule{51, 55, 59, 255};
+    render::Color disabled{94, 99, 105, 255};
+};
+
+/// Look of the avatars (Avatar): a dark disc, the picture or the initial on it, and a ring. Sizes are parts
+/// of the size of the avatar, colours as the rest of the interface.
+struct AvatarStyle {
+    /// Font of the initial.
+    render::FontId font;
+    /// Size of the initial, and space between the picture and the ring.
+    float initialSize = 0.38f;
+    float ringGap = 0.07f;
+    float ringThickness = 1.5f;
+    /// Number of dots of the ring of a guest.
+    int guestDots = 24;
+    render::Color disc{14, 15, 17, 255};
+    render::Color initial{255, 255, 255, 255};
+    render::Color guestInitial{154, 160, 166, 255};
+    render::Color ring{255, 255, 255, 150};
+    render::Color discordRing{255, 255, 255, 230};
+    render::Color glow{255, 255, 255, 70};
+    float glowSpread = 0.14f;
+    render::Color guestRing{107, 113, 119, 255};
+};
+
 /// Look of the interface: font, sizes and colours, in game units. One style for the whole interface.
 struct InterfaceStyle {
     /// Font of every text of the interface.
@@ -403,6 +513,9 @@ struct InterfaceStyle {
     SliderStyle slider{};
     SwitchStyle toggle{};
     GaugeStyle gauge{};
+    FieldStyle field{};
+    ListStyle list{};
+    AvatarStyle avatar{};
 };
 
 } // namespace rtype::engine

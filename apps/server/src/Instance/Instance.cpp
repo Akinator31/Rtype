@@ -35,11 +35,27 @@ constexpr std::chrono::milliseconds Linger{100};
 constexpr std::chrono::seconds GameOverWait{2};
 /// How often the acknowledgements are checked meanwhile.
 constexpr std::chrono::milliseconds GameOverCheck{50};
+/// How often the master is told where the game stands (GAME_STATUS, docs/protocol/instances.md).
+constexpr std::chrono::seconds StatusInterval{1};
 
 const rtype::log::Logger &logger()
 {
     static const rtype::log::Logger instance("instance");
     return instance;
+}
+
+/// Why the master shuts the game down, for the logs.
+std::string_view describe(ShutdownReason reason)
+{
+    switch (reason) {
+    case ShutdownReason::Empty:
+        return "no player left";
+    case ShutdownReason::MasterStopping:
+        return "the master stops";
+    case ShutdownReason::EndedByAdmin:
+        return "an administrator ended the game";
+    }
+    return "unknown reason";
 }
 
 /// The player of a slot in standalone mode, with the public keys of rtype/game/Standalone.hpp.
@@ -65,6 +81,7 @@ class Instance
     std::optional<MasterLink> _link;
     rtype::network::Timer _linger;
     rtype::network::Timer _gameOverWait;
+    rtype::network::Timer _status;
     int _exitCode = Success;
     bool _stopping = false;
 
@@ -89,6 +106,7 @@ class Instance
     void gameOver(const GameOverReport &report)
     {
         _game.stop();
+        _status.cancel();
         const auto deadline = std::chrono::steady_clock::now() + GameOverWait;
         _gameOverWait.startRepeating(GameOverCheck, [this, report, deadline] {
             if (!_host->acknowledged() && std::chrono::steady_clock::now() < deadline) {
@@ -120,6 +138,7 @@ class Instance
             return;
         }
         _link->sendReady(_host->localAddress().port());
+        _status.startRepeating(StatusInterval, [this] { _link->sendGameStatus(_host->status()); });
     }
 
 public:
@@ -136,7 +155,7 @@ public:
                   });
               },
               [this] { _loop.post([this] { stop(Failure, DisconnectReason::Shutdown); }); }),
-          _linger(loop), _gameOverWait(loop)
+          _linger(loop), _gameOverWait(loop), _status(loop)
     {
     }
 
@@ -194,10 +213,7 @@ public:
                               },
                           .onShutdown =
                               [this](const ShutdownMessage &shutdown) {
-                                  logger().info("Shut down by the master: {}",
-                                                shutdown.reason == ShutdownReason::Empty
-                                                    ? "no player left"
-                                                    : "the master stops");
+                                  logger().info("Shut down by the master: {}", describe(shutdown.reason));
                                   stop(Success, DisconnectReason::Shutdown);
                               },
                           .onFailed =
@@ -220,6 +236,7 @@ public:
         _stopping = true;
         _exitCode = exitCode;
         _gameOverWait.cancel();
+        _status.cancel();
         _game.stop();
         if (_host) {
             _host->closeAll(reason);

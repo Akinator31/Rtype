@@ -5,6 +5,7 @@
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "rtype/lobby/Messages.hpp"
+#include "rtype/log/Logger.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/FramedConnection.hpp"
@@ -14,11 +15,14 @@
 #include "rtype/network/TlsConnection.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -40,12 +44,81 @@ using rtype::network::TcpListener;
 using rtype::network::TlsConnection;
 using Clock = std::chrono::steady_clock;
 using Bytes = std::vector<std::byte>;
+using Catch::Matchers::ContainsSubstring;
 using testing::LobbyClient;
 using testing::runFor;
 using testing::waitUntil;
 
 namespace
 {
+
+/// Captures the messages logged during a test, at every level.
+class Capture : public rtype::log::Sink
+{
+private:
+    mutable std::mutex _mutex;
+    std::string _text;
+
+public:
+    void write(const rtype::log::Record &record) override
+    {
+        const std::lock_guard lock(_mutex);
+        _text.append(record.message).append("\n");
+    }
+
+    [[nodiscard]] std::string text() const
+    {
+        const std::lock_guard lock(_mutex);
+        return _text;
+    }
+};
+
+struct Captured {
+    std::shared_ptr<Capture> sink = std::make_shared<Capture>();
+    rtype::log::Level previous = rtype::log::level();
+
+    Captured()
+    {
+        rtype::log::setSink(sink);
+        rtype::log::setLevel(rtype::log::Level::Trace);
+    }
+    ~Captured()
+    {
+        rtype::log::setLevel(previous);
+        rtype::log::setSink(nullptr);
+    }
+    Captured(const Captured &) = delete;
+    Captured &operator=(const Captured &) = delete;
+};
+
+/// A session token no master gave.
+SessionToken someToken()
+{
+    SessionToken token{};
+    token.fill(std::byte{0x5A});
+    return token;
+}
+
+/// One valid request of each kind of the accounts.
+std::vector<std::pair<std::uint8_t, Bytes>> accountRequests()
+{
+    return {
+        {message_type::Register,
+         encode(RegisterMessage{"Pavel", "pavel@example.org", "correct horse battery"})},
+        {message_type::VerifyEmail, encode(VerifyEmailMessage{"Pavel", "123456"})},
+        {message_type::ResendCode, encode(ResendCodeMessage{"Pavel"})},
+        {message_type::SignIn, encode(SignInMessage{"Pavel", "correct horse battery"})},
+        {message_type::SignOut, {}},
+        {message_type::ForgotPassword, encode(ForgotPasswordMessage{"pavel@example.org"})},
+        {message_type::ResetPassword,
+         encode(ResetPasswordMessage{"pavel@example.org", "123456", "new password!"})},
+        {message_type::DiscordSignIn, {}},
+        {message_type::DiscordConfirm,
+         encode(DiscordConfirmMessage{"code", std::string(43, 'v'), "http://127.0.0.1/callback"})},
+        {message_type::ChooseUsername, encode(ChooseUsernameMessage{"Pavel"})},
+        {message_type::DeleteAccount, encode(DeleteAccountMessage{"correct horse battery"})},
+    };
+}
 
 /// A lobby on the loopback, and its clients.
 struct LobbyFixture {
@@ -164,7 +237,8 @@ TEST_CASE("In the lobby, each request gets the answer of its state", "[lobby]")
     client->send(message_type::LeaveGame);
     client->send(message_type::JoinGame, encode(JoinGameMessage{7}));
     client->send(0x42);
-    client->send(message_type::Welcome, encode(WelcomeMessage{1}));
+    client->send(message_type::Welcome,
+                 encode(WelcomeMessage{.playerId = 1, .features = {}, .account = std::nullopt}));
 
     CHECK(client->error(fixture.loop, 1) == ErrorMessage{message_type::Hello, ErrorCode::AlreadyWelcomed});
     CHECK(client->error(fixture.loop, 2) == ErrorMessage{message_type::LeaveGame, ErrorCode::NotInGame});
@@ -182,10 +256,13 @@ TEST_CASE("An invalid name is refused, and the client can try again", "[lobby]")
     LobbyFixture fixture;
     auto client = fixture.client();
     const auto sendName = [&](std::string name) {
-        Bytes payload = {std::byte{0}, std::byte{1}, static_cast<std::byte>(name.size())};
+        Bytes payload = {std::byte{0}, static_cast<std::byte>(ProtocolVersion),
+                         static_cast<std::byte>(name.size())};
         for (const char character : name) {
             payload.push_back(static_cast<std::byte>(character));
         }
+        // Locale "en", no token
+        payload.insert(payload.end(), {std::byte{2}, std::byte{'e'}, std::byte{'n'}, std::byte{0}});
         client->send(message_type::Hello, payload);
     };
 
@@ -206,14 +283,134 @@ TEST_CASE("An invalid name is refused, and the client can try again", "[lobby]")
 
 TEST_CASE("Another version of the protocol is refused, and the connection closed", "[lobby]")
 {
+    // A client of before the administration (version 1), and one of a newer server
+    const std::uint16_t version = GENERATE(std::uint16_t{1}, static_cast<std::uint16_t>(ProtocolVersion + 1));
+    CAPTURE(version);
     LobbyFixture fixture;
     auto client = fixture.client();
 
-    client->send(message_type::Hello, encode(HelloMessage{2, "Pavel"}));
+    client->send(
+        message_type::Hello,
+        encode(HelloMessage{.version = version, .name = "Pavel", .locale = "en", .token = std::nullopt}));
 
     CHECK(client->error(fixture.loop) == ErrorMessage{message_type::Hello, ErrorCode::UnsupportedVersion});
     CHECK(waitUntil(fixture.loop, [&] { return client->closed.has_value(); }));
     CHECK(waitUntil(fixture.loop, [&] { return fixture.lobby.connectionCount() == 0; }));
+}
+
+TEST_CASE("A client of version 2 is told to update, not that its HELLO is malformed", "[lobby]")
+{
+    LobbyFixture fixture;
+    auto client = fixture.client();
+
+    // HELLO of version 2: a version and a name, without the locale and the token of version 3
+    client->send(message_type::Hello, Bytes{std::byte{0}, std::byte{2}, std::byte{3}, std::byte{'B'},
+                                            std::byte{'o'}, std::byte{'b'}});
+
+    CHECK(client->error(fixture.loop) == ErrorMessage{message_type::Hello, ErrorCode::UnsupportedVersion});
+    CHECK(waitUntil(fixture.loop, [&] { return client->closed.has_value(); }));
+}
+
+TEST_CASE("A master without accounts says so in WELCOME, and answers ACCOUNTS_DISABLED", "[lobby][accounts]")
+{
+    LobbyFixture fixture;
+    auto client = fixture.client();
+    client->send(message_type::Hello,
+                 encode(HelloMessage{
+                     .version = ProtocolVersion, .name = "Pavel", .locale = "fr-FR", .token = std::nullopt}));
+    REQUIRE(client->reply(fixture.loop));
+    REQUIRE(client->received[0].first == message_type::Welcome);
+    const auto welcome = decodeWelcome(client->received[0].second);
+    REQUIRE(welcome);
+    CHECK(welcome->features == ServerFeatures{.guests = true, .passwordAccounts = false, .discord = false});
+    CHECK_FALSE(welcome->account);
+
+    // Every request of the accounts, sent without waiting, answered in order; the connection stays
+    const auto requests = accountRequests();
+    for (const auto &[type, payload] : requests) {
+        client->send(type, payload);
+    }
+    client->send(message_type::Ping);
+    for (std::size_t i = 0; i < requests.size(); ++i) {
+        CHECK(client->error(fixture.loop, i + 1) ==
+              ErrorMessage{requests[i].first, ErrorCode::AccountsDisabled});
+    }
+    REQUIRE(client->reply(fixture.loop, requests.size() + 1));
+    CHECK(client->received.back().first == message_type::Pong);
+    CHECK_FALSE(client->closed);
+}
+
+TEST_CASE("Without accounts, the state of a request is checked and its payload is not read",
+          "[lobby][accounts]")
+{
+    LobbyFixture fixture;
+    auto client = fixture.client();
+
+    // Before HELLO
+    client->send(message_type::SignIn, encode(SignInMessage{"Pavel", "correct horse battery"}));
+    CHECK(client->error(fixture.loop, 0) == ErrorMessage{message_type::SignIn, ErrorCode::HelloRequired});
+
+    // Once welcomed, a payload that would be malformed changes nothing: no account is behind it
+    client->hello("Pavel");
+    REQUIRE(client->reply(fixture.loop, 1));
+    client->send(message_type::SignIn, Bytes{std::byte{0xFF}});
+    client->send(message_type::SignOut, Bytes{std::byte{1}});
+    CHECK(client->error(fixture.loop, 2) == ErrorMessage{message_type::SignIn, ErrorCode::AccountsDisabled});
+    CHECK(client->error(fixture.loop, 3) == ErrorMessage{message_type::SignOut, ErrorCode::AccountsDisabled});
+    CHECK_FALSE(client->closed);
+
+    // A type after the accounts is still unknown
+    client->send(0x14);
+    CHECK(client->error(fixture.loop, 4) == ErrorMessage{0x14, ErrorCode::UnknownMessage});
+}
+
+TEST_CASE("A HELLO with a session token gets SESSION_EXPIRED; without it, the client is welcomed",
+          "[lobby][accounts]")
+{
+    LobbyFixture fixture;
+    auto resuming = fixture.client();
+
+    resuming->send(
+        message_type::Hello,
+        encode(HelloMessage{.version = ProtocolVersion, .name = "", .locale = "en", .token = someToken()}));
+
+    CHECK(resuming->error(fixture.loop) == ErrorMessage{message_type::Hello, ErrorCode::SessionExpired});
+    CHECK(waitUntil(fixture.loop, [&] { return resuming->closed.has_value(); }));
+
+    // The client forgets the token and connects again, as a guest
+    auto guest = fixture.player("Pavel");
+    CHECK_FALSE(decodeWelcome(guest->received[0].second)->account);
+}
+
+TEST_CASE("No password, token or code of the accounts reaches the logs", "[lobby][accounts]")
+{
+    const Captured captured;
+    LobbyFixture fixture;
+    const std::string password = "my very secret password";
+    const std::string code = "864209";
+
+    auto resuming = fixture.client();
+    resuming->send(
+        message_type::Hello,
+        encode(HelloMessage{.version = ProtocolVersion, .name = "", .locale = "en", .token = someToken()}));
+    REQUIRE(resuming->error(fixture.loop));
+
+    auto client = fixture.player("Pavel");
+    client->send(message_type::SignIn, encode(SignInMessage{"Pavel", password}));
+    client->send(message_type::Register, encode(RegisterMessage{"Pavel", "pavel@example.org", password}));
+    client->send(message_type::ResetPassword,
+                 encode(ResetPasswordMessage{"pavel@example.org", code, password}));
+    client->send(message_type::DeleteAccount, encode(DeleteAccountMessage{password}));
+    client->send(message_type::VerifyEmail, encode(VerifyEmailMessage{"Pavel", code}));
+    REQUIRE(client->reply(fixture.loop, 5));
+
+    const std::string logs = captured.sink->text();
+    CHECK_THAT(logs, ContainsSubstring("Pavel"));
+    CHECK_THAT(logs, !ContainsSubstring(password));
+    CHECK_THAT(logs, !ContainsSubstring(code));
+    CHECK_THAT(logs, !ContainsSubstring(std::string(32, '\x5A')));
+    CHECK_THAT(logs, !ContainsSubstring("5a5a5a5a"));
+    CHECK_THAT(logs, !ContainsSubstring("5A5A5A5A"));
 }
 
 TEST_CASE("A malformed request gets MALFORMED, and the connection is closed", "[lobby]")

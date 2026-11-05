@@ -149,7 +149,9 @@ void TextInput::update(InputSource &source, float elapsed)
     if (control && _edits.wasPressed(Edit::SelectAll)) {
         selectAll();
     }
-    if (control && (_edits.wasPressed(Edit::Copy) || _edits.wasPressed(Edit::Cut)) && !selection().empty()) {
+    // A secret never reaches the clipboard, where any program could read it
+    if (control && !_secret && (_edits.wasPressed(Edit::Copy) || _edits.wasPressed(Edit::Cut)) &&
+        !selection().empty()) {
         source.setClipboardText(selectedText());
         if (_edits.wasPressed(Edit::Cut)) {
             replaceSelection({});
