@@ -12,7 +12,7 @@ The client library is organised like the ECS, with one file per system:
 libs/engine/include/rtype/engine/
   Component/    the data attached to entities
     Drawing.hpp     Layer, Drawable, Text, BoundText, Sprite, Box, Scale, Opacity
-    Animation.hpp   Easing, ease(), Tween, Spin, ModelAnimation, switchModelAnimation()
+    Animation.hpp   Easing, ease(), Tween, Spin, Scroll, ModelAnimation, switchModelAnimation(), addModelAnimation()
     Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
     Layout.hpp      Column, ColumnItem, AnchorPoint, Anchor
     Toast.hpp       ToastType, Toast
@@ -20,7 +20,7 @@ libs/engine/include/rtype/engine/
   System/       the systems, one per file
     InterfaceSystem.hpp  WidgetTextSystem.hpp  BoundTextSystem.hpp  TweenSystem.hpp  HitboxSystem.hpp
     ColumnLayoutSystem.hpp  AnchorSystem.hpp  ToastSystem.hpp  SpinSystem.hpp  ModelAnimationSystem.hpp
-    SoundSystem.hpp
+    ScrollSystem.hpp  SoundSystem.hpp
   Interface/    what the interface is built with
     MenuBuilder.hpp  InterfaceBuilder.hpp  Navigation.hpp  Style.hpp  Metrics.hpp
   Rendering/
@@ -47,6 +47,7 @@ ecs.registerSystem<WidgetTextSystem>();
 ecs.registerSystem<BoundTextSystem>();
 ecs.registerSystem<TweenSystem>();
 ecs.registerSystem<SpinSystem>();
+ecs.registerSystem<ScrollSystem>();
 ecs.registerSystem<FlightSystem>();
 ecs.registerSystem<IntroSystem>(scenes, devices);
 ecs.registerSystem<ModelAnimationSystem>();
@@ -70,9 +71,9 @@ renderer.endFrame();
 | 1 | `Scenes` | Records which scene receives input for the whole update. |
 | 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation; they read the input before the game. |
 | 3 | `GameSessionSystem`, `SoundSystem` | The game: the input of the player to its session, the snapshots to the entities of the game scene ([A game in the client](client-game.md)). Then the sounds: the `SoundSystem` plays each `SoundEffect` given to an entity and removes it, in the frame the game gave it ([Audio](audio.md#in-the-engine)). |
-| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem` | Texts of the widgets and bound texts, tweens, spinning models. |
+| 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem`, `ScrollSystem` | Texts of the widgets and bound texts, tweens, spinning models, scrolling skies. |
 | 5 | `FlightSystem`, `IntroSystem` | Client systems of the main menu: the ships flying around the station, the intro. |
-| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`, unless the model already has this pose (entities sharing a model and an animation at the same time are posed once). `ModelAnimation::speed` 0 holds the pose; `blendedAnimation` and `blendAmount` mix a second animation in, in step. |
+| 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`, unless the model already has this pose (entities sharing a model and an animation at the same time are posed once). `ModelAnimation::speed` 0 holds the pose; `blendedAnimation` and `blendAmount` mix a second animation in, in step; `addModelAnimation()` plays a third one once over them (`addedAnimation`, removed after `addedDuration`): what it changes from its first frame adds to their pose, bone by bone (a recoil over a flight). |
 | 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
 | 8 | `ToastSystem` | Places, fades and destroys the toasts. |
 | 9 | `TransformSystem` | Positions of the children from their parents, last. |
@@ -178,6 +179,21 @@ and hide something read their `on` / `off` argument with `readSwitch()` (`Comman
 | `Scale`, `Opacity` | Size factor and transparency, animated by tweens. |
 
 The HUD is made of entities of the game scene in the `Interface` layer: it is drawn after the world.
+
+### The sky
+
+A `Backdrop` covers the visible area with a picture, behind the 3D models; it needs no `Drawable` nor
+`Position`. The sky is the scene of the first shown `Backdrop`: all its `Backdrop`s and `BackdropSprite`s are
+drawn by `order`, the lowest at the back.
+
+| Component | Draws |
+|---|---|
+| `Backdrop` | A picture scaled to cover the visible area, cut on the sides that overflow. With a `Scroll`, it slides to the left by `Scroll::offset` and repeats itself: its right side must join its left side. |
+| `BackdropSprite` | A picture of `height` game units, centred `y` units under the top of the visible area. With a `Scroll`, it comes in from the right, goes out on the left, and comes back every `period` units of scrolling; `start` is the scrolling already done at the start (0: just out of the screen, on the right). |
+| `Scroll` | `speed` in game units per second; the `ScrollSystem` adds `speed × elapsed` to `offset`. |
+
+Layers going faster the nearer they are make a parallax: the game scene scrolls four layers and three objects
+([A game in the client](client-game.md#the-sky)).
 
 ## Animations
 

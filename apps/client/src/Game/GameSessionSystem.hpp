@@ -64,7 +64,8 @@ struct Kill {
 /// 2. the session updates, paused while a menu is over the scene;
 /// 3. each snapshot becomes entities of the scene: one per entity of the game, created when it appears,
 ///    moved, and destroyed when it is no longer in the world. The kinds given a ShipLook are 3D models, which
-///    roll around their length, smoothly, as their ship climbs or dives; those given a BossLook are standing
+///    roll around their length, smoothly, as their ship climbs or dives, and recoil when a shot of the
+///    players appears at their nose; those given a BossLook are standing
 ///    3D models, which play the animation of their stance; those given a ShotLook are models of energy; the
 ///    others are boxes. An entity killed in the game (a ship shot down, a shot that hit) leaves
 ///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. An entity whose
@@ -133,6 +134,12 @@ class GameSessionSystem : public ecs::System
     [[nodiscard]] std::optional<std::uint8_t> findKiller(ecs::entity_t bydo,
                                                          const std::vector<ecs::entity_t> &killed) const;
     void createEntity(const game::EntityState &state);
+    /// Plays the recoil of the ship of the players that fired a shot, if it is drawn in 3D.
+    void recoilShooter(const game::EntityState &shot);
+    /// The ship of the players, or of their allies, drawn in 3D, nearest to a shot that appears, if it is
+    /// near enough to have fired it: the snapshots do not tell which ship fired, and the allies fire the
+    /// shots of a player.
+    [[nodiscard]] std::optional<ecs::entity_t> findShooter(const game::EntityState &shot) const;
     /// Destroys the entity of an entity of the game gone, which leaves its impact if it was killed.
     void removeEntity(std::uint32_t networkId, const ecs::EntityRef &entity);
     void moveEntity(ecs::entity_t entity, const game::EntityState &state);

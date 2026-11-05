@@ -70,7 +70,7 @@ the input. When the game scene closes, the engine destroys its entities and the 
 
 | Scene | What it holds |
 |---|---|
-| `game` | The starry sky, the world of the session, and the [HUD](#hud). Escape opens the pause menu. |
+| `game` | The [scrolling sky](#the-sky), the world of the session, and the [HUD](#hud). Escape opens the pause menu. |
 | `pause` | Over the game, dimmed: **Resume**, or **Leave the game**. Offline, the game stops while it is open. |
 
 `GameScenes::play(session, onEnd)` starts a game with a session: the game scene replaces every scene. "Solo"
@@ -97,6 +97,23 @@ repository.
 or a `ShotLook` (`GameSessionSystem::setShipLook()` / `setShotLook()`, called by `GameScenes`, kept by
 `ShipLooks` / `ShotLooks`, which give the entities their models) is drawn with
 its 3D model instead of a box; without one, as in the tests, it stays a box.
+
+### The sky
+
+The sky of the game scene (`createGameSky()` in `GameScenes.cpp`) scrolls to the left, the nearer the faster,
+so that the ships seem to fly to the right; even the deep sky moves visibly, nothing stays still ([The sky](scenes-and-interface.md#the-sky) in the engine). The
+pictures are in `assets/images/backgrounds/`; the layers are 5120 × 1440 and join on their sides.
+
+| Order | Picture | Speed (units/s) | |
+|---|---|---|---|
+| 0 | `space_bg_0_deep.png` | 40 | The deep sky, opaque |
+| 1 | `space_galaxy.png` | 50 | 360 high, seen from the start, back every 4200 units |
+| 2 | `space_bg_1_nebula.png` | 80 | |
+| 4 | `space_bg_2_stars.png` | 140 | |
+| 5 | `space_moon.png`, `space_planet_ringed.png` | 160, 170 | 200 and 640 high, hiding the stars, back every 9000 and 13000 units |
+| 6 | `space_bg_3_near.png` | 300 | The nearest stars |
+
+The sky keeps scrolling while the game is paused. The main menu and the hangar keep the still `starfield.png`.
 
 ### Shots in 3D
 
@@ -138,9 +155,18 @@ where its box would be, with the same size anywhere on the screen: what is drawn
   drawn: they stretch far behind the ship once it rolls its belly towards the camera. Their meshes
   (`ShipLook::trailMeshes`, by index in the model file) go into `Model::hiddenMeshes`, which the renderer does
   not draw.
+- **Recoil**: a ship of the players (or an ally of the rescue) plays the `Shoot` animation of its rig each
+  time it fires: its hull kicks back and a flash grows at its muzzle, for 0.3 s. The snapshots do not say who
+  fired a shot: a shot of the players that appears makes the ship of the players drawn in 3D nearest to it
+  recoil, if it is no farther than twice `Rules::shipHalfWidth` (the allies fire the shots of a player, so its
+  owner is not enough). `Shoot` only moves the hull and the muzzle, from the rest pose of the rig: it is added
+  over the flight (`addModelAnimation()`, `ModelAnimation::addedAnimation`), each bone keeping its pose plus
+  what `Shoot` changes from its first frame, in the space of its parent; played alone, it would show the
+  ship in the rest pose. The Bydos do not recoil.
 - **Cost**: the models are skinned on the CPU, a few milliseconds per pose. The ships of a model are
   kept in step (the time of their animation is that of the session), and the `SceneRenderer` poses a model
-  again only when its pose changes: ten Bydos cost one pose per frame.
+  again only when its pose changes: ten Bydos cost one pose per frame. A ship recoiling has a pose of its
+  own for 0.3 s.
 
 The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
 an entity flies.

@@ -51,14 +51,31 @@ struct Spin {
     float speed = 0.0f;
 };
 
+/// Moves the entity along a scrolling picture of the sky (a Backdrop, a BackdropSprite), forever, to show the
+/// travel of the camera: the ScrollSystem adds the speed times the elapsed time to the offset.
+struct Scroll {
+    /// In game units per second, the picture going to the left; negative goes to the right.
+    float speed = 0.0f;
+    /// How far the picture has gone, in game units.
+    float offset = 0.0f;
+};
+
+/// No animation, for ModelAnimation::addedAnimation.
+inline constexpr int NoAnimation = -1;
+
 /// Plays an animation of the skinned Model of the entity, in a loop: the ModelAnimationSystem moves its time,
 /// the SceneRenderer poses the model before drawing it. Play another one with switchModelAnimation(), which
 /// fades from the previous one, so that the model does not jump from a pose to the other. A speed of 0 holds
 /// the pose. A second animation can be mixed in for good, in step with it: a pose between two of the rig.
+/// A third one can be added over them once, with addModelAnimation(): what it changes from its first frame
+/// adds to their pose, such as the recoil of a gun over a flight.
 /// @code
 /// const int idle = resources.getModelAnimation(model, "Idle");
 /// ecs.addComponent<ModelAnimation>(ship, idle);
 /// switchModelAnimation(ecs.getComponent<ModelAnimation>(ship), resources.getModelAnimation(model, "Move"));
+/// const int shoot = resources.getModelAnimation(model, "Shoot");
+/// addModelAnimation(ecs.getComponent<ModelAnimation>(ship), shoot,
+///                   resources.getModelAnimationDuration(model, shoot));
 /// @endcode
 struct ModelAnimation {
     int animation = 0;
@@ -72,6 +89,11 @@ struct ModelAnimation {
     /// halfway between them, such as a flame halfway between Idle and Move. Not mixed in while it fades.
     int blendedAnimation = 0;
     float blendAmount = 0.0f;
+    /// Played once over the others, from its start, for addedDuration seconds, then removed (NoAnimation):
+    /// the bones it moves keep the pose of the others, plus what it changes from its first frame.
+    int addedAnimation = NoAnimation;
+    float addedTime = 0.0f;
+    float addedDuration = 0.0f;
 
     friend bool operator==(const ModelAnimation &, const ModelAnimation &) = default;
 };
@@ -80,6 +102,15 @@ struct ModelAnimation {
 inline void switchModelAnimation(ModelAnimation &animation, int next, float fadeDuration = 0.5f)
 {
     animation = {next, 0.0f, animation.animation, animation.time, fadeDuration};
+}
+
+/// Plays an animation once from its start, for `duration` seconds, over the current one: its length, from
+/// render::ResourceManager::getModelAnimationDuration(). It starts again if it was already played.
+inline void addModelAnimation(ModelAnimation &animation, int added, float duration)
+{
+    animation.addedAnimation = added;
+    animation.addedTime = 0.0f;
+    animation.addedDuration = duration;
 }
 
 } // namespace rtype::engine

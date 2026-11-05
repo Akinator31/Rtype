@@ -3,6 +3,7 @@
 #   Commands/, Console/  the console and its commands
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
 #   Loading/             the loading screen at startup, and the loading of the assets of the scenes
+#   Lore/                the story of the game, scrolling away towards the horizon
 #   MainMenu/            the home screen and its submenus
 #   Online/              playing online: the lobby of a server, and its scenes
 #   ShipSelector/        the hangar: the catalog of ships and the scene where the player picks one
@@ -51,6 +52,10 @@ add_library(r-type_client_core STATIC
     src/Loading/LoadingSystem.cpp
     src/Loading/SceneAssetLoader.cpp
     src/Loading/SceneLoadStatus.cpp
+    src/Lore/CrawlSystem.cpp
+    src/Lore/LoreLayout.cpp
+    src/Lore/LoreScene.cpp
+    src/Lore/LoreText.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
     src/MainMenu/Logo.cpp

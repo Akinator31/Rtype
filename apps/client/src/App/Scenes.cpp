@@ -3,6 +3,7 @@
 #include "Console/ConsoleScene.hpp"
 #include "Game/LocalSession.hpp"
 #include "Loading/LoadingScene.hpp"
+#include "Lore/LoreScene.hpp"
 #include "MainMenu/ControlsMenu.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/SettingsMenu.hpp"
@@ -48,6 +49,7 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     createSettingsScene(engine, style, targets);
     createControlsScenes(engine, style, translations);
     createShipSelectorScene(engine, resources, style, translations, ships);
+    createLoreScene(engine, resources, targets.audio, style, metrics, translations);
 }
 
 } // namespace rtype::client

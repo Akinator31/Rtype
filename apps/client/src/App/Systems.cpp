@@ -8,6 +8,7 @@
 #include "Game/HudSystem.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "Game/RescueCameraSystem.hpp"
+#include "Lore/CrawlSystem.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/LogoFlareSystem.hpp"
@@ -43,9 +44,11 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     ecs.registerSystem<engine::BoundTextSystem>();
     ecs.registerSystem<engine::TweenSystem>();
     ecs.registerSystem<engine::SpinSystem>();
+    ecs.registerSystem<engine::ScrollSystem>();
     ecs.registerSystem<FlightSystem>();
     ecs.registerSystem<IntroSystem>(engine.getScenes(), devices);
     ecs.registerSystem<LogoFlareSystem>();
+    ecs.registerSystem<CrawlSystem>(engine.getScenes());
     ecs.registerSystem<ShipSelectorSystem>(engine.getScenes(), engine.getControls(), devices);
     ecs.registerSystem<engine::ModelAnimationSystem>();
     ecs.registerSystem<engine::HitboxSystem>(metrics, style);

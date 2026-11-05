@@ -1825,6 +1825,24 @@ TEST_CASE("A spinning model turns at its speed and stays between 0 and 360 degre
     CHECK(ecs.getComponent<Model>(backwards).spinAngle == 315.0f);
 }
 
+TEST_CASE("A scrolling picture moves its offset by its speed", "[engine][scroll]")
+{
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<ScrollSystem>();
+    const entity_t far = ecs.createEntity();
+    ecs.addComponent<Scroll>(far, 10.0f);
+    const entity_t backwards = ecs.createEntity();
+    ecs.addComponent<Scroll>(backwards, -40.0f);
+
+    engine.update(0.5f);
+    CHECK(ecs.getComponent<Scroll>(far).offset == 5.0f);
+    CHECK(ecs.getComponent<Scroll>(backwards).offset == -20.0f);
+
+    engine.update(1.5f);
+    CHECK(ecs.getComponent<Scroll>(far).offset == 20.0f);
+}
+
 TEST_CASE("A model animation moves its time by the elapsed time", "[engine][animation]")
 {
     Engine engine;
@@ -1860,6 +1878,34 @@ TEST_CASE("Switching a model animation fades from the previous one", "[engine][a
     CHECK(animation.previousAnimation == 2);
     CHECK(animation.previousTime == 1.5f);
     CHECK(animation.fadeDuration == 0.75f);
+}
+
+TEST_CASE("An animation added over a model animation plays once, then is removed", "[engine][animation]")
+{
+    Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    ecs.registerSystem<ModelAnimationSystem>();
+    const entity_t ship = ecs.createEntity();
+    ModelAnimation &animation = ecs.addComponent<ModelAnimation>(ship, 2);
+    CHECK(animation.addedAnimation == NoAnimation);
+
+    addModelAnimation(animation, 4, 0.3f);
+    engine.update(0.25f);
+    const ModelAnimation &played = ecs.getComponent<ModelAnimation>(ship);
+    CHECK(played.animation == 2);
+    CHECK(played.time == 0.25f);
+    CHECK(played.addedAnimation == 4);
+    CHECK(played.addedTime == 0.25f);
+
+    // Added again: from its start
+    addModelAnimation(ecs.getComponent<ModelAnimation>(ship), 4, 0.3f);
+    engine.update(0.25f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).addedTime == 0.25f);
+
+    // Played for its duration: removed, the pose is the one of the other entities of the model again
+    engine.update(0.25f);
+    CHECK(ecs.getComponent<ModelAnimation>(ship).addedAnimation == NoAnimation);
+    CHECK(ecs.getComponent<ModelAnimation>(ship) == ModelAnimation{2, 0.75f});
 }
 
 TEST_CASE("The sound system plays each sound effect once, then takes it from its entity", "[engine][sound]")

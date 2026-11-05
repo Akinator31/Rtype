@@ -128,7 +128,9 @@ void ShipLooks::addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::Entity
     animation.blendedAnimation = ship.model.animations.move;
     animation.blendAmount = Flame;
     const render::Vector2 hullCentre{hull.x + (hull.width / 2.0f), hull.y + (hull.height / 2.0f)};
-    ecs.addComponent<ShipAttitude>(entity, hullCentre);
+    ShipAttitude &attitude = ecs.addComponent<ShipAttitude>(entity, hullCentre);
+    attitude.shoot = ship.model.animations.shoot;
+    attitude.shootDuration = ship.model.animations.shootDuration;
     moveModel(ecs, entity, state, clock);
     placeModel(ecs, entity, 0.0f);
 }
@@ -161,6 +163,13 @@ void ShipLooks::placeModel(ecs::Ecs &ecs, ecs::entity_t entity, float elapsed)
     const ecs::Position &position = ecs.getComponent<ecs::Position>(entity);
     model.position = {position.x - ((centre.x * std::cos(aim)) - (centre.y * std::sin(aim))),
                       position.y - ((centre.x * std::sin(aim)) + (centre.y * std::cos(aim))), 0.0f};
+}
+
+void ShipLooks::fireModel(ecs::Ecs &ecs, ecs::entity_t entity)
+{
+    const ShipAttitude &attitude = ecs.getComponent<ShipAttitude>(entity);
+    engine::addModelAnimation(ecs.getComponent<engine::ModelAnimation>(entity), attitude.shoot,
+                              attitude.shootDuration);
 }
 
 } // namespace rtype::client

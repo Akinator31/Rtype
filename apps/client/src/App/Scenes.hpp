@@ -21,9 +21,9 @@ void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resour
                          const engine::RendererMetrics &metrics,
                          const localization::Localization &translations);
 
-/// Declares the scenes of the client built from the loaded assets: the main menu, its submenus and the
-/// hangar. Those of a game are declared by GameScenes, those of online play by OnlineScenes. Everything given
-/// must outlive the engine.
+/// Declares the scenes of the client built from the loaded assets: the main menu, its submenus, the hangar
+/// and the story. Those of a game are declared by GameScenes, those of online play by OnlineScenes.
+/// Everything given must outlive the engine.
 /// @param targets What the Settings page changes; its translations are those of every menu.
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
                       const engine::InterfaceStyle &style, const engine::RendererMetrics &metrics,

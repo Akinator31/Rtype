@@ -9,7 +9,8 @@ namespace rtype::engine
 {
 
 /// Plays the animations of the models: moves the time of each ModelAnimation by the elapsed time. The
-/// animations loop when they are drawn, so the time only grows.
+/// animations loop when they are drawn, so the time only grows. An added animation (addModelAnimation()) is
+/// removed once it has played for its duration.
 class ModelAnimationSystem : public ecs::System
 {
     ecs::ComponentCache<ModelAnimation> &_animations;

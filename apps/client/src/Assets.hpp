@@ -11,12 +11,25 @@
 
 // Images
 #define RTYPE_IMAGE_STARFIELD "images/starfield.png"
+// The sky of the game, from the back to the front: the layers cover the screen and join on their sides
+#define RTYPE_IMAGE_SKY_DEEP "images/backgrounds/space_bg_0_deep.png"
+#define RTYPE_IMAGE_SKY_NEBULA "images/backgrounds/space_bg_1_nebula.png"
+#define RTYPE_IMAGE_SKY_STARS "images/backgrounds/space_bg_2_stars.png"
+#define RTYPE_IMAGE_SKY_NEAR "images/backgrounds/space_bg_3_near.png"
+#define RTYPE_IMAGE_SKY_GALAXY "images/backgrounds/space_galaxy.png"
+#define RTYPE_IMAGE_SKY_MOON "images/backgrounds/space_moon.png"
+#define RTYPE_IMAGE_SKY_PLANET "images/backgrounds/space_planet_ringed.png"
 #define RTYPE_IMAGE_LOGO "images/rtpye_logo_without_flare.png"
 #define RTYPE_IMAGE_LOGO_FLARE "images/flare.png"
 #define RTYPE_IMAGE_ENERGY_NOISE "images/fx/energy_noise.png"
 #define RTYPE_IMAGE_GLOW_CORE "images/fx/glow_core.png"
 #define RTYPE_IMAGE_LIFE "images/hud/life.png"
 #define RTYPE_IMAGE_LIFE_LOST "images/hud/life_lost.png"
+
+// Texts
+// The story of the game, in each language, laid out for the crawl of the lore scene (see LoreLineKind)
+#define RTYPE_LORE_FRENCH "lore/fr.txt"
+#define RTYPE_LORE_ENGLISH "lore/en.txt"
 
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
@@ -52,5 +65,7 @@
 /// The voice played when the allies are called to the rescue against the final boss, offline: its length is
 /// game::Rules::rescueVoiceTicks. Not in the assets yet: the rescue goes on silently without it.
 #define RTYPE_SOUND_RESCUE_VOICE "sounds/rescue_voice.wav"
+/// The music of the lore scene, played once while the story scrolls: about as long as the crawl.
+#define RTYPE_MUSIC_LORE "sounds/lore.mp3"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"
