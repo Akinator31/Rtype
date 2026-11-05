@@ -324,6 +324,26 @@ void Administration::accounts(std::string search, std::size_t limit, std::option
     }
 }
 
+void Administration::profile(long long accountId, ProfileCallback done)
+{
+    if (_database == nullptr) {
+        done(std::nullopt);
+        return;
+    }
+    auto shared = std::make_shared<ProfileCallback>(std::move(done));
+    const bool queued = _database->run(
+        "read the picture of an account",
+        [accountId](rtype::database::Database &database) { return findDiscordProfile(database, accountId); },
+        [shared, alive = std::weak_ptr<bool>(_alive)](std::optional<std::optional<DiscordProfile>> profile) {
+            if (!alive.expired()) {
+                (*shared)(std::move(profile));
+            }
+        });
+    if (!queued) {
+        (*shared)(std::nullopt);
+    }
+}
+
 void Administration::account(long long accountId, AccountCallback done)
 {
     if (_database == nullptr) {

@@ -90,3 +90,10 @@ export function fadeByAge(age: number): number {
   if (age < Day) return 0.6;
   return 0.4;
 }
+
+/** The first character of a name, in capitals, for an avatar without picture: a whole character, even beyond
+ * the 16 bits of UTF-16. */
+export function initialOf(name: string): string {
+  const [first] = Array.from(name);
+  return first === undefined ? '?' : first.toUpperCase();
+}

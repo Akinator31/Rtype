@@ -95,9 +95,10 @@ struct AccountDone {
 };
 
 /// What a request of the accounts gets: ERROR with its code, SIGNED_IN (the connection is now signed in to
-/// that account), CODE_SENT, DONE or DISCORD_AUTHORIZE.
+/// that account), CODE_SENT, DONE, DISCORD_AUTHORIZE, PROFILE or AVATAR.
 using AccountReply = std::variant<rtype::lobby::ErrorCode, SignedInAccount, CodeSent, AccountDone,
-                                  rtype::lobby::DiscordAuthorizeMessage>;
+                                  rtype::lobby::DiscordAuthorizeMessage, rtype::lobby::ProfileMessage,
+                                  rtype::lobby::AvatarMessage>;
 
 /// The accounts of the lobby (docs/architecture/accounts.md#in-the-lobby): the requests REGISTER to
 /// DELETE_ACCOUNT, the sessions resumed by HELLO, the names of guests, on the thread of the loop.
@@ -116,6 +117,8 @@ using AccountReply = std::variant<rtype::lobby::ErrorCode, SignedInAccount, Code
 /// - **Nothing tells the accounts of others**: REGISTER answers CODE_SENT whether the email has an account or
 ///   not, FORGOT_PASSWORD and RESEND_CODE too, a wrong login and a wrong password get the same error after
 ///   the same work, and EMAIL_NOT_VERIFIED comes only after the right password.
+/// - **The profiles**: GET_PROFILE gives the Discord profile of an account, GET_AVATAR its picture in parts.
+///   They only read, and do not count against the limits of an address.
 /// - **The limits** of AccountLimits, kept in memory: per address, per account, per login.
 /// - **The purge** of the accounts not verified within 24 hours, at start then every hour.
 /// - **Destroying it** drops the replies not given yet: their `done` is never called.
@@ -187,6 +190,8 @@ private:
     /// DISCORD_CONFIRM, once Discord told who the player is.
     void discordUser(const AccountConnection &connection, const DiscordUser &user, const Done &done);
     void chooseUsername(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
+    void getProfile(std::span<const std::byte> payload, Done done);
+    void getAvatar(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
 
 public:
     /// The database thread, the hasher, the mailer and the Discord client must outlive the service; their

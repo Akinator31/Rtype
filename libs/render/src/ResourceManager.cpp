@@ -2,6 +2,8 @@
 
 #include "Resources.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
@@ -24,6 +26,45 @@ TextureId ResourceManager::loadTexture(const std::string &path, TextureFiltering
     const std::string key = filtering == TextureFiltering::Smooth ? path + "@smooth" : path;
     return _impl->textures.load(key,
                                 [&] { return detail::Texture(_impl->assetsDirectory / path, filtering); });
+}
+
+TextureId ResourceManager::loadRoundPicture(const std::string &key, const std::vector<unsigned char> &png,
+                                            int size)
+{
+    return _impl->textures.load("picture:" + key, [&] {
+        Image image = LoadImageFromMemory(".png", png.data(), static_cast<int>(png.size()));
+        if (image.data == nullptr || size <= 0) {
+            UnloadImage(image);
+            throw std::runtime_error("Cannot read the picture " + key);
+        }
+        // The middle square, at the size asked
+        const int side = std::min(image.width, image.height);
+        ImageCrop(&image, {static_cast<float>(image.width - side) / 2.0f,
+                           static_cast<float>(image.height - side) / 2.0f, static_cast<float>(side),
+                           static_cast<float>(side)});
+        ImageResize(&image, size, size);
+        ImageFormat(&image, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        // Transparent outside of the circle, with a pixel of transition so that its edge is smooth
+        auto *pixels = static_cast<unsigned char *>(image.data);
+        const float radius = static_cast<float>(size) / 2.0f;
+        for (int y = 0; y < size; ++y) {
+            for (int x = 0; x < size; ++x) {
+                const float distance =
+                    std::hypot(static_cast<float>(x) + 0.5f - radius, static_cast<float>(y) + 0.5f - radius);
+                const float coverage = std::clamp(radius - distance, 0.0f, 1.0f);
+                unsigned char &alpha = pixels[(((y * size) + x) * 4) + 3];
+                alpha = static_cast<unsigned char>(static_cast<float>(alpha) * coverage);
+            }
+        }
+        try {
+            detail::Texture texture(image, TextureFiltering::Smooth);
+            UnloadImage(image);
+            return texture;
+        } catch (...) {
+            UnloadImage(image);
+            throw;
+        }
+    });
 }
 
 FontId ResourceManager::loadFont(const std::string &path, int size)

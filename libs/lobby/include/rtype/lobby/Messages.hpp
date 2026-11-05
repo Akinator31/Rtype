@@ -29,6 +29,9 @@
 /// afterwards, since a wrong value there is not malformed but has its own error: the version of HELLO
 /// (UNSUPPORTED_VERSION), and the names of HELLO and CREATE_GAME (INVALID_NAME, see isValidPlayerName()).
 ///
+/// The profiles (version 4): AccountInfo carries what the account knows of itself, GET_PROFILE the Discord
+/// profile of an account, GET_AVATAR its picture, in parts that fit in a frame.
+///
 /// The fields of the accounts (version 3) are decoded within their lengths; what they hold is checked by the
 /// master, which has its own error for each: INVALID_NAME for a username, INVALID_EMAIL, WEAK_PASSWORD. A
 /// password, a session token and a code are secrets: never logged, at any level.
@@ -36,7 +39,7 @@ namespace rtype::lobby
 {
 
 /// The version of the lobby protocol, in HELLO.
-inline constexpr std::uint16_t ProtocolVersion = 3;
+inline constexpr std::uint16_t ProtocolVersion = 4;
 /// Longest name of a player, in bytes of UTF-8.
 inline constexpr std::size_t MaxPlayerNameLength = 16;
 /// Longest name of a game, in bytes of UTF-8.
@@ -66,6 +69,14 @@ inline constexpr std::size_t MinCodeVerifierLength = 43;
 inline constexpr std::size_t MaxCodeVerifierLength = 128;
 /// Longest redirect address of DISCORD_CONFIRM, in bytes.
 inline constexpr std::size_t MaxRedirectUriLength = 2048;
+/// Longest name of a Discord user (`@username`), display name, and version of a picture, in PROFILE, in
+/// bytes.
+inline constexpr std::size_t MaxDiscordUsernameLength = 64;
+inline constexpr std::size_t MaxDisplayNameLength = 128;
+inline constexpr std::size_t MaxAvatarHashLength = 64;
+/// Largest picture of an account, in bytes, and largest part of it in one AVATAR.
+inline constexpr std::size_t MaxAvatarSize = 256 * 1024;
+inline constexpr std::size_t MaxAvatarChunk = 16000;
 
 /// A session token: 256 random bits, given by SIGNED_IN, sent back in HELLO. Secret: never logged.
 using SessionToken = std::array<std::byte, 32>;
@@ -90,6 +101,8 @@ inline constexpr std::uint8_t DiscordSignIn = 0x0E;
 inline constexpr std::uint8_t DiscordConfirm = 0x0F;
 inline constexpr std::uint8_t ChooseUsername = 0x10;
 inline constexpr std::uint8_t DeleteAccount = 0x11;
+inline constexpr std::uint8_t GetProfile = 0x12;
+inline constexpr std::uint8_t GetAvatar = 0x13;
 inline constexpr std::uint8_t Welcome = 0x81;
 inline constexpr std::uint8_t GameList = 0x82;
 inline constexpr std::uint8_t GameJoined = 0x83;
@@ -101,9 +114,12 @@ inline constexpr std::uint8_t SignedIn = 0x88;
 inline constexpr std::uint8_t CodeSent = 0x89;
 inline constexpr std::uint8_t DiscordAuthorize = 0x8A;
 inline constexpr std::uint8_t Done = 0x8B;
+inline constexpr std::uint8_t Profile = 0x8C;
+inline constexpr std::uint8_t Avatar = 0x8D;
 } // namespace message_type
 
-/// Tells whether a request is one of the accounts (version 3): REGISTER to DELETE_ACCOUNT.
+/// Tells whether a request is one of the accounts (version 3): REGISTER to DELETE_ACCOUNT, and GET_PROFILE
+/// and GET_AVATAR (version 4).
 [[nodiscard]] bool isAccountRequest(std::uint8_t type);
 
 /// Tells whether a name can be the name of a player: 1 to 16 bytes of UTF-8, without control characters.
@@ -249,6 +265,23 @@ struct DeleteAccountMessage {
     friend bool operator==(const DeleteAccountMessage &, const DeleteAccountMessage &) = default;
 };
 
+/// `GET_PROFILE`: the Discord profile of an account (version 4).
+struct GetProfileMessage {
+    /// Never 0, which is malformed.
+    std::uint64_t accountId = 0;
+
+    friend bool operator==(const GetProfileMessage &, const GetProfileMessage &) = default;
+};
+
+/// `GET_AVATAR`: a part of the picture of an account, from `offset` (version 4).
+struct GetAvatarMessage {
+    /// 0 for the new Discord user confirmed on this connection, who has no account yet (CHOOSE_USERNAME).
+    std::uint64_t accountId = 0;
+    std::uint32_t offset = 0;
+
+    friend bool operator==(const GetAvatarMessage &, const GetAvatarMessage &) = default;
+};
+
 // --- Master to client ---
 
 /// What a master offers, in WELCOME (version 3).
@@ -270,13 +303,20 @@ enum class AccountRole : std::uint8_t {
     Admin = 1,
 };
 
-/// An account signed in, in WELCOME and SIGNED_IN (version 3).
+/// An account signed in, in WELCOME and SIGNED_IN (version 3), with what it knows of itself (version 4).
 struct AccountInfo {
     /// Never 0.
     std::uint64_t id = 0;
     /// 1 to MaxUsernameLength bytes of text: the name of the player.
     std::string username;
     AccountRole role = AccountRole::Player;
+    /// 0 to MaxEmailLength bytes of text: empty for an account made with Discord (version 4, as below).
+    std::string email{};
+    bool emailVerified = false;
+    /// Whether it signs in with a password: an account made with Discord has none.
+    bool hasPassword = false;
+    /// When it was made, in milliseconds since 1970 (UTC).
+    std::uint64_t createdAt = 0;
 
     friend bool operator==(const AccountInfo &, const AccountInfo &) = default;
 };
@@ -417,6 +457,9 @@ enum class ErrorCode : std::uint16_t {
     DiscordTaken = 32,
     /// The master cannot reach Discord now, or Discord answers with an error: try again in a moment.
     DiscordUnavailable = 33,
+    /// GET_PROFILE of no account, or GET_AVATAR of an account without picture, or from beyond its end
+    /// (version 4).
+    NotFound = 34,
 };
 
 /// Tells whether the master closes the connection after this error: MALFORMED, UNSUPPORTED_VERSION, KICKED,
@@ -450,6 +493,45 @@ struct SignedInMessage {
     friend bool operator==(const SignedInMessage &, const SignedInMessage &) = default;
 };
 
+/// `PROFILE`: the answer to GET_PROFILE, the Discord profile of an account as of its last sign-in with
+/// Discord; and the answer to DISCORD_CONFIRM for a new Discord user, who chooses its username next (version
+/// 4).
+struct ProfileMessage {
+    /// 0 in the answer to DISCORD_CONFIRM: the new Discord user, who has no account yet.
+    std::uint64_t accountId = 0;
+    /// Whether the account is linked to a Discord user. Without, the texts are empty and the size 0.
+    bool discord = false;
+    /// 0 to MaxDiscordUsernameLength bytes of text: `@username` on Discord.
+    std::string discordUsername{};
+    /// 0 to MaxDisplayNameLength bytes of text: the name it shows on Discord.
+    std::string displayName{};
+    /// 0 to MaxAvatarHashLength bytes of text: the version of its picture, empty for none. A client keeps a
+    /// picture under it, and asks GET_AVATAR only for a version it does not have.
+    std::string avatarHash{};
+    /// The bytes of the picture, 0 for none, at most MaxAvatarSize.
+    std::uint32_t avatarSize = 0;
+
+    friend bool operator==(const ProfileMessage &, const ProfileMessage &) = default;
+};
+
+/// `AVATAR`: the answer to GET_AVATAR, a part of the picture of an account, a PNG (version 4). The client
+/// asks the next part from `offset` plus the size of this one, until it has `total` bytes, and checks that
+/// the version did not change meanwhile.
+struct AvatarMessage {
+    /// As in GET_AVATAR: 0 for the new Discord user of this connection.
+    std::uint64_t accountId = 0;
+    /// 1 to MaxAvatarHashLength bytes of text.
+    std::string avatarHash;
+    /// 1 to MaxAvatarSize.
+    std::uint32_t total = 0;
+    /// Where the part starts: less than `total`.
+    std::uint32_t offset = 0;
+    /// 1 to MaxAvatarChunk bytes, ending at `total` at most.
+    std::vector<std::byte> bytes;
+
+    friend bool operator==(const AvatarMessage &, const AvatarMessage &) = default;
+};
+
 /// `DISCORD_AUTHORIZE`: the answer to DISCORD_SIGN_IN, the Discord application of the master, for the client
 /// to ask the player through the Discord Social SDK (version 3).
 struct DiscordAuthorizeMessage {
@@ -474,6 +556,8 @@ struct DiscordAuthorizeMessage {
 [[nodiscard]] std::vector<std::byte> encode(const DiscordConfirmMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const ChooseUsernameMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const DeleteAccountMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const GetProfileMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const GetAvatarMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const WelcomeMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const GameListMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const GameJoinedMessage &message);
@@ -482,6 +566,8 @@ struct DiscordAuthorizeMessage {
 [[nodiscard]] std::vector<std::byte> encode(const ServerMessageMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const SignedInMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const DiscordAuthorizeMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const ProfileMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const AvatarMessage &message);
 
 [[nodiscard]] std::optional<HelloMessage> decodeHello(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<CreateGameMessage> decodeCreateGame(std::span<const std::byte> payload);
@@ -495,6 +581,8 @@ struct DiscordAuthorizeMessage {
 [[nodiscard]] std::optional<DiscordConfirmMessage> decodeDiscordConfirm(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<ChooseUsernameMessage> decodeChooseUsername(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<DeleteAccountMessage> decodeDeleteAccount(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<GetProfileMessage> decodeGetProfile(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<GetAvatarMessage> decodeGetAvatar(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<WelcomeMessage> decodeWelcome(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<GameListMessage> decodeGameList(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<GameJoinedMessage> decodeGameJoined(std::span<const std::byte> payload);
@@ -504,6 +592,8 @@ struct DiscordAuthorizeMessage {
 [[nodiscard]] std::optional<SignedInMessage> decodeSignedIn(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<DiscordAuthorizeMessage>
 decodeDiscordAuthorize(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<ProfileMessage> decodeProfile(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<AvatarMessage> decodeAvatar(std::span<const std::byte> payload);
 /// For the messages without payload: true if it is empty.
 [[nodiscard]] bool decodeEmpty(std::span<const std::byte> payload);
 

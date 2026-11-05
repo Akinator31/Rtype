@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace rtype::engine
 {
@@ -47,6 +48,8 @@ public:
 
     [[nodiscard]] bool hasKey(std::string_view key) const;
     void removeKey(std::string_view key);
+    /// The keys that start with `prefix`, sorted: every key for an empty prefix.
+    [[nodiscard]] std::vector<std::string> keys(std::string_view prefix = {}) const;
 
     void setString(std::string_view key, std::string_view value);
     void setInt(std::string_view key, int value);

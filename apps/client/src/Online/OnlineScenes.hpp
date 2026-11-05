@@ -1,8 +1,11 @@
 #pragma once
 
 #include "Game/GameScenes.hpp"
+#include "Online/FormErrors.hpp"
+#include "Online/KnownProfiles.hpp"
 #include "Online/KnownServers.hpp"
 #include "Online/LobbyClient.hpp"
+#include "Online/OnlineScreen.hpp"
 #include "Online/SessionTokens.hpp"
 #include "rtype/discord/Authorizer.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -13,9 +16,13 @@
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/Tls.hpp"
+#include "rtype/render/ResourceManager.hpp"
 
+#include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -55,7 +62,9 @@ inline constexpr const char *ChooseUsernameScene = "online_choose_username";
 splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 
 /// Playing online (docs/architecture/client-online.md): the Online menu, where the player gives a server and
-/// its name, then the lobby of the server, with its games.
+/// its name, or picks one met before, then the lobby of the server, with its games. The screens follow the
+/// Série 14 of the design: the fields of a form, its errors under them, Discord first, and the profile
+/// of the account (its Discord picture and names) wherever it shows.
 ///
 /// - **Connect** opens a LobbyClient to the server, trusting the key KnownServers knows for it (ADR 0021).
 ///   A server never met shows its key, which the player may trust: it is remembered, and the client connects
@@ -72,8 +81,11 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 ///   accepts it in Discord (discord::Authorizer), and the master signs in, or asks for the username of a new
 ///   account. Signed in, the same flow links Discord to the account, or confirms the deletion of an account
 ///   without password.
-/// - What goes wrong is shown in a toast, in the language of the game: the server cannot be reached, is not
-///   the expected one, the game is full...
+/// - **The profile**: signed in, the client reads the Discord profile of the account (GET_PROFILE) and its
+///   picture (GET_AVATAR), shown in the lobby and in My account, and remembered with the server for the
+///   Online menu (KnownProfiles), the picture kept on disk under its version.
+/// - What goes wrong with a field is shown under it; the rest in a toast, in the language of the game: the
+///   server cannot be reached, is not the expected one, the game is full...
 class OnlineScenes
 {
     /// What a Discord confirmation is for.
@@ -84,12 +96,18 @@ class OnlineScenes
     };
 
     engine::Engine &_engine;
+    const engine::InterfaceStyle &_style;
+    render::ResourceManager &_resources;
     network::EventLoop &_loop;
     discord::Authorizer &_discord;
     GameScenes &_games;
     localization::Localization &_translations;
     KnownServers _known;
     SessionTokens _sessions;
+    KnownProfiles _profiles;
+    /// The sky of the screens that are not over the main menu, and the logo of Discord.
+    render::TextureId _sky;
+    render::TextureId _discordLogo;
     std::string _serverText = "127.0.0.1:4242";
     std::string _name = "Player";
     std::optional<network::Address> _server;
@@ -101,8 +119,18 @@ class OnlineScenes
     std::vector<lobby::GameInfo> _list;
     /// The username or email of the account whose email is verified with a code, in CodeScene.
     std::string _login;
-    /// The email of the forgotten password, in ResetPasswordScene.
+    /// The email of the forgotten password, in ResetPasswordScene, or of the account just created, in
+    /// CodeScene.
     std::string _email;
+    /// The Discord profile of the account signed in, and its picture, once read.
+    std::optional<lobby::ProfileMessage> _profile;
+    std::optional<render::TextureId> _picture;
+    /// The new Discord user confirmed, who chooses its username, and its picture.
+    std::optional<lobby::ProfileMessage> _newUser;
+    std::optional<render::TextureId> _newUserPicture;
+    /// Where a Discord confirmation stands, for DiscordScene: 0 Discord opened, 1 waiting for the player,
+    /// 2 the server checking.
+    int _discordStep = 0;
 
     void connect();
     /// The server presented a key not trusted: asks the player, or warns it.
@@ -121,7 +149,27 @@ class OnlineScenes
 
     /// What an error of the master means, in the language of the game.
     [[nodiscard]] std::string message(lobby::ErrorCode code) const;
-    void declareAccountScenes(const engine::Metrics &metrics, const engine::InterfaceStyle &style);
+    /// Shows an error of the master under the field of the form it is about, if the form has it, else in a
+    /// toast.
+    /// @param fields The fields of the form, by what they hold; 0 for those it has not.
+    void showError(lobby::ErrorCode code, const std::map<FormField, ecs::entity_t> &fields);
+    /// Starts a screen in its scene: its sky behind it when it is not over another one.
+    [[nodiscard]] OnlineScreen screen(engine::Engine &target, engine::SceneId scene, bool sky = true) const;
+    void declareServerScenes(const engine::InterfaceStyle &style);
+    void declareLobbyScene(const engine::InterfaceStyle &style);
+    void declareAccountScenes(const engine::InterfaceStyle &style);
+    void declareFormScenes(const engine::InterfaceStyle &style);
+    void declareDiscordScenes(const engine::InterfaceStyle &style);
+    void declareMyAccountScenes(const engine::InterfaceStyle &style);
+    /// Reads the profile and the picture of the account signed in, then shows them where they are.
+    void readProfile();
+    /// A picture as a round texture, cached under its version.
+    [[nodiscard]] std::optional<render::TextureId> roundPicture(const std::string &hash,
+                                                                std::span<const std::byte> png);
+    /// The avatar of the account signed in, the remembered one of a server, or of a guest.
+    [[nodiscard]] engine::Avatar accountAvatar(float size) const;
+    /// Builds a scene again if it is the one shown, to show what changed.
+    void refreshIfShown(const char *scene);
     /// WELCOME: the choice of the accounts if the server offers them and the player is not signed in, else
     /// the games.
     void welcomed();
@@ -139,10 +187,13 @@ class OnlineScenes
 public:
     /// Declares the Online menu and the lobby. Everything given must outlive the engine.
     /// The servers trusted are kept in the settings of the engine.
+    /// @param resources Loads the sky, the logo of Discord and the pictures of the accounts.
+    /// @param pictures The folder the pictures of the accounts are kept in.
     /// @param discord Asks the player to accept the Discord application of a server; polled by the game loop.
-    OnlineScenes(engine::Engine &engine, network::EventLoop &loop, GameScenes &games,
-                 const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-                 localization::Localization &translations, discord::Authorizer &discord);
+    OnlineScenes(engine::Engine &engine, render::ResourceManager &resources, network::EventLoop &loop,
+                 GameScenes &games, const engine::InterfaceStyle &style,
+                 localization::Localization &translations, discord::Authorizer &discord,
+                 std::filesystem::path pictures);
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;

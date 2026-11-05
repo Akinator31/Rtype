@@ -48,7 +48,4 @@ public:
 [[nodiscard]] std::string formatMail(const Mail &mail, std::string_view from,
                                      std::chrono::system_clock::time_point date, std::string_view messageId);
 
-/// Encodes bytes in base64 (RFC 4648), without line breaks.
-[[nodiscard]] std::string base64(std::string_view bytes);
-
 } // namespace rtype::server

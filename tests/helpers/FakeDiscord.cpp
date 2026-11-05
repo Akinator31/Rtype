@@ -1,6 +1,6 @@
 #include "FakeDiscord.hpp"
 
-#include "Accounts/Mailer.hpp"
+#include "Common/Base64.hpp"
 #include "rtype/network/Crypto.hpp"
 
 #include <crow.h>
@@ -55,6 +55,8 @@ struct FakeDiscord::Impl {
     std::mutex mutex;
     std::map<std::string, Grant> codes;
     std::map<std::string, rtype::server::DiscordUser> tokens;
+    /// The pictures of the users who accepted, by "id/hash.png", as the CDN names them.
+    std::map<std::string, std::string> avatars;
     bool down = false;
     std::size_t exchanges = 0;
 
@@ -122,7 +124,35 @@ struct FakeDiscord::Impl {
         if (found == tokens.end()) {
             return json(401, {{"message", "401: Unauthorized"}});
         }
-        return json(200, {{"id", found->second.id}, {"username", found->second.username}});
+        const rtype::server::DiscordUser &user = found->second;
+        crow::json::wvalue body{{"id", user.id}, {"username", user.username}};
+        // Discord gives null for a user without display name or picture
+        body["global_name"] =
+            user.displayName.empty() ? crow::json::wvalue(nullptr) : crow::json::wvalue(user.displayName);
+        body["avatar"] =
+            user.avatarHash.empty() ? crow::json::wvalue(nullptr) : crow::json::wvalue(user.avatarHash);
+        return json(200, std::move(body));
+    }
+
+    /// The answer of the CDN for a picture: its bytes, whatever they are.
+    crow::response avatar(const std::string &id, const std::string &file)
+    {
+        const std::lock_guard lock(mutex);
+        const auto found = avatars.find(id + "/" + file);
+        if (down || found == avatars.end()) {
+            return crow::response(404);
+        }
+        crow::response response(200, found->second);
+        response.set_header("Content-Type", "image/png");
+        return response;
+    }
+
+    /// Keeps the picture of a user who accepts, for the CDN.
+    void keepAvatar(const rtype::server::DiscordUser &user)
+    {
+        if (!user.avatarHash.empty()) {
+            avatars[user.id + "/" + user.avatarHash + ".png"] = user.avatar;
+        }
     }
 };
 
@@ -136,6 +166,8 @@ FakeDiscord::FakeDiscord(const FakeDiscordEndpoint &endpoint) : _impl(std::make_
             [&impl](const crow::request &request) { return impl.token(request); });
     CROW_ROUTE(impl.app,
                "/api/v10/users/@me")([&impl](const crow::request &request) { return impl.me(request); });
+    CROW_ROUTE(impl.app, "/cdn/avatars/<string>/<string>")
+    ([&impl](const std::string &id, const std::string &file) { return impl.avatar(id, file); });
     impl.app.signal_clear();
     impl.app.bindaddr(endpoint.address).port(endpoint.port).concurrency(1);
     if (!endpoint.certificateFile.empty()) {
@@ -166,6 +198,7 @@ rtype::server::DiscordClientSettings FakeDiscord::settings() const
     settings.discord.clientId = ClientId;
     settings.discord.clientSecret = ClientSecret;
     settings.apiUrl = std::format("http://127.0.0.1:{}/api/v10", _impl->app.port());
+    settings.cdnUrl = std::format("http://127.0.0.1:{}/cdn", _impl->app.port());
     settings.connectTimeout = std::chrono::seconds(2);
     settings.timeout = std::chrono::seconds(5);
     return settings;
@@ -176,6 +209,7 @@ rtype::server::DiscordAuthorization FakeDiscord::accept(const rtype::server::Dis
     rtype::server::DiscordAuthorization authorization{
         .code = randomText(), .codeVerifier = randomText(), .redirectUri = RedirectUri};
     const std::lock_guard lock(_impl->mutex);
+    _impl->keepAvatar(user);
     _impl->codes[authorization.code] = Impl::Grant{
         .user = user, .verifier = authorization.codeVerifier, .challenge = false, .redirectUri = RedirectUri};
     return authorization;
@@ -186,6 +220,7 @@ std::string FakeDiscord::authorize(const rtype::server::DiscordUser &user, const
 {
     std::string code = randomText();
     const std::lock_guard lock(_impl->mutex);
+    _impl->keepAvatar(user);
     _impl->codes[code] =
         Impl::Grant{.user = user, .verifier = challenge, .challenge = true, .redirectUri = redirectUri};
     return code;

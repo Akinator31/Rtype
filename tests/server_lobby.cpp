@@ -360,8 +360,8 @@ TEST_CASE("Without accounts, the state of a request is checked and its payload i
     CHECK_FALSE(client->closed);
 
     // A type after the accounts is still unknown
-    client->send(0x12);
-    CHECK(client->error(fixture.loop, 4) == ErrorMessage{0x12, ErrorCode::UnknownMessage});
+    client->send(0x14);
+    CHECK(client->error(fixture.loop, 4) == ErrorMessage{0x14, ErrorCode::UnknownMessage});
 }
 
 TEST_CASE("A HELLO with a session token gets SESSION_EXPIRED; without it, the client is welcomed",

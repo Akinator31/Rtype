@@ -1,10 +1,12 @@
 #pragma once
 
-// A Discord of the tests: the two routes of its API the master uses (/oauth2/token and /users/@me), on the
-// loopback, over HTTP. The tests play the player and the Discord Social SDK with accept(), which gives what
-// the client would get once the user accepted, and the administrator in its browser with authorize(). A small
-// Crow server, in FakeDiscord.cpp so that its headers are compiled once. Built with CROW_ENABLE_SSL, as in
-// rtype_fake_services (tests/helpers/fake_services.cpp), it also speaks HTTPS, as discord.com.
+// A Discord of the tests: the two routes of its API the master uses (/oauth2/token and /users/@me) and the
+// pictures of its CDN (/cdn/avatars/<id>/<hash>.png), on the loopback, over HTTP. A user given to accept() or
+// authorize() with an avatarHash has its `avatar` served as its picture, whatever its bytes. The tests play
+// the player and the Discord Social SDK with accept(), which gives what the client would get once the user
+// accepted, and the administrator in its browser with authorize(). A small Crow server, in FakeDiscord.cpp so
+// that its headers are compiled once. Built with CROW_ENABLE_SSL, as in rtype_fake_services
+// (tests/helpers/fake_services.cpp), it also speaks HTTPS, as discord.com.
 
 #include "Accounts/Discord.hpp"
 

@@ -263,19 +263,19 @@ const config = defineConfig({
           line: { value: '#1e2023' },
           edge: { value: '#2e3135' },
           rail: { value: '#26292d' },
-          group: { value: '#4a4f55' },
+          group: { value: '#6b7177' },
           signal: { value: '#5c6166' },
           silver: { value: '#c3c8cd' },
           white: { value: '#ffffff' },
           muted: { value: '#8a9097' },
-          hint: { value: '#6b7177' },
+          hint: { value: '#868c92' },
           disabled: { value: '#33373b' },
           alert: { value: '#e8726e' },
         },
       },
       fonts: {
         heading: { value: "'Audiowide', sans-serif" },
-        body: { value: "'Inter', sans-serif" },
+        body: { value: "'Exo 2', sans-serif" },
       },
       radii: {
         l1: { value: '4px' },
@@ -346,7 +346,7 @@ const config = defineConfig({
           filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.25))',
         },
       },
-      // The small labels: Inter Medium, capitals, wide tracking
+      // The small labels: Exo 2 Medium, capitals, wide tracking
       caption: {
         value: {
           fontFamily: 'body',

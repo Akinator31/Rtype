@@ -119,6 +119,8 @@ public:
     /// Sets the maximum number of characters: typed and pasted characters are ignored once it is reached. 0,
     /// the default, means no limit.
     void setMaxLength(std::size_t characters) { _maxLength = characters; }
+    /// Most characters the text can hold, 0 for no limit.
+    [[nodiscard]] std::size_t maxLength() const { return _maxLength; }
 
     /// Sets which characters can be typed or pasted, on top of the control characters (line feed,
     /// tabulation...), which are always refused. By default, every other character is accepted.

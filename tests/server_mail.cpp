@@ -6,6 +6,7 @@
 #include "Accounts/CurlMailer.hpp"
 #include "Accounts/MailMessages.hpp"
 #include "Accounts/Mailer.hpp"
+#include "Common/Base64.hpp"
 #include "Common/Options.hpp"
 #include "Common/Settings.hpp"
 #include "Server.hpp"
@@ -251,6 +252,19 @@ TEST_CASE("base64 follows RFC 4648", "[server][mail]")
     CHECK(base64("fooba") == "Zm9vYmE=");
     CHECK(base64("foobar") == "Zm9vYmFy");
     CHECK(base64("\xff\xfe\x00"sv) == "//4A");
+}
+
+TEST_CASE("base64 decodes what it encodes, and refuses what is not base64", "[server][mail]")
+{
+    for (const std::string_view bytes :
+         {""sv, "f"sv, "fo"sv, "foo"sv, "foob"sv, "foobar"sv, "\xff\xfe\x00"sv}) {
+        CHECK(decodeBase64(base64(bytes)) == std::string(bytes));
+    }
+    CHECK_FALSE(decodeBase64("Zg="));
+    CHECK_FALSE(decodeBase64("Z!=="));
+    CHECK_FALSE(decodeBase64("Zg==Zg=="));
+    CHECK_FALSE(decodeBase64("Z==="));
+    CHECK_FALSE(decodeBase64("Zg=a"));
 }
 
 TEST_CASE("A mail is written for SMTP: its headers, then its text and its HTML in UTF-8", "[server][mail]")

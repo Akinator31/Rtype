@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Accounts/AccountStore.hpp"
 #include "Common/Settings.hpp"
 
 #include <atomic>
@@ -13,6 +14,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <variant>
 
@@ -28,15 +30,25 @@ struct DiscordAuthorization {
     std::string redirectUri;
 };
 
-/// A Discord user, as `/users/@me` tells it.
+/// A Discord user, as `/users/@me` tells it, with its picture.
 struct DiscordUser {
-    /// Its id, a snowflake in decimal digits: what the master keeps.
+    /// Its id, a snowflake in decimal digits: what the master keeps to sign it in.
     std::string id;
-    /// Its name on Discord, for the logs and as the username the client proposes.
+    /// Its name on Discord (`@username`), for the logs and as the username the client proposes.
     std::string username;
+    /// The name it shows on Discord (`global_name`), empty if it has none.
+    std::string displayName{};
+    /// The version of its picture on Discord (`avatar`), empty if it has none.
+    std::string avatarHash{};
+    /// Its picture, a PNG of AvatarSize pixels from the CDN of Discord; empty if it has none, or if the CDN
+    /// failed: the user signs in all the same.
+    std::string avatar{};
 
     friend bool operator==(const DiscordUser &, const DiscordUser &) = default;
 };
+
+/// What the master keeps of a Discord user (saveDiscordProfile()).
+[[nodiscard]] DiscordProfile profileOf(const DiscordUser &user);
 
 /// Why Discord gave no user.
 enum class DiscordFailure {
@@ -48,6 +60,14 @@ enum class DiscordFailure {
 
 using DiscordAnswer = std::variant<DiscordUser, DiscordFailure>;
 
+/// The size of the pictures asked of Discord, in pixels.
+inline constexpr int AvatarSize = 128;
+/// Most bytes of a picture kept: Discord sends far less at AvatarSize.
+inline constexpr std::size_t MaxAvatarBytes = 256 * 1024;
+
+/// Whether the bytes start as a PNG image does.
+[[nodiscard]] bool isPng(std::string_view bytes);
+
 /// How the master reaches Discord.
 struct DiscordClientSettings {
     /// [discord] of the settings: the id of the application and its secret.
@@ -55,6 +75,8 @@ struct DiscordClientSettings {
     /// The address of the API of Discord, without a trailing slash. Changed by the tests only, for their fake
     /// Discord: neither the settings file nor the command line reach it.
     std::string apiUrl = "https://discord.com/api/v10";
+    /// The address of the CDN of Discord, which serves the pictures. Changed by the tests only, as apiUrl.
+    std::string cdnUrl = "https://cdn.discordapp.com";
     /// Most requests not answered yet, the one running included.
     std::size_t maxPending = 16;
     /// Longest wait for the connection, then for each whole exchange with Discord.
@@ -70,8 +92,8 @@ struct DiscordClientSettings {
 /// Asks Discord who a player is, with libcurl, on a thread of its own
 /// (docs/architecture/accounts.md#discord): the authorization code of DISCORD_CONFIRM exchanged for a token
 /// (`/oauth2/token`, with the secret of the application and the code verifier of PKCE), then `/users/@me`
-/// with that token, scope `identify` only. The token is dropped at once: the master keeps the id of the user,
-/// nothing else.
+/// with that token, scope `identify` only, then its picture from the CDN, if it has one. The token is dropped
+/// at once: the master keeps the id of the user, its names and its picture.
 ///
 /// - **The results come back through `post`**, given to the constructor: the post() of the event loop of the
 ///   master.

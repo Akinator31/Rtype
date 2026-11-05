@@ -519,6 +519,10 @@ void Lobby::accountRequest(Client &client, std::uint8_t type, std::span<const st
                 } else if (const auto *authorize =
                                std::get_if<rtype::lobby::DiscordAuthorizeMessage>(&answer)) {
                     reply(asking, message_type::DiscordAuthorize, rtype::lobby::encode(*authorize));
+                } else if (const auto *profile = std::get_if<rtype::lobby::ProfileMessage>(&answer)) {
+                    reply(asking, message_type::Profile, rtype::lobby::encode(*profile));
+                } else if (const auto *avatar = std::get_if<rtype::lobby::AvatarMessage>(&answer)) {
+                    reply(asking, message_type::Avatar, rtype::lobby::encode(*avatar));
                 } else {
                     reply(asking, message_type::Done);
                     if (std::get<AccountDone>(answer).closes) {

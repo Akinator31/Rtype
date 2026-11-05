@@ -67,12 +67,24 @@ public:
     /// DISCORD_AUTHORIZE, or the error of the master.
     using DiscordAuthorizeCallback =
         std::function<void(const std::variant<lobby::DiscordAuthorizeMessage, lobby::ErrorCode> &result)>;
-    /// DISCORD_CONFIRM done without signing in (DONE): a new Discord user, who chooses its username, or,
-    /// signed in, the identity linked or confirmed.
-    struct DiscordConfirmed {};
+    /// DISCORD_CONFIRM done without signing in: a new Discord user (PROFILE), who chooses its username, or,
+    /// signed in, the identity linked or confirmed (DONE).
+    struct DiscordConfirmed {
+        /// The Discord profile of a new user: its names, and its picture, read with picture(0).
+        std::optional<lobby::ProfileMessage> newUser;
+    };
     /// What DISCORD_CONFIRM gives: SIGNED_IN, DONE, or the error of the master.
     using DiscordConfirmResult = std::variant<lobby::SignedInMessage, DiscordConfirmed, lobby::ErrorCode>;
     using DiscordConfirmCallback = std::function<void(const DiscordConfirmResult &result)>;
+    /// PROFILE, or the error of the master.
+    using ProfileCallback =
+        std::function<void(const std::variant<lobby::ProfileMessage, lobby::ErrorCode> &result)>;
+    /// The picture of an account, whole: a PNG, and its version.
+    struct Picture {
+        std::string hash;
+        std::vector<std::byte> png;
+    };
+    using PictureCallback = std::function<void(const std::variant<Picture, lobby::ErrorCode> &result)>;
 
     struct Handlers {
         /// The master welcomed the player: requests can be sent.
@@ -128,6 +140,9 @@ private:
     void fail(lobby::ErrorCode code);
     /// A request answered SIGNED_IN or an error: signs the connection in on SIGNED_IN.
     void signInRequest(std::uint8_t type, std::vector<std::byte> payload, SignInCallback done);
+    /// The next part of a picture, from the end of what `picture` has, until it has `total` bytes.
+    void picturePart(std::uint64_t accountId, std::shared_ptr<Picture> picture, std::uint32_t total,
+                     PictureCallback done);
     /// A request answered CODE_SENT, DONE or an error. `closes`: the master closes the connection after DONE.
     void doneRequest(std::uint8_t type, std::vector<std::byte> payload, DoneCallback done,
                      bool closes = false);
@@ -194,6 +209,11 @@ public:
     void discordConfirm(const lobby::DiscordConfirmMessage &confirmation, DiscordConfirmCallback done);
     /// CHOOSE_USERNAME: the username of the account of the new Discord user just confirmed.
     void chooseUsername(const std::string &username, SignInCallback done);
+    /// GET_PROFILE: the Discord profile of an account (version 4).
+    void profile(std::uint64_t accountId, ProfileCallback done);
+    /// GET_AVATAR, as many times as its parts: the picture of an account, whole, or NOT_FOUND if it has none,
+    /// or if it changed while it was read. Account 0: the new Discord user just confirmed on this connection.
+    void picture(std::uint64_t accountId, PictureCallback done);
 
     /// Closes the connection, after what was sent. No handler is called after.
     void close();

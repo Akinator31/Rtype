@@ -1,6 +1,7 @@
 #include "Accounts/AccountStore.hpp"
 
 #include "Accounts/AccountRules.hpp"
+#include "Common/Base64.hpp"
 #include "Master/AdminStore.hpp"
 #include "rtype/network/Crypto.hpp"
 
@@ -359,13 +360,62 @@ std::variant<Account, AccountConflict> createDiscordAccount(rtype::database::Dat
     });
 }
 
+void saveDiscordProfile(rtype::database::Database &database, const std::string &discordId,
+                        const DiscordProfile &profile, TimePoint now)
+{
+    // The version of the picture is kept only with the picture: a list knows there is one from it alone
+    const bool hasAvatar = !profile.avatar.empty() && !profile.avatarHash.empty();
+    const std::optional<std::string> avatar =
+        hasAvatar ? std::optional<std::string>(base64(profile.avatar)) : std::nullopt;
+    const std::optional<std::string> hash =
+        hasAvatar ? std::optional<std::string>(profile.avatarHash) : std::nullopt;
+    const std::optional<std::string> name =
+        profile.displayName.empty() ? std::nullopt : std::optional<std::string>(profile.displayName);
+    const long long at = unixMilliseconds(now);
+    database.session() << "UPDATE discord_identities SET discord_username = :username, "
+                          "discord_display_name = :name, avatar_hash = :hash, avatar_png = :avatar, "
+                          "profile_at = :at WHERE discord_id = :id",
+        soci::use(profile.username), soci::use(name), soci::use(hash), soci::use(avatar), soci::use(at),
+        soci::use(discordId);
+}
+
+std::optional<DiscordProfile> findDiscordProfile(rtype::database::Database &database, long long accountId)
+{
+    const soci::rowset<soci::row> rows =
+        (database.session().prepare
+             << "SELECT discord_username, discord_display_name, avatar_hash, avatar_png "
+                "FROM discord_identities WHERE account_id = :id",
+         soci::use(accountId));
+    for (const soci::row &row : rows) {
+        DiscordProfile profile{.username = optionalText(row, 0).value_or(""),
+                               .displayName = optionalText(row, 1).value_or(""),
+                               .avatarHash = optionalText(row, 2).value_or(""),
+                               .avatar = {}};
+        // A picture that does not decode is no picture
+        if (const std::optional<std::string> avatar = optionalText(row, 3)) {
+            profile.avatar = decodeBase64(*avatar).value_or("");
+        }
+        if (profile.avatar.empty()) {
+            profile.avatarHash.clear();
+        }
+        return profile;
+    }
+    return std::nullopt;
+}
+
 std::optional<AccountEntry> findAccountEntry(rtype::database::Database &database, long long accountId)
 {
     std::optional<Account> account = findAccount(database, accountId);
     if (!account) {
         return std::nullopt;
     }
-    return AccountEntry{.account = std::move(*account), .discordId = discordIdentity(database, accountId)};
+    std::optional<DiscordProfile> discord = findDiscordProfile(database, accountId);
+    if (discord) {
+        discord->avatar.clear();
+    }
+    return AccountEntry{.account = std::move(*account),
+                        .discordId = discordIdentity(database, accountId),
+                        .discord = std::move(discord)};
 }
 
 std::vector<AccountEntry> listAccounts(rtype::database::Database &database, std::string_view search,
@@ -374,13 +424,23 @@ std::vector<AccountEntry> listAccounts(rtype::database::Database &database, std:
     const long long last = before.value_or(std::numeric_limits<long long>::max());
     const auto count = static_cast<long long>(limit);
     // The columns of readAccount(), then the Discord user: no other column of the join has their names
-    const std::string columns = std::format("{}, discord_id", AccountColumns);
+    const std::string columns =
+        std::format("{}, discord_id, discord_username, discord_display_name, avatar_hash", AccountColumns);
     const std::string join = "FROM accounts LEFT JOIN discord_identities ON discord_identities.account_id = "
                              "accounts.id";
     const auto read = [](const soci::rowset<soci::row> &rows) {
         std::vector<AccountEntry> entries;
         for (const soci::row &row : rows) {
-            entries.push_back({.account = readAccount(row), .discordId = optionalText(row, 10)});
+            AccountEntry entry{
+                .account = readAccount(row), .discordId = optionalText(row, 10), .discord = {}};
+            if (entry.discordId) {
+                // The picture is not read: its version, kept only with it, is enough for a list
+                entry.discord = DiscordProfile{.username = optionalText(row, 11).value_or(""),
+                                               .displayName = optionalText(row, 12).value_or(""),
+                                               .avatarHash = optionalText(row, 13).value_or(""),
+                                               .avatar = {}};
+            }
+            entries.push_back(std::move(entry));
         }
         return entries;
     };
@@ -400,13 +460,15 @@ std::vector<AccountEntry> listAccounts(rtype::database::Database &database, std:
     }
     pattern += '%';
     const std::string exact(search);
-    return read((database.session().prepare << std::format(
-                     "SELECT {} {} WHERE accounts.id < :last AND (username_key LIKE :username ESCAPE '!' OR "
-                     "email_key LIKE :email ESCAPE '!' OR discord_id = :discord) ORDER BY accounts.id DESC "
-                     "LIMIT :count",
-                     columns, join),
-                 soci::use(last), soci::use(pattern), soci::use(pattern), soci::use(exact),
-                 soci::use(count)));
+    return read(
+        (database.session().prepare << std::format(
+             "SELECT {} {} WHERE accounts.id < :last AND (username_key LIKE :username ESCAPE '!' OR "
+             "email_key LIKE :email ESCAPE '!' OR LOWER(discord_username) LIKE :discordName ESCAPE '!' "
+             "OR LOWER(discord_display_name) LIKE :displayName ESCAPE '!' OR discord_id = :discord) "
+             "ORDER BY accounts.id DESC LIMIT :count",
+             columns, join),
+         soci::use(last), soci::use(pattern), soci::use(pattern), soci::use(pattern), soci::use(pattern),
+         soci::use(exact), soci::use(count)));
 }
 
 SessionToken createSession(rtype::database::Database &database, long long accountId, SessionClient client,

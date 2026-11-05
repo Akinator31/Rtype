@@ -977,7 +977,7 @@ TEST_CASE("A new Discord user chooses a username, then signs in with Discord alo
         CHECK(player.welcome("Someone").features ==
               rtype::lobby::ServerFeatures{.guests = true, .passwordAccounts = true, .discord = true});
         // Nothing is signed in yet: the new user chooses its username
-        CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Done);
+        CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Profile);
         CHECK(errorOf(player.ask(message_type::ChooseUsername, choosing("taken")),
                       message_type::ChooseUsername) == ErrorCode::UsernameTaken);
         CHECK(errorOf(player.ask(message_type::ChooseUsername, choosing("no spaces")),
@@ -1056,7 +1056,7 @@ TEST_CASE("A code Discord refuses is wrong, and five of them need a new DISCORD_
     // A code used once already: Discord refuses it
     const DiscordAuthorization used = server.fakeDiscord->accept(WingUser);
     player.discordSignIn();
-    CHECK(player.discordConfirm(used).first == message_type::Done);
+    CHECK(player.discordConfirm(used).first == message_type::Profile);
     player.discordSignIn();
     CHECK(errorOf(player.discordConfirm(used), message_type::DiscordConfirm) == ErrorCode::InvalidCode);
     // The verifier of another code, an address Discord did not send the code to, a code it never gave
@@ -1077,7 +1077,7 @@ TEST_CASE("A code Discord refuses is wrong, and five of them need a new DISCORD_
     CHECK(errorOf(player.discordConfirm(right), message_type::DiscordConfirm) == ErrorCode::TooManyAttempts);
     CHECK(server.fakeDiscord->exchanges() == 6);
     player.discordSignIn();
-    CHECK(player.discordConfirm(right).first == message_type::Done);
+    CHECK(player.discordConfirm(right).first == message_type::Profile);
 }
 
 TEST_CASE("A DISCORD_SIGN_IN and a new Discord user expire", "[server][accounts][discord][database]")
@@ -1098,7 +1098,7 @@ TEST_CASE("A DISCORD_SIGN_IN and a new Discord user expire", "[server][accounts]
     CHECK(errorOf(player.discordConfirm(server.fakeDiscord->accept(WingUser)),
                   message_type::DiscordConfirm) == ErrorCode::DiscordNotConfirmed);
 
-    CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Done);
+    CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Profile);
     testing::runFor(server.loop, 400ms);
     CHECK(errorOf(player.ask(message_type::ChooseUsername, choosing("Wing")), message_type::ChooseUsername) ==
           ErrorCode::DiscordNotConfirmed);
@@ -1122,7 +1122,7 @@ TEST_CASE("Discord down: the player tries again, without losing an attempt",
               ErrorCode::DiscordUnavailable);
     }
     server.fakeDiscord->setDown(false);
-    CHECK(player.discordConfirm(accepted).first == message_type::Done);
+    CHECK(player.discordConfirm(accepted).first == message_type::Profile);
 }
 
 TEST_CASE("Signed in, a player links Discord, which then signs in to its account",
@@ -1153,6 +1153,127 @@ TEST_CASE("Signed in, a player links Discord, which then signs in to its account
     REQUIRE(signedIn);
     CHECK(signedIn->account.id == static_cast<std::uint64_t>(pilot.id));
     CHECK(signedIn->account.username == "Pilot_7");
+}
+
+namespace
+{
+
+/// The smallest PNG: its signature, then what follows does not matter to the master.
+const std::string PngPicture = std::string("\x89PNG\r\n\x1a\n", 8) + "picture of a pilot";
+
+} // namespace
+
+TEST_CASE("The master keeps the names and the picture Discord gives, and their changes",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_profile", withDiscord());
+    server.start();
+
+    DiscordUser wing = WingUser;
+    wing.displayName = "Wing Commander";
+    wing.avatarHash = "a1b2c3d4e5f6";
+    wing.avatar = PngPicture;
+    long long id = 0;
+    {
+        Player player(server);
+        player.welcome("Someone");
+        CHECK(player.discord(*server.fakeDiscord, wing).first == message_type::Profile);
+        const auto created = signedInOf(player.ask(message_type::ChooseUsername, choosing("Wing")));
+        REQUIRE(created);
+        id = static_cast<long long>(created->account.id);
+    }
+    CHECK(findDiscordProfile(server.direct, id) == DiscordProfile{.username = "wing",
+                                                                  .displayName = "Wing Commander",
+                                                                  .avatarHash = "a1b2c3d4e5f6",
+                                                                  .avatar = PngPicture});
+
+    // A new name, and a picture that is not one: the names change, the picture is dropped
+    wing.displayName = "Wing";
+    wing.avatarHash = "ffff0000";
+    wing.avatar = "<html>not a picture</html>";
+    {
+        Player player(server);
+        player.welcome("Someone");
+        REQUIRE(signedInOf(player.discord(*server.fakeDiscord, wing)));
+    }
+    CHECK(findDiscordProfile(server.direct, id) ==
+          DiscordProfile{.username = "wing", .displayName = "Wing", .avatarHash = "", .avatar = ""});
+    const std::vector<AccountEntry> listed = listAccounts(server.direct, "wing", 10);
+    REQUIRE(listed.size() == 1);
+    CHECK(listed.front().discord->displayName == "Wing");
+    CHECK(listed.front().discord->avatarHash.empty());
+}
+
+TEST_CASE("Any player reads the profile of an account, and its picture in parts",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_profile", withDiscord());
+    const Account pilot = server.seed("Pilot_7", "pilot@example.org");
+    const auto made =
+        createDiscordAccount(server.direct, "Wing", WingUser.id, std::chrono::system_clock::now());
+    REQUIRE(std::holds_alternative<Account>(made));
+    const auto wing = static_cast<std::uint64_t>(std::get<Account>(made).id);
+    // A picture of two parts and a bit
+    const std::string picture = PngPicture + std::string((2 * rtype::lobby::MaxAvatarChunk) + 100, 'p');
+    saveDiscordProfile(
+        server.direct, WingUser.id,
+        {.username = "wing", .displayName = "Wing Commander", .avatarHash = "a1b2", .avatar = picture},
+        std::chrono::system_clock::now());
+    server.start();
+
+    Player player(server);
+    player.welcome("Someone");
+    // An account without Discord: its profile is empty
+    const auto plain = player.ask(
+        message_type::GetProfile,
+        rtype::lobby::encode(rtype::lobby::GetProfileMessage{static_cast<std::uint64_t>(pilot.id)}));
+    REQUIRE(plain.first == message_type::Profile);
+    CHECK(rtype::lobby::decodeProfile(plain.second) ==
+          rtype::lobby::ProfileMessage{.accountId = static_cast<std::uint64_t>(pilot.id)});
+
+    const auto profile =
+        player.ask(message_type::GetProfile, rtype::lobby::encode(rtype::lobby::GetProfileMessage{wing}));
+    REQUIRE(profile.first == message_type::Profile);
+    CHECK(rtype::lobby::decodeProfile(profile.second) ==
+          rtype::lobby::ProfileMessage{.accountId = wing,
+                                       .discord = true,
+                                       .discordUsername = "wing",
+                                       .displayName = "Wing Commander",
+                                       .avatarHash = "a1b2",
+                                       .avatarSize = static_cast<std::uint32_t>(picture.size())});
+
+    // The parts, one after the other, give the picture back; beyond its end, there is nothing
+    std::string received;
+    while (received.size() < picture.size()) {
+        const auto part =
+            player.ask(message_type::GetAvatar, rtype::lobby::encode(rtype::lobby::GetAvatarMessage{
+                                                    wing, static_cast<std::uint32_t>(received.size())}));
+        REQUIRE(part.first == message_type::Avatar);
+        const auto avatar = rtype::lobby::decodeAvatar(part.second);
+        REQUIRE(avatar);
+        CHECK(avatar->avatarHash == "a1b2");
+        CHECK(avatar->offset == received.size());
+        received.append(reinterpret_cast<const char *>(avatar->bytes.data()), avatar->bytes.size());
+    }
+    CHECK(received == picture);
+    CHECK(errorOf(player.ask(message_type::GetAvatar, rtype::lobby::encode(rtype::lobby::GetAvatarMessage{
+                                                          wing, static_cast<std::uint32_t>(picture.size())})),
+                  message_type::GetAvatar) == ErrorCode::NotFound);
+    CHECK(errorOf(player.ask(message_type::GetAvatar, rtype::lobby::encode(rtype::lobby::GetAvatarMessage{
+                                                          static_cast<std::uint64_t>(pilot.id), 0})),
+                  message_type::GetAvatar) == ErrorCode::NotFound);
+    CHECK(errorOf(player.ask(message_type::GetProfile,
+                             rtype::lobby::encode(rtype::lobby::GetProfileMessage{999999})),
+                  message_type::GetProfile) == ErrorCode::NotFound);
+
+    // A signed-in account knows its email, whether it has a password, and when it was made
+    const rtype::lobby::AccountInfo account = player.signIn("Pilot_7").account;
+    CHECK(account.email == "pilot@example.org");
+    CHECK(account.emailVerified);
+    CHECK(account.hasPassword);
+    CHECK(account.createdAt == static_cast<std::uint64_t>(rtype::server::unixMilliseconds(pilot.createdAt)));
 }
 
 TEST_CASE("A banned account cannot sign in with Discord", "[server][accounts][discord][database]")
@@ -1227,7 +1348,7 @@ TEST_CASE("No code nor verifier of Discord reaches the logs", "[server][accounts
     wrong.codeVerifier = std::string(43, 'w');
     CHECK(errorOf(player.discordConfirm(wrong), message_type::DiscordConfirm) == ErrorCode::InvalidCode);
     const DiscordAuthorization accepted = server.fakeDiscord->accept(WingUser);
-    CHECK(player.discordConfirm(accepted).first == message_type::Done);
+    CHECK(player.discordConfirm(accepted).first == message_type::Profile);
     REQUIRE(signedInOf(player.ask(message_type::ChooseUsername, choosing("Wing"))));
     server.settle();
 

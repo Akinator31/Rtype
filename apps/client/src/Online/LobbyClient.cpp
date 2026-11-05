@@ -127,6 +127,8 @@ std::string describe(ErrorCode code)
         return "This Discord account belongs to another account";
     case ErrorCode::DiscordUnavailable:
         return "The server cannot reach Discord now: try again in a moment";
+    case ErrorCode::NotFound:
+        return "Nothing was found";
     }
     return std::format("The server refused (error {})", static_cast<int>(code));
 }
@@ -200,6 +202,8 @@ std::string_view errorKey(ErrorCode code)
         return "error.discord_taken";
     case ErrorCode::DiscordUnavailable:
         return "error.discord_unavailable";
+    case ErrorCode::NotFound:
+        return "error.not_found";
     }
     return "error.unknown";
 }
@@ -539,6 +543,60 @@ void LobbyClient::deleteAccount(const std::string &password, DoneCallback done)
                 std::move(done), true);
 }
 
+void LobbyClient::profile(std::uint64_t accountId, ProfileCallback done)
+{
+    request(message_type::GetProfile, lobby::encode(lobby::GetProfileMessage{accountId}),
+            [accountId, done = std::move(done)](std::uint8_t type, std::span<const std::byte> payload) {
+                if (type == message_type::Profile) {
+                    if (const auto profile = lobby::decodeProfile(payload);
+                        profile && profile->accountId == accountId) {
+                        done(*profile);
+                        return;
+                    }
+                }
+                const auto error = type == message_type::Error ? lobby::decodeError(payload) : std::nullopt;
+                done(error ? error->code : ErrorCode::Malformed);
+            });
+}
+
+void LobbyClient::picture(std::uint64_t accountId, PictureCallback done)
+{
+    picturePart(accountId, std::make_shared<Picture>(), 0, std::move(done));
+}
+
+void LobbyClient::picturePart(std::uint64_t accountId, std::shared_ptr<Picture> picture, std::uint32_t total,
+                              PictureCallback done)
+{
+    const auto offset = static_cast<std::uint32_t>(picture->png.size());
+    request(message_type::GetAvatar, lobby::encode(lobby::GetAvatarMessage{accountId, offset}),
+            [this, accountId, picture, total, offset,
+             done = std::move(done)](std::uint8_t type, std::span<const std::byte> payload) {
+                if (type != message_type::Avatar) {
+                    const auto error =
+                        type == message_type::Error ? lobby::decodeError(payload) : std::nullopt;
+                    done(error ? error->code : ErrorCode::Malformed);
+                    return;
+                }
+                const auto part = lobby::decodeAvatar(payload);
+                if (!part || part->accountId != accountId || part->offset != offset) {
+                    done(ErrorCode::Malformed);
+                    return;
+                }
+                // The picture changed between two parts: what was read is of another one
+                if (offset > 0 && (part->avatarHash != picture->hash || part->total != total)) {
+                    done(ErrorCode::NotFound);
+                    return;
+                }
+                picture->hash = part->avatarHash;
+                picture->png.insert(picture->png.end(), part->bytes.begin(), part->bytes.end());
+                if (picture->png.size() >= part->total) {
+                    done(*picture);
+                    return;
+                }
+                picturePart(accountId, picture, part->total, done);
+            });
+}
+
 void LobbyClient::discordSignIn(DiscordAuthorizeCallback done)
 {
     request(message_type::DiscordSignIn, {},
@@ -568,6 +626,13 @@ void LobbyClient::discordConfirm(const lobby::DiscordConfirmMessage &confirmatio
                 if (type == message_type::Done && lobby::decodeEmpty(payload)) {
                     done(DiscordConfirmed{});
                     return;
+                }
+                if (type == message_type::Profile) {
+                    if (const auto profile = lobby::decodeProfile(payload);
+                        profile && profile->accountId == 0) {
+                        done(DiscordConfirmed{.newUser = *profile});
+                        return;
+                    }
                 }
                 const SignInResult result = signInResult(type, payload);
                 if (const auto *signedIn = std::get_if<lobby::SignedInMessage>(&result)) {

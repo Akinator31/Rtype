@@ -75,7 +75,8 @@ void InterfaceSystem::setFocus(const std::vector<ecs::entity_t> &widgets, ecs::e
 bool InterfaceSystem::keepsSize(ecs::entity_t widget) const
 {
     return _panels.has(widget) || _tracks.has(widget) || _switches.has(widget) ||
-           (_fields.has(widget) && _fields.get(widget).type == TextFieldType::Console);
+           (_fields.has(widget) &&
+            (_fields.get(widget).type == TextFieldType::Console || isFormField(_fields.get(widget))));
 }
 
 void InterfaceSystem::animateFocus(ecs::entity_t widget)
@@ -229,6 +230,24 @@ void InterfaceSystem::activate(ecs::entity_t widget)
     }
 }
 
+void InterfaceSystem::editField(ecs::entity_t widget, float elapsed)
+{
+    TextField &field = _fields.get(widget);
+    field.input.update(_input, elapsed);
+    if (!field.input.wasChanged()) {
+        return;
+    }
+    // What was wrong is no longer shown once the player changes the content
+    field.error.clear();
+    // A code is sent as soon as its last cell is typed, or pasted
+    const std::size_t digits = field.input.maxLength();
+    if (field.type == TextFieldType::Code && digits > 0 && field.input.length() == digits) {
+        if (auto onSubmit = field.onSubmit) {
+            _ecs.defer([onSubmit, text = field.input.text()] { onSubmit(text); });
+        }
+    }
+}
+
 void InterfaceSystem::click(ecs::entity_t widget)
 {
     // A click on a text field only gives it the focus: it does not submit it
@@ -304,6 +323,11 @@ void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
             track.grab = approach(track.grab, isGrabbed ? 1.0f : 0.0f, step);
             track.focus = approach(track.focus, isLit(widget, hovered) ? 1.0f : 0.0f, step);
             playLightingSound(widget, track.lit, isLit(widget, hovered), appeared);
+        }
+        if (_fields.has(widget) && isFormField(_fields.get(widget))) {
+            TextField &field = _fields.get(widget);
+            const float fade = elapsed / std::max(_style.field.fadeDuration, 0.001f);
+            field.light = approach(field.light, _focused.has(widget) ? 1.0f : 0.0f, fade);
         }
         if (_switches.has(widget) && _toggles.has(widget)) {
             SwitchTrack &track = _switches.get(widget);
@@ -399,7 +423,7 @@ void InterfaceSystem::update(float elapsed)
     } else {
         const ecs::entity_t focused = list[focusedIndex()];
         if (_fields.has(focused)) {
-            _fields.get(focused).input.update(_input, elapsed);
+            editField(focused, elapsed);
         }
         if (_navigation.wasPressed(Navigation::Confirm)) {
             activate(focused);

@@ -120,7 +120,7 @@ ecs::entity_t MenuBuilder::choice(const std::string &caption, std::vector<std::s
 ecs::entity_t MenuBuilder::textField(const std::string &caption, const std::string &content,
                                      std::function<void(const std::string &)> onSubmit, std::size_t maxLength)
 {
-    TextField field{caption, {}, std::move(onSubmit)};
+    TextField field{.caption = caption, .onSubmit = std::move(onSubmit)};
     field.input.setText(content);
     field.input.setMaxLength(maxLength);
     const ecs::entity_t entity = widget(widgetLabel(field), true);
@@ -130,7 +130,7 @@ ecs::entity_t MenuBuilder::textField(const std::string &caption, const std::stri
 
 ecs::entity_t MenuBuilder::passwordField(const std::string &caption, std::size_t maxLength)
 {
-    TextField field{caption, {}, {}};
+    TextField field{.caption = caption};
     field.input.setSecret(true);
     field.input.setMaxLength(maxLength);
     const ecs::entity_t entity = widget(widgetLabel(field), true);

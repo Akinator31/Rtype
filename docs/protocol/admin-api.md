@@ -56,8 +56,12 @@ with `[discord]` and `web.public_url` too. `POST /api/sign-in` takes a username 
 `Content-Type: application/json`. `account` is the administrator signed in, `null` for the local token:
 
 ```json
-{"id": 1, "username": "Chief", "role": "admin", "locked": true}
+{"id": 1, "username": "Chief", "role": "admin", "locked": true,
+ "discord": {"username": "chief", "displayName": "The Chief", "avatar": "a1b2c3"}}
 ```
+
+`discord` is the Discord profile of the account as of its last sign-in with Discord, as in
+[`GET /api/accounts`](#get-apiaccounts), `null` without one.
 
 `locked` is `true` for an administrator of `[admin] admins`. Behind HTTPS (`web.public_url` in `https://`), the
 cookies are `Secure`.
@@ -255,8 +259,8 @@ administrators of `[admin] admins` are `locked`: demoting, banning or deleting t
 ### `GET /api/accounts`
 
 Query: `?search=<text>&limit=50&before=<id>`, all optional. The accounts, newest first: `limit` of them (1 to
-200, 50 by default), with an id below `before` if given. `search`, at most 254 bytes, keeps those whose username
-or email holds it, ignoring case, or whose Discord id is it.
+200, 50 by default), with an id below `before` if given. `search`, at most 254 bytes, keeps those whose username,
+email, Discord name or Discord display name holds it, ignoring case, or whose Discord id is it.
 
 ```json
 [
@@ -267,6 +271,7 @@ or email holds it, ignoring case, or whose Discord id is it.
     "emailVerifiedAt": 1797900000000,
     "password": true,
     "discordId": "80351110224678912",
+    "discord": {"username": "alice", "displayName": "Alice in Space", "avatar": "a1b2c3"},
     "role": "player",
     "locked": false,
     "bannedAt": null,
@@ -278,11 +283,20 @@ or email holds it, ignoring case, or whose Discord id is it.
 ```
 
 `email` is `null` for an account made with Discord only, `password` whether it has one; `role` is `admin` for
-an administrator of `[admin] admins`, whatever the database holds.
+an administrator of `[admin] admins`, whatever the database holds. `discord` is the profile of its Discord
+identity as of its last sign-in with Discord, `null` without one: `username` (`@username`), `displayName` or
+`null`, and `avatar`, the version of its picture, or `null` without one.
 
 ### `GET /api/accounts/{id}`
 
 One account, as in the list; `404` without it.
+
+### `GET /api/accounts/{id}/avatar`
+
+The Discord picture of the account: `200` with the PNG (`Content-Type: image/png`, 128 pixels), its version as
+`ETag`, kept by the browser a day (`Cache-Control: private, max-age=86400`); `404` without one. The panel names
+it with its version, `/api/accounts/{id}/avatar?v=<avatar>`, so that a new picture is a new address. The CSP
+allows it: it comes from the panel itself.
 
 ### `POST /api/accounts/{id}/ban`
 

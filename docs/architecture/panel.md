@@ -30,7 +30,7 @@ a host acts on, and no more: no route of the API, no technical detail, a count o
 | `/bans` | The addresses banned now and the time left of each, lifted from here; those lifted or expired lately, from the record; a new ban: address, duration, reason, the pilots it removes |
 | `/messages` | A message to the whole lobby or to a game, from a template kept in the browser, previewed as the game shows it; the messages sent, from the record |
 | `/history` | The record of the actions, newest first, a page of 100 at a time, searched and filtered by kind; an entry unfolded under its line into its details |
-| `/accounts` | With accounts only, in the navigation: the accounts, newest first, searched by username, email or Discord id; their email and whether it is verified, Discord id, role, state, last sign-in. Ban one with a reason, unban it, make it an administrator or a player, delete it, each behind its window; the administrators of `[admin] admins` marked **Settings**, without these actions |
+| `/accounts` | With accounts only, in the navigation: the accounts, newest first, searched by username, email, Discord name or id; their avatar (their Discord picture, else their initial), email and whether it is verified, Discord name, role, state, last sign-in. The account chosen, the first at first, shows in a sheet on the right (P9′ of the Série 14): its avatar and names, its email, its password, its Discord id, its dates, and its actions. Ban one with a reason, unban it, make it an administrator or a player, delete it, each behind its window; the administrators of `[admin] admins` marked **Settings**, without these actions |
 | `/settings` | The version, start and ports of the server, read only; the preferences of the panel: confirm the actions, a sound when an instance becomes stuck |
 
 `/actions`, the address of the record before the history, leads to `/history`. The master answers `index.html`
@@ -41,12 +41,14 @@ and ending off in the settings; a ban always asks its duration.
 
 ### Without a session
 
-A panel opened without a session shows the page to open one. With accounts (`GET /api/sign-in`), an
-administrator signs in first: its username or email and its password, sent to `POST /api/sign-in`, or **Sign in
-with Discord**, which goes to `/auth/discord` when the master offers it ([Accounts](web.md#accounts)); the page
-then loads again. Below, and alone without accounts, the token of `admin-url.txt`, pasted alone or in its
-address, or read from the file itself (the browser reads it, nothing is uploaded), is sent to `/?token=`, which
-the master trades for its cookie. A session that expires while the panel is open (12 hours, a restart of the
+A panel opened without a session shows the page to open one (P1′ of the Série 14). With accounts
+(`GET /api/sign-in`), an administrator signs in first: **Continue with Discord** at the top, which goes to
+`/auth/discord` when the master offers it ([Accounts](web.md#accounts)), then, under an "or", its username or
+email and its password, sent to `POST /api/sign-in`; the page then loads again. The token of `admin-url.txt` is
+folded at the foot of the same card (**Paste a token**), and alone without accounts: pasted alone or in its
+address, or read from the file itself (the browser reads it, nothing is uploaded), it is sent to `/?token=`,
+which the master trades for its cookie. The foot of the side bar shows the administrator signed in, with its
+avatar. A session that expires while the panel is open (12 hours, a restart of the
 master, an account banned or demoted) puts a window over the page: the account and its password with accounts,
 the token without.
 
@@ -100,10 +102,11 @@ The design gives the panel its values; `src/theme/system.ts` sets each of them o
 
 - **Tokens**: black, borders `#1e2023`, the edges of fields and buttons `#2e3135`, radius 8 px for a card, 6 for
   a strip or a toast, 4 for a field or a button; text white, silver `#c3c8cd`, secondary `#8a9097`, hints
-  `#6b7177`, the labels of the groups `#4a4f55`, disabled `#33373b`; the red of the alerts `#e8726e`. Chakra's
+  `#868c92` (raised from the `#6b7177` of the design, for contrast), the labels of the groups `#6b7177`, disabled
+  `#33373b`; the red of the alerts `#e8726e`. Chakra's
   own semantic tokens (`bg`, `fg`, `border`) point at them, so its dialogs, fields and tables take them too.
 - **Text styles**: `pageTitle` and `cardTitle` in chrome, the gradient of the design clipped to the text, its
-  glow a drop shadow; `caption` and `label`, Inter Medium in capitals; `name`, `number` and `link` in Audiowide.
+  glow a drop shadow; `caption` and `label`, Exo 2 Medium in capitals; `name`, `number` and `link` in Audiowide.
 - **Recipes**, after the row of components of the design: the navigation entry (A0), its signal and its flare
   on the page shown; the action button (A1), principal, secondary or danger; the state badge (A2), active,
   neutral, alert or muted, pressable as a filter; the field (A3), its focus and its error lit; the actions of
@@ -116,7 +119,7 @@ The design gives the panel its values; `src/theme/system.ts` sets each of them o
 The master serves the panel with a strict CSP ([The headers](web.md#the-headers)). The panel keeps to it:
 
 - One script, the bundle of Vite, from the panel: no inline script, no `eval`.
-- Its fonts (Audiowide, Inter Regular and Medium, under the OFL) and its images in its own files: Vite inlines
+- Its fonts (Audiowide, Exo 2 Regular and Medium, under the OFL) and its images in its own files: Vite inlines
   none of them as a `data:` address (`assetsInlineLimit: 0`), which the CSP refuses for fonts.
 - Its styles inline, which the CSP allows: Chakra UI writes them at run time.
 - Its requests to its own origin only, the WebSocket included.

@@ -30,6 +30,7 @@ add_library(r-type_client_core STATIC
     src/Loading/AssetPreload.cpp
     src/Loading/LoadingScene.cpp
     src/Loading/LoadingSystem.cpp
+    src/MainMenu/Capitals.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
     src/MainMenu/Logo.cpp
@@ -41,9 +42,12 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Submenus.cpp
     src/MainMenu/UiShowcase.cpp
     src/Online/AccountScenes.cpp
+    src/Online/FormErrors.cpp
+    src/Online/KnownProfiles.cpp
     src/Online/KnownServers.cpp
     src/Online/LobbyClient.cpp
     src/Online/OnlineScenes.cpp
+    src/Online/OnlineScreen.cpp
     src/Online/SessionTokens.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp

@@ -120,8 +120,10 @@ reachable from the Internet for it.
     INFO  master   Check passed: the server can start
     ```
 
-The server asks Discord the scope `identify` only, and keeps the id of the Discord user: never its token, its
-email nor its friends. A new Discord user chooses the username of its account in the game.
+The server asks Discord the scope `identify` only, and keeps the id of the Discord user, its names and its
+picture, refreshed at each sign-in: never its token, its email nor its friends. The picture comes from
+`cdn.discordapp.com`, which the machine must reach on 443 too; without it, players sign in all the same,
+without picture. A new Discord user chooses the username of its account in the game, its Discord name proposed.
 
 ## Result
 
@@ -191,6 +193,7 @@ that a host can tell them, as the GDPR asks:
 |---|---|---|
 | Username, email | As typed | The account is deleted by its player, or within 24 hours if the email is never verified |
 | Discord identity | The id of the Discord user, and when it was linked; never its token | The account is deleted, or another identity linked |
+| Discord profile | Its name (`@username`), its display name and its picture (PNG, 128 px), as of its last sign-in with Discord, to show them in the game and the panel | Replaced at each sign-in with Discord; the account is deleted, or another identity linked |
 | Password | Its Argon2id hash only, never the password | The account is deleted, or the password changed |
 | Dates: created, email verified, last seen | | The account is deleted |
 | Ban and its reason | | The ban is lifted, or the account deleted |

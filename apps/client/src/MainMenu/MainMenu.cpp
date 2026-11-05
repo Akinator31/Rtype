@@ -1,6 +1,7 @@
 #include "MainMenu/MainMenu.hpp"
 
 #include "Assets.hpp"
+#include "MainMenu/Capitals.hpp"
 #include "MainMenu/Intro.hpp"
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/Logo.hpp"
@@ -171,25 +172,6 @@ void createLogoFlares(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render
     flare.lag = 0.0f;
     flare.strength = 1.0f;
     createLogoFlare(ecs, interface, texture, flare, flareTrail + 1);
-}
-
-/// The text in capitals, like the buttons of the design: the letters of ASCII and the accented letters of
-/// Latin-1 (é is written in UTF-8 as C3 A9, É as C3 89).
-std::string toCapitals(std::string text)
-{
-    for (std::size_t index = 0; index < text.size(); ++index) {
-        const auto byte = static_cast<unsigned char>(text[index]);
-        if (byte >= 'a' && byte <= 'z') {
-            text[index] = static_cast<char>(byte - ('a' - 'A'));
-        } else if (byte == 0xC3 && index + 1 < text.size()) {
-            const auto next = static_cast<unsigned char>(text[index + 1]);
-            if (next >= 0xA0 && next <= 0xBE && next != 0xB7) {
-                text[index + 1] = static_cast<char>(next - 0x20);
-            }
-            ++index;
-        }
-    }
-    return text;
 }
 
 /// The button at `row` of the column, counted from the top, hidden until the player presses, then fading

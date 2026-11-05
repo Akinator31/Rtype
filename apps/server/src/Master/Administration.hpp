@@ -149,6 +149,8 @@ public:
     /// Nothing if the database failed; then nothing inside if there is no such account.
     using AccountCallback = std::function<void(std::optional<std::optional<AdminAccount>> account)>;
     using ChangeCallback = std::function<void(AccountChanged changed)>;
+    /// Nothing if the database failed; then nothing inside if the account has no Discord profile.
+    using ProfileCallback = std::function<void(std::optional<std::optional<DiscordProfile>> profile)>;
 
     /// How often the expired bans are forgotten.
     static constexpr std::chrono::minutes PurgeInterval{1};
@@ -205,6 +207,8 @@ public:
     void accounts(std::string search, std::size_t limit, std::optional<long long> before,
                   AccountsCallback done);
     void account(long long accountId, AccountCallback done);
+    /// The Discord profile of an account, with its picture.
+    void profile(long long accountId, ProfileCallback done);
     /// Bans an account: its sessions end, its players are removed with ERROR (BANNED).
     void banAccount(long long accountId, const std::string &reason, const std::string &actor,
                     ChangeCallback done);

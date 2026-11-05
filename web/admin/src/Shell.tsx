@@ -27,6 +27,7 @@ import { duration, time } from './format';
 import { useLive, useLiveStore } from './live/context';
 import type { LiveState } from './live/state';
 import { usePreferences } from './preferences';
+import { Avatar } from './components/Avatar';
 import { strings } from './strings';
 import { alertFlareGlow, alertFlareLine, alertGlow, flareGlow, flareLine, glow } from './theme/system';
 import { useNow } from './useNow';
@@ -144,9 +145,14 @@ function Who({ account }: { account: SessionAccount | null | undefined }) {
   };
   return (
     <Flex align="center" justify="space-between" gap="10px" px="4px" pt="12px" data-testid="who">
-      <Text textStyle="hint" color="fg.muted" truncate>
-        {account === null ? strings.session.localAccess : strings.session.signedInAs(account.username)}
-      </Text>
+      <Flex align="center" gap="8px" minW={0}>
+        {account !== null && (
+          <Avatar accountId={account.id} name={account.username} discord={account.discord} size={24} />
+        )}
+        <Text textStyle="hint" color="fg.muted" truncate>
+          {account === null ? strings.session.localAccess : strings.session.signedInAs(account.username)}
+        </Text>
+      </Flex>
       <RowAction onClick={() => void signOut()} disabled={pending}>
         {strings.session.signOut}
       </RowAction>

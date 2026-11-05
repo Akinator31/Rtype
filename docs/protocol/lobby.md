@@ -4,7 +4,7 @@ The connection between a client and the master: TLS, framing, the messages to li
 games, and those of the player accounts. Conventions and types are defined in the
 [overview](index.md#2-conventions).
 
-This page describes **version 3**. The client and the master ship together: a master refuses a `HELLO` of
+This page describes **version 4**. The client and the master ship together: a master refuses a `HELLO` of
 another version with `UNSUPPORTED_VERSION`, and the client tells the player to update.
 
 | Version | Change |
@@ -12,6 +12,7 @@ another version with `UNSUPPORTED_VERSION`, and the client tells the player to u
 | 1 | First version |
 | 2 | The administrators of the server ([administration API](admin-api.md)): `SERVER_MESSAGE`; `LEFT_GAME` reasons `KICKED` and `ENDED_BY_ADMIN`; `ERROR` codes `KICKED` and `BANNED`, sent before the master closes the connection |
 | 3 | The player accounts ([section 6](#6-accounts)): `HELLO` carries a locale and an optional session token; `WELCOME` carries the features of the server and the account signed in; the requests `REGISTER` to `DELETE_ACCOUNT`, the replies `SIGNED_IN`, `CODE_SENT`, `DISCORD_AUTHORIZE` and `DONE`, and their error codes |
+| 4 | The profiles ([section 6.6](#66-profiles)): an account carries its email, whether it has a password, and its date; `GET_PROFILE` and `PROFILE`, the Discord profile of an account; `GET_AVATAR` and `AVATAR`, its picture in parts; `DISCORD_CONFIRM` answers `PROFILE` for a new Discord user; the error `NOT_FOUND` |
 
 The version is the first field of `HELLO` in every version, so that a master reads it from a client of any
 version and answers `UNSUPPORTED_VERSION`, never `MALFORMED`.
@@ -135,9 +136,11 @@ Example: `HELLO` with version 3, the name `"Pavel"`, the locale `"fr"` and no se
 | `FORGOT_PASSWORD` | `CODE_SENT` |
 | `RESET_PASSWORD` | `SIGNED_IN` |
 | `DISCORD_SIGN_IN` | `DISCORD_AUTHORIZE` |
-| `DISCORD_CONFIRM` | `SIGNED_IN` or `DONE` |
+| `DISCORD_CONFIRM` | `SIGNED_IN`, `PROFILE` or `DONE` |
 | `CHOOSE_USERNAME` | `SIGNED_IN` |
 | `DELETE_ACCOUNT` | `DONE` |
+| `GET_PROFILE` | `PROFILE` |
+| `GET_AVATAR` | `AVATAR` |
 
 ## 5. Messages
 
@@ -244,9 +247,9 @@ No payload.
 **Receiver behaviour:** the master answers `PONG`. A master closes a connection on which it received nothing
 for 30 seconds.
 
-#### Requests of the accounts (`0x07`–`0x11`)
+#### Requests of the accounts (`0x07`–`0x13`)
 
-Version 3. A master without the feature a request needs (`WELCOME` tells which it has) answers
+Version 3, and `GET_PROFILE` and `GET_AVATAR` in version 4. A master without the feature a request needs (`WELCOME` tells which it has) answers
 `ERROR (ACCOUNTS_DISABLED)` to it, after the check of the state (`HELLO_REQUIRED`) and without reading its
 payload. The flows they make are in [section 6](#6-accounts).
 
@@ -368,7 +371,8 @@ who the user is, scope `identify` only, and drops the token. It needs a `DISCORD
 less than ten minutes old, which it uses up. Only this request signs in or links anything. Then:
 
 - not signed in, an identity that has an account: `SIGNED_IN`;
-- not signed in, a new identity: `DONE`, and the client sends `CHOOSE_USERNAME` within ten minutes;
+- not signed in, a new identity: `PROFILE` with the account id 0, the profile Discord gave (version 4; `DONE` in
+  version 3), and the client sends `CHOOSE_USERNAME` within ten minutes;
 - signed in, an identity without account: linked to the account, `DONE`; the account's own identity: confirmed
   for `DELETE_ACCOUNT` for five minutes, `DONE`.
 
@@ -402,6 +406,30 @@ then closes the connection. Errors: `INVALID_CREDENTIALS`, `DISCORD_NOT_CONFIRME
 
 ### 5.2 Master to client
 
+##### GET_PROFILE (`0x12`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Account id | `u64`, never 0 |
+
+**Receiver behaviour:** version 4. The master answers `PROFILE`, the Discord profile of the account as of its
+last sign-in with Discord, empty for an account without Discord; `NOT_FOUND` if there is no such account. Any
+player may ask it, of any account: the names and the picture of Discord are those its owner shows. It does not
+count against the requests of an address.
+
+##### GET_AVATAR (`0x13`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Account id | `u64`; 0 for the new Discord user confirmed on this connection, who has no account yet |
+| 8 | Offset | `u32` |
+
+**Receiver behaviour:** version 4. The master answers `AVATAR`, the part of the picture of the account that
+starts at the offset, at most 16000 bytes so that it fits in a frame; `NOT_FOUND` if the account has no
+picture, or from the end of it on. The client asks from 0, then from the end of each part, until it has the
+size `AVATAR` gives, and starts again if its version changed meanwhile. It does not count against the requests
+of an address.
+
 #### WELCOME (`0x81`)
 
 | | |
@@ -429,6 +457,9 @@ An **account**, in `WELCOME` and `SIGNED_IN`:
 | 0 | Account id | `u64` | Never 0 |
 | 8 | Username | `str8` | 1 to 16 bytes, the name of the player |
 | 9 + n | Role | `u8` | `0` player, `1` administrator; any other value is malformed |
+| 10 + n | Flags | `u8` | `0x01` the email is verified, `0x02` it signs in with a password; the other bits are 0 (version 4) |
+| 11 + n | Email | `str8` | 0 to 254 bytes: empty for an account made with Discord (version 4) |
+| 12 + n + e | Created | `u64` | When the account was made, in milliseconds since 1970, UTC (version 4) |
 
 **Receiver behaviour:** the client offers what the master offers: sign in, create an account, play as a guest.
 A master without accounts sends only the guests bit, and the client looks as it did before accounts.
@@ -555,6 +586,7 @@ No payload.
 | `ALREADY_SIGNED_IN` | 31 | A request to sign in, or to create an account, while signed in | Kept |
 | `DISCORD_TAKEN` | 32 | This Discord identity belongs to another account | Kept |
 | `DISCORD_UNAVAILABLE` | 33 | The master cannot reach Discord now, or Discord answers with an error: try again in a moment | Kept |
+| `NOT_FOUND` | 34 | `GET_PROFILE` of no account, `GET_AVATAR` of an account without picture or beyond its end (version 4) | Kept |
 
 **Receiver behaviour:** the client shows a message matching the code. Unknown codes are shown as a generic
 error. An `ERROR` with the request 0 and the code `KICKED` or `BANNED` is not the reply to the request the
@@ -621,6 +653,43 @@ scope `identify`, with the challenge of a code verifier of PKCE it keeps, then s
 | **Sent when** | Reply to `SIGN_OUT`, `DISCORD_CONFIRM` or `DELETE_ACCOUNT` (version 3). |
 
 No payload. After `SIGN_OUT` and `DELETE_ACCOUNT`, the master closes the connection.
+
+#### PROFILE (`0x8C`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Reply to `GET_PROFILE`, and to `DISCORD_CONFIRM` for a new Discord user (version 4). |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Account id | `u64` | 0 in the reply to `DISCORD_CONFIRM`: the new user has no account yet |
+| 8 | Discord | `bool` | Whether the account is linked to Discord; without, the texts are empty and the size 0 |
+| 9 | Discord username | `str8` | 0 to 64 bytes: `@username` on Discord |
+| 10 + u | Display name | `str8` | 0 to 128 bytes: the name it shows on Discord |
+| 11 + u + d | Picture version | `str8` | 0 to 64 bytes: names the picture, empty for none |
+| 12 + u + d + h | Picture size | `u32` | Its bytes, at most 262144 (256 KiB); 0 exactly when there is no version |
+
+**Receiver behaviour:** the client shows the names, and asks the picture with `GET_AVATAR` only for a version it
+does not keep already.
+
+#### AVATAR (`0x8D`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Reply to `GET_AVATAR` (version 4). |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Account id | `u64` | As in `GET_AVATAR` |
+| 8 | Picture version | `str8` | 1 to 64 bytes |
+| 9 + h | Total | `u32` | The size of the whole picture: 1 to 262144 |
+| 13 + h | Offset | `u32` | Where this part starts: less than the total |
+| 17 + h | Part | `u16` + bytes | 1 to 16000 bytes, ending at the total at most |
+
+**Receiver behaviour:** the picture is a PNG, of 128 pixels for one of Discord. A part that does not fit the
+picture is malformed.
 
 ## 6. Accounts
 
@@ -718,7 +787,9 @@ sequenceDiagram
     alt identity with an account
         M->>C: SIGNED_IN (token, account)
     else new identity
-        M->>C: DONE
+        M->>C: PROFILE (account 0: names, picture version and size)
+        C->>M: GET_AVATAR (account 0), as many parts as needed
+        M->>C: AVATAR
         C->>M: CHOOSE_USERNAME (username)
         M->>C: SIGNED_IN (token, account)
     end
@@ -744,6 +815,26 @@ sequenceDiagram
 
 *An account without password (created with Discord) confirms with Discord first: `DISCORD_SIGN_IN`, then
 `DISCORD_CONFIRM` (`DONE`), then `DELETE_ACCOUNT` with an empty password, within five minutes.*
+
+### 6.6 Profiles
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Master
+    C->>M: HELLO (token)
+    M->>C: WELCOME (account: email, flags, date)
+    C->>M: GET_PROFILE (account id)
+    M->>C: PROFILE (Discord names, picture version 9f3a…, 21 504 bytes)
+    Note over C: no picture 9f3a… kept yet
+    C->>M: GET_AVATAR (account id, 0)
+    M->>C: AVATAR (0, 16 000 bytes)
+    C->>M: GET_AVATAR (account id, 16 000)
+    M->>C: AVATAR (16 000, 5 504 bytes)
+```
+
+*Version 4. The picture of Discord is kept by the master at each sign-in with Discord, and read in parts that
+fit in a frame. The client keeps it under its version: it asks it again only when the version changes.*
 
 ## 7. When the connection closes
 

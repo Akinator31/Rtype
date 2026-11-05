@@ -93,6 +93,9 @@ test('a page opened without a session asks for the token of admin-url.txt, and t
   const page = await browser.newPage();
   const problems = await watch(page);
   await page.goto(url.split('/?')[0] + '/games');
+  // The master has accounts: the token is folded under the card of an account
+  await expect(page.getByRole('form', { name: 'Sign in' })).toBeVisible();
+  await page.getByTestId('local-access').getByRole('button', { name: 'Paste a token' }).click();
   const form = page.getByRole('form', { name: 'Open a session' });
   await expect(form).toBeVisible();
   await form.getByRole('textbox').fill(url);

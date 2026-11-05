@@ -2,6 +2,7 @@
 
 #include "Accounts/AccountRules.hpp"
 #include "Accounts/Mailer.hpp"
+#include "Common/Base64.hpp"
 #include "Common/Secret.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Crypto.hpp"
@@ -39,7 +40,13 @@ std::optional<AccountEntry> withDiscord(rtype::database::Database &database, std
         return std::nullopt;
     }
     std::optional<std::string> discordId = discordIdentity(database, account->id);
-    return AccountEntry{.account = std::move(*account), .discordId = std::move(discordId)};
+    // Its profile without its picture, which the panel asks for on its own
+    std::optional<DiscordProfile> discord = findDiscordProfile(database, account->id);
+    if (discord) {
+        discord->avatar.clear();
+    }
+    return AccountEntry{
+        .account = std::move(*account), .discordId = std::move(discordId), .discord = std::move(discord)};
 }
 
 /// Encodes bytes in base64url (RFC 4648, 5) without padding, as PKCE wants its challenge.
@@ -200,6 +207,7 @@ std::variant<PanelAccount, PanelRefusal> PanelAccounts::admit(const AccountEntry
         .username = account.username,
         .role = AccountRole::Admin,
         .listed = listed,
+        .discord = entry.discord,
     };
 }
 
@@ -374,8 +382,12 @@ void PanelAccounts::finishDiscord(const std::string &state, const std::string &c
             const DiscordUser user = std::get<DiscordUser>(answer);
             onDatabase(
                 "find the account of a Discord user for the panel",
-                [id = user.id](rtype::database::Database &database) {
-                    return withDiscord(database, findAccountByDiscord(database, id));
+                [user](rtype::database::Database &database) {
+                    std::optional<Account> account = findAccountByDiscord(database, user.id);
+                    if (account) {
+                        saveDiscordProfile(database, user.id, profileOf(user), SystemClock::now());
+                    }
+                    return withDiscord(database, std::move(account));
                 },
                 done,
                 [this, done](const std::optional<AccountEntry> &entry) {

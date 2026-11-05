@@ -805,7 +805,12 @@ TEST_CASE(
 {
     FOR_EACH_ENGINE();
     AccountsMaster master(engine, "client_accounts_discord", true);
-    const rtype::server::DiscordUser wing{.id = "80351110224678912", .username = "wing"};
+    const std::string png = std::string("\x89PNG\r\n\x1a\n", 8) + std::string(20000, 'p');
+    const rtype::server::DiscordUser wing{.id = "80351110224678912",
+                                          .username = "wing",
+                                          .displayName = "Wing Commander",
+                                          .avatarHash = "a1b2c3",
+                                          .avatar = png};
     const auto confirmation = [](const rtype::server::DiscordAuthorization &accepted) {
         return lobby::DiscordConfirmMessage{.code = accepted.code,
                                             .codeVerifier = accepted.codeVerifier,
@@ -832,8 +837,21 @@ TEST_CASE(
         return *confirmed;
     };
 
-    // A new Discord user: not signed in until it chooses its username
-    CHECK(std::holds_alternative<LobbyClient::DiscordConfirmed>(signInWithDiscord()));
+    // A new Discord user: not signed in until it chooses its username, its profile and picture shown
+    // meanwhile
+    const LobbyClient::DiscordConfirmResult newUser = signInWithDiscord();
+    REQUIRE(std::holds_alternative<LobbyClient::DiscordConfirmed>(newUser));
+    const auto &profile = std::get<LobbyClient::DiscordConfirmed>(newUser).newUser;
+    REQUIRE(profile);
+    CHECK(profile->displayName == "Wing Commander");
+    CHECK(profile->discordUsername == "wing");
+    CHECK(profile->avatarSize == png.size());
+    std::optional<std::variant<LobbyClient::Picture, lobby::ErrorCode>> picture;
+    client->picture(0, [&](const auto &result) { picture = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return picture.has_value(); }));
+    REQUIRE(std::holds_alternative<LobbyClient::Picture>(*picture));
+    CHECK(std::get<LobbyClient::Picture>(*picture).hash == "a1b2c3");
+    CHECK(std::get<LobbyClient::Picture>(*picture).png.size() == png.size());
     CHECK_FALSE(client->account());
     std::optional<LobbyClient::SignInResult> created;
     client->chooseUsername("Wing", [&](const auto &result) { created = result; });
@@ -842,6 +860,12 @@ TEST_CASE(
     REQUIRE(client->account());
     CHECK(client->account()->username == "Wing");
     CHECK(client->name() == "Wing");
+    CHECK_FALSE(client->account()->hasPassword);
+    std::optional<std::variant<lobby::ProfileMessage, lobby::ErrorCode>> kept;
+    client->profile(client->account()->id, [&](const auto &result) { kept = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return kept.has_value(); }));
+    REQUIRE(std::holds_alternative<lobby::ProfileMessage>(*kept));
+    CHECK(std::get<lobby::ProfileMessage>(*kept).avatarHash == "a1b2c3");
 
     // What the protocol cannot carry is refused at once, without asking the master
     std::optional<LobbyClient::DiscordConfirmResult> malformed;
