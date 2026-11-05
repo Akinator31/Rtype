@@ -54,15 +54,14 @@ jobs:
           token: ${{ steps.bot.outputs.token || github.token }}
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
-          cache: pip
-          cache-dependency-path: requirements-dev.txt
+          activate-environment: true
 
       # Same clang-format version for everyone, pinned in requirements-dev.txt
       - name: Install clang-format
-        run: pip install -r requirements-dev.txt
+        run: uv pip install -r requirements-dev.txt
 
       # Tracked C++ files only: submodules and fetched dependencies are left alone
       - name: Run clang-format
