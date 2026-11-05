@@ -5,8 +5,8 @@
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/Submenus.hpp"
-#include "rtype/engine/Component/Drawing.hpp"
 #include "ShipSelector/ShipSelector.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Widget.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Tls.hpp"
@@ -118,8 +118,8 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, render::ResourceManager &reso
                            localization::Localization &translations, discord::Authorizer &discord,
                            ShipSelection &ships, std::filesystem::path pictures)
     : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord), _games(games),
-      _translations(translations), _ships(ships), _known(engine.getSettings()), _sessions(engine.getSettings()),
-      _profiles(engine.getSettings(), std::move(pictures)),
+      _translations(translations), _ships(ships), _known(engine.getSettings()),
+      _sessions(engine.getSettings()), _profiles(engine.getSettings(), std::move(pictures)),
       _sky(resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth)),
       _discordLogo(resources.loadTexture(RTYPE_IMAGE_DISCORD, render::TextureFiltering::Smooth))
 {
@@ -358,21 +358,20 @@ void OnlineScenes::declareLobbyScene(const engine::InterfaceStyle &style)
                           {engine::AnchorPoint::TopLeft, columnLeft, listTop + 20.0f}, Tone::Hint);
             }
             const float buttons = listTop + (static_cast<float>(MaxGamesShown) * style.list.height) + 30.0f;
-            page.button(
-                _translations.text("online.create"),
-                [this] {
-                    openShipSelector(_engine, _ships, [this] {
-                        if (_lobby) {
-                            const std::string game = std::string(_lobby->name())
-                                                         .append("'s game")
-                                                         .substr(0, lobby::MaxGameNameLength);
-                            _lobby->createGame(
-                                game, CreatedGamePlayers,
-                                [this](const LobbyClient::JoinResult &result) { joined(result); });
-                        }
-                    });
-                },
-                {engine::AnchorPoint::TopLeft, columnLeft, buttons});
+            page.button(_translations.text("online.create"),
+                        [this] {
+                            openShipSelector(_engine, _ships, [this] {
+                                if (_lobby) {
+                                    const std::string game = std::string(_lobby->name())
+                                                                 .append("'s game")
+                                                                 .substr(0, lobby::MaxGameNameLength);
+                                    _lobby->createGame(
+                                        game, CreatedGamePlayers,
+                                        [this](const LobbyClient::JoinResult &result) { joined(result); });
+                                }
+                            });
+                        },
+                        {engine::AnchorPoint::TopLeft, columnLeft, buttons});
             page.button(_translations.text("online.refresh"), [this] { refresh(); },
                         {engine::AnchorPoint::TopLeft, columnLeft, buttons + online_layout::buttonsSpacing});
 
