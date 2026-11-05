@@ -32,6 +32,7 @@ add_library(r-type_client_core STATIC
     src/Game/DeathScreenSystem.cpp
     src/Game/EntityLook.cpp
     src/Game/EntitySounds.cpp
+    src/Game/GameRecorder.cpp
     src/Game/GameScenes.cpp
     src/Game/GameSessionSystem.cpp
     src/Game/GameView.cpp
@@ -77,6 +78,7 @@ add_library(r-type_client_core STATIC
     src/Settings/PlayerSettings.cpp
     src/Quests/EventQuest.cpp
     src/Quests/Quests.cpp
+    src/Quests/StatQuest.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp
     src/ShipSelector/ShipSelection.cpp
