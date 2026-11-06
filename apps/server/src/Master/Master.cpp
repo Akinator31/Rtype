@@ -13,6 +13,7 @@
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "Master/Process.hpp"
+#include "Master/Relay.hpp"
 #include "Master/ServerDatabase.hpp"
 #include "Master/ServerKey.hpp"
 #include "Web/LocalAccess.hpp"
@@ -102,6 +103,18 @@ int runMaster(const MasterOptions &options)
         logger.error("Cannot listen on {}: {}", options.listen, error.code().message());
         return Failure;
     }
+    // Every game on one UDP port (--game-relay), on the address of the lobby: opened here, a port taken
+    // stops the master at start, as --check. It outlives the games, which tell it their sessions
+    std::optional<Relay> relay;
+    if (options.gameRelay) {
+        const rtype::network::Address relayAddress = options.listen.withPort(*options.gameRelay);
+        try {
+            relay.emplace(relayAddress, loadedBans);
+        } catch (const std::system_error &error) {
+            logger.error("Cannot open UDP {} for the games: {}", relayAddress, error.code().message());
+            return Failure;
+        }
+    }
 
     // The panel (docs/architecture/web.md): declared after the loop, it stops before it
     const WebSettings &webSettings = options.settings.web;
@@ -171,8 +184,13 @@ int runMaster(const MasterOptions &options)
     }
 
     const unsigned maxGames = options.lastGamePort - options.firstGamePort + 1U;
-    logger.info("Lobby on TCP {}, games on UDP {}-{} ({} at most)", listener->localAddress(),
-                options.firstGamePort, options.lastGamePort, maxGames);
+    if (relay) {
+        logger.info("Lobby on TCP {}, games on UDP {} through the relay ({} at most)",
+                    listener->localAddress(), relay->publicAddress(), maxGames);
+    } else {
+        logger.info("Lobby on TCP {}, games on UDP {}-{} ({} at most)", listener->localAddress(),
+                    options.firstGamePort, options.lastGamePort, maxGames);
+    }
     logger.info("Panel on HTTP {}", web->localAddress());
     if (!std::filesystem::is_regular_file(panelDir / "index.html")) {
         logger.info("The panel is not built: no index.html in {}", panelDir.string());
@@ -208,12 +226,17 @@ int runMaster(const MasterOptions &options)
                           .trailingArguments = {"--log-level", levelArgument(), "--config", config.string()},
                           .firstPort = options.firstGamePort,
                           .lastPort = options.lastGamePort,
+                          .relay = relay ? &*relay : nullptr,
                       });
     } catch (const std::system_error &error) {
         logger.error("Cannot prepare the games: {}", error.what());
         return Failure;
     }
     AddressBans bans(loadedBans);
+    if (relay) {
+        // The relay drops the datagrams of a banned address before any game sees them
+        bans.setChangeHandler([&bans, &relay] { relay->setBans(bans.list()); });
+    }
     if (!loadedBans.empty()) {
         logger.info("{} addresses banned", loadedBans.size());
     }
@@ -281,7 +304,12 @@ int runMaster(const MasterOptions &options)
             }
         });
     });
+    // Once the instances are gone, their last DISCONNECT forwarded: before the loop of the master
+    if (relay) {
+        relay->stop();
+    }
     // The administration goes first: nothing tells it anything any more
+    bans.setChangeHandler({});
     web->setAdministration(nullptr);
     web->setPanelAccounts(nullptr);
     lobby.setObserver(nullptr);

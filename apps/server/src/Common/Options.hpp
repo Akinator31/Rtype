@@ -33,6 +33,10 @@ struct MasterOptions {
     /// The UDP ports given to the games, one per game: their number is the most games at once.
     std::uint16_t firstGamePort = 4243;
     std::uint16_t lastGamePort = 4299;
+    /// `--game-relay`: every game on this one UDP port, through the relay of the master
+    /// (docs/architecture/server.md#the-relay); 0 lets the system choose. The range of the game ports then
+    /// only gives the number of games at once. Temporary: the only mode once the relay is the default.
+    std::optional<std::uint16_t> gameRelay;
     /// The private key the master proves its identity with, generated there at its first start
     /// (docs/guides/generate-the-server-keys.md).
     std::filesystem::path key = "server.key";

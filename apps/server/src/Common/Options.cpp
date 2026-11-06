@@ -21,6 +21,8 @@ Master options:
   -p, --port <port>          TCP port of the lobby (default: 4242; 0: any free port)
       --bind <ip>            Address to listen on (default: 0.0.0.0, every interface)
       --game-ports <a>-<b>   UDP ports of the games, one per game (default: 4243-4299)
+      --game-relay <port>    Serve every game on this one UDP port, through a relay (0: any free
+                             port); the range of --game-ports then only gives the most games at once
   -k, --key <file>           Private key of the server (default: server.key), generated there if the
                              file does not exist. Keep it: the players refuse the server with another key
       --fingerprint          Show the fingerprint of the key, for the players to check, then exit
@@ -171,6 +173,10 @@ Options parseOptions(std::span<const std::string_view> arguments, const ServerSe
                                                         options.master.firstGamePort,
                                                         options.master.lastGamePort));
             }
+            masterOnly.push_back(argument);
+        } else if (argument == "--game-relay") {
+            options.master.gameRelay =
+                parseNumber<std::uint16_t>(argument, value(), 0, std::numeric_limits<std::uint16_t>::max());
             masterOnly.push_back(argument);
         } else if (argument == "-k" || argument == "--key") {
             options.master.key = std::filesystem::path(std::string(value()));
