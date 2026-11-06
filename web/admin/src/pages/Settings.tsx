@@ -110,7 +110,7 @@ export function Settings() {
         <Pair label={t.lobby}>{server ? strings.overview.lobbyValue(server.ports.lobby) : strings.none}</Pair>
         <Pair label={t.games}>
           {server
-            ? strings.overview.gamePortsValue(server.ports.games.first, server.ports.games.last)
+            ? strings.overview.gamePortValue(server.ports.game, server.maxGames)
             : strings.none}
         </Pair>
       </Card>

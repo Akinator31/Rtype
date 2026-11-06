@@ -74,7 +74,7 @@ export const strings = {
     nextBanEnd: (left: string) => `Next end in ${left}`,
     uptime: 'Uptime',
     lobbyValue: (port: number) => `${port} / TCP`,
-    gamePortsValue: (first: number, last: number) => `${first} to ${last} / UDP`,
+    gamePortValue: (port: number, maxGames: number) => `${port} / UDP · ${maxGames} games at most`,
     runningGames: 'Games running',
     seeAll: 'See all',
     live: 'Live',
