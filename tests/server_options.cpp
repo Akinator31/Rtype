@@ -43,6 +43,7 @@ TEST_CASE("Without arguments, the server is a master with the default settings",
     CHECK(options.master.listen == Address::anyIpv4(4242));
     CHECK(options.master.firstGamePort == 4243);
     CHECK(options.master.lastGamePort == 4299);
+    CHECK_FALSE(options.master.gameRelay);
     CHECK(options.master.key == "server.key");
     CHECK_FALSE(options.master.check);
     CHECK(options.master.config.empty());
@@ -125,6 +126,9 @@ TEST_CASE("Every option of the master is read", "[server]")
     CHECK(options.master.check);
     CHECK(options.logLevel == rtype::log::Level::Debug);
     CHECK(parse({"-p", "0", "-k", "a.key"}).master.listen == Address::anyIpv4(0));
+    // The relay: the same number as the lobby is allowed, one is TCP and the other UDP; 0 for any free port
+    CHECK(parse({"--game-relay", "4242"}).master.gameRelay == 4242);
+    CHECK(parse({"--game-relay", "0"}).master.gameRelay == 0);
 }
 
 TEST_CASE("Invalid options of the master are refused", "[server]")
@@ -138,6 +142,9 @@ TEST_CASE("Invalid options of the master are refused", "[server]")
         {"--game-ports", "4243"},
         {"--game-ports", "4300-4243"},
         {"--game-ports", "0-10"},
+        {"--game-relay"},
+        {"--game-relay", "65536"},
+        {"--game-relay", "relay"},
         {"--log-level", "loud"},
         {"--unknown"},
         {"4242"},
@@ -176,6 +183,7 @@ TEST_CASE("An instance needs its id and ports, and refuses the options of the ma
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--check"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--fingerprint"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--health"},
+        {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--game-relay", "4242"},
     };
 
     for (const auto &arguments : invalid) {

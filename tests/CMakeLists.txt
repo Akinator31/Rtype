@@ -75,6 +75,7 @@ add_executable(rtype_tests
     server_mail.cpp
     server_panel_accounts.cpp
     server_options.cpp
+    server_relay.cpp
     server_replication.cpp
     server_settings.cpp
     server_web.cpp

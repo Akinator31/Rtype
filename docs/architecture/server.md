@@ -35,6 +35,7 @@ apps/server/src/
     Master.cpp             runMaster()
     Lobby.cpp              the lobby: the TLS connections of the clients and their requests
     Games.cpp              the games: one instance each, started, connected back, watched
+    Relay.cpp              the relay: every game on one UDP port, on a thread of its own
     Process.cpp            Process: starts a program and stops it, on Linux and Windows
     ServerKey.cpp          the key of the master: loaded, or generated at its first start
     ServerDatabase.cpp     the database of the master: its address, its migrations
@@ -62,7 +63,7 @@ Everything but `main.cpp` is the library `r-type_server_core`, so that the tests
 (`tests/server_options.cpp`, `tests/server_key.cpp`, `tests/server_database.cpp`, `tests/server_lifecycle.cpp`,
 `tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`,
 `tests/server_settings.cpp`, `tests/server_web.cpp`, `tests/server_admin.cpp`,
-`tests/server_account_store.cpp`, `tests/relay_frame.cpp`). Includes are written from `src/`, like in the client:
+`tests/server_account_store.cpp`, `tests/relay_frame.cpp`, `tests/server_relay.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -91,6 +92,7 @@ a server that cannot work stops at once with the reason.*
 | `-p`, `--port <port>` | 4242 | TCP port of the lobby; 0 lets the system choose |
 | `--bind <ip>` | `0.0.0.0` | Address to listen on: every interface by default, `127.0.0.1` for this machine only |
 | `--game-ports <first>-<last>` | 4243–4299 | UDP ports of the games, one per game: their number is the most games at once |
+| `--game-relay <port>` | | Serves every game on this one UDP port, through the [relay](#the-relay), on the address of `--bind`; 0 lets the system choose. The range of `--game-ports` then only gives the most games at once, and no instance opens a port of it. May be the same number as `--port`: one is TCP, the other UDP. Temporary: the only mode once the relay is the default |
 | `-k`, `--key <file>` | `server.key` | Private key of the server, generated there if the file does not exist ([Manage the server key](../guides/generate-the-server-keys.md)) |
 | `--fingerprint` | | Shows the fingerprint of the key, for the players to check, then exits. Never generates a key |
 | `--database <address>` | `sqlite:rtype.db` | Where the master keeps its data: `sqlite:<file>`, or `postgresql://<user>@<host>:<port>/<database>` ([The database](#the-database)) |
@@ -116,6 +118,9 @@ INFO  master   Server key 4026de0635ae89391bff98b7b9ddc0689fa8529f9804e4c4721ead
 INFO  master   Panel at http://127.0.0.1:8080: open the address written in admin-url.txt
 INFO  master   Master started: Ctrl+C to stop
 ```
+
+With `--game-relay 4242`, the line of the games says `games on UDP 0.0.0.0:4242 through the relay (57 at most)`;
+a UDP port taken stops the master at start, `--check` included: `Cannot open UDP 0.0.0.0:4242 for the games`.
 
 `admin-url.txt`, beside the key, holds the address that opens the panel with the local access token, new at
 each start, readable by its owner only ([Local access](web.md#local-access)).
@@ -319,7 +324,9 @@ sequenceDiagram
   after its player left. An id already taken is drawn again (`takeSession()`); the tests force collisions
   with `setSessionDraw()`.
 - **One UDP port per game**, from `--game-ports`: none free is `SERVER_FULL`. A port is given back once the
-  process has exited.
+  process has exited. Behind the [relay](#the-relay) (`--game-relay`), the range only counts the games: the
+  instance is given the relay in `CONFIGURE` and opens no port of it, `READY` carries its port on the loopback,
+  and `GAME_JOINED` the public port of the relay, the same for every game.
 
 | What happens | The players | The instance |
 |---|---|---|
@@ -349,6 +356,71 @@ INFO  games    Pavel creates game 1 "Bydo hunters" for 4 players: instance 48213
 INFO  games    game 1 "Bydo hunters" ready on UDP 4243
 INFO  games    Pavel (1) joins game 1 "Bydo hunters" (1/4)
 ```
+
+Behind the relay: `instance 48213 behind the relay`, then `ready behind the relay, on 127.0.0.1:40213`.
+
+### The relay
+
+`Relay` (`Master/Relay.hpp`) serves every game of the master on one public UDP port, given by `--game-relay`.
+It owns the only public UDP socket, reads the session in the clear header of each datagram
+([game protocol](../protocol/game.md), section 2), and forwards it to the instance of that game over the
+loopback, in a [relay frame](../protocol/instances.md#5-the-relay-frame) with the address of its client. Each
+instance still runs in its own process ([ADR 0013](../decisions/0013-one-process-per-game.md)).
+
+```mermaid
+flowchart LR
+  C1["Client A"] -- "UDP 4242" --> R
+  C2["Client B"] -- "UDP 4242" --> R
+  subgraph Master
+    R["Relay<br/>own thread, own EventLoop<br/>session → instance"]
+  end
+  R -- "127.0.0.1, relay frame" --> I1["Instance 1<br/>127.0.0.1:ephemeral"]
+  R -- "127.0.0.1, relay frame" --> I2["Instance 2<br/>127.0.0.1:ephemeral"]
+```
+
+*The clients send to one port; the relay finds the game of each datagram by its session.*
+
+**Inbound**, each datagram on the public port, in this order:
+
+1. its header is invalid (`parseDatagramHeader()`: size, magic, version, session 0): dropped;
+2. its address is banned (its copy of the [bans](administration.md#bans)): dropped;
+3. its address sends more than 200 datagrams per second: dropped, with the same counter as the `SessionHost`
+   of a game (`RateLimiter`, `libs/network`);
+4. no game has its session: dropped, logged at `trace`;
+5. otherwise, it goes in a frame, with the address of its client, to the instance of its session.
+
+**Outbound**, each frame on its loopback port:
+
+1. from an address that is not one of the instances: dropped;
+2. a frame that does not decode, or whose datagram has no valid header: dropped;
+3. the session of the datagram is not one of that instance: dropped, since an instance only ever speaks for
+   its own players;
+4. otherwise, the datagram goes from the public port to the address of the frame.
+
+The client sees nothing of it: it sends to the address of the master on the port of `GAME_JOINED`, and its
+answers come from there. The relay never holds the keys of a datagram, so the encryption stays end to end,
+client to instance; the instance still sees the real address of each client, so its own limit per address
+and its following of an address that changes work as with a port of its own.
+
+**The table** `session → game`, and the loopback address of each instance, live on the thread of the relay.
+`Games`, on the loop of the master, posts every change to it: the instance at its `READY`, a session at its
+`ADD_PLAYER`, a session released when its player leaves, still routed 2 seconds (`Relay::SessionLinger`) for the
+`DISCONNECT` of its instance to go out, and every session of a game removed when its instance exits. A session
+released whose id the master gave since to another game, once the first game is gone, stays routed to the new
+one. The bans are posted the same way: `AddressBans` calls its change handler at each ban added or lifted, and
+the master posts a copy; an expired ban is never applied, since the relay checks its date.
+
+**Its own thread**, with its own `EventLoop` ([Threads](threads.md#server)): it copies every datagram of every
+game, about 480 per second for a game of 4 at 60 Hz, both ways, so it never waits on the lobby, its TLS or its
+database. It shares nothing with the loop of the master but posted functions, and its counters (`counters()`:
+datagrams forwarded each way, dropped for each reason), which are atomic.
+
+**The cost**: two hops on the loopback per round trip. With 8 games of 4 players at 60 Hz, each datagram
+echoed by its instance (`rtype_tests "[.relay-latency]"`, a Release build), the relay adds 40 to 70 µs to the
+median round trip, against a tick of 16.7 ms.
+
+**Its stop**: once every instance has exited, their last `DISCONNECT (SHUTDOWN)` forwarded, the master stops the
+relay (`stop()`, after the work posted before), then its own loop.
 
 ## An instance at work
 
@@ -422,7 +494,8 @@ flowchart LR
       master in `READY`. It reads only the frames from `127.0.0.1:<relay port>`, hands the game the address of
       the client and the datagram of each one ([relay frame](../protocol/instances.md#5-the-relay-frame)), and
       sends every datagram back to the relay in a frame. The log says `Game 7 behind the relay on
-      127.0.0.1:4242, receiving on 127.0.0.1:40213`. The master does not start a relay yet;
+      127.0.0.1:4242, receiving on 127.0.0.1:40213`. The master gives one with `--game-relay`
+      ([The relay](#the-relay));
   - a player added gets the lowest free slot, and its ship when its client connects;
   - on `CONNECT`, the client receives `ACCEPTED`, then `PLAYER_JOINED` for each player connected, itself
     included; the others receive its `PLAYER_JOINED`;
@@ -653,6 +726,14 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   stopped by Ctrl+C.
 - `tests/relay_frame.cpp` (tag `[relay]`): the relay frame: round trips in IPv4 and IPv6, its bytes, the
   largest datagram and one byte more, every malformed case, and random bytes.
+- `tests/server_relay.cpp` (tag `[relay]`): the `Relay` alone, with fake clients and instances on the loopback:
+  each datagram to the instance of its session with the address of its client, and back from the public
+  port; every drop of each direction (not a datagram of the game, an unknown session, a frame from a port that
+  is not an instance, one that does not decode, an instance that sends for a player of another game); a banned
+  address until its ban is lifted, an expired ban; the rate per address (`RateLimiter`); a session released
+  still routed for 2 seconds, then gone; a game gone with its sessions; an id given again to another game; the
+  stop. The change handler of `AddressBans`. A measure, hidden from the runs (`[.relay-latency]`): the latency
+  the relay adds with 8 games of 4 players at 60 Hz.
 - `tests/lobby_messages.cpp` (tag `[lobby]`): the `HELLO` frame of the specification, the bytes of the other
   messages, round trips, the names checked apart, every malformed case, and random bytes.
 - `tests/server_lobby.cpp` (tag `[lobby]`): a `Lobby` on the loopback and real TLS clients pinning its key.
@@ -666,7 +747,10 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   0 and collisions drawn again, an id kept until its instance exits; `SERVER_FULL`; an instance that cannot
   start, exits at once or never gets ready, and its port given back; an impostor with an unknown id or a wrong
   secret; a crash reported as `GAME_CRASHED`; a silent client reported as `TIMED_OUT`; the master stopping its
-  games; and the real binary run as a master, which starts the instance of a game created by a client.
+  games; behind a real relay, two games of two players on one UDP port, each player seeing only its game, no
+  port of the range opened, a player who leaves still receiving its `DISCONNECT`, and a crashed instance whose
+  sessions are gone; and the real binary run as a master, with a port per game then with `--game-relay`, which
+  starts the instance of a game created by a client.
 - `tests/server_key.cpp` (tag `[server]`): a key generated where none exists, then the same one loaded; only
   its owner can read it; a file that is not a key, or cannot be written, stops the master and is never
   replaced; `--fingerprint` shows the key and never makes one.

@@ -26,6 +26,8 @@
 namespace rtype::server
 {
 
+class Relay;
+
 /// How the master runs its games.
 struct GamesSettings {
     /// The program of the instances: the master itself (currentExecutable()), or another one in the tests.
@@ -44,6 +46,9 @@ struct GamesSettings {
     /// A running game without GAME_STATUS for this long is stale: its instance, or its game thread, is
     /// stuck. Its instances report every second.
     std::chrono::milliseconds statusTimeout{std::chrono::seconds(3)};
+    /// The relay of the master (`--game-relay`), which serves every game on its one public UDP port; it must
+    /// outlive the games. nullptr: each game opens its own port of the range.
+    Relay *relay = nullptr;
 };
 
 /// Where a game stands, as its instance last said (GAME_STATUS).
@@ -73,7 +78,8 @@ struct LobbyPlayer {
 /// });
 /// @endcode
 ///
-/// - **Creating** takes a free UDP port, draws a secret, starts the instance and waits for its READY: only
+/// - **Creating** takes a free UDP port (behind a relay, only a place: the number of games stays the size of
+///   the range), draws a secret, starts the instance and waits for its READY: only
 ///   then is the creator added and answered. No port: SERVER_FULL. No READY in time, or an instance that
 ///   cannot start: GAME_START_FAILED, and the instance is killed.
 /// - **Joining** adds a player to a game that is ready: it gets a session and its keys, given to the instance
@@ -86,6 +92,9 @@ struct LobbyPlayer {
 /// - **Its status** (GAME_STATUS, every second) is kept with its time: status() says where it stands, and
 ///   whether it stopped reporting.
 /// - **Its port is freed** once the process has exited, killed if it does not within the stop timeout.
+/// - **Behind a relay** (GamesSettings::relay), the instance is given the relay in CONFIGURE, and the relay
+///   is told where the instance receives (READY), each session added and released, and the instance gone:
+///   GAME_JOINED gives the public port of the relay to every player.
 /// - **The administration** sees the running games and acts on them through AdminGames, and is told what
 ///   happens to them through its AdminObserver (docs/architecture/administration.md).
 class Games final : public AdminGames
@@ -151,6 +160,8 @@ private:
     void closeConnection(Game &game);
     void send(Game &game, std::uint8_t type, std::span<const std::byte> payload);
     void supervise();
+    /// The UDP port the players of a game send to: the one of the relay, or its own.
+    [[nodiscard]] std::uint16_t publicPort(const Game &game) const;
     void closeInstanceConnection(std::uint64_t id);
 
 public:

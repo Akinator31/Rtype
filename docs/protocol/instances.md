@@ -25,7 +25,7 @@ r-type_server --instance --id <instance id> --udp-port <port> --master-port <por
 | Argument | Description |
 |---|---|
 | `--id` | Id of the instance, a `u32` other than 0. It is also the game id shown to the clients. |
-| `--udp-port` | UDP port the instance opens for its clients, when `CONFIGURE` gives no relay |
+| `--udp-port` | UDP port the instance opens for its clients, when `CONFIGURE` gives no relay. Behind the relay the master still gives a port of its range, which the instance does not open |
 | `--master-port` | TCP port on which the master listens for its instances, on `127.0.0.1` |
 
 The master then writes the **secret** to the instance's standard input: 32 random bytes, as 64 lowercase
@@ -273,3 +273,7 @@ encryption stays end to end between the client and the instance.
 instance), or if it does not decode: shorter than 20 bytes, a family other than 4 or 6, a non-zero byte after
 an IPv4 address, port 0, or a datagram longer than 1200 bytes. The datagram it carries is then checked as any
 datagram of the game, by its session.
+
+The relay of the master (`--game-relay`, [Server](../architecture/server.md#the-relay)) drops, on its side, a
+frame from an address that is not one of its instances, one that does not decode or whose datagram has no valid
+header, and one whose session belongs to another instance: an instance only speaks for its own players.
