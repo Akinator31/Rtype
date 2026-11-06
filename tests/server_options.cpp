@@ -10,6 +10,7 @@
 #include "rtype/network/Tls.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -21,6 +22,7 @@
 #include <vector>
 
 using namespace rtype::server;
+using Catch::Matchers::ContainsSubstring;
 using rtype::network::Address;
 
 namespace
@@ -41,9 +43,8 @@ TEST_CASE("Without arguments, the server is a master with the default settings",
 
     CHECK(options.mode == Options::Mode::Master);
     CHECK(options.master.listen == Address::anyIpv4(4242));
-    CHECK(options.master.firstGamePort == 4243);
-    CHECK(options.master.lastGamePort == 4299);
-    CHECK_FALSE(options.master.gameRelay);
+    CHECK(options.master.gamePort == 4242);
+    CHECK(options.master.maxGames == 57);
     CHECK(options.master.key == "server.key");
     CHECK_FALSE(options.master.check);
     CHECK(options.master.config.empty());
@@ -99,7 +100,7 @@ TEST_CASE("A master with a configuration that has errors does not start", "[serv
     const std::string keyArgument = key.string();
     const std::string configArgument = directory.string();
     const std::string databaseArgument = "sqlite:" + (directory / "rtype.db").string();
-    const std::string settingsArgument = testing::webOnAnyPort(directory / "web.toml").string();
+    const std::string settingsArgument = testing::onAnyPorts(directory / "web.toml").string();
     std::ostringstream out;
     std::istringstream in;
 
@@ -115,20 +116,24 @@ TEST_CASE("A master with a configuration that has errors does not start", "[serv
 
 TEST_CASE("Every option of the master is read", "[server]")
 {
-    const Options options = parse({"--port", "5000", "--bind", "127.0.0.1", "--game-ports", "6000-6009",
-                                   "--key", "/etc/rtype/server.key", "--check", "--log-level", "debug"});
+    const Options options =
+        parse({"--port", "5000", "--bind", "127.0.0.1", "--game-port", "6000", "--max-games", "10", "--key",
+               "/etc/rtype/server.key", "--check", "--log-level", "debug"});
 
     CHECK(options.mode == Options::Mode::Master);
     CHECK(options.master.listen == Address::loopbackIpv4(5000));
-    CHECK(options.master.firstGamePort == 6000);
-    CHECK(options.master.lastGamePort == 6009);
+    CHECK(options.master.gamePort == 6000);
+    CHECK(options.master.maxGames == 10);
     CHECK(options.master.key == "/etc/rtype/server.key");
     CHECK(options.master.check);
     CHECK(options.logLevel == rtype::log::Level::Debug);
     CHECK(parse({"-p", "0", "-k", "a.key"}).master.listen == Address::anyIpv4(0));
-    // The relay: the same number as the lobby is allowed, one is TCP and the other UDP; 0 for any free port
-    CHECK(parse({"--game-relay", "4242"}).master.gameRelay == 4242);
-    CHECK(parse({"--game-relay", "0"}).master.gameRelay == 0);
+    // The same number as the lobby is allowed, one is TCP and the other UDP; 0 for any free port
+    const Options same = parse({"--port", "4242", "--game-port", "4242"});
+    CHECK(same.master.listen.port() == 4242);
+    CHECK(same.master.gamePort == 4242);
+    CHECK(parse({"--game-port", "0"}).master.gamePort == 0);
+    CHECK(parse({"--max-games", "1000"}).master.maxGames == 1000);
 }
 
 TEST_CASE("Invalid options of the master are refused", "[server]")
@@ -139,12 +144,12 @@ TEST_CASE("Invalid options of the master are refused", "[server]")
         {"--port", "-1"},
         {"--port", "42a"},
         {"--bind", "localhost"},
-        {"--game-ports", "4243"},
-        {"--game-ports", "4300-4243"},
-        {"--game-ports", "0-10"},
-        {"--game-relay"},
-        {"--game-relay", "65536"},
-        {"--game-relay", "relay"},
+        {"--game-port"},
+        {"--game-port", "65536"},
+        {"--game-port", "udp"},
+        {"--max-games", "0"},
+        {"--max-games", "1001"},
+        {"--max-games", "-1"},
         {"--log-level", "loud"},
         {"--unknown"},
         {"4242"},
@@ -158,17 +163,36 @@ TEST_CASE("Invalid options of the master are refused", "[server]")
     }
 }
 
+TEST_CASE("The options of the port range, gone with the relay, name what replaces them", "[server]")
+{
+    for (const std::string_view option : {"--game-ports", "--game-relay"}) {
+        CAPTURE(option);
+        try {
+            (void)parse({option, "4243-4299"});
+            FAIL("accepted");
+        } catch (const std::invalid_argument &error) {
+            CHECK_THAT(error.what(),
+                       ContainsSubstring("--game-port <port>") && ContainsSubstring("--max-games"));
+        }
+    }
+}
+
 // --- Instance ---
 
 TEST_CASE("An instance reads its id and ports", "[server]")
 {
-    const Options options = parse({"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000"});
+    // As a master starts it: its UDP port comes from the relay, in CONFIGURE
+    const Options options = parse({"--instance", "--id", "7", "--master-port", "5000"});
 
     CHECK(options.mode == Options::Mode::Instance);
     CHECK(options.instance.id == 7);
-    CHECK(options.instance.udpPort == 4251);
+    CHECK(options.instance.udpPort == 0);
     CHECK(options.instance.masterPort == 5000);
     CHECK_FALSE(options.instance.standalone);
+    // A port of its own, for a CONFIGURE without a relay
+    CHECK(
+        parse({"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000"}).instance.udpPort ==
+        4251);
 }
 
 TEST_CASE("An instance needs its id and ports, and refuses the options of the master", "[server]")
@@ -176,14 +200,14 @@ TEST_CASE("An instance needs its id and ports, and refuses the options of the ma
     const std::vector<std::vector<std::string_view>> invalid{
         {"--instance"},
         {"--instance", "--udp-port", "4251", "--master-port", "5000"},
-        {"--instance", "--id", "7", "--master-port", "5000"},
         {"--instance", "--id", "7", "--udp-port", "4251"},
         {"--instance", "--id", "0", "--udp-port", "4251", "--master-port", "5000"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--key", "server.key"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--check"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--fingerprint"},
         {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--health"},
-        {"--instance", "--id", "7", "--udp-port", "4251", "--master-port", "5000", "--game-relay", "4242"},
+        {"--instance", "--id", "7", "--master-port", "5000", "--game-port", "4242"},
+        {"--instance", "--id", "7", "--master-port", "5000", "--max-games", "4"},
     };
 
     for (const auto &arguments : invalid) {
@@ -203,6 +227,8 @@ TEST_CASE("The standalone mode only exists in debug builds, without a master", "
     CHECK(options.instance.id == 1);
     CHECK_THROWS_AS(parse({"--instance", "--standalone", "--udp-port", "4242", "--master-port", "5000"}),
                     std::invalid_argument);
+    // Without a master, nor its relay: it opens its own port
+    CHECK_THROWS_AS(parse({"--instance", "--standalone"}), std::invalid_argument);
 }
 
 // --- Help, version, exit codes ---

@@ -8,7 +8,6 @@
 // The programs are looked for in RTYPE_BUILD_BIN, by default build/bin at the root of the repository.
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createSocket } from 'node:dgram';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -32,25 +31,6 @@ function freeTcpPort(): Promise<number> {
       );
     });
   });
-}
-
-function udpPortFree(port: number): Promise<boolean> {
-  return new Promise((done) => {
-    const socket = createSocket('udp4');
-    socket.once('error', () => done(false));
-    socket.bind(port, () => socket.close(() => done(true)));
-  });
-}
-
-/** `count` consecutive UDP ports free now, for the games of the master. */
-async function freeUdpPorts(count: number): Promise<number> {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const first = 20000 + Math.floor(Math.random() * 40000);
-    let free = true;
-    for (let port = first; free && port < first + count; port++) free = await udpPortFree(port);
-    if (free) return first;
-  }
-  throw new Error('No free UDP ports');
 }
 
 function waitFor<T>(what: string, check: () => T | undefined, limit = 20_000): Promise<T> {
@@ -151,7 +131,6 @@ export default async function setup(): Promise<() => Promise<void>> {
   }
   const folder = mkdtempSync(join(tmpdir(), 'rtype-panel-e2e-'));
   const lobbyPort = await freeTcpPort();
-  const firstGamePort = await freeUdpPorts(4);
   const mail = await mailServer();
   await run(
     executable('rtype_panel_accounts'),
@@ -167,7 +146,8 @@ export default async function setup(): Promise<() => Promise<void>> {
     [
       '[server]',
       `port = ${lobbyPort}`,
-      `game_ports = "${firstGamePort}-${firstGamePort + 3}"`,
+      'game_port = 0',
+      'max_games = 4',
       'key = "server.key"',
       'database = "sqlite:rtype.db"',
       '',

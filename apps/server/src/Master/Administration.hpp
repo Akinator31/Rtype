@@ -27,8 +27,9 @@ namespace rtype::server
 struct AdministrationSettings {
     std::string version;
     std::uint16_t lobbyPort = 0;
-    std::uint16_t firstGamePort = 0;
-    std::uint16_t lastGamePort = 0;
+    /// The UDP port of every game, the one of the relay.
+    std::uint16_t gamePort = 0;
+    std::uint32_t maxGames = 0;
     std::uint16_t panelPort = 0;
     /// `[admin] admins`: their accounts are locked, neither demoted, banned nor deleted.
     std::vector<std::string> admins;
@@ -40,8 +41,9 @@ struct AdminServer {
     std::chrono::system_clock::time_point startedAt;
     std::chrono::milliseconds uptime{0};
     std::uint16_t lobbyPort = 0;
-    std::uint16_t firstGamePort = 0;
-    std::uint16_t lastGamePort = 0;
+    /// The UDP port of every game, the one of the relay.
+    std::uint16_t gamePort = 0;
+    std::uint32_t maxGames = 0;
     std::uint16_t panelPort = 0;
     std::size_t players = 0;
     std::size_t games = 0;

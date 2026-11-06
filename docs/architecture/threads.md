@@ -286,7 +286,7 @@ the panel are signed in the same way, by `PanelAccounts` on the loop ([Web serve
 of the web server posted to the loop waits there for the database thread, the hasher or Discord, without
 blocking either side.
 
-With `--game-relay`, the master runs one more thread, the one of its relay ([Server](server.md#the-relay)): its
+The master runs one more thread, the one of its relay ([Server](server.md#the-relay)): its
 own `EventLoop`, the one public UDP socket of the games and a socket on the loopback for the instances. It copies
 every datagram of every game, so it never waits on the lobby, its TLS or its database. The loop of the master
 posts it every change of its table (an instance ready, a session added or released, an instance gone) and a

@@ -36,9 +36,8 @@ struct GamesSettings {
     std::vector<std::string> leadingArguments;
     /// Given after them, such as `--log-level debug`.
     std::vector<std::string> trailingArguments;
-    /// The UDP ports of the games, one per game: their number is the most games at once.
-    std::uint16_t firstPort = 4243;
-    std::uint16_t lastPort = 4299;
+    /// The most games at once, running or ending: past it, SERVER_FULL.
+    std::uint32_t maxGames = 57;
     /// From the start of an instance to its READY (docs/protocol/instances.md, section 3).
     std::chrono::milliseconds startTimeout{std::chrono::seconds(10)};
     /// From SHUTDOWN or GAME_OVER to the exit of an instance, before it is killed.
@@ -46,9 +45,6 @@ struct GamesSettings {
     /// A running game without GAME_STATUS for this long is stale: its instance, or its game thread, is
     /// stuck. Its instances report every second.
     std::chrono::milliseconds statusTimeout{std::chrono::seconds(3)};
-    /// The relay of the master (`--game-relay`), which serves every game on its one public UDP port; it must
-    /// outlive the games. nullptr: each game opens its own port of the range.
-    Relay *relay = nullptr;
 };
 
 /// Where a game stands, as its instance last said (GAME_STATUS).
@@ -72,16 +68,16 @@ struct LobbyPlayer {
 /// lobby.
 ///
 /// @code
-/// rtype::server::Games games(loop, {.executable = rtype::server::currentExecutable()});
+/// rtype::server::Relay relay(rtype::network::Address::anyIpv4(4242));
+/// rtype::server::Games games(loop, relay, {.executable = rtype::server::currentExecutable()});
 /// games.create({playerId, "Pavel"}, {"Bydo hunters", 4}, [&](rtype::server::Games::JoinResult result) {
 ///     // GAME_JOINED, or the error to answer
 /// });
 /// @endcode
 ///
-/// - **Creating** takes a free UDP port (behind a relay, only a place: the number of games stays the size of
-///   the range), draws a secret, starts the instance and waits for its READY: only
-///   then is the creator added and answered. No port: SERVER_FULL. No READY in time, or an instance that
-///   cannot start: GAME_START_FAILED, and the instance is killed.
+/// - **Creating** takes a place among GamesSettings::maxGames, draws a secret, starts the instance and waits
+///   for its READY: only then is the creator added and answered. No place: SERVER_FULL. No READY in time, or
+///   an instance that cannot start: GAME_START_FAILED, and the instance is killed.
 /// - **Joining** adds a player to a game that is ready: it gets a session and its keys, given to the instance
 ///   (ADD_PLAYER) before the player (GAME_JOINED). A session id is random, never 0, and unique across the
 ///   whole master: it names one player of one game, and stays taken until the instance of its game exits, so
@@ -91,10 +87,10 @@ struct LobbyPlayer {
 ///   (LEFT_GAME (GAME_CRASHED)). A game over is told too (LEFT_GAME (GAME_OVER)).
 /// - **Its status** (GAME_STATUS, every second) is kept with its time: status() says where it stands, and
 ///   whether it stopped reporting.
-/// - **Its port is freed** once the process has exited, killed if it does not within the stop timeout.
-/// - **Behind a relay** (GamesSettings::relay), the instance is given the relay in CONFIGURE, and the relay
-///   is told where the instance receives (READY), each session added and released, and the instance gone:
-///   GAME_JOINED gives the public port of the relay to every player.
+/// - **Its place is freed** once the process has exited, killed if it does not within the stop timeout.
+/// - **Behind the relay** of the master, every game: the instance is given the relay in CONFIGURE, and the
+///   relay is told where the instance receives (READY), each session added and released, and the instance
+///   gone. GAME_JOINED gives the public port of the relay to every player.
 /// - **The administration** sees the running games and acts on them through AdminGames, and is told what
 ///   happens to them through its AdminObserver (docs/architecture/administration.md).
 class Games final : public AdminGames
@@ -119,6 +115,7 @@ private:
     struct InstanceConnection;
 
     rtype::network::EventLoop &_loop;
+    Relay &_relay;
     GamesSettings _settings;
     LeftHandler _onLeft;
     AdminObserver *_observer = nullptr;
@@ -131,7 +128,6 @@ private:
     std::map<std::uint32_t, std::uint32_t> _playerGames;
     /// The session ids taken, in every game whose instance has not exited yet.
     std::set<std::uint32_t> _sessions;
-    std::set<std::uint16_t> _freePorts;
     std::uint32_t _lastGameId = 0;
     std::uint64_t _lastConnection = 0;
     bool _stopping = false;
@@ -160,15 +156,14 @@ private:
     void closeConnection(Game &game);
     void send(Game &game, std::uint8_t type, std::span<const std::byte> payload);
     void supervise();
-    /// The UDP port the players of a game send to: the one of the relay, or its own.
-    [[nodiscard]] std::uint16_t publicPort(const Game &game) const;
     void closeInstanceConnection(std::uint64_t id);
 
 public:
-    /// Listens for the instances on 127.0.0.1, on a port of the system.
+    /// Listens for the instances on 127.0.0.1, on a port of the system. `relay` serves the games on its
+    /// public port: it must outlive them.
     /// @throws std::system_error if it cannot listen.
-    /// @throws std::invalid_argument if the port range is empty.
-    Games(rtype::network::EventLoop &loop, GamesSettings settings);
+    /// @throws std::invalid_argument if maxGames is 0.
+    Games(rtype::network::EventLoop &loop, Relay &relay, GamesSettings settings);
     ~Games() override;
 
     Games(const Games &) = delete;

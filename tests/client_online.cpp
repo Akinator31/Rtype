@@ -57,7 +57,8 @@ namespace
 struct Master {
     EventLoop loop;
     ServerIdentity identity = ServerIdentity::generate();
-    rtype::server::Games games{loop, testing::instances()};
+    rtype::server::Relay relay{Address::loopbackIpv4(0)};
+    rtype::server::Games games{loop, relay, testing::instances()};
     rtype::server::Lobby lobby{loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games};
 
     ~Master()
@@ -79,9 +80,11 @@ struct AccountsMaster {
     EventLoop loop;
     rtype::test::TestDatabase test;
     ServerIdentity identity = ServerIdentity::generate();
-    rtype::server::Games games{loop, rtype::server::GamesSettings{.executable = RTYPE_TEST_CHILD,
-                                                                  .leadingArguments = {},
-                                                                  .trailingArguments = {}}};
+    rtype::server::Relay relay{Address::loopbackIpv4(0)};
+    rtype::server::Games games{loop, relay,
+                               rtype::server::GamesSettings{.executable = RTYPE_TEST_CHILD,
+                                                            .leadingArguments = {},
+                                                            .trailingArguments = {}}};
     testing::FakeMailer mailer;
     std::optional<testing::FakeDiscord> fakeDiscord;
     std::optional<rtype::database::DatabaseThread> database;

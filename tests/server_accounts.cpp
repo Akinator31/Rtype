@@ -95,10 +95,12 @@ struct Server {
     Database direct;
     Setup setup;
     ServerIdentity identity = ServerIdentity::generate();
-    Games games{loop, setup.games ? testing::instances()
-                                  : GamesSettings{.executable = RTYPE_TEST_CHILD,
-                                                  .leadingArguments = {},
-                                                  .trailingArguments = {}}};
+    Relay relay{Address::loopbackIpv4(0)};
+    Games games{
+        loop, relay,
+        setup.games
+            ? testing::instances()
+            : GamesSettings{.executable = RTYPE_TEST_CHILD, .leadingArguments = {}, .trailingArguments = {}}};
     FakeMailer mailer;
     std::optional<FakeDiscord> fakeDiscord;
     std::optional<DatabaseThread> database;

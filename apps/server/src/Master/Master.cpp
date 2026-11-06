@@ -103,17 +103,15 @@ int runMaster(const MasterOptions &options)
         logger.error("Cannot listen on {}: {}", options.listen, error.code().message());
         return Failure;
     }
-    // Every game on one UDP port (--game-relay), on the address of the lobby: opened here, a port taken
-    // stops the master at start, as --check. It outlives the games, which tell it their sessions
+    // Every game on one UDP port (--game-port), on the address of the lobby, through the relay: opened here,
+    // a port taken stops the master at start, as --check. It outlives the games, which tell it their sessions
     std::optional<Relay> relay;
-    if (options.gameRelay) {
-        const rtype::network::Address relayAddress = options.listen.withPort(*options.gameRelay);
-        try {
-            relay.emplace(relayAddress, loadedBans);
-        } catch (const std::system_error &error) {
-            logger.error("Cannot open UDP {} for the games: {}", relayAddress, error.code().message());
-            return Failure;
-        }
+    const rtype::network::Address relayAddress = options.listen.withPort(options.gamePort);
+    try {
+        relay.emplace(relayAddress, loadedBans);
+    } catch (const std::system_error &error) {
+        logger.error("Cannot open UDP {} for the games: {}", relayAddress, error.code().message());
+        return Failure;
     }
 
     // The panel (docs/architecture/web.md): declared after the loop, it stops before it
@@ -183,14 +181,8 @@ int runMaster(const MasterOptions &options)
         logger.info("Discord application {}", discordSettings->discord.clientId);
     }
 
-    const unsigned maxGames = options.lastGamePort - options.firstGamePort + 1U;
-    if (relay) {
-        logger.info("Lobby on TCP {}, games on UDP {} through the relay ({} at most)",
-                    listener->localAddress(), relay->publicAddress(), maxGames);
-    } else {
-        logger.info("Lobby on TCP {}, games on UDP {}-{} ({} at most)", listener->localAddress(),
-                    options.firstGamePort, options.lastGamePort, maxGames);
-    }
+    logger.info("Lobby on TCP {}, games on UDP {} ({} at most)", listener->localAddress(),
+                relay->publicAddress(), options.maxGames);
     logger.info("Panel on HTTP {}", web->localAddress());
     if (!std::filesystem::is_regular_file(panelDir / "index.html")) {
         logger.info("The panel is not built: no index.html in {}", panelDir.string());
@@ -219,24 +211,20 @@ int runMaster(const MasterOptions &options)
 
     std::optional<Games> games;
     try {
-        games.emplace(loop,
+        games.emplace(loop, *relay,
                       GamesSettings{
                           .executable = currentExecutable(),
                           .leadingArguments = {},
                           .trailingArguments = {"--log-level", levelArgument(), "--config", config.string()},
-                          .firstPort = options.firstGamePort,
-                          .lastPort = options.lastGamePort,
-                          .relay = relay ? &*relay : nullptr,
+                          .maxGames = options.maxGames,
                       });
     } catch (const std::system_error &error) {
         logger.error("Cannot prepare the games: {}", error.what());
         return Failure;
     }
     AddressBans bans(loadedBans);
-    if (relay) {
-        // The relay drops the datagrams of a banned address before any game sees them
-        bans.setChangeHandler([&bans, &relay] { relay->setBans(bans.list()); });
-    }
+    // The relay drops the datagrams of a banned address before any game sees them
+    bans.setChangeHandler([&bans, &relay] { relay->setBans(bans.list()); });
     if (!loadedBans.empty()) {
         logger.info("{} addresses banned", loadedBans.size());
     }
@@ -281,8 +269,8 @@ int runMaster(const MasterOptions &options)
                                   AdministrationSettings{
                                       .version = RTYPE_VERSION,
                                       .lobbyPort = lobby.localAddress().port(),
-                                      .firstGamePort = options.firstGamePort,
-                                      .lastGamePort = options.lastGamePort,
+                                      .gamePort = relay->publicAddress().port(),
+                                      .maxGames = options.maxGames,
                                       .panelPort = web->localAddress().port(),
                                       .admins = options.settings.admin.admins,
                                   });
@@ -305,9 +293,7 @@ int runMaster(const MasterOptions &options)
         });
     });
     // Once the instances are gone, their last DISCONNECT forwarded: before the loop of the master
-    if (relay) {
-        relay->stop();
-    }
+    relay->stop();
     // The administration goes first: nothing tells it anything any more
     bans.setChangeHandler({});
     web->setAdministration(nullptr);

@@ -24,7 +24,6 @@
 #include "rtype/network/UdpSocket.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -52,7 +51,6 @@ using rtype::network::ServerIdentity;
 using rtype::network::SessionEnd;
 using rtype::network::TcpListener;
 using rtype::network::UdpSocket;
-using testing::freePorts;
 using testing::instances;
 using testing::killProcess;
 using testing::LobbyClient;
@@ -111,16 +109,18 @@ struct GameClient {
     }
 };
 
-/// A master: its games and its lobby, on the loop of the test.
+/// A master: its relay, its games and its lobby, on the loop of the test.
 struct MasterFixture {
     EventLoop loop;
     ServerIdentity identity = ServerIdentity::generate();
+    /// Before the games, which it outlives
+    Relay relay{Address::loopbackIpv4(0)};
     Games games;
     Lobby lobby;
     std::vector<GameClient *> gameClients;
 
-    explicit MasterFixture(GamesSettings settings = instances(), Relay *relay = nullptr)
-        : games(loop, withRelay(std::move(settings), relay)),
+    explicit MasterFixture(GamesSettings settings = instances())
+        : games(loop, relay, std::move(settings)),
           lobby(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games)
     {
     }
@@ -130,12 +130,6 @@ struct MasterFixture {
         // The instances left stop properly
         games.shutdown();
         (void)waitUntil(loop, [&] { return games.empty(); });
-    }
-
-    static GamesSettings withRelay(GamesSettings settings, Relay *relay)
-    {
-        settings.relay = relay;
-        return settings;
     }
 
     MasterFixture(const MasterFixture &) = delete;
@@ -320,7 +314,7 @@ TEST_CASE("Session ids are unique across the games of the master, and drawn agai
     CHECK(draws->empty());
 }
 
-TEST_CASE("Without a free game port, the server is full", "[games]")
+TEST_CASE("With max_games games running, the server is full", "[games]")
 {
     MasterFixture master(instances(1));
     auto alice = master.player("Alice");
@@ -333,7 +327,7 @@ TEST_CASE("Without a free game port, the server is full", "[games]")
     CHECK(bob->error(master.loop, 1) == ErrorMessage{message_type::CreateGame, ErrorCode::ServerFull});
 }
 
-TEST_CASE("A game whose instance does not start fails, and its port is free again", "[games]")
+TEST_CASE("A game whose instance does not start fails, and its place is free again", "[games]")
 {
     SECTION("A program that does not exist")
     {
@@ -359,7 +353,7 @@ TEST_CASE("A game whose instance does not start fails, and its port is free agai
         CHECK(alice->error(master.loop, 1) ==
               ErrorMessage{message_type::CreateGame, ErrorCode::GameStartFailed});
 
-        // Not SERVER_FULL: the only port was given back
+        // Not SERVER_FULL: the only place was given back
         REQUIRE(master.wait([&] { return master.games.empty(); }));
         alice->send(message_type::CreateGame, encode(CreateGameMessage{"Game", 4}));
         CHECK(alice->error(master.loop, 2) ==
@@ -566,7 +560,8 @@ TEST_CASE("A game whose instance stops reporting is shown as stale", "[games]")
     REQUIRE(master.wait([&] { return !received.empty(); }));
     REQUIRE(received[0] == instance_message::Configure);
     CHECK_FALSE(master.games.status(1));
-    instance->send(instance_message::Ready, encode(ReadyMessage{settings.firstPort}));
+    // Where it would receive the frames of the relay: no client plays here
+    instance->send(instance_message::Ready, encode(ReadyMessage{1}));
     const GameJoinedMessage joined = master.joined(*alice, 1);
 
     // Ready, nothing reported yet: no status, not stale yet
@@ -619,13 +614,12 @@ TEST_CASE("A master that stops shuts its games down", "[games]")
     CHECK(master.wait([&] { return alice->closed.has_value(); }));
 }
 
-TEST_CASE("Behind the relay, every game is served on one UDP port, each player seeing only its game",
+TEST_CASE("Every game is served on the one UDP port of the relay, each player seeing only its game",
           "[games][relay]")
 {
-    // Declared before the master, which outlives the clients: each is destroyed after what uses it
-    Relay relay(Address::loopbackIpv4(0));
-    const GamesSettings settings = instances(2);
-    MasterFixture master(settings, &relay);
+    // Declared before the clients, which it outlives
+    MasterFixture master(instances(2));
+    Relay &relay = master.relay;
     const std::uint16_t relayPort = relay.publicAddress().port();
     auto alice = master.player("Alice");
     auto bob = master.player("Bob");
@@ -664,10 +658,6 @@ TEST_CASE("Behind the relay, every game is served on one UDP port, each player s
     CHECK(relay.counters().outbound > 0);
     CHECK(relay.counters().droppedFor(Relay::Drop::WrongInstance) == 0);
     CHECK(relay.counters().droppedFor(Relay::Drop::UnknownSession) == 0);
-    // No instance opened a port of the range: only the relay listens in UDP
-    for (std::uint32_t port = settings.firstPort; port <= settings.lastPort; ++port) {
-        CHECK_NOTHROW(UdpSocket(master.loop, Address::anyIpv4(static_cast<std::uint16_t>(port))));
-    }
 
     // Bob leaves: the DISCONNECT (QUIT) of its instance still goes out through the relay
     bob->send(message_type::LeaveGame);
@@ -691,8 +681,6 @@ TEST_CASE("Behind the relay, every game is served on one UDP port, each player s
 
 TEST_CASE("r-type_server, run as a master, starts the instance of a game created by a client", "[games]")
 {
-    // With a port per game, or every game on the one port of the relay
-    const bool relayed = GENERATE(false, true);
     EventLoop loop;
     const ServerIdentity identity = ServerIdentity::generate();
     const std::filesystem::path key = std::filesystem::temp_directory_path() / "rtype_tests_games_master.key";
@@ -701,34 +689,34 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
         std::filesystem::temp_directory_path() / "rtype_tests_games_master.db";
     std::filesystem::remove(database);
     const std::filesystem::path settings =
-        testing::webOnAnyPort(std::filesystem::temp_directory_path() / "rtype_tests_games_master.toml");
-    std::uint16_t lobbyPort = 0;
-    {
+        testing::onAnyPorts(std::filesystem::temp_directory_path() / "rtype_tests_games_master.toml");
+    // One number for the lobby and the games, as 4242 by default: free in TCP and in UDP
+    std::uint16_t port = 0;
+    for (int attempt = 0; attempt < 100 && port == 0; ++attempt) {
         const TcpListener probe(loop, Address::loopbackIpv4(0));
-        lobbyPort = probe.localAddress().port();
+        try {
+            const UdpSocket udp(loop, Address::anyIpv4(probe.localAddress().port()));
+            port = probe.localAddress().port();
+        } catch (const std::system_error &) {
+            continue;
+        }
     }
+    REQUIRE(port != 0);
     loop.poll();
-    const std::uint16_t gamePort = freePorts(1);
-    const std::uint16_t relayPort = relayed ? freePorts(1) : 0;
-    std::vector<std::string> arguments = {
-        "--port",       std::to_string(lobbyPort),
-        "--bind",       "127.0.0.1",
-        "--game-ports", std::to_string(gamePort) + "-" + std::to_string(gamePort),
-        "--key",        key.string(),
-        "--database",   "sqlite:" + database.string(),
-        "--settings",   settings.string(),
-        "--log-level",  "warning"};
-    if (relayed) {
-        arguments.insert(arguments.end(), {"--game-relay", std::to_string(relayPort)});
-    }
+    const std::vector<std::string> arguments = {"--port",      std::to_string(port),
+                                                "--bind",      "127.0.0.1",
+                                                "--game-port", std::to_string(port),
+                                                "--key",       key.string(),
+                                                "--database",  "sqlite:" + database.string(),
+                                                "--settings",  settings.string(),
+                                                "--log-level", "warning"};
     Process server(RTYPE_TEST_SERVER, arguments, {.input = {}, .stopGrace = testing::Patience});
 
     // The master opens its port: try until it does
     std::unique_ptr<LobbyClient> alice;
     REQUIRE(waitUntil(loop, [&] {
         if (!alice || alice->closed) {
-            alice =
-                std::make_unique<LobbyClient>(loop, Address::loopbackIpv4(lobbyPort), identity.fingerprint());
+            alice = std::make_unique<LobbyClient>(loop, Address::loopbackIpv4(port), identity.fingerprint());
             testing::runFor(loop, 50ms);
         }
         return alice->secured;
@@ -738,7 +726,7 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
     REQUIRE(waitUntil(loop, [&] { return alice->received.size() >= 2; }));
     REQUIRE(alice->received[1].first == message_type::GameJoined);
     const GameJoinedMessage game = *decodeGameJoined(alice->received[1].second);
-    CHECK(game.udpPort == (relayed ? relayPort : gamePort));
+    CHECK(game.udpPort == port);
     GameClient client(loop, game);
     REQUIRE(waitUntil(loop, [&] {
         client.update();

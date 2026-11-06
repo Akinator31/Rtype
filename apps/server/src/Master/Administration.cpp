@@ -56,8 +56,8 @@ AdminServer Administration::server() const
         .uptime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
                                                                         _started),
         .lobbyPort = _settings.lobbyPort,
-        .firstGamePort = _settings.firstGamePort,
-        .lastGamePort = _settings.lastGamePort,
+        .gamePort = _settings.gamePort,
+        .maxGames = _settings.maxGames,
         .panelPort = _settings.panelPort,
         .players = _lobby.adminPlayers().size(),
         .games = _games.adminGames().size(),

@@ -19,14 +19,17 @@ This page describes **version 4**. Master and instances come from the same build
 The master starts an instance with its own executable and these arguments:
 
 ```
-r-type_server --instance --id <instance id> --udp-port <port> --master-port <port>
+r-type_server --instance --id <instance id> --master-port <port>
 ```
 
 | Argument | Description |
 |---|---|
 | `--id` | Id of the instance, a `u32` other than 0. It is also the game id shown to the clients. |
-| `--udp-port` | UDP port the instance opens for its clients, when `CONFIGURE` gives no relay. Behind the relay the master still gives a port of its range, which the instance does not open |
 | `--master-port` | TCP port on which the master listens for its instances, on `127.0.0.1` |
+
+A master gives no UDP port: since version 4 the instance receives its datagrams from the relay of the master,
+whose port `CONFIGURE` gives. `--udp-port <port>`, which a master no longer passes, gives the port an instance
+opens itself when `CONFIGURE` has no relay (the tests of an instance alone, and the standalone mode).
 
 The master then writes the **secret** to the instance's standard input: 32 random bytes, as 64 lowercase
 hexadecimal characters followed by a line feed (`\n`). The secret is never passed as an argument: the
@@ -109,7 +112,7 @@ not presented itself yet, and that the secret matches, comparing it in constant 
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | UDP port | `u16` | The port opened: `--udp-port` without a relay; behind a relay, the port on `127.0.0.1` the system chose, where the relay sends its frames (version 4) |
+| 0 | UDP port | `u16` | The port opened: behind a relay, the port on `127.0.0.1` the system chose, where the relay sends its frames (version 4); without a relay, `--udp-port`, or the one the system chose without it |
 
 **Receiver behaviour:** the game appears in `GAME_LIST`, and the master sends it the players waiting to join.
 
@@ -196,10 +199,10 @@ the game, like any malformed message.
 |---|---|---|---|
 | 0 | Name | `str8` | Name of the game, 1 to 32 bytes |
 | 1 + n | Max players | `u8` | 1 to 4 |
-| 2 + n | Relay port | `u16` | Port of the relay of the master on `127.0.0.1` (version 4); 0: no relay |
+| 2 + n | Relay port | `u16` | Port of the relay of the master on `127.0.0.1` (version 4), which a master always gives; 0: no relay |
 
-**Receiver behaviour:** without a relay, the instance opens its UDP port, `--udp-port`, for its clients. With
-a relay, it opens a UDP port on `127.0.0.1` chosen by the system instead, takes there only the
+**Receiver behaviour:** without a relay, the instance opens its UDP port, `--udp-port` (a port of the system
+without it), for its clients. With a relay, it opens a UDP port on `127.0.0.1` chosen by the system instead, takes there only the
 [relay frames](#5-the-relay-frame) that come from `127.0.0.1:<relay port>`, and sends every datagram of the
 game back as a frame to the relay. Either way it answers `READY` with the port it opened.
 
@@ -274,6 +277,6 @@ instance), or if it does not decode: shorter than 20 bytes, a family other than 
 an IPv4 address, port 0, or a datagram longer than 1200 bytes. The datagram it carries is then checked as any
 datagram of the game, by its session.
 
-The relay of the master (`--game-relay`, [Server](../architecture/server.md#the-relay)) drops, on its side, a
+The relay of the master (`--game-port`, [Server](../architecture/server.md#the-relay)) drops, on its side, a
 frame from an address that is not one of its instances, one that does not decode or whose datagram has no valid
 header, and one whose session belongs to another instance: an instance only speaks for its own players.

@@ -117,7 +117,7 @@ the clients.
 | Name | Value | Description |
 |---|---|---|
 | Master port | 4242 (default) | TCP port of the master, configurable |
-| Game ports | 4243–4299 (default) | UDP port range of the games, configurable |
+| Game port | 4242 (default) | UDP port of every game, the same number as the master port, configurable ([ADR 0027](../decisions/0027-one-udp-port-relay.md)) |
 | Maximum TCP frame | 16384 | Largest TCP frame, size prefix included ([lobby](lobby.md#3-framing)) |
 | Maximum datagram | 1200 | Largest UDP datagram, all fields included ([game](game.md#2-datagram-layout)) |
 | Lobby ping interval | 10 s | A client sends `PING` if it sent nothing for this long |
