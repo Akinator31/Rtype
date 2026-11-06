@@ -29,7 +29,8 @@ void addBurst(MonoSound &sound, float second, float hertz, float length = 0.05f)
     const auto count = static_cast<std::size_t>(length * static_cast<float>(SampleRate));
     for (std::size_t i = 0; i < count && start + i < sound.samples.size(); ++i) {
         const float t = static_cast<float>(i) / static_cast<float>(SampleRate);
-        const float fade = std::min(1.0f, static_cast<float>(i) / 220.0f) * (1.0f - static_cast<float>(i) / static_cast<float>(count));
+        const float fade = std::min(1.0f, static_cast<float>(i) / 220.0f) *
+                           (1.0f - static_cast<float>(i) / static_cast<float>(count));
         sound.samples[start + i] += 0.8f * fade * std::sin(2.0f * std::numbers::pi_v<float> * hertz * t);
     }
 }

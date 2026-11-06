@@ -40,7 +40,8 @@ struct WaveDefinition {
     /// Random only: where they appear.
     WaveArea area;
     /// The music the clients play when the wave starts: a path relative to the assets of the client, for
-    /// instance "sounds/boss_theme.mp3". Empty: the music playing goes on. A Music wave needs it, and follows it.
+    /// instance "sounds/boss_theme.mp3". Empty: the music playing goes on. A Music wave needs it, and follows
+    /// it.
     std::string music;
     /// Music only: what comes at the beats of each band, in the order bass, mid, high.
     std::array<WaveBeatRule, 3> beats;

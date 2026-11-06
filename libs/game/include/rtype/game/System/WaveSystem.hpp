@@ -11,9 +11,9 @@ namespace rtype::game
 /// from MinWaveDifficulty to MaxWaveDifficulty; a difficulty without a wave is skipped. A wave sends its
 /// enemies one every spawnInterval seconds, where its placement says, and ends once they are all sent and
 /// none is left (destroyed or gone out of the area). A Music wave sends each at the tick its timeline says,
-/// on the beats of its music, instead of at regular intervals. The next one starts Rules::wavePause ticks later; the
-/// first one Rules::firstWaveDelay ticks after the game starts. Once the last one ends, the game is won
-/// (GameOutcome::Victory).
+/// on the beats of its music, instead of at regular intervals. The next one starts Rules::wavePause ticks
+/// later; the first one Rules::firstWaveDelay ticks after the game starts. Once the last one ends, the game
+/// is won (GameOutcome::Victory).
 ///
 /// Nothing happens without a wave in context.waves, nor while no player is in the game, nor during the
 /// rescue against the final boss (RescueSystem), which ends the game itself. The enemies are created after

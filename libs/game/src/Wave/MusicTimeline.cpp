@@ -63,8 +63,8 @@ class Placer
 
     [[nodiscard]] bool isRecent(std::uint32_t lane) const
     {
-        return std::find(_recent.begin(), _recent.begin() + static_cast<std::ptrdiff_t>(_recentCount), lane) !=
-               _recent.begin() + static_cast<std::ptrdiff_t>(_recentCount);
+        return std::find(_recent.begin(), _recent.begin() + static_cast<std::ptrdiff_t>(_recentCount),
+                         lane) != _recent.begin() + static_cast<std::ptrdiff_t>(_recentCount);
     }
 
     void remember(std::uint32_t lane)
@@ -105,7 +105,8 @@ public:
         const WaveArea &area = _wave.area;
         const float laneHeight = (area.maxY - area.minY) / static_cast<float>(LaneCount);
         const float laneTop = area.minY + laneHeight * static_cast<float>(pickLane());
-        return {enemy, between(area.minX, area.maxX), between(laneTop + laneHeight * 0.2f, laneTop + laneHeight * 0.8f)};
+        return {enemy, between(area.minX, area.maxX),
+                between(laneTop + laneHeight * 0.2f, laneTop + laneHeight * 0.8f)};
     }
 };
 

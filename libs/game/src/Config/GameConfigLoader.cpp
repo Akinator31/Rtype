@@ -166,7 +166,8 @@ struct ReadFiles {
 std::filesystem::path findAssetsBeside(const std::filesystem::path &directory)
 {
     const std::filesystem::path normal = directory.lexically_normal();
-    const std::filesystem::path root = normal.has_filename() ? normal.parent_path() : normal.parent_path().parent_path();
+    const std::filesystem::path root =
+        normal.has_filename() ? normal.parent_path() : normal.parent_path().parent_path();
     std::error_code error;
     if (!std::filesystem::is_directory(root / "assets", error) &&
         std::filesystem::is_directory(root / "apps" / "client" / "assets", error)) {

@@ -30,7 +30,8 @@ struct BandRange {
     float highHertz;
 };
 
-constexpr std::array<BandRange, BeatBandCount> BandRanges{{{40.0f, 150.0f}, {150.0f, 2500.0f}, {2500.0f, 10000.0f}}};
+constexpr std::array<BandRange, BeatBandCount> BandRanges{
+    {{40.0f, 150.0f}, {150.0f, 2500.0f}, {2500.0f, 10000.0f}}};
 
 using Spectrum = std::vector<std::complex<float>>;
 
@@ -92,7 +93,8 @@ std::array<std::vector<float>, BeatBandCount> measureBands(const MonoSound &soun
 {
     const std::vector<float> window = makeWindow();
     const auto bins = makeBins(sound.sampleRate);
-    const std::size_t frameCount = sound.samples.size() < FrameSize ? 0 : (sound.samples.size() - FrameSize) / HopSize + 1;
+    const std::size_t frameCount =
+        sound.samples.size() < FrameSize ? 0 : (sound.samples.size() - FrameSize) / HopSize + 1;
     std::array<std::vector<float>, BeatBandCount> loudness;
     for (auto &band : loudness) {
         band.resize(frameCount);
@@ -176,8 +178,8 @@ std::vector<Candidate> findCandidates(const std::vector<float> &loudness, BeatBa
 /// An attack is heard in several bands at once (a kick drum has a click): only the clearest band keeps it.
 std::vector<Candidate> keepClearestBand(std::vector<Candidate> candidates)
 {
-    std::ranges::stable_sort(candidates,
-                             [](const Candidate &a, const Candidate &b) { return a.prominence > b.prominence; });
+    std::ranges::stable_sort(
+        candidates, [](const Candidate &a, const Candidate &b) { return a.prominence > b.prominence; });
     std::vector<Candidate> kept;
     for (const Candidate &candidate : candidates) {
         const bool shadowed = std::ranges::any_of(kept, [&](const Candidate &other) {

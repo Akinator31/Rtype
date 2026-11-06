@@ -562,8 +562,9 @@ TEST_CASE("A music wave is analysed into a timeline of enemies", "[game][config]
 {
     ConfigDirectory directory("music");
     directory.writeValid();
-    directory.write("waves/line.lua", "return { name = 'line', difficulty = 1, quantity = 1, placement = 'random',"
-                                      " enemy = 'scout' }");
+    directory.write("waves/line.lua",
+                    "return { name = 'line', difficulty = 1, quantity = 1, placement = 'random',"
+                    " enemy = 'scout' }");
 
     const LoadedGameConfig loaded = loadMusic(directory, MusicWave);
 
@@ -622,17 +623,21 @@ TEST_CASE("A music wave with a mistake is an error of its file", "[game][config]
     ConfigDirectory directory("music_errors");
     directory.writeValid();
 
-    CHECK_THAT(loadMusic(directory, replaced(MusicWave, "sounds/drums_style.mp3", "sounds/nope.mp3")).errors.at(0),
-               ContainsSubstring("waves/music.lua: music:"));
-    CHECK_THAT(loadMusic(directory, replaced(MusicWave, ", music = \"sounds/drums_style.mp3\"", "")).errors.at(0),
-               ContainsSubstring("music: missing"));
+    CHECK_THAT(
+        loadMusic(directory, replaced(MusicWave, "sounds/drums_style.mp3", "sounds/nope.mp3")).errors.at(0),
+        ContainsSubstring("waves/music.lua: music:"));
+    CHECK_THAT(
+        loadMusic(directory, replaced(MusicWave, ", music = \"sounds/drums_style.mp3\"", "")).errors.at(0),
+        ContainsSubstring("music: missing"));
     CHECK(loadMusic(directory, replaced(MusicWave, "beats = {", "beats = { low = {}, ")).errors.at(0) ==
           "waves/music.lua: beats.low: unknown field");
     CHECK(loadMusic(directory, replaced(MusicWave, "enemies = { \"scout\" }, minGap = 1.0",
-                                        "enemies = { \"nope\" }, minGap = 1.0")).errors.at(0) ==
-          "waves/music.lua: the wave 'drums' uses the unknown enemy 'nope'");
-    CHECK(loadMusic(directory, replaced(MusicWave, "enemies = { \"scout\" }, minGap = 1.0", "enemies = { 3 }")).errors.at(0) ==
-          "waves/music.lua: beats.bass.enemies[1]: expected a string");
-    CHECK(loadMusic(directory, replaced(MusicWave, "placement = \"music\",", "placement = \"music\", quantity = 3,")).errors.at(0) ==
-          "waves/music.lua: quantity: unknown field");
+                                        "enemies = { \"nope\" }, minGap = 1.0"))
+              .errors.at(0) == "waves/music.lua: the wave 'drums' uses the unknown enemy 'nope'");
+    CHECK(
+        loadMusic(directory, replaced(MusicWave, "enemies = { \"scout\" }, minGap = 1.0", "enemies = { 3 }"))
+            .errors.at(0) == "waves/music.lua: beats.bass.enemies[1]: expected a string");
+    CHECK(loadMusic(directory,
+                    replaced(MusicWave, "placement = \"music\",", "placement = \"music\", quantity = 3,"))
+              .errors.at(0) == "waves/music.lua: quantity: unknown field");
 }

@@ -1,7 +1,7 @@
 #include "rtype/beat/Decoder/Mp3Decoder.hpp"
 
-// raylib embeds its own dr_mp3 in raudio.c, and the client links both: keep the functions of this copy private to
-// this file, or the linker finds every drmp3_* defined twice
+// raylib embeds its own dr_mp3 in raudio.c, and the client links both: keep the functions of this copy
+// private to this file, or the linker finds every drmp3_* defined twice
 #define DRMP3_API static
 #define DR_MP3_IMPLEMENTATION
 #include <dr_mp3.h>
@@ -49,8 +49,8 @@ MonoSound decodeMp3(const std::filesystem::path &file)
     const std::vector<char> content = readFile(file);
     drmp3_config config{};
     drmp3_uint64 frameCount = 0;
-    float *frames =
-        drmp3_open_memory_and_read_pcm_frames_f32(content.data(), content.size(), &config, &frameCount, nullptr);
+    float *frames = drmp3_open_memory_and_read_pcm_frames_f32(content.data(), content.size(), &config,
+                                                              &frameCount, nullptr);
     if (frames == nullptr || config.channels == 0) {
         throw std::runtime_error(std::format("{}: not a valid mp3", file.generic_string()));
     }

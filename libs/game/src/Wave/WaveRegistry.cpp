@@ -56,17 +56,19 @@ void checkMusic(const WaveDefinition &definition, const EnemyRegistry &enemies)
         throw std::invalid_argument(std::format("the music wave '{}' needs a music", definition.name));
     }
     if (!definition.spawns.empty() || !definition.enemy.empty()) {
-        throw std::invalid_argument(std::format(
-            "the music wave '{}' gets its enemies from its beats, not from spawns nor enemy", definition.name));
+        throw std::invalid_argument(
+            std::format("the music wave '{}' gets its enemies from its beats, not from spawns nor enemy",
+                        definition.name));
     }
     if (definition.timeline.size() != definition.quantity) {
         throw std::invalid_argument(
             std::format("the music wave '{}' needs as many enemies as its timeline", definition.name));
     }
-    const bool hasEnemies = std::ranges::any_of(
-        definition.beats, [](const WaveBeatRule &rule) { return !rule.enemies.empty(); });
+    const bool hasEnemies =
+        std::ranges::any_of(definition.beats, [](const WaveBeatRule &rule) { return !rule.enemies.empty(); });
     if (!hasEnemies) {
-        throw std::invalid_argument(std::format("the music wave '{}' needs enemies on its beats", definition.name));
+        throw std::invalid_argument(
+            std::format("the music wave '{}' needs enemies on its beats", definition.name));
     }
     for (const WaveBeatRule &rule : definition.beats) {
         for (const std::string &enemy : rule.enemies) {

@@ -1,7 +1,7 @@
 #include "rtype/beat/Decoder/WavDecoder.hpp"
 
-// raylib embeds its own dr_wav in raudio.c, and the client links both: keep the functions of this copy private to
-// this file, or the linker finds every drwav_* defined twice
+// raylib embeds its own dr_wav in raudio.c, and the client links both: keep the functions of this copy
+// private to this file, or the linker finds every drwav_* defined twice
 #define DRWAV_API static
 #define DRWAV_PRIVATE static
 #define DR_WAV_IMPLEMENTATION
