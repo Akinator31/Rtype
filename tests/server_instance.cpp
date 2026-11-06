@@ -5,8 +5,10 @@
 #include "Common/InstanceMessages.hpp"
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
+#include "Instance/DirectTransport.hpp"
 #include "Instance/GameHost.hpp"
 #include "Instance/GameThread.hpp"
+#include "Instance/GameTransport.hpp"
 #include "Instance/Instance.hpp"
 #include "Instance/MasterLink.hpp"
 #include "rtype/game/Messages.hpp"
@@ -237,6 +239,26 @@ std::optional<rtype::game::EntityState> shipOf(const rtype::game::SnapshotPart &
     }
     return std::nullopt;
 }
+
+/// A transport with no socket: the test hands datagrams in from any address, and reads those sent.
+struct FakeTransport final : GameTransport {
+    struct State {
+        ReceiveHandler handler;
+        std::vector<std::pair<Address, Bytes>> sent;
+        bool closed = false;
+    };
+    /// Shared with the test: the host owns the transport.
+    std::shared_ptr<State> state = std::make_shared<State>();
+    Address local = Address::loopbackIpv4(4999);
+
+    void start(ReceiveHandler handler) override { state->handler = std::move(handler); }
+    void send(const Address &to, std::span<const std::byte> datagram) override
+    {
+        state->sent.emplace_back(to, copy(datagram));
+    }
+    void close() override { state->closed = true; }
+    [[nodiscard]] const Address &localAddress() const override { return local; }
+};
 
 /// An instance run by runInstance() on a thread of its own, as r-type_server --instance would.
 struct RunningInstance {
@@ -610,12 +632,54 @@ TEST_CASE("The link fails on what the protocol does not expect", "[instance]")
 
 // --- Whole instances ---
 
+TEST_CASE("A game host sends and receives through its transport, with the address of each client",
+          "[instance]")
+{
+    EventLoop loop;
+    GameThread game({}, {}, [](TickResult) {});
+    auto transport = std::make_unique<FakeTransport>();
+    const std::shared_ptr<FakeTransport::State> wire = transport->state;
+    std::optional<std::uint32_t> connected;
+    GameHost host(loop, std::move(transport), 4, game,
+                  {.onConnected = [&](std::uint32_t playerId) { connected = playerId; },
+                   .onDisconnected = {},
+                   .onGameOver = {}});
+    REQUIRE(wire->handler);
+    CHECK(host.localAddress() == Address::loopbackIpv4(4999));
+
+    // A client far away, whose datagrams the test carries both ways
+    const AddPlayerMessage alice = player(42, 5, "Alice");
+    REQUIRE(host.addPlayer(alice));
+    const Address aliceAddress = *Address::parse("203.0.113.7", 50000);
+    std::optional<rtype::game::AcceptedMessage> accepted;
+    ClientSession client(alice.sessionId, DatagramKey(alice.clientKey), DatagramKey(alice.serverKey),
+                         [&](std::span<const std::byte> datagram) { wire->handler(aliceAddress, datagram); });
+    client.start([&](std::span<const std::byte> payload) { accepted = rtype::game::decodeAccepted(payload); },
+                 [](std::uint8_t, std::span<const std::byte>) {}, [](SessionEnd) {}, Clock::now());
+    const auto carry = [&] {
+        client.update(Clock::now());
+        for (const auto &[to, datagram] : std::exchange(wire->sent, {})) {
+            // Everything the host sends goes to the address the client sent from
+            CHECK(to == aliceAddress);
+            client.receive(datagram, Clock::now());
+        }
+    };
+
+    REQUIRE(waitUntil(loop, [&] { return accepted.has_value(); }, carry));
+    CHECK(accepted->slot == 0);
+    CHECK(connected == 42u);
+
+    // Closing the game closes the transport
+    host.closeAll(DisconnectReason::Shutdown);
+    CHECK(wire->closed);
+}
+
 TEST_CASE("A game over is sent to the clients, reported with the scores, and nothing follows", "[instance]")
 {
     EventLoop loop;
     GameThread game({}, {}, [](TickResult) {});
     std::optional<GameOverReport> report;
-    GameHost host(loop, Address::loopbackIpv4(0), 4, game,
+    GameHost host(loop, std::make_unique<DirectTransport>(loop, Address::loopbackIpv4(0)), 4, game,
                   {.onConnected = {}, .onDisconnected = {}, .onGameOver = [&](const GameOverReport &scores) {
                        report = scores;
                    }});
@@ -656,7 +720,7 @@ TEST_CASE("The status of a game comes from its last tick and the sessions of its
 {
     EventLoop loop;
     GameThread game({}, {}, [](TickResult) {});
-    GameHost host(loop, Address::loopbackIpv4(0), 4, game, {});
+    GameHost host(loop, std::make_unique<DirectTransport>(loop, Address::loopbackIpv4(0)), 4, game, {});
     const AddPlayerMessage alice = player(42, 5, "Alice");
     const AddPlayerMessage bob = player(43, 6, "Bob");
     REQUIRE(host.addPlayer(alice));

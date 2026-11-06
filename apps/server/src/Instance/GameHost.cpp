@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <utility>
 
 namespace rtype::server
 {
@@ -26,13 +27,13 @@ const rtype::log::Logger &logger()
 
 } // namespace
 
-GameHost::GameHost(rtype::network::EventLoop &loop, const rtype::network::Address &local,
+GameHost::GameHost(rtype::network::EventLoop &loop, std::unique_ptr<GameTransport> transport,
                    std::uint8_t maxPlayers, GameThread &game, Handlers handlers)
-    : _socket(loop, local), _game(game), _maxPlayers(std::min(maxPlayers, MaxInstancePlayers)),
+    : _transport(std::move(transport)), _game(game), _maxPlayers(std::min(maxPlayers, MaxInstancePlayers)),
       _handlers(std::move(handlers)),
       _sessions(
           [this](const rtype::network::Address &to, std::span<const std::byte> datagram) {
-              _socket.send(to, datagram);
+              _transport->send(to, datagram);
           },
           {
               .onConnected = [this](std::uint32_t session,
@@ -43,7 +44,7 @@ GameHost::GameHost(rtype::network::EventLoop &loop, const rtype::network::Addres
           }),
       _updates(loop)
 {
-    _socket.startReceiving([this](const rtype::network::Address &from, std::span<const std::byte> datagram) {
+    _transport->start([this](const rtype::network::Address &from, std::span<const std::byte> datagram) {
         _sessions.receive(from, datagram, Clock::now());
     });
     // Sends, resends, acknowledgements, heartbeats and timeouts, at the pace of the ticks, but on its own:
@@ -286,7 +287,7 @@ void GameHost::closeAll(DisconnectReason reason)
     _updates.cancel();
     _sessions.closeAll(reason);
     _players.clear();
-    _socket.close();
+    _transport->close();
 }
 
 } // namespace rtype::server

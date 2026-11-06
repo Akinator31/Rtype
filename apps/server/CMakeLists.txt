@@ -141,6 +141,7 @@ add_library(r-type_server_core STATIC
     src/Common/Options.cpp
     src/Common/Secret.cpp
     src/Common/Settings.cpp
+    src/Instance/DirectTransport.cpp
     src/Instance/GameHost.cpp
     src/Instance/GameThread.cpp
     src/Instance/InputBuffer.cpp

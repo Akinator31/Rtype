@@ -50,7 +50,9 @@ apps/server/src/
   Instance/                an instance: one game
     Instance.cpp           runInstance(): the life of the instance, with or without a master
     MasterLink.cpp         the connection to the master
-    GameHost.cpp           the network side of the game: UDP, sessions, players, game messages
+    GameHost.cpp           the network side of the game: sessions, players, game messages
+    GameTransport.hpp      how the datagrams of the game come and go, for GameHost
+    DirectTransport.cpp    the transport of a game with a UDP port of its own
     GameThread.cpp         the simulation thread, at 60 ticks per second
 ```
 
@@ -390,7 +392,7 @@ master closing the connection, stops the game with exit code 1: an instance neve
 flowchart LR
     subgraph Net["network thread (main): the event loop"]
         Link["MasterLink<br/>TCP to the master"]
-        Host["GameHost<br/>UDP, SessionHost, players"]
+        Host["GameHost<br/>transport, SessionHost, players"]
     end
     subgraph Sim["game thread"]
         Game["GameThread<br/>Simulation, 60 ticks/s"]
@@ -409,6 +411,10 @@ flowchart LR
   `InputBuffer` for the tick they are stamped with ([below](#inputs)), and the result of each tick goes back with
   the tick of the last input applied for each player.
 - **`GameHost`** is the game seen from the network ([game protocol](../protocol/game.md)):
+  - its datagrams come and go through a `GameTransport`, with the real address of each client, so its
+    `SessionHost` limits and follows clients by their address whatever carries the datagrams.
+    `DirectTransport`, a `UdpSocket` bound to `--udp-port`, is the only one today; the instance opens it before
+    the host, and "Cannot open UDP port" comes from there;
   - a player added gets the lowest free slot, and its ship when its client connects;
   - on `CONNECT`, the client receives `ACCEPTED`, then `PLAYER_JOINED` for each player connected, itself
     included; the others receive its `PLAYER_JOINED`;
@@ -627,7 +633,8 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 - `tests/server_instance.cpp` (tag `[instance]`): the messages between the master and its instances (round
   trips, bytes, every malformed case, random bytes), the game thread (its rate, each input applied at its
   tick, whatever their order, nothing after `stop()`), the game over of `GameHost` (sent, reported with the
-  scores, acknowledged, nothing after), every failure of `MasterLink`, and whole instances run by `runInstance()` on
+  scores, acknowledged, nothing after), a `GameHost` on a fake transport (a client far away connected, every
+  datagram sent back to its address, the transport closed with the game), every failure of `MasterLink`, and whole instances run by `runInstance()` on
   a thread of the test, with a fake master over TCP and real clients over UDP: two players who join, see each
   other and move, one removed by the master, one who quits, then `SHUTDOWN`; the master going away; a full
   game; a UDP port taken; a player removed by an administrator; and the standalone mode with its public keys, stopped by Ctrl+C.
