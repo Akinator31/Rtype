@@ -67,6 +67,14 @@ on their own machine for development or on a machine on the Internet.
     ./build/bin/r-type_server --key keys/server.key --port 5000 --game-ports 5001-5010 --log-level debug
     ```
 
+    Every game on one UDP port, the same number as the lobby, through the relay of the master: only 4242/tcp
+    and 4242/udp to open. The range of `--game-ports` then only gives the most games at once
+    ([The relay](../architecture/server.md#the-relay)); this option is temporary, until it is the default:
+
+    ```sh
+    ./build/bin/r-type_server --key keys/server.key --game-relay 4242
+    ```
+
 4. **Open the panel**, from the machine of the server: the server writes its address, with a
    token new at each start, to `admin-url.txt` beside its key, `keys/admin-url.txt` here, readable by its owner
    only:
@@ -103,6 +111,7 @@ and exits with code 1:
 | `Cannot open the database sqlite:rtype.db: ...` | The file is not a database, or its directory cannot be written: give another one with `--database sqlite:<file>` |
 | `... has migration N (...), which this program does not know` | A newer server changed this database: run that version, or give this one another database |
 | `Cannot listen on 0.0.0.0:4242: Address already in use` | Another server runs on that port: stop it, or choose another with `--port` |
+| `Cannot open UDP 0.0.0.0:4242 for the games: Address already in use` | With `--game-relay`, another program uses that UDP port: stop it, or choose another |
 | `Cannot serve the panel on 127.0.0.1:8080: Address already in use` | Another program uses the port of the panel, a second server on the machine for instance: give it another `listen` in `[web]` ([Configure a server](configure-a-server.md)) |
 
 Once it runs, the games it starts show in its logs. Players who create a game and get `GAME_START_FAILED` point

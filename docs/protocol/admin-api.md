@@ -128,6 +128,7 @@ shown until it is ready (10 seconds at most).
 
 | Field | Meaning |
 |---|---|
+| `port` | The UDP port its players send to: its own, or the one of the relay, the same for every game, with `--game-relay` ([Server](../architecture/server.md#the-relay)) |
 | `tick`, `wave` | From the last `GAME_STATUS` of the instance ([instances, 4.1](instances.md#game_status-0x06)); `null` before the first |
 | `statusAge` | Since that status, or since the game got ready |
 | `stale` | No status for 3 seconds: the instance, or its game thread, is stuck |
