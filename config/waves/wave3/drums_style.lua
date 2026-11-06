@@ -10,9 +10,9 @@ return {
     music = "sounds/drums_style.mp3",
     lead = 1.5,
     beats = {
-        bass = { enemies = { "bydo_heavy" }, minGap = 4.5 },
-        mid = { enemies = { "bydo_scout", "bydo_gunner" }, minGap = 3.5 },
-        high = { enemies = { "bydo_scout" }, minGap = 3.5 },
+        bass = { enemies = { "bydo_heavy", "bydo_bomber", "bydo_phalanx" }, minGap = 4.5 },
+        mid = { enemies = { "bydo_scout", "bydo_gunner", "bydo_striker", "bydo_orbiter", "bydo_mortar" }, minGap = 3.5 },
+        high = { enemies = { "bydo_scout", "bydo_drone", "bydo_stinger", "bydo_sniper" }, minGap = 3.5 },
     },
     area = { minX = 1980, maxX = 2020, minY = 100, maxY = 980 },
 }
