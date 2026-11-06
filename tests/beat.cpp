@@ -2,6 +2,7 @@
 
 #include "rtype/beat/Analysis/BeatDetector.hpp"
 #include "rtype/beat/Decoder/Mp3Decoder.hpp"
+#include "rtype/beat/Decoder/WavDecoder.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -109,6 +110,18 @@ TEST_CASE("A missing or invalid mp3 is refused", "[beat]")
 {
     CHECK_THROWS_AS(decodeMp3("no/such/file.mp3"), std::runtime_error);
     CHECK_THROWS_AS(decodeMp3(std::filesystem::path(RTYPE_TEST_CONFIG) / "player.lua"), std::runtime_error);
+}
+
+TEST_CASE("A wav is decoded, and another extension is refused", "[beat]")
+{
+    const std::filesystem::path sounds(RTYPE_TEST_SOUNDS);
+
+    const MonoSound sound = decodeSound(sounds / "punk.wav");
+
+    CHECK(sound.sampleRate == 44100);
+    CHECK(sound.duration() > 30.0f);
+    CHECK_THROWS_AS(decodeWav("no/such/file.wav"), std::runtime_error);
+    CHECK_THROWS_AS(decodeSound(std::filesystem::path(RTYPE_TEST_CONFIG) / "player.lua"), std::runtime_error);
 }
 
 TEST_CASE("The music of a wave is decoded and has beats in each band", "[beat]")

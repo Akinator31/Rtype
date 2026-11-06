@@ -1,6 +1,7 @@
 #include "Wave/MusicTimeline.hpp"
 
 #include "rtype/beat/Analysis/BeatDetector.hpp"
+#include "rtype/beat/Decoder/WavDecoder.hpp"
 #include "rtype/game/Constants.hpp"
 
 #include <algorithm>
@@ -117,7 +118,7 @@ std::uint32_t toTick(float seconds)
 
 void fillMusicTimeline(WaveDefinition &wave, const std::filesystem::path &assets)
 {
-    const beat::MonoSound sound = beat::decodeMp3(assets / wave.music);
+    const beat::MonoSound sound = beat::decodeSound(assets / wave.music);
     const std::vector<beat::Beat> beats = beat::detectBeats(sound, gapsOf(wave));
     Placer placer(wave);
     std::array<std::size_t, 3> lastEnemy{std::numeric_limits<std::size_t>::max(),
