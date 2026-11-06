@@ -308,9 +308,12 @@ sequenceDiagram
 - **The instances connect back** to a listener of the master on `127.0.0.1`, on a port of the system. An
   instance has 10 seconds to present itself; an unknown id closes its connection, a wrong secret (compared in
   constant time, `sameSecret()`) also kills the instance it pretends to be.
-- **A session per player**: an id unique in its game, and two keys drawn by the master, given to the instance
-  (`ADD_PLAYER`) before the player (`GAME_JOINED`), so that the game knows the session when the client
-  connects.
+- **A session per player**: an id and two keys drawn by the master, given to the instance (`ADD_PLAYER`)
+  before the player (`GAME_JOINED`), so that the game knows the session when the client connects. The id is
+  random, never 0, and unique across the master, not only in its game: one id names one player of one game.
+  It stays taken until the instance of its game exits, so an instance never sees the same id twice, even
+  after its player left. An id already taken is drawn again (`takeSession()`); the tests force collisions
+  with `setSessionDraw()`.
 - **One UDP port per game**, from `--game-ports`: none free is `SERVER_FULL`. A port is given back once the
   process has exited.
 
@@ -637,7 +640,8 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   lobby.
 - `tests/server_games.cpp` (tag `[games]`): real instances of `r-type_server` started by `Games`, real lobby
   clients over TLS and game clients over UDP. A game created, listed, joined, full, left, and shut down with
-  its last player; the requests after `CREATE_GAME` answered in order; `SERVER_FULL`; an instance that cannot
+  its last player; the requests after `CREATE_GAME` answered in order; session ids unique across two games,
+  0 and collisions drawn again, an id kept until its instance exits; `SERVER_FULL`; an instance that cannot
   start, exits at once or never gets ready, and its port given back; an impostor with an unknown id or a wrong
   secret; a crash reported as `GAME_CRASHED`; a silent client reported as `TIMED_OUT`; the master stopping its
   games; and the real binary run as a master, which starts the instance of a game created by a client.

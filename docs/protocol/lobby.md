@@ -499,7 +499,7 @@ malformed otherwise.
 |---|---|---|---|
 | 0 | Game id | `u32` | |
 | 4 | UDP port | `u16` | Port of the game, on the same IP address as the master |
-| 6 | Session id | `u32` | Identifies the player's session in the game, never 0 |
+| 6 | Session id | `u32` | Identifies the player's session in the game, never 0. Random: the client assumes nothing about its value |
 | 10 | Client key | `bytes[32]` | Key of the datagrams sent by the client |
 | 42 | Server key | `bytes[32]` | Key of the datagrams sent by the game |
 

@@ -208,7 +208,7 @@ the game, like any malformed message.
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Player id | `u32` | |
-| 4 | Session id | `u32` | Unique in this instance, never 0 |
+| 4 | Session id | `u32` | Random, never 0, unique across the master: never given twice while this instance runs, nor to another running instance |
 | 8 | Client key | `bytes[32]` | |
 | 40 | Server key | `bytes[32]` | |
 | 72 | Name | `str8` | 1 to 16 bytes |
