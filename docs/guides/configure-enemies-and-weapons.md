@@ -214,7 +214,7 @@ The enemies appear in five lanes of the `area` (the same default as a random wav
 one of the two beats before, so that they come from everywhere. The positions are fixed by the name of the wave:
 every game of it is the same. The file is looked for in `assets/` next to `config/` (or `apps/client/assets/` for
 the configuration of the repository), so a server needs the music beside its configuration, which its package
-installs. Only the mp3 format is read.
+installs. Only the mp3 and wav formats are read.
 
 ```lua
 return {
@@ -229,7 +229,8 @@ return {
 ```
 
 The wave lasts as long as the music and ends once its last enemy is gone. `config/waves/wave3/drums_style.lua` and
-`wave4/the_sports_music.lua` are the examples.
+`wave4/the_sports_music.lua` are the examples; `wave1/space_voyager.lua`, `wave2/christmas_rock.lua`,
+`wave5/punk.lua`, `wave5/epic_anthem.lua`, `wave1/cyberpunk_short.lua` and `wave4/cyberpunk_main.lua` follow the other tracks.
 
 A game plays the waves by difficulty, from 1 to 6: for each one, a wave drawn among those of that difficulty.
 The repository keeps its examples in `config/waves/wave1/` through `wave5/`, with four choices
