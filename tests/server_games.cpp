@@ -260,6 +260,58 @@ TEST_CASE("The requests after CREATE_GAME are answered after it, in order", "[ga
           ErrorMessage{message_type::JoinGame, ErrorCode::AlreadyInGame});
 }
 
+TEST_CASE("Session ids are unique across the games of the master, and drawn again on a collision", "[games]")
+{
+    // The draws, in order; 0 and the ids already taken are drawn again:
+    // - Alice, game 1: 0 refused, then 7
+    // - Bob, game 2: 7 taken in game 1, then 9
+    // - Carol, game 1: 9 taken in game 2, 7 in game 1, then 12
+    // - Dave, game 1 after Carol left: 12 still taken until the instance exits, then 13
+    auto draws = std::make_shared<std::vector<std::uint32_t>>(
+        std::vector<std::uint32_t>{0, 7, 7, 9, 9, 7, 12, 12, 13});
+    MasterFixture master;
+    master.games.setSessionDraw([draws, extra = std::uint32_t{1000}]() mutable {
+        if (draws->empty()) {
+            return extra++; // more draws than expected: the checks below fail, without looping forever
+        }
+        const std::uint32_t session = draws->front();
+        draws->erase(draws->begin());
+        return session;
+    });
+    auto alice = master.player("Alice");
+    auto bob = master.player("Bob");
+    auto carol = master.player("Carol");
+    auto dave = master.player("Dave");
+
+    alice->send(message_type::CreateGame, encode(CreateGameMessage{"First", 4}));
+    const GameJoinedMessage aliceGame = master.joined(*alice, 1);
+    bob->send(message_type::CreateGame, encode(CreateGameMessage{"Second", 4}));
+    const GameJoinedMessage bobGame = master.joined(*bob, 1);
+    carol->send(message_type::JoinGame, encode(JoinGameMessage{aliceGame.gameId}));
+    const GameJoinedMessage carolGame = master.joined(*carol, 1);
+    CHECK(aliceGame.sessionId == 7);
+    CHECK(bobGame.sessionId == 9);
+    CHECK(carolGame.sessionId == 12);
+    CHECK(bobGame.gameId != aliceGame.gameId);
+
+    // The instances accept these ids: the clients of both games connect
+    GameClient aliceClient(master.loop, aliceGame);
+    GameClient bobClient(master.loop, bobGame);
+    GameClient carolClient(master.loop, carolGame);
+    master.gameClients = {&aliceClient, &bobClient, &carolClient};
+    REQUIRE(master.wait([&] {
+        return aliceClient.accepted.has_value() && bobClient.accepted.has_value() &&
+               carolClient.accepted.has_value();
+    }));
+
+    carol->send(message_type::LeaveGame);
+    REQUIRE(master.wait([&] { return carol->received.size() > 2 && carolClient.end.has_value(); }));
+    dave->send(message_type::JoinGame, encode(JoinGameMessage{aliceGame.gameId}));
+    const GameJoinedMessage daveGame = master.joined(*dave, 1);
+    CHECK(daveGame.sessionId == 13);
+    CHECK(draws->empty());
+}
+
 TEST_CASE("Without a free game port, the server is full", "[games]")
 {
     MasterFixture master(instances(1));
