@@ -156,6 +156,7 @@ add_library(r-type_server_core STATIC
     src/Master/Lobby.cpp
     src/Master/Master.cpp
     src/Master/Process.cpp
+    src/Master/Relay.cpp
     src/Master/ServerDatabase.cpp
     src/Master/ServerKey.cpp
     src/Web/AdminJson.cpp
