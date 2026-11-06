@@ -1632,3 +1632,108 @@ TEST_CASE("A behavior sees the phase of its Bydo", "[game]")
     run(simulation, 60);
     CHECK(entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer).at(0).y == Approx(203.0f));
 }
+
+// --- The waves that follow a music ---
+
+namespace
+{
+
+/// Four scouts at the ticks 0, 30, 30 and 90 of the wave, as loadGameConfig() fills them from a music.
+WaveDefinition musicWave(std::uint8_t difficulty = 1)
+{
+    WaveDefinition wave;
+    wave.name = "drums";
+    wave.difficulty = difficulty;
+    wave.placement = WavePlacement::Music;
+    wave.music = "sounds/drums.mp3";
+    wave.beats[0].enemies = {"bydo_scout"};
+    wave.timeline = {{0, {"bydo_scout", 2000.0f, 100.0f}},
+                     {30, {"bydo_scout", 2000.0f, 300.0f}},
+                     {30, {"bydo_scout", 2000.0f, 500.0f}},
+                     {90, {"bydo_scout", 2000.0f, 700.0f}}};
+    wave.quantity = static_cast<std::uint16_t>(wave.timeline.size());
+    return wave;
+}
+
+} // namespace
+
+TEST_CASE("A wave registry takes a music wave, and refuses an incomplete one", "[game]")
+{
+    const EnemyRegistry enemies = scoutEnemies();
+    WaveRegistry registry;
+    WaveDefinition wave = musicWave();
+
+    SECTION("a complete one")
+    {
+        registry.addDefinition(wave, enemies);
+        CHECK(registry.getDefinition("drums").timeline.size() == 4);
+        return;
+    }
+    SECTION("no music")
+    {
+        wave.music.clear();
+    }
+    SECTION("a timeline of another size than its quantity")
+    {
+        wave.quantity = 3;
+    }
+    SECTION("no enemy on any beat")
+    {
+        wave.beats[0].enemies.clear();
+    }
+    SECTION("an unknown enemy on a beat")
+    {
+        wave.beats[1].enemies = {"nope"};
+    }
+    SECTION("spawns of a manual wave")
+    {
+        wave.spawns = {{"bydo_scout", 0.0f, 0.0f}};
+    }
+    SECTION("an empty area")
+    {
+        wave.area.minY = 10.0f;
+        wave.area.maxY = 5.0f;
+    }
+
+    CHECK_THROWS_AS(registry.addDefinition(wave, enemies), std::invalid_argument);
+}
+
+TEST_CASE("A music wave sends its enemies at the ticks of its timeline, then ends once they are gone",
+          "[game]")
+{
+    Rules rules;
+    rules.firstWaveDelay = 10;
+    Simulation simulation(rules, battleConfig({musicWave()}));
+    simulation.addPlayer(0);
+    const auto flyers = [&] { return entitiesOf(simulation.snapshot(), EntityKind::BydoFlyer); };
+
+    CHECK(runUntilWave(simulation, 100) == 1);
+    // The first one is at tick 0 of the wave, created after the systems of the tick
+    REQUIRE(flyers().size() == 1);
+    CHECK(flyers()[0].y == Approx(100.0f));
+
+    run(simulation, 29);
+    CHECK(flyers().size() == 1);
+    run(simulation, 1);
+    CHECK(flyers().size() == 3);
+    run(simulation, 59);
+    CHECK(flyers().size() == 3);
+    run(simulation, 1);
+    CHECK(flyers().size() == 4);
+
+    destroyEnemies(simulation);
+    simulation.step();
+    CHECK(simulation.context().wave.name.empty());
+    CHECK(simulation.context().waveMusic.empty());
+}
+
+TEST_CASE("A music wave gives its music to the clients when it starts", "[game]")
+{
+    Rules rules;
+    rules.firstWaveDelay = 1;
+    Simulation simulation(rules, battleConfig({musicWave()}));
+    simulation.addPlayer(0);
+
+    CHECK(runUntilWave(simulation, 5) == 1);
+    CHECK(simulation.snapshot().waveMusic == "sounds/drums.mp3");
+}

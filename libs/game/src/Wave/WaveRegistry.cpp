@@ -50,6 +50,38 @@ void checkRandom(const WaveDefinition &definition, const EnemyRegistry &enemies)
     }
 }
 
+void checkMusic(const WaveDefinition &definition, const EnemyRegistry &enemies)
+{
+    if (definition.music.empty()) {
+        throw std::invalid_argument(std::format("the music wave '{}' needs a music", definition.name));
+    }
+    if (!definition.spawns.empty() || !definition.enemy.empty()) {
+        throw std::invalid_argument(std::format(
+            "the music wave '{}' gets its enemies from its beats, not from spawns nor enemy", definition.name));
+    }
+    if (definition.timeline.size() != definition.quantity) {
+        throw std::invalid_argument(
+            std::format("the music wave '{}' needs as many enemies as its timeline", definition.name));
+    }
+    const bool hasEnemies = std::ranges::any_of(
+        definition.beats, [](const WaveBeatRule &rule) { return !rule.enemies.empty(); });
+    if (!hasEnemies) {
+        throw std::invalid_argument(std::format("the music wave '{}' needs enemies on its beats", definition.name));
+    }
+    for (const WaveBeatRule &rule : definition.beats) {
+        for (const std::string &enemy : rule.enemies) {
+            checkEnemy(definition, enemies, enemy);
+        }
+    }
+    if (!(definition.lead >= 0.0f)) {
+        throw std::invalid_argument(std::format("the wave '{}' needs a positive lead", definition.name));
+    }
+    const WaveArea &area = definition.area;
+    if (!(area.minX <= area.maxX) || !(area.minY <= area.maxY)) {
+        throw std::invalid_argument(std::format("the wave '{}' has an empty area", definition.name));
+    }
+}
+
 void checkDefinition(const WaveDefinition &definition, const EnemyRegistry &enemies)
 {
     if (definition.name.empty()) {
@@ -68,6 +100,8 @@ void checkDefinition(const WaveDefinition &definition, const EnemyRegistry &enem
     }
     if (definition.placement == WavePlacement::Manual) {
         checkManual(definition, enemies);
+    } else if (definition.placement == WavePlacement::Music) {
+        checkMusic(definition, enemies);
     } else {
         checkRandom(definition, enemies);
     }

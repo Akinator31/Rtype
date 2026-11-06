@@ -2,6 +2,7 @@
 
 #include "Config/DefinitionReaders.hpp"
 #include "Config/TableReader.hpp"
+#include "Wave/MusicTimeline.hpp"
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Ship/ShipRegistry.hpp"
@@ -160,6 +161,36 @@ struct ReadFiles {
     std::optional<FromFile<PlayerDefinition>> player;
 };
 
+/// The assets of the programs, next to the configuration: `assets/` beside `config/` once built or installed,
+/// or `apps/client/assets/` when the configuration is the one of the repository.
+std::filesystem::path findAssetsBeside(const std::filesystem::path &directory)
+{
+    const std::filesystem::path normal = directory.lexically_normal();
+    const std::filesystem::path root = normal.has_filename() ? normal.parent_path() : normal.parent_path().parent_path();
+    std::error_code error;
+    if (!std::filesystem::is_directory(root / "assets", error) &&
+        std::filesystem::is_directory(root / "apps" / "client" / "assets", error)) {
+        return root / "apps" / "client" / "assets";
+    }
+    return root / "assets";
+}
+
+/// Finds the enemies of the waves that follow a music: the analysis of the music needs the assets.
+void analyseMusics(const std::filesystem::path &assets, std::vector<FromFile<WaveDefinition>> &waves,
+                   std::vector<std::string> &errors)
+{
+    for (auto &[file, wave] : waves) {
+        if (wave.placement != WavePlacement::Music) {
+            continue;
+        }
+        try {
+            fillMusicTimeline(wave, assets);
+        } catch (const std::runtime_error &error) {
+            errors.push_back(std::format("{}: music: {}", file, error.what()));
+        }
+    }
+}
+
 /// The file of the player, at the root of the directory: required, a game cannot be played without it.
 std::optional<FromFile<PlayerDefinition>> readPlayerFile(const std::filesystem::path &directory,
                                                          std::vector<std::string> &errors)
@@ -177,7 +208,8 @@ std::optional<FromFile<PlayerDefinition>> readPlayerFile(const std::filesystem::
     return std::nullopt;
 }
 
-ReadFiles readFiles(const std::filesystem::path &directory, std::vector<std::string> &errors)
+ReadFiles readFiles(const std::filesystem::path &directory, const std::filesystem::path &assets,
+                    std::vector<std::string> &errors)
 {
     ReadFiles files;
     files.projectiles =
@@ -187,6 +219,9 @@ ReadFiles readFiles(const std::filesystem::path &directory, std::vector<std::str
     files.enemies = readFolder<EnemyDefinition>(directory, "enemies", readEnemyDefinition, errors);
     readBehaviors(directory, files.enemies, errors);
     files.waves = readFolder<WaveDefinition>(directory, "waves", readWaveDefinition, errors);
+    if (errors.empty()) {
+        analyseMusics(assets, files.waves, errors);
+    }
     files.player = readPlayerFile(directory, errors);
     return files;
 }
@@ -232,13 +267,18 @@ GameConfig takeConfig(ReadFiles &files)
 
 LoadedGameConfig loadGameConfig(const std::filesystem::path &directory)
 {
+    return loadGameConfig(directory, findAssetsBeside(directory));
+}
+
+LoadedGameConfig loadGameConfig(const std::filesystem::path &directory, const std::filesystem::path &assets)
+{
     LoadedGameConfig loaded;
     std::error_code error;
     if (!std::filesystem::is_directory(directory, error)) {
         loaded.errors.push_back(std::format("{}: no configuration directory", directory.generic_string()));
         return loaded;
     }
-    ReadFiles files = readFiles(directory, loaded.errors);
+    ReadFiles files = readFiles(directory, assets, loaded.errors);
     if (loaded.errors.empty()) {
         checkDefinitions(files, loaded.errors);
     }

@@ -17,6 +17,8 @@ struct WaveProgress {
     std::uint16_t spawned = 0;
     /// Ticks before its next enemy.
     std::uint32_t nextSpawnIn = 0;
+    /// Music wave: ticks since it started.
+    std::uint32_t elapsed = 0;
     /// Ticks before the next wave starts, between two waves.
     std::uint32_t pauseLeft = 0;
 };

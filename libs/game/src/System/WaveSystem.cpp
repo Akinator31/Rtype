@@ -76,6 +76,7 @@ void WaveSystem::startNextWave()
         progress.name = names[_context.randomBetween(0, last)];
         progress.spawned = 0;
         progress.nextSpawnIn = 0;
+        progress.elapsed = 0;
         _context.waveStarted = progress.number;
         _context.waveMusic = _context.waves.getDefinition(progress.name).music;
         spawnDueEnemies(_context.waves.getDefinition(progress.name));
@@ -85,8 +86,27 @@ void WaveSystem::startNextWave()
     _context.gameOver = GameOutcome::Victory;
 }
 
+void WaveSystem::spawnTimelineEnemies(const WaveDefinition &wave)
+{
+    WaveProgress &progress = _context.wave;
+    while (progress.spawned < wave.quantity && wave.timeline[progress.spawned].tick <= progress.elapsed) {
+        spawnAt(wave.timeline[progress.spawned].spawn);
+        ++progress.spawned;
+    }
+    ++progress.elapsed;
+}
+
+void WaveSystem::spawnAt(const WaveSpawn &spawn)
+{
+    _ecs.defer([this, spawn] { spawnEnemy(_ecs, _context, spawn.enemy, spawn.x, spawn.y); });
+}
+
 void WaveSystem::spawnDueEnemies(const WaveDefinition &wave)
 {
+    if (wave.placement == WavePlacement::Music) {
+        spawnTimelineEnemies(wave);
+        return;
+    }
     WaveProgress &progress = _context.wave;
     if (progress.nextSpawnIn > 0) {
         --progress.nextSpawnIn;
@@ -108,7 +128,7 @@ void WaveSystem::spawnEnemyOf(const WaveDefinition &wave, std::uint16_t index)
         spawn = {wave.enemy, _context.randomNumber(area.minX, area.maxX),
                  _context.randomNumber(area.minY, area.maxY)};
     }
-    _ecs.defer([this, spawn] { spawnEnemy(_ecs, _context, spawn.enemy, spawn.x, spawn.y); });
+    spawnAt(spawn);
 }
 
 void WaveSystem::endWave()

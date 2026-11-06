@@ -279,6 +279,29 @@ std::vector<TableReader> TableReader::readList(const std::string &name)
     return items;
 }
 
+std::vector<std::string> TableReader::readStrings(const std::string &name)
+{
+    const luabridge::LuaRef value = getField(name);
+    if (value.isNil()) {
+        return {};
+    }
+    const std::size_t length = value.isTable() ? getRawLength(value) : 0;
+    if (!value.isTable() || countEntries(value) != length) {
+        fail(name, "expected a list of strings");
+    }
+    std::vector<std::string> items;
+    for (std::size_t i = 1; i <= length; ++i) {
+        const std::string item = std::format("{}[{}]", name, i);
+        const luabridge::LuaRef element = value.rawget(static_cast<lua_Integer>(i));
+        std::string text = toString(item, element);
+        if (text.empty()) {
+            fail(item, "expected a non-empty string");
+        }
+        items.push_back(std::move(text));
+    }
+    return items;
+}
+
 void TableReader::checkAllFieldsRead() const
 {
     for (const auto &[key, value] : luabridge::pairs(_table)) {
