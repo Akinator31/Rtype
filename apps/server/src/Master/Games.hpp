@@ -26,6 +26,8 @@
 namespace rtype::server
 {
 
+class Relay;
+
 /// How the master runs its games.
 struct GamesSettings {
     /// The program of the instances: the master itself (currentExecutable()), or another one in the tests.
@@ -34,9 +36,8 @@ struct GamesSettings {
     std::vector<std::string> leadingArguments;
     /// Given after them, such as `--log-level debug`.
     std::vector<std::string> trailingArguments;
-    /// The UDP ports of the games, one per game: their number is the most games at once.
-    std::uint16_t firstPort = 4243;
-    std::uint16_t lastPort = 4299;
+    /// The most games at once, running or ending: past it, SERVER_FULL.
+    std::uint32_t maxGames = 57;
     /// From the start of an instance to its READY (docs/protocol/instances.md, section 3).
     std::chrono::milliseconds startTimeout{std::chrono::seconds(10)};
     /// From SHUTDOWN or GAME_OVER to the exit of an instance, before it is killed.
@@ -67,23 +68,29 @@ struct LobbyPlayer {
 /// lobby.
 ///
 /// @code
-/// rtype::server::Games games(loop, {.executable = rtype::server::currentExecutable()});
+/// rtype::server::Relay relay(rtype::network::Address::anyIpv4(4242));
+/// rtype::server::Games games(loop, relay, {.executable = rtype::server::currentExecutable()});
 /// games.create({playerId, "Pavel"}, {"Bydo hunters", 4}, [&](rtype::server::Games::JoinResult result) {
 ///     // GAME_JOINED, or the error to answer
 /// });
 /// @endcode
 ///
-/// - **Creating** takes a free UDP port, draws a secret, starts the instance and waits for its READY: only
-///   then is the creator added and answered. No port: SERVER_FULL. No READY in time, or an instance that
-///   cannot start: GAME_START_FAILED, and the instance is killed.
+/// - **Creating** takes a place among GamesSettings::maxGames, draws a secret, starts the instance and waits
+///   for its READY: only then is the creator added and answered. No place: SERVER_FULL. No READY in time, or
+///   an instance that cannot start: GAME_START_FAILED, and the instance is killed.
 /// - **Joining** adds a player to a game that is ready: it gets a session and its keys, given to the instance
-///   (ADD_PLAYER) before the player (GAME_JOINED).
+///   (ADD_PLAYER) before the player (GAME_JOINED). A session id is random, never 0, and unique across the
+///   whole master: it names one player of one game, and stays taken until the instance of its game exits, so
+///   that an instance never sees the same id twice.
 /// - **A game without players** is shut down (SHUTDOWN (EMPTY)).
 /// - **An instance that dies**, or closes its connection, without GAME_OVER has crashed: its players are told
 ///   (LEFT_GAME (GAME_CRASHED)). A game over is told too (LEFT_GAME (GAME_OVER)).
 /// - **Its status** (GAME_STATUS, every second) is kept with its time: status() says where it stands, and
 ///   whether it stopped reporting.
-/// - **Its port is freed** once the process has exited, killed if it does not within the stop timeout.
+/// - **Its place is freed** once the process has exited, killed if it does not within the stop timeout.
+/// - **Behind the relay** of the master, every game: the instance is given the relay in CONFIGURE, and the
+///   relay is told where the instance receives (READY), each session added and released, and the instance
+///   gone. GAME_JOINED gives the public port of the relay to every player.
 /// - **The administration** sees the running games and acts on them through AdminGames, and is told what
 ///   happens to them through its AdminObserver (docs/architecture/administration.md).
 class Games final : public AdminGames
@@ -95,6 +102,8 @@ public:
     /// it closed its session itself (`PLAYER_DISCONNECTED (QUIT)`).
     using LeftHandler = std::function<void(std::uint32_t playerId,
                                            std::optional<rtype::lobby::LeftGameMessage> notification)>;
+    /// Draws a candidate session id, refused if it is 0 or already taken.
+    using SessionDraw = std::function<std::uint32_t()>;
 
     /// How often the processes are checked.
     static constexpr std::chrono::milliseconds SupervisionInterval{50};
@@ -106,16 +115,19 @@ private:
     struct InstanceConnection;
 
     rtype::network::EventLoop &_loop;
+    Relay &_relay;
     GamesSettings _settings;
     LeftHandler _onLeft;
     AdminObserver *_observer = nullptr;
+    SessionDraw _drawSession;
     rtype::network::TcpListener _listener;
     rtype::network::Timer _supervision;
     std::map<std::uint32_t, std::unique_ptr<Game>> _games;
     std::map<std::uint64_t, std::unique_ptr<InstanceConnection>> _connections;
     /// The game of each player, creators waiting for theirs included.
     std::map<std::uint32_t, std::uint32_t> _playerGames;
-    std::set<std::uint16_t> _freePorts;
+    /// The session ids taken, in every game whose instance has not exited yet.
+    std::set<std::uint32_t> _sessions;
     std::uint32_t _lastGameId = 0;
     std::uint64_t _lastConnection = 0;
     bool _stopping = false;
@@ -130,6 +142,8 @@ private:
     void playerDisconnected(Game &game, std::span<const std::byte> payload);
     void gameOver(Game &game, std::span<const std::byte> payload);
     void statusReceived(Game &game, std::span<const std::byte> payload);
+    /// A new session id, never 0, never one of _sessions, which it joins.
+    [[nodiscard]] std::uint32_t takeSession();
     rtype::lobby::GameJoinedMessage addPlayer(Game &game, const LobbyPlayer &player);
     void removed(Game &game, std::uint32_t playerId);
     /// Sends SHUTDOWN, then waits for the exit.
@@ -145,10 +159,11 @@ private:
     void closeInstanceConnection(std::uint64_t id);
 
 public:
-    /// Listens for the instances on 127.0.0.1, on a port of the system.
+    /// Listens for the instances on 127.0.0.1, on a port of the system. `relay` serves the games on its
+    /// public port: it must outlive them.
     /// @throws std::system_error if it cannot listen.
-    /// @throws std::invalid_argument if the port range is empty.
-    Games(rtype::network::EventLoop &loop, GamesSettings settings);
+    /// @throws std::invalid_argument if maxGames is 0.
+    Games(rtype::network::EventLoop &loop, Relay &relay, GamesSettings settings);
     ~Games() override;
 
     Games(const Games &) = delete;
@@ -164,6 +179,8 @@ public:
     /// Tells the administration what happens to the games; nullptr for nobody. It must outlive the games, or
     /// be taken away first.
     void setObserver(AdminObserver *observer) { _observer = observer; }
+    /// Replaces the random generator of the system for the session ids: for the tests, to force collisions.
+    void setSessionDraw(SessionDraw draw) { _drawSession = std::move(draw); }
 
     /// The games ready to be joined, sorted by id: for GAME_LIST.
     [[nodiscard]] std::vector<rtype::lobby::GameInfo> list() const;

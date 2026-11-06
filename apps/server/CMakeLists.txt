@@ -139,13 +139,16 @@ add_library(r-type_server_core STATIC
     src/Common/InstanceMessages.cpp
     src/Common/Lifecycle.cpp
     src/Common/Options.cpp
+    src/Common/RelayFrame.cpp
     src/Common/Secret.cpp
     src/Common/Settings.cpp
+    src/Instance/DirectTransport.cpp
     src/Instance/GameHost.cpp
     src/Instance/GameThread.cpp
     src/Instance/InputBuffer.cpp
     src/Instance/Instance.cpp
     src/Instance/MasterLink.cpp
+    src/Instance/RelayedTransport.cpp
     src/Master/AddressBans.cpp
     src/Master/Administration.cpp
     src/Master/AdminStore.cpp
@@ -153,6 +156,7 @@ add_library(r-type_server_core STATIC
     src/Master/Lobby.cpp
     src/Master/Master.cpp
     src/Master/Process.cpp
+    src/Master/Relay.cpp
     src/Master/ServerDatabase.cpp
     src/Master/ServerKey.cpp
     src/Web/AdminJson.cpp

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Version 1, specified, not yet implemented |
-| **Version** | Lobby 2, game 1, instances 3 ([section 4](#4-versioning)) |
+| **Version** | Lobby 2, game 1, instances 4 ([section 4](#4-versioning)) |
 | **Transport** | TCP with TLS 1.3 for the lobby, encrypted UDP for the games ([ADR 0012](../decisions/0012-tcp-lobby-udp-game.md), [ADR 0014](../decisions/0014-encryption.md)) |
 
 ## 1. Introduction
@@ -102,7 +102,7 @@ keys of the game. It then talks to the game directly, over encrypted datagrams.*
 The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **3** (version 2 adds the
 messages of the administrators, version 3 those of the player accounts, [lobby](lobby.md)). The game protocol has its own, in the header of every
 datagram (as a `u8`), currently **1**. The instances have a version of their own, sent in `INSTANCE_HELLO`,
-currently **3**
+currently **4**
 ([master and instances](instances.md)): master and instances come from the same build, so it changes without
 the clients.
 
@@ -117,7 +117,7 @@ the clients.
 | Name | Value | Description |
 |---|---|---|
 | Master port | 4242 (default) | TCP port of the master, configurable |
-| Game ports | 4243–4299 (default) | UDP port range of the games, configurable |
+| Game port | 4242 (default) | UDP port of every game, the same number as the master port, configurable ([ADR 0027](../decisions/0027-one-udp-port-relay.md)) |
 | Maximum TCP frame | 16384 | Largest TCP frame, size prefix included ([lobby](lobby.md#3-framing)) |
 | Maximum datagram | 1200 | Largest UDP datagram, all fields included ([game](game.md#2-datagram-layout)) |
 | Lobby ping interval | 10 s | A client sends `PING` if it sent nothing for this long |

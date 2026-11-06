@@ -1,9 +1,10 @@
 #pragma once
 
-// What the tests that run real games share: free UDP ports for their instances, the settings of instances of
-// r-type_server, and stopping a process at once, as a crash would.
+// What the tests that run real games share: free UDP ports, the settings of instances of r-type_server, which
+// run behind a relay of the test (Master/Relay.hpp), and stopping a process at once, as a crash would.
 
 #include "Master/Games.hpp"
+#include "Master/Relay.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/UdpSocket.hpp"
@@ -30,7 +31,7 @@
 namespace testing
 {
 
-/// `count` consecutive UDP ports free now, for the games of a test.
+/// `count` consecutive UDP ports free now.
 inline std::uint16_t freePorts(std::uint16_t count)
 {
     rtype::network::EventLoop loop;
@@ -53,16 +54,14 @@ inline std::uint16_t freePorts(std::uint16_t count)
     return 0;
 }
 
-/// Games run by real instances of r-type_server, on free ports.
-inline rtype::server::GamesSettings instances(std::uint16_t ports = 4)
+/// Games run by real instances of r-type_server, `maxGames` at most, behind a relay of the test.
+inline rtype::server::GamesSettings instances(std::uint32_t maxGames = 4)
 {
-    const std::uint16_t first = freePorts(ports);
     return {
         .executable = RTYPE_TEST_SERVER,
         .leadingArguments = {},
         .trailingArguments = {"--log-level", "warning"},
-        .firstPort = first,
-        .lastPort = static_cast<std::uint16_t>(first + ports - 1),
+        .maxGames = maxGames,
     };
 }
 

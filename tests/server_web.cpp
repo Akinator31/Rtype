@@ -4,7 +4,6 @@
 
 #include "Common/Options.hpp"
 #include "Common/Secret.hpp"
-#include "GameServers.hpp"
 #include "Http.hpp"
 #include "Master/Master.hpp"
 #include "Server.hpp"
@@ -680,14 +679,13 @@ namespace
 /// The arguments of a master that keeps everything in `directory`, its panel on a free port.
 std::vector<std::string> masterArguments(const TempDirectory &directory, const std::string &settings)
 {
-    const std::uint16_t gamePort = testing::freePorts(1);
-    return {"--port",       "0",
-            "--bind",       "127.0.0.1",
-            "--game-ports", std::format("{}-{}", gamePort, gamePort),
-            "--key",        (directory.path / "server.key").string(),
-            "--database",   "sqlite:" + (directory.path / "rtype.db").string(),
-            "--config",     RTYPE_TEST_CONFIG,
-            "--settings",   settings};
+    return {"--port",      "0",
+            "--bind",      "127.0.0.1",
+            "--game-port", "0",
+            "--key",       (directory.path / "server.key").string(),
+            "--database",  "sqlite:" + (directory.path / "rtype.db").string(),
+            "--config",    RTYPE_TEST_CONFIG,
+            "--settings",  settings};
 }
 
 int runMasterWith(const std::vector<std::string> &arguments)
@@ -703,7 +701,7 @@ int runMasterWith(const std::vector<std::string> &arguments)
 TEST_CASE("A master writes admin-url.txt beside its key, whose address opens the panel", "[server][web]")
 {
     const TempDirectory directory("master");
-    const std::string settings = testing::webOnAnyPort(directory.path / "web.toml").string();
+    const std::string settings = testing::onAnyPorts(directory.path / "web.toml").string();
     const std::vector<std::string> arguments = masterArguments(directory, settings);
     const Captured captured;
 
@@ -832,7 +830,7 @@ TEST_CASE("Without accounts, a master serves its panel on the loopback only", "[
     const TempDirectory directory("loopback");
     std::ofstream(directory.path / "server.key")
         << rtype::network::ServerIdentity::generate().privateKeyPem();
-    const std::string settings = testing::webOnAnyPort(directory.path / "web.toml").string();
+    const std::string settings = testing::onAnyPorts(directory.path / "web.toml").string();
     std::vector<std::string> arguments = masterArguments(directory, settings);
     arguments.emplace_back("--check");
     const std::vector<std::string_view> views(arguments.begin(), arguments.end());

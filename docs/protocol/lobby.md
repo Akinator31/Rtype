@@ -206,7 +206,7 @@ No payload.
 
 **Receiver behaviour:** the master starts a game instance ([instances](instances.md)), waits until it is
 ready, adds the player to it and answers `GAME_JOINED`. Errors: `INVALID_NAME`, `MALFORMED` (max players out
-of range), `SERVER_FULL` (no free game port), `GAME_START_FAILED` (the instance did not start within 10
+of range), `SERVER_FULL` (the server runs its most games at once, `max_games`), `GAME_START_FAILED` (the instance did not start within 10
 seconds).
 
 #### JOIN_GAME (`0x04`)
@@ -498,8 +498,8 @@ malformed otherwise.
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Game id | `u32` | |
-| 4 | UDP port | `u16` | Port of the game, on the same IP address as the master |
-| 6 | Session id | `u32` | Identifies the player's session in the game, never 0 |
+| 4 | UDP port | `u16` | The UDP port of the server, on the same IP address as the master: the same for every game, 4242 by default, where the relay of the master forwards each datagram to its game by its session ([ADR 0027](../decisions/0027-one-udp-port-relay.md)) |
+| 6 | Session id | `u32` | Identifies the player's session in the game, never 0. Random: the client assumes nothing about its value |
 | 10 | Client key | `bytes[32]` | Key of the datagrams sent by the client |
 | 42 | Server key | `bytes[32]` | Key of the datagrams sent by the game |
 

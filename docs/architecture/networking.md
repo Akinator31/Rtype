@@ -128,7 +128,7 @@ rtype::network::resolve("localhost", 4242); // std::vector<Address>, IPv4 first;
 ## UDP
 
 ```cpp
-rtype::network::UdpSocket socket(loop, Address::anyIpv4(4243));
+rtype::network::UdpSocket socket(loop, Address::anyIpv4(4242));
 
 socket.startReceiving([&](const Address &from, std::span<const std::byte> datagram) {
     socket.send(from, datagram); // echo
@@ -664,8 +664,24 @@ ever answering**: an answer to a forged datagram could be used to flood someone 
 1. Size and header (`parseDatagramHeader()`).
 2. A known session.
 3. **At most 200 datagrams per second and per source address**, counted before decrypting: a flood costs
-   almost nothing.
+   almost nothing. The counter is a `RateLimiter` (`rtype/network/RateLimiter.hpp`), which the relay of the
+   master also uses, with the same limit, before it forwards anything; the counters of the addresses that
+   stopped sending are forgotten after 10 seconds.
 4. The replay window, then the tag, then the body.
+
+**Behind the relay of the master** ([Server](server.md#the-relay)), the clients send to one public port for
+every game, and the master forwards each datagram to the instance of its session, on the loopback, in a
+[relay frame](../protocol/instances.md#5-the-relay-frame): the address of the client, then the datagram,
+unchanged. Nothing here changes: the relay reads only the clear header, `parseDatagramHeader()`, and the instance
+hands the real address of each client to its `SessionHost`, so the limit per address and the following of an
+address that changes work as before.
+
+```cpp
+// The relay, inbound: from the public port to the instance of the session
+const auto header = rtype::network::parseDatagramHeader(datagram);
+if (!header || banned(from) || !rates.allow(from, now)) return;
+loopback.send(instanceOf(header->session), rtype::server::encodeRelayFrame(from, datagram));
+```
 
 **A client whose port changes**, which a home router may do, is followed: an authentic datagram from another
 address with a newer packet number moves the session there. An older one, arriving late, does not.

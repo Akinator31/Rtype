@@ -18,7 +18,7 @@ on their own machine for development or on a machine on the Internet.
 
 1. **Check the configuration.** `--check` loads the key and the database, or makes them the first time, and the game configuration (the `config/` folder next
    to the server, or `--config <dir>`, see [Configure enemies and weapons](configure-enemies-and-weapons.md))
-   and opens the ports of the lobby and of the panel, then exits, without running the server. With accounts, it
+   and opens the ports of the lobby, of the games and of the panel, then exits, without running the server. With accounts, it
    also signs in to the mail server, without sending anything ([Set up accounts](set-up-accounts.md)):
 
     ```sh
@@ -28,7 +28,7 @@ on their own machine for development or on a machine on the Internet.
     ```
     INFO  master   Game configuration /home/me/Rtype/build/bin/config: 2 projectiles, 2 weapons, 1 ships, 2 enemies, 2 waves
     INFO  master   Database sqlite:rtype.db, schema 0
-    INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
+    INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 0.0.0.0:4242 (57 at most)
     INFO  master   Panel on HTTP 127.0.0.1:8080
     INFO  master   Server key 5b61c7a9ce1a44bfc64fec2013a4a09b6b4d5a8db4129eff890a1462c7ea1f1c
     INFO  master   Check passed: the server can start
@@ -37,22 +37,22 @@ on their own machine for development or on a machine on the Internet.
     The server key is the fingerprint the players are shown at their first connection, and trust. Keep
     `keys/server.key`: with another key, they refuse the server.
 
-2. **Open the ports** if players come from another machine: the TCP port of the lobby (4242), and the UDP
-   range of the games (4243 to 4299), in the firewall of the machine and, at home, as port forwarding on the
-   router. Without the UDP range, players reach the lobby but no game: their client gives up after 5 seconds.
+2. **Open the ports** if players come from another machine: 4242 over TCP for the lobby, and 4242 over UDP for
+   every game, in the firewall of the machine and, at home, as port forwarding on the router. Without the UDP
+   port, players reach the lobby but no game: their client gives up after 5 seconds.
 
     === "Linux (ufw)"
 
         ```sh
         sudo ufw allow 4242/tcp
-        sudo ufw allow 4243:4299/udp
+        sudo ufw allow 4242/udp
         ```
 
     === "Windows"
 
         ```powershell
         New-NetFirewallRule -DisplayName "R-Type lobby" -Direction Inbound -Protocol TCP -LocalPort 4242 -Action Allow
-        New-NetFirewallRule -DisplayName "R-Type games" -Direction Inbound -Protocol UDP -LocalPort 4243-4299 -Action Allow
+        New-NetFirewallRule -DisplayName "R-Type games" -Direction Inbound -Protocol UDP -LocalPort 4242 -Action Allow
         ```
 
 3. **Start the server**:
@@ -64,8 +64,11 @@ on their own machine for development or on a machine on the Internet.
     Other ports, fewer games, more logs:
 
     ```sh
-    ./build/bin/r-type_server --key keys/server.key --port 5000 --game-ports 5001-5010 --log-level debug
+    ./build/bin/r-type_server --key keys/server.key --port 5000 --game-port 5000 --max-games 10 --log-level debug
     ```
+
+    Every game is on the one UDP port of `--game-port`, the same number as the lobby by default: the master
+    forwards each datagram to its game ([The relay](../architecture/server.md#the-relay)).
 
 4. **Open the panel**, from the machine of the server: the server writes its address, with a
    token new at each start, to `admin-url.txt` beside its key, `keys/admin-url.txt` here, readable by its owner
@@ -103,11 +106,12 @@ and exits with code 1:
 | `Cannot open the database sqlite:rtype.db: ...` | The file is not a database, or its directory cannot be written: give another one with `--database sqlite:<file>` |
 | `... has migration N (...), which this program does not know` | A newer server changed this database: run that version, or give this one another database |
 | `Cannot listen on 0.0.0.0:4242: Address already in use` | Another server runs on that port: stop it, or choose another with `--port` |
+| `Cannot open UDP 0.0.0.0:4242 for the games: Address already in use` | Another program uses that UDP port, another server for instance: stop it, or choose another with `--game-port` |
+| `--game-ports is gone: ...`, or `game_ports is gone` in the settings file | A command line or a file of an older server: every game is now on one UDP port, `--game-port` (`game_port`), and `--max-games` (`max_games`) gives the most games at once |
 | `Cannot serve the panel on 127.0.0.1:8080: Address already in use` | Another program uses the port of the panel, a second server on the machine for instance: give it another `listen` in `[web]` ([Configure a server](configure-a-server.md)) |
 
 Once it runs, the games it starts show in its logs. Players who create a game and get `GAME_START_FAILED` point
-to its instances: `Cannot open UDP port` means another program uses the game ports, choose others with
-`--game-ports`.
+to its instances, whose errors are in the same logs. `SERVER_FULL` means `--max-games` games run already.
 
 To run it in a container instead, from the image of the CI, see [Deploy with Docker](deploy-with-docker.md).
 

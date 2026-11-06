@@ -76,7 +76,7 @@ USER rtype
 WORKDIR /data
 # The key, the SQLite database, admin-url.txt: lose it, and the players refuse the new key of the server
 VOLUME /data
-EXPOSE 4242/tcp 4243-4299/udp
+EXPOSE 4242/tcp 4242/udp
 # Asks /api/health of the master, on the loopback of the container: its event loop answers it
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --start-interval=2s --retries=3 \
     CMD ["/opt/rtype/r-type_server", "--health", "--settings", "/config/server.toml"]

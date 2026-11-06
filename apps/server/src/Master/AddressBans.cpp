@@ -44,6 +44,9 @@ void AddressBans::add(AddressBan ban)
     ban.address = banKey(ban.address);
     const rtype::network::Address key = ban.address;
     _bans.insert_or_assign(key, std::move(ban));
+    if (_onChange) {
+        _onChange();
+    }
 }
 
 std::optional<AddressBan> AddressBans::remove(const rtype::network::Address &address,
@@ -55,6 +58,9 @@ std::optional<AddressBan> AddressBans::remove(const rtype::network::Address &add
     }
     AddressBan lifted = std::move(found->second);
     _bans.erase(found);
+    if (_onChange) {
+        _onChange();
+    }
     if (lifted.expiresAt <= now) {
         return std::nullopt;
     }

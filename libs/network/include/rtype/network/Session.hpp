@@ -3,6 +3,7 @@
 #include "rtype/network/Address.hpp"
 #include "rtype/network/Datagram.hpp"
 #include "rtype/network/MessageChannel.hpp"
+#include "rtype/network/RateLimiter.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -229,18 +230,11 @@ public:
     };
 
 private:
-    struct RateCounter {
-        Clock::time_point windowStart;
-        std::size_t count = 0;
-    };
-
     SendFunction _send;
     Handlers _handlers;
     std::unordered_map<std::uint32_t, std::unique_ptr<detail::SessionPeer>> _sessions;
-    std::unordered_map<Address, RateCounter> _rates;
-    Clock::time_point _lastRatePrune;
+    RateLimiter _rates;
 
-    [[nodiscard]] bool withinRate(const Address &from, Clock::time_point now);
     void sendDatagrams(detail::SessionPeer &peer, Clock::time_point now);
     void end(std::uint32_t session, SessionEnd end, std::optional<DisconnectReason> farewell);
 

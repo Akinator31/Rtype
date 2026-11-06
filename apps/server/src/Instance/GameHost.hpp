@@ -2,16 +2,17 @@
 
 #include "Common/InstanceMessages.hpp"
 #include "Instance/GameThread.hpp"
+#include "Instance/GameTransport.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/Session.hpp"
 #include "rtype/network/Timer.hpp"
-#include "rtype/network/UdpSocket.hpp"
 
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -19,18 +20,22 @@
 namespace rtype::server
 {
 
-/// The network side of a game, on the network thread of an instance: its UDP socket, the sessions of its
+/// The network side of a game, on the network thread of an instance: its transport, the sessions of its
 /// players, their slots, and the messages of the game protocol (docs/protocol/game.md). It hands the
 /// players and their inputs to the GameThread, and sends the result of each tick to the clients.
 ///
 /// @code
-/// rtype::server::GameHost host(loop, rtype::network::Address::anyIpv4(udpPort), 4, game,
+/// rtype::server::GameHost host(loop,
+///     std::make_unique<rtype::server::DirectTransport>(loop, rtype::network::Address::anyIpv4(udpPort)), 4,
+///     game,
 ///     {.onConnected = [&](std::uint32_t player) { link.sendPlayerConnected(player); },
 ///      .onDisconnected = [&](std::uint32_t player, auto reason) { ... }});
 /// host.addPlayer(addPlayer);       // ADD_PLAYER from the master
 /// host.publish(result);            // each tick, from the GameThread through loop.post()
 /// @endcode
 ///
+/// - The datagrams come and go through the transport given (GameTransport.hpp), with the real address of each
+///   client: the host does not know whether they come from a socket of its own or from a relay.
 /// - A player gets the lowest free slot when added, and its ship when its client connects.
 /// - On `CONNECT`, the client receives `ACCEPTED` (its slot, the tick rate, the tick), then `PLAYER_JOINED`
 ///   for each player connected, itself included; the others receive its `PLAYER_JOINED`.
@@ -67,7 +72,7 @@ private:
         bool connected = false;
     };
 
-    rtype::network::UdpSocket _socket;
+    std::unique_ptr<GameTransport> _transport;
     GameThread &_game;
     std::uint8_t _maxPlayers;
     Handlers _handlers;
@@ -94,15 +99,14 @@ private:
                          std::optional<std::uint32_t> except = std::nullopt);
 
 public:
-    /// Opens the UDP socket of the game.
-    /// @throws std::system_error if it cannot be opened: the port is in use.
-    GameHost(rtype::network::EventLoop &loop, const rtype::network::Address &local, std::uint8_t maxPlayers,
-             GameThread &game, Handlers handlers);
+    /// Starts receiving through the transport, already open: whatever cannot be opened has failed before.
+    GameHost(rtype::network::EventLoop &loop, std::unique_ptr<GameTransport> transport,
+             std::uint8_t maxPlayers, GameThread &game, Handlers handlers);
 
     GameHost(const GameHost &) = delete;
     GameHost &operator=(const GameHost &) = delete;
 
-    [[nodiscard]] const rtype::network::Address &localAddress() const { return _socket.localAddress(); }
+    [[nodiscard]] const rtype::network::Address &localAddress() const { return _transport->localAddress(); }
 
     /// Expects the client of a player on its session.
     /// @return false if the game is full, or the player or its session already exists.
@@ -115,8 +119,8 @@ public:
     /// Sends the result of a tick to the clients. On the network thread.
     void publish(const TickResult &result);
 
-    /// Closes every session with `DISCONNECT` and this reason, then the socket, after the datagrams queued:
-    /// the game stops.
+    /// Closes every session with `DISCONNECT` and this reason, then the transport, after the datagrams
+    /// queued: the game stops.
     void closeAll(rtype::network::DisconnectReason reason);
 
     /// Where the game stands: the last tick published, the wave under way, and each player whose client

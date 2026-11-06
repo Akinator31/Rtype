@@ -67,7 +67,7 @@ int check(const MasterDirectory &directory, std::vector<std::string> databaseOpt
                                        "--key",
                                        (directory.path / "server.key").string(),
                                        "--settings",
-                                       testing::webOnAnyPort(directory.path / "web.toml").string()};
+                                       testing::onAnyPorts(directory.path / "web.toml").string()};
     arguments.insert(arguments.end(), databaseOptions.begin(), databaseOptions.end());
     const std::vector<std::string_view> views(arguments.begin(), arguments.end());
     std::ostringstream out;

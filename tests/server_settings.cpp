@@ -124,7 +124,8 @@ TEST_CASE("The example of the guide is read, every key of it", "[server][setting
     const std::filesystem::path file = directory.write("server.toml", R"(# server.toml
 [server]
 port = 4242
-game_ports = "4243-4299"
+game_port = 4242
+max_games = 20
 key = "/data/server.key"
 database_file = "secrets/database_url"
 
@@ -157,8 +158,8 @@ admins = ["pavel@example.org", "discord:123456789012345678"]
     const ServerSettings settings = loadSettings(file, Log);
 
     CHECK(settings.port == 4242);
-    CHECK(settings.firstGamePort == 4243);
-    CHECK(settings.lastGamePort == 4299);
+    CHECK(settings.gamePort == 4242);
+    CHECK(settings.maxGames == 20);
     CHECK(settings.key == std::filesystem::path("/data/server.key"));
     CHECK_FALSE(settings.database);
     CHECK(settings.databaseFile == directory.path / "secrets/database_url");
@@ -195,7 +196,8 @@ TEST_CASE("An empty settings file leaves every default", "[server][settings]")
     const ServerSettings settings = parse("");
 
     CHECK_FALSE(settings.port);
-    CHECK_FALSE(settings.firstGamePort);
+    CHECK_FALSE(settings.gamePort);
+    CHECK_FALSE(settings.maxGames);
     CHECK_FALSE(settings.key);
     CHECK_FALSE(settings.database);
     CHECK_FALSE(settings.databaseFile);
@@ -271,10 +273,20 @@ TEST_CASE("Invalid values are refused", "[server][settings]")
 {
     CHECK_THAT(refusal("[server]\nport = 70000\n"), ContainsSubstring("[server] port must be a port"));
     CHECK_THAT(refusal("[server]\nport = -1\n"), ContainsSubstring("[server] port must be a port"));
-    for (const std::string_view range : {"4243", "4299-4243", "0-10", "a-b", "4243-", "4243-70000"}) {
-        CHECK_THAT(refusal(std::format("[server]\ngame_ports = \"{}\"\n", range)),
-                   ContainsSubstring(":2:14: [server] game_ports must be"));
+    CHECK_THAT(refusal("[server]\ngame_port = 70000\n"),
+               ContainsSubstring(":2:13: [server] game_port must be a port"));
+    CHECK_THAT(refusal("[server]\ngame_port = \"4242\"\n"),
+               ContainsSubstring("[server] game_port must be a number"));
+    for (const std::string_view games : {"0", "-1", "1001"}) {
+        CHECK_THAT(refusal(std::format("[server]\nmax_games = {}\n", games)),
+                   ContainsSubstring(":2:13: [server] max_games must be from 1 to 1000"));
     }
+    // The range of before the relay: refused at its line, with the keys that replace it
+    CHECK_THAT(refusal("[server]\nport = 4242\ngame_ports = \"4243-4299\"\n"),
+               ContainsSubstring(":3:14: [server] game_ports is gone") &&
+                   ContainsSubstring("game_port (default 4242)") && ContainsSubstring("max_games"));
+    // 0 lets the system choose, as --game-port 0
+    CHECK(parse("[server]\ngame_port = 0\n").gamePort == 0);
     CHECK_THAT(refusal("[server]\nkey = \"\"\n"), ContainsSubstring("[server] key must not be empty"));
     CHECK_THAT(refusal("[server]\ndatabase = \"rtype.db\"\n"), ContainsSubstring("[server] database:"));
     CHECK_THAT(refusal("[server]\ndatabase = \"sqlite:a.db\"\ndatabase_file = \"url\"\n"),
@@ -481,25 +493,26 @@ TEST_CASE("The command line wins over the settings file", "[server][settings]")
     const ServerSettings settings = parse(R"(
 [server]
 port = 5000
-game_ports = "5001-5010"
+game_port = 5000
+max_games = 10
 key = "/data/server.key"
 database_file = "/run/secrets/database_url"
 )");
 
     const Options fromFile = parseOptions(std::vector<std::string_view>{}, settings);
     CHECK(fromFile.master.listen == Address::anyIpv4(5000));
-    CHECK(fromFile.master.firstGamePort == 5001);
-    CHECK(fromFile.master.lastGamePort == 5010);
+    CHECK(fromFile.master.gamePort == 5000);
+    CHECK(fromFile.master.maxGames == 10);
     CHECK(fromFile.master.key == "/data/server.key");
     CHECK(fromFile.master.databaseFile == "/run/secrets/database_url");
 
-    const Options overridden =
-        parseOptions(std::vector<std::string_view>{"--port", "6000", "--game-ports", "6001-6002", "--key",
-                                                   "other.key", "--database", "sqlite:other.db"},
-                     settings);
+    const Options overridden = parseOptions(
+        std::vector<std::string_view>{"--port", "6000", "--game-port", "6001", "--max-games", "2", "--key",
+                                      "other.key", "--database", "sqlite:other.db"},
+        settings);
     CHECK(overridden.master.listen == Address::anyIpv4(6000));
-    CHECK(overridden.master.firstGamePort == 6001);
-    CHECK(overridden.master.lastGamePort == 6002);
+    CHECK(overridden.master.gamePort == 6001);
+    CHECK(overridden.master.maxGames == 2);
     CHECK(overridden.master.key == "other.key");
     CHECK(overridden.master.database ==
           rtype::database::Address{rtype::database::Engine::Sqlite, "other.db"});
@@ -543,6 +556,7 @@ TEST_CASE("A master checks its settings file with --check", "[server][settings]"
                                  .write("server.toml", std::format(R"(
 [server]
 port = 0
+game_port = 0
 key = "server.key"
 database = "sqlite:rtype.db"
 [web]

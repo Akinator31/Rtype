@@ -4,7 +4,7 @@ The local connection between the master and the game processes it starts
 ([ADR 0013](../decisions/0013-one-process-per-game.md)). Clients never see this protocol. Conventions and types
 are defined in the [overview](index.md#2-conventions).
 
-This page describes **version 3**. Master and instances come from the same build, so a master refuses an
+This page describes **version 4**. Master and instances come from the same build, so a master refuses an
 `INSTANCE_HELLO` of another version.
 
 | Version | Change |
@@ -12,20 +12,24 @@ This page describes **version 3**. Master and instances come from the same build
 | 1 | First version |
 | 2 | `GAME_STATUS`: the instance tells the master where its game stands, every second |
 | 3 | The actions of the administrators ([administration](../architecture/administration.md)): `REMOVE_PLAYER` reason `KICKED`, `SHUTDOWN` reason `ENDED_BY_ADMIN` |
+| 4 | The relay of the master: `CONFIGURE` carries the port of the relay, `READY` the port on the loopback the relay sends to, and the [relay frame](#5-the-relay-frame) |
 
 ## 1. Starting an instance
 
 The master starts an instance with its own executable and these arguments:
 
 ```
-r-type_server --instance --id <instance id> --udp-port <port> --master-port <port>
+r-type_server --instance --id <instance id> --master-port <port>
 ```
 
 | Argument | Description |
 |---|---|
 | `--id` | Id of the instance, a `u32` other than 0. It is also the game id shown to the clients. |
-| `--udp-port` | UDP port the instance opens for its clients |
 | `--master-port` | TCP port on which the master listens for its instances, on `127.0.0.1` |
+
+A master gives no UDP port: since version 4 the instance receives its datagrams from the relay of the master,
+whose port `CONFIGURE` gives. `--udp-port <port>`, which a master no longer passes, gives the port an instance
+opens itself when `CONFIGURE` has no relay (the tests of an instance alone, and the standalone mode).
 
 The master then writes the **secret** to the instance's standard input: 32 random bytes, as 64 lowercase
 hexadecimal characters followed by a line feed (`\n`). The secret is never passed as an argument: the
@@ -46,8 +50,8 @@ sequenceDiagram
     participant I as Instance
     M->>I: start process, secret on standard input
     I->>M: INSTANCE_HELLO (version, id, secret)
-    M->>I: CONFIGURE (name, max players)
-    Note over I: opens its UDP port
+    M->>I: CONFIGURE (name, max players, relay port)
+    Note over I: opens its UDP port, or one on the loopback behind the relay
     I->>M: READY (UDP port)
     M->>I: ADD_PLAYER (player id, name, session id, keys)
     I->>M: PLAYER_CONNECTED (player id)
@@ -91,7 +95,7 @@ An instance exits with code 0 after `GAME_OVER` or `SHUTDOWN`, and with a non-ze
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 2 |
+| 0 | Version | `u16` | Protocol version, 4 |
 | 2 | Instance id | `u32` | The `--id` argument |
 | 6 | Secret | `bytes[32]` | The secret read on the standard input |
 
@@ -108,7 +112,7 @@ not presented itself yet, and that the secret matches, comparing it in constant 
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | UDP port | `u16` | The port opened, equal to `--udp-port` |
+| 0 | UDP port | `u16` | The port opened: behind a relay, the port on `127.0.0.1` the system chose, where the relay sends its frames (version 4); without a relay, `--udp-port`, or the one the system chose without it |
 
 **Receiver behaviour:** the game appears in `GAME_LIST`, and the master sends it the players waiting to join.
 
@@ -195,8 +199,12 @@ the game, like any malformed message.
 |---|---|---|---|
 | 0 | Name | `str8` | Name of the game, 1 to 32 bytes |
 | 1 + n | Max players | `u8` | 1 to 4 |
+| 2 + n | Relay port | `u16` | Port of the relay of the master on `127.0.0.1` (version 4), which a master always gives; 0: no relay |
 
-**Receiver behaviour:** the instance opens its UDP port and answers `READY`.
+**Receiver behaviour:** without a relay, the instance opens its UDP port, `--udp-port` (a port of the system
+without it), for its clients. With a relay, it opens a UDP port on `127.0.0.1` chosen by the system instead, takes there only the
+[relay frames](#5-the-relay-frame) that come from `127.0.0.1:<relay port>`, and sends every datagram of the
+game back as a frame to the relay. Either way it answers `READY` with the port it opened.
 
 #### ADD_PLAYER (`0x82`)
 
@@ -208,7 +216,7 @@ the game, like any malformed message.
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Player id | `u32` | |
-| 4 | Session id | `u32` | Unique in this instance, never 0 |
+| 4 | Session id | `u32` | Random, never 0, unique across the master: never given twice while this instance runs, nor to another running instance |
 | 8 | Client key | `bytes[32]` | |
 | 40 | Server key | `bytes[32]` | |
 | 72 | Name | `str8` | 1 to 16 bytes |
@@ -245,3 +253,30 @@ game protocol has no reason for a removal, which the lobby tells the player itse
 | 0 | Reason | `u8` | `EMPTY` (0), `MASTER_STOPPING` (1) or `ENDED_BY_ADMIN` (2, version 3) |
 
 **Receiver behaviour:** the instance sends `DISCONNECT (SHUTDOWN)` to its clients and exits with code 0.
+
+## 5. The relay frame
+
+Behind the relay of the master, the datagrams of the game travel between the relay and the instance on the
+loopback, over UDP, one datagram of the game in each relay frame. The frame adds the address of the client:
+the instance sees the real address of each client, to follow it and limit its rate, as with a port of its own.
+The same layout goes both ways: from the relay, the client the datagram comes from; to the relay, the client it
+goes to.
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Family | `u8` | 4 (IPv4) or 6 (IPv6) |
+| 1 | Address | `bytes[16]` | IPv4 in the first 4 bytes, the other 12 zero; or the 16 bytes of an IPv6 address |
+| 17 | Port | `u16` | Port of the client, never 0 |
+| 19 | Datagram | rest | The datagram of the game ([game](game.md)), unchanged, 1 to 1200 bytes |
+
+The relay never holds the keys of the sessions: it reads only the clear header of a datagram, and the
+encryption stays end to end between the client and the instance.
+
+**Receiver behaviour:** a frame is dropped silently if it comes from another address than the relay (for the
+instance), or if it does not decode: shorter than 20 bytes, a family other than 4 or 6, a non-zero byte after
+an IPv4 address, port 0, or a datagram longer than 1200 bytes. The datagram it carries is then checked as any
+datagram of the game, by its session.
+
+The relay of the master (`--game-port`, [Server](../architecture/server.md#the-relay)) drops, on its side, a
+frame from an address that is not one of its instances, one that does not decode or whose datagram has no valid
+header, and one whose session belongs to another instance: an instance only speaks for its own players.

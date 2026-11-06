@@ -10,13 +10,13 @@
 # The images: `docker build .` and `docker build --target smoke .`. The fake services
 # (tests/helpers/fake_services.cpp) run in a container of their own, named discord.com on a network shared with
 # the server, whose image is given their certificate to trust: the master reaches them at the address of
-# Discord it always uses. The game ports, published with the same numbers inside and outside, are
-# RTYPE_SMOKE_GAME_PORTS (default 47253-47255): change them if they are taken.
+# Discord it always uses. The UDP port of the games, published once with the same number inside and outside, is
+# RTYPE_SMOKE_GAME_PORT (default 47253): change it if it is taken.
 set -euo pipefail
 
 server_image=${1:?usage: smoke-test-accounts.sh <server image> <smoke image>}
 smoke_image=${2:?usage: smoke-test-accounts.sh <server image> <smoke image>}
-game_ports=${RTYPE_SMOKE_GAME_PORTS:-47253-47255}
+game_port=${RTYPE_SMOKE_GAME_PORT:-47253}
 name="rtype-smoke-accounts-$$-$RANDOM"
 work=$(mktemp -d)
 
@@ -45,10 +45,10 @@ fail() {
 
 command -v curl >/dev/null || fail "curl is missing on this machine: it asks the panel"
 
-# The settings of the official server, with the fake services and the game ports of the test. A key the file
+# The settings of the official server, with the fake services and the game port of the test. A key the file
 # leaves out, or that changed name, fails the test here rather than in production
 settings=$(dirname "$0")/server-accounts.toml
-sed -e "s/^game_ports = .*/game_ports = \"$game_ports\"/" \
+sed -e "s/^game_port = .*/game_port = $game_port/" \
     -e 's|^public_url = .*|public_url = "https://admin.rtype.test"|' \
     -e 's/^host = .*/host = "mail.test"/' \
     -e 's/^port = 587$/port = 25/' \
@@ -57,7 +57,7 @@ sed -e "s/^game_ports = .*/game_ports = \"$game_ports\"/" \
     -e "s/^client_id = .*/client_id = \"$discord_client_id\"/" \
     -e "s/^admins = .*/admins = [\"$admin\"]/" \
     "$settings" > "$work/server.toml"
-for key in 'listen = "0.0.0.0:8080"' 'client_secret_file = "/run/secrets/discord_secret"' 'host = "mail.test"' \
+for key in "game_port = $game_port" 'listen = "0.0.0.0:8080"' 'client_secret_file = "/run/secrets/discord_secret"' 'host = "mail.test"' \
     "client_id = \"$discord_client_id\""; do
     grep -qF "$key" "$work/server.toml" || fail "docker/server-accounts.toml has no longer the line of: $key"
 done
@@ -94,7 +94,7 @@ docker run --rm -v "$name-data:/data" --entrypoint sh "$smoke_image" -c \
 # daemon). The secret as Docker mounts its secrets, readable by the user of the server only
 echo "Starting $server_image"
 docker create --name "$name" --network "$name-net" -v "$name-data:/data" \
-    -p 127.0.0.1::4242/tcp -p "127.0.0.1:$game_ports:$game_ports/udp" -p 127.0.0.1::8080/tcp \
+    -p 127.0.0.1::4242/tcp -p "127.0.0.1:$game_port:$game_port/udp" -p 127.0.0.1::8080/tcp \
     "$server_image" >/dev/null
 docker cp "$work/server.toml" "$name:/config/server.toml" >/dev/null
 mkdir "$work/secrets"

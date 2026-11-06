@@ -19,9 +19,6 @@ using detail::SessionPeer;
 namespace
 {
 
-/// How often the rate counters of addresses that stopped sending are forgotten.
-constexpr std::chrono::seconds RatePruneInterval{10};
-
 std::string_view describe(const SessionEnd &end)
 {
     switch (end.cause) {
@@ -278,7 +275,7 @@ void ClientSession::end(SessionEnd end, std::optional<DisconnectReason> farewell
 // --- SessionHost ---
 
 SessionHost::SessionHost(SendFunction send, Handlers handlers)
-    : _send(std::move(send)), _handlers(std::move(handlers))
+    : _send(std::move(send)), _handlers(std::move(handlers)), _rates(MaxDatagramsPerSecond)
 {
 }
 
@@ -311,7 +308,7 @@ void SessionHost::receive(const Address &from, std::span<const std::byte> datagr
         }
         return;
     }
-    if (!withinRate(from, now)) {
+    if (!_rates.allow(from, now)) {
         return;
     }
     SessionPeer &peer = *found->second;
@@ -390,12 +387,6 @@ void SessionHost::update(Clock::time_point now)
             end(id, {SessionEnd::Cause::Failed}, DisconnectReason::ProtocolError);
         }
     }
-
-    if (now - _lastRatePrune >= RatePruneInterval) {
-        _lastRatePrune = now;
-        std::erase_if(_rates,
-                      [&](const auto &entry) { return now - entry.second.windowStart >= RatePruneInterval; });
-    }
 }
 
 bool SessionHost::send(std::uint32_t session, std::uint8_t type, std::span<const std::byte> payload,
@@ -463,21 +454,6 @@ std::size_t SessionHost::pendingReliable(std::uint32_t session) const
 {
     const auto found = _sessions.find(session);
     return found == _sessions.end() ? 0 : found->second->channel.pendingReliable();
-}
-
-bool SessionHost::withinRate(const Address &from, Clock::time_point now)
-{
-    RateCounter &counter = _rates[from];
-    if (counter.count == 0 || now - counter.windowStart >= std::chrono::seconds(1)) {
-        counter.windowStart = now;
-        counter.count = 0;
-    }
-    ++counter.count;
-    if (counter.count == MaxDatagramsPerSecond + 1) {
-        logger().debug("{} sends more than {} datagrams per second: the others are dropped", from,
-                       MaxDatagramsPerSecond);
-    }
-    return counter.count <= MaxDatagramsPerSecond;
 }
 
 void SessionHost::sendDatagrams(SessionPeer &peer, Clock::time_point now)

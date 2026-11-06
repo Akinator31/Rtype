@@ -1,10 +1,9 @@
 # The official server in Dokploy, with its accounts (docs/guides/deploy-with-docker.md).
 #
-# The lobby and the games are published on the host: 4242 over TCP, 4243 to 4299 over UDP, the same numbers
-# inside and outside, since the lobby gives the players the port of their game. Turn off the userland proxy of
-# Docker on the host first: otherwise each of the 57 UDP ports costs a process. The panel listens on port 8080
-# of the container and is never published: Traefik reaches it over the network of Dokploy, at the domain given
-# to the service.
+# The lobby and the games are published on the host: 4242 over TCP, and 4242 over UDP for every game, the same
+# number inside and outside, since the lobby gives the players the port of their game. The panel listens on
+# port 8080 of the container and is never published: Traefik reaches it over the network of Dokploy, at the
+# domain given to the service.
 #
 # Its settings (docker/server-accounts.toml) and its secrets are files of the service, which Dokploy keeps in
 # ../files; RTYPE_FILES points elsewhere without Dokploy. Each secret is readable by the user of the server,
@@ -18,7 +17,7 @@ services:
     init: true
     ports:
       - "4242:4242/tcp"
-      - "4243-4299:4243-4299/udp"
+      - "4242:4242/udp"
     # The panel, for Traefik only
     expose:
       - "8080"

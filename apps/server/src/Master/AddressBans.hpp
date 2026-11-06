@@ -3,9 +3,11 @@
 #include "rtype/network/Address.hpp"
 
 #include <chrono>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace rtype::server
@@ -38,9 +40,14 @@ struct AddressBan {
 class AddressBans
 {
     std::unordered_map<rtype::network::Address, AddressBan> _bans;
+    std::function<void()> _onChange;
 
 public:
     explicit AddressBans(const std::vector<AddressBan> &bans = {});
+
+    /// Called after each ban added or lifted, for the relay to take a copy; an empty function for nobody.
+    /// Not for the bans that expire: whoever checks a ban checks its date.
+    void setChangeHandler(std::function<void()> handler) { _onChange = std::move(handler); }
 
     /// The ban of an address, if one runs at `now`.
     [[nodiscard]] std::optional<AddressBan>
