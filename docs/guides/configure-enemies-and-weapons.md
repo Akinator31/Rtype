@@ -186,15 +186,50 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `label` | string | `""` | Short text shown to the players |
 | `description` | string | `""` | Longer text |
 | `difficulty` | whole number from 1 to 6 | *required* | How hard the wave is, 1 the easiest, 6 the final boss |
-| `placement` | `"manual"` or `"random"` | *required* | Each enemy listed with its position, or one kind of enemy placed at random |
+| `placement` | `"manual"`, `"random"` or `"music"` | *required* | Each enemy listed with its position, one kind of enemy placed at random, or enemies that come on the beats of a music |
 | `spawnInterval` | number, 0 or more | `1` | Seconds between two enemies, 0 for all at once |
-| `music` | string, at most 128 bytes | `""` | Music the players hear when the wave starts, a path in the assets of the client (`"sounds/boss_theme.mp3"`); none: the music playing goes on |
+| `music` | string, at most 128 bytes | `""` | Music the players hear when the wave starts, a path in the assets of the client (`"sounds/boss_theme.mp3"`); none: the music playing goes on. *Required* for a music wave, which follows it |
 | `spawns` | list of `{ enemy = "...", x = ..., y = ... }` | | Manual only, *required*: each enemy and where it appears, in order |
 | `enemy` | string | | Random only, *required*: the id of the kind of every enemy |
 | `area` | `{ minX, maxX, minY, maxY }` | a band just past the right edge, over the whole height | Random only: where they appear; each bound optional |
-| `quantity` | whole number from 1 to 65535 | the number of `spawns` | How many enemies; *required* for a random wave |
+| `quantity` | whole number from 1 to 65535 | the number of `spawns` | How many enemies; *required* for a random wave; not allowed for a music wave (it is the number of beats found) |
+| `beats` | `{ bass = {...}, mid = {...}, high = {...} }` | | Music only, *required*: what comes at the beats of each band, each band optional (see below) |
+| `lead` | number, 0 or more | `1.5` | Music only: seconds an enemy needs to cross the screen. It appears this long before its beat, so that it is in sight on it |
 
-A manual wave sets no `enemy` and a random wave no `spawns`: a wave does not mix both modes.
+A manual wave sets no `enemy` and a random wave no `spawns`: a wave does not mix the modes.
+
+#### Music waves
+
+A `"music"` wave brings the Bydos in on the rhythm of an mp3 file. At load, the server and the client analyse
+the file (`libs/beat`): it is cut in three bands of frequencies, and each attack found is a beat of the band it
+is the clearest in, `bass` (the kick drum), `mid` (the snare, the voices) or `high` (the cymbals). Each band you
+list in `beats` has:
+
+| Field | Type | Default | What it is |
+|---|---|---|---|
+| `enemies` | list of strings | *required to be used* | The ids of the kinds of enemies; one of them, drawn, comes at each beat of the band. A band with none is ignored |
+| `minGap` | number, 0 or more | `0.25` | Seconds: no two beats of the band closer than this. Raise it if the wave is too busy |
+
+The enemies appear in five lanes of the `area` (the same default as a random wave), never in the lane of
+one of the two beats before, so that they come from everywhere. The positions are fixed by the name of the wave:
+every game of it is the same. The file is looked for in `assets/` next to `config/` (or `apps/client/assets/` for
+the configuration of the repository), so a server needs the music beside its configuration, which its package
+installs. Only the mp3 format is read.
+
+```lua
+return {
+    name = "drums_style", difficulty = 3, placement = "music",
+    music = "sounds/drums_style.mp3",
+    beats = {
+        bass = { enemies = { "bydo_heavy" }, minGap = 1.5 },
+        mid = { enemies = { "bydo_scout", "bydo_gunner" }, minGap = 1.2 },
+        high = { enemies = { "bydo_scout" }, minGap = 1.2 },
+    },
+}
+```
+
+The wave lasts as long as the music and ends once its last enemy is gone. `config/waves/wave3/drums_style.lua` and
+`wave4/the_sports_music.lua` are the examples.
 
 A game plays the waves by difficulty, from 1 to 6: for each one, a wave drawn among those of that difficulty.
 The repository keeps its examples in `config/waves/wave1/` through `wave5/`, with four choices
