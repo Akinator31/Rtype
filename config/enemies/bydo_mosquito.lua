@@ -1,7 +1,7 @@
 -- A fragile missile fighter that darts between random points before fleeing.
 return {
     id = "bydo_mosquito",
-    ship = "bydo_interceptor",
+    ship = "bydo_mosquito",
     health = 25,
     speed = 340,
     weapon = "micro_missile_launcher",
