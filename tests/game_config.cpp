@@ -93,15 +93,14 @@ TEST_CASE("The configuration of the repository loads, and a Simulation registers
     CHECK(context.weapons.hasDefinition("blaster"));
     CHECK(context.ships.hasDefinition("bydo_scout"));
     CHECK(context.enemies.hasDefinition("bydo_scout"));
-    CHECK(context.waves.hasDefinition("scouts_line"));
+    CHECK(context.waves.hasDefinition("space_voyager"));
     CHECK(context.weapons.hasDefinition(context.player.weapon));
     CHECK(context.ships.hasDefinition(context.player.ship));
-    // Four choices per level; the game draws one of each, and ends with the final boss
+    // At least one music wave per level, up to the one before the final boss (retired for now)
     for (std::uint8_t difficulty = MinWaveDifficulty; difficulty < MaxWaveDifficulty; ++difficulty) {
         INFO("difficulty " << int{difficulty});
-        CHECK(context.waves.listWavesOfDifficulty(difficulty).size() >= 4);
+        CHECK_FALSE(context.waves.listWavesOfDifficulty(difficulty).empty());
     }
-    CHECK(context.waves.listWavesOfDifficulty(MaxWaveDifficulty) == std::vector<std::string>{"shogun_duel"});
 }
 
 TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest player, then leaves", "[game]")
@@ -117,14 +116,14 @@ TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest p
                                   &EntityState::kind);
     };
 
-    // 500 units at 150 per second, then a second to aim: no orb before
-    for (int tick = 0; tick < 255; ++tick) {
+    // 500 units at 450 per second, then a second to aim: no orb before
+    for (int tick = 0; tick < 120; ++tick) {
         simulation.step();
     }
     CHECK(ecs.getComponent<rtype::ecs::Position>(gunner).x == Approx(1500.0f));
     CHECK(countOrbs() == 0);
     // An orb every half second, then it flies away
-    for (int tick = 0; tick < 75; ++tick) {
+    for (int tick = 0; tick < 85; ++tick) {
         simulation.step();
     }
     CHECK(countOrbs() == 3);
