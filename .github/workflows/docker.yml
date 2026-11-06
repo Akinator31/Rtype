@@ -1,8 +1,8 @@
 name: Docker
 
 # The image of the server (docs/guides/deploy-with-docker.md): built and tested on every pull request, then
-# published on GHCR from main (tag main) and from the tags of the releases (their version, and latest), which
-# Dokploy pulls
+# published on GHCR for linux/amd64 and linux/arm64 from main (tag main) and from the tags of the releases
+# (their version, and latest), which Dokploy pulls
 on:
   push:
     branches: [main]
@@ -50,12 +50,16 @@ jobs:
       - name: Smoke test with accounts
         run: docker/smoke-test-accounts.sh "$SERVER_IMAGE" "$SMOKE_IMAGE"
 
+      # The image for linux/amd64 and linux/arm64 in one manifest, Dokploy pulls the one of its machine. arm64
+      # is built under QEMU, slower, and only here: the smoke tests above run on amd64. The builder keeps its
+      # cache mounts on this runner, from one publication to the next
       - name: Publish on GHCR
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
+          BUILDER: rtype-multi-arch
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           if [ "$REF_TYPE" = tag ]; then
@@ -65,12 +69,16 @@ jobs:
           else
             tags=(main)
           fi
-          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          tag_args=()
           for tag in "${tags[@]}"; do
-            docker tag "$SERVER_IMAGE" "$image:$tag"
-            docker push "$image:$tag"
-            docker rmi "$image:$tag"
+            tag_args+=(-t "$image:$tag")
           done
+          docker run --privileged --rm tonistiigi/binfmt --install arm64
+          docker buildx inspect "$BUILDER" >/dev/null 2>&1 \
+            || docker buildx create --name "$BUILDER" --driver docker-container
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker buildx build --builder "$BUILDER" --platform linux/amd64,linux/arm64 --target server \
+            "${tag_args[@]}" --push .
           docker logout ghcr.io
 
       - name: Remove the images

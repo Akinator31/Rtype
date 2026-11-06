@@ -13,8 +13,9 @@ Discord configured, their secrets as files, and the panel on its domain over HTT
 - Its firewall open for **4242/tcp** (the lobby) and **4242/udp** (every game), as for a server without
   Docker ([Run a server](run-a-server.md), step 2).
 - The image: `ghcr.io/akinator31/rtype`, built and published by the CI, tagged `latest` and with its version
-  for each release, `main` for the last commit of `main`. To build it yourself, from the root of the
-  repository: `docker build -t rtype-server .`.
+  for each release, `main` for the last commit of `main`. It exists for **linux/amd64** and **linux/arm64**
+  (an ARM server, a Raspberry Pi 4 or 5 with a 64-bit system): Docker pulls the one of the machine. To build
+  it yourself, from the root of the repository: `docker build -t rtype-server .`.
 
 ## What the image holds
 
