@@ -221,9 +221,9 @@ return {
     name = "drums_style", difficulty = 3, placement = "music",
     music = "sounds/drums_style.mp3",
     beats = {
-        bass = { enemies = { "bydo_heavy" }, minGap = 1.5 },
-        mid = { enemies = { "bydo_scout", "bydo_gunner" }, minGap = 1.2 },
-        high = { enemies = { "bydo_scout" }, minGap = 1.2 },
+        bass = { enemies = { "bydo_heavy" }, minGap = 4.5 },
+        mid = { enemies = { "bydo_scout", "bydo_gunner" }, minGap = 3.5 },
+        high = { enemies = { "bydo_scout" }, minGap = 3.5 },
     },
 }
 ```
