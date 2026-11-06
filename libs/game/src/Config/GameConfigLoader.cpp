@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <format>
+#include <future>
 #include <fstream>
 #include <iterator>
 #include <optional>
@@ -176,18 +177,28 @@ std::filesystem::path findAssetsBeside(const std::filesystem::path &directory)
     return root / "assets";
 }
 
-/// Finds the enemies of the waves that follow a music: the analysis of the music needs the assets.
+/// Finds the enemies of the waves that follow a music: the analysis of the music needs the assets. Each music is
+/// analysed on a thread of its own, they are long and independent.
 void analyseMusics(const std::filesystem::path &assets, std::vector<FromFile<WaveDefinition>> &waves,
                    std::vector<std::string> &errors)
 {
-    for (auto &[file, wave] : waves) {
-        if (wave.placement != WavePlacement::Music) {
-            continue;
+    struct Analysis {
+        const std::string *file;
+        std::future<void> done;
+    };
+    std::vector<Analysis> analyses;
+    for (auto &wave : waves) {
+        if (wave.definition.placement == WavePlacement::Music) {
+            analyses.push_back({&wave.file, std::async(std::launch::async, [&wave, &assets] {
+                                    fillMusicTimeline(wave.definition, assets);
+                                })});
         }
+    }
+    for (auto &[file, done] : analyses) {
         try {
-            fillMusicTimeline(wave, assets);
+            done.get();
         } catch (const std::runtime_error &error) {
-            errors.push_back(std::format("{}: music: {}", file, error.what()));
+            errors.push_back(std::format("{}: music: {}", *file, error.what()));
         }
     }
 }
