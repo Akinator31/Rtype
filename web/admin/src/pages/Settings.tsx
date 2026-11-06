@@ -109,9 +109,7 @@ export function Settings() {
         </Pair>
         <Pair label={t.lobby}>{server ? strings.overview.lobbyValue(server.ports.lobby) : strings.none}</Pair>
         <Pair label={t.games}>
-          {server
-            ? strings.overview.gamePortValue(server.ports.game, server.maxGames)
-            : strings.none}
+          {server ? strings.overview.gamePortValue(server.ports.game, server.maxGames) : strings.none}
         </Pair>
       </Card>
       <Card title={t.preferences} gap="16px">
