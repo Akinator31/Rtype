@@ -36,7 +36,8 @@ own (Schannel).
 
 PulseAudio and ALSA (`libpulse0`, `libasound2t64`) are required on Linux by the Discord Social SDK the client
 signs in to Discord with ([ADR 0026](../decisions/0026-discord-social-sdk.md)); the SDK itself is in the
-repository, in `libs/discord/sdk/`, for Linux x86-64 and Windows x64, the only platforms the client builds on.
+repository, in `libs/discord/sdk/`, for Linux x86-64 and Windows x64, the only platforms the client builds on. Elsewhere, Linux aarch64 for
+instance, the configure warns and builds the server only.
 
 libpq (`libpq-dev`, `postgresql-libs`) is optional: with it, the server can keep its data in a PostgreSQL
 database; without it, in SQLite only. The configure says which: `Database engines: SQLite, PostgreSQL`. On

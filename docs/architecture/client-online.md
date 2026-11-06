@@ -233,7 +233,9 @@ at sign-out and at the deletion of the account; the pictures stay, as another se
 `libs/discord` is two targets, so that the tests never load the library of Discord: `rtype::discord`, the
 interface, which the client and its tests know, and `rtype::discord_sdk`, its implementation, linked by the
 executable `r-type_client` alone. The SDK itself is kept in `libs/discord/sdk/` (its `README.md`), for Linux
-x86-64 and Windows x64; its library is copied beside the executable, in the build and in the package.
+x86-64 and Windows x64; its library is copied beside the executable, in the build and in the package. On
+another platform (Linux aarch64, the image of the server for linux/arm64), `rtype::discord_sdk` does not exist:
+CMake warns and leaves `r-type_client` out, the server and the tests are built.
 
 ## RemoteSession
 

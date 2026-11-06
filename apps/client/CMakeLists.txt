@@ -97,6 +97,11 @@ target_link_libraries(r-type_client_core
            rtype::log rtype::network rtype::physics rtype::render
     PRIVATE rtype_options)
 
+# Without the Discord Social SDK for this platform (libs/discord), the core above only, for the tests
+if(NOT TARGET rtype::discord_sdk)
+  return()
+endif()
+
 add_executable(r-type_client
     src/main.cpp
 )
