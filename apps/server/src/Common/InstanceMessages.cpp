@@ -199,9 +199,10 @@ std::vector<std::byte> encode(const ConfigureMessage &message)
     require(!message.name.empty() && message.name.size() <= MaxGameNameLength,
             "A game name is 1 to 32 bytes");
     require(message.maxPlayers >= 1 && message.maxPlayers <= MaxInstancePlayers, "A game has 1 to 4 players");
-    Writer writer(2 + message.name.size());
+    Writer writer(4 + message.name.size());
     writer.writeString(message.name);
     writer.writeU8(message.maxPlayers);
+    writer.writeU16(message.relayPort);
     return writer.take();
 }
 
@@ -211,6 +212,7 @@ std::optional<ConfigureMessage> decodeConfigure(std::span<const std::byte> paylo
     ConfigureMessage message;
     message.name = reader.readString(1, MaxGameNameLength);
     message.maxPlayers = reader.readU8();
+    message.relayPort = reader.readU16();
     if (message.maxPlayers == 0 || message.maxPlayers > MaxInstancePlayers) {
         reader.fail();
     }
