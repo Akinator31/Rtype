@@ -6,7 +6,8 @@
 
 [server]
 port = 4242
-game_ports = "4243-4299"
+game_port = 4242
+max_games = 57
 key = "/data/server.key"
 database = "sqlite:/data/rtype.db"
 
