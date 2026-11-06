@@ -1,7 +1,7 @@
 return {
     name = "the_sports_music",
-    label = "The sports music",
-    description = "The Bydos follow the rhythm",
+    label = "Reversal of fortune",
+    description = "Humanity regains the upper hand, and the Bydos strike back",
     difficulty = 4,
     placement = "music",
     music = "sounds/the_sports_music.mp3",

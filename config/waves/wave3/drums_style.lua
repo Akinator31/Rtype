@@ -3,8 +3,8 @@
 -- drum, the snare and the cymbals.
 return {
     name = "drums_style",
-    label = "Drums style",
-    description = "The Bydos follow the drums",
+    label = "The Shogun project",
+    description = "Human and Bydos technology are fused into a new arsenal",
     difficulty = 3,
     placement = "music",
     music = "sounds/drums_style.mp3",

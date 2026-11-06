@@ -1,7 +1,7 @@
 return {
     name = "epic_anthem",
-    label = "Epic anthem",
-    description = "The Bydos march to the anthem",
+    label = "The last obstacle",
+    description = "Peace is out of reach while the Bydos Shogun still stands",
     difficulty = 5,
     placement = "music",
     music = "sounds/epic_anthem.mp3",

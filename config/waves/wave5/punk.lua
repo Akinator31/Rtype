@@ -1,7 +1,7 @@
 return {
     name = "punk",
-    label = "Punk",
-    description = "The Bydos storm in",
+    label = "The Shogun threat",
+    description = "The Shogun, seized by the Bydos, storms across the galaxy",
     difficulty = 5,
     placement = "music",
     music = "sounds/punk.wav",

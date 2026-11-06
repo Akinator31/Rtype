@@ -1,7 +1,7 @@
 return {
     name = "cyberpunk_main",
-    label = "Cyberpunk main",
-    description = "The Bydos hack the city to the beat",
+    label = "Hijacked fleet",
+    description = "The Bydos take control of human ships, one beat at a time",
     difficulty = 4,
     placement = "music",
     music = "sounds/cyberpunk_main.wav",

@@ -1,7 +1,7 @@
 return {
     name = "space_voyager",
-    label = "Space voyager",
-    description = "The Bydos drift with the melody",
+    label = "The first signal",
+    description = "An unknown signal crosses the stars, and the Bydos drift along it",
     difficulty = 1,
     placement = "music",
     music = "sounds/space_voyager.wav",

@@ -1,7 +1,7 @@
 return {
     name = "christmas_rock",
-    label = "Christmas rock",
-    description = "The Bydos rock along",
+    label = "First contact",
+    description = "The Bydos reach humanity, and their technology far outclasses it",
     difficulty = 2,
     placement = "music",
     music = "sounds/christmas_rock.mp3",

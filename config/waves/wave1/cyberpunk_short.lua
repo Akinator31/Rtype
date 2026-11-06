@@ -1,7 +1,7 @@
 return {
     name = "cyberpunk_short",
-    label = "Cyberpunk short",
-    description = "The Bydos jack into a short cyberpunk loop",
+    label = "The warning",
+    description = "The decoded message announces a war that cannot be avoided",
     difficulty = 1,
     placement = "music",
     music = "sounds/cyberpunk_short.wav",
