@@ -118,6 +118,8 @@ class GameSessionSystem : public ecs::System
     /// The entities drawn that the game killed: they leave an impact when they go.
     std::unordered_set<std::uint32_t> _killed;
     std::vector<game::PlayerState> _players;
+    /// Hit points of the ship of the local player in the latest snapshot, 0 while it is not there.
+    std::uint8_t _localHealth = 0;
     std::uint32_t _tick = 0;
     /// Seconds the session has been played: the time of the animations of the ships.
     float _clock = 0.0f;
@@ -213,6 +215,8 @@ public:
     [[nodiscard]] GameSession *session() const { return _session.get(); }
     /// The players of the latest snapshot, by slot: for the HUD.
     [[nodiscard]] const std::vector<game::PlayerState> &players() const { return _players; }
+    /// Hit points of the ship of the local player in the latest snapshot: for the HUD.
+    [[nodiscard]] std::uint8_t localHealth() const { return _localHealth; }
     /// The tick of the latest snapshot.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }
     /// The stage of the rescue against the final boss in the latest snapshot.

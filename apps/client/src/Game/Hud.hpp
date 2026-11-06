@@ -35,6 +35,8 @@ struct Hud {
     /// "1P", above the score of the local player.
     ecs::entity_t pilot = 0;
     ecs::entity_t score = 0;
+    /// The hit points of the ship of the local player, in green, under the score.
+    ecs::entity_t health = 0;
     /// One line per other player at most.
     std::vector<HudAlly> allies;
     /// The bars of the signal, from the shortest, left of the ping.

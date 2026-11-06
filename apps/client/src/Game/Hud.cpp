@@ -39,6 +39,10 @@ constexpr render::Color PilotColor{138, 144, 151, 255};
 constexpr float ScoreSize = 34.7f;
 constexpr float ScoreSpacing = 4.0f;
 
+constexpr float HealthSize = 20.0f;
+constexpr float HealthSpacing = 2.0f;
+constexpr render::Color HealthColor{80, 220, 100, 255};
+
 constexpr float AllySize = 12.0f;
 constexpr float AllySpacing = 1.3f;
 constexpr render::Color AllyNameColor{107, 113, 119, 255};
@@ -97,6 +101,8 @@ ecs::entity_t openHud(ecs::Ecs &ecs, engine::SceneId scene, const HudLook &look,
                            PilotSpacing);
     hud.score = createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, ScoreSize,
                            render::colors::White, ScoreSpacing);
+    hud.health = createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, HealthSize, HealthColor,
+                            HealthSpacing);
 
     for (std::uint8_t index = 1; index < game::MaxPlayers; ++index) {
         const ecs::entity_t name = createText(ecs, scene, engine::AnchorPoint::BottomRight, look.font,

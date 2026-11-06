@@ -19,6 +19,7 @@ constexpr float LifeGap = 10.7f;
 constexpr float LivesCentre = 146.7f;
 constexpr float PilotCentre = 114.0f;
 constexpr float ScoreCentre = 75.3f;
+constexpr float HealthCentre = 38.0f;
 
 /// The line of the other player nearest to the ping, and the distance between two lines.
 constexpr float AllyCentre = 92.7f;
@@ -73,6 +74,7 @@ void HudSystem::update(float /*elapsed*/)
         const Hud &hud = _huds.get(entity);
         stretchShadows(hud);
         showPilot(hud, local);
+        showHealth(hud);
         showAllies(hud, local);
         showPing(hud, ping);
     }
@@ -104,6 +106,13 @@ void HudSystem::showPilot(const Hud &hud, std::uint8_t slot)
     engine::Text &score = _texts.get(hud.score);
     score.text = formatScore(player == players.end() ? 0 : player->score);
     placeAbove(hud.score, Margin, ScoreCentre, score.size);
+}
+
+void HudSystem::showHealth(const Hud &hud)
+{
+    engine::Text &health = _texts.get(hud.health);
+    health.text = std::format("HP {}", _sessions.localHealth());
+    placeAbove(hud.health, Margin, HealthCentre, health.size);
 }
 
 void HudSystem::showAllies(const Hud &hud, std::uint8_t local)

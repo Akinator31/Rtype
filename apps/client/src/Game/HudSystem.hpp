@@ -36,6 +36,7 @@ class HudSystem : public ecs::System
 
     void stretchShadows(const Hud &hud);
     void showPilot(const Hud &hud, std::uint8_t slot);
+    void showHealth(const Hud &hud);
     void showAllies(const Hud &hud, std::uint8_t local);
     void showPing(const Hud &hud, std::optional<std::chrono::milliseconds> ping);
     /// Puts the offset of the anchor of an entity of the HUD.
