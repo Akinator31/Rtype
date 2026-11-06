@@ -95,8 +95,8 @@ players in them, as they play; remove a player; end a game; tell every player so
 ### Deployment
 
 A **Docker image** of the server comes with it, and a `docker-compose.yml` that Dokploy can use: the panel's
-port behind the proxy and its domain; the lobby port (TCP) and the range of game ports (UDP) published on the
-host directly; volumes for the key and the SQLite database; the secrets as files.
+port behind the proxy and its domain; the lobby port (TCP) and the game ports (UDP, one since
+[ADR 0027](0027-one-udp-port-relay.md)) published on the host directly; volumes for the key and the SQLite database; the secrets as files.
 
 ## Consequences
 

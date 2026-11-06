@@ -11,7 +11,7 @@ Run a server and play the same game from several machines, or from several clien
     ./build/bin/r-type_server
     ```
 
-    For players on other machines, open the TCP port 4242 and the UDP ports 4243 to 4299.
+    For players on other machines, open 4242 over TCP and over UDP.
 
 2. **Connect.** Start the client, choose **Online**, type a name and the server, then **Connect**, or pick one
    of the **Servers met** on the right, which shows the account you will be signed in to:
@@ -55,16 +55,16 @@ The players see each other's ships move. The server shows them in its logs:
 
 ```
 INFO  lobby    Pavel (1) joined the lobby from 127.0.0.1:51234
-INFO  games    Pavel creates game 1 "Pavel's game" for 4 players: instance 48213 on UDP 4243
-INFO  games    game 1 "Pavel's game" ready on UDP 4243
+INFO  games    Pavel creates game 1 "Pavel's game" for 4 players: instance 48213
+INFO  games    game 1 "Pavel's game" ready
 INFO  instance Pavel (1) connected from 127.0.0.1:40102, slot 0
 ```
 
 | Toast in the client | Fix |
 |---|---|
 | `Cannot reach ...: Connection refused` | The server does not run, or the address or the TCP port is wrong, or blocked |
-| `The game cannot be reached: its UDP port may be blocked` | The lobby works but not the games: open the UDP range of the server |
-| `The server cannot host another game` | Every game port is taken: wait for a game to end, or give the server more ports |
+| `The game cannot be reached: its UDP port may be blocked` | The lobby works but not the games: open the UDP port of the server, 4242 by default |
+| `The server cannot host another game` | The server runs its most games at once: wait for a game to end, or raise its `--max-games` |
 | `Your session expired: sign in again` | The session ended (30 days, a new password, a ban, signed out elsewhere): the client connected again as a guest |
 | `If this email has an account, a code was sent to it` but no email | Look in the spam folder, then **Send a new code** (once a minute); the server may not reach its mail server |
 | `This name belongs to an account` | A guest cannot take the username of an account: choose another name, or sign in |

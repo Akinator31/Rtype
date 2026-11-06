@@ -193,8 +193,8 @@ Port forwarding
     if the server is hosted behind a home router.
 
 Firewall
-:   Filters traffic by port and protocol. The server's host must let in TCP 4242 and the UDP range of the
-    games.
+:   Filters traffic by port and protocol. The server's host must let in 4242 over TCP, for the lobby, and over UDP,
+    for every game.
 
 ## Security
 

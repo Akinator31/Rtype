@@ -21,7 +21,8 @@ else.
     # server.toml
     [server]
     port = 4242
-    game_ports = "4243-4299"
+    game_port = 4242                              # UDP: every game, the same number as the lobby
+    max_games = 57
     key = "/data/server.key"
     database_file = "/run/secrets/database_url"   # or: database = "sqlite:/data/rtype.db"
 
@@ -95,7 +96,8 @@ else.
 | Section | Key | Default | Meaning |
 |---|---|---|---|
 | `[server]` | `port` | 4242 | TCP port of the lobby, as `--port`; 0 lets the system choose |
-| | `game_ports` | `"4243-4299"` | UDP ports of the games, as `--game-ports` |
+| | `game_port` | 4242 | UDP port of every game, as `--game-port`; 0 lets the system choose. The same number as `port` is fine: one is TCP, the other UDP |
+| | `max_games` | 57 | Most games at once, from 1 to 1000, as `--max-games` |
 | | `key` | `server.key` | Private key of the server, as `--key` |
 | | `database` | `sqlite:rtype.db` | Where the master keeps its data, as `--database`; a relative SQLite file is next to the settings file |
 | | `database_file` | | A file holding the address of the database, as `--database-file`. Not with `database` |

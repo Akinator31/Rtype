@@ -128,7 +128,7 @@ rtype::network::resolve("localhost", 4242); // std::vector<Address>, IPv4 first;
 ## UDP
 
 ```cpp
-rtype::network::UdpSocket socket(loop, Address::anyIpv4(4243));
+rtype::network::UdpSocket socket(loop, Address::anyIpv4(4242));
 
 socket.startReceiving([&](const Address &from, std::span<const std::byte> datagram) {
     socket.send(from, datagram); // echo
