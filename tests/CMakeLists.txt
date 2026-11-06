@@ -11,6 +11,7 @@ add_executable(rtype_tests
     action_map.cpp
     async_resources.cpp
     audio.cpp
+    beat.cpp
     client_game.cpp
     client_interpolation.cpp
     client_lore.cpp
@@ -95,7 +96,7 @@ if(MSVC)
   set_source_files_properties(helpers/FakeDiscord.cpp PROPERTIES COMPILE_OPTIONS /bigobj)
 endif()
 target_link_libraries(rtype_tests PRIVATE
-    rtype_options rtype::audio rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
+    rtype_options rtype::audio rtype::beat rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
     rtype::scripting rtype::shaders r-type_client_core r-type_server_core
     CURL::libcurl Crow::Crow Catch2::Catch2WithMain)
 # The fake mail server of the tests speaks TLS with OpenSSL, there where libcurl uses it: not on Windows, whose
@@ -127,6 +128,7 @@ target_compile_definitions(rtype_tests PRIVATE
     RTYPE_TEST_CHILD="$<TARGET_FILE:rtype_test_child>"
     RTYPE_TEST_SERVER="$<TARGET_FILE:r-type_server>"
     RTYPE_TEST_CONFIG="${PROJECT_SOURCE_DIR}/config"
+    RTYPE_TEST_SOUNDS="${PROJECT_SOURCE_DIR}/apps/client/assets/sounds"
     RTYPE_TEST_FONTS="${PROJECT_SOURCE_DIR}/apps/client/assets/fonts"
     RTYPE_TEST_LOCALES="${PROJECT_SOURCE_DIR}/apps/client/assets/locales")
 # The helpers the tests share
