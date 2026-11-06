@@ -1,7 +1,7 @@
 -- Stops to fire three siege missiles, then retreats to the left.
 return {
     id = "bydo_siege",
-    ship = "bydo_heavy",
+    ship = "bydo_siege",
     health = 200,
     speed = 85,
     acceleration = 170,
