@@ -13,8 +13,8 @@
 
 #include <algorithm>
 #include <format>
-#include <future>
 #include <fstream>
+#include <future>
 #include <iterator>
 #include <optional>
 #include <stdexcept>
@@ -177,8 +177,8 @@ std::filesystem::path findAssetsBeside(const std::filesystem::path &directory)
     return root / "assets";
 }
 
-/// Finds the enemies of the waves that follow a music: the analysis of the music needs the assets. Each music is
-/// analysed on a thread of its own, they are long and independent.
+/// Finds the enemies of the waves that follow a music: the analysis of the music needs the assets. Each music
+/// is analysed on a thread of its own, they are long and independent.
 void analyseMusics(const std::filesystem::path &assets, std::vector<FromFile<WaveDefinition>> &waves,
                    std::vector<std::string> &errors)
 {

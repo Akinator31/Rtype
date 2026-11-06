@@ -246,7 +246,8 @@ TEST_CASE("An instance started with its secret runs until asked to stop, then ex
     rtype::network::EventLoop loop;
     rtype::network::TcpListener master(loop, rtype::network::Address::loopbackIpv4(0));
     std::optional<rtype::network::TcpConnection> connected;
-    master.startAccepting([&connected](rtype::network::TcpConnection accepted) { connected.emplace(std::move(accepted)); });
+    master.startAccepting(
+        [&connected](rtype::network::TcpConnection accepted) { connected.emplace(std::move(accepted)); });
     const std::vector<std::string> arguments = {"--instance",
                                                 "--id",
                                                 "7",
