@@ -17,6 +17,7 @@ CPMAddPackage(
 target_compile_definitions(raylib PRIVATE SUPPORT_FILEFORMAT_JPG=1)
 
 add_subdirectory(audio)
+add_subdirectory(beat)
 add_subdirectory(core)
 add_subdirectory(database)
 add_subdirectory(discord)

@@ -1,9 +1,12 @@
 #pragma once
 
 #include "rtype/game/Wave/WaveArea.hpp"
+#include "rtype/game/Wave/WaveBeatRule.hpp"
 #include "rtype/game/Wave/WavePlacement.hpp"
 #include "rtype/game/Wave/WaveSpawn.hpp"
+#include "rtype/game/Wave/WaveTimedSpawn.hpp"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -37,8 +40,17 @@ struct WaveDefinition {
     /// Random only: where they appear.
     WaveArea area;
     /// The music the clients play when the wave starts: a path relative to the assets of the client, for
-    /// instance "sounds/boss_theme.mp3". Empty: the music playing goes on.
+    /// instance "sounds/boss_theme.mp3". Empty: the music playing goes on. A Music wave needs it, and follows
+    /// it.
     std::string music;
+    /// Music only: what comes at the beats of each band, in the order bass, mid, high.
+    std::array<WaveBeatRule, 3> beats;
+    /// Music only: seconds an enemy needs to cross the screen, so that it comes in sight before its beat,
+    /// not on it.
+    float lead = 1.5f;
+    /// Music only: the enemies and the tick they appear at, by increasing tick. Not written in the files:
+    /// loadGameConfig() fills it from the music, and `quantity` with its size.
+    std::vector<WaveTimedSpawn> timeline;
 };
 
 } // namespace rtype::game

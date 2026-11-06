@@ -14,3 +14,14 @@ add_dependencies(r-type_client r-type_config)
 add_dependencies(r-type_server r-type_config)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/config/ DESTINATION config COMPONENT client)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/config/ DESTINATION config COMPONENT server)
+# The server analyses the music of the waves that follow one (placement "music"): it needs those files, not the
+# other assets of the client
+install(FILES ${PROJECT_SOURCE_DIR}/apps/client/assets/sounds/christmas_rock.mp3
+              ${PROJECT_SOURCE_DIR}/apps/client/assets/sounds/cyberpunk_main.wav
+              ${PROJECT_SOURCE_DIR}/apps/client/assets/sounds/cyberpunk_short.wav
+              ${PROJECT_SOURCE_DIR}/apps/client/assets/sounds/drums_style.mp3
+              ${PROJECT_SOURCE_DIR}/apps/client/assets/sounds/epic_anthem.mp3
+              ${PROJECT_SOURCE_DIR}/apps/client/assets/sounds/punk.wav
+              ${PROJECT_SOURCE_DIR}/apps/client/assets/sounds/space_voyager.wav
+              ${PROJECT_SOURCE_DIR}/apps/client/assets/sounds/the_sports_music.mp3
+        DESTINATION assets/sounds COMPONENT server)

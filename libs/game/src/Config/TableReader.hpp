@@ -84,6 +84,9 @@ public:
     /// An optional list of tables, `{ {...}, {...} }`, empty if absent.
     [[nodiscard]] std::vector<TableReader> readList(const std::string &name);
 
+    /// An optional list of non-empty strings, `{ "a", "b" }`, empty if absent.
+    [[nodiscard]] std::vector<std::string> readStrings(const std::string &name);
+
     /// Throws a ConfigError for the first field that was not read: unknown to the definition.
     void checkAllFieldsRead() const;
 };
