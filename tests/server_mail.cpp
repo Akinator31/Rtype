@@ -151,6 +151,7 @@ int checkMaster(const TempDirectory &directory, std::uint16_t port)
                                  .write("server.toml", std::format(R"(
 [server]
 port = 0
+game_port = 0
 key = "server.key"
 database = "sqlite:rtype.db"
 [web]

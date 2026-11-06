@@ -20,9 +20,9 @@ constexpr std::string_view Usage =
 Master options:
   -p, --port <port>          TCP port of the lobby (default: 4242; 0: any free port)
       --bind <ip>            Address to listen on (default: 0.0.0.0, every interface)
-      --game-ports <a>-<b>   UDP ports of the games, one per game (default: 4243-4299)
-      --game-relay <port>    Serve every game on this one UDP port, through a relay (0: any free
-                             port); the range of --game-ports then only gives the most games at once
+      --game-port <port>     UDP port of every game (default: 4242, as the lobby: one is TCP, the
+                             other UDP; 0: any free port)
+      --max-games <n>        Most games at once (default: 57)
   -k, --key <file>           Private key of the server (default: server.key), generated there if the
                              file does not exist. Keep it: the players refuse the server with another key
       --fingerprint          Show the fingerprint of the key, for the players to check, then exit
@@ -38,7 +38,7 @@ Master options:
 
 Instance options (given by the master):
       --id <id>              Id of the game, from 1
-      --udp-port <port>      UDP port of the game
+      --udp-port <port>      UDP port of the game, when it opens its own (--standalone)
       --master-port <port>   Port of the master, on 127.0.0.1
       --standalone           A game without a master, with a test key (debug builds only)
   The master writes the secret of the instance on its standard input.
@@ -99,8 +99,8 @@ Options parseOptions(std::span<const std::string_view> arguments, const ServerSe
     if (settings.port) {
         options.master.listen = options.master.listen.withPort(*settings.port);
     }
-    options.master.firstGamePort = settings.firstGamePort.value_or(options.master.firstGamePort);
-    options.master.lastGamePort = settings.lastGamePort.value_or(options.master.lastGamePort);
+    options.master.gamePort = settings.gamePort.value_or(options.master.gamePort);
+    options.master.maxGames = settings.maxGames.value_or(options.master.maxGames);
     options.master.key = settings.key.value_or(options.master.key);
     options.master.database = settings.database.value_or(options.master.database);
     options.master.databaseFile = settings.databaseFile.value_or(options.master.databaseFile);
@@ -159,25 +159,19 @@ Options parseOptions(std::span<const std::string_view> arguments, const ServerSe
         } else if (argument == "--bind") {
             bind = value();
             masterOnly.push_back(argument);
-        } else if (argument == "--game-ports") {
-            const std::string_view range = value();
-            const std::size_t dash = range.find('-');
-            if (dash == std::string_view::npos) {
-                throw std::invalid_argument(
-                    std::format("--game-ports expects <first>-<last>, not '{}'", range));
-            }
-            options.master.firstGamePort = parsePort(argument, range.substr(0, dash));
-            options.master.lastGamePort = parsePort(argument, range.substr(dash + 1));
-            if (options.master.firstGamePort > options.master.lastGamePort) {
-                throw std::invalid_argument(std::format("--game-ports: {} is above {}",
-                                                        options.master.firstGamePort,
-                                                        options.master.lastGamePort));
-            }
-            masterOnly.push_back(argument);
-        } else if (argument == "--game-relay") {
-            options.master.gameRelay =
+        } else if (argument == "--game-port") {
+            options.master.gamePort =
                 parseNumber<std::uint16_t>(argument, value(), 0, std::numeric_limits<std::uint16_t>::max());
             masterOnly.push_back(argument);
+        } else if (argument == "--max-games") {
+            options.master.maxGames = parseNumber<std::uint32_t>(argument, value(), 1, MaxGames);
+            masterOnly.push_back(argument);
+        } else if (argument == "--game-ports" || argument == "--game-relay") {
+            // Gone with the relay as the only mode: said plainly, rather than "unknown"
+            throw std::invalid_argument(std::format(
+                "{} is gone: every game is on one UDP port, --game-port <port> (default 4242), and "
+                "--max-games <n> gives the most games at once (default 57)",
+                argument));
         } else if (argument == "-k" || argument == "--key") {
             options.master.key = std::filesystem::path(std::string(value()));
             masterOnly.push_back(argument);
@@ -273,6 +267,9 @@ Options parseOptions(std::span<const std::string_view> arguments, const ServerSe
         if (!idGiven) {
             options.instance.id = 1;
         }
+        if (!udpPortGiven) {
+            throw std::invalid_argument("--standalone opens its own UDP port: it needs --udp-port");
+        }
     } else {
         if (!idGiven) {
             throw std::invalid_argument("an instance needs --id");
@@ -280,9 +277,6 @@ Options parseOptions(std::span<const std::string_view> arguments, const ServerSe
         if (!masterPortGiven) {
             throw std::invalid_argument("an instance needs --master-port");
         }
-    }
-    if (!udpPortGiven) {
-        throw std::invalid_argument("an instance needs --udp-port");
     }
     options.mode = Options::Mode::Instance;
     return options;

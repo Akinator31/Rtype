@@ -162,8 +162,8 @@ struct Fixture {
         administration.emplace(loop, games, lobby, bans, &*database,
                                AdministrationSettings{.version = "1.2.3",
                                                       .lobbyPort = 4242,
-                                                      .firstGamePort = 4243,
-                                                      .lastGamePort = 4299,
+                                                      .gamePort = 4242,
+                                                      .maxGames = 57,
                                                       .panelPort = 8080,
                                                       .admins = {}});
         administration->subscribe([this](const AdminEvent &event) { events.push_back(event); });
@@ -230,8 +230,8 @@ TEST_CASE("A subscriber gets a snapshot of the server, then its events in order"
     const auto &snapshot = std::get<admin_event::Snapshot>(events[0]);
     CHECK(snapshot.server.version == "1.2.3");
     CHECK(snapshot.server.lobbyPort == 4242);
-    CHECK(snapshot.server.firstGamePort == 4243);
-    CHECK(snapshot.server.lastGamePort == 4299);
+    CHECK(snapshot.server.gamePort == 4242);
+    CHECK(snapshot.server.maxGames == 57);
     CHECK(snapshot.server.panelPort == 8080);
     CHECK(snapshot.server.players == 1);
     CHECK(snapshot.server.games == 1);
@@ -515,6 +515,7 @@ struct AdminMaster {
     const rtype::test::TestDatabase &test;
     std::optional<rtype::database::DatabaseThread> database;
     AddressBans bans;
+    Relay relay{Address::loopbackIpv4(0)};
     Games games;
     Lobby lobby;
     std::optional<Administration> administration;
@@ -525,7 +526,7 @@ struct AdminMaster {
 
     AdminMaster(const rtype::test::TestDatabase &database_, rtype::network::ServerIdentity key)
         : identity(std::move(key)), test(database_), bans(loadBans(database_)),
-          games(loop, testing::instances()),
+          games(loop, relay, testing::instances()),
           lobby(loop, rtype::network::TcpListener(loop, Address::loopbackIpv4(0)), identity, games)
     {
         rtype::database::Database opened = test.open();
@@ -540,8 +541,8 @@ struct AdminMaster {
         administration.emplace(loop, games, lobby, bans, &*database,
                                AdministrationSettings{.version = "test",
                                                       .lobbyPort = lobby.localAddress().port(),
-                                                      .firstGamePort = 0,
-                                                      .lastGamePort = 0,
+                                                      .gamePort = relay.publicAddress().port(),
+                                                      .maxGames = 4,
                                                       .panelPort = web->localAddress().port(),
                                                       .admins = {}});
         lobby.setBans(&bans);
@@ -718,7 +719,9 @@ TEST_CASE("From the panel, a host sees the server, its games and its players, li
     const crow::json::rvalue server = parse(panel.get("/api/server").body);
     CHECK(server["version"].s() == "test");
     CHECK(server["ports"]["lobby"].i() == master.lobby.localAddress().port());
+    CHECK(server["ports"]["game"].i() == game.udpPort);
     CHECK(server["ports"]["panel"].i() == master.web->localAddress().port());
+    CHECK(server["maxGames"].i() == 4);
     CHECK(server["players"].i() == 1);
     CHECK(server["games"].i() == 1);
     const crow::json::rvalue games = parse(panel.get("/api/games").body);

@@ -15,6 +15,10 @@
 namespace rtype::server
 {
 
+/// The most games a master runs at once, `--max-games` and `max_games`: a bound against a typo, far above
+/// what one machine runs (each game is a process with a thread at 60 Hz).
+inline constexpr std::uint32_t MaxGames = 1000;
+
 /// A settings file refused. The message says where, `server.toml:12:5: unknown key 'prot' in [server]`, and
 /// never holds a secret.
 class SettingsError : public std::runtime_error
@@ -93,8 +97,8 @@ struct AdminSettings {
 struct ServerSettings {
     // [server]: nothing when the file leaves the key out
     std::optional<std::uint16_t> port;
-    std::optional<std::uint16_t> firstGamePort;
-    std::optional<std::uint16_t> lastGamePort;
+    std::optional<std::uint16_t> gamePort;
+    std::optional<std::uint32_t> maxGames;
     std::optional<std::filesystem::path> key;
     std::optional<rtype::database::Address> database;
     std::optional<std::filesystem::path> databaseFile;
