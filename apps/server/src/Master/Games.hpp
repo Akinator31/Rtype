@@ -77,7 +77,9 @@ struct LobbyPlayer {
 ///   then is the creator added and answered. No port: SERVER_FULL. No READY in time, or an instance that
 ///   cannot start: GAME_START_FAILED, and the instance is killed.
 /// - **Joining** adds a player to a game that is ready: it gets a session and its keys, given to the instance
-///   (ADD_PLAYER) before the player (GAME_JOINED).
+///   (ADD_PLAYER) before the player (GAME_JOINED). A session id is random, never 0, and unique across the
+///   whole master: it names one player of one game, and stays taken until the instance of its game exits, so
+///   that an instance never sees the same id twice.
 /// - **A game without players** is shut down (SHUTDOWN (EMPTY)).
 /// - **An instance that dies**, or closes its connection, without GAME_OVER has crashed: its players are told
 ///   (LEFT_GAME (GAME_CRASHED)). A game over is told too (LEFT_GAME (GAME_OVER)).
@@ -95,6 +97,8 @@ public:
     /// it closed its session itself (`PLAYER_DISCONNECTED (QUIT)`).
     using LeftHandler = std::function<void(std::uint32_t playerId,
                                            std::optional<rtype::lobby::LeftGameMessage> notification)>;
+    /// Draws a candidate session id, refused if it is 0 or already taken.
+    using SessionDraw = std::function<std::uint32_t()>;
 
     /// How often the processes are checked.
     static constexpr std::chrono::milliseconds SupervisionInterval{50};
@@ -109,12 +113,15 @@ private:
     GamesSettings _settings;
     LeftHandler _onLeft;
     AdminObserver *_observer = nullptr;
+    SessionDraw _drawSession;
     rtype::network::TcpListener _listener;
     rtype::network::Timer _supervision;
     std::map<std::uint32_t, std::unique_ptr<Game>> _games;
     std::map<std::uint64_t, std::unique_ptr<InstanceConnection>> _connections;
     /// The game of each player, creators waiting for theirs included.
     std::map<std::uint32_t, std::uint32_t> _playerGames;
+    /// The session ids taken, in every game whose instance has not exited yet.
+    std::set<std::uint32_t> _sessions;
     std::set<std::uint16_t> _freePorts;
     std::uint32_t _lastGameId = 0;
     std::uint64_t _lastConnection = 0;
@@ -130,6 +137,8 @@ private:
     void playerDisconnected(Game &game, std::span<const std::byte> payload);
     void gameOver(Game &game, std::span<const std::byte> payload);
     void statusReceived(Game &game, std::span<const std::byte> payload);
+    /// A new session id, never 0, never one of _sessions, which it joins.
+    [[nodiscard]] std::uint32_t takeSession();
     rtype::lobby::GameJoinedMessage addPlayer(Game &game, const LobbyPlayer &player);
     void removed(Game &game, std::uint32_t playerId);
     /// Sends SHUTDOWN, then waits for the exit.
@@ -164,6 +173,8 @@ public:
     /// Tells the administration what happens to the games; nullptr for nobody. It must outlive the games, or
     /// be taken away first.
     void setObserver(AdminObserver *observer) { _observer = observer; }
+    /// Replaces the random generator of the system for the session ids: for the tests, to force collisions.
+    void setSessionDraw(SessionDraw draw) { _drawSession = std::move(draw); }
 
     /// The games ready to be joined, sorted by id: for GAME_LIST.
     [[nodiscard]] std::vector<rtype::lobby::GameInfo> list() const;

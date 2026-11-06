@@ -7,6 +7,7 @@
 #include "rtype/network/TcpConnection.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <format>
 #include <stdexcept>
 #include <system_error>
@@ -63,7 +64,8 @@ struct Games::Game {
     rtype::network::Timer startTimeout;
     Clock::time_point endingSince;
     std::map<std::uint32_t, Member> members;
-    std::uint32_t lastSession = 0;
+    /// Every session id given in this game, players gone included: taken until the instance exits.
+    std::vector<std::uint32_t> sessions;
     std::optional<Creator> creator;
     /// The last GAME_STATUS, and when it came, or when the game got ready before the first.
     std::optional<GameStatusMessage> status;
@@ -186,10 +188,27 @@ void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMess
     _games.emplace(id, std::move(created));
 }
 
+std::uint32_t Games::takeSession()
+{
+    // 2^32 ids for a few hundred players at most: a collision is rare, and drawn again
+    while (true) {
+        std::uint32_t session = 0;
+        if (_drawSession) {
+            session = _drawSession();
+        } else {
+            const auto bytes = rtype::network::randomBytes<sizeof(std::uint32_t)>();
+            std::memcpy(&session, bytes.data(), sizeof(session));
+        }
+        if (session != 0 && _sessions.insert(session).second) {
+            return session;
+        }
+    }
+}
+
 rtype::lobby::GameJoinedMessage Games::addPlayer(Game &game, const LobbyPlayer &player)
 {
-    // Never 0, never reused in this instance
-    const std::uint32_t session = ++game.lastSession;
+    const std::uint32_t session = takeSession();
+    game.sessions.push_back(session);
     const AddPlayerMessage added{player.id, session, rtype::network::randomBytes<32>(),
                                  rtype::network::randomBytes<32>(), player.name};
     // To the instance first: it expects the session before the client connects
@@ -694,6 +713,9 @@ void Games::supervise()
         Game &game = *_games.at(id);
         closeConnection(game);
         _freePorts.insert(game.port);
+        for (const std::uint32_t session : game.sessions) {
+            _sessions.erase(session);
+        }
         logger().debug("{} ended: UDP {} free again", game.describe(), game.port);
         _games.erase(id);
     }

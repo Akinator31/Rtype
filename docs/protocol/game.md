@@ -30,7 +30,7 @@ acknowledgements and the messages.*
 | 0 | Magic | `u16` | `0x5254` (`"RT"`) |
 | 2 | Version | `u8` | Protocol version, 1 |
 | 3 | Reserved | `u8` | 0 |
-| 4 | Session id | `u32` | Session given by the master, never 0 |
+| 4 | Session id | `u32` | Session given by the master, never 0, unique across the master |
 | 8 | Packet number | `u64` | Number of this datagram in its direction, from 1 |
 | 16 | Ciphertext | | The encrypted body, n bytes |
 | 16 + n | Tag | `bytes[16]` | Authentication tag |
