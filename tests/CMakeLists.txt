@@ -56,6 +56,7 @@ add_executable(rtype_tests
     physics_order.cpp
     physics_resolution.cpp
     physics_step.cpp
+    relay_frame.cpp
     reliability.cpp
     resource_cache.cpp
     scene_assets.cpp

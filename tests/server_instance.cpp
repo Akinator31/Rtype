@@ -4,6 +4,7 @@
 
 #include "Common/InstanceMessages.hpp"
 #include "Common/Options.hpp"
+#include "Common/RelayFrame.hpp"
 #include "Common/Secret.hpp"
 #include "Instance/DirectTransport.hpp"
 #include "Instance/GameHost.hpp"
@@ -11,6 +12,7 @@
 #include "Instance/GameTransport.hpp"
 #include "Instance/Instance.hpp"
 #include "Instance/MasterLink.hpp"
+#include "Instance/RelayedTransport.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/Standalone.hpp"
 #include "rtype/network/Address.hpp"
@@ -260,6 +262,40 @@ struct FakeTransport final : GameTransport {
     [[nodiscard]] const Address &localAddress() const override { return local; }
 };
 
+/// The relay of a master, in the test: the clients send to its public socket, it forwards their datagrams in
+/// relay frames to the instance on the loopback, and sends the frames of the instance on to their clients.
+struct FakeRelay {
+    UdpSocket loopback;
+    UdpSocket open;
+    /// Where the instance receives its frames: the port of READY.
+    std::optional<Address> instance;
+    /// The clients the instance sent to, frame after frame.
+    std::vector<Address> sentTo;
+
+    explicit FakeRelay(EventLoop &loop)
+        : loopback(loop, Address::loopbackIpv4(0)), open(loop, Address::loopbackIpv4(0))
+    {
+        open.startReceiving([this](const Address &from, std::span<const std::byte> datagram) {
+            if (instance) {
+                loopback.send(*instance, encodeRelayFrame(from, datagram));
+            }
+        });
+        loopback.startReceiving([this](const Address &from, std::span<const std::byte> received) {
+            const auto frame = decodeRelayFrame(received);
+            if (from != instance || !frame) {
+                return;
+            }
+            sentTo.push_back(frame->client);
+            open.send(frame->client, frame->datagram);
+        });
+    }
+
+    /// The port of the relay, for CONFIGURE.
+    [[nodiscard]] std::uint16_t port() const { return loopback.localAddress().port(); }
+    /// The one public port of the master, the clients send to.
+    [[nodiscard]] std::uint16_t publicPort() const { return open.localAddress().port(); }
+};
+
 /// An instance run by runInstance() on a thread of its own, as r-type_server --instance would.
 struct RunningInstance {
     std::istringstream input;
@@ -339,6 +375,8 @@ TEST_CASE("The messages of the instances survive a round trip", "[instance]")
     CHECK(decodeGameStatus(encode(GameStatusMessage{})) == GameStatusMessage{});
     const ConfigureMessage configure{"Bydo hunters", 3};
     CHECK(decodeConfigure(encode(configure)) == configure);
+    const ConfigureMessage relayed{"Bydo hunters", 3, 4242};
+    CHECK(decodeConfigure(encode(relayed)) == relayed);
     const AddPlayerMessage added = player(42, 5, "Alice");
     CHECK(decodeAddPlayer(encode(added)) == added);
     CHECK(encode(added).size() == 72 + 1 + 5);
@@ -365,7 +403,8 @@ TEST_CASE("The messages of the instances are written field by field", "[instance
     CHECK(encode(ReadyMessage{4251}) == bytes({0x10, 0x9B}));
     CHECK(encode(PlayerDisconnectedMessage{42, PlayerDisconnectedReason::TimedOut}) ==
           bytes({0, 0, 0, 0x2A, 1}));
-    CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2}));
+    CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2, 0, 0}));
+    CHECK(encode(ConfigureMessage{"Duo", 2, 4242}) == bytes({3, 'D', 'u', 'o', 2, 0x10, 0x92}));
     CHECK(encode(GameOverReport{{{1, 1500}}}) == bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC}));
     CHECK(encode(ShutdownMessage{ShutdownReason::Empty}) == bytes({0}));
     CHECK(encode(ShutdownMessage{ShutdownReason::EndedByAdmin}) == bytes({2}));
@@ -404,9 +443,9 @@ TEST_CASE("The messages of the instances refuse what the protocol forbids", "[in
     CHECK_FALSE(decodePlayerDisconnected(bytes({0, 0, 0, 1, 2})));                                // reason 2
     CHECK_FALSE(decodeRemovePlayer(bytes({0, 0, 0, 1, 3})));                                      // reason 3
     CHECK_FALSE(decodeShutdown(bytes({3})));                                                      // reason 3
-    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 0})));                                             // no player
-    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 5})));                                             // 5 players
-    CHECK_FALSE(decodeConfigure(bytes({0, 2})));                                                  // no name
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 0, 0, 0})));                                       // no player
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 5, 0, 0})));                                       // 5 players
+    CHECK_FALSE(decodeConfigure(bytes({0, 2, 0, 0})));                                            // no name
     CHECK_FALSE(decodeGameOverReport(bytes({5})));                                                // 5 scores
     CHECK_FALSE(decodeGameOverReport(bytes({1, 0, 0, 0, 1})));                                    // cut
     CHECK_FALSE(decodeGameStatus(bytes({0, 0, 0, 1, 0, 1, 5})));                                  // 5 players
@@ -427,7 +466,7 @@ TEST_CASE("The messages of the instances refuse what the protocol forbids", "[in
         {encode(GameOverReport{{{1, 2}}}), [](auto p) { return decodeGameOverReport(p).has_value(); }},
         {encode(GameStatusMessage{1, 2, {{1, 2, true, 3}, {4, 5, false, std::nullopt}}}),
          [](auto p) { return decodeGameStatus(p).has_value(); }},
-        {encode(ConfigureMessage{"G", 1}), [](auto p) { return decodeConfigure(p).has_value(); }},
+        {encode(ConfigureMessage{"G", 1, 4242}), [](auto p) { return decodeConfigure(p).has_value(); }},
         {encode(player(1, 2, "Bob")), [](auto p) { return decodeAddPlayer(p).has_value(); }},
         {encode(RemovePlayerMessage{1, {}}), [](auto p) { return decodeRemovePlayer(p).has_value(); }},
         {encode(ShutdownMessage{}), [](auto p) { return decodeShutdown(p).has_value(); }},
@@ -674,6 +713,62 @@ TEST_CASE("A game host sends and receives through its transport, with the addres
     CHECK(wire->closed);
 }
 
+TEST_CASE("A relayed transport takes the frames of the relay alone, and answers in frames to it",
+          "[instance]")
+{
+    EventLoop loop;
+    UdpSocket relay(loop, Address::loopbackIpv4(0));
+    std::vector<Bytes> frames;
+    relay.startReceiving(
+        [&](const Address &, std::span<const std::byte> frame) { frames.push_back(copy(frame)); });
+    RelayedTransport transport(loop, relay.localAddress().port());
+    CHECK(transport.localAddress().ip() == "127.0.0.1");
+    CHECK(transport.localAddress().port() != 0);
+    CHECK(transport.relay() == relay.localAddress());
+
+    std::vector<std::pair<Address, Bytes>> received;
+    transport.start([&](const Address &from, std::span<const std::byte> datagram) {
+        received.emplace_back(from, copy(datagram));
+    });
+
+    const Address alice = *Address::parse("203.0.113.7", 50000);
+    const Address bob = *Address::parse("2001:db8::9", 61000);
+    const Bytes hello = {std::byte{1}, std::byte{2}, std::byte{3}};
+    // A frame from another port of the machine, then one that does not decode: both dropped
+    UdpSocket intruder(loop, Address::loopbackIpv4(0));
+    intruder.send(transport.localAddress(), encodeRelayFrame(bob, hello));
+    relay.send(transport.localAddress(), Bytes(5, std::byte{4}));
+    relay.send(transport.localAddress(), encodeRelayFrame(alice, hello));
+    REQUIRE(waitUntil(loop, [&] { return !received.empty(); }));
+    for (int i = 0; i < 50; ++i) {
+        loop.poll();
+        std::this_thread::sleep_for(1ms);
+    }
+    REQUIRE(received.size() == 1);
+    CHECK(received[0].first == alice);
+    CHECK(received[0].second == hello);
+
+    // What the game sends goes to the relay, with the address of its client
+    transport.send(bob, hello);
+    transport.send(bob, {});                // nothing to carry: dropped
+    transport.send(bob.withPort(0), hello); // nowhere to go: dropped
+    transport.send(alice, hello);
+    REQUIRE(waitUntil(loop, [&] { return frames.size() >= 2; }));
+    for (int i = 0; i < 50; ++i) {
+        loop.poll();
+        std::this_thread::sleep_for(1ms);
+    }
+    REQUIRE(frames.size() == 2);
+    const auto first = decodeRelayFrame(frames[0]);
+    const auto second = decodeRelayFrame(frames[1]);
+    REQUIRE(first);
+    REQUIRE(second);
+    CHECK(first->client == bob);
+    CHECK(second->client == alice);
+    CHECK(copy(first->datagram) == hello);
+    transport.close();
+}
+
 TEST_CASE("A game over is sent to the clients, reported with the scores, and nothing follows", "[instance]")
 {
     EventLoop loop;
@@ -863,6 +958,83 @@ TEST_CASE("An instance runs a game for the players the master gives it", "[insta
     // SHUTDOWN: the instance exits with 0
     master.send(instance_message::Shutdown, ShutdownMessage{ShutdownReason::Empty});
     CHECK(fixture.instance->waitForExit(loop) == Success);
+}
+
+TEST_CASE("An instance behind a relay runs a game for the clients behind it", "[instance]")
+{
+    InstanceFixture fixture;
+    EventLoop &loop = fixture.loop;
+    FakeMaster &master = fixture.master;
+    FakeRelay relay(loop);
+    fixture.start();
+    fixture.configure({"Relayed", 4, relay.port()});
+    // READY gives the port on the loopback, where the relay sends its frames
+    relay.instance = Address::loopbackIpv4(fixture.udpPort);
+
+    const AddPlayerMessage alice = player(42, 5, "Alice");
+    const AddPlayerMessage bob = player(43, 6, "Bob");
+    const AddPlayerMessage carol = player(44, 7, "Carol");
+    master.send(instance_message::AddPlayer, alice);
+    master.send(instance_message::AddPlayer, bob);
+    master.send(instance_message::AddPlayer, carol);
+    loop.poll();
+    std::this_thread::sleep_for(20ms);
+
+    // Carol talks to the loopback port of the instance from elsewhere than the relay, in valid frames: not
+    // heard
+    UdpSocket intruder(loop, Address::loopbackIpv4(0));
+    bool carolAccepted = false;
+    ClientSession carolSession(carol.sessionId, DatagramKey(carol.clientKey), DatagramKey(carol.serverKey),
+                               [&](std::span<const std::byte> datagram) {
+                                   intruder.send(*relay.instance,
+                                                 encodeRelayFrame(intruder.localAddress(), datagram));
+                               });
+    intruder.startReceiving([&](const Address &, std::span<const std::byte> datagram) {
+        carolSession.receive(datagram, Clock::now());
+    });
+    carolSession.start([&](std::span<const std::byte>) { carolAccepted = true; },
+                       [](std::uint8_t, std::span<const std::byte>) {}, [](SessionEnd) {}, Clock::now());
+
+    // Alice and Bob, two clients on the one public port, as with a master
+    TestClient aliceClient(loop, relay.publicPort(), alice);
+    TestClient bobClient(loop, relay.publicPort(), bob);
+    const auto updateAll = [&] {
+        aliceClient.update();
+        bobClient.update();
+        carolSession.update(Clock::now());
+    };
+    REQUIRE(waitUntil(loop, [&] { return aliceClient.accepted && bobClient.accepted; }, updateAll));
+    CHECK(aliceClient.accepted->slot != bobClient.accepted->slot);
+    REQUIRE(waitUntil(
+        loop, [&] { return aliceClient.joined().size() == 2 && bobClient.joined().size() == 2; }, updateAll));
+    REQUIRE(waitUntil(
+        loop, [&] { return aliceClient.lastSnapshot().has_value() && bobClient.lastSnapshot().has_value(); },
+        updateAll));
+
+    // The instance answered each client at its own address, the one the relay saw
+    const Address aliceAddress = aliceClient.socket.localAddress();
+    const Address bobAddress = bobClient.socket.localAddress();
+    CHECK(std::ranges::find(relay.sentTo, aliceAddress) != relay.sentTo.end());
+    CHECK(std::ranges::find(relay.sentTo, bobAddress) != relay.sentTo.end());
+    CHECK(std::ranges::all_of(relay.sentTo,
+                              [&](const Address &to) { return to == aliceAddress || to == bobAddress; }));
+    CHECK_FALSE(carolAccepted);
+    while (const auto connected = master.take(instance_message::PlayerConnected)) {
+        CHECK(decodePlayerConnected(*connected)->playerId != 44);
+    }
+
+    // Alice quits through the relay: the master is told
+    aliceClient.session.close(DisconnectReason::Quit);
+    REQUIRE(waitUntil(loop, [&] { return master.has(instance_message::PlayerDisconnected); }, updateAll));
+    CHECK(decodePlayerDisconnected(*master.take(instance_message::PlayerDisconnected)) ==
+          PlayerDisconnectedMessage{42, PlayerDisconnectedReason::Quit});
+
+    // SHUTDOWN: Bob receives DISCONNECT through the relay, and the instance exits with 0
+    master.send(instance_message::Shutdown, ShutdownMessage{ShutdownReason::Empty});
+    REQUIRE(waitUntil(loop, [&] { return bobClient.end.has_value(); }, updateAll));
+    CHECK(bobClient.end->reason == DisconnectReason::Shutdown);
+    CHECK(fixture.instance->waitForExit(loop) == Success);
+    CHECK_FALSE(carolAccepted);
 }
 
 TEST_CASE("An instance tells its master every second where its game stands", "[instance]")

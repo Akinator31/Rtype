@@ -27,6 +27,7 @@ apps/server/src/
     GameConfig.cpp         the configuration of the game: where it is, loaded and logged
     InstanceMessages.cpp   the messages between the master and its instances
     Options.cpp            the command line of both modes, the exit codes
+    RelayFrame.cpp         the relay frame: a datagram of the game with the address of its client
     Lifecycle.cpp          runUntilStopped(): the event loop and the stop signals
     Secret.cpp             the secret the master gives to its instances
     Settings.cpp           the settings file of the master (--settings) and its secret files
@@ -53,6 +54,7 @@ apps/server/src/
     GameHost.cpp           the network side of the game: sessions, players, game messages
     GameTransport.hpp      how the datagrams of the game come and go, for GameHost
     DirectTransport.cpp    the transport of a game with a UDP port of its own
+    RelayedTransport.cpp   the transport of a game behind the relay of the master, on the loopback
     GameThread.cpp         the simulation thread, at 60 ticks per second
 ```
 
@@ -60,7 +62,7 @@ Everything but `main.cpp` is the library `r-type_server_core`, so that the tests
 (`tests/server_options.cpp`, `tests/server_key.cpp`, `tests/server_database.cpp`, `tests/server_lifecycle.cpp`,
 `tests/process.cpp`, `tests/server_instance.cpp`, `tests/server_lobby.cpp`, `tests/server_games.cpp`,
 `tests/server_settings.cpp`, `tests/server_web.cpp`, `tests/server_admin.cpp`,
-`tests/server_account_store.cpp`). Includes are written from `src/`, like in the client:
+`tests/server_account_store.cpp`, `tests/relay_frame.cpp`). Includes are written from `src/`, like in the client:
 `#include "Common/Options.hpp"`. The next steps add their files to the folder of their mode: the lobby and the
 supervision of the instances in `Master/`, the game in `Instance/`, what both sides read in `Common/`.
 
@@ -359,8 +361,8 @@ sequenceDiagram
     participant C as Client
     Note over I: reads the secret
     I->>M: INSTANCE_HELLO (id, secret), on 127.0.0.1
-    M->>I: CONFIGURE (name, max players)
-    Note over I: opens its UDP port, starts the game thread
+    M->>I: CONFIGURE (name, max players, relay port)
+    Note over I: opens its UDP port (or one on the loopback, behind the relay), starts the game thread
     I->>M: READY (UDP port)
     M->>I: ADD_PLAYER (player, session, keys, name)
     C->>I: CONNECT
@@ -412,9 +414,15 @@ flowchart LR
   the tick of the last input applied for each player.
 - **`GameHost`** is the game seen from the network ([game protocol](../protocol/game.md)):
   - its datagrams come and go through a `GameTransport`, with the real address of each client, so its
-    `SessionHost` limits and follows clients by their address whatever carries the datagrams.
-    `DirectTransport`, a `UdpSocket` bound to `--udp-port`, is the only one today; the instance opens it before
-    the host, and "Cannot open UDP port" comes from there;
+    `SessionHost` limits and follows clients by their address whatever carries the datagrams. The instance
+    builds it from `CONFIGURE`, before the host, and "Cannot open UDP port" comes from there:
+    - relay port 0 (the master of today, the standalone mode): `DirectTransport`, a `UdpSocket` bound to
+      `--udp-port`;
+    - a relay port: `RelayedTransport`, a `UdpSocket` on `127.0.0.1` at a port the system chooses, given to the
+      master in `READY`. It reads only the frames from `127.0.0.1:<relay port>`, hands the game the address of
+      the client and the datagram of each one ([relay frame](../protocol/instances.md#5-the-relay-frame)), and
+      sends every datagram back to the relay in a frame. The log says `Game 7 behind the relay on
+      127.0.0.1:4242, receiving on 127.0.0.1:40213`. The master does not start a relay yet;
   - a player added gets the lowest free slot, and its ship when its client connects;
   - on `CONNECT`, the client receives `ACCEPTED`, then `PLAYER_JOINED` for each player connected, itself
     included; the others receive its `PLAYER_JOINED`;
@@ -634,10 +642,17 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   trips, bytes, every malformed case, random bytes), the game thread (its rate, each input applied at its
   tick, whatever their order, nothing after `stop()`), the game over of `GameHost` (sent, reported with the
   scores, acknowledged, nothing after), a `GameHost` on a fake transport (a client far away connected, every
-  datagram sent back to its address, the transport closed with the game), every failure of `MasterLink`, and whole instances run by `runInstance()` on
+  datagram sent back to its address, the transport closed with the game), a `RelayedTransport` (only the frames
+  of the relay read, malformed ones dropped, every datagram sent in a frame to the relay), every failure of
+  `MasterLink`, and whole instances run by `runInstance()` on
   a thread of the test, with a fake master over TCP and real clients over UDP: two players who join, see each
   other and move, one removed by the master, one who quits, then `SHUTDOWN`; the master going away; a full
-  game; a UDP port taken; a player removed by an administrator; and the standalone mode with its public keys, stopped by Ctrl+C.
+  game; a UDP port taken; a player removed by an administrator; a game behind a fake relay on the loopback
+  (two clients on one public port, each answered at its own address, a third one whose frames come from
+  another port never heard, `DISCONNECT` through the relay); and the standalone mode with its public keys,
+  stopped by Ctrl+C.
+- `tests/relay_frame.cpp` (tag `[relay]`): the relay frame: round trips in IPv4 and IPv6, its bytes, the
+  largest datagram and one byte more, every malformed case, and random bytes.
 - `tests/lobby_messages.cpp` (tag `[lobby]`): the `HELLO` frame of the specification, the bytes of the other
   messages, round trips, the names checked apart, every malformed case, and random bytes.
 - `tests/server_lobby.cpp` (tag `[lobby]`): a `Lobby` on the loopback and real TLS clients pinning its key.

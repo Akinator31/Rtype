@@ -33,7 +33,7 @@ class MasterLink
 {
 public:
     struct Handlers {
-        /// Once, first: the game to run. Answer sendReady() once the UDP port is open.
+        /// Once, first: the game to run, behind a relay or not. Answer sendReady() once its port is open.
         std::function<void(const ConfigureMessage &game)> onConfigure;
         std::function<void(const AddPlayerMessage &player)> onAddPlayer;
         std::function<void(const RemovePlayerMessage &player)> onRemovePlayer;
