@@ -4,6 +4,7 @@
 #include "Common/InstanceMessages.hpp"
 #include "Common/Lifecycle.hpp"
 #include "Common/Secret.hpp"
+#include "Instance/DirectTransport.hpp"
 #include "Instance/GameHost.hpp"
 #include "Instance/GameThread.hpp"
 #include "Instance/MasterLink.hpp"
@@ -15,6 +16,7 @@
 
 #include <chrono>
 #include <format>
+#include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -89,8 +91,10 @@ class Instance
     bool openGame(std::uint8_t maxPlayers, GameHost::Handlers handlers)
     {
         try {
-            _host.emplace(_loop, rtype::network::Address::anyIpv4(_options.udpPort), maxPlayers, _game,
-                          std::move(handlers));
+            _host.emplace(
+                _loop,
+                std::make_unique<DirectTransport>(_loop, rtype::network::Address::anyIpv4(_options.udpPort)),
+                maxPlayers, _game, std::move(handlers));
         } catch (const std::system_error &error) {
             logger().error("Cannot open UDP port {}: {}", _options.udpPort, error.code().message());
             return false;
