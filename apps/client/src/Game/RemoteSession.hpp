@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Game/GameSession.hpp"
+#include "Game/InputClock.hpp"
 #include "Game/Interpolation.hpp"
 #include "Game/Prediction.hpp"
 #include "rtype/game/Messages.hpp"
@@ -31,7 +32,9 @@ namespace rtype::client
 ///
 /// - **Inputs**: once per tick (60 per second), it sends INPUT with the inputs of the last 8 ticks, newest
 ///   first, so that a lost datagram loses no input. Each one is stamped with the tick the game should apply
-///   it at, estimated from the latest snapshot and the round-trip time (section 9.2).
+///   it at (section 9.2): first estimated from the latest snapshot and the round-trip time, then kept just
+///   ahead of the game by the lead each snapshot reports (InputClock), a little faster or slower than 60
+///   per second, or with a jump when they arrive too late.
 /// - **Snapshots**: the parts received and the destructions go into a RemoteWorld, and each world received
 ///   into an Interpolation; takeSnapshots() gives, each frame, the world drawn 100 ms in the past, between
 ///   the two snapshots around that time: the entities move at the frame rate, not 30 times per second.
@@ -56,6 +59,9 @@ private:
     game::RemoteWorld _world;
     Interpolation _interpolation;
     Prediction _prediction;
+    InputClock _inputClock;
+    /// The tick of the last snapshot whose input lead was given to the InputClock.
+    std::uint32_t _leadTick = 0;
     std::optional<game::AcceptedMessage> _accepted;
     /// The id of the ship of the player, 0 while it has none.
     std::uint32_t _shipId = 0;
@@ -117,6 +123,8 @@ public:
     [[nodiscard]] const Prediction &prediction() const { return _prediction; }
     /// The tick stamped on the newest input sent.
     [[nodiscard]] std::uint32_t inputTick() const { return _inputTick; }
+    /// The pace of the inputs, for the tests.
+    [[nodiscard]] const InputClock &inputClock() const { return _inputClock; }
 };
 
 } // namespace rtype::client

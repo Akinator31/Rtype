@@ -22,6 +22,8 @@ constexpr int MaxInputsPerUpdate = 5;
 constexpr std::chrono::milliseconds DefaultRtt{100};
 /// Ticks of margin, so that an input arrives before its tick (docs/protocol/game.md, 9.2).
 constexpr std::uint32_t InputMargin = 2;
+/// The time between two snapshots, in seconds: what a jump of the stamps takes to show, on top of the RTT.
+constexpr double SnapshotDelay = 2.0 / game::TickRate;
 
 const log::Logger &logger()
 {
@@ -107,6 +109,12 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
             _interpolation.receive(_world.tick(), _world.entities(), _world.players());
             _snapshotReceived = Clock::now();
             reconcile(*part);
+            if (part->inputLead != game::NoInputLead && part->tick > _leadTick) {
+                // Once per snapshot: every part has the same
+                _leadTick = part->tick;
+                const double rtt = std::chrono::duration<double>(_session.rtt().value_or(DefaultRtt)).count();
+                _inputClock.receive(part->inputLead, rtt + SnapshotDelay);
+            }
         }
         return;
     case game::message_type::EntitiesDestroyed:
@@ -184,8 +192,21 @@ std::uint32_t RemoteSession::estimateTick() const
 
 void RemoteSession::sendInput()
 {
-    // Never back in time: the game ignores an input older than the last one
-    _inputTick = std::max(_inputTick + 1, estimateTick());
+    std::uint32_t stamp = _inputTick + 1;
+    if (!_inputClock.synced()) {
+        // Never back in time: the game ignores an input older than the last one
+        stamp = std::max(stamp, estimateTick());
+    }
+    if (const std::uint32_t jump = _inputClock.takeJump(); jump > 0) {
+        logger().debug("Inputs too late for the game: stamped {} ticks further", jump);
+        stamp += jump;
+    }
+    // The ticks skipped repeat the previous input, as the game and the prediction do
+    for (std::uint32_t skipped = _inputTick + 1;
+         skipped < stamp && !_history.empty() && skipped - _inputTick <= InputHistory; ++skipped) {
+        _history.push_front(_history.front());
+    }
+    _inputTick = stamp;
     // The ship of the player moves at once, as the game will move it at that tick
     _prediction.apply(_inputTick, _input);
     _history.push_front(_input);
@@ -201,11 +222,12 @@ void RemoteSession::update(float elapsed)
     _session.update(Clock::now());
     _interpolation.advance(elapsed);
     _prediction.advance(elapsed);
+    _inputClock.advance(elapsed);
     if (!_accepted || _over) {
         return;
     }
-    // One INPUT per tick, whatever the frame rate
-    _pending += std::max(0.0f, elapsed);
+    // One INPUT per tick, whatever the frame rate, a little faster or slower to arrive just in time
+    _pending += std::max(0.0, static_cast<double>(elapsed) * _inputClock.rate());
     int sent = 0;
     while (_pending >= Tick && sent < MaxInputsPerUpdate) {
         sendInput();
