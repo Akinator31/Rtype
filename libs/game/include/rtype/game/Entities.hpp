@@ -3,6 +3,7 @@
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/game/GameContext.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/game/Weapon/WeaponFiring.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -49,6 +50,12 @@ ecs::entity_t spawnWeaponShot(ecs::Ecs &ecs, GameContext &context, const std::st
 /// the nose to the point, and goes past it. A point on the nose itself fires forward.
 ecs::entity_t spawnAimedShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
                              std::uint8_t owner, float x, float y, float targetX, float targetY);
+
+/// The shot of a weapon from where and at the velocity a ShotLaunch says (aimShot(), playerShot()), with the
+/// firing mechanic, the range and the damage of the weapon. Throws std::out_of_range if the weapon or its
+/// projectile is unknown.
+ecs::entity_t spawnShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId, std::uint8_t owner,
+                        const ShotLaunch &launch);
 
 /// The ship of a player, if it has one.
 [[nodiscard]] std::optional<ecs::entity_t> findPlayerShip(ecs::Ecs &ecs, std::uint8_t slot);
