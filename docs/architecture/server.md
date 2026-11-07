@@ -490,7 +490,8 @@ flowchart LR
   Behind by more than 250 ms (a machine that slept, a debugger), it goes on from now instead of running fast.
   The commands of the network thread apply at the start of the next tick. The inputs of each player wait in an
   `InputBuffer` for the tick they are stamped with ([below](#inputs)), and the result of each tick goes back with
-  the tick of the last input applied for each player, and the smallest lead of its `INPUT` messages.
+  the tick of the last input applied for each player, the smallest lead of its `INPUT` messages, and the state
+  of the weapon of its ship (`Simulation::weaponOf()`).
 - **`GameHost`** is the game seen from the network ([game protocol](../protocol/game.md)):
   - its datagrams come and go through a `GameTransport`, with the real address of each client, so its
     `SessionHost` limits and follows clients by their address whatever carries the datagrams. The instance
@@ -506,8 +507,8 @@ flowchart LR
   - on `CONNECT`, the client receives `ACCEPTED`, then `PLAYER_JOINED` for each player connected, itself
     included; the others receive its `PLAYER_JOINED`;
   - the inputs of each `INPUT` go to the game, which applies each one at its tick;
-  - every 2 ticks, each client receives the snapshot in parts, with its last input and the smallest lead of its
-    `INPUT` messages over those 2 ticks; every tick, the entities
+  - every 2 ticks, each client receives the snapshot in parts, with its last input, the smallest lead of its
+    `INPUT` messages over those 2 ticks and the weapon of its ship; every tick, the entities
     destroyed. They leave as soon as the tick is published, not at the next update of the sessions: up to a
     tick of delay less, and no jitter from it;
   - the game over goes to every client (`GAME_OVER`, with the last snapshot), then to the instance with the

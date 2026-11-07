@@ -297,6 +297,11 @@ equipWeapon(ecs, context, ship, "blaster"); // gives the ship an Armed component
   own when the magazine is empty (no shot meanwhile) and fires through `spawnWeaponShot()` (deferred), from
   the nose of the ship (the edge of its collider). A player fires while Fire is held, a Bydo as soon as it is
   in the game area.
+- How a weapon steps, where the shot of a player starts and how a shot moves are in `WeaponFiring.hpp`
+  (`stepWeapon()`, `playerShot()`, `moveShot()`), as the movement of the ship is in `ShipMovement.hpp`: the
+  client predicts the shots of its player online with them, and a test checks, for every weapon of
+  `config/weapons/`, that they give the ticks, the positions and the state of the weapon of the game, to the
+  bit.
 - A ship **without** `Armed` does not fire. The ships of the players get the weapon of the
   [players](#players), the Bydos that of their definition.
 - The range is checked by `ProjectileSystem` on the distance flown (`Projectile::travelled`); a projectile past
@@ -644,7 +649,7 @@ one implementation.
 | `PLAYER_JOINED` | `0x04` | Game → Client | `PlayerJoinedMessage`: slot, player id, name |
 | `PLAYER_LEFT` | `0x05` | Game → Client | `PlayerLeftMessage`: slot, reason |
 | `INPUT` | `0x40` | Client → Game | `InputMessage`: tick, inputs newest first |
-| `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, input lead, part, players, entities |
+| `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, input lead, weapon of the ship of the client, part, players, entities (the age of the shots in the byte of the health) |
 | `ENTITIES_DESTROYED` | `0x81` | Game → Client | `EntitiesDestroyedMessage`: tick, ids and causes |
 | `WAVE_STARTED` | `0x82` | Game → Client | `WaveStartedMessage` |
 | `GAME_OVER` | `0x83` | Game → Client | `GameOverMessage` |

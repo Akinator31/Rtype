@@ -335,21 +335,24 @@ units per second as `−2400` (`F6 A0`).
 so that a late message about a destroyed entity cannot be mistaken for a new one. Its **kind** says what it is,
 hence what the client draws:
 
-| Kind | Value | Owner | Health |
+| Kind | Value | Owner | Health, or age |
 |---|---|---|---|
 | `PLAYER_SHIP` | `0x01` | Its player slot | Hit points left |
-| `PLAYER_SHOT` | `0x02` | Slot of the player who fired | 0 |
-| `PLAYER_CHARGED_SHOT` | `0x03` | Slot of the player who fired | 0 |
+| `PLAYER_SHOT` | `0x02` | Slot of the player who fired | Age |
+| `PLAYER_CHARGED_SHOT` | `0x03` | Slot of the player who fired | Age |
 | `BYDO_FLYER` | `0x10` | None | Hit points left |
 | `BYDO_SHOOTER` | `0x11` | None | Hit points left |
 | `BYDO_TANK` | `0x12` | None | Hit points left |
 | `BYDO_BOSS` | `0x1F` | None | Hit points left |
-| `BYDO_SHOT` | `0x40` | None | 0 |
-| `BYDO_PLASMA_SHOT` | `0x41` | None | 0 |
+| `BYDO_SHOT` | `0x40` | None | Age |
+| `BYDO_PLASMA_SHOT` | `0x41` | None | Age |
 
 - Ranges: `0x01`–`0x0F` players and their shots, `0x10`–`0x3F` Bydos, `0x40`–`0x5F` Bydo shots, `0x60`–`0xFF`
   reserved for later kinds (power-ups, the Force, obstacles). Kind `0x00` is invalid.
 - The **owner** is a player slot (0 to 3), or `0xFF` for none.
+- A **shot** (`0x02`, `0x03`, `0x40`–`0x5F`) has no hit points: in their place, its **age**, the ticks since it
+  was fired, at most 255. A snapshot of tick `T` with a shot of age `a` says it was fired at tick `T − a`: the
+  client matches it with the shot it predicted at that tick ([section 9.2](#92-inputs)).
 - A client MUST skip the entities of a kind it does not know: adding a kind does not change the protocol
   version ([versioning](index.md#4-versioning)).
 
@@ -404,6 +407,12 @@ the client SHOULD stamp each input with the tick after the previous one, and fol
 Without this, a client whose stamps only go up ends more than 60 ticks ahead after some time, and every input
 is ignored.
 
+**Predicting the shots.** A client MAY draw the shots of its player before the game sends them, as it predicts
+its ship: each `SNAPSHOT` gives the state of the weapon of its ship at its tick (cooldown, ammo, reload), from
+which it replays the inputs not applied yet, with the rules of the game, to know at which ticks the weapon
+fires and from where. The shot of the game fired at the same tick, told by its age, then takes the place of the
+predicted one. A predicted shot the game never sends is a wrong guess: the client stops drawing it.
+
 ### 9.3 Snapshots
 
 **Sending.** Every **2** ticks (30 times per second), after simulating the tick, the game sends each connected
@@ -456,12 +465,15 @@ or more inputs than `Tick + 1`, makes the message malformed.
 | 0 | Tick | `u32` | Tick of the world described |
 | 4 | Last input | `u32` | Tick of the last input of this client that the game applied, 0 if none |
 | 8 | Input lead | `i8` | Smallest lead of the `INPUT` messages of this client since the previous snapshot, −127 to 127 ([section 9.2](#92-inputs)); −128 if none came |
-| 9 | Part | `u8` | Number of this part, from 0 |
-| 10 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
-| 11 | Player count | `u8` | 0 to 4 |
-| 12 | Players | | Player count times the fields below |
-| 12 + 6p | Entity count | `u8` | Number of entities in this part |
-| 13 + 6p | Entities | | Entity count times the fields below |
+| 9 | Weapon cooldown | `u16` | Ticks before the weapon of the ship of this client can fire again; 0 without a ship |
+| 11 | Weapon ammo | `u16` | Shots left in its magazine |
+| 13 | Weapon reload | `u16` | Ticks before its magazine is full again, 0 when it is not reloading |
+| 15 | Part | `u8` | Number of this part, from 0 |
+| 16 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
+| 17 | Player count | `u8` | 0 to 4 |
+| 18 | Players | | Player count times the fields below |
+| 18 + 6p | Entity count | `u8` | Number of entities in this part |
+| 19 + 6p | Entities | | Entity count times the fields below |
 
 Each player:
 
@@ -482,7 +494,7 @@ Each entity, 16 bytes:
 | 8 | Y | `i16` | |
 | 10 | Velocity X | `i16` | Eighths of a unit per second |
 | 12 | Velocity Y | `i16` | |
-| 14 | Health | `u8` | Hit points left, for health bars; 0 for kinds without |
+| 14 | Health, or age | `u8` | Hit points left, for health bars; 0 for kinds without. For a shot, its age in ticks, at most 255 ([section 9.1](#91-the-world)) |
 | 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bit 3: aiming up. Bit 4: aiming down (a ship of a player turned by 30°, [section 9.2](#92-inputs)). Bit 5: guarding, bit 6: slashing, bit 7: shooting (the stance of a Bydo, at most one, drawn with its animation) |
 
 **Receiver behaviour:** the client applies the part as [section 9.3](#93-snapshots) says. A part number not below
@@ -587,10 +599,13 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 ```
 80                        type: SNAPSHOT
 00                        flags: unreliable
-00 23                     size: 35 bytes
+00 29                     size: 41 bytes
 00 00 03 E8                 tick: 1000
 00 00 03 E6                 last input applied: tick 998
 02                          input lead: 2 ticks
+00 04                       weapon: cooldown 4 ticks,
+00 07                         7 shots left,
+00 00                         not reloading
 00                          part 0
 01                          of 1 part
 01                          1 player

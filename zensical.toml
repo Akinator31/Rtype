@@ -96,6 +96,7 @@ nav = [
         "decisions/0026-discord-social-sdk.md",
         "decisions/0027-one-udp-port-relay.md",
         "decisions/0028-input-stamps-follow-the-lead.md",
+        "decisions/0029-predicted-shots.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [
