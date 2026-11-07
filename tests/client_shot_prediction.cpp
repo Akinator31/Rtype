@@ -527,3 +527,14 @@ TEST_CASE("Online, inputs lost without their copies: the shots drawn come back t
     duel.shots.apply(frame, 0, duel.latest, duel.stamp);
     CHECK(ownShots(frame).size() <= duel.view.entities.size());
 }
+
+TEST_CASE("A predicted shot is drawn between two ticks at the frame rate", "[shot-prediction]")
+{
+    ShotPrediction shots = armed();
+    shots.predict({{110, Launch}}, 100);
+    Snapshot snapshot;
+    // 20 units per tick: a quarter of the way past tick 113
+    shots.apply(snapshot, Slot, 100.0, 113.25);
+    REQUIRE(ownShots(snapshot).size() == 1);
+    CHECK(ownShots(snapshot)[0].x == Approx(365.0f));
+}

@@ -76,14 +76,15 @@ void ShotPrediction::predict(const std::map<std::uint32_t, game::ShotLaunch> &sh
     }
 }
 
-game::EntityState ShotPrediction::place(const Ghost &ghost, std::uint32_t fired, std::uint32_t tick,
+game::EntityState ShotPrediction::place(const Ghost &ghost, std::uint32_t fired, double tick,
                                         std::uint8_t slot) const
 {
     game::EntityState state;
     state.id = ghost.id;
     state.kind = game::EntityKind::PlayerShot;
     state.owner = slot;
-    const std::uint32_t steps = std::min(tick > fired ? tick - fired : 0U, MaxSteps);
+    const double since = std::clamp(tick - static_cast<double>(fired), 0.0, static_cast<double>(MaxSteps));
+    const auto steps = static_cast<std::uint32_t>(since);
     ecs::Position position = ghost.launch.position;
     physics::Velocity velocity = ghost.launch.velocity;
     if (_weapon) {
@@ -94,6 +95,14 @@ game::EntityState ShotPrediction::place(const Ghost &ghost, std::uint32_t fired,
         if (steps > 0) {
             velocity = game::getProjectileVelocity(_weapon->mechanic, ghost.launch.velocity, steps - 1,
                                                    _weapon->rules);
+        }
+        // Between two ticks, on the way to the next one: drawn at the frame rate
+        const auto part = static_cast<float>(since - static_cast<double>(steps));
+        if (part > 0.0f) {
+            const ecs::Position next =
+                game::moveShot(position, _weapon->mechanic, ghost.launch.velocity, steps, _weapon->rules);
+            position.x += (next.x - position.x) * part;
+            position.y += (next.y - position.y) * part;
         }
     }
     state.x = position.x;
@@ -152,7 +161,7 @@ void ShotPrediction::apply(game::Snapshot &snapshot, std::uint8_t slot, double d
         if (const auto ghost = ghostOf(entity.id); ghost != _ghosts.end()) {
             ghost->second.seen = true;
             drawnGhosts.insert(ghost->second.id);
-            entities.push_back(place(ghost->second, ghost->first, static_cast<std::uint32_t>(*target), slot));
+            entities.push_back(place(ghost->second, ghost->first, *target, slot));
             continue;
         }
         const auto seconds = static_cast<float>(std::max(0.0, *target - drawn) / game::TickRate);
@@ -184,7 +193,7 @@ void ShotPrediction::apply(game::Snapshot &snapshot, std::uint8_t slot, double d
             continue;
         }
         if (static_cast<double>(ghost->first) <= *target) {
-            entities.push_back(place(predicted, ghost->first, static_cast<std::uint32_t>(*target), slot));
+            entities.push_back(place(predicted, ghost->first, *target, slot));
         }
         ++ghost;
     }

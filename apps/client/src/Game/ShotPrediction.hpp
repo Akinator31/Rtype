@@ -81,7 +81,7 @@ private:
     std::uint32_t _nextId = FirstGhostId;
 
     /// Where a predicted shot is at a tick, and its velocity then, as the game moves it.
-    [[nodiscard]] game::EntityState place(const Ghost &ghost, std::uint32_t fired, std::uint32_t tick,
+    [[nodiscard]] game::EntityState place(const Ghost &ghost, std::uint32_t fired, double tick,
                                           std::uint8_t slot) const;
     /// The tick to draw a shot of the game at, from the tick of the ship: its end, once. Nothing once past
     /// it.
@@ -110,7 +110,8 @@ public:
     /// leaves out those past their end.
     /// @param slot The slot of the player.
     /// @param drawn The tick the world is drawn at (Interpolation::drawnTick()).
-    /// @param ship The tick its ship is drawn at: the one of its newest input.
+    /// @param ship The tick its ship is drawn at: the one of its newest input, and the fraction of the way to
+    ///   the next one.
     void apply(game::Snapshot &snapshot, std::uint8_t slot, double drawn, double ship);
 
     /// The id a shot of the game is drawn with: the one of the predicted shot it took the place of, else its

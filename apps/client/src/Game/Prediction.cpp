@@ -143,4 +143,15 @@ std::optional<ecs::Position> Prediction::position() const
     return ecs::Position{_predicted->x + _offsetX, _predicted->y + _offsetY};
 }
 
+std::optional<ecs::Position> Prediction::position(double fraction, game::PlayerInput held) const
+{
+    if (!_predicted) {
+        return std::nullopt;
+    }
+    const auto part = static_cast<float>(std::clamp(fraction, 0.0, 1.0));
+    const ecs::Position next = game::moveShip(*_predicted, held, _rules);
+    return ecs::Position{_predicted->x + ((next.x - _predicted->x) * part) + _offsetX,
+                         _predicted->y + ((next.y - _predicted->y) * part) + _offsetY};
+}
+
 } // namespace rtype::client

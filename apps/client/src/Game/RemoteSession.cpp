@@ -302,7 +302,9 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
     game::Snapshot snapshot = _interpolation.view();
     // The ship of the player where it is predicted, aiming as its input says, the rest where the
     // interpolation draws it
-    const std::optional<ecs::Position> predicted = _prediction.position();
+    // Between two inputs sent, at the frame rate: the fraction of the time to the next one
+    const double fraction = std::clamp(_pending / Tick, 0.0, 1.0);
+    const std::optional<ecs::Position> predicted = _prediction.position(fraction, _input);
     for (game::EntityState &entity : snapshot.entities) {
         if (entity.kind != game::EntityKind::PlayerShip || entity.owner != localSlot()) {
             continue;
@@ -323,7 +325,8 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
     // The shots of the player from the moment it fires, in the time of its ship, not in the past with the
     // rest
     _shots.predict(_prediction.shots(), _world.tick());
-    _shots.apply(snapshot, localSlot(), *_interpolation.drawnTick(), static_cast<double>(_inputTick));
+    _shots.apply(snapshot, localSlot(), *_interpolation.drawnTick(),
+                 static_cast<double>(_inputTick) + fraction);
     snapshot.destroyed = std::exchange(_destroyed, {});
     for (game::DestroyedEntity &entity : snapshot.destroyed) {
         // Drawn under the id of the shot predicted, if it took its place

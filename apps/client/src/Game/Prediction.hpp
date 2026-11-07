@@ -107,6 +107,12 @@ public:
     /// Where to draw the ship, nothing while it has none.
     [[nodiscard]] std::optional<ecs::Position> position() const;
 
+    /// Where to draw the ship between two inputs sent: `fraction` of the way to the next tick, moved with the
+    /// input held now, which that tick will apply if it does not change. At the frame rate, without waiting
+    /// for the next input: a key pressed shows at once.
+    /// @param fraction 0 at the tick of the newest input sent, 1 at the next one.
+    [[nodiscard]] std::optional<ecs::Position> position(double fraction, game::PlayerInput held) const;
+
     /// Where the ship will be once every input sent is applied, without the correction drawn.
     [[nodiscard]] std::optional<ecs::Position> predicted() const { return _predicted; }
 
