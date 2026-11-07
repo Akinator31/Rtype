@@ -139,6 +139,8 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
     switch (type) {
     case game::message_type::Snapshot:
         if (const auto part = game::decodeSnapshotPart(payload); part && _world.apply(*part)) {
+            // Every copy of their destruction lost: gone all the same
+            (void)_world.forgetStale();
             _interpolation.receive(_world.tick(), _world.entities(), _world.players());
             _snapshotReceived = Clock::now();
             reconcile(*part);

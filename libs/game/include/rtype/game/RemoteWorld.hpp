@@ -19,8 +19,8 @@ struct RemovedEntity {
 };
 
 /// The world as a client knows it from the messages of its game, kept as the protocol says
-/// (docs/protocol/game.md, section 9.3): the parts of the snapshots, which can be lost, late or out of order,
-/// and the destructions, which are reliable.
+/// (docs/protocol/game.md, section 9.3): the parts of the snapshots and the destructions, which can be lost,
+/// late, out of order, or received again.
 ///
 /// @code
 /// if (const auto part = rtype::game::decodeSnapshotPart(payload)) {
@@ -35,8 +35,10 @@ struct RemovedEntity {
 /// @endcode
 ///
 /// - A part older than the latest one applied is ignored; the other parts of that latest tick still apply.
-/// - An entity is created or updated by the parts, and only removed by ENTITIES_DESTROYED: missing from
-///   a part means its part was lost, not that it is gone.
+/// - An entity is created or updated by the parts, and removed by ENTITIES_DESTROYED: missing from a part
+///   means its part was lost, not that it is gone. The same destruction received again changes nothing.
+/// - An entity no snapshot had for StaleTicks is removed all the same: every copy of its destruction was
+///   lost.
 /// - The ids destroyed are remembered until the snapshots reach the tick of their destruction, so that an
 ///   older part cannot bring them back.
 /// - The entities of a kind this version does not know are skipped.
@@ -45,11 +47,18 @@ struct RemovedEntity {
 /// no network.
 class RemoteWorld
 {
+public:
+    /// Ticks of snapshots without an entity before it is removed: 30 snapshots, each of them lost.
+    static constexpr std::uint32_t StaleTicks = 60;
+
+private:
     std::uint32_t _tick = 0;
     bool _received = false;
     std::uint32_t _lastInput = 0;
     std::vector<PlayerState> _players;
     std::map<std::uint32_t, EntityState> _entities;
+    /// The tick of the latest part that had each entity.
+    std::map<std::uint32_t, std::uint32_t> _seen;
     /// Ids destroyed at a tick the snapshots have not reached yet, with that tick.
     std::map<std::uint32_t, std::uint32_t> _destroyed;
 
@@ -72,6 +81,10 @@ public:
     [[nodiscard]] const std::vector<PlayerState> &players() const { return _players; }
     /// The entities, by id.
     [[nodiscard]] const std::map<std::uint32_t, EntityState> &entities() const { return _entities; }
+    /// Removes the entities no snapshot had for StaleTicks.
+    /// @return Those removed.
+    std::vector<RemovedEntity> forgetStale();
+
     /// An entity, or nullptr.
     [[nodiscard]] const EntityState *find(std::uint32_t id) const;
 };

@@ -2,6 +2,7 @@
 // docs/protocol/game.md, section 9.2).
 
 #include "Instance/InputBuffer.hpp"
+#include "Instance/RecentDestructions.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -138,4 +139,31 @@ TEST_CASE("The lead of the INPUT messages is measured, even for the ones ignored
     CHECK(buffer.takeLead() == InputBuffer::MaxAhead + 5);
     // Only the two in time are kept
     CHECK(buffer.size() == 2);
+}
+
+// --- The destructions sent again ---
+
+TEST_CASE("A destruction is sent again with the snapshots of the next Repeat ticks, then forgotten",
+          "[replication]")
+{
+    using rtype::game::DestroyCause;
+    using rtype::game::EntitiesDestroyedMessage;
+    using rtype::server::RecentDestructions;
+
+    RecentDestructions destructions;
+    const EntitiesDestroyedMessage at10{10, {{7, DestroyCause::Killed}}};
+    const EntitiesDestroyedMessage at11{11, {{8, DestroyCause::Removed}, {9, DestroyCause::Removed}}};
+    destructions.add(10, {at10});
+    destructions.add(11, {at11});
+    destructions.add(12, {});
+
+    // Not with the snapshot of their own tick: sent already
+    CHECK(destructions.again(10).empty());
+    CHECK(destructions.again(12) == std::vector{at10, at11});
+    CHECK(destructions.again(10 + RecentDestructions::Repeat) == std::vector{at10, at11});
+    CHECK(destructions.again(11 + RecentDestructions::Repeat) == std::vector{at11});
+    CHECK(destructions.again(12 + RecentDestructions::Repeat).empty());
+
+    destructions.add(12 + RecentDestructions::Repeat, {});
+    CHECK(destructions.size() == 0);
 }

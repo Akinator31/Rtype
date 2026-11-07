@@ -591,3 +591,37 @@ TEST_CASE("A shot gives its age in the byte of the health, the other kinds their
     CHECK(decoded->entities[1].age == 12);
     CHECK(decoded->entities[1].health == 0);
 }
+
+TEST_CASE("The world of a client ignores a destruction received again", "[game][world]")
+{
+    RemoteWorld world;
+    REQUIRE(world.apply({10, 0, 0, 1, {}, {entity(1), entity(2)}, NoInputLead, {}}));
+    const EntitiesDestroyedMessage destroyed{11, {{1, DestroyCause::Killed}}};
+
+    CHECK(world.apply(destroyed).size() == 1);
+    // Its copies, with the next snapshots: nothing more removed, no second explosion
+    CHECK(world.apply(destroyed).empty());
+    CHECK(world.apply(destroyed).empty());
+    CHECK_FALSE(world.find(1));
+    CHECK(world.find(2));
+}
+
+TEST_CASE("The world of a client removes an entity no snapshot had for StaleTicks", "[game][world]")
+{
+    RemoteWorld world;
+    REQUIRE(world.apply({10, 0, 0, 1, {}, {entity(1), entity(2)}, NoInputLead, {}}));
+    // Entity 2 is no longer in the snapshots, and every copy of its destruction was lost
+    for (std::uint32_t tick = 12; tick <= 10 + RemoteWorld::StaleTicks; tick += 2) {
+        REQUIRE(world.apply({tick, 0, 0, 1, {}, {entity(1)}, NoInputLead, {}}));
+        CHECK(world.forgetStale().empty());
+    }
+    CHECK(world.find(2));
+
+    REQUIRE(world.apply({12 + RemoteWorld::StaleTicks, 0, 0, 1, {}, {entity(1)}, NoInputLead, {}}));
+    const std::vector<RemovedEntity> removed = world.forgetStale();
+    REQUIRE(removed.size() == 1);
+    CHECK(removed[0].last.id == 2);
+    CHECK(removed[0].cause == DestroyCause::Removed);
+    CHECK_FALSE(world.find(2));
+    CHECK(world.find(1));
+}

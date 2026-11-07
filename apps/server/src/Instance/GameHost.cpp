@@ -216,10 +216,15 @@ void GameHost::publish(const TickResult &result)
             _inputLeads[slot] = _inputLeads[slot] ? std::min(*_inputLeads[slot], *lead) : *lead;
         }
     }
-    for (const rtype::game::EntitiesDestroyedMessage &message : rtype::game::destroyedMessages(snapshot)) {
+    // Unreliable, as soon as they happen, then again with the snapshots: a lost one costs a snapshot
+    // interval, and holds back nothing behind it
+    const std::vector<rtype::game::EntitiesDestroyedMessage> destroyed =
+        rtype::game::destroyedMessages(snapshot);
+    for (const rtype::game::EntitiesDestroyedMessage &message : destroyed) {
         sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
-                        Delivery::Reliable);
+                        Delivery::Unreliable);
     }
+    _destructions.add(snapshot.tick, destroyed);
     if (snapshot.waveStarted) {
         sendToConnected(
             rtype::game::message_type::WaveStarted,
@@ -240,6 +245,10 @@ void GameHost::publish(const TickResult &result)
             }
         }
         _inputLeads.fill(std::nullopt);
+        for (const rtype::game::EntitiesDestroyedMessage &message : _destructions.again(snapshot.tick)) {
+            sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
+                            Delivery::Unreliable);
+        }
     }
     if (snapshot.gameOver) {
         gameOver(result);

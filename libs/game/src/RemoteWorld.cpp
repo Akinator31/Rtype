@@ -24,8 +24,26 @@ bool RemoteWorld::apply(const SnapshotPart &part)
             continue;
         }
         _entities.insert_or_assign(entity.id, entity);
+        _seen.insert_or_assign(entity.id, part.tick);
     }
     return true;
+}
+
+std::vector<RemovedEntity> RemoteWorld::forgetStale()
+{
+    std::vector<RemovedEntity> removed;
+    for (auto seen = _seen.begin(); seen != _seen.end();) {
+        if (seen->second + StaleTicks >= _tick) {
+            ++seen;
+            continue;
+        }
+        if (const auto entity = _entities.find(seen->first); entity != _entities.end()) {
+            removed.push_back({entity->second, DestroyCause::Removed});
+            _entities.erase(entity);
+        }
+        seen = _seen.erase(seen);
+    }
+    return removed;
 }
 
 std::vector<RemovedEntity> RemoteWorld::apply(const EntitiesDestroyedMessage &message)
@@ -40,6 +58,7 @@ std::vector<RemovedEntity> RemoteWorld::apply(const EntitiesDestroyedMessage &me
         if (entity != _entities.end()) {
             removed.push_back({entity->second, destroyed.cause});
             _entities.erase(entity);
+            _seen.erase(destroyed.id);
         }
     }
     return removed;
