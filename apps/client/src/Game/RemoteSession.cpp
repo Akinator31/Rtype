@@ -122,6 +122,10 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
             // Drawn until the drawn tick reaches its destruction, 100 ms after the message arrives
             for (const game::DestroyedEntity &entity : destroyed->entities) {
                 _interpolation.destroyed(entity.id, destroyed->tick);
+                if (const game::EntityState *known = _world.find(entity.id);
+                    known != nullptr && _accepted && ShotPrediction::isShotOf(*known, _accepted->slot)) {
+                    _shots.destroyed(entity.id, destroyed->tick);
+                }
                 if (entity.id == _shipId) {
                     // The ship of the player is no more: nothing to predict until it comes back
                     _prediction.reconcile(std::nullopt, destroyed->tick);
@@ -275,6 +279,8 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
             entity.flags |= game::EntityState::AimingDown;
         }
     }
+    // The shots of the player in the time of its ship, not in the past with the rest
+    _shots.apply(snapshot, localSlot(), *_interpolation.drawnTick(), static_cast<double>(_inputTick));
     snapshot.destroyed = std::exchange(_destroyed, {});
     snapshot.waveStarted = std::exchange(_waveStarted, std::nullopt);
     snapshot.waveMusic = std::exchange(_waveMusic, {});

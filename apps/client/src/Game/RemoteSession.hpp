@@ -4,6 +4,7 @@
 #include "Game/InputClock.hpp"
 #include "Game/Interpolation.hpp"
 #include "Game/Prediction.hpp"
+#include "Game/ShotPrediction.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/RemoteWorld.hpp"
 #include "rtype/lobby/Messages.hpp"
@@ -39,8 +40,8 @@ namespace rtype::client
 ///   into an Interpolation; takeSnapshots() gives, each frame, the world drawn 100 ms in the past, between
 ///   the two snapshots around that time: the entities move at the frame rate, not 30 times per second.
 /// - **The ship of the player** is predicted: each input moves it at once, and each snapshot that has it
-///   reconciles the prediction with the game (Prediction). It is drawn where it is predicted, the rest where
-///   the interpolation draws it.
+///   reconciles the prediction with the game (Prediction). It is drawn where it is predicted, and its shots
+///   in its time (ShotPrediction), the rest where the interpolation draws it.
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why.
 ///
 /// The loop must be polled, by the game loop of the client.
@@ -59,6 +60,7 @@ private:
     game::RemoteWorld _world;
     Interpolation _interpolation;
     Prediction _prediction;
+    ShotPrediction _shots;
     InputClock _inputClock;
     /// The tick of the last snapshot whose input lead was given to the InputClock.
     std::uint32_t _leadTick = 0;

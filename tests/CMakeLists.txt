@@ -18,6 +18,7 @@ add_executable(rtype_tests
     client_lore.cpp
     client_online.cpp
     client_profiles.cpp
+    client_shot_prediction.cpp
     client_prediction.cpp
     color_filter.cpp
     collider_debug_renderer.cpp
