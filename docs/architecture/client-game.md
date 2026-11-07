@@ -210,7 +210,7 @@ entity of its own (`Impact`, `Model`, `ModelAnimation` with a speed of 0), 300 u
 the game so that the wings of the ships do not hide it. The `ImpactSystem` moves the time of its animation,
 fades it out during the last quarter, and destroys it at its end, before the animation would loop.
 
-Online, `ENTITIES_DESTROYED` arrives while the entity is still drawn, about 100 ms in the past: the
+Online, `ENTITIES_DESTROYED` arrives while the entity is still drawn, 50 ms or more in the past: the
 `GameSessionSystem` remembers the ids killed, and the impact appears when the entity goes. Several impacts of
 the same model share it in different poses: the renderer poses the model again before drawing each one, in
 the glow of the frame too.
@@ -268,8 +268,9 @@ destructions (`setDestructionSound()`), both set by `GameScenes`. The `GameSessi
 gives an `engine::SoundEffect`, heard from the side of the screen the entity is on (pan up to 0.6 at the
 edges), and the engine's `SoundSystem`, registered right after the game, plays it in the same frame
 ([Audio](audio.md#in-the-engine)). The shot that appears carries its sound; the ship destroyed is gone at once,
-so its sound is carried by its impact: a kind without an `ImpactLook` makes no sound when destroyed. Online, the
-sounds play when the shot is drawn and when the ship disappears, about 100 ms after the game. `medium_blaster.wav`
+so its sound is carried by its impact: a kind without an `ImpactLook` makes no sound when destroyed. Online, a
+shot of the player sounds when it is fired, predicted ([Shots of the player](client-online.md#shots-of-the-player));
+the others' and the destructions when they are drawn, 50 ms or more after the game. `medium_blaster.wav`
 is not used yet; the destruction sound of `config/ships/` (`ShipSounds`) is not read by the client, which does not
 know which enemy a Bydo is.
 

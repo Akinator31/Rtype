@@ -109,8 +109,9 @@ Otherwise the datagram is a duplicate, a replay or too old, and is dropped. Afte
 |---|---|---|---|
 | 0 | Ack | `u64` | Highest packet number received from the peer, 0 if none |
 | 8 | Ack bits | `u32` | Bit i (bit 0 is the least significant) set: packet `Ack − 1 − i` was received |
-| 12 | Count | `u8` | Number of messages that follow |
-| 13 | Messages | | Count messages, one after the other |
+| 12 | Ack delay | `u16` | Time since packet `Ack` was received, in tenths of a millisecond, at most `0xFFFF` ([round-trip time](#round-trip-time)); 0 if none was |
+| 14 | Count | `u8` | Number of messages that follow |
+| 15 | Messages | | Count messages, one after the other |
 
 Each message:
 
@@ -169,9 +170,12 @@ order they were sent.
 
 ### Round-trip time
 
-The sender records when it sent each packet. When a packet is acknowledged for the first time, the elapsed
-time is a sample of the round-trip time. The RTT SHOULD be smoothed (`rtt = 0.9 × rtt + 0.1 × sample`); it is
-used for the resend delay and shown to the player as the ping.
+The sender records when it sent each packet. When the packet `Ack` of a datagram is acknowledged for the first
+time, the elapsed time minus the `Ack delay` of that datagram is a sample of the round-trip time: the delay is
+how long the peer kept the packet before acknowledging it (the game acknowledges an `INPUT` with its next
+snapshot, up to 2 ticks later), not the network. The packets acknowledged by the `Ack bits` only, whose delay
+is not known, and an `Ack delay` of `0xFFFF` give no sample. The RTT SHOULD be smoothed
+(`rtt = 0.9 × rtt + 0.1 × sample`); it is used for the resend delay and shown to the player as the ping.
 
 ## 7. Session
 
@@ -431,9 +435,12 @@ and the players. With four players, a part holds up to 69 entities.
    tick (a reliable message can arrive before an older unreliable one). It can forget an id once `L` reaches
    that tick.
 
-**Drawing.** The client SHOULD draw the world **100 ms** in the past, interpolating each entity between the two
+**Drawing.** The client SHOULD draw the world a little in the past, interpolating each entity between the two
 snapshots around that time: the movement stays smooth when a snapshot is lost. The velocity lets it
-extrapolate when no newer snapshot is there.
+extrapolate when no newer snapshot is there. How far in the past is a trade: further hides more jitter and
+losses, closer shows a more recent world. A fixed **100 ms** is safe; the client of this repository measures it
+instead: for each snapshot that arrives, the ticks since the previous one plus how much later than the
+earliest of the last 3 s it arrived, plus a tick, the largest over those 3 s, from 50 to 250 ms.
 
 ### INPUT (`0x40`)
 
@@ -580,6 +587,7 @@ received the game's packets up to number 41, all of them. The decrypted body:
 ```
 00 00 00 00 00 00 00 29   ack: packet 41
 FF FF FF FF               ack bits: the 32 packets before were received
+00 64                     ack delay: packet 41 came 10 ms ago
 01                        count: 1 message
 40                        type: INPUT
 00                        flags: unreliable
@@ -591,7 +599,7 @@ FF FF FF FF               ack bits: the 32 packets before were received
 01                          tick 998: up
 ```
 
-The body is 25 bytes; once sealed ([section 3](#3-encryption)), the datagram is 57 bytes.
+The body is 27 bytes; once sealed ([section 3](#3-encryption)), the datagram is 59 bytes.
 
 The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives and 1500 points, and its ship
 (entity 7) is at (200, 540.5), going up at 300 units per second, invulnerable:

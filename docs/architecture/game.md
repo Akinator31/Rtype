@@ -709,7 +709,7 @@ for (const auto &[id, entity] : world.entities()) { /* draw it */ }
 | `ENTITIES_DESTROYED` | The entities are removed and given back with their last state; their ids are remembered until the snapshots reach the tick of their destruction, so that an older part cannot bring them back |
 | A kind it does not know | Skipped |
 
-It keeps the latest state only; drawing 100 ms in the past and interpolating between snapshots come on top of
+It keeps the latest state only; drawing a little in the past and interpolating between snapshots come on top of
 it, in the client. Like the Simulation, it has no clock and no network.
 
 ## Tests

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed; its "Inputs" amended by [0028](0028-input-stamps-follow-the-lead.md) |
+| **Status** | Proposed; its "Inputs" amended by [0028](0028-input-stamps-follow-the-lead.md), its delay of 100 ms by [0030](0030-measured-delays.md) |
 | **Date** | 2026-10-17 |
 
 ## Context

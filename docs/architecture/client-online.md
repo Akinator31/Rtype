@@ -20,7 +20,7 @@ apps/client/src/
   main.cpp             gives OnlineScenes the SocialSdkAuthorizer of libs/discord, polled every frame
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
-    Interpolation.cpp  the world drawn 100 ms in the past, between the snapshots around that time
+    Interpolation.cpp  the world drawn a little in the past, between the snapshots around that time
     Prediction.cpp     the ship of the player, moved at once by its inputs, then reconciled with the game
     InputClock.cpp     the pace of the inputs, kept just in time by the lead the snapshots report
     ShotPrediction.cpp the shots of the player, drawn from the moment it fires, in the time of its ship
@@ -290,14 +290,28 @@ updating leaves the stamps behind: the next lead is 0 or less, and they jump.
 
 The snapshots come 30 times per second, some late, some lost; the client draws 60, 144 times per second. Drawing
 the newest snapshot moves the entities in jumps: still for 33 ms, then 20 units at once. `Interpolation` draws
-the world **100 ms in the past** instead, between the two snapshots around that time
+the world **a little in the past** instead, between the two snapshots around that time
 ([game protocol, 9.3](../protocol/game.md#93-snapshots)):
 
 ```
 snapshots received:   tick 40 ──────────── tick 42 ──────────── tick 44 (newest)
-                                   ▲
-                       drawn tick 41.3 = newest − 6 ticks (100 ms): 65 % of the way from 40 to 42
+                               ▲
+                       drawn tick 41 = newest − 3 ticks (50 ms): halfway from 40 to 42
 ```
+
+**The delay** is as short as the network allows: each world that arrives tells the delay it needed not to be
+waited for, and the largest of the last 3 s is kept, from 50 to 250 ms (100 ms before 8 worlds came):
+
+| The network | The delay |
+|---|---|
+| Steady, a snapshot every 2 ticks | 50 ms: the 2 ticks to the next snapshot and a tick of margin |
+| A snapshot lost now and then | 83 ms: 4 ticks without a world, and the margin |
+| Snapshots 20 to 70 ms late, at random | About 100 ms: the 50 ms of jitter on top |
+| Steady again | Back to 50 ms after 3 s, the drawn tick catching up a little faster, without a leap |
+
+`needed = ticks since the previous world / 60 + (how late it came − the earliest of 3 s) + 1 / 60`, the
+lateness being its arrival time minus its tick / 60: the earliest is the latency without jitter, whatever the
+offset between the clocks.
 
 | What happens | What is drawn |
 |---|---|
@@ -305,12 +319,12 @@ snapshots received:   tick 40 ──────────── tick 42 ─�
 | A snapshot lost | The same, between the snapshots that arrived: 4 ticks apart instead of 2 |
 | No snapshot for a while | Each entity goes on with its velocity for 250 ms at most, then waits |
 | An entity created | It appears when the drawn tick reaches its first snapshot |
-| An entity destroyed | It disappears when the drawn tick reaches its destruction, not when `ENTITIES_DESTROYED` arrives 100 ms earlier |
+| An entity destroyed | It disappears when the drawn tick reaches its destruction, not when `ENTITIES_DESTROYED` arrives, the delay earlier |
 
 **The drawn tick** advances with the time of the frames, 60 ticks per second, and is nudged towards its target
-(newest tick − 6): a little faster when it falls behind, a little slower when it gets ahead, never backwards.
-The jitter of the snapshots and the drift between the clocks of the client and of the server are absorbed
-without a jump; after a pause of more than half a second (a window dragged, a debugger), it jumps to its
+(newest tick − the delay): a little faster when it falls behind, a little slower when it gets ahead, never
+backwards. The jitter of the snapshots, the drift between the clocks of the client and of the server and a
+change of the delay are absorbed without a jump; after a pause of more than half a second (a window dragged, a debugger), it jumps to its
 target.
 
 `Interpolation` is pure, without a clock nor a network: the `RemoteSession` gives it each world received
@@ -318,7 +332,7 @@ target.
 
 ## Prediction
 
-The interpolation draws the world 100 ms in the past, on top of the round trip: fine for the others, whose
+The interpolation draws the world 50 ms or more in the past, on top of the round trip: fine for the others, whose
 keys the player does not see, but the ship of the player itself would answer late. `Prediction` moves it at
 once instead, and the game stays the one that decides:
 
@@ -347,8 +361,8 @@ destruction are drawn as the game sends them, through the interpolation.
 ## Shots of the player
 
 The ship of the player is drawn at the tick of its newest input, the world at the drawn tick: a round trip,
-100 ms and 2 ticks in the past. Its shots, drawn with the world, came out late and trailed behind it: they
-appeared a round trip and 100 ms after Fire was pressed, far from its nose. They are predicted as the ship is,
+the delay of the interpolation and 2 ticks in the past. Its shots, drawn with the world, came out late and
+trailed behind it: they appeared that long after Fire was pressed, far from its nose. They are predicted as the ship is,
 from the moment it fires ([ADR 0029](../decisions/0029-predicted-shots.md)):
 
 1. **`Prediction` runs the weapon too.** Each input sent steps it with `game::stepWeapon()`, and a tick it
@@ -421,10 +435,11 @@ use, kept in the settings, then refused with another key until forgotten; settin
 fingerprint, which trusts nothing; a fingerprint shown in groups of 4 digits.
 
 `tests/client_interpolation.cpp` (tag `[interpolation]`) plays a server sending 30 snapshots per second to a
-client drawing 144 frames per second: the world drawn 100 ms behind, an entity moving a little at every frame,
-with snapshots on time, irregular or lost; extrapolation then waiting without snapshots; entities appearing and
-disappearing when the drawn tick reaches them; a server clock running faster; a pause; and the drawn tick
-never going back.
+client drawing 144 frames per second: the world drawn 50 ms behind on a steady network, an entity moving a
+little at every frame, with snapshots on time, irregular or lost; the delay longer with jitter or losses, never
+waiting for a snapshot, back down without a leap once steady, within its bounds; extrapolation then waiting
+without snapshots; entities appearing and disappearing when the drawn tick reaches them; a server clock
+running faster; a pause; and the drawn tick never going back.
 
 `tests/client_input_clock.cpp` (tag `[input-clock]`) checks the pace alone, then plays it against the
 `InputBuffer` of the server, at 240 frames per second, with delays on the way up and down: no input lost with a
@@ -459,7 +474,7 @@ elsewhere; a correction too large applied at once; and the ticks skipped when st
 
 - **A shot that hits at once**, within a round trip of the ship, flies through its target for that long before
   its destruction comes: the Bydos are drawn in the past.
-- **The player sees the others 100 ms in the past** and its own ship in the present: a Bydo shot can seem to
-  miss and still hit, as in every game that predicts.
+- **The player sees the others in the past**, 50 ms or more on top of the round trip, and its own ship in the
+  present: a Bydo shot can seem to miss and still hit, as in every game that predicts.
 - **The names of the players** are known (`RemoteSession::names()`) but not shown in the HUD yet.
 - **One server at a time**, typed by hand: no list of servers, no address remembered.
