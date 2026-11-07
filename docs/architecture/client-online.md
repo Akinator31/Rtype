@@ -23,6 +23,7 @@ apps/client/src/
     Interpolation.cpp  the world drawn 100 ms in the past, between the snapshots around that time
     Prediction.cpp     the ship of the player, moved at once by its inputs, then reconciled with the game
     InputClock.cpp     the pace of the inputs, kept just in time by the lead the snapshots report
+    ShotPrediction.cpp the shots of the player, drawn in the time of its ship
 ```
 
 The client has one `EventLoop` for its network, polled by the game loop once per frame before the engine
@@ -340,8 +341,33 @@ snapshot of 13 from the game ──► start from its position, replay 14, 15, 1
 and a test checks that both give the same position to the bit, over a minute of random inputs against the walls.
 A rule that changes how a ship moves must change there, or every snapshot would correct the prediction.
 
-Only the movement of the ship is predicted: its shots, the hits and its destruction are drawn as the game sends
-them, through the interpolation.
+Only the movement of the ship is predicted: the hits and its destruction are drawn as the game sends them,
+through the interpolation, and its shots in the time of the ship ([below](#shots-of-the-player)).
+
+## Shots of the player
+
+The ship of the player is drawn at the tick of its newest input, the world at the drawn tick: a round trip,
+100 ms and 2 ticks in the past. Its shots, drawn with the world, trailed behind it: they started far behind its
+nose when it flew forward, out of line with it when it turned. `ShotPrediction` moves them on instead, along
+their velocity, from the drawn tick to the tick of the ship: their trail follows the ship as offline.
+
+```cpp
+shots.destroyed(id, tick);                         // ENTITIES_DESTROYED of a shot of the player
+shots.apply(snapshot, slot, drawnTick, inputTick); // each frame, on the world of the interpolation
+```
+
+| The shot | Where it is drawn |
+|---|---|
+| Flying | Its position at the drawn tick, moved on by `velocity × (ship tick − drawn tick) / 60` |
+| Destroyed, the ship past its destruction | Once where the game destroyed it, for its impact; then no more, though the interpolation still has it |
+| Destroyed, the ship not there yet | Moved on as flying, until the ship reaches it |
+
+- Moved on, a shot would fly through what it hit until the drawn tick reaches its destruction: it is drawn
+  where the game destroyed it as soon as `ENTITIES_DESTROYED` comes, a round trip after the ship reached that
+  tick, then removed.
+- The velocity is the one of the snapshot: exact for a bullet or a laser, close for a missile that speeds up or
+  a plasma that zigzags.
+- The shots of the others, the Bydos and their shots stay in the past, with the world they hit.
 
 ## Tests
 
@@ -388,6 +414,11 @@ client clock 1% fast or 1% slow for 5 minutes, the lead staying between 1 and 5;
 coming back down without losing an input; a game that stalls 300 ms and skips the ticks it missed; a client that
 starts late; and a network that jitters by 40 ms, a few inputs late at the start, none after.
 
+`tests/client_shot_prediction.cpp` (tag `[shot-prediction]`) checks the shots of the player (normal and
+charged) moved on to the tick of the ship, the others' shots, the Bydo shots and the ship left alone, never moved
+back, a shot destroyed drawn once where it ended then gone, one destroyed later flying on, and its destruction
+forgotten once the drawn tick passes it.
+
 `tests/client_prediction.cpp` (tag `[prediction]`) plays the client against the real rules, a `Simulation` with
 the `InputBuffer` of the server, the inputs and the snapshots delayed: never corrected when nothing is lost, nor
 when an `INPUT` is lost (the next ones carry its inputs); the ship answering before the game; the game ending
@@ -400,12 +431,14 @@ elsewhere; a correction too large applied at once; and the ticks skipped when st
 ./build/bin/rtype_tests "[interpolation]"
 ./build/bin/rtype_tests "[prediction]"
 ./build/bin/rtype_tests "[input-clock]"
+./build/bin/rtype_tests "[shot-prediction]"
 ```
 
 ## Limits and next steps
 
-- **The shots are not predicted**: they leave a round trip and 100 ms after Fire is pressed. Predicting them
-  means drawing a shot before the game creates it, then matching it with the one it sends.
+- **The shots are not predicted**: drawn in the time of the ship, they still appear a round trip and 100 ms
+  after Fire is pressed, already that far from its nose. Predicting them means drawing a shot before the game
+  creates it, then matching it with the one it sends.
 - **The player sees the others 100 ms in the past** and its own ship in the present: a Bydo shot can seem to
   miss and still hit, as in every game that predicts.
 - **The names of the players** are known (`RemoteSession::names()`) but not shown in the HUD yet.
