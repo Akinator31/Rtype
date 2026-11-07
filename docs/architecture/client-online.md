@@ -345,6 +345,10 @@ once instead, and the game stays the one that decides:
    the ship is not teleported, the gap is drawn and fades out in a few frames. A gap of more than 120 units
    (the ship came back elsewhere) is applied at once.
 4. **Without a ship** (destroyed, waiting to come back), nothing is predicted: the game decides.
+5. **Between two inputs**, 60 per second, the screen draws 144 frames: the ship is drawn on the way to the next
+   tick, by the fraction of the time to the next input, moved with the input held now
+   (`position(fraction, held)`). Not between the last two ticks, which would draw it a tick late: a key
+   pressed shows at the next frame, and the next tick lands where the drawing was going, unless the keys change.
 
 ```
 inputs sent:   12  13  14  15  16   ◄── applied at once: the ship is drawn there
@@ -371,7 +375,8 @@ from the moment it fires ([ADR 0029](../decisions/0029-predicted-shots.md)):
    shots of the later ticks are replayed from there, like the ship. `prediction.shots()` holds those after the
    latest snapshot, by tick.
 2. **`ShotPrediction` draws them at once**, under an id of its own (from `0xF0000000`), along the path of the
-   game (`game::moveShot()`), in the time of the ship.
+   game (`game::moveShot()`), in the time of the ship, the fraction of a tick included: between two ticks, on
+   the way to the next one.
 3. **The shot of the game takes its place.** A shot of the player in a snapshot of tick `T` with the age `a`
    was fired at `T − a`: it is matched with the predicted shot of that tick, and drawn under the id of the
    predicted one, along the same path. The drawing goes on without a jump, without a new entity, without a
@@ -453,13 +458,14 @@ ended then gone; a predicted shot drawn from its tick, dropped when no longer pr
 by the shot of the game under its id, done once it is gone. Then the client plays against the real game, for
 every weapon of `config/weapons/`, fire held, moving and aiming: every shot drawn was predicted, at the tick its
 input was sent, at the position the game has at that tick, to the bit; with inputs lost, the wrong guesses
-are dropped and nothing is drawn twice.
+are dropped and nothing is drawn twice; and a shot drawn between two ticks.
 
 `tests/client_prediction.cpp` (tag `[prediction]`) plays the client against the real rules, a `Simulation` with
 the `InputBuffer` of the server, the inputs and the snapshots delayed: never corrected when nothing is lost, nor
 when an `INPUT` is lost (the next ones carry its inputs); the ship answering before the game; the game ending
 where the prediction was; the walls; without redundancy, a lost input corrected smoothly; no ship, then back
-elsewhere; a correction too large applied at once; and the ticks skipped when stamping.
+elsewhere; a correction too large applied at once; and the ticks skipped when stamping; the ship drawn between two ticks with the input held, and moving at every
+frame at 144 frames per second.
 
 ```sh
 ./build/bin/rtype_tests "[online]"
