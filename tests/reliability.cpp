@@ -160,10 +160,11 @@ TEST_CASE("A body is the one the specification describes", "[network]")
 {
     const std::vector<std::byte> fire = bytesOf("fire");
     const std::vector<std::byte> move = bytesOf("up");
-    const DatagramBody body{41, 0xFFFFFFFF, {{0x40, false, 0, fire}, {0x81, true, 0x1234, move}}};
+    const DatagramBody body{41, 0xFFFFFFFF, {{0x40, false, 0, fire}, {0x81, true, 0x1234, move}}, 250};
 
-    // ack 41, all 32 before, 2 messages; 0x40 unreliable "fire"; 0x81 reliable id 0x1234 "up"
-    CHECK(encodeBody(body) == fromHex("0000000000000029ffffffff02"
+    // ack 41, all 32 before, acknowledged 25 ms after it came, 2 messages; 0x40 unreliable "fire"; 0x81
+    // reliable id 0x1234 "up"
+    CHECK(encodeBody(body) == fromHex("0000000000000029ffffffff00fa02"
                                       "40000004"
                                       "66697265"
                                       "810112340002"
@@ -173,7 +174,7 @@ TEST_CASE("A body is the one the specification describes", "[network]")
 TEST_CASE("A body survives a round trip", "[network]")
 {
     const std::vector<std::byte> payload = bytesOf("snapshot");
-    const DatagramBody body{7, 0x5, {{0x80, false, 0, payload}, {0x02, true, 65535, {}}}};
+    const DatagramBody body{7, 0x5, {{0x80, false, 0, payload}, {0x02, true, 65535, {}}}, MaxAckDelay};
 
     const std::vector<std::byte> bytes = encodeBody(body);
     const auto decoded = decodeBody(bytes);
@@ -181,6 +182,7 @@ TEST_CASE("A body survives a round trip", "[network]")
     REQUIRE(decoded);
     CHECK(decoded->ack == 7);
     CHECK(decoded->ackBits == 0x5);
+    CHECK(decoded->ackDelay == MaxAckDelay);
     REQUIRE(decoded->messages.size() == 2);
     CHECK(decoded->messages[0].type == 0x80);
     CHECK_FALSE(decoded->messages[0].reliable);
@@ -209,11 +211,11 @@ TEST_CASE("A malformed body is refused", "[network]")
     trailing.push_back(std::byte{0});
     const std::vector<std::byte> truncated(valid.begin(), valid.end() - 1);
     std::vector<std::byte> moreMessages = valid;
-    moreMessages[12] = std::byte{2};
+    moreMessages[14] = std::byte{2};
     std::vector<std::byte> reservedFlag = valid;
-    reservedFlag[14] = std::byte{0x02};
+    reservedFlag[16] = std::byte{0x02};
     std::vector<std::byte> sizeTooLarge = valid;
-    sizeTooLarge[16] = std::byte{4};
+    sizeTooLarge[18] = std::byte{4};
 
     CHECK_FALSE(decodeBody(trailing));
     CHECK_FALSE(decodeBody(truncated));
@@ -497,6 +499,62 @@ TEST_CASE("The round-trip time is measured from the acknowledgements", "[network
     CHECK(*a.rtt() == 40ms);
     // max(1.5 × 40 ms, 100 ms)
     CHECK(a.resendDelay() == MessageChannel::MinResendDelay);
+}
+
+TEST_CASE("The round-trip time leaves out the time the peer waited to acknowledge", "[network]")
+{
+    // b answers 30 ms after it receives, as a game that acknowledges only with its next snapshot
+    MessageChannel a;
+    MessageChannel b;
+    Clock::time_point now{};
+    for (int i = 0; i < 50; ++i) {
+        const auto sent = a.next(now);
+        REQUIRE(sent);
+        now += 20ms;
+        REQUIRE(b.receive(sent->packetNumber, sent->body, now));
+        now += 30ms;
+        const auto answer = b.next(now);
+        CHECK(decodeBody(answer->body)->ackDelay == 300);
+        now += 20ms;
+        REQUIRE(a.receive(answer->packetNumber, answer->body, now));
+    }
+    REQUIRE(a.rtt());
+    CHECK(*a.rtt() == 40ms);
+}
+
+TEST_CASE("Only the packet acknowledged directly gives a sample, and never a saturated delay", "[network]")
+{
+    MessageChannel a;
+    MessageChannel b;
+    Clock::time_point now{};
+    // Two packets: the first lost on the way, acknowledged later by the bits only
+    const auto first = a.next(now);
+    const auto second = a.next(now);
+    REQUIRE(first);
+    REQUIRE(second);
+    now += 20ms;
+    REQUIRE(b.receive(second->packetNumber, second->body, now));
+    REQUIRE(b.receive(first->packetNumber, first->body, now + 500ms));
+    now += 520ms;
+    const auto answer = b.next(now);
+    REQUIRE(answer);
+    // The delay is of the second, received 520 ms ago: 20 + 520 + 20 − 520
+    now += 20ms;
+    REQUIRE(a.receive(answer->packetNumber, answer->body, now));
+    REQUIRE(a.rtt());
+    CHECK(*a.rtt() == 40ms);
+
+    // A peer silent for more than 6.5 s: no sample
+    MessageChannel c;
+    MessageChannel d;
+    Clock::time_point later{};
+    const auto lone = c.next(later);
+    REQUIRE(d.receive(lone->packetNumber, lone->body, later));
+    later += 10s;
+    const auto late = d.next(later);
+    CHECK(decodeBody(late->body)->ackDelay == MaxAckDelay);
+    REQUIRE(c.receive(late->packetNumber, late->body, later));
+    CHECK_FALSE(c.rtt());
 }
 
 // --- Over a fake network ---

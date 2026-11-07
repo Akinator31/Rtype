@@ -124,10 +124,14 @@ private:
     std::optional<Clock::duration> _rtt;
     /// A reliable message was received since the last datagram sent: the peer waits for its acknowledgement.
     bool _ackOwed = false;
+    /// When the highest packet number of the peer was received, for the `Ack delay` of the next datagrams.
+    std::optional<Clock::time_point> _highestReceived;
     bool _failed = false;
 
-    void acknowledge(std::uint64_t ack, std::uint32_t ackBits, Clock::time_point now);
-    void onAcknowledged(SentPacket &packet, Clock::time_point now);
+    void acknowledge(std::uint64_t ack, std::uint32_t ackBits, std::uint16_t ackDelay, Clock::time_point now);
+    void onAcknowledged(SentPacket &packet);
+    /// The `Ack delay` of a datagram sent now.
+    [[nodiscard]] std::uint16_t ackDelayAt(Clock::time_point now) const;
     void deliver(const BodyMessage &message, std::vector<ReceivedMessage> &delivered);
     void fail(const char *reason);
 
