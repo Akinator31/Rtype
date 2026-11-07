@@ -62,6 +62,13 @@ entities the scene draws.*
 3. **The world.** Each snapshot holds the whole world at its tick. An entity of the game gets an entity of the
    scene the first time it appears (`Replicated` with its id, `Position`, `Drawable`, and its look), is moved
    by the next ones, and is destroyed when a snapshot no longer has it.
+4. **Between two ticks.** The screen draws more frames than the game steps (144 per second against 60):
+   `between()` gives where to draw the entities at this frame, positions only, no event. The `LocalSession`
+   moves each one on with its velocity by the fraction of the time to the next step, and the ship of the player
+   with the input held, as the next step will move it, walls included: a key pressed shows at the next frame,
+   without drawing anything a tick late. Not during the rescue, which flies the ship on its own. Online, the
+   `RemoteSession` gives nothing: its snapshots are drawn at the frame rate already
+   ([The client online](client-online.md#interpolation)).
 
 The `GameSessionSystem` runs after the `InterfaceSystem`: Escape opens the pause menu before the game reads
 the input. When the game scene closes, the engine destroys its entities and the system forgets its session.
@@ -443,7 +450,9 @@ added with a line in one of the tables and its name in `en.lang` and `fr.lang`.
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:
 
 - the `LocalSession`: 60 steps per second of game time with frames of any length, at most 5 per update, its
-  player moved by its input, nothing while paused;
+  player moved by its input, nothing while paused; between two steps, its ship moving at every frame at 144
+  frames per second and stopping at the next frame when the key is let go, without events, nothing while
+  paused;
 - `inputFrom()` and `lookOf()`: the controls held become the bits of the input, the ship has the size of the
   rules, the four players have four colours, the Bydos a look of their own;
 - `computeGameView()`: an orthographic camera centred on the visible area, as high as it, y pointing down;
