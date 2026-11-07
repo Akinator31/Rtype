@@ -233,7 +233,8 @@ void GameHost::publish(const TickResult &result)
                 continue;
             }
             for (const rtype::game::SnapshotPart &part : rtype::game::splitSnapshot(
-                     snapshot, result.lastInputs[player.slot], toInputLead(_inputLeads[player.slot]))) {
+                     snapshot, result.lastInputs[player.slot], toInputLead(_inputLeads[player.slot]),
+                     result.weapons[player.slot])) {
                 _sessions.send(session, rtype::game::message_type::Snapshot, rtype::game::encode(part),
                                Delivery::Unreliable);
             }

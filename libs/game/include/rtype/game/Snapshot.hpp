@@ -109,6 +109,9 @@ struct EntityState {
     /// Hit points left, for health bars; 0 for kinds without.
     std::uint8_t health = 0;
     std::uint8_t flags = 0;
+    /// For a shot (isShot()): ticks since it was fired, at most 255, so that a client knows the tick it was
+    /// fired at. Written in the byte of the health, which a shot does not have.
+    std::uint8_t age = 0;
 
     friend bool operator==(const EntityState &, const EntityState &) = default;
 };

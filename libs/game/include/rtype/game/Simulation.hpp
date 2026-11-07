@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/ecs/Ecs.hpp"
+#include "rtype/game/Component/Components.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/GameContext.hpp"
 #include "rtype/game/PlayerInput.hpp"
@@ -9,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace rtype::game
 {
@@ -64,6 +66,9 @@ public:
     void removePlayer(std::uint8_t slot);
 
     [[nodiscard]] bool hasPlayer(std::uint8_t slot) const;
+
+    /// The weapon of the ship of a player, as the last step() left it: nothing without a ship or a weapon.
+    [[nodiscard]] std::optional<Armed> weaponOf(std::uint8_t slot);
     [[nodiscard]] std::size_t playerCount() const;
 
     /// The input of a player, applied at every tick until the next call. Ignored for an empty slot.

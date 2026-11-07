@@ -586,12 +586,14 @@ TEST_CASE("stepWeapon(), playerShot() and moveShot() fire and move the shots exa
                 }
                 REQUIRE(shot.x == found->second.position.x);
                 REQUIRE(shot.y == found->second.position.y);
+                // Its age in the snapshot: the client finds the tick it was fired at
+                REQUIRE(shot.age == std::min<std::uint32_t>(found->second.age, 255));
                 alive.insert(*found);
             }
             // Fired by the client, by the game too
             REQUIRE_FALSE(launch);
             shots = std::move(alive);
-            const Armed &real = simulation.ecs().getComponent<Armed>(ship);
+            const Armed real = *simulation.weaponOf(0);
             REQUIRE(real.cooldown == armed.cooldown);
             REQUIRE(real.ammo == armed.ammo);
             REQUIRE(real.reloadLeft == armed.reloadLeft);
