@@ -169,7 +169,7 @@ void run()
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord, ships,
-                                       rtype::render::userDataDirectory() / "pictures");
+                                       rtype::render::userDataDirectory() / "pictures", config);
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     rtype::client::registerQuests(engine, translations);

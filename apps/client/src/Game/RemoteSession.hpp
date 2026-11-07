@@ -5,6 +5,7 @@
 #include "Game/Interpolation.hpp"
 #include "Game/Prediction.hpp"
 #include "Game/ShotPrediction.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/RemoteWorld.hpp"
 #include "rtype/lobby/Messages.hpp"
@@ -64,6 +65,10 @@ private:
     InputClock _inputClock;
     /// The tick of the last snapshot whose input lead was given to the InputClock.
     std::uint32_t _leadTick = 0;
+    /// The weapon of the ships of the players, from the definitions of the client: what its shots are
+    /// predicted with, once the slot is known.
+    std::optional<game::WeaponDefinition> _weapon;
+    float _projectileHalfWidth = 0.0f;
     std::optional<game::AcceptedMessage> _accepted;
     /// The id of the ship of the player, 0 while it has none.
     std::uint32_t _shipId = 0;
@@ -85,6 +90,8 @@ private:
     std::string _endReason;
 
     void received(std::uint8_t type, std::span<const std::byte> payload);
+    /// The game accepted the player: its slot is known, the shots of its weapon can be predicted.
+    void accept(std::span<const std::byte> payload);
     /// Corrects the prediction with a part of a snapshot that has the ship of the player.
     void reconcile(const game::SnapshotPart &part);
     void sendInput();
@@ -93,9 +100,11 @@ private:
 public:
     /// Starts connecting at once.
     /// @param game The address of the instance: the IP of the master, the UDP port of GAME_JOINED.
+    /// @param config The definitions of the client (loadGameConfig()): the weapon of the player, whose shots
+    ///   are predicted. Without it, they are drawn when the game sends them.
     /// @throws std::system_error if no UDP socket can be opened.
     RemoteSession(network::EventLoop &loop, const network::Address &game,
-                  const lobby::GameJoinedMessage &joined);
+                  const lobby::GameJoinedMessage &joined, const game::GameConfig &config = {});
     /// Says goodbye to the game (DISCONNECT) if still in it.
     ~RemoteSession() override;
 
@@ -123,6 +132,8 @@ public:
     [[nodiscard]] const Interpolation &interpolation() const { return _interpolation; }
     /// The prediction of the ship of the player, for the tests.
     [[nodiscard]] const Prediction &prediction() const { return _prediction; }
+    /// The shots of the player as drawn, for the tests.
+    [[nodiscard]] const ShotPrediction &shots() const { return _shots; }
     /// The tick stamped on the newest input sent.
     [[nodiscard]] std::uint32_t inputTick() const { return _inputTick; }
     /// The pace of the inputs, for the tests.

@@ -1,11 +1,16 @@
 #pragma once
 
 #include "rtype/ecs/Hierarchy.hpp"
+#include "rtype/game/Component/Components.hpp"
+#include "rtype/game/Messages.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/Weapon/WeaponDefinition.hpp"
+#include "rtype/game/Weapon/WeaponFiring.hpp"
 
 #include <cstdint>
 #include <deque>
+#include <map>
 #include <optional>
 
 namespace rtype::client
@@ -32,6 +37,10 @@ namespace rtype::client
 ///   elsewhere) is not smoothed.
 /// - **No ship** (destroyed, waiting to come back): nothing is predicted; the game decides when it comes
 ///   back.
+/// - **The weapon**, once armed(): each input also steps it, as the game does (game::stepWeapon()), and each
+///   tick it fires gives a shot, from where the ship was (game::playerShot()). A snapshot gives the state of
+///   the weapon at its tick: the shots of the later ticks are replayed from there, like the ship. Those of
+///   the ticks up to the snapshot are the game's: they are no longer predicted.
 ///
 /// Pure: no clock, no network.
 class Prediction
@@ -52,9 +61,25 @@ private:
         game::PlayerInput input;
     };
 
+    /// The weapon of the ship, once armed().
+    struct Weapon {
+        game::WeaponDefinition definition;
+        float projectileHalfWidth = 0.0f;
+        std::uint8_t slot = 0;
+    };
+
     game::Rules _rules;
     std::deque<Sent> _sent;
     std::optional<ecs::Position> _predicted;
+    std::optional<Weapon> _weapon;
+    /// The state of the weapon once every input sent is applied, while there is a ship.
+    std::optional<game::Armed> _armed;
+    /// The shots of the ticks after the last snapshot, by the tick they are fired at.
+    std::map<std::uint32_t, game::ShotLaunch> _shots;
+
+    /// One tick of the ship and its weapon, from `position` and `armed`: the shot it fires, if any.
+    std::optional<game::ShotLaunch> step(ecs::Position &position, std::optional<game::Armed> &armed,
+                                         game::PlayerInput input) const;
     /// What is drawn on top of the prediction while a correction fades out.
     float _offsetX = 0.0f;
     float _offsetY = 0.0f;
@@ -62,13 +87,19 @@ private:
 public:
     explicit Prediction(game::Rules rules = {}) : _rules(rules) {}
 
+    /// The ship of the player of `slot` has this weapon: its shots are predicted from now.
+    /// @param projectileHalfWidth Half the width of the collider of the projectile of the weapon.
+    void arm(game::WeaponDefinition weapon, float projectileHalfWidth, std::uint8_t slot);
+
     /// An input sent for `tick`: the predicted ship moves at once.
     void apply(std::uint32_t tick, game::PlayerInput input);
 
     /// A snapshot of the game.
     /// @param ship Where the game had the ship of the local player, nothing if it has none.
     /// @param tick The tick of the snapshot: the inputs up to it are applied by the game.
-    void reconcile(std::optional<ecs::Position> ship, std::uint32_t tick);
+    /// @param weapon The weapon of the ship at that tick, when the snapshot says it.
+    void reconcile(std::optional<ecs::Position> ship, std::uint32_t tick,
+                   std::optional<game::WeaponState> weapon = std::nullopt);
 
     /// Time goes by: the correction drawn fades out.
     void advance(double elapsed);
@@ -78,6 +109,13 @@ public:
 
     /// Where the ship will be once every input sent is applied, without the correction drawn.
     [[nodiscard]] std::optional<ecs::Position> predicted() const { return _predicted; }
+
+    /// The shots predicted for the ticks after the last snapshot, by the tick they are fired at: where they
+    /// start and their velocity. Empty without a weapon or a ship.
+    [[nodiscard]] const std::map<std::uint32_t, game::ShotLaunch> &shots() const { return _shots; }
+
+    /// The weapon once every input sent is applied, nothing without a weapon or a ship.
+    [[nodiscard]] const std::optional<game::Armed> &weapon() const { return _armed; }
 
     /// Inputs sent and not applied by the game yet, as far as the snapshots tell.
     [[nodiscard]] std::size_t pending() const { return _sent.size(); }

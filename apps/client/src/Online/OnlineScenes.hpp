@@ -12,6 +12,7 @@
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/localization/Localization.hpp"
 #include "rtype/network/Address.hpp"
@@ -105,6 +106,8 @@ class OnlineScenes
     GameScenes &_games;
     localization::Localization &_translations;
     ShipSelection &_ships;
+    /// The definitions of the client: the weapon of the player, whose shots its games predict.
+    const game::GameConfig &_config;
     KnownServers _known;
     SessionTokens _sessions;
     KnownProfiles _profiles;
@@ -194,10 +197,12 @@ public:
     /// @param pictures The folder the pictures of the accounts are kept in.
     /// @param discord Asks the player to accept the Discord application of a server; polled by the game loop.
     /// @param ships The ship the player picks in the hangar, before creating or joining a game.
+    /// @param config The definitions of the client (loadGameConfig()): the weapon of the player, whose shots
+    ///   its games online predict.
     OnlineScenes(engine::Engine &engine, render::ResourceManager &resources, network::EventLoop &loop,
                  GameScenes &games, const engine::InterfaceStyle &style,
                  localization::Localization &translations, discord::Authorizer &discord, ShipSelection &ships,
-                 std::filesystem::path pictures);
+                 std::filesystem::path pictures, const game::GameConfig &config);
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;
