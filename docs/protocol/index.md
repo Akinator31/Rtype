@@ -101,7 +101,7 @@ keys of the game. It then talks to the game directly, over encrypted datagrams.*
 
 The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **3** (version 2 adds the
 messages of the administrators, version 3 those of the player accounts, [lobby](lobby.md)). The game protocol has its own, in the header of every
-datagram (as a `u8`), currently **1**. The instances have a version of their own, sent in `INSTANCE_HELLO`,
+datagram (as a `u8`), currently **2** (version 2 adds the input lead of `SNAPSHOT`). The instances have a version of their own, sent in `INSTANCE_HELLO`,
 currently **4**
 ([master and instances](instances.md)): master and instances come from the same build, so it changes without
 the clients.
@@ -131,6 +131,7 @@ the clients.
 | Snapshot parts | 16 at most | Datagrams of one snapshot |
 | Inputs per `INPUT` | 8 (recommended), 32 at most | The inputs of the last ticks, sent again ([game](game.md#92-inputs)) |
 | Input lead | 60 ticks | The game ignores inputs further ahead |
+| Target lead | 2 to 3 ticks | The smallest lead of the last 0.5 s a client keeps its inputs at ([game](game.md#92-inputs)) |
 | Input hold | 30 ticks | Without inputs for this long, the game applies an empty input |
 | Interpolation delay | 100 ms (recommended) | How far in the past the client draws the world |
 | Players per game | 1–4 | |

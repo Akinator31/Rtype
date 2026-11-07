@@ -22,6 +22,7 @@ apps/client/src/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn 100 ms in the past, between the snapshots around that time
     Prediction.cpp     the ship of the player, moved at once by its inputs, then reconciled with the game
+    InputClock.cpp     the pace of the inputs, kept just in time by the lead the snapshots report
 ```
 
 The client has one `EventLoop` for its network, polled by the game loop once per frame before the engine
@@ -247,13 +248,42 @@ CMake warns and leaves `r-type_client` out, the server and the tests are built.
 | Instance → client | `GAME_OVER`, `DISCONNECT`, or nothing for 5 seconds: the end | Once |
 
 - **The tick of an input** is the one at which the game should apply it (section 9.2 of the
-  [game protocol](../protocol/game.md#92-inputs)): the tick of the latest snapshot, plus the time since it came,
-  plus the round-trip time measured by the session, plus 2 ticks of margin. It never goes back: the game
-  ignores an input older than the last one.
+  [game protocol](../protocol/game.md#92-inputs)). The first ones are estimated: the tick of the latest
+  snapshot, plus the time since it came, plus the round-trip time measured by the session, plus 2 ticks of
+  margin. Once a snapshot reports how early they arrive, each input is stamped with the tick after the previous
+  one, and the [input clock](#input-clock) keeps them just in time.
 - **`takeSnapshots()`** gives, at every frame, the world of the [interpolation](#interpolation): the
   `GameSessionSystem` draws it as it draws the offline world, and the entities move at the frame rate.
 - **Pausing** does nothing online: the game goes on, and the input sent under the pause menu is empty.
 - **Leaving** sends `DISCONNECT` to the game, when the session is destroyed.
+
+## Input clock
+
+An estimate of the tick drifts, and the game ignores the inputs more than 60 ticks ahead without a word: a
+client 1% fast ended with every input ignored after about 100 s, the ship coming back to where it was as soon
+as the player moved ([ADR 0028](../decisions/0028-input-stamps-follow-the-lead.md)). So each `SNAPSHOT` tells
+the client the **lead** of its inputs: the smallest, since the previous snapshot, of their tick minus the last
+tick the game simulated when they came. 1 is just in time, 0 or less lost.
+
+`InputClock` turns the leads into a pace:
+
+| The smallest lead of the last 0.5 s | What the client does |
+|---|---|
+| 2 or 3 | One input per tick |
+| 1: no margin left | A little faster: 3% per tick missing, 10% at most |
+| Above 3: latency for nothing | A little slower: 3% per tick too many, half as fast at most |
+| 0 or less: inputs lost (one report is enough) | The next stamp jumps forward at once, to a lead of 2; the ticks skipped carry the previous input, and the leads of the next RTT + 2 ticks are ignored |
+
+```cpp
+clock.advance(elapsed);                     // each frame
+pending += elapsed * clock.rate();          // one INPUT each time a tick of pending is there
+stamp += 1 + clock.takeJump();              // each INPUT sent
+clock.receive(part.inputLead, rtt + 0.033); // each snapshot with a lead, once
+```
+
+The stamps stay consecutive: no input is lost, none is stamped twice, and stamps too far ahead come back down
+by sending fewer of them. A frame too long (more than 5 ticks at once are not sent) or a scene that stops
+updating leaves the stamps behind: the next lead is 0 or less, and they jump.
 
 ## Interpolation
 
@@ -352,6 +382,12 @@ with snapshots on time, irregular or lost; extrapolation then waiting without sn
 disappearing when the drawn tick reaches them; a server clock running faster; a pause; and the drawn tick
 never going back.
 
+`tests/client_input_clock.cpp` (tag `[input-clock]`) checks the pace alone, then plays it against the
+`InputBuffer` of the server, at 240 frames per second, with delays on the way up and down: no input lost with a
+client clock 1% fast or 1% slow for 5 minutes, the lead staying between 1 and 5; stamps 50 ticks ahead
+coming back down without losing an input; a game that stalls 300 ms and skips the ticks it missed; a client that
+starts late; and a network that jitters by 40 ms, a few inputs late at the start, none after.
+
 `tests/client_prediction.cpp` (tag `[prediction]`) plays the client against the real rules, a `Simulation` with
 the `InputBuffer` of the server, the inputs and the snapshots delayed: never corrected when nothing is lost, nor
 when an `INPUT` is lost (the next ones carry its inputs); the ship answering before the game; the game ending
@@ -363,6 +399,7 @@ elsewhere; a correction too large applied at once; and the ticks skipped when st
 ./build/bin/rtype_tests "[online][accounts]"
 ./build/bin/rtype_tests "[interpolation]"
 ./build/bin/rtype_tests "[prediction]"
+./build/bin/rtype_tests "[input-clock]"
 ```
 
 ## Limits and next steps

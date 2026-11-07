@@ -28,7 +28,7 @@ acknowledgements and the messages.*
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Magic | `u16` | `0x5254` (`"RT"`) |
-| 2 | Version | `u8` | Protocol version, 1 |
+| 2 | Version | `u8` | Protocol version, 2 |
 | 3 | Reserved | `u8` | 0 |
 | 4 | Session id | `u32` | Session given by the master, never 0, unique across the master |
 | 8 | Packet number | `u64` | Number of this datagram in its direction, from 1 |
@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-01                        version 1
+02                        version 2
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -74,7 +74,7 @@ The body is encrypted with **AEAD_CHACHA20_POLY1305** as defined in
 A receiver processes a datagram in this order, and drops it silently at the first failed step:
 
 1. The size is between 32 and 1200 bytes.
-2. The magic is `0x5254`, the version is 1, the reserved byte is 0.
+2. The magic is `0x5254`, the version is 2, the reserved byte is 0.
 3. The session id is a known session.
 4. The source address has not sent more than 200 datagrams in the last second.
 5. The packet number is accepted by the replay window ([section 4](#4-replay-window)).
@@ -372,7 +372,7 @@ Up and down together, left and right together, or aim up and aim down together, 
 
 **Client.** Once per tick, the client samples its controls and sends `INPUT` with the inputs of the last
 **8** ticks, newest first: a lost datagram loses no input, since the next ones carry it again. It stamps each
-input with the tick at which it expects the game to receive it, which it SHOULD estimate as:
+input with the tick at which it expects the game to receive it. For its first inputs, it SHOULD estimate it as:
 
 ```
 tick of the latest snapshot received
@@ -385,6 +385,24 @@ ahead; it ignores inputs for ticks already simulated, and those further ahead. A
 input of that tick, or, if it has none, the last input it applied: a lost input continues the previous
 movement. After **30** ticks without any input from a player, it applies an empty input (nothing pressed), so
 that a ship whose player lost the connection stops.
+
+**Lead.** For each `INPUT` received, ignored or not, the game measures its **lead**: its `Tick` minus the last
+tick simulated. 1 means just in time (applied at the next tick), 0 or less too late, above 60 too early. Each
+`SNAPSHOT` tells the client the smallest lead of its `INPUT` messages since the previous snapshot.
+
+**Keeping the stamps in time.** An estimate drifts: the clocks of the client and the game do not run at
+exactly the same speed, the RTT changes, the game may skip ticks when it falls behind. Once it receives a lead,
+the client SHOULD stamp each input with the tick after the previous one, and follow the leads instead:
+
+- it keeps the smallest lead of the last 0.5 s between **2** and **3**, by sending its inputs a little faster
+  (lead 1) or slower (above 3) than once per tick: at most 10% faster, at least half as fast. The stamps stay
+  consecutive, so no input is lost, and stamps too far ahead come back down;
+- a lead of 0 or less means its inputs are lost: it adds to the next stamp what is missing to reach 2, at once.
+  The ticks skipped carry the previous input again, as the game does. It ignores the leads of the next
+  RTT + 2 ticks, which are those of the inputs sent before.
+
+Without this, a client whose stamps only go up ends more than 60 ticks ahead after some time, and every input
+is ignored.
 
 ### 9.3 Snapshots
 
@@ -437,12 +455,13 @@ or more inputs than `Tick + 1`, makes the message malformed.
 |---|---|---|---|
 | 0 | Tick | `u32` | Tick of the world described |
 | 4 | Last input | `u32` | Tick of the last input of this client that the game applied, 0 if none |
-| 8 | Part | `u8` | Number of this part, from 0 |
-| 9 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
-| 10 | Player count | `u8` | 0 to 4 |
-| 11 | Players | | Player count times the fields below |
-| 11 + 6p | Entity count | `u8` | Number of entities in this part |
-| 12 + 6p | Entities | | Entity count times the fields below |
+| 8 | Input lead | `i8` | Smallest lead of the `INPUT` messages of this client since the previous snapshot, −127 to 127 ([section 9.2](#92-inputs)); −128 if none came |
+| 9 | Part | `u8` | Number of this part, from 0 |
+| 10 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
+| 11 | Player count | `u8` | 0 to 4 |
+| 12 | Players | | Player count times the fields below |
+| 12 + 6p | Entity count | `u8` | Number of entities in this part |
+| 13 + 6p | Entities | | Entity count times the fields below |
 
 Each player:
 
@@ -568,9 +587,10 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 ```
 80                        type: SNAPSHOT
 00                        flags: unreliable
-00 22                     size: 34 bytes
+00 23                     size: 35 bytes
 00 00 03 E8                 tick: 1000
 00 00 03 E6                 last input applied: tick 998
+02                          input lead: 2 ticks
 00                          part 0
 01                          of 1 part
 01                          1 player

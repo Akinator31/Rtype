@@ -33,6 +33,7 @@ technical and comparative study of the project.
 | [0025](0025-server-administration.md)                   | Administration through a web panel served by the master     | Accepted                                                                               |
 | [0026](0026-discord-social-sdk.md)                      | Discord sign-in through the Discord Social SDK in the client | Accepted                                                                               |
 | [0027](0027-one-udp-port-relay.md)                      | One UDP port for every game, through a relay in the master  | Accepted                                                                               |
+| [0028](0028-input-stamps-follow-the-lead.md)            | The stamps of the inputs follow the lead the game reports   | Accepted                                                                               |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

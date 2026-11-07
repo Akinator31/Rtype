@@ -95,6 +95,7 @@ nav = [
         "decisions/0025-server-administration.md",
         "decisions/0026-discord-social-sdk.md",
         "decisions/0027-one-udp-port-relay.md",
+        "decisions/0028-input-stamps-follow-the-lead.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

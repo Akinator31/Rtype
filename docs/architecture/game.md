@@ -644,14 +644,14 @@ one implementation.
 | `PLAYER_JOINED` | `0x04` | Game → Client | `PlayerJoinedMessage`: slot, player id, name |
 | `PLAYER_LEFT` | `0x05` | Game → Client | `PlayerLeftMessage`: slot, reason |
 | `INPUT` | `0x40` | Client → Game | `InputMessage`: tick, inputs newest first |
-| `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, part, players, entities |
+| `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, input lead, part, players, entities |
 | `ENTITIES_DESTROYED` | `0x81` | Game → Client | `EntitiesDestroyedMessage`: tick, ids and causes |
 | `WAVE_STARTED` | `0x82` | Game → Client | `WaveStartedMessage` |
 | `GAME_OVER` | `0x83` | Game → Client | `GameOverMessage` |
 
 ```cpp
 // Game, once per client, every 2 ticks
-for (const rtype::game::SnapshotPart &part : rtype::game::splitSnapshot(simulation.snapshot(), lastInput)) {
+for (const rtype::game::SnapshotPart &part : rtype::game::splitSnapshot(simulation.snapshot(), lastInput, lead)) {
     host.send(session, rtype::game::message_type::Snapshot, rtype::game::encode(part),
               rtype::network::Delivery::Unreliable);
 }

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Proposed; its "Inputs" amended by [0028](0028-input-stamps-follow-the-lead.md) |
 | **Date** | 2026-10-17 |
 
 ## Context
@@ -81,7 +81,8 @@ stamped with its tick, the last 8 ticks in every datagram.**
 - The game applies, at each tick, the input of that tick if it has it, otherwise the last one it has. Inputs of
   ticks already simulated are ignored; inputs too far ahead too.
 - Each snapshot tells the client the tick of its last input that the game applied: unused for now, it is what
-  prediction needs later.
+  prediction needs later. **Amended by [ADR 0028](0028-input-stamps-follow-the-lead.md)**: each snapshot also
+  tells how early the inputs arrive, and the client paces its inputs on it.
 
 ### Events
 
