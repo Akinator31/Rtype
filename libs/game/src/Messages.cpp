@@ -19,8 +19,8 @@ namespace
 using rtype::network::Reader;
 using rtype::network::Writer;
 
-/// The fields before the players in SNAPSHOT: tick, last input, part, parts, player count.
-constexpr std::size_t SnapshotHeaderSize = 11;
+/// The fields before the players in SNAPSHOT: tick, last input, input lead, part, parts, player count.
+constexpr std::size_t SnapshotHeaderSize = 12;
 /// One player in SNAPSHOT: slot, lives, score.
 constexpr std::size_t PlayerStateSize = 6;
 /// One entity in SNAPSHOT.
@@ -292,6 +292,7 @@ std::vector<std::byte> encode(const SnapshotPart &part)
                   (EntityStateSize * part.entities.size()));
     writer.writeU32(part.tick);
     writer.writeU32(part.lastInput);
+    writer.writeU8(static_cast<std::uint8_t>(part.inputLead));
     writer.writeU8(part.part);
     writer.writeU8(part.parts);
     writePlayers(writer, part.players);
@@ -308,6 +309,7 @@ std::optional<SnapshotPart> decodeSnapshotPart(std::span<const std::byte> payloa
     SnapshotPart part;
     part.tick = reader.readU32();
     part.lastInput = reader.readU32();
+    part.inputLead = static_cast<std::int8_t>(reader.readU8());
     part.part = reader.readU8();
     part.parts = reader.readU8();
     if (part.parts == 0 || part.parts > MaxSnapshotParts || part.part >= part.parts) {
@@ -346,7 +348,8 @@ std::optional<SnapshotPart> decodeSnapshotPart(std::span<const std::byte> payloa
     return part;
 }
 
-std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t lastInput)
+std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t lastInput,
+                                        std::int8_t inputLead)
 {
     const std::size_t perPart = maxEntitiesPerPart(snapshot.players.size());
     const std::size_t needed = std::max<std::size_t>(1, (snapshot.entities.size() + perPart - 1) / perPart);
@@ -357,6 +360,7 @@ std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t 
         SnapshotPart &part = parts[i];
         part.tick = snapshot.tick;
         part.lastInput = lastInput;
+        part.inputLead = inputLead;
         part.part = static_cast<std::uint8_t>(i);
         part.parts = static_cast<std::uint8_t>(count);
         part.players = snapshot.players;

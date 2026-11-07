@@ -9,6 +9,7 @@
 #include "rtype/network/Session.hpp"
 #include "rtype/network/Timer.hpp"
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -85,6 +86,9 @@ private:
     std::uint32_t _tick = 0;
     std::uint16_t _wave = 0;
     std::vector<rtype::game::PlayerState> _states;
+    /// For each slot, the smallest lead of its INPUT messages since the previous snapshot
+    /// (TickResult::inputLeads).
+    std::array<std::optional<std::int64_t>, rtype::game::MaxPlayers> _inputLeads{};
 
     void gameOver(const TickResult &result);
 

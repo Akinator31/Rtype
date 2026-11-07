@@ -45,8 +45,9 @@ inline constexpr std::size_t MaxSealedDatagramSize = 1200;
 inline constexpr std::size_t MaxDatagramBodySize = MaxSealedDatagramSize - MinSealedDatagramSize;
 /// First field of every datagram, "RT".
 inline constexpr std::uint16_t DatagramMagic = 0x5254;
-/// Version of the datagram layout.
-inline constexpr std::uint8_t DatagramVersion = 1;
+/// Version of the game protocol, of the datagram layout and of the messages (docs/protocol/index.md, section
+/// 4): 2 adds the input lead of SNAPSHOT.
+inline constexpr std::uint8_t DatagramVersion = 2;
 
 struct DatagramHeader;
 

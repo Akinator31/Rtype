@@ -1,11 +1,15 @@
 #include "Instance/InputBuffer.hpp"
 
+#include <algorithm>
+
 namespace rtype::server
 {
 
 void InputBuffer::receive(std::uint32_t newest, std::span<const game::PlayerInput> inputs,
                           std::uint32_t current)
 {
+    const std::int64_t lead = static_cast<std::int64_t>(newest) - static_cast<std::int64_t>(current);
+    _lead = _lead ? std::min(*_lead, lead) : lead;
     for (std::size_t i = 0; i < inputs.size() && i <= newest; ++i) {
         const std::uint32_t tick = newest - static_cast<std::uint32_t>(i);
         // Too late, or too far ahead: a client whose clock runs away cannot fill the memory of the game

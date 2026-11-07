@@ -551,6 +551,9 @@ TEST_CASE("The game thread steps 60 times per second and applies each input at i
     // The tick of the last input applied, for the snapshots of its client
     CHECK(results[2].lastInputs[1] == 3);
     CHECK(results[5].lastInputs[1] == 6);
+    // How early they arrived, the smallest of the two, once: the game was at tick 0
+    CHECK(results[0].inputLeads[1] == 3);
+    CHECK_FALSE(results[1].inputLeads[1]);
 
     // Nothing after stop()
     const std::size_t count = results.size();

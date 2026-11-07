@@ -118,3 +118,24 @@ TEST_CASE("The inputs of the ticks simulated are forgotten, and a reset forgets 
     CHECK(buffer.lastApplied() == 0);
     CHECK(buffer.take(16) == PlayerInput{});
 }
+
+TEST_CASE("The lead of the INPUT messages is measured, even for the ones ignored", "[replication]")
+{
+    InputBuffer buffer;
+    CHECK_FALSE(buffer.takeLead());
+
+    // At tick 10: one 3 ticks early, one just in time, the smallest is kept
+    buffer.receive(13, std::vector{Up}, 10);
+    buffer.receive(11, std::vector{Up}, 10);
+    CHECK(buffer.takeLead() == 1);
+    // Taken: the next ones start again
+    CHECK_FALSE(buffer.takeLead());
+
+    // Too late, or too far ahead: ignored, but measured, so that the client corrects its stamps
+    buffer.receive(9, std::vector{Up}, 10);
+    CHECK(buffer.takeLead() == -1);
+    buffer.receive(10 + InputBuffer::MaxAhead + 5, std::vector{Up}, 10);
+    CHECK(buffer.takeLead() == InputBuffer::MaxAhead + 5);
+    // Only the two in time are kept
+    CHECK(buffer.size() == 2);
+}

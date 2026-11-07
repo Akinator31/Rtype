@@ -130,6 +130,7 @@ void GameThread::run()
                     simulation.setInput(slot, buffers[slot].take(tick));
                 }
                 result.lastInputs[slot] = buffers[slot].lastApplied();
+                result.inputLeads[slot] = buffers[slot].takeLead();
             }
 
             simulation.step();

@@ -45,6 +45,7 @@ SnapshotPart examplePart()
     SnapshotPart part;
     part.tick = 1000;
     part.lastInput = 998;
+    part.inputLead = 2;
     part.players = {{0, 3, 1500}};
     part.entities = {
         {7, EntityKind::PlayerShip, 0, 200.0f, 540.5f, 0.0f, -300.0f, 3, EntityState::Invulnerable}};
@@ -55,6 +56,7 @@ SnapshotPart examplePart()
 const std::vector<std::byte> ExampleSnapshot = bytes({
     0x00, 0x00, 0x03, 0xE8,             // tick 1000
     0x00, 0x00, 0x03, 0xE6,             // last input 998
+    0x02,                               // input lead 2
     0x00, 0x01,                         // part 0 of 1
     0x01, 0x00, 0x03, 0x00, 0x00, 0x05, // 1 player: slot 0, 3 lives,
     0xDC,                               //   score 1500
@@ -163,6 +165,7 @@ TEST_CASE("Every message survives a round trip", "[game][messages]")
     SnapshotPart part;
     part.tick = 77;
     part.lastInput = 75;
+    part.inputLead = -127;
     part.part = 15;
     part.parts = 16;
     part.players = {{3, 0, 0xFFFFFFFF}, {0, 255, 0}};
@@ -205,7 +208,7 @@ TEST_CASE("The reserved bits of inputs are dropped; every bit of the flags is de
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")
 {
     std::vector<std::byte> payload = ExampleSnapshot;
-    payload[22] = std::byte{0x60}; // the kind of the entity: reserved for later kinds
+    payload[23] = std::byte{0x60}; // the kind of the entity: reserved for later kinds
     const auto part = decodeSnapshotPart(payload);
 
     REQUIRE(part);
@@ -267,22 +270,23 @@ TEST_CASE("A snapshot part refuses the values the specification forbids", "[game
         return decodeSnapshotPart(payload);
     };
 
-    CHECK_FALSE(changed(8, 1));  // part 1 of 1
-    CHECK_FALSE(changed(9, 0));  // 0 parts
-    CHECK_FALSE(changed(9, 17)); // 17 parts
-    CHECK(changed(9, 16));       // part 0 of 16
-    CHECK_FALSE(changed(11, 4)); // slot 4
-    CHECK_FALSE(changed(21, 0)); // entity id 0
-    CHECK_FALSE(changed(22, 0)); // kind 0
-    CHECK_FALSE(changed(17, 2)); // 2 entities announced, 1 given
-    CHECK_FALSE(changed(17, 0)); // 0 entities announced, 1 given
-    CHECK_FALSE(changed(10, 5)); // 5 players
+    CHECK(changed(8, 0x80));      // input lead: any value
+    CHECK_FALSE(changed(9, 1));   // part 1 of 1
+    CHECK_FALSE(changed(10, 0));  // 0 parts
+    CHECK_FALSE(changed(10, 17)); // 17 parts
+    CHECK(changed(10, 16));       // part 0 of 16
+    CHECK_FALSE(changed(12, 4));  // slot 4
+    CHECK_FALSE(changed(22, 0));  // entity id 0
+    CHECK_FALSE(changed(23, 0));  // kind 0
+    CHECK_FALSE(changed(18, 2));  // 2 entities announced, 1 given
+    CHECK_FALSE(changed(18, 0));  // 0 entities announced, 1 given
+    CHECK_FALSE(changed(11, 5));  // 5 players
 
     // The same slot twice
     SnapshotPart part = examplePart();
     part.players = {{1, 3, 0}, {2, 3, 0}};
     std::vector<std::byte> payload = encode(part);
-    payload[17] = std::byte{1}; // the slot of the second player
+    payload[18] = std::byte{1}; // the slot of the second player
     CHECK_FALSE(decodeSnapshotPart(payload));
 }
 
@@ -374,7 +378,7 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
         snapshot.entities.push_back(entity(id, static_cast<float>(id) * 0.125f, static_cast<float>(id)));
     }
 
-    const std::vector<SnapshotPart> parts = splitSnapshot(snapshot, 498);
+    const std::vector<SnapshotPart> parts = splitSnapshot(snapshot, 498, 3);
 
     REQUIRE(parts.size() == 3);
     std::vector<EntityState> entities;
@@ -385,6 +389,7 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
         REQUIRE(part);
         CHECK(part->tick == 500);
         CHECK(part->lastInput == 498);
+        CHECK(part->inputLead == 3);
         CHECK(part->part == i);
         CHECK(part->parts == 3);
         CHECK(part->players == snapshot.players);

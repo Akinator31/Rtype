@@ -64,6 +64,8 @@ inline constexpr std::size_t MaxInputsPerMessage = 32;
 inline constexpr std::size_t InputRedundancy = 8;
 /// Most parts of one snapshot.
 inline constexpr std::size_t MaxSnapshotParts = 16;
+/// The input lead of a SNAPSHOT when the game received no INPUT from this client since the previous snapshot.
+inline constexpr std::int8_t NoInputLead = -128;
 /// Most entities in one ENTITIES_DESTROYED that still fits in a datagram (checked against libs/network).
 inline constexpr std::size_t MaxDestroyedPerMessage = 228;
 /// Longest name of a player, in bytes of UTF-8.
@@ -139,6 +141,11 @@ struct SnapshotPart {
     std::vector<PlayerState> players;
     /// The entities of this part. Decoded, they may have kinds this client does not know (isKnown()).
     std::vector<EntityState> entities;
+    /// How early the inputs of this client arrive (docs/protocol/game.md, section 9.2), written after the
+    /// last input: the smallest, over the INPUT messages received since the previous snapshot, of the tick of
+    /// their newest input minus the last tick simulated when it arrived, within -127 to 127. 1 is just in
+    /// time, 0 or less too late. NoInputLead if none arrived.
+    std::int8_t inputLead = NoInputLead;
 
     friend bool operator==(const SnapshotPart &, const SnapshotPart &) = default;
 };
@@ -209,7 +216,9 @@ decodeEntitiesDestroyed(std::span<const std::byte> payload);
 /// A snapshot without entities is one part. Beyond MaxSnapshotParts full parts (1104 entities with four
 /// players), the last entities are left out: the rules must never have that many.
 /// @param lastInput The tick of the last input of this client that the game applied, 0 if none.
-[[nodiscard]] std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t lastInput);
+/// @param inputLead How early the inputs of this client arrive (SnapshotPart::inputLead).
+[[nodiscard]] std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t lastInput,
+                                                      std::int8_t inputLead = NoInputLead);
 
 /// The ENTITIES_DESTROYED messages of a snapshot: none if nothing was destroyed, several with the same tick
 /// if they do not fit in one datagram.
