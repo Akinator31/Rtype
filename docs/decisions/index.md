@@ -36,6 +36,7 @@ technical and comparative study of the project.
 | [0028](0028-input-stamps-follow-the-lead.md)            | The stamps of the inputs follow the lead the game reports   | Accepted                                                                               |
 | [0029](0029-predicted-shots.md)                         | The shots of the player are predicted, then matched by their age | Accepted                                                                          |
 | [0030](0030-measured-delays.md)                         | A round-trip time without the delay of the acknowledgements, an interpolation delay measured | Accepted                                                              |
+| [0031](0031-destructions-sent-again.md)                 | The destructions, unreliable, sent again with the snapshots | Accepted                                                                               |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

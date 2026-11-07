@@ -706,7 +706,8 @@ for (const auto &[id, entity] : world.entities()) { /* draw it */ }
 | A part older than the latest applied | Ignored (`apply()` gives false); the other parts of the latest tick still apply |
 | An entity in a part | Created, or updated |
 | An entity missing from a part | Kept: its part may have been lost |
-| `ENTITIES_DESTROYED` | The entities are removed and given back with their last state; their ids are remembered until the snapshots reach the tick of their destruction, so that an older part cannot bring them back |
+| An entity missing from every part for 60 ticks | Removed by `forgetStale()`, without an effect: every copy of its destruction was lost |
+| `ENTITIES_DESTROYED` | The entities are removed and given back with their last state; their ids are remembered until the snapshots reach the tick of their destruction, so that an older part cannot bring them back. Received again, it removes nothing more |
 | A kind it does not know | Skipped |
 
 It keeps the latest state only; drawing a little in the past and interpolating between snapshots come on top of

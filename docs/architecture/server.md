@@ -509,8 +509,10 @@ flowchart LR
   - the inputs of each `INPUT` go to the game, which applies each one at its tick;
   - every 2 ticks, each client receives the snapshot in parts, with its last input, the smallest lead of its
     `INPUT` messages over those 2 ticks and the weapon of its ship; every tick, the entities
-    destroyed. They leave as soon as the tick is published, not at the next update of the sessions: up to a
-    tick of delay less, and no jitter from it;
+    destroyed, unreliable, then again with each snapshot of the next 30 ticks (`RecentDestructions`): a lost one
+    costs a snapshot interval, never a resend that holds back the messages behind it. They leave as soon as the
+    tick is published, not at the next update of the sessions: up to a tick of delay less, and no jitter from
+    it;
   - the game over goes to every client (`GAME_OVER`, with the last snapshot), then to the instance with the
     score of each player; nothing is published after it;
   - a session that closes takes the ship away; the others receive `PLAYER_LEFT`, and the master
@@ -723,7 +725,8 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   until asked to stop, then exits with 0; without it, it exits with 1.
 - `tests/server_replication.cpp` (tag `[replication]`): the `InputBuffer`: an input applied at its tick, the
   last one repeated then emptied after a silence, the ticks of a lost datagram filled by the next one, inputs
-  too late, too far ahead or received twice ignored, and the lead of each `INPUT` measured, even ignored.
+  too late, too far ahead or received twice ignored, and the lead of each `INPUT` measured, even ignored; the
+  destructions sent again with the snapshots of the next 30 ticks, then forgotten.
 - `tests/server_instance.cpp` (tag `[instance]`): the messages between the master and its instances (round
   trips, bytes, every malformed case, random bytes), the game thread (its rate, each input applied at its
   tick, whatever their order, the lead of the inputs, nothing after `stop()`), the game over of `GameHost` (sent, reported with the

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed; its "Inputs" amended by [0028](0028-input-stamps-follow-the-lead.md), its delay of 100 ms by [0030](0030-measured-delays.md) |
+| **Status** | Proposed; its "Inputs" amended by [0028](0028-input-stamps-follow-the-lead.md), its delay of 100 ms by [0030](0030-measured-delays.md), its reliable destructions by [0031](0031-destructions-sent-again.md) |
 | **Date** | 2026-10-17 |
 
 ## Context
@@ -88,7 +88,9 @@ stamped with its tick, the last 8 ticks in every datagram.**
 
 Only what cannot be read from the next snapshot is a reliable message: a destruction (to draw an explosion and
 remove the entity), a new wave (for the HUD), and the end of the game. Scores and lives are in every snapshot:
-a lost snapshot is replaced, and the client never shows an old score after a newer one.
+a lost snapshot is replaced, and the client never shows an old score after a newer one. **Amended by
+[ADR 0031](0031-destructions-sent-again.md)**: the destructions are unreliable, sent again with the snapshots of
+the next 30 ticks.
 
 ## Consequences
 

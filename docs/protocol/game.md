@@ -430,10 +430,12 @@ and the players. With four players, a part holds up to 69 entities.
 2. The players replace the scores and lives shown.
 3. Each entity of a known kind is created if its id is unknown, or updated otherwise. An entity missing from
    a snapshot is **not** destroyed: its part may have been lost.
-4. An entity is destroyed only by [`ENTITIES_DESTROYED`](#entities_destroyed-0x81). The client remembers the
-   ids it destroyed, with the tick of their destruction, and ignores their states in snapshots older than that
-   tick (a reliable message can arrive before an older unreliable one). It can forget an id once `L` reaches
-   that tick.
+4. An entity is destroyed by [`ENTITIES_DESTROYED`](#entities_destroyed-0x81), received once or again. The
+   client remembers the ids it destroyed, with the tick of their destruction, and ignores their states in
+   snapshots older than that tick (the destruction can arrive before an older snapshot). It can forget an id
+   once `L` reaches that tick.
+5. An entity that no snapshot had for **60** ticks is removed all the same, without an effect: every copy of its
+   destruction was lost.
 
 **Drawing.** The client SHOULD draw the world a little in the past, interpolating each entity between the two
 snapshots around that time: the movement stays smooth when a snapshot is lost. The velocity lets it
@@ -513,8 +515,8 @@ entity id or kind of 0, or a size that does not match the counts makes the messa
 | | |
 |---|---|
 | **Direction** | Game → Client |
-| **Reliability** | Reliable |
-| **Sent when** | After a tick in which entities were destroyed: one message for all the entities of that tick, or several with the same tick when they do not fit in one datagram (228 entities at most per message). |
+| **Reliability** | Unreliable, sent again with the snapshots |
+| **Sent when** | After a tick in which entities were destroyed: one message for all the entities of that tick, or several with the same tick when they do not fit in one datagram (228 entities at most per message). Sent again with each snapshot of the next **30** ticks: a lost one costs a snapshot interval, and holds back no message behind it, as a reliable one would. |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
@@ -536,6 +538,7 @@ Each entity:
 
 **Receiver behaviour:** the client removes the entities and remembers their ids
 ([section 9.3](#93-snapshots)). Unknown ids are remembered too: their first snapshot may still be on its way.
+The same destruction received again, with a later snapshot, changes nothing: no second explosion.
 Unknown causes are treated as `REMOVED`. A count of 0, an id of 0, or a size that does not match the count
 makes the message malformed.
 
