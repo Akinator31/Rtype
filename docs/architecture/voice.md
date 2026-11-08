@@ -3,13 +3,15 @@
 !!! warning "In progress"
 
     The voice chat is being built. This page describes what exists: the interface, the rule of the backends,
-    the codec and the messages of the game protocol. The devices come with the next steps.
+    the codec, the messages of the game protocol, the devices and the voice of the game, with an open
+    microphone turned on from the console. The talk modes, their settings and the voice in the HUD come with
+    the next steps.
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
 ([ADR 0032](../decisions/0032-voice-chat-in-the-game-session.md)).
 
-The voice library (`libs/voice`, namespace `rtype::voice`) holds what the client knows of the voice, in two
+The voice library (`libs/voice`, namespace `rtype::voice`) holds what the client knows of the voice, in three
 targets:
 
 | Target | Header | Content |
@@ -17,11 +19,19 @@ targets:
 | `rtype::voice` | `rtype/voice/VoiceChannel.hpp` | `VoiceChannel`, the voice of one game for the player of this client; `Participant`, `Join`, `Position`, `Slot` |
 | `rtype::voice` | `rtype/voice/Backend.hpp` | `Backend` (`None`, `Game`, `Discord`), `carriedByGame()` and `name()` |
 | `rtype::voice` | `rtype/voice/Format.hpp` | `SampleRate`, `FrameSamples`, `FramesPerSecond`, `MaxFrameBytes`: what the codec, the protocol and the devices agree on |
+| `rtype::voice` | `rtype/voice/Devices.hpp` | `Capture` and `Playback`: the microphone and the voices played, as interfaces |
+| `rtype::voice` | `rtype/voice/RingBuffer.hpp` | `RingBuffer`: what an audio thread and the game loop share, without a lock |
 | `rtype::voice_codec` | `rtype/voice/Codec.hpp` | `Encoder`, `Decoder`, `isValidFrame()`: the voice in Opus |
+| `rtype::voice_client` | `rtype/voice/JitterBuffer.hpp` | `JitterBuffer`: the frames of one player put back in order and in time |
+| `rtype::voice_client` | `rtype/voice/GameVoice.hpp` | `GameVoice`, the `VoiceChannel` of the voice of the game, and the `VoiceTransport` it goes through |
+| `rtype::voice_client` | `rtype/voice/Microphone.hpp` | `Microphone`: the `Capture` of the default microphone |
 
 `rtype::voice` is header only, without dependency: `libs/game` (the messages) and the server know the backends
 and the format without Opus.
 `rtype::voice_codec` is built on libopus, a private dependency: no Opus type in its header.
+`rtype::voice_client` links the codec, and raylib for its miniaudio, privately: no miniaudio in its headers.
+The voices are played by `audio::VoiceStreams` of `libs/audio` ([Audio](audio.md#the-voices)), the `Playback`
+of the client.
 
 ## The backends
 
@@ -93,7 +103,7 @@ Xiph, with its hash. Its license (BSD) is installed with the client, in `license
 | Mode | `OPUS_APPLICATION_VOIP`, `OPUS_SIGNAL_VOICE`, variable bit rate |
 | Bit rate | 24 kbit/s by default (`EncoderSettings::bitrate`): about 60 bytes per frame |
 | Losses | In-band FEC on, for 10 % of frames lost (`EncoderSettings::expectedLoss`; 0 turns it off) |
-| Silence | DTX (`EncoderSettings::discontinuous`): after 200 ms of silence, frames of 1 or 2 bytes, which need not be sent (`EncodedFrame::silence()`), and one frame every 400 ms |
+| Silence | DTX (`EncoderSettings::discontinuous`): after 200 ms of silence, frames of 1 or 2 bytes and an update of the noise every 400 ms (`EncodedFrame::discontinued`), none of them sent (`EncodedFrame::silence()`) |
 
 ```cpp
 rtype::voice::Encoder encoder;
@@ -156,14 +166,82 @@ Discord. A frame of D, on Discord, would go to A and B, never to another player 
   of 10.
 - **The client** (`RemoteSession`, [The client online](client-online.md#remotesession)) tells its backend,
   sends the frames it is given in the datagram of the next `INPUT`, and keeps the frames of the others and the
-  roster for the voice channel. It neither captures nor plays.
+  roster. Given the devices of the voice, it runs a [`GameVoice`](#the-voice-of-the-game) through them.
+
+## The devices
+
+The voice has two devices, interfaces of `rtype/voice/Devices.hpp`, called on the game loop only: a `Capture`
+(`open()`, `close()`, `read()` the samples captured) and a `Playback`, one stream per player (`open(slot)`,
+`close(slot)`, `write(slot, samples)`, `setVolume(slot, volume)`, `available()`). Both are 48 kHz mono, signed
+16 bits. The client gives the real ones; the tests give fakes (`tests/helpers/FakeVoiceDevices.hpp`).
+
+| Device | Real one | How |
+|---|---|---|
+| Microphone | `voice::Microphone` | A `ma_device` of capture through the miniaudio raylib compiles: its callback writes to a `RingBuffer` of one second, which `read()` empties |
+| Voices | `audio::VoiceStreams` | One `AudioStream` of raylib per slot, with a callback that reads a `RingBuffer` of 200 ms, silence when it is empty |
+
+- **One miniaudio.** raylib 6.0 compiles miniaudio 0.11.24 into itself, capture included. `Microphone.cpp`
+  includes its `external/miniaudio.h` without the implementation, with the defines raylib compiles it with
+  (`MA_NO_JACK`, `MA_NO_WAV`…, as `raudio.c`), so that `ma_device` has the same layout, and links the symbols
+  of raylib. Neither a second copy nor a new dependency.
+- **The microphone is open only while it is on** in a game: the system shows it in use only then.
+- **Without a device, no error**: no microphone, the player listens only; no audio output
+  (`Playback::available()` false), the player has no voice, `NONE`.
+- **The audio threads never wait**: each callback shares a `RingBuffer` with the game loop, one producer and
+  one consumer, without a lock; what does not fit is dropped ([Threads](threads.md#the-audio-threads)).
+
+## The voice of the game
+
+`GameVoice` is the `VoiceChannel` of a player on `Backend::Game`. It goes through a `VoiceTransport`, the
+session with the game (`send()` a frame, `receive()` those of the others), which `RemoteSession` is.
+
+```mermaid
+flowchart LR
+    M["Microphone<br/>(audio thread)"] -- RingBuffer --> E["poll(): 960 samples<br/>Encoder"]
+    E -- "VOICE" --> T["VoiceTransport<br/>(RemoteSession)"]
+    T -- "VOICE_FRAME" --> J["JitterBuffer<br/>of the slot"]
+    J --> D["Decoder<br/>of the slot"]
+    D -- RingBuffer --> P["VoiceStreams<br/>(audio thread)"]
+```
+
+- **Out.** While the player talks and is not muted, each 960 samples of the microphone are encoded and sent with
+  their sequence. Silence is not sent (DTX); when the player stops talking, the next frame goes with `last`.
+  At most 60 ms of microphone wait for the next `poll()`: after a stall of the game loop, the oldest are
+  dropped rather than sent late.
+- **In.** The frames of a player go into its `JitterBuffer`, unless it has no voice (`carriedByGame()` false)
+  or is muted by this player. The jitter buffer gives back 20 ms at a time, at their pace; each is decoded by
+  the `Decoder` of its player and written to its stream: the frame, or the copy the next one carries
+  (`decodeFec()`), or concealed. A player is `speaking` while its last frame played is less than 200 ms old.
+- **The players** are those of `PLAYER_JOINED`, on `NONE` until the roster; each has its stream, open from
+  `join()` to `removeParticipant()` or `leave()`, at its volume, 0 while muted by this player.
+
+**The jitter buffer** (`JitterBuffer`, pure: the time is given, nothing is decoded) puts the frames of a player
+back in order and plays them one every 20 ms:
+
+| | |
+|---|---|
+| A talk spurt | Starts with a frame that comes while nothing plays; played from a delay after it |
+| The delay | 40 ms at first; 20 ms more, up to 120 ms, at each frame that comes after its time; 20 ms less, down to 40 ms, after 5 s without one |
+| A frame missing | From the next one if it is there (`Kind::Fec`), made up otherwise (`Kind::Conceal`) |
+| The end | After 5 frames made up in a row, or after the frame `last`; the next frame starts another spurt |
+| Dropped | A frame received twice, one of a spurt over; behind by more than 120 ms (the game loop stalled), the frames whose time passed |
+| Far ahead | A frame 50 frames or more ahead of the one to play starts a new spurt |
+
+**In the client**, `RemoteSession` runs a `GameVoice` when it is given the `VoiceDevices` of `main.cpp` (the
+`Microphone`, the `VoiceStreams`, and whether the microphone is on): on `GAME` if the voices can be played, it
+joins at `ACCEPTED`, gives it the players and the roster, polls it at each update, and leaves at the end. The
+microphone is off at each start: the console command `voice [on|off]` turns it on, an open microphone. The
+talk modes (push-to-talk, voice activity) and their settings come next.
 
 ## Rules
 
-- **The voice is never stored nor logged**, by the game or the client, and a replay has no voice.
+- **The voice is never stored nor logged**, by the game or the client, and a replay has no voice. The logs
+  tell the microphone opened and closed, never what it heard.
 - **The server never decodes**: it checks the sizes and rates of the frames and forwards them.
 - **The tests open no device**: they use `testing::FakeVoiceChannel` (`tests/helpers/FakeVoiceChannel.hpp`),
-  which keeps what it is told; `speak(slot, bool)` makes a player talk.
+  which keeps what it is told, `speak(slot, bool)` making a player talk, and the fake devices of
+  `tests/helpers/FakeVoiceDevices.hpp`: a microphone that gives what the test says, a playback that keeps what
+  it plays, and a transport that links two `GameVoice` as the game would.
 
 ## Testing
 
@@ -175,6 +253,17 @@ frames of 1, 60 and 160 bytes, every malformed case, an unknown backend read as 
 dropped, random bytes. The game, in `tests/server_instance.cpp`, and two clients online, in
 `tests/client_online.cpp`, both tag `[voice]`: see [Server](server.md#tests) and
 [The client online](client-online.md#tests).
+
+`tests/voice_jitter.cpp` (tag `[voice]`): the jitter buffer against frames reordered, late, received twice,
+lost one by one or in a row, the end of a spurt, a game loop that stalls, sequences that go around; the delay
+that grows and shrinks; the ring buffer, and every item carried in order from one thread to another.
+
+`tests/voice_game.cpp` (tag `[voice]`), two `GameVoice` linked by fake transports, with real Opus: muted by
+default and the microphone closed; a frame every 20 ms once on; the voice of one out of the stream of its slot
+on the other, as loud, and speaking; silence not sent and the end of a spurt told; nothing heard from a player
+without voice, muted, or gone; the backlog of a stall dropped; no microphone, and leaving. Two real clients
+with a real game, in `tests/client_online.cpp`: the microphone of one heard from the stream of its slot on the
+other.
 
 `tests/voice_codec.cpp` (tag `[voice]`), on a voice-like sound (a pitch gliding from 140 to 220 Hz, with its
 harmonics): its level within 3 dB and its pitch kept after the codec; about 60 bytes per frame; never more than

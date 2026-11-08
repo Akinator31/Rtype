@@ -14,17 +14,31 @@
 #include "rtype/network/Session.hpp"
 #include "rtype/network/UdpSocket.hpp"
 #include "rtype/voice/Backend.hpp"
+#include "rtype/voice/Devices.hpp"
+#include "rtype/voice/GameVoice.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <deque>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace rtype::client
 {
+
+/// What the voice of a game online needs (docs/architecture/voice.md): the devices, which outlive the
+/// sessions, and whether the player talks.
+struct VoiceDevices {
+    voice::Capture &capture;
+    voice::Playback &playback;
+    /// The microphone is on: the player talks, with an open microphone (the `voice` command of the
+    /// console). Off by default: nobody hears the player unasked. The talk modes and their settings come
+    /// later.
+    bool microphoneOn = false;
+};
 
 /// A game online: the session of the player with its game instance, over encrypted UDP
 /// (docs/protocol/game.md), with what GAME_JOINED gave (ADR 0015).
@@ -46,12 +60,14 @@ namespace rtype::client
 ///   in its time (ShotPrediction), the rest where the interpolation draws it.
 /// - **The voice** (section 9.4): it tells the game what carries the voice of the player (VOICE_STATE, at
 ///   the connection and at every change), sends its frames (VOICE), and keeps those of the others
-///   (VOICE_FRAME) for takeVoiceFrames(), with what carries the voice of each player (VOICE_ROSTER). It
-///   neither captures nor plays: the voice channel does.
+///   (VOICE_FRAME) for takeVoiceFrames(), with what carries the voice of each player (VOICE_ROSTER). Given
+///   VoiceDevices, it runs the voice of the game itself (voice::GameVoice): the player is on Backend::Game
+///   if the voices can be played, the frames go through the GameVoice instead of takeVoiceFrames(), and it
+///   talks while VoiceDevices::microphoneOn.
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why.
 ///
 /// The loop must be polled, by the game loop of the client.
-class RemoteSession final : public GameSession
+class RemoteSession final : public GameSession, private voice::VoiceTransport
 {
 public:
     /// Inputs in each INPUT: the last ticks, so that a lost datagram loses none (docs/protocol/game.md, 9.2).
@@ -101,6 +117,10 @@ private:
     voice::Backend _voiceBackend = voice::Backend::None;
     game::VoiceRosterMessage _voiceRoster;
     std::deque<game::VoiceFrameMessage> _voiceFrames;
+    /// The voice of the game, with VoiceDevices. Last: destroyed first, while the session it sends through is
+    /// still there.
+    VoiceDevices *_devices = nullptr;
+    std::unique_ptr<voice::GameVoice> _voice;
 
     void received(std::uint8_t type, std::span<const std::byte> payload);
     /// The game accepted the player: its slot is known, the shots of its weapon can be predicted.
@@ -110,15 +130,25 @@ private:
     void sendInput();
     void sendVoiceState();
     [[nodiscard]] std::uint32_t estimateTick() const;
+    /// Runs the voice of the game, once per update.
+    void updateVoice();
+
+    // The transport of the GameVoice
+    bool send(const Outgoing &frame) override;
+    [[nodiscard]] std::vector<Incoming> receive() override;
 
 public:
     /// Starts connecting at once.
     /// @param game The address of the instance: the IP of the master, the UDP port of GAME_JOINED.
     /// @param config The definitions of the client (loadGameConfig()): the weapon of the player, whose shots
     ///   are predicted. Without it, they are drawn when the game sends them.
+    /// @param voiceDevices The devices of the voice, which must outlive the session. Without them, the
+    /// session runs
+    ///   no voice.
     /// @throws std::system_error if no UDP socket can be opened.
     RemoteSession(network::EventLoop &loop, const network::Address &game,
-                  const lobby::GameJoinedMessage &joined, const game::GameConfig &config = {});
+                  const lobby::GameJoinedMessage &joined, const game::GameConfig &config = {},
+                  VoiceDevices *voiceDevices = nullptr);
     /// Says goodbye to the game (DISCONNECT) if still in it.
     ~RemoteSession() override;
 
@@ -144,6 +174,8 @@ public:
     [[nodiscard]] std::vector<game::VoiceFrameMessage> takeVoiceFrames();
     /// What carries the voice of each player, from the latest VOICE_ROSTER.
     [[nodiscard]] const game::VoiceRosterMessage &voiceRoster() const { return _voiceRoster; }
+    /// The voice of the game, given VoiceDevices.
+    [[nodiscard]] voice::GameVoice *voice() const { return _voice.get(); }
 
     /// The game accepted the player.
     [[nodiscard]] bool accepted() const { return _accepted.has_value(); }

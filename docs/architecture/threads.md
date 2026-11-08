@@ -35,7 +35,8 @@ Why nothing else gets a thread:
   Splitting it from the rendering would mean copying every frame for the renderer, a mailbox for the input,
   cross-thread text measurements and one more frame of latency, for almost no gain. The `SceneRenderer`
   keeps reading the ECS directly.
-- **Audio**: raylib (miniaudio) already mixes on its own internal thread.
+- **Audio**: raylib (miniaudio) already mixes on its own internal thread, and captures the microphone of the
+  voice on another ([The audio threads](#the-audio-threads)).
 - **Network**: the sockets never block, `EventLoop::poll()` handles what is ready and returns at once, and the
   sessions are written to run on the game's thread without locks ([Client online](client-online.md)). A
   network thread would only copy each message into a queue that Main reads at the start of the frame, which
@@ -130,6 +131,31 @@ sequenceDiagram
     M->>M: finishPendingLoads() (render and audio)
     M->>M: SceneRenderer draws World then Interface, endFrame (vsync)
 ```
+
+## The audio threads
+
+miniaudio, compiled into raylib, runs threads of its own, which call back into the client. The voice of the
+games online ([Voice](voice.md#the-devices)) uses two of them:
+
+| Thread | Calls | Shares with Main |
+|---|---|---|
+| **Output** of raylib | the callback of each `AudioStream` of `audio::VoiceStreams`, while it mixes | a `RingBuffer` of 200 ms per player: Main writes the voice decoded, the callback reads it, silence when it is empty |
+| **Capture** of `voice::Microphone`, while it is open | its data callback, every 10 ms | a `RingBuffer` of one second: the callback writes the samples, Main reads them by frames of 20 ms |
+
+- **Without a lock.** Each `RingBuffer` (`libs/voice`) has one producer and one consumer, and two counters
+  that only grow, atomic: neither thread ever waits on the other. An audio callback that waited on Main would
+  be heard as a click; Main that waited on a callback would drop a frame.
+- **What does not fit is dropped**: the producer writes what fits, never waits for room. A stream full is a
+  stream 200 ms behind; a microphone not read for a second loses its oldest samples.
+- **Nothing else crosses.** The callbacks touch their ring buffer only: the decoding, the encoding and the
+  jitter buffer run on Main, in `GameVoice::poll()`. They find their buffer without a lock: the user pointer of
+  the device for the capture; for the streams, whose callbacks of raylib take no pointer, one function per slot
+  and a variable of `VoiceStreams.cpp`, set before the first stream opens and cleared after the last closes.
+- **They stop before their buffer goes.** `UnloadAudioStream()` takes the lock of the output thread, and
+  `ma_device_uninit()` waits for the capture callback: no callback runs after either, so the ring buffers can
+  be freed. In `main.cpp`, the game played stops before the devices of the voice (`StopSessions`).
+
+Its tests carry 200,000 items from one thread to another, every one in order (`tests/voice_jitter.cpp`).
 
 ## Scene loading (dynamic)
 

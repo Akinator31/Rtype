@@ -2,6 +2,7 @@
 
 #include "Console/Console.hpp"
 #include "Game/GameScenes.hpp"
+#include "Game/RemoteSession.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/render/Window.hpp"
@@ -19,9 +20,11 @@ struct DebugViews {
 
 /// Registers every console command of the client. Each command has its own file in Commands/: to add one,
 /// write its register function there and call it from here.
-/// @param engine, window, games, config, views They must outlive the console.
+/// @param engine, window, games, config, views, voice They must outlive the console.
 /// @param views The views switched by the "hitboxes" and "fps" commands.
+/// @param voice The microphone switched by the "voice" command.
 void registerClientCommands(Console &console, engine::Engine &engine, render::Window &window,
-                            GameScenes &games, const game::GameConfig &config, DebugViews &views);
+                            GameScenes &games, const game::GameConfig &config, DebugViews &views,
+                            VoiceDevices &voice);
 
 } // namespace rtype::client

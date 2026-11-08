@@ -78,6 +78,10 @@ EncodedFrame Encoder::encode(ConstPcm samples)
         return frame;
     }
     frame.size = static_cast<std::size_t>(size);
+    opus_int32 inDtx = 0;
+    if (opus_encoder_ctl(_state->encoder, OPUS_GET_IN_DTX(&inDtx)) == OPUS_OK) {
+        frame.discontinued = inDtx != 0;
+    }
     return frame;
 }
 

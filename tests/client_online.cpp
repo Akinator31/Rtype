@@ -8,6 +8,7 @@
 #include "Accounts/PasswordHasher.hpp"
 #include "FakeDiscord.hpp"
 #include "FakeMailer.hpp"
+#include "FakeVoiceDevices.hpp"
 #include "Game/RemoteSession.hpp"
 #include "GameServers.hpp"
 #include "LobbyClient.hpp"
@@ -29,8 +30,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
 
+#include <array>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <numbers>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -41,6 +46,7 @@
 using namespace std::chrono_literals;
 using rtype::client::LobbyClient;
 using rtype::client::RemoteSession;
+using rtype::client::VoiceDevices;
 using rtype::network::Address;
 using rtype::network::EventLoop;
 using rtype::network::ServerIdentity;
@@ -514,6 +520,77 @@ TEST_CASE("Two clients online hear each other through the game once both have a 
     CHECK(heard[0].frame == hello.frame);
     // She never hears herself
     CHECK(aliceSession.takeVoiceFrames().empty());
+}
+
+TEST_CASE("The microphone of a client online is heard from the stream of its slot on the other",
+          "[online][voice]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    Events bobEvents;
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
+                    bobEvents.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed() && bob.welcomed(); }));
+    const lobby::GameJoinedMessage aliceGame = create(master.loop, alice, "Voices");
+    const auto bobJoined = answer<LobbyClient::JoinResult>(
+        master.loop, [&](auto done) { bob.joinGame(aliceGame.gameId, std::move(done)); });
+    REQUIRE(bobJoined);
+
+    testing::FakeMicrophone aliceMicrophone;
+    testing::FakePlayback alicePlayback;
+    VoiceDevices aliceVoice{.capture = aliceMicrophone, .playback = alicePlayback};
+    testing::FakeMicrophone bobMicrophone;
+    testing::FakePlayback bobPlayback;
+    VoiceDevices bobVoice{.capture = bobMicrophone, .playback = bobPlayback};
+    RemoteSession aliceSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), aliceGame, {},
+                               &aliceVoice);
+    RemoteSession bobSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort),
+                             std::get<lobby::GameJoinedMessage>(*bobJoined), {}, &bobVoice);
+    const std::vector<RemoteSession *> both = {&aliceSession, &bobSession};
+    // Both on the voice of the game once accepted, each knowing the other
+    const game::VoiceRosterMessage roster{{voice::Backend::Game, voice::Backend::Game}};
+    REQUIRE(play(master.loop, both, [&] {
+        return aliceSession.voiceRoster() == roster && bobSession.voiceRoster() == roster &&
+               aliceSession.voice()->participants().size() == 1 &&
+               bobSession.voice()->participants().size() == 1;
+    }));
+    CHECK(bobPlayback.streams[0]);
+    // The microphone is off by default: closed
+    CHECK_FALSE(aliceMicrophone.isOpen);
+
+    // Alice turns it on and talks: a frame of her voice every 20 ms
+    aliceVoice.microphoneOn = true;
+    double phase = 0.0;
+    auto nextFrame = std::chrono::steady_clock::now();
+    REQUIRE(play(master.loop, both, [&] {
+        if (std::chrono::steady_clock::now() >= nextFrame) {
+            nextFrame += std::chrono::milliseconds(20);
+            std::array<std::int16_t, voice::FrameSamples> frame{};
+            for (std::int16_t &sample : frame) {
+                phase += 2.0 * std::numbers::pi * 180.0 / voice::SampleRate;
+                sample = static_cast<std::int16_t>(std::sin(phase) * 6000.0 + std::sin(3.0 * phase) * 2000.0);
+            }
+            aliceMicrophone.say(frame);
+        }
+        return bobPlayback.played[0].size() >= 10 * voice::FrameSamples;
+    }));
+    CHECK(aliceMicrophone.isOpen);
+    CHECK(bobSession.voice()->participants().at(0).speaking);
+    // Something heard, not silence
+    double sum = 0.0;
+    for (const std::int16_t sample : bobPlayback.played[0]) {
+        sum += static_cast<double>(sample) * sample;
+    }
+    CHECK(std::sqrt(sum / static_cast<double>(bobPlayback.played[0].size())) > 500.0);
+    // Bob says nothing, and Alice never hears herself
+    CHECK(alicePlayback.played[0].empty());
+    CHECK(alicePlayback.played[1].empty());
+
+    // She turns it off: closed
+    aliceVoice.microphoneOn = false;
+    REQUIRE(play(master.loop, both, [&] { return !aliceMicrophone.isOpen; }));
 }
 
 TEST_CASE("A client is told when its game crashes", "[online]")

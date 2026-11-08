@@ -146,8 +146,8 @@ TEST_CASE("Silence encodes to frames that need not be sent", "[voice]")
 {
     Encoder encoder;
     const Frame silence{};
-    // Opus waits 200 ms of silence, 10 frames, before it stops sending; then it sends one frame every 400 ms,
-    // to keep the decoders of the others in step
+    // Opus waits 200 ms of silence, 10 frames, before it stops sending; then it gives one frame every 400 ms,
+    // an update of its noise, which is not sent either
     for (int i = 0; i < 10; ++i) {
         (void)encoder.encode(silence);
     }
@@ -155,7 +155,7 @@ TEST_CASE("Silence encodes to frames that need not be sent", "[voice]")
     for (int i = 0; i < 40; ++i) {
         sent += encoder.encode(silence).silence() ? 0 : 1;
     }
-    CHECK(sent <= 2);
+    CHECK(sent == 0);
 
     Encoder continuous({.discontinuous = false});
     CHECK_FALSE(continuous.encode(silence).silence());
