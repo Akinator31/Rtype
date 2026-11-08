@@ -254,8 +254,9 @@ void InterfaceSystem::editField(ecs::entity_t widget, float elapsed)
 
 void InterfaceSystem::click(ecs::entity_t widget)
 {
-    // A click on a text field only gives it the focus: it does not submit it
-    if (!_fields.has(widget)) {
+    // A click on a text field only gives it the focus: it does not submit it. A click on a slider drags its
+    // handle (updateSliders()): only Confirm runs its action
+    if (!_fields.has(widget) && !_sliders.has(widget)) {
         activate(widget);
     }
 }
