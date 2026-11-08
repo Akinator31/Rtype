@@ -265,13 +265,13 @@ CMake warns and leaves `r-type_client` out, the server and the tests are built.
   queues a `VOICE`, which leaves with the next datagram, the one of the next `INPUT`; it refuses before the
   acceptance, after the end and on `NONE`. The frames of the others wait for `takeVoiceFrames()`, 150 at most
   (a second of three players), the oldest dropped beyond.
-- **The voice of the game**: given `VoiceDevices` (the microphone, the voices played, and whether the
-  microphone is on), the session runs a `voice::GameVoice` ([Voice](voice.md#the-voice-of-the-game)), its
+- **The voice of the game**: given `VoiceDevices` (the microphone, the voices played, the preferences of the
+  Voice page and the state of the keys), the session runs a `voice::GameVoice` ([Voice](voice.md#the-voice-of-the-game)), its
   `VoiceTransport` being the session itself. It is on `GAME` if the voices can be played, `NONE` otherwise; the
   `GameVoice` joins at `ACCEPTED`, gets the players of `PLAYER_JOINED` and `PLAYER_LEFT` and the roster, is
-  polled at each update before the inputs go, and leaves at the end. `main.cpp` gives the devices through
-  `OnlineScenes`; the console command `voice [on|off]` turns the microphone on (an open microphone), off at each
-  start.
+  polled at each update before the inputs go, after `applyVoice()` gave it the mode, the keys and the volumes
+  ([The talk modes](voice.md#the-talk-modes)), and leaves at the end. `main.cpp` gives the devices through
+  `OnlineScenes`.
 
 ## Input clock
 

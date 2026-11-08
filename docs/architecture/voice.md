@@ -3,9 +3,9 @@
 !!! warning "In progress"
 
     The voice chat is being built. This page describes what exists: the interface, the rule of the backends,
-    the codec, the messages of the game protocol, the devices and the voice of the game, with an open
-    microphone turned on from the console. The talk modes, their settings and the voice in the HUD come with
-    the next steps.
+    the codec, the messages of the game protocol, the devices, the voice of the game, the talk modes, the keys
+    and the Voice page. The voice in the HUD, the sound processing and the spatial voice come with the next
+    steps.
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
@@ -24,7 +24,8 @@ targets:
 | `rtype::voice_codec` | `rtype/voice/Codec.hpp` | `Encoder`, `Decoder`, `isValidFrame()`: the voice in Opus |
 | `rtype::voice_client` | `rtype/voice/JitterBuffer.hpp` | `JitterBuffer`: the frames of one player put back in order and in time |
 | `rtype::voice_client` | `rtype/voice/GameVoice.hpp` | `GameVoice`, the `VoiceChannel` of the voice of the game, and the `VoiceTransport` it goes through |
-| `rtype::voice_client` | `rtype/voice/Microphone.hpp` | `Microphone`: the `Capture` of the default microphone |
+| `rtype::voice_client` | `rtype/voice/Talk.hpp` | `TalkMode`, `PushToTalk`, `VoiceActivity`, `LevelMeter`, `levelOf()`: how the player talks, pure |
+| `rtype::voice_client` | `rtype/voice/Microphone.hpp` | `Microphone`: the `Capture` of a microphone of the system, the default one or one chosen |
 
 `rtype::voice` is header only, without dependency: `libs/game` (the messages) and the server know the backends
 and the format without Opus.
@@ -184,7 +185,15 @@ The voice has two devices, interfaces of `rtype/voice/Devices.hpp`, called on th
   includes its `external/miniaudio.h` without the implementation, with the defines raylib compiles it with
   (`MA_NO_JACK`, `MA_NO_WAV`…, as `raudio.c`), so that `ma_device` has the same layout, and links the symbols
   of raylib. Neither a second copy nor a new dependency.
-- **The microphone is open only while it is on** in a game: the system shows it in use only then.
+- **The microphone is open only while it can be heard**: in a game, in a mode other than off, neither muted
+  nor deafened; or on the Voice page, to try it. The system shows it in use only then.
+- **The microphone is chosen** on the Voice page, by its name (`Microphone::devices()`, from
+  `ma_context_get_devices()`), the default of the system otherwise. A microphone unplugged while open is
+  followed: its device stops, its notification callback says so, and the next `read()` opens the one chosen if
+  it is back, the default of the system otherwise. A name not found at `open()` is the default too.
+- **The output is the one of raylib**: the voices are mixed with the music and the effects, on the device
+  raylib opened, the default of the system (`InitAudioDevice()` takes no device). Choosing another output for
+  the voices would mean a second playback device of ours, beside raylib's.
 - **Without a device, no error**: no microphone, the player listens only; no audio output
   (`Playback::available()` false), the player has no voice, `NONE`.
 - **The audio threads never wait**: each callback shares a `RingBuffer` with the game loop, one producer and
@@ -204,16 +213,22 @@ flowchart LR
     D -- RingBuffer --> P["VoiceStreams<br/>(audio thread)"]
 ```
 
-- **Out.** While the player talks and is not muted, each 960 samples of the microphone are encoded and sent with
-  their sequence. Silence is not sent (DTX); when the player stops talking, the next frame goes with `last`.
+- **Out.** While the player talks and is not muted, each 960 samples of the microphone are given their volume
+  (`setInputVolume()`), encoded and sent with their sequence. With the voice activity on
+  (`setVoiceActivity(threshold)`), only the frames of the voice go ([The talk modes](#the-talk-modes)).
+  Silence is not sent (DTX); when the player stops talking, the next frame goes with `last`.
   At most 60 ms of microphone wait for the next `poll()`: after a stall of the game loop, the oldest are
   dropped rather than sent late.
-- **In.** The frames of a player go into its `JitterBuffer`, unless it has no voice (`carriedByGame()` false)
-  or is muted by this player. The jitter buffer gives back 20 ms at a time, at their pace; each is decoded by
+- **In.** The frames of a player go into its `JitterBuffer`, unless it has no voice (`carriedByGame()` false),
+  is muted by this player, or this player is deafened (`setDeafened()`). The jitter buffer gives back 20 ms at a time, at their pace; each is decoded by
   the `Decoder` of its player and written to its stream: the frame, or the copy the next one carries
   (`decodeFec()`), or concealed. A player is `speaking` while its last frame played is less than 200 ms old.
 - **The players** are those of `PLAYER_JOINED`, on `NONE` until the roster; each has its stream, open from
-  `join()` to `removeParticipant()` or `leave()`, at its volume, 0 while muted by this player.
+  `join()` to `removeParticipant()` or `leave()`, at its volume times the volume of the voices
+  (`setOutputVolume()`), 0 while muted by this player or deafened.
+- **The level** of the last frame of the microphone, after its volume, is `inputLevel()`, in dBFS. A
+  microphone that gives only silence (under -85 dBFS) for 10 s while the player talks is
+  `microphoneSilent()`: unplugged, or muted by a switch of its own. A frame with a sound clears it.
 
 **The jitter buffer** (`JitterBuffer`, pure: the time is given, nothing is decoded) puts the frames of a player
 back in order and plays them one every 20 ms:
@@ -227,11 +242,74 @@ back in order and plays them one every 20 ms:
 | Dropped | A frame received twice, one of a spurt over; behind by more than 120 ms (the game loop stalled), the frames whose time passed |
 | Far ahead | A frame 50 frames or more ahead of the one to play starts a new spurt |
 
-**In the client**, `RemoteSession` runs a `GameVoice` when it is given the `VoiceDevices` of `main.cpp` (the
-`Microphone`, the `VoiceStreams`, and whether the microphone is on): on `GAME` if the voices can be played, it
-joins at `ACCEPTED`, gives it the players and the roster, polls it at each update, and leaves at the end. The
-microphone is off at each start: the console command `voice [on|off]` turns it on, an open microphone. The
-talk modes (push-to-talk, voice activity) and their settings come next.
+**In the client**, `RemoteSession` runs a `GameVoice` when it is given the `VoiceDevices` of `main.cpp`
+(`apps/client/src/Voice/VoiceDevices.hpp`: the `Microphone`, the `VoiceStreams`, the preferences of the Voice
+page, and the state of the keys): on `GAME` if the voices can be played, it joins at `ACCEPTED`, gives it the
+players and the roster, polls it at each update, and leaves at the end. Before each poll, `applyVoice()` gives
+it the mode, the keys and the volumes ([The talk modes](#the-talk-modes)); after it, the session tells
+`VoiceDevices::microphoneSilent`.
+
+## The talk modes
+
+The player chooses on the Voice page when it is heard (`TalkMode`, `rtype/voice/Talk.hpp`).
+`applyVoice()` (`Game/RemoteSession.hpp`) turns it into calls of the `GameVoice` at each update:
+
+| Mode | The microphone | Heard |
+|---|---|---|
+| **Push-to-talk**, the default | Open | While the key is held, and 200 ms after it is released (`PushToTalk::ReleaseDelay`), so that the last word is not cut |
+| **Voice activity** | Open | The frames whose level is over the threshold, and the 15 after the last one, 300 ms (`VoiceActivity::Hold`), so that the quiet ends of words and the pauses are heard |
+| **Off** | Closed | Never |
+
+- **Push-to-talk by default**: the noise of the room, the keyboard and the television stay out until the
+  player asks. The microphone is open all the same, so that the first word is not lost while it opens.
+- **The voice activity is decided frame by frame**, in `GameVoice`, on the level of the frame about to be
+  encoded (`levelOf()`, its mean power in dBFS): the first syllable is not cut by the latency of a frame of
+  the game loop. The threshold goes from -70 dBFS (the breath of a quiet room) to -10 (a shout), -40 by
+  default.
+- **Muted or deafened** by its keys, the player is not heard in any mode, and its microphone is closed.
+  Deafened, it hears no voice either. Both last until the client closes, and are not kept in the settings.
+
+### The keys
+
+Three controls of the virtual gamepad the game does not read carry the voice
+(`apps/client/src/Settings/ControlSettings.hpp`), rebound on the Voice page as the actions of the game are on
+the Controls page ([Input](input.md#choosing-the-keys)); a key does one thing among all of them:
+
+| Action | Control | Keyboard | Gamepad |
+|---|---|---|---|
+| Push to talk, held | `PushToTalkControl`, `LeftTrigger` | ++v++ | LT |
+| Mute and unmute | `MuteControl`, `FaceUp` | ++m++ | Y |
+| Deafen and hear again | `DeafenControl`, `Select` | ++n++ | View |
+
+`VoiceKeysSystem` (`apps/client/src/Voice/`) reads them each frame while a game online receives the input (no
+menu over it): the push-to-talk key held goes to `VoiceDevices::pushToTalk`, released as soon as a menu covers
+the game; the two others switch `muted` and `deafened`, each with a toast. Unmuting a deafened player lets it
+hear again too; in the mode off, the mute key only says that the voice is off. A toast warns, once per
+silence, when the microphone gives nothing while the player talks. Offline there is no voice, and the keys do
+nothing.
+
+### The Voice page
+
+The Voice page (`apps/client/src/MainMenu/VoiceMenu.cpp`), opened from the *Voice* group of the Settings page,
+is built as the other pages of settings ([Pages of settings](scenes-and-interface.md#pages-of-settings)):
+
+| Column | Group | Row | What it changes |
+|---|---|---|---|
+| Left | Talk | Mode: push-to-talk, voice activity, off | `VoicePreferences::mode` |
+| Left | Talk | Activation threshold, a slider, then the level of the microphone under it on the same scale | `threshold` |
+| Left | Microphone | Microphone: the default of the system, then those it has | `inputDevice`, `Microphone::setDevice()` |
+| Left | Microphone | Microphone volume, a slider | `inputVolume` |
+| Right | Listen | Voice volume, a slider, apart from the music and the effects | `voiceVolume` |
+| Right | Keys | Push to talk, Mute, Deafen: a key each, chosen as on the Controls page | `assignKey()` |
+
+- **The microphone is tried while the page is open**: it opens with the page and closes with it, and the
+  level meter (`LevelMeter`: it rises at once and falls at 60 dB per second) shows its level, after its
+  volume, under the threshold on the same scale (`levelFraction()`): the player sees where its voice goes
+  over it. The page is reached from the main menu only, never during a game, so that the meter and the game
+  never read the same microphone.
+- **When the page closes**, `keepVoiceSettings()` and `keepControlSettings()` keep the choices, and the file is
+  written ([Settings](settings.md#the-file)). At start, `applySavedSettings()` reads them back
+  (`readVoiceSettings()`) and gives the microphone chosen.
 
 ## Rules
 
@@ -261,9 +339,18 @@ that grows and shrinks; the ring buffer, and every item carried in order from on
 `tests/voice_game.cpp` (tag `[voice]`), two `GameVoice` linked by fake transports, with real Opus: muted by
 default and the microphone closed; a frame every 20 ms once on; the voice of one out of the stream of its slot
 on the other, as loud, and speaking; silence not sent and the end of a spurt told; nothing heard from a player
-without voice, muted, or gone; the backlog of a stall dropped; no microphone, and leaving. Two real clients
-with a real game, in `tests/client_online.cpp`: the microphone of one heard from the stream of its slot on the
-other.
+without voice, muted, or gone; the backlog of a stall dropped; no microphone, and leaving; with the voice
+activity, the frames of the voice and the hold only; the volume of the microphone before the level; deafened,
+nothing heard, and the volume of the voices over the one of each player; a microphone silent for 10 s while
+talking, and not while not. Two real clients with a real game, in `tests/client_online.cpp`: in push-to-talk,
+the microphone of one heard from the stream of its slot on the other while the key is held, closed once
+muted.
+
+`tests/voice_talk.cpp` (tag `[voice]`): the names of the modes; the level of silence and of sines; the
+push-to-talk key and its release delay; the voice activity and its hold; the level meter that falls; the scale
+of the meter and the threshold. `tests/client_voice.cpp` (tags `[settings][voice]`): the preferences of a first
+run, kept and read back, wrong or out of range; each mode, muted and deafened, through `applyVoice()`. The keys
+of the voice, in `tests/control_settings.cpp`: their defaults, and a key shared with an action of the game.
 
 `tests/voice_codec.cpp` (tag `[voice]`), on a voice-like sound (a pitch gliding from 140 to 220 Hz, with its
 harmonics): its level within 3 dB and its pitch kept after the codec; about 60 bytes per frame; never more than

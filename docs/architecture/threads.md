@@ -141,13 +141,14 @@ games online ([Voice](voice.md#the-devices)) uses two of them:
 |---|---|---|
 | **Output** of raylib | the callback of each `AudioStream` of `audio::VoiceStreams`, while it mixes | a `RingBuffer` of 200 ms per player: Main writes the voice decoded, the callback reads it, silence when it is empty |
 | **Capture** of `voice::Microphone`, while it is open | its data callback, every 10 ms | a `RingBuffer` of one second: the callback writes the samples, Main reads them by frames of 20 ms |
+| A thread of miniaudio, while the microphone is open | its notification callback, when the device stops | an `atomic<bool>`: the device was lost (unplugged), and Main opens a microphone again at its next `read()`. A stop asked by Main sets another flag first, so that it is not taken for a loss |
 
 - **Without a lock.** Each `RingBuffer` (`libs/voice`) has one producer and one consumer, and two counters
   that only grow, atomic: neither thread ever waits on the other. An audio callback that waited on Main would
   be heard as a click; Main that waited on a callback would drop a frame.
 - **What does not fit is dropped**: the producer writes what fits, never waits for room. A stream full is a
   stream 200 ms behind; a microphone not read for a second loses its oldest samples.
-- **Nothing else crosses.** The callbacks touch their ring buffer only: the decoding, the encoding and the
+- **Nothing else crosses.** The callbacks touch their ring buffer only, and the notification its flag: the decoding, the encoding and the
   jitter buffer run on Main, in `GameVoice::poll()`. They find their buffer without a lock: the user pointer of
   the device for the capture; for the streams, whose callbacks of raylib take no pointer, one function per slot
   and a variable of `VoiceStreams.cpp`, set before the first stream opens and cleared after the last closes.
