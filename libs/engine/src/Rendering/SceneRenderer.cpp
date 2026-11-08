@@ -246,6 +246,37 @@ float smooth(float amount)
     return clamped * clamped * (3.0f - (2.0f * clamped));
 }
 
+// A chevron `width` wide from `left`, centred on `middle`: pointing right for a direction of +1 (›), left for
+// -1 (‹)
+void drawChevron(render::Renderer &renderer, float left, float middle, float width, float height,
+                 float thickness, int direction, render::Color color)
+{
+    const float tip = direction > 0 ? left + width : left;
+    const float back = direction > 0 ? left : left + width;
+    const render::Vector2 point{tip, middle};
+    renderer.drawLine({back, middle - (height / 2.0f)}, point, thickness, color);
+    renderer.drawLine(point, {back, middle + (height / 2.0f)}, thickness, color);
+    // A dot on the tip joins the two strokes
+    renderer.drawCircle(point, thickness / 2.0f, color);
+}
+
+// The outline of a rectangle in dashes `dash` long, with gaps as long
+void drawDashedOutline(render::Renderer &renderer, render::Rectangle area, float thickness, float dash,
+                       render::Color color)
+{
+    const float step = 2.0f * std::max(dash, 1.0f);
+    for (float x = area.x; x < area.x + area.width; x += step) {
+        const float length = std::min(dash, area.x + area.width - x);
+        renderer.drawRectangle({x, area.y, length, thickness}, color);
+        renderer.drawRectangle({x, area.y + area.height - thickness, length, thickness}, color);
+    }
+    for (float y = area.y + thickness; y < area.y + area.height - thickness; y += step) {
+        const float length = std::min(dash, area.y + area.height - thickness - y);
+        renderer.drawRectangle({area.x, y, thickness, length}, color);
+        renderer.drawRectangle({area.x + area.width - thickness, y, thickness, length}, color);
+    }
+}
+
 // The caption on the left of a widget, and its value on the right, on the line starting at `top`
 void drawCaption(render::Renderer &renderer, render::FontId font, const std::string &caption,
                  const std::string &value, float left, float right, float top, float size, float spacing,
@@ -861,71 +892,222 @@ void SceneRenderer::drawTitle(render::Renderer &renderer, const Text &text, rend
     renderer.drawGradientText(text.font, text.text, topLeft, size, chrome, spacing);
 }
 
+void SceneRenderer::drawRowFrame(render::Renderer &renderer, render::Rectangle area, float light,
+                                 float opacity) const
+{
+    const SettingStyle &style = _style.setting;
+    const float bottom = area.y + area.height;
+    renderer.drawRectangle({area.x, bottom - style.ruleThickness, area.width, style.ruleThickness},
+                           faded(style.rule, opacity));
+    const float lit = smooth(light);
+    if (lit <= 0.0f) {
+        return;
+    }
+    const render::Color veil = faded(style.veil, opacity * lit);
+    renderer.drawRoundedRectangle({area.x, area.y, area.width * style.veilLength, area.height}, 0.0f, veil,
+                                  clear(veil));
+    const render::Rectangle mark{area.x, area.y + ((area.height - style.markHeight) / 2.0f), style.markWidth,
+                                 style.markHeight};
+    drawBlurred(renderer, mark, style.markWidth / 2.0f, style.markGlowBlur,
+                faded(style.markGlow, opacity * lit));
+    renderer.drawRectangle(mark, faded(style.mark, opacity * lit));
+    // The line of light traces itself from the left edge while the row lights up
+    drawLightLine(renderer, area.x, area.x + (area.width * lit), bottom - (style.ruleThickness / 2.0f),
+                  style.ruleThickness, faded(style.light, opacity), faded(style.lightGlow, opacity),
+                  style.lightGlowBlur);
+}
+
+void SceneRenderer::drawSettingRow(render::Renderer &renderer, const SettingRow &row, const Text &text,
+                                   const Panel *panel, render::Vector2 centre, float opacity) const
+{
+    const SettingStyle &style = _style.setting;
+    const render::Rectangle area{centre.x - (row.width / 2.0f), centre.y - (style.height / 2.0f), row.width,
+                                 style.height};
+    const float light = panel != nullptr ? std::clamp(panel->highlight, 0.0f, 1.0f) : 0.0f;
+    const float lit = smooth(light);
+    drawRowFrame(renderer, area, light, opacity);
+
+    const render::Vector2 caption = renderer.measureText(text.font, text.text, text.size, text.spacing);
+    renderer.drawText(text.font, text.text, {area.x + style.inset, centre.y - (caption.y / 2.0f)}, text.size,
+                      faded(mix(style.caption, style.litCaption, lit), opacity), text.spacing);
+
+    const float right = area.x + area.width - style.valueInset;
+    const render::Color chevron = faded(style.litValue, opacity);
+    if (!row.change) {
+        // A row that opens something: a chevron alone, brighter while lit
+        drawChevron(renderer, right - style.chevronWidth, centre.y, style.chevronWidth, style.chevronHeight,
+                    style.chevronThickness, 1, brightened(chevron, 0.55f + (0.45f * lit)));
+        return;
+    }
+    const std::string value = row.value ? row.value() : std::string();
+    const render::Vector2 measured =
+        renderer.measureText(style.valueFont, value, style.valueSize, style.valueSpacing);
+    const float valueRight = area.x + area.width - style.getValueInset();
+    const render::Vector2 topLeft{valueRight - measured.x, centre.y - (measured.y / 2.0f)};
+    if (lit > 0.0f) {
+        drawBlurred(renderer, {topLeft.x, topLeft.y, measured.x, measured.y}, measured.y / 2.0f,
+                    _style.flare.textGlowBlur, faded(_style.flare.textGlow, opacity * lit));
+        // The chevrons around the value say that Left and Right change it
+        const render::Color shown = brightened(chevron, 0.9f * lit);
+        drawChevron(renderer, topLeft.x - style.chevronGap - style.chevronWidth, centre.y, style.chevronWidth,
+                    style.chevronHeight, style.chevronThickness, -1, shown);
+        drawChevron(renderer, valueRight + style.chevronGap, centre.y, style.chevronWidth,
+                    style.chevronHeight, style.chevronThickness, 1, shown);
+    }
+    renderer.drawText(style.valueFont, value, topLeft, style.valueSize,
+                      faded(mix(style.value, style.litValue, lit), opacity), style.valueSpacing);
+}
+
+float SceneRenderer::drawKeyCap(render::Renderer &renderer, const KeyCap &key, float left, float middle,
+                                float opacity) const
+{
+    const KeyStyle &style = _style.keys;
+    // Three dots of ASCII: the fonts may have no ellipsis
+    const std::string label = key.state == KeyCapState::Waiting ? std::string("...") : key.label;
+    const render::Vector2 measured =
+        renderer.measureText(style.font, label, style.textSize, style.letterSpacing);
+    const float width = std::max(style.minWidth, measured.x + (2.0f * style.padding));
+    const render::Rectangle area{left, middle - (style.height / 2.0f), width, style.height};
+
+    render::Color fill = style.fill;
+    render::Color frame = style.frame;
+    render::Color text = style.text;
+    if (key.state == KeyCapState::New) {
+        drawBlurred(renderer, area, style.radius, style.glowBlur, faded(style.newGlow, opacity));
+        fill = style.newFill;
+        frame = style.newFrame;
+    } else if (key.state == KeyCapState::Conflict) {
+        fill = style.conflictFill;
+        frame = style.conflictFrame;
+        text = style.conflict;
+    }
+    renderer.drawRoundedRectangle(area, style.radius, faded(fill, opacity), faded(fill, opacity));
+    if (key.state == KeyCapState::Waiting) {
+        drawDashedOutline(renderer, area, style.border, style.dash, faded(style.waitingFrame, opacity));
+    } else {
+        renderer.drawRoundedRectangleOutline(area, style.radius, style.border, faded(frame, opacity));
+    }
+    renderer.drawText(style.font, label, {left + ((width - measured.x) / 2.0f), middle - (measured.y / 2.0f)},
+                      style.textSize, faded(text, opacity), style.letterSpacing);
+    return width;
+}
+
+float SceneRenderer::drawPadButton(render::Renderer &renderer, const std::string &label, float left,
+                                   float middle, float opacity) const
+{
+    const KeyStyle &style = _style.keys;
+    const render::Vector2 measured =
+        renderer.measureText(style.font, label, style.textSize, style.letterSpacing);
+    const float width = std::max(style.minWidth, measured.x + (2.0f * style.padding));
+    const render::Rectangle area{left, middle - (style.height / 2.0f), width, style.height};
+    const float radius = style.height / 2.0f;
+    renderer.drawRoundedRectangle(area, radius, faded(style.buttonFill, opacity),
+                                  faded(style.buttonFill, opacity));
+    renderer.drawRoundedRectangleOutline(area, radius, style.border, faded(style.buttonFrame, opacity));
+    renderer.drawText(style.font, label, {left + ((width - measured.x) / 2.0f), middle - (measured.y / 2.0f)},
+                      style.textSize, faded(style.buttonText, opacity), style.letterSpacing);
+    return width;
+}
+
+void SceneRenderer::drawKeyRow(render::Renderer &renderer, const KeyRow &row, const Text &text,
+                               const Panel *panel, render::Vector2 centre, float opacity) const
+{
+    const SettingStyle &setting = _style.setting;
+    const KeyStyle &style = _style.keys;
+    if (row.dimmed && row.dimmed()) {
+        opacity *= setting.dimOpacity;
+    }
+    const render::Rectangle area{centre.x - (row.width / 2.0f), centre.y - (style.rowHeight / 2.0f),
+                                 row.width, style.rowHeight};
+    const float light = panel != nullptr ? std::clamp(panel->highlight, 0.0f, 1.0f) : 0.0f;
+    drawRowFrame(renderer, area, light, opacity);
+
+    const render::Vector2 caption = renderer.measureText(text.font, text.text, text.size, text.spacing);
+    renderer.drawText(text.font, text.text, {area.x + setting.inset, centre.y - (caption.y / 2.0f)},
+                      text.size, faded(mix(setting.caption, setting.litCaption, smooth(light)), opacity),
+                      text.spacing);
+
+    float left = area.x + row.keysColumn;
+    for (const KeyCap &key : row.keys ? row.keys() : std::vector<KeyCap>{}) {
+        left += drawKeyCap(renderer, key, left, centre.y, opacity) + style.gap;
+    }
+    left = area.x + row.buttonsColumn;
+    for (const std::string &button : row.buttons ? row.buttons() : std::vector<std::string>{}) {
+        left += drawPadButton(renderer, button, left, centre.y, opacity) + style.gap;
+    }
+}
+
+void SceneRenderer::drawSectionLabel(render::Renderer &renderer, const SectionLabel &label, const Text &text,
+                                     render::Vector2 centre, float opacity) const
+{
+    const SettingStyle &style = _style.setting;
+    const render::Vector2 measured = renderer.measureText(text.font, text.text, text.size, text.spacing);
+    const render::Vector2 topLeft{centre.x - (measured.x / 2.0f), centre.y - (measured.y / 2.0f)};
+    renderer.drawText(text.font, text.text, topLeft, text.size, faded(text.color, opacity), text.spacing);
+    const float left = topLeft.x + measured.x + style.sectionGap;
+    const float right = topLeft.x + label.width;
+    if (label.width > 0.0f && right > left) {
+        renderer.drawRectangle(
+            {left, centre.y - (style.ruleThickness / 2.0f), right - left, style.ruleThickness},
+            faded(style.sectionRule, opacity));
+    }
+}
+
 void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider, const SliderTrack &track,
                                const Text &text, render::Vector2 centre, float opacity) const
 {
     const SliderStyle &style = _style.slider;
     const float value = std::clamp(slider.get ? slider.get() : 0.0f, 0.0f, 1.0f);
     // The looks ease in and out, instead of changing at a constant speed
-    const auto eased = [](float amount) {
-        const float clamped = std::clamp(amount, 0.0f, 1.0f);
-        return clamped * clamped * (3.0f - (2.0f * clamped));
-    };
-    const float lit = eased(track.hover);
-    const float focus = eased(std::max(track.focus, track.hover));
-    const float grab = eased(track.grab);
+    const float lit = smooth(track.hover);
+    const float focus = std::max(track.focus, track.hover);
+    const float grab = smooth(track.grab);
 
-    // The caption on its line, then the rail under it, with room for the largest handle
-    const float top = centre.y - (style.getHeight() / 2.0f);
-    const float left = centre.x - (style.width / 2.0f);
+    // The row, lit as the rows of a page of settings
+    const float rowWidth = style.getAreaWidth(track.width);
+    const render::Rectangle area{centre.x - (rowWidth / 2.0f), centre.y - (style.getHeight() / 2.0f),
+                                 rowWidth, style.getHeight()};
+    drawRowFrame(renderer, area, focus, opacity);
+    const float shown = smooth(focus);
+
+    // The caption on the left, the percentage on the column of the values of the other rows
+    const float captionTop = area.y + style.paddingTop;
+    renderer.drawText(text.font, slider.caption, {area.x + style.inset, captionTop}, style.captionSize,
+                      faded(mix(style.caption, style.litCaption, shown), opacity), style.letterSpacing);
+    const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + " %";
+    const render::Vector2 measured =
+        renderer.measureText(style.valueFont, percentage, style.valueSize, style.valueSpacing);
+    renderer.drawText(style.valueFont, percentage,
+                      {area.x + rowWidth - style.valueInset - measured.x,
+                       captionTop + ((style.captionSize - measured.y) / 2.0f)},
+                      style.valueSize, faded(mix(style.value, style.litCaption, shown), opacity),
+                      style.valueSpacing);
+
+    // The rail, from the caption to the percentage, and its part up to the value in light
+    const float left = style.getRailLeft(centre.x, track.width);
+    const float width = style.getRailWidth(track.width);
     const float y = style.getRailY(centre.y);
-    const float handleX = left + (value * style.width);
-
-    const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%";
-    const float percentageWidth =
-        renderer.measureText(text.font, percentage, style.captionSize, style.letterSpacing).x;
-    const render::Color caption = faded(mix(style.caption, style.litCaption, focus), opacity);
-    renderer.drawText(text.font, slider.caption, {left, top}, style.captionSize, caption,
-                      style.letterSpacing);
-    renderer.drawText(text.font, percentage, {left + style.width - percentageWidth, top}, style.captionSize,
-                      faded(style.litCaption, opacity), style.letterSpacing);
-
-    const render::Rectangle rail{left, y - (style.railThickness / 2.0f), style.width, style.railThickness};
-    renderer.drawRoundedRectangle(rail, style.railThickness / 2.0f, faded(style.rail, opacity),
+    renderer.drawRoundedRectangle({left, y - (style.railThickness / 2.0f), width, style.railThickness},
+                                  style.railThickness / 2.0f, faded(style.rail, opacity),
                                   faded(style.rail, opacity));
-    const float filled = handleX - left;
+    const float filled = value * width;
     if (filled > 0.0f) {
-        // Two fainter lines around the filled part give it its light, stronger when pointed at or dragged
-        const render::Color light =
-            faded(brightened(style.fillGlow, 1.0f + (1.5f * lit) + (1.0f * grab)), opacity);
-        for (const float spread : {3.0f, 1.7f}) {
-            const float thickness = style.fillThickness * spread;
-            renderer.drawRoundedRectangle({left, y - (thickness / 2.0f), filled, thickness}, thickness / 2.0f,
-                                          light, light);
-        }
-        const float thickness = style.fillThickness * (1.0f + (0.35f * lit));
-        renderer.drawRoundedRectangle({left, y - (thickness / 2.0f), filled, thickness}, thickness / 2.0f,
-                                      faded(style.fill, opacity), faded(style.fill, opacity));
+        const render::Rectangle fill{left, y - (style.fillThickness / 2.0f), filled, style.fillThickness};
+        drawBlurred(renderer, fill, style.fillThickness / 2.0f, style.fillGlowBlur,
+                    faded(brightened(style.fillGlow, 1.0f + shown + lit + grab), opacity));
+        const render::Color color = faded(mix(style.fill, style.litFill, shown), opacity);
+        renderer.drawRoundedRectangle(fill, style.fillThickness / 2.0f, color, color);
     }
 
-    // The handle grows when pointed at, and more when dragged, with a soft light and a faint ring around it
-    const float radius = (style.handleRadius + ((style.handleHoverRadius - style.handleRadius) * lit)) +
-                         ((style.handleDragRadius - style.handleHoverRadius) * grab);
-    const render::Vector2 handleCentre{handleX, y};
-    drawHalo(renderer, handleCentre, radius, style.handleGlowSpread * (0.4f + (0.6f * lit) + (0.4f * grab)),
-             faded(brightened(style.handleGlow, lit + grab), opacity));
-    if (lit > 0.0f) {
-        render::Color ring = style.handleRing;
-        ring.a = static_cast<std::uint8_t>(static_cast<float>(ring.a) * lit);
-        renderer.drawCircleOutline(handleCentre, radius + style.handleRingGap + (3.0f * lit),
-                                   style.handleThickness / 2.0f, faded(ring, opacity));
-    }
-    const render::Color handle = faded(style.handle, opacity);
-    renderer.drawArc(handleCentre, radius, style.handleThickness, 180.0f + style.handleOpening,
-                     360.0f - style.handleOpening, handle);
-    renderer.drawArc(handleCentre, radius, style.handleThickness, style.handleOpening,
-                     180.0f - style.handleOpening, handle);
-    renderer.drawCircle(handleCentre, style.handleThickness * 0.7f, handle);
+    // The handle, a bar across the rail, grows when pointed at, and more when dragged
+    const float height = style.handleHeight + ((style.handleHoverHeight - style.handleHeight) * lit) +
+                         ((style.handleDragHeight - style.handleHoverHeight) * grab);
+    const render::Rectangle handle{left + filled - (style.handleWidth / 2.0f), y - (height / 2.0f),
+                                   style.handleWidth, height};
+    drawBlurred(renderer, handle, style.handleWidth / 2.0f, style.handleGlowBlur,
+                faded(brightened(style.handleGlow, 0.5f + (0.5f * shown) + lit + grab), opacity));
+    renderer.drawRoundedRectangle(handle, style.handleWidth / 2.0f, faded(style.handle, opacity),
+                                  faded(style.handle, opacity));
 }
 
 void SceneRenderer::drawSwitch(render::Renderer &renderer, const Toggle &toggle, const SwitchTrack &track,
@@ -1271,6 +1453,9 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     auto &rows = _ecs.cache<ListRow>();
     auto &avatars = _ecs.cache<Avatar>();
     auto &rings = _ecs.cache<Ring>();
+    auto &settingRows = _ecs.cache<SettingRow>();
+    auto &keyRows = _ecs.cache<KeyRow>();
+    auto &sectionLabels = _ecs.cache<SectionLabel>();
 
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
@@ -1297,6 +1482,9 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
                 renderer.drawRectangleOutline(area, box.outline, faded(box.color, opacity));
             } else if (box.bottom) {
                 renderer.drawGradientRectangle(area, faded(box.color, opacity), faded(*box.bottom, opacity));
+            } else if (box.right) {
+                renderer.drawRoundedRectangle(area, 0.0f, faded(box.color, opacity),
+                                              faded(*box.right, opacity));
             } else {
                 renderer.drawRectangle(area, faded(box.color, opacity));
             }
@@ -1316,6 +1504,21 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
         }
         if (avatars.has(entity)) {
             drawAvatar(renderer, avatars.get(entity), {centre.x, centre.y}, opacity);
+            continue;
+        }
+        if (settingRows.has(entity) && texts.has(entity)) {
+            drawSettingRow(renderer, settingRows.get(entity), texts.get(entity),
+                           hasPanel ? &panels.get(entity) : nullptr, {centre.x, centre.y}, opacity);
+            continue;
+        }
+        if (keyRows.has(entity) && texts.has(entity)) {
+            drawKeyRow(renderer, keyRows.get(entity), texts.get(entity),
+                       hasPanel ? &panels.get(entity) : nullptr, {centre.x, centre.y}, opacity);
+            continue;
+        }
+        if (sectionLabels.has(entity) && texts.has(entity)) {
+            drawSectionLabel(renderer, sectionLabels.get(entity), texts.get(entity), {centre.x, centre.y},
+                             opacity);
             continue;
         }
         if (fields.has(entity) && fields.get(entity).type == TextFieldType::Line) {

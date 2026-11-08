@@ -66,6 +66,8 @@ struct SliderTrack {
     float focus = 0.0f;
     /// Whether the slider is under the pointer or has the focus, to sound when it lights up.
     bool lit = false;
+    /// Width of the row, in game units, or 0 for the width of the style.
+    float width = 0.0f;
 };
 
 /// Draws a Toggle as "OFF - dot - ON" (InterfaceStyle::toggle) instead of a text. The Text of the entity
@@ -176,6 +178,61 @@ struct ListRow {
     std::string side{};
     float width = 0.0f;
     std::optional<Avatar> avatar{};
+};
+
+/// A row of a page of settings (InterfaceStyle::setting): its caption (the Text of the entity) on the left,
+/// its value on the right, on the column shared by every row, and a rule under it. With a Panel, it lights up
+/// as the other widgets: a veil from its left, a mark on its left edge, a line of light along its bottom.
+///
+/// With `change`, it is a choice: Left, Right, the mouse wheel, Confirm and a click go through its values,
+/// and chevrons appear around the value while it is lit. Without it, with a Button, it opens something: a
+/// chevron on its right, and no value.
+struct SettingRow {
+    /// The value shown, read every frame so that the row always shows the real setting. Can be empty.
+    std::function<std::string()> value{};
+    /// Goes to the next value (+1) or the previous one (-1). Empty for a row that opens something.
+    std::function<void(int)> change{};
+    /// Width of the row, in game units, or 0 for the width of the style.
+    float width = 0.0f;
+};
+
+/// How a key of a KeyRow is drawn.
+enum class KeyCapState {
+    /// A key bound to the action.
+    Normal,
+    /// The key just chosen for the action, lit.
+    New,
+    /// The empty key while the player is asked for one, in dashes.
+    Waiting,
+    /// A key that another action is about to take, in the red of the alerts.
+    Conflict,
+};
+
+/// A key of a KeyRow: its name as it is printed on the keyboard, and its state.
+struct KeyCap {
+    std::string label{};
+    KeyCapState state = KeyCapState::Normal;
+};
+
+/// A row of the table of the controls (InterfaceStyle::keys): the action (the Text of the entity), its keys,
+/// each in a frame like a key of a keyboard, and the buttons of the gamepad in pills. With a Panel and a
+/// Button, it lights up as a SettingRow and is pressed as a button. Everything is read every frame.
+struct KeyRow {
+    std::function<std::vector<KeyCap>()> keys{};
+    std::function<std::vector<std::string>()> buttons{};
+    /// Whether the row is drawn dim, while the player chooses a key for another row. Can be empty.
+    std::function<bool()> dimmed{};
+    /// Width of the row, and where its keys and its buttons start from its left edge, in game units.
+    float width = 0.0f;
+    float keysColumn = 0.0f;
+    float buttonsColumn = 0.0f;
+};
+
+/// The name of a group of rows, in small capitals (the Text of the entity), followed by a fine rule up to the
+/// end of the group (InterfaceStyle::setting). Without width, the name alone: the head of a column.
+struct SectionLabel {
+    /// From the left of the name to the end of the rule, in game units, or 0 for no rule.
+    float width = 0.0f;
 };
 
 /// Label of a widget that shows a value: "Caption: value".

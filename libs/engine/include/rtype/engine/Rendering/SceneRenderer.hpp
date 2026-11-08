@@ -8,6 +8,7 @@
 #include "rtype/engine/Scene/Scenes.hpp"
 
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rtype::ecs
@@ -108,7 +109,30 @@ class SceneRenderer
     /// Draws a title (see Title): its text in chrome, with a light around it.
     void drawTitle(render::Renderer &renderer, const Text &text, render::Vector2 centre, float scale,
                    float opacity) const;
-    /// Draws a slider (see SliderTrack): its caption and value, its rail and its handle.
+    /// Draws what the rows of a page of settings share in `area`: the rule under the row, and while it is lit
+    /// (`light` from 0 to 1), the veil from its left, the mark on its left edge and the line of light along
+    /// its bottom.
+    void drawRowFrame(render::Renderer &renderer, render::Rectangle area, float light, float opacity) const;
+    /// Draws a row of a page of settings: its frame, its caption, its value and the chevrons of a choice, or
+    /// the chevron of a row that opens something.
+    void drawSettingRow(render::Renderer &renderer, const SettingRow &row, const Text &text,
+                        const Panel *panel, render::Vector2 centre, float opacity) const;
+    /// Draws a row of the controls: its frame, its action, its keys and its gamepad buttons.
+    void drawKeyRow(render::Renderer &renderer, const KeyRow &row, const Text &text, const Panel *panel,
+                    render::Vector2 centre, float opacity) const;
+    /// Draws a key in its frame, its left side at `left`, in the look of its state.
+    /// @return Its width.
+    float drawKeyCap(render::Renderer &renderer, const KeyCap &key, float left, float middle,
+                     float opacity) const;
+    /// Draws a button of the gamepad in its pill, its left side at `left`.
+    /// @return Its width.
+    float drawPadButton(render::Renderer &renderer, const std::string &label, float left, float middle,
+                        float opacity) const;
+    /// Draws the name of a group of rows and its rule.
+    void drawSectionLabel(render::Renderer &renderer, const SectionLabel &label, const Text &text,
+                          render::Vector2 centre, float opacity) const;
+    /// Draws a slider (see SliderTrack): a row of a page of settings, its caption and value, its rail and its
+    /// handle.
     void drawSlider(render::Renderer &renderer, const Slider &slider, const SliderTrack &track,
                     const Text &text, render::Vector2 centre, float opacity) const;
     /// Draws a switch (see SwitchTrack): its caption, then "OFF", a link with a dot on it, and "ON".

@@ -5,6 +5,7 @@
 #include "rtype/input/Keys.hpp"
 
 #include <array>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -42,6 +43,17 @@ inline constexpr input::Key CancelKey = input::Key::Escape;
 /// Binds this key alone to the control, instead of its other keys; its gamepad inputs stay. The key leaves
 /// the other GameActions that had it, so that a key does one thing in the game.
 void assignKey(engine::Controls &controls, engine::Control control, input::Key key);
+
+/// The GameAction other than `control` that has this key, which assignKey() would take from it: the Controls
+/// page asks before. Nothing if no other action has it.
+[[nodiscard]] const GameAction *findKeyOwner(const engine::Controls &controls, engine::Control control,
+                                             input::Key key);
+
+/// The keys in the translations of the gamepad inputs of a control, in the order they were bound, each once:
+/// "pad.dpad_up" for the D-pad, "pad.left_stick" for both directions of the left stick, "pad.a" for the
+/// bottom face button. The Controls page shows them; they are not rebound.
+[[nodiscard]] std::vector<std::string> gamepadNamesOf(const engine::Controls &controls,
+                                                      engine::Control control);
 
 /// Gives the GameActions the keys kept in the settings. An action with nothing kept, or with a key that does
 /// not exist, keeps its default keys.

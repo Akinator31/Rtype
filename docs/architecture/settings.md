@@ -49,7 +49,7 @@ volumes of the music and of the sound effects, the colour filter of the image
 flowchart LR
     File["settings.txt"] -- "readSettings()" --> Settings["engine::Settings"]
     Settings -- "applyDisplaySettings()<br/>applyPlayerSettings()<br/>at start" --> Apply["Window · Localization<br/>AudioPlayer · Renderer"]
-    Page["Settings page<br/>four buttons, two sliders"] -- "each change, at once" --> Apply
+    Page["Settings page<br/>six choices, two sliders"] -- "each change, at once" --> Apply
     Page -- "closes: keep...Settings()" --> Settings
     Settings -- "writeSettings()" --> File
 ```
@@ -57,16 +57,22 @@ flowchart LR
 *The choices are read and applied when the client starts, applied at once on the page, and written when the
 page closes.*
 
-| Row | Widget | What it changes |
-|---|---|---|
-| Language | Button: English, French | `Localization::setLanguage()`, and the captions of the sliders |
-| Music, Sound effects | Sliders, by steps of 5% | `AudioPlayer::setMusicVolume()`, `setEffectsVolume()` |
-| Colour filter | Button: none, protanopia, deuteranopia, tritanopia, high contrast (`PlayerColorFilters`) | `Renderer::setColorFilter()` |
-| Screen | Button: "2 (DELL U2720Q)", the next connected screen | `Window::moveToMonitor()` |
-| Resolution | Button: fullscreen, then the window sizes smaller than the screen (`resolutionsFor()`) | `Window::setFullscreen()`, `setSize()` |
-| Frame rate | Button: 60, 120, 144, 165, 240, unlimited (`FpsLimits`) | `Window::setTargetFps()` |
-| VSync | Button: on, off | `Window::setVsync()` |
-| Controls | Button: opens the Controls page, to choose the key of each action ([Input](input.md#choosing-the-keys)) | `assignKey()` |
+The page is two columns of named groups ([Pages of settings](scenes-and-interface.md#pages-of-settings)): on the
+left *General*, *Audio* and *Accessibility*, on the right *Display* and *Controls*. Each row shows its caption on
+the left and its value on the right, on a column shared by every row; Right, the wheel, Enter and a click go to
+the next value, Left to the previous one (`stepValue()`, `apps/client/src/Settings/NextValue.hpp`). Under the
+right column, a note explains the row that has the focus (`settings.hint.*` in the translations).
+
+| Group | Row | Widget | What it changes |
+|---|---|---|---|
+| General | Language | Choice: English, French | `Localization::setLanguage()`, and the captions of the sliders |
+| Audio | Music, Sound effects | Sliders, by steps of 5% | `AudioPlayer::setMusicVolume()`, `setEffectsVolume()` |
+| Accessibility | Colour filter | Choice: none, protanopia, deuteranopia, tritanopia, high contrast (`PlayerColorFilters`) | `Renderer::setColorFilter()` |
+| Display | Screen | Choice: "2 · DELL U2720Q", the connected screens (`moveToMonitor()`) | `Window::moveToMonitor()` |
+| Display | Resolution | Choice: fullscreen, then the window sizes smaller than the screen (`resolutionsFor()`) | `Window::setFullscreen()`, `setSize()` |
+| Display | Frame rate | Choice: 60, 120, 144, 165, 240, unlimited (`FpsLimits`) | `Window::setTargetFps()` |
+| Display | VSync | Choice: on, off | `Window::setVsync()` |
+| Controls | Keyboard and gamepad | Opens the Controls page, to choose the key of each action ([Input](input.md#choosing-the-keys)) | `assignKey()` |
 
 - **At start**, right after the settings are read, `applyDisplaySettings()` moves the window to the kept
   screen and gives it the kept resolution; then, once the translations are loaded, `applyPlayerSettings()`
@@ -80,6 +86,8 @@ page closes.*
 - **The frame rate needs VSync off above the refresh rate of the screen.** With the vertical synchronisation
   on, the frames wait for the screen: a 60 Hz screen stays at 60 frames per second, whatever the limit.
 - **The filters that simulate a colour blindness** are for the team, and not offered on the page.
+- **The page reads over the 3D background**: a veil darkens the left of the screen under it, and the captions
+  and values are bright on it, rather than grey on the planet of the main menu.
 - **When the page closes** (its back button or Escape), `keepPlayerSettings()` and `keepDisplaySettings()` keep
   the values, and `writeSettings()` writes the file, once, rather than at every step of a slider. A file that
   cannot be written is logged: the choices then last until the client closes.

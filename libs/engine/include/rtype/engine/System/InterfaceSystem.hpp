@@ -44,6 +44,8 @@ namespace rtype::engine
 /// - A switch (a Toggle with a SwitchTrack) lights up while the pointer is over its "OFF - ON" part, and its
 ///   dot slides to the side that is on. Clicking anywhere on its row, Confirm, Left and Right set it, as for
 ///   every Toggle.
+/// - A SettingRow with a `change` goes to its next value on Confirm and a click, and to the next or previous
+///   one with Right, Left and the wheel, sounding as a pressed button. It lights up as a button.
 /// - A field of a form (TextFieldType::Line or Code) lights up while it has the focus, and keeps its size.
 ///   Its error is cleared when its content changes; a code is submitted as soon as it is full.
 /// - A pressed button bursts (its highlight goes up to FlareStyle::pressedHighlight, then back to 1),
@@ -92,6 +94,7 @@ class InterfaceSystem : public ecs::System
     ecs::ComponentCache<Text> &_texts;
     ecs::ComponentCache<Choice> &_choices;
     ecs::ComponentCache<TextField> &_fields;
+    ecs::ComponentCache<SettingRow> &_settingRows;
     ecs::ComponentCache<SoundEffect> &_sounds;
 
     [[nodiscard]] std::vector<ecs::entity_t> widgets();

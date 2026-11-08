@@ -13,7 +13,7 @@ libs/engine/include/rtype/engine/
   Component/    the data attached to entities
     Drawing.hpp     Layer, Drawable, Text, BoundText, Sprite, Box, Scale, Opacity
     Animation.hpp   Easing, ease(), Tween, Spin, Scroll, ModelAnimation, switchModelAnimation(), addModelAnimation()
-    Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField
+    Widget.hpp      Focusable, Focused, Hitbox, Button, Toggle, Slider, Choice, TextField, SettingRow, KeyRow, SectionLabel
     Layout.hpp      Column, ColumnItem, AnchorPoint, Anchor
     Toast.hpp       ToastType, Toast
     Sound.hpp       SoundEffect
@@ -276,13 +276,17 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 |---|---|
 | `text` | A `Text` with the font, size and colour of the style |
 | `boundText` | A `Text` rewritten every frame from a function by the `BoundTextSystem` (score, lives, ping) |
-| `box` | A filled or outlined `Box` |
+| `box` | A filled or outlined `Box`; `Box::bottom` or `Box::right` fade it into a second colour, downwards or to the right |
 | `sprite` | A `Sprite`: a texture or a part of it |
 | `button` | A focusable `Button` of text alone (`InterfaceStyle::flare`), as wide as its spaced letters and its star: when lit, a line of light traces itself across the text and a star flares after it; when pressed, the star bursts, a pulse runs along the line, and the action runs `pressDelay` later. The buttons of a builder get the focus in the order they are created |
 | `dangerButton` | A `button` in the red of the alerts (`Panel::danger`, `FlareStyle::danger`): its text, its line and its star. For an action that deletes |
 | `textField`, `passwordField` | A field of a form (`TextFieldType::Line`): see [Forms](#forms) |
 | `codeField` | A code of digits in cells (`TextFieldType::Code`): see [Forms](#forms) |
 | `listRow` | A row of a list (`ListRow`): see [Lists and avatars](#lists-and-avatars) |
+| `settingRow`, `linkRow` | A row of a page of settings (`SettingRow`): see [Pages of settings](#pages-of-settings) |
+| `keyRow` | A row of the table of the controls (`KeyRow`): see [Pages of settings](#pages-of-settings) |
+| `sectionLabel` | The name of a group of rows and its rule (`SectionLabel`), or the head of a column of a table |
+| `note` | A small text in grey (`SettingStyle::note`): a hint, the keys of a page |
 | `avatar` | The round picture of a player, or their initial (`Avatar`): see [Lists and avatars](#lists-and-avatars) |
 | `backButton` | A `Button` with a "<", to go back (the font of the buttons has no "←") |
 | `header` | The top of a secondary screen: a `backButton`, then the title to its right on the same line |
@@ -342,11 +346,14 @@ Toasts are stacked from the corner, the newest nearest to it; the others glide t
 goes from the top of the line to its bottom through the stops of `chrome` (`Renderer::drawGradientText()`).
 `MenuBuilder` titles and the headers of the submenus use it.
 
-`InterfaceBuilder::slider()` makes a value between 0 and 1 drawn as a fine rail with a ring open on its sides
-for the handle, from `InterfaceStyle::slider` (`SliderStyle`). The handle grows when the slider is pointed at
-or has the focus, and more while it is dragged: the `InterfaceSystem` writes the `SliderTrack` of the slider,
-and moves the value to the pointer while the mouse button is held. Left, Right and the wheel step the value as
-for every `Slider`.
+`InterfaceBuilder::slider()` makes a value between 0 and 1 drawn as a row of a page of settings
+(`InterfaceStyle::slider`, `SliderStyle`): its caption on the left, its percentage on the column of the values
+of the other rows, and under them a fine rail with its filled part in light and a bar for the handle. The row
+lights up as a `SettingRow` while it is under the pointer or has the focus; the handle grows when it is
+pointed at, and more while it is dragged: the `InterfaceSystem` writes the `SliderTrack` of the slider, and
+moves the value to the pointer while the mouse button is held. Left, Right and the wheel step the value as for
+every `Slider`. The row is `SliderStyle::width` wide, or `SliderTrack::width` (the last parameter of
+`slider()`); `getRailLeft()` and `getRailWidth()` give its rail.
 
 `InterfaceBuilder::toggle()` makes an on / off setting drawn as "OFF - dot - ON" (`InterfaceStyle::toggle`,
 `SwitchStyle`): the dot slides to the side that is on, and the label of that side lights up. The switch lights
@@ -369,11 +376,34 @@ gauge, it takes an `Extent` to be placed by an `Anchor`.
 `Text::spacing` spaces the letters of a text, as in the widely spaced capitals of the design; the
 `AnchorSystem` and the `HitboxSystem` measure the text with it.
 
-The handle of a slider lights up only while the pointer is over it (or it is dragged); its caption lights up
+The handle of a slider lights up only while the pointer is over it (or it is dragged); its row lights up
 while the slider is under the pointer or has the focus.
 
 The client shows all of them, with the toasts, in the *Interface* menu of the settings
 (`MainMenu/UiShowcase.cpp`).
+
+### Pages of settings
+
+The Settings and Controls pages of the client are made of rows that share one look (`InterfaceStyle::setting`,
+`SettingStyle`), drawn by `SceneRenderer::drawRowFrame()`: a fine rule under each row, and while the row is lit
+(its `Panel`, as a button), a veil from its left, a mark on its left edge and a line of light that traces
+itself along its bottom. The caption is on the left, in the font of the text (Exo 2); the value is on the
+right, in the font of the values (Audiowide), and every value ends on the same column
+(`SettingStyle::getValueInset()`), so that the values of a page line up whatever their length.
+
+| Element | Row |
+|---|---|
+| `settingRow(caption, value, change, anchor)` | A choice (`SettingRow`): `value` is read every frame, `change(+1)` or `change(-1)` goes to the next or previous value on Right, Left, the wheel, Confirm and a click (forwards). Chevrons appear around the value while it is lit |
+| `linkRow(caption, onPress, anchor)` | A row that opens something: a chevron on its right, pressed as a button |
+| `slider(...)` | A volume: see [Titles and sliders](#titles-and-sliders) |
+| `keyRow(action, row, onPress, anchor)` | A row of the table of the controls (`KeyRow`, `InterfaceStyle::keys`, `KeyStyle`): the action, its keys each in a frame like a key of a keyboard (`KeyCap`, in the state `Normal`, `New`, `Waiting` in dashes, or `Conflict` in red), and the buttons of the gamepad in pills, read only. `KeyRow::dimmed` dims it |
+| `sectionLabel(text, anchor, width)` | The name of a group, in small capitals, with a rule up to `width` |
+| `note(text, anchor)` | A small grey text: the hint of the focused row, the keys of the page |
+
+The client lays them out in `MainMenu/SettingsPage.hpp`: a veil (a `Box` that fades to the right) darkens the
+side of the screen where the page is, so that its text reads over the planet of the main menu; the groups are
+in columns, and the hint of the focused row and the keys of the page are notes. The design is the series 15 of
+the Figma of the interface.
 
 ### Forms
 
