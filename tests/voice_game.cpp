@@ -3,11 +3,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <random>
+#include <span>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -15,6 +18,7 @@ using rtype::voice::Backend;
 using rtype::voice::FrameSamples;
 using rtype::voice::GameVoice;
 using rtype::voice::SampleRate;
+using testing::FakeLoopback;
 using testing::FakeMicrophone;
 using testing::FakePlayback;
 using testing::FakeTransport;
@@ -61,6 +65,8 @@ struct Player {
 
     Player(rtype::voice::Slot self, rtype::voice::Slot other)
     {
+        // The samples as they are said: the processing has its tests (voice_processing.cpp)
+        voice.setProcessing({.noiseSuppression = false, .gainControl = false});
         voice.addParticipant(other);
         voice.setBackend(other, Backend::Game);
         voice.join({.self = self});
@@ -403,4 +409,52 @@ TEST_CASE("A microphone that gives only silence for 10 s while the player talks 
         alice.voice.poll(Start);
     }
     CHECK_FALSE(alice.voice.microphoneSilent());
+}
+
+TEST_CASE("The echo of what the speakers play is not sent, the loopback open with the microphone", "[voice]")
+{
+    // What the speakers play, and the microphone hearing it 60 ms later, at half its level: about -24 dBFS,
+    // over the threshold of the voice activity
+    constexpr std::size_t frames = 8 * rtype::voice::FramesPerSecond;
+    std::mt19937 random(11);
+    std::normal_distribution<double> normal(0.0, 4000.0);
+    std::vector<std::int16_t> played(frames * FrameSamples);
+    for (std::int16_t &sample : played) {
+        sample = static_cast<std::int16_t>(std::clamp(normal(random), -32768.0, 32767.0));
+    }
+    constexpr std::size_t delay = 60 * static_cast<std::size_t>(SampleRate) / 1000;
+    std::vector<std::int16_t> heard(played.size(), 0);
+    for (std::size_t i = delay; i < heard.size(); ++i) {
+        heard[i] = static_cast<std::int16_t>(played[i - delay] / 2);
+    }
+
+    const auto sentAtTheEnd = [&](bool withLoopback) {
+        Player alice(0, 1);
+        FakeLoopback loopback;
+        GameVoice voice(alice.transport, alice.microphone, alice.playback,
+                        withLoopback ? &loopback : nullptr);
+        voice.setProcessing({.noiseSuppression = false, .gainControl = false});
+        voice.join({.self = 0});
+        CHECK_FALSE(loopback.isOpen);
+        voice.setSelfMute(false);
+        voice.setTalking(true);
+        voice.setVoiceActivity(-40.0f);
+        CHECK(loopback.isOpen == withLoopback);
+        std::size_t sent = 0;
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            loopback.play(std::span(played).subspan(frame * FrameSamples, FrameSamples));
+            alice.microphone.say(std::span(heard).subspan(frame * FrameSamples, FrameSamples));
+            const std::size_t before = alice.transport.sent.size();
+            voice.poll(Start);
+            // The last 2 s, the room learnt
+            if (frame >= frames - (2 * rtype::voice::FramesPerSecond)) {
+                sent += alice.transport.sent.size() - before;
+            }
+        }
+        voice.setSelfMute(true);
+        CHECK_FALSE(loopback.isOpen);
+        return sent;
+    };
+    CHECK(sentAtTheEnd(false) == 2 * rtype::voice::FramesPerSecond);
+    CHECK(sentAtTheEnd(true) == 0);
 }
