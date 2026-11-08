@@ -403,6 +403,37 @@ the countdown stops while the game is paused offline, then fades everything out 
 is reached. The client takes the lives at the start and the delay from the default `game::Rules`, like its
 prediction. The last life opens no death screen: the event of the ship lost is told as for any other.
 
+### Results screen
+
+Online, when a game goes to its end (every player out of lives), `GameScenes` keeps what the local player did
+in it from its last `PlayerState` (`GameScenes::results()`): the waves cleared, the Bydos shot down, the best
+streak, the score and the experience earned, even with no wave cleared. The snapshots of the game do not
+carry its end: `RemoteSession` gives the outcome of `GAME_OVER` to the next snapshot it takes, with the
+players of the latest snapshot received, their final scores. `OnlineScenes` then leaves the game and shows
+them in the results scene (`GameScenes::showResults()`), over the sky of the game, until the player presses
+**Continue** (`summary.continue`) or Escape, which goes back to the list of the games:
+
+- a veil and `THE R-TYPE SECTION HAS FALLEN` (`summary.title`: the elite pilots of the lore) in chrome fade
+  in, with the sound of the game over;
+- the four figures land one after the other, each popping from larger with a thump;
+- the experience earned counts up from 0, ticking higher and higher, while the bar of the level of the account
+  fills from the experience before the game to the one after, with the level and the experience into it under
+  it. Each level gained pops `LEVEL UP` (`progress.level_up`) with its fanfare, and the bar starts again from
+  its left end. An achievement sound once all is counted;
+- a guest sees the experience it earned, then, on a server with accounts, that it keeps it only signed in
+  (`progress.guest`).
+
+The experience before the game is the one of the last `PROGRESS` as the player joined it. The one after is
+guessed as that and the experience of the game until the master tells it (`PROGRESS` with experience gained),
+which may come while the screen counts: the bar follows it. Shown on the results, that `PROGRESS` makes no
+toast; one that comes in the lobby still does.
+
+`openResultsScreen()` creates the entities and a `ResultsScreen` that lists them; the `ResultsSystem` plays it
+in the time of the screen and gives its sounds to the `engine::SoundSystem` (`sounds/fx/results/`: the sound of
+the game over is "Energy - short end sparkles 04", the one of a level gained "Level up bonus 2", the one of
+the experience counted "Apocalyptic Game Achievement Completed 1", its ticks "Game Weapons Designed Hit Bass
+Layer Sweetener Sub Click Tick"; the thump of a figure is synthesized for the game).
+
 ## Quests
 
 ### Events and stats
