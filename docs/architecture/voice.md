@@ -2,20 +2,24 @@
 
 !!! warning "In progress"
 
-    The voice chat is being built. This page describes what exists: the interface and the rule of the
-    backends. The codec, the messages of the game protocol and the devices come with the next steps.
+    The voice chat is being built. This page describes what exists: the interface, the rule of the backends
+    and the codec. The messages of the game protocol and the devices come with the next steps.
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
 ([ADR 0032](../decisions/0032-voice-chat-in-the-game-session.md)).
 
-The voice library (`libs/voice`, namespace `rtype::voice`) holds what the client knows of the voice. It is
-header only for now.
+The voice library (`libs/voice`, namespace `rtype::voice`) holds what the client knows of the voice, in two
+targets:
 
-| Header | Content |
-|---|---|
-| `rtype/voice/VoiceChannel.hpp` | `VoiceChannel`, the voice of one game for the player of this client; `Participant`, `Join`, `Position`, `Slot` |
-| `rtype/voice/Backend.hpp` | `Backend` (`None`, `Game`, `Discord`) and `carriedByGame()` |
+| Target | Header | Content |
+|---|---|---|
+| `rtype::voice` | `rtype/voice/VoiceChannel.hpp` | `VoiceChannel`, the voice of one game for the player of this client; `Participant`, `Join`, `Position`, `Slot` |
+| `rtype::voice` | `rtype/voice/Backend.hpp` | `Backend` (`None`, `Game`, `Discord`) and `carriedByGame()` |
+| `rtype::voice_codec` | `rtype/voice/Codec.hpp` | `Encoder`, `Decoder`, `isValidFrame()`: the voice in Opus |
+
+`rtype::voice` is header only, without dependency: the server can know the backends without Opus.
+`rtype::voice_codec` is built on libopus, a private dependency: no Opus type in its header.
 
 ## The backends
 
@@ -75,6 +79,43 @@ voice.leave();                                     // LEFT_GAME, or the session 
 A device that cannot be opened is not an error, as for the [audio](audio.md): the player hears nothing or is
 heard by nobody, and the game goes on.
 
+## The codec
+
+The voice is encoded with [Opus](https://opus-codec.org/) 1.6.1, through CPM from the release archive of
+Xiph, with its hash. Its license (BSD) is installed with the client, in `licenses/opus.txt`.
+
+| | |
+|---|---|
+| Samples | 48 kHz (`SampleRate`), mono, signed 16 bits |
+| Frame | 20 ms, 960 samples (`FrameSamples`); 1 to 160 bytes encoded (`MaxFrameBytes`) |
+| Mode | `OPUS_APPLICATION_VOIP`, `OPUS_SIGNAL_VOICE`, variable bit rate |
+| Bit rate | 24 kbit/s by default (`EncoderSettings::bitrate`): about 60 bytes per frame |
+| Losses | In-band FEC on, for 10 % of frames lost (`EncoderSettings::expectedLoss`; 0 turns it off) |
+| Silence | DTX (`EncoderSettings::discontinuous`): after 200 ms of silence, frames of 1 or 2 bytes, which need not be sent (`EncodedFrame::silence()`), and one frame every 400 ms |
+
+```cpp
+rtype::voice::Encoder encoder;
+const rtype::voice::EncodedFrame frame = encoder.encode(samples);   // 960 samples
+if (!frame.silence()) {
+    session.sendVoice(frame.data());
+}
+```
+
+The encoder never gives more than 160 bytes: Opus lowers the quality of a frame that would not fit.
+
+**One decoder per player**, since it keeps what it heard to make up what it did not. For each frame, in
+order:
+
+| The frame | Call |
+|---|---|
+| Received | `decode(frame, samples)` |
+| Lost, the next one received | `decodeFec(next, samples)`: the copy of the lost frame that the next one carries, then `decode(next, …)` as usual |
+| Lost, with nothing after it | `conceal(samples)`: made up from the frames before, fading to silence |
+
+A frame comes from the network: `decode()` and `decodeFec()` refuse, and return false for, anything but a valid
+Opus packet of 20 ms of 1 to 160 bytes (`isValidFrame()`), and leave the samples as they were. A packet of
+another length (10 ms, 40 ms) is refused, so that every frame is the same 960 samples.
+
 ## Rules
 
 - **The voice is never stored nor logged**, by the game or the client, and a replay has no voice.
@@ -86,3 +127,9 @@ heard by nobody, and the game goes on.
 
 `tests/voice.cpp` (tag `[voice]`): the rule of the backends for every pair, the mixed game of 2 + 2, and a
 channel that knows the other players of its game, not its own.
+
+`tests/voice_codec.cpp` (tag `[voice]`), on a voice-like sound (a pitch gliding from 140 to 220 Hz, with its
+harmonics): its level within 3 dB and its pitch kept after the codec; about 60 bytes per frame; never more than
+160, even for loud noise at the highest bit rate; silence not sent after 200 ms; a lost frame rebuilt from the
+next one closer to the original than concealed, and only concealed without FEC; the frames refused (empty, too
+big, 10 ms); 20,000 frames of random bytes without a crash, run under the sanitizers in the CI.
