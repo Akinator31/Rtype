@@ -24,7 +24,7 @@ struct EncoderSettings {
     /// The share of frames expected to be lost, in percent: the more, the more of each frame is spent on
     /// rebuilding the one before it (in-band FEC). 0 turns the FEC off.
     int expectedLoss = 10;
-    /// Silence encoded in 1 or 2 bytes, which need not be sent (DTX).
+    /// Silence encoded in 1 or 2 bytes, which need not be sent, nor the updates of its noise (DTX).
     bool discontinuous = true;
 };
 
@@ -32,10 +32,12 @@ struct EncoderSettings {
 struct EncodedFrame {
     std::array<std::uint8_t, MaxFrameBytes> bytes{};
     std::size_t size = 0;
+    /// Encoded while the encoder is in DTX: a silence, or the update of its noise Opus gives every 400 ms.
+    bool discontinued = false;
 
     [[nodiscard]] std::span<const std::uint8_t> data() const { return {bytes.data(), size}; }
-    /// A frame of silence, with nothing to send: the decoder of the others conceals it.
-    [[nodiscard]] bool silence() const { return size <= 2; }
+    /// A frame of silence, with nothing to send: the decoder of the others conceals it, fading to silence.
+    [[nodiscard]] bool silence() const { return size <= 2 || discontinued; }
 };
 
 /// Encodes the voice of the player, one frame of 20 ms at a time.
