@@ -19,6 +19,7 @@ constexpr float LifeGap = 10.7f;
 constexpr float LivesCentre = 146.7f;
 constexpr float PilotCentre = 114.0f;
 constexpr float ScoreCentre = 75.3f;
+constexpr float HealthCentre = 38.0f;
 /// Between the score and the experience.
 constexpr float XpGap = 21.3f;
 
@@ -86,6 +87,7 @@ void HudSystem::update(float /*elapsed*/)
         const Hud &hud = _huds.get(entity);
         stretchShadows(hud);
         showPilot(hud, local);
+        showHealth(hud);
         showAllies(hud, local);
         showPing(hud, ping);
     }
@@ -120,6 +122,13 @@ void HudSystem::showPilot(const Hud &hud, std::uint8_t slot)
     engine::Text &xp = _texts.get(hud.xp);
     xp.text = player == players.end() ? std::string() : formatXp(*player);
     placeAbove(hud.xp, Margin + measureWidth(hud.score) + XpGap, ScoreCentre, xp.size);
+}
+
+void HudSystem::showHealth(const Hud &hud)
+{
+    engine::Text &health = _texts.get(hud.health);
+    health.text = std::format("HP {}", _sessions.localHealth());
+    placeAbove(hud.health, Margin, HealthCentre, health.size);
 }
 
 void HudSystem::showAllies(const Hud &hud, std::uint8_t local)

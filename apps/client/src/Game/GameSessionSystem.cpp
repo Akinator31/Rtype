@@ -108,6 +108,7 @@ void GameSessionSystem::stop()
     _entities.clear();
     _killed.clear();
     _players.clear();
+    _localHealth = 0;
     _tick = 0;
     _rescue = game::RescueStage::None;
     _outcomeTold = false;
@@ -244,11 +245,15 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
 {
     _tick = snapshot.tick;
     _players = snapshot.players;
+    _localHealth = 0;
 
     std::unordered_set<std::uint32_t> present;
     present.reserve(snapshot.entities.size());
     for (const game::EntityState &state : snapshot.entities) {
         present.insert(state.id);
+        if (isLocalShip(state)) {
+            _localHealth = state.health;
+        }
         const auto found = _entities.find(state.id);
         if (found == _entities.end() || !_ecs.isAlive(found->second)) {
             createEntity(state);
