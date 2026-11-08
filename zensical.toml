@@ -38,6 +38,7 @@ nav = [
         "architecture/client-game.md",
         "architecture/client-online.md",
         "architecture/audio.md",
+        "architecture/voice.md",
         "architecture/scenes-and-interface.md",
         "architecture/threads.md",
     ] },
@@ -99,6 +100,7 @@ nav = [
         "decisions/0029-predicted-shots.md",
         "decisions/0030-measured-delays.md",
         "decisions/0031-destructions-sent-again.md",
+        "decisions/0032-voice-chat-in-the-game-session.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

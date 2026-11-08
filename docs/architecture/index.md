@@ -76,6 +76,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
 | **Interface** | Menus, options and HUD, made of entities like the world (`libs/engine`) | Client |
 | **Audio** | Music and sound effects, built on raylib (`libs/audio`) | Client |
+| **Voice** | The voice chat of an online game, through the game or Discord (`libs/voice`, [Voice](voice.md)) | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
 
 ## World and interface
@@ -122,6 +123,7 @@ The programs are built on twelve libraries:
 | `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
 | `libs/discord` | Signing in with Discord from the client: an interface, and its implementation through the Discord Social SDK, kept in `libs/discord/sdk/`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
+| `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord (`rtype::voice`, header only), and the codec of the voice (`rtype::voice_codec`). Wraps libopus. For the client. | [Voice](voice.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
@@ -134,7 +136,8 @@ the accounts ([Accounts](accounts.md#passwords)), private dependencies of `r-typ
 the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who a player is, and is the HTTP
 client of the tests, comes through CPM too, with OpenSSL from the system on Linux. The Discord Social SDK is a
 private dependency of `rtype::discord_sdk`, linked by `r-type_client` alone
-([ADR 0026](../decisions/0026-discord-social-sdk.md)).
+([ADR 0026](../decisions/0026-discord-social-sdk.md)). libopus, which encodes the voice, is a private dependency
+of `rtype::voice_codec` ([Voice](voice.md#the-codec)).
 
 ## Repository layout
 
