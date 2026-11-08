@@ -7,8 +7,9 @@
 #   rtype::voice_codec   the encoder and the decoder of the voice (rtype/voice/Codec.hpp), built on libopus, a
 #                        private dependency. For the client
 #   rtype::voice_client  the voice of the game for the client: the jitter buffer (rtype/voice/JitterBuffer.hpp),
-#                        the channel of the game (rtype/voice/GameVoice.hpp) and the microphone
-#                        (rtype/voice/Microphone.hpp), through the miniaudio raylib compiles
+#                        the channel of the game (rtype/voice/GameVoice.hpp), the talk modes
+#                        (rtype/voice/Talk.hpp) and the microphone (rtype/voice/Microphone.hpp), through the
+#                        miniaudio raylib compiles
 add_library(rtype_voice INTERFACE)
 add_library(rtype::voice ALIAS rtype_voice)
 target_include_directories(rtype_voice INTERFACE include)
@@ -45,6 +46,7 @@ add_library(rtype_voice_client STATIC
     src/GameVoice.cpp
     src/JitterBuffer.cpp
     src/Microphone.cpp
+    src/Talk.cpp
 )
 add_library(rtype::voice_client ALIAS rtype_voice_client)
 # raylib for its miniaudio: its header (external/miniaudio.h, a system header) and its symbols, which raudio.c
