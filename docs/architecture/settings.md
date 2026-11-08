@@ -38,7 +38,7 @@ Name keys by domain with dots, so that the file stays readable:
 | `voice.input_volume` | The Voice page: the volume of the microphone, from 0 to 1 |
 | `voice.volume` | The Voice page: the volume of the voices of the others, from 0 to 1, apart from the music and the effects |
 | `voice.player.<server>/<account>.volume`, `.muted` | The pause menu of a game online (`keepVoiceSettings()`): how the player hears another player, its volume from 0 to 1 and muted or not; `<server>/guest/<name>` for a guest. Only the players not heard as by default ([Voice](voice.md#in-the-hud-and-the-pause-menu)) |
-| `voice.noise_suppression` | The Voice page: whether RNNoise takes the noise of the room out of the microphone, `true` by default ([Voice](voice.md#the-sound-processing)) |
+| `voice.noise_suppression` | The Voice page: whether the noise of the room is taken out of the microphone, `true` by default ([Voice](voice.md#the-sound-processing)) |
 | `voice.gain_control` | The Voice page: whether the automatic gain brings the voice to the same level, `true` by default |
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
 | `servers.session.<host>:<port>` | `SessionTokens`: the session token of the account signed in on that server, 64 hexadecimal digits, sent in the next `HELLO` ([Accounts](client-online.md#accounts)). A secret: never logged |

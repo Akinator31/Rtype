@@ -154,8 +154,8 @@ games online ([Voice](voice.md#the-devices)) uses two of them:
   the device for the capture; for the streams, whose callbacks of raylib take no pointer, one function per slot
   and a variable of `VoiceStreams.cpp`, set before the first stream opens and cleared after the last closes; for
   the loopback, a variable of `OutputLoopback.cpp`, set before `AttachAudioMixedProcessor()` and cleared after
-  `DetachAudioMixedProcessor()`. The sound processing of the microphone (the echo cancellation, RNNoise and the
-  gain control) runs on Main too, in `GameVoice::poll()`, never in a callback
+  `DetachAudioMixedProcessor()`. The sound processing of the microphone (the echo cancellation, the noise
+  suppression and the gain control of WebRTC) runs on Main too, in `GameVoice::poll()`, never in a callback
   ([Voice](voice.md#the-sound-processing)).
 - **They stop before their buffer goes.** `UnloadAudioStream()` and `DetachAudioMixedProcessor()` take the
   lock of the output thread, and

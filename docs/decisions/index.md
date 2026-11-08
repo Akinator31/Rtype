@@ -38,6 +38,7 @@ technical and comparative study of the project.
 | [0030](0030-measured-delays.md)                         | A round-trip time without the delay of the acknowledgements, an interpolation delay measured | Accepted                                                              |
 | [0031](0031-destructions-sent-again.md)                 | The destructions, unreliable, sent again with the snapshots | Accepted                                                                               |
 | [0032](0032-voice-chat-in-the-game-session.md)          | A voice chat of our own in the game session, and Discord beside it in the same game | Accepted                                                       |
+| [0033](0033-webrtc-audio-processing.md)                 | The echo, the noise and the gain of the microphone by the audio processing of WebRTC | Accepted                                                      |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

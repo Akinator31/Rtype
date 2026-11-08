@@ -23,8 +23,7 @@ targets:
 | `rtype::voice` | `rtype/voice/Devices.hpp` | `Capture`, `Playback` and `Loopback`: the microphone, the voices played and what the speakers play, as interfaces |
 | `rtype::voice` | `rtype/voice/RingBuffer.hpp` | `RingBuffer`: what an audio thread and the game loop share, without a lock |
 | `rtype::voice_codec` | `rtype/voice/Codec.hpp` | `Encoder`, `Decoder`, `isValidFrame()`: the voice in Opus |
-| `rtype::voice_processing` | `rtype/voice/Processing.hpp` | `SoundProcessing`, `ProcessingSettings`: the echo cancellation, the noise suppression and the gain control of the microphone |
-| `rtype::voice_processing` | `rtype/voice/EchoDelay.hpp` | `measureEchoDelay()`, `EchoDelay`: how late the echo comes back, pure |
+| `rtype::voice_processing` | `rtype/voice/Processing.hpp` | `SoundProcessing`, `ProcessingSettings`: the echo cancellation, the noise suppression and the gain control of the microphone, by WebRTC |
 | `rtype::voice_client` | `rtype/voice/JitterBuffer.hpp` | `JitterBuffer`: the frames of one player put back in order and in time |
 | `rtype::voice_client` | `rtype/voice/GameVoice.hpp` | `GameVoice`, the `VoiceChannel` of the voice of the game, and the `VoiceTransport` it goes through |
 | `rtype::voice_client` | `rtype/voice/Talk.hpp` | `TalkMode`, `PushToTalk`, `VoiceActivity`, `LevelMeter`, `levelOf()`: how the player talks, pure |
@@ -33,7 +32,8 @@ targets:
 `rtype::voice` is header only, without dependency: `libs/game` (the messages) and the server know the backends
 and the format without Opus.
 `rtype::voice_codec` is built on libopus, a private dependency: no Opus type in its header.
-`rtype::voice_processing` is built on speexdsp and RNNoise, private dependencies: neither in its headers.
+`rtype::voice_processing` is built on webrtc-audio-processing and abseil, private dependencies: neither in
+its headers.
 `rtype::voice_client` links the codec and the processing, and raylib for its miniaudio, privately: no
 miniaudio in its headers.
 The voices are played by `audio::VoiceStreams` of `libs/audio` ([Audio](audio.md#the-voices)), the `Playback`
@@ -321,53 +321,42 @@ flowchart LR
 
 Without a headset, the speakers come back in the microphone, and the others hear themselves. Between the
 microphone and the encoder, `GameVoice` puts each frame through a `SoundProcessing`
-(`rtype/voice/Processing.hpp`), on the game loop, never in an audio callback. Each frame of 20 ms goes through
-the chain in two halves of 10 ms, the frame of speexdsp and RNNoise:
+(`rtype/voice/Processing.hpp`), on the game loop, never in an audio callback. It is the audio processing of
+WebRTC ([webrtc-audio-processing](https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing) 2.1, the
+one PipeWire and PulseAudio use), in two halves of 10 ms per frame:
 
 | Step | By | Setting |
 |---|---|---|
-| 1. Echo cancellation | `speex_echo` of [speexdsp](https://www.speex.org/) 1.2.1: an adaptive filter of 150 ms (`EchoTail`), the reference being what the speakers play | None: on whenever something is played |
-| 2. Noise suppression | [RNNoise](https://github.com/xiph/rnnoise) 0.2: a small recurrent network trained on voices and noises; its output is 10 ms late | `noiseSuppression`, on by default |
-| 3. What is left of the echo, and the gain control | `speex_preprocess`: the residual echo of the canceller cut by up to 40 dB, and the AGC, towards about -12 dBFS, raising a quiet voice by 20 dB at most | `gainControl`, on by default |
+| 1. High-pass filter | Takes the hum and the rumble under 80 Hz out | None: always on |
+| 2. Echo cancellation | AEC3, the reference being what the speakers play | None: on whenever something is played |
+| 3. Noise suppression | The noise suppressor of WebRTC, at its level `kHigh`: the steady noises (a fan, a hum, a breath) | `noiseSuppression`, on by default |
+| 4. Gain control | AGC2, its adaptive digital gain: the voice brought to about -12 dBFS (`headroom_db` 12), from +6 dB, raised by 30 dB at most, with a limiter | `gainControl`, on by default |
 
-The step 3 runs only with an echo or the gain control: with both off and nothing played, the samples go out
-as they came. speexdsp suppresses the residual echo only with its own noise suppression on: it is on, at 1 dB,
-RNNoise doing the noise.
+With nothing played and both settings off, the samples go out as they came.
 
 **The reference** is the mix of everything played, the voices of the others, the music and the effects,
 taken where raylib has mixed them, before the master volume (`audio::OutputLoopback`). It opens and closes with
-the microphone. Without an audio output, or a `Loopback` (`GameVoice` takes one or `nullptr`), there is no
-echo cancellation, and the rest of the chain runs.
+the microphone, and is given to the canceller as it comes (`played()`, `ProcessReverseStream()`), before the
+microphone of the same `poll()` (`captured()`, then `next()` and `ProcessStream()`). Without an audio output,
+or a `Loopback` (`GameVoice` takes one or `nullptr`), there is no echo cancellation, and the rest of the chain
+runs.
 
-**The delay is measured, not guessed.** The microphone and the reference are two streams of samples, counted
-from the moment they open; the reference of a sample of the microphone is found by the counts:
+**AEC3 does what a filter alone cannot**:
 
-- **Pairing.** At the first call where both have come, the newest sample of each are paired. The echo of a
-  sample played then comes back some delay after its pair: the latencies of the output and of the input, and
-  the way through the room.
-- **Measure** (`measureEchoDelay()`, `rtype/voice/EchoDelay.hpp`, pure). Every 2 s of the microphone
-  (`MeasureEvery`), 1 s of the reference and the microphone around it, both decimated to 2 kHz, are compared
-  at every delay from -20 to 400 ms: the delay where their normalized correlation is highest. A measure is
-  believed over 0.3 (`EchoDelay::MinCorrelation`); the first is kept at once, a change only when two in a row
-  agree within 1 ms, so that a measure fooled by the voice of the player, which is not in the reference, does
-  not move it.
-- **The filter** is given the reference 5 ms (`EchoMargin`) before the delay measured, so that its 150 ms
-  start just before the echo. Before a first measure, the echo is taken to start at 20 ms (`EchoAssumed`),
-  about the least an output and an input add: echoes of 20 to 170 ms are cancelled at once. When the delay
-  measured changes, the filter learns the room again.
-- **Lost samples.** A game loop that stalls for more than a second loses samples of a ring buffer, and moves
-  one stream against the other. Past 80 ms (`MaxDrift`), it is seen at the next frame: both streams are paired
-  again, the delay measured again (`repairs()` counts it). The frames dropped by `GameVoice` after a stall
-  (`drop()`) keep the pairing.
-- **The reference late.** A sample of the reference not come yet when its frame of the microphone is
-  processed is taken as silence: it happens only for a delay under the jitter of the two callbacks, a few
-  milliseconds.
+- **The delay** between what is played and its echo, the latencies of the output and of the input and the
+  way through the room, is estimated by AEC3 itself, and followed when it moves: a game loop that stalls and
+  drops frames of the microphone (`drop()`), or two devices whose clocks drift.
+- **From the start**: what its adaptive filter has not learnt yet is suppressed, so that an echo of the usual
+  delays (20 to 100 ms) is cut from the first second. A long one, of a Bluetooth headset (250 ms), passes for
+  about 400 ms, the time it finds the delay; a delay that moves, for 1 to 1.5 s.
+- **What the filter cannot follow**, the echo of small speakers driven hard (not linear), and the moments where
+  both ends talk at once, are left to its suppressor, which keeps the voice of the player.
 
 The settings are two rows of the [Voice page](#the-voice-page), applied at each update by `applyVoice()`.
 
 ```cpp
 rtype::voice::SoundProcessing processing({.noiseSuppression = true, .gainControl = true});
-processing.played(loopbackSamples);      // what the speakers played since the last time
+processing.played(loopbackSamples);      // what the speakers played since the last time, first
 processing.captured(microphoneSamples);  // what the microphone heard since the last time
 std::array<std::int16_t, rtype::voice::FrameSamples> frame;
 while (processing.next(frame)) {
@@ -375,14 +364,20 @@ while (processing.next(frame)) {
 }
 ```
 
-**The dependencies.** speexdsp and RNNoise are built only with autotools: CPM downloads their release archives
-from Xiph (`DOWNLOAD_ONLY`, with their hash), and `libs/voice/CMakeLists.txt` compiles the sources they need as
-two static C libraries. speexdsp: the canceller, the preprocessor and their KISS FFT, in floating point, with
-the `speexdsp_config_types.h` its configure would write. RNNoise: the network and the weights of its model,
-which its release archive carries and the archive of a tag does not, in plain C, without the code for AVX2
-chosen at run time; two frames of 10 ms each 20 ms stay well under a millisecond. Their licenses (BSD) are
-installed with the client, in `licenses/speexdsp.txt` and `licenses/rnnoise.txt`. None of their symbols
-clashes with those of Opus, which the client links too.
+**The dependency.** webrtc-audio-processing is built only with meson: CPM downloads its release archive from
+freedesktop (`DOWNLOAD_ONLY`, with its hash), and `libs/voice/cmake/WebRtcAudioProcessing.cmake` compiles the
+sources its `meson.build` files list for x86 (about 250, the parts for SSE2 and AVX2 chosen at run time by the
+CPU), so that neither meson nor its subproject is needed on Linux or Windows. The list is to be read again at
+an update. abseil, which it is written against, comes through CPM too, at the release its meson wrap pins
+(20240722.0). One header of WebRTC uses `uint8_t` without `<cstdint>`, which recent GCC no longer includes
+through `<string>`: the build includes it before each of its C++ files (`-include cstdint`, `/FIcstdint`),
+the sources left as they are. Its warnings are not ours (`-w`). Its license (BSD) is installed with the client
+in `licenses/webrtc-audio-processing.txt`, the one of abseil (Apache 2.0) in `licenses/abseil.txt`. The whole
+chain costs under 1 % of a core.
+
+The first version of this step was built on speexdsp, for the echo and the gain, and RNNoise, for the noise,
+with a measure of the delay of ours: the filter of speexdsp learnt slowly, and let the echo through for a
+moment at each start and each new delay. AEC3 replaced both ([ADR 0033](../decisions/0033-webrtc-audio-processing.md)).
 
 ## The talk modes
 
@@ -504,14 +499,15 @@ the pause menu, in `tests/engine.cpp`: its label instead of the percentage, and 
 player leaves), and two clients online, in `tests/client_online.cpp`: the status of one told to the other, and
 its volume and mute applied from the choices of the other.
 
-`tests/voice_processing.cpp` (tag `[voice]`), without a device, on noise played in a room of four reflections
-and a voice-like sound in syllables: the delay of an echo measured within 1 ms from 0 to 390 ms; none without a
-sound played; the delay kept moving only when two measures agree; an echo of 250 ms, past what the filter
-covers before a measure, cut by 20 dB at least (about 70 dB on this room) and its delay measured; the voice of
-the player kept within 3 dB while the echo is cut; the noise of a room cut by 10 dB at least while the voice
-keeps its level within 6 dB and each of its harmonics up to 2.9 kHz within 6 dB; a quiet voice raised by 6 dB
-at least by the gain control, a loud one kept under clipping; frames dropped keeping the pairing; a microphone
-that loses samples paired again; the microphone alone without a reference.
+`tests/voice_processing.cpp` (tag `[voice]`), without a device, on what a game plays (noise in bursts, louder and
+quieter, with pauses) in a room of four reflections, and a voice-like sound in syllables: an echo of 20 and
+60 ms cut by 20 dB at least from the first second, and one of 250 ms too; all of them by 40 dB at least after
+it; an echo whose delay moves by 80 ms cut by 30 dB again two seconds after; the voice of the player kept
+within 6 dB while the echo is cut; the noise of a room cut by 10 dB at least while the voice keeps its level
+within 6 dB and each of its harmonics up to 2.9 kHz within 6 dB; a quiet voice raised by 6 dB at least by the
+gain control, a loud one under clipping once it has adapted; the echo still cut after frames dropped; a second
+of microphone kept at most; the microphone going out as it came with nothing played and the processing off.
+The echo is synthetic: a real room is tried by ear.
 
 `tests/voice_codec.cpp` (tag `[voice]`), on a voice-like sound (a pitch gliding from 140 to 220 Hz, with its
 harmonics): its level within 3 dB and its pitch kept after the codec; about 60 bytes per frame; never more than
