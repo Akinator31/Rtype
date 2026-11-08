@@ -352,6 +352,14 @@ runs.
 - **What the filter cannot follow**, the echo of small speakers driven hard (not linear), and the moments where
   both ends talk at once, are left to its suppressor, which keeps the voice of the player.
 
+**What it cannot cancel**:
+
+- **The sounds of other programs** (a video, a music player, another voice chat): they do not go through the
+  mix of raylib, so they are not in the reference, and a player on speakers sends them.
+- **Another computer in the same room**: each client cancels only what its own speakers play. A player who
+  talks into one computer while the other plays its voice beside it hears itself back, and the microphone of
+  the second one hears the player itself. Two computers side by side test nothing of the echo cancellation.
+
 The settings are two rows of the [Voice page](#the-voice-page), applied at each update by `applyVoice()`.
 
 ```cpp
@@ -507,7 +515,15 @@ within 6 dB while the echo is cut; the noise of a room cut by 10 dB at least whi
 within 6 dB and each of its harmonics up to 2.9 kHz within 6 dB; a quiet voice raised by 6 dB at least by the
 gain control, a loud one under clipping once it has adapted; the echo still cut after frames dropped; a second
 of microphone kept at most; the microphone going out as it came with nothing played and the processing off.
-The echo is synthetic: a real room is tried by ear.
+The echo is synthetic there.
+
+**By ear**, with two computers, the one tried on speakers, the other in a headset, in the same online game:
+nobody talks, the computer on speakers sends all the time (voice activity with a low threshold, or the
+push-to-talk key held). The music of the game it plays is not heard in the headset: it is cancelled. A video
+played beside it in another program is heard: it is not in the reference. Both together show that the
+microphone hears the speakers and that the echo of the game is taken out. Talking spoils the test when both
+computers are in the same room: the microphone of the one on speakers hears the player itself. Tried on
+2026-11-09, a tower on speakers and a laptop in a headset: the music of the game cut, a video heard.
 
 `tests/voice_codec.cpp` (tag `[voice]`), on a voice-like sound (a pitch gliding from 140 to 220 Hz, with its
 harmonics): its level within 3 dB and its pitch kept after the codec; about 60 bytes per frame; never more than
