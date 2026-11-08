@@ -90,6 +90,7 @@ add_executable(rtype_tests
     tls.cpp
     viewport.cpp
     voice.cpp
+    voice_codec.cpp
     helpers/FakeDiscord.cpp
 )
 # The fake Discord is a Crow server: Asio for Windows 10 and later, as libs/network, and on MSVC, Crow and Asio in
@@ -102,7 +103,7 @@ if(MSVC)
 endif()
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::beat rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
-    rtype::scripting rtype::shaders rtype::voice r-type_client_core r-type_server_core
+    rtype::scripting rtype::shaders rtype::voice rtype::voice_codec r-type_client_core r-type_server_core
     CURL::libcurl Crow::Crow Catch2::Catch2WithMain)
 # The fake mail server of the tests speaks TLS with OpenSSL, there where libcurl uses it: not on Windows, whose
 # libcurl uses Schannel
