@@ -42,14 +42,13 @@ void Controls::bindDefaults()
     bind(Control::FaceRight, Binding::gamepadButton(GamepadButton::FaceRight));
     bind(Control::FaceLeft, Binding::key(Key::LeftShift));
     bind(Control::FaceLeft, Binding::gamepadButton(GamepadButton::FaceLeft));
-    bind(Control::FaceUp, Binding::key(Key::M));
+    bind(Control::FaceUp, Binding::key(Key::F));
     bind(Control::FaceUp, Binding::gamepadButton(GamepadButton::FaceUp));
 
     bind(Control::LeftShoulder, Binding::key(Key::Q));
     bind(Control::LeftShoulder, Binding::gamepadButton(GamepadButton::LeftBumper));
     bind(Control::RightShoulder, Binding::key(Key::E));
     bind(Control::RightShoulder, Binding::gamepadButton(GamepadButton::RightBumper));
-    bind(Control::LeftTrigger, Binding::key(Key::V));
     bind(Control::LeftTrigger, Binding::gamepadButton(GamepadButton::LeftTrigger));
     bind(Control::LeftTrigger, Binding::gamepadAxis(GamepadAxis::LeftTrigger, AxisDirection::Positive));
     bind(Control::RightTrigger, Binding::gamepadButton(GamepadButton::RightTrigger));
@@ -58,7 +57,7 @@ void Controls::bindDefaults()
     bind(Control::Start, Binding::key(Key::Escape));
     bind(Control::Start, Binding::key(Key::Enter));
     bind(Control::Start, Binding::gamepadButton(GamepadButton::Start));
-    bind(Control::Select, Binding::key(Key::N));
+    bind(Control::Select, Binding::key(Key::Tab));
     bind(Control::Select, Binding::gamepadButton(GamepadButton::Select));
 }
 

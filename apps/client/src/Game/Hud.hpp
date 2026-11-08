@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Voice/VoiceIcons.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -11,21 +10,17 @@
 namespace rtype::client
 {
 
-/// The look of the HUD: the pictures of a life left and of a life lost, its font, and the icons of the voice.
+/// The look of the HUD: the pictures of a life left and of a life lost, and its font.
 struct HudLook {
     render::TextureId life;
     render::TextureId lostLife;
     render::FontId font;
-    VoiceIconTextures voice{};
 };
 
-/// The line of another player in the HUD, from the right: its score, its name online, its slot ("P2"), and
-/// the icon of its voice.
+/// The line of another player in the HUD: its name, then its score.
 struct HudAlly {
-    ecs::entity_t slot = 0;
     ecs::entity_t name = 0;
     ecs::entity_t score = 0;
-    ecs::entity_t voice = 0;
 };
 
 /// The HUD of a game scene, made of entities of its scene: the HudSystem places them and writes them each
@@ -37,9 +32,8 @@ struct Hud {
     ecs::entity_t bottomShadow = 0;
     /// One picture per life at the start, from the left.
     std::vector<ecs::entity_t> lives;
-    /// "1P", with its name online, above the score of the local player, and the icon of its voice after it.
+    /// "1P", above the score of the local player.
     ecs::entity_t pilot = 0;
-    ecs::entity_t pilotVoice = 0;
     ecs::entity_t score = 0;
     /// One line per other player at most.
     std::vector<HudAlly> allies;
@@ -51,8 +45,7 @@ struct Hud {
 /// Opens the HUD of the game in a scene (docs/architecture/client-game.md, "HUD"), from the Figma design: a
 /// shadow along the top and the bottom of the screen; in the bottom left corner, the lives of the local
 /// player, its slot and its score; in the bottom right corner, the score of each other player, and the ping
-/// under them with its signal bars, online only. Online with a voice, the icon of the voice of each pilot is
-/// beside its name (Figma, Série 16). The events stay in the corner of the toasts, top right.
+/// under them with its signal bars, online only. The events stay in the corner of the toasts, top right.
 /// @param maxLives Lives at the start of the game: one picture each.
 /// @return The entity of the Hud.
 ecs::entity_t openHud(ecs::Ecs &ecs, engine::SceneId scene, const HudLook &look, std::uint8_t maxLives);

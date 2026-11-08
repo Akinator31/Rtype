@@ -77,12 +77,6 @@ struct Lobby::Client {
     {
         return state == State::Welcomed ? std::format("{} ({})", name, playerId) : address.toString();
     }
-
-    /// The player as its game knows it: its name, and its account if signed in.
-    [[nodiscard]] LobbyPlayer lobbyPlayer() const
-    {
-        return {.id = playerId, .name = name, .accountId = account ? account->account.id : 0};
-    }
 };
 
 Lobby::Lobby(rtype::network::EventLoop &loop, rtype::network::TcpListener listener,
@@ -281,7 +275,7 @@ void Lobby::handle(Client &client, std::uint8_t type, std::span<const std::byte>
         } else if (const auto join = rtype::lobby::decodeJoinGame(payload); !join) {
             malformed();
         } else {
-            joined(client, type, _games.join(client.lobbyPlayer(), join->gameId));
+            joined(client, type, _games.join({client.playerId, client.name}, join->gameId));
         }
         return;
     case message_type::LeaveGame:
@@ -334,7 +328,7 @@ void Lobby::createGame(Client &client, std::span<const std::byte> payload)
     client.busy = true;
     const std::uint64_t id = client.id;
     const std::uint32_t playerId = client.playerId;
-    _games.create(client.lobbyPlayer(), *game,
+    _games.create({playerId, client.name}, *game,
                   [this, id, playerId, alive = std::weak_ptr<bool>(_alive)](const Games::JoinResult &result) {
                       if (alive.expired()) {
                           return;

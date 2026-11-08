@@ -213,13 +213,7 @@ than one already held when the scene opened:
   therefore not be chosen while the banner asks.
 
 ++escape++ cancels, and is never bound. The gamepads keep their buttons. A button under the table puts every
-key back to its default (`Controls::resetDefaults()`), those of the voice included.
-
-The keys of the voice (push to talk, mute, deafen) are chosen the same way on the Voice page
-([Voice](voice.md#the-keys)): they are actions too (`VoiceActions`), on controls the game does not read, and
-`assignKey()` and `findKeyOwner()` go through every action (`BoundActions`), so that a key does one thing among
-those of the game and those of the voice. Both pages share their rows and the scene that asks for the key
-(`Controls/KeyChoice.hpp`).
+key back to its default (`Controls::resetDefaults()`).
 
 A key is shown as it is printed on the keyboard of the player (`input::keyLabel()`, from GLFW): `Key::W` shows
 "Z" on AZERTY. A key that prints no character is shown by its translated name, `key.<name>` in the

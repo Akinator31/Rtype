@@ -223,9 +223,6 @@ void InterfaceSystem::activate(ecs::entity_t widget)
         _ecs.defer([toggle] { toggle.set(!toggle.get()); });
     } else if (_choices.has(widget) || _settingRows.has(widget)) {
         adjust(widget, 1);
-    } else if (_sliders.has(widget) && _sliders.get(widget).onConfirm) {
-        playSound(widget, _style.button.clickSound);
-        _ecs.defer([onConfirm = _sliders.get(widget).onConfirm] { onConfirm(); });
     } else if (_fields.has(widget)) {
         const TextField &field = _fields.get(widget);
         if (auto onSubmit = field.onSubmit) {
@@ -254,9 +251,8 @@ void InterfaceSystem::editField(ecs::entity_t widget, float elapsed)
 
 void InterfaceSystem::click(ecs::entity_t widget)
 {
-    // A click on a text field only gives it the focus: it does not submit it. A click on a slider drags its
-    // handle (updateSliders()): only Confirm runs its action
-    if (!_fields.has(widget) && !_sliders.has(widget)) {
+    // A click on a text field only gives it the focus: it does not submit it
+    if (!_fields.has(widget)) {
         activate(widget);
     }
 }

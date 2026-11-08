@@ -78,7 +78,7 @@ the input. When the game scene closes, the engine destroys its entities and the 
 | Scene | What it holds |
 |---|---|
 | `game` | The [scrolling sky](#the-sky), the world of the session, and the [HUD](#hud). Escape opens the pause menu. |
-| `pause` | Over the game, a veil on its left, as the pages of settings: **Resume**, or **Leave the game**; online with other players, the voice of each ([Voice](voice.md#in-the-hud-and-the-pause-menu)). Offline, the game stops while it is open. |
+| `pause` | Over the game, dimmed: **Resume**, or **Leave the game**. Offline, the game stops while it is open. |
 
 `GameScenes::play(session, onEnd)` starts a game with a session: the game scene replaces every scene. "Solo"
 plays a `LocalSession`, and goes back to the main menu when it ends; the lobby plays a `RemoteSession`, and
@@ -289,27 +289,21 @@ The HUD is the one of the Figma design (file `RrrH0ic4ttdyDoc3nRnWBr`, "Rangée 
 - a shadow along the top of the screen (black at 60 % fading out) and one along the bottom (fading in to 65 %),
   under the HUD and the toasts: `engine::Box` with a `bottom` colour, a vertical gradient;
 - bottom left, the local player: one picture per life of the start (`images/hud/life.png`, `life_lost.png`, as
-  on the death screen), lit for the lives left; its slot, `1P`, and online its name (`1P · KAZE`) and the icon
-  of its voice; its score on seven digits, in large;
-- bottom right, the other players, one line each from the top in the order of their slots: online, the icon of
-  its voice, then `P2`, its name and its score, its name turned white while it talks; offline, `P2` and its
-  score. Under them, online, the ping (`28 MS`) with four signal bars, lit under 25, 60 and 120 ms
+  on the death screen), lit for the lives left; its slot, `1P`; its score on seven digits, in large;
+- bottom right, the other players, one line each from the top in the order of their slots, `P2` then its
+  score; under them, online, the ping (`28 MS`) with four signal bars, lit under 25, 60 and 120 ms
   (`HudSystem::FourBars`…), one at least. Offline, there is no ping: nothing is shown;
 - top right, the events, which stay the toasts of the engine ([Events](#events)).
 
 `openHud()` creates its entities in the game scene, in the Interface layer under the death screen, and a `Hud`
 that lists them. The `HudSystem` writes them each frame from the players of the latest snapshot
-(`GameSessionSystem::players()`), the ping of the session (`GameSession::ping()`: the round-trip time of the
-`network::ClientSession` online, none offline), the names of the players (`GameSession::playerNames()`, none
-offline) and its voice (`GameSession::voiceView()`, none offline), and places them through their `Anchor`: the
-lines of the other players pile up from the ping, and their parts follow the width of the one on their right.
-Before the first snapshot, the local player has all its lives and a score of 0.
+(`GameSessionSystem::players()`) and the ping of the session (`GameSession::ping()`: the round-trip time of the
+`network::ClientSession` online, none offline), and places them through their `Anchor`: the lines of the other
+players pile up from the ping, and their names follow the width of their score. Before the first snapshot, the
+local player has all its lives and a score of 0.
 
-The voice in the HUD is the one of Série 16 of the design (`Voix en jeu`, node 210:1483): the icons, and the
-badge above the ship of a pilot who talks, are described in [Voice](voice.md#in-the-hud-and-the-pause-menu).
-
-The design also has a record (`HI`) and a Beam gauge: the game keeps no record and has no charged shot yet.
-The events name the players by slot.
+The design also has a record (`HI`), a Beam gauge and the names of the pilots: the game keeps no record, has no
+charged shot yet, and the HUD names the players by slot, as the events do.
 
 ### Events
 
@@ -494,8 +488,7 @@ added with a line in one of the tables and its name in `en.lang` and `fr.lang`.
   just lost goes out after the veil and the rest have faded in;
 - the HUD: the lives left of the local player lit, its slot and its score on seven digits, all its lives before
   the first snapshot; the scores of the other players, the first on top, a player gone leaving its line; the
-  ping with its signal bars when the session has one, nothing offline; online, the names of the pilots and the
-  icons of their voice, and the badge above the ship of a pilot who talks (tag `[voice]`).
+  ping with its signal bars when the session has one, nothing offline.
 
 ```sh
 ./build/bin/rtype_tests "[client]"

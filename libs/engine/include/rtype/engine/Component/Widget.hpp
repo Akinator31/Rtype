@@ -2,7 +2,6 @@
 
 #include "rtype/input/TextInput.hpp"
 #include "rtype/render/ResourceManager.hpp"
-#include "rtype/render/Types.hpp"
 
 #include <cstddef>
 #include <functional>
@@ -48,27 +47,11 @@ struct Toggle {
 };
 
 /// A value between 0 and 1, shown as a percentage: "Caption: 80%". Left, Right and the mouse wheel change it.
-/// A label, written instead of the percentage, an action for Confirm and a picture after the caption are
-/// optional: the volume of a player in the pause menu, muted with Confirm, shows "MUTED" and its state.
 struct Slider {
-    /// A picture drawn after the caption, tinted: the state of the voice of a player, for instance.
-    struct Icon {
-        render::TextureId texture;
-        /// Part of the texture, in texture pixels.
-        render::Rectangle source;
-        render::Color tint = render::colors::White;
-    };
-
     std::string caption;
     std::function<float()> get;
     std::function<void(float)> set;
     float step = 0.1f;
-    /// Written instead of the percentage when it gives a text ("MUTED"), read every frame. Optional.
-    std::function<std::string()> label{};
-    /// What Confirm does on the slider: mute what it sets the volume of, for instance. Optional.
-    std::function<void()> onConfirm{};
-    /// The picture after the caption, read every frame: none when it gives nothing. Optional.
-    std::function<std::optional<Icon>()> icon{};
 };
 
 /// Draws a Slider as a rail with a handle (InterfaceStyle::slider) instead of a text, and lets the mouse drag

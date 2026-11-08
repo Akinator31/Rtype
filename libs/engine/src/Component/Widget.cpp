@@ -13,11 +13,6 @@ std::string widgetLabel(const Toggle &toggle)
 
 std::string widgetLabel(const Slider &slider)
 {
-    if (slider.label) {
-        if (std::string label = slider.label(); !label.empty()) {
-            return slider.caption + ": " + label;
-        }
-    }
     const float value = slider.get ? slider.get() : 0.0f;
     return slider.caption + ": " + std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%";
 }

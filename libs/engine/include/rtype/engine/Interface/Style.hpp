@@ -336,9 +336,6 @@ struct SliderStyle {
     float paddingTop = 20.0f;
     float captionGap = 22.0f;
     float paddingBottom = 26.0f;
-    /// The picture after the caption (Slider::icon): its size, and the space between the caption and it.
-    float iconSize = 22.0f;
-    float iconGap = 12.0f;
     float railThickness = 3.0f;
     float fillThickness = 4.0f;
     render::Color rail{255, 255, 255, 41};

@@ -468,15 +468,8 @@ TEST_CASE("The master reads the score of a player who just destroyed a Bydo, wit
     std::uint32_t stamped = 0;
     std::optional<float> target;
     auto nextInput = Clock::now();
-    auto nextPing = Clock::now();
     const auto play = [&] {
         client.update();
-        // The lobby closes a player silent for 30 s, and its game with it: on a slow machine, the first kill
-        // can take longer
-        if (Clock::now() >= nextPing) {
-            alice->send(message_type::Ping);
-            nextPing += 5s;
-        }
         const rtype::game::SnapshotPart &part = *client.snapshot;
         std::optional<rtype::game::EntityState> ship;
         target.reset();

@@ -224,13 +224,12 @@ std::vector<std::byte> encode(const AddPlayerMessage &message)
     require(message.sessionId != 0, "A session id is never 0");
     require(!message.name.empty() && message.name.size() <= MaxInstancePlayerNameLength,
             "A player name is 1 to 16 bytes");
-    Writer writer(81 + message.name.size());
+    Writer writer(73 + message.name.size());
     writer.writeU32(message.playerId);
     writer.writeU32(message.sessionId);
     writer.writeBytes(message.clientKey);
     writer.writeBytes(message.serverKey);
     writer.writeString(message.name);
-    writer.writeU64(message.accountId);
     return writer.take();
 }
 
@@ -243,7 +242,6 @@ std::optional<AddPlayerMessage> decodeAddPlayer(std::span<const std::byte> paylo
     message.clientKey = reader.readBytes<32>();
     message.serverKey = reader.readBytes<32>();
     message.name = reader.readString(1, MaxInstancePlayerNameLength);
-    message.accountId = reader.readU64();
     if (message.sessionId == 0) {
         reader.fail();
     }

@@ -72,48 +72,6 @@ TEST_CASE("The action that already has a key is found before it is taken", "[set
     CHECK(findKeyOwner(controls, Control::Up, Key::W)->control == Control::FaceDown);
 }
 
-TEST_CASE("The keys of the voice are V, M and N, and LT, Y and View on a gamepad", "[settings][voice]")
-{
-    Controls controls;
-
-    CHECK(keysOf(controls, PushToTalkControl) == std::vector{Key::V});
-    CHECK(keysOf(controls, MuteControl) == std::vector{Key::M});
-    CHECK(keysOf(controls, DeafenControl) == std::vector{Key::N});
-    CHECK(gamepadNamesOf(controls, PushToTalkControl) == std::vector<std::string>{"pad.lt"});
-    CHECK(gamepadNamesOf(controls, MuteControl) == std::vector<std::string>{"pad.y"});
-    CHECK(gamepadNamesOf(controls, DeafenControl) == std::vector<std::string>{"pad.view"});
-    // No action of the game reads them
-    for (const GameAction &action : GameActions) {
-        for (const GameAction &voice : VoiceActions) {
-            CHECK(action.control != voice.control);
-        }
-    }
-}
-
-TEST_CASE("A key does one thing among the actions of the game and those of the voice", "[settings][voice]")
-{
-    Controls controls;
-
-    // V talks: Fire asks before taking it, and takes it from push-to-talk
-    REQUIRE(findKeyOwner(controls, Control::FaceDown, Key::V) != nullptr);
-    CHECK(findKeyOwner(controls, Control::FaceDown, Key::V)->name == "push_to_talk");
-    assignKey(controls, Control::FaceDown, Key::V);
-    CHECK(keysOf(controls, PushToTalkControl).empty());
-    // And the other way around
-    assignKey(controls, MuteControl, Key::V);
-    CHECK(keysOf(controls, Control::FaceDown).empty());
-    CHECK(keysOf(controls, MuteControl) == std::vector{Key::V});
-
-    rtype::engine::Settings settings;
-    keepControlSettings(settings, controls);
-    CHECK(settings.getString("controls.mute") == "V");
-    CHECK(settings.getString("controls.push_to_talk") == "");
-    Controls next;
-    applyControlSettings(settings, next);
-    CHECK(keysOf(next, MuteControl) == std::vector{Key::V});
-    CHECK(keysOf(next, PushToTalkControl).empty());
-}
-
 TEST_CASE("A key chosen replaces the keys of the action, and its gamepad buttons stay", "[settings]")
 {
     Controls controls;

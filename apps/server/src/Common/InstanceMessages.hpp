@@ -18,7 +18,7 @@ namespace rtype::server
 {
 
 /// The version of this protocol, in INSTANCE_HELLO.
-inline constexpr std::uint16_t InstanceProtocolVersion = 5;
+inline constexpr std::uint16_t InstanceProtocolVersion = 4;
 /// Longest name of a game, in bytes of UTF-8.
 inline constexpr std::size_t MaxGameNameLength = 32;
 /// Longest name of a player, in bytes of UTF-8.
@@ -154,8 +154,6 @@ struct AddPlayerMessage {
     std::array<std::byte, 32> serverKey{};
     /// 1 to MaxInstancePlayerNameLength bytes.
     std::string name;
-    /// The id of its account, 0 for a guest (version 5): told to the other players in PLAYER_JOINED.
-    std::uint64_t accountId = 0;
 
     friend bool operator==(const AddPlayerMessage &, const AddPlayerMessage &) = default;
 };
