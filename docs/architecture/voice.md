@@ -2,8 +2,8 @@
 
 !!! warning "In progress"
 
-    The voice chat is being built. This page describes what exists: the interface, the rule of the backends
-    and the codec. The messages of the game protocol and the devices come with the next steps.
+    The voice chat is being built. This page describes what exists: the interface, the rule of the backends,
+    the codec and the messages of the game protocol. The devices come with the next steps.
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
@@ -15,10 +15,12 @@ targets:
 | Target | Header | Content |
 |---|---|---|
 | `rtype::voice` | `rtype/voice/VoiceChannel.hpp` | `VoiceChannel`, the voice of one game for the player of this client; `Participant`, `Join`, `Position`, `Slot` |
-| `rtype::voice` | `rtype/voice/Backend.hpp` | `Backend` (`None`, `Game`, `Discord`) and `carriedByGame()` |
+| `rtype::voice` | `rtype/voice/Backend.hpp` | `Backend` (`None`, `Game`, `Discord`), `carriedByGame()` and `name()` |
+| `rtype::voice` | `rtype/voice/Format.hpp` | `SampleRate`, `FrameSamples`, `FramesPerSecond`, `MaxFrameBytes`: what the codec, the protocol and the devices agree on |
 | `rtype::voice_codec` | `rtype/voice/Codec.hpp` | `Encoder`, `Decoder`, `isValidFrame()`: the voice in Opus |
 
-`rtype::voice` is header only, without dependency: the server can know the backends without Opus.
+`rtype::voice` is header only, without dependency: `libs/game` (the messages) and the server know the backends
+and the format without Opus.
 `rtype::voice_codec` is built on libopus, a private dependency: no Opus type in its header.
 
 ## The backends
@@ -116,6 +118,46 @@ A frame comes from the network: `decode()` and `decodeFec()` refuse, and return 
 Opus packet of 20 ms of 1 to 160 bytes (`isValidFrame()`), and leave the samples as they were. A packet of
 another length (10 ms, 40 ms) is refused, so that every frame is the same 960 samples.
 
+## In the game session
+
+The voice travels in the UDP session of the game
+([game protocol, section 9.4](../protocol/game.md#94-the-voice)), in four messages of `libs/game`
+(`rtype/game/Messages.hpp`):
+
+| Message | Direction | Content |
+|---|---|---|
+| `VOICE` (`0x41`) | Client → game, unreliable | `VoiceMessage`: sequence, last of a talk spurt, 1 to 160 bytes of Opus |
+| `VOICE_STATE` (`0x42`) | Client → game, reliable | `VoiceStateMessage`: the backend of the player |
+| `VOICE_FRAME` (`0x84`) | Game → client, unreliable | `VoiceFrameMessage`: the slot of the player who talks, then as `VOICE` |
+| `VOICE_ROSTER` (`0x85`) | Game → client, reliable | `VoiceRosterMessage`: the backend of each slot |
+
+These are new types, which an older client or game ignores: the game protocol stays at version 2.
+
+```mermaid
+sequenceDiagram
+    participant A as Client A (game)
+    participant G as Game (GameHost)
+    participant B as Client B (game)
+    participant D as Client D (Discord)
+    A->>G: VOICE_STATE GAME
+    G->>A: VOICE_ROSTER
+    G->>B: VOICE_ROSTER
+    G->>D: VOICE_ROSTER
+    A->>G: VOICE seq 7
+    G->>B: VOICE_FRAME slot 0, seq 7
+    G->>D: VOICE_FRAME slot 0, seq 7
+```
+
+*A player on the game talks: the game forwards its frame to every other player with a voice, on the game or on
+Discord. A frame of D, on Discord, would go to A and B, never to another player on Discord, who hears D there.*
+
+- **The game** (`GameHost`, [Server](server.md)) keeps the backend of each player, sends the roster at every
+  change, and forwards each frame to the others, within the rate of a `VoiceRate`: 60 frames per second, bursts
+  of 10.
+- **The client** (`RemoteSession`, [The client online](client-online.md#remotesession)) tells its backend,
+  sends the frames it is given in the datagram of the next `INPUT`, and keeps the frames of the others and the
+  roster for the voice channel. It neither captures nor plays.
+
 ## Rules
 
 - **The voice is never stored nor logged**, by the game or the client, and a replay has no voice.
@@ -127,6 +169,12 @@ another length (10 ms, 40 ms) is refused, so that every frame is the same 960 sa
 
 `tests/voice.cpp` (tag `[voice]`): the rule of the backends for every pair, the mixed game of 2 + 2, and a
 channel that knows the other players of its game, not its own.
+
+The messages, in `tests/game_messages.cpp` (tags `[game][messages][voice]`): field by field, round trips with
+frames of 1, 60 and 160 bytes, every malformed case, an unknown backend read as `NONE`, the reserved bits
+dropped, random bytes. The game, in `tests/server_instance.cpp`, and two clients online, in
+`tests/client_online.cpp`, both tag `[voice]`: see [Server](server.md#tests) and
+[The client online](client-online.md#tests).
 
 `tests/voice_codec.cpp` (tag `[voice]`), on a voice-like sound (a pitch gliding from 140 to 220 Hz, with its
 harmonics): its level within 3 dB and its pitch kept after the codec; about 60 bytes per frame; never more than

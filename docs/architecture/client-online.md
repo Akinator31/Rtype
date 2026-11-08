@@ -244,6 +244,9 @@ CMake warns and leaves `r-type_client` out, the server and the tests are built.
 | Direction | What | How often |
 |---|---|---|
 | Client → instance | `INPUT`: the input of the player, stamped with a tick, with the inputs of the 7 ticks before | 60 per second, whatever the frame rate |
+| Client → instance | `VOICE_STATE`: what carries the voice of the player (`setVoiceBackend()`) | Once accepted, then at every change |
+| Client → instance | `VOICE`: a frame of the voice of the player (`sendVoice()`) | 50 per second while the player talks |
+| Instance → client | `VOICE_FRAME`: the voice of the others, for `takeVoiceFrames()`; `VOICE_ROSTER`: what carries each voice, `voiceRoster()` | As they come |
 | Instance → client | `SNAPSHOT` parts and `ENTITIES_DESTROYED`, into a `RemoteWorld` | 30 and as they come |
 | Instance → client | `PLAYER_JOINED`, `PLAYER_LEFT`: the names of the players | When they join and leave |
 | Instance → client | `GAME_OVER`, `DISCONNECT`, or nothing for 5 seconds: the end | Once |
@@ -257,6 +260,11 @@ CMake warns and leaves `r-type_client` out, the server and the tests are built.
   `GameSessionSystem` draws it as it draws the offline world, and the entities move at the frame rate.
 - **Pausing** does nothing online: the game goes on, and the input sent under the pause menu is empty.
 - **Leaving** sends `DISCONNECT` to the game, when the session is destroyed.
+- **The voice** ([Voice](voice.md)): the session carries it and nothing more. Its backend is `NONE` until
+  `setVoiceBackend()`; one set before the game accepts the player is told at the acceptance. `sendVoice()`
+  queues a `VOICE`, which leaves with the next datagram, the one of the next `INPUT`; it refuses before the
+  acceptance, after the end and on `NONE`. The frames of the others wait for `takeVoiceFrames()`, 150 at most
+  (a second of three players), the oldest dropped beyond.
 
 ## Input clock
 
@@ -417,6 +425,9 @@ shots.apply(snapshot, slot, drawnTick, inputTick); // then, on the world of the 
 - a client trusting no key told the key of the server instead of closed, then welcomed once it trusts it;
 - two clients playing the same game, each moving its own ship and seeing the other's, with the names of the
   players, the world drawn at every frame behind the newest one, and inputs stamped ahead of the world;
+- two clients hearing each other through the game (tag `[voice]`): a backend set before the acceptance told at
+  it, no voice sent to a player on `NONE`, the roster on both, then a frame received with its slot, by the
+  other only;
 - a game that crashes reported to its player, who can create another one, and a game that stops ending the
   session of its player.
 
