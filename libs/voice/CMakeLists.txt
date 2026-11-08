@@ -1,6 +1,7 @@
 # The voice chat of an online game (docs/architecture/voice.md, ADR 0032), in two targets:
 #   rtype::voice        the interface the client knows (rtype/voice/VoiceChannel.hpp) and what carries the voice
-#                       of each player (rtype/voice/Backend.hpp). Header only: the server can use it without Opus
+#                       of each player (rtype/voice/Backend.hpp), and the format of the voice
+#                       (rtype/voice/Format.hpp). Header only: the game protocol and the server use it without Opus
 #   rtype::voice_codec  the encoder and the decoder of the voice (rtype/voice/Codec.hpp), built on libopus, a
 #                       private dependency. For the client
 add_library(rtype_voice INTERFACE)
