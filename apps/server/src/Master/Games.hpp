@@ -61,6 +61,8 @@ struct GameStatus {
 struct LobbyPlayer {
     std::uint32_t id = 0;
     std::string name;
+    /// The id of its account, 0 for a guest.
+    std::uint64_t accountId = 0;
 };
 
 /// The games of the master (ADR 0013): one instance per game, started with Process, connected back on a local

@@ -113,8 +113,13 @@ TEST_CASE("An input is the one of the example of the specification", "[game][mes
 TEST_CASE("The small messages are written field by field", "[game][messages]")
 {
     CHECK(encode(AcceptedMessage{2, 60, 1000}) == bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8}));
+    // A guest, account 0; then the account 7 (version 3)
     CHECK(encode(PlayerJoinedMessage{1, 42, "Pavel"}) ==
-          bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l'}));
+          bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l', 0x00, 0x00, 0x00, 0x00, 0x00,
+                 0x00, 0x00, 0x00}));
+    CHECK(encode(PlayerJoinedMessage{1, 42, "Pavel", 7}) ==
+          bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l', 0x00, 0x00, 0x00, 0x00, 0x00,
+                 0x00, 0x00, 0x07}));
     CHECK(encode(PlayerLeftMessage{3, LeaveReason::TimedOut}) == bytes({0x03, 0x01}));
     CHECK(encode(EntitiesDestroyedMessage{1000, {{7, DestroyCause::Killed}, {9, DestroyCause::Removed}}}) ==
           bytes({0x00, 0x00, 0x03, 0xE8, 0x02, 0x00, 0x00, 0x00, 0x07, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00}));
@@ -157,6 +162,37 @@ TEST_CASE("The messages of the voice survive a round trip, with frames of 1 to 1
     const VoiceRosterMessage roster{{rtype::voice::Backend::Discord, rtype::voice::Backend::Game,
                                      rtype::voice::Backend::None, rtype::voice::Backend::Discord}};
     CHECK(decodeVoiceRoster(encode(roster)) == roster);
+}
+
+TEST_CASE("What each player tells about its voice is one byte of flags", "[game][messages][voice]")
+{
+    using rtype::voice::Status;
+    CHECK(encode(VoiceStatusMessage{}) == bytes({0x00}));
+    CHECK(encode(VoiceStatusMessage{{.muted = true}}) == bytes({0x01}));
+    CHECK(encode(VoiceStatusMessage{{.deafened = true}}) == bytes({0x02}));
+    CHECK(encode(VoiceStatusMessage{{.noMicrophone = true}}) == bytes({0x04}));
+    CHECK(encode(VoiceStatusesMessage{{Status{.muted = true, .deafened = true}, Status{}, Status{},
+                                       Status{.noMicrophone = true}}}) == bytes({0x03, 0x00, 0x00, 0x04}));
+
+    const VoiceStatusMessage all{{.muted = true, .deafened = true, .noMicrophone = true}};
+    CHECK(decodeVoiceStatus(encode(all)) == all);
+    // The reserved bits are dropped
+    CHECK(decodeVoiceStatus(bytes({0xF9})) == VoiceStatusMessage{{.muted = true}});
+    CHECK_FALSE(decodeVoiceStatus(bytes({})));
+    CHECK_FALSE(decodeVoiceStatus(bytes({0x01, 0x00})));
+    const VoiceStatusesMessage statuses{
+        {Status{}, Status{.muted = true}, Status{.deafened = true}, Status{}}};
+    CHECK(decodeVoiceStatuses(encode(statuses)) == statuses);
+    CHECK_FALSE(decodeVoiceStatuses(bytes({0x00, 0x00, 0x00})));
+    CHECK_FALSE(decodeVoiceStatuses(bytes({0x00, 0x00, 0x00, 0x00, 0x00})));
+}
+
+TEST_CASE("PLAYER_JOINED carries the account of the player", "[game][messages]")
+{
+    const PlayerJoinedMessage signedIn{2, 9, "Nova", 0xFFFFFFFFFFFFFFFF};
+    CHECK(decodePlayerJoined(encode(signedIn)) == signedIn);
+    // Version 2, without the account: too short
+    CHECK_FALSE(decodePlayerJoined(bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l'})));
 }
 
 TEST_CASE("The voice refuses an empty frame, one over 160 bytes, a slot above 3, or bytes left over",

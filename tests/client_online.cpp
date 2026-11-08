@@ -589,10 +589,25 @@ TEST_CASE("The microphone of a client online is heard from the stream of its slo
     CHECK(alicePlayback.played[0].empty());
     CHECK(alicePlayback.played[1].empty());
 
-    // She mutes herself with its key: closed
+    // She mutes herself with its key: closed, and Bob is told
     aliceVoice.pushToTalk = false;
     aliceVoice.muted = true;
     REQUIRE(play(master.loop, both, [&] { return !aliceMicrophone.isOpen; }));
+    REQUIRE(play(master.loop, both, [&] { return bobSession.voice()->participants().at(0).status.muted; }));
+    CHECK(bobSession.voiceStatuses().statuses[0] == voice::Status{.muted = true});
+    CHECK(bobSession.voiceView()->local == rtype::client::LocalVoice{});
+    CHECK(aliceSession.voiceView()->local.muted);
+
+    // Bob turns Alice down, then mutes her, from his pause menu: kept under her name, a guest
+    const std::optional<std::string> key = bobSession.voiceKey(0);
+    REQUIRE(key);
+    CHECK(*key == rtype::client::playerVoiceKey("", 0, "Alice"));
+    CHECK(bobSession.accountOf(0) == 0u);
+    bobVoice.preferences.players[*key] = {.volume = 0.5f, .muted = false};
+    REQUIRE(play(master.loop, both, [&] { return bobSession.voice()->participants().at(0).volume == 0.5f; }));
+    bobVoice.preferences.players[*key].muted = true;
+    REQUIRE(play(master.loop, both, [&] { return bobSession.voice()->participants().at(0).mutedByMe; }));
+    CHECK(bobPlayback.volume[0] == 0.0f);
 }
 
 TEST_CASE("A client is told when its game crashes", "[online]")

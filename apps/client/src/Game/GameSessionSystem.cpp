@@ -50,6 +50,11 @@ bool isPlayerSideShip(game::EntityKind kind)
 /// snapshot or so when it is drawn: no farther than this from its centre.
 const float ShooterReach = 2.0f * game::Rules{}.shipHalfWidth;
 
+/// The badges of the voice are drawn over the health bars (order 35), under the damage numbers.
+constexpr int VoiceBadgeOrder = 36;
+/// How fast a badge of the voice fades in and out, in opacity per second.
+constexpr float VoiceBadgeFade = 8.0f;
+
 } // namespace
 
 game::PlayerInput inputFrom(const engine::Controls &controls)
@@ -233,6 +238,7 @@ void GameSessionSystem::update(float elapsed)
         place(*drawn);
     }
     placeShipModels(elapsed);
+    showVoiceBadges(elapsed);
     if (_session->isOver() && _onOver) {
         // Once: it usually switches scenes, at the next update
         const std::function<void()> onOver = std::exchange(_onOver, nullptr);
@@ -482,6 +488,43 @@ void GameSessionSystem::showHealth(ecs::entity_t entity, const game::EntityState
     health.health = maxHealth > 0 ? static_cast<float>(state.health) / static_cast<float>(maxHealth) : 0.0f;
     if (hit) {
         health.time = 0.0f;
+    }
+}
+
+void GameSessionSystem::showVoiceBadges(float elapsed)
+{
+    const std::optional<VoiceView> voice = _voiceBadgeLook ? _session->voiceView() : std::nullopt;
+    if (!voice) {
+        return;
+    }
+    const std::uint8_t local = _session->localSlot();
+    for (const auto &[networkId, ref] : _entities) {
+        if (!_ecs.isAlive(ref)) {
+            continue;
+        }
+        Replicated &replicated = _ecs.getComponent<Replicated>(ref.id);
+        if (replicated.kind != game::EntityKind::PlayerShip || replicated.owner == local) {
+            continue;
+        }
+        const auto pilot = std::ranges::find(voice->others, replicated.owner, &voice::Participant::slot);
+        const bool speaking = pilot != voice->others.end() && voiceIconOf(*pilot) == VoiceIcon::Speaking;
+        if (!replicated.voiceBadge) {
+            if (!speaking) {
+                continue;
+            }
+            const ecs::entity_t badge = _ecs.createEntity();
+            _ecs.addComponent<engine::SceneMember>(badge, *_scene);
+            _ecs.addComponent<engine::Drawable>(badge, engine::Layer::World, VoiceBadgeOrder);
+            ecs::attach(_ecs, badge, ref.id, {_voiceBadgeLook->x, _voiceBadgeLook->y});
+            _ecs.addComponent<engine::Sprite>(badge, _voiceBadgeLook->texture, _voiceBadgeLook->source,
+                                              _voiceBadgeLook->size, _voiceBadgeLook->size);
+            _ecs.addComponent<engine::Opacity>(badge, 0.0f);
+            replicated.voiceBadge = badge;
+        }
+        // Faded in and out, so that a short silence between two words does not blink
+        float &opacity = _ecs.getComponent<engine::Opacity>(*replicated.voiceBadge).value;
+        const float step = elapsed * VoiceBadgeFade;
+        opacity = speaking ? std::min(1.0f, opacity + step) : std::max(0.0f, opacity - step);
     }
 }
 

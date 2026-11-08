@@ -113,6 +113,13 @@ void GameVoice::setBackend(Slot slot, Backend backend)
     }
 }
 
+void GameVoice::setStatus(Slot slot, Status status)
+{
+    if (Remote *other = remote(slot)) {
+        other->player.status = status;
+    }
+}
+
 void GameVoice::setSelfMute(bool muted)
 {
     if (muted == _selfMuted) {
@@ -129,15 +136,17 @@ void GameVoice::setTalking(bool talking)
 
 void GameVoice::setParticipantVolume(Slot slot, float volume)
 {
-    if (Remote *other = remote(slot)) {
-        other->player.volume = std::clamp(volume, 0.0f, MaxVolume);
+    Remote *other = remote(slot);
+    const float clamped = std::clamp(volume, 0.0f, MaxVolume);
+    if (other != nullptr && other->player.volume != clamped) {
+        other->player.volume = clamped;
         applyVolume(*other);
     }
 }
 
 void GameVoice::setParticipantMute(Slot slot, bool muted)
 {
-    if (Remote *other = remote(slot)) {
+    if (Remote *other = remote(slot); other != nullptr && other->player.mutedByMe != muted) {
         other->player.mutedByMe = muted;
         if (muted) {
             other->jitter.reset();
@@ -218,9 +227,10 @@ void GameVoice::updateCapture()
     const bool wanted = _joined && !_selfMuted;
     if (wanted && !_captureOpen) {
         _captureOpen = _capture.open();
-        if (!_captureOpen) {
+        if (!_captureOpen && !_microphoneMissing) {
             logger().warning("No microphone: the player listens only");
         }
+        _microphoneMissing = !_captureOpen;
     } else if (!wanted && _captureOpen) {
         _capture.close();
         _captureOpen = false;

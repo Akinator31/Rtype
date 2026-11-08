@@ -85,6 +85,7 @@ bool GameHost::addPlayer(const AddPlayerMessage &player)
     added.playerId = player.playerId;
     added.slot = *slot;
     added.name = player.name;
+    added.accountId = player.accountId;
     _players.emplace(player.sessionId, std::move(added));
     logger().debug("Player {} ({}) expected on session {}, slot {}", player.name, player.playerId,
                    player.sessionId, *slot);
@@ -109,19 +110,21 @@ void GameHost::connected(std::uint32_t session, const rtype::network::Address &f
     // The players already there, for the newcomer
     for (const auto &[otherSession, other] : _players) {
         if (other.connected && otherSession != session) {
-            _sessions.send(
-                session, rtype::game::message_type::PlayerJoined,
-                rtype::game::encode(rtype::game::PlayerJoinedMessage{other.slot, other.playerId, other.name}),
-                Delivery::Reliable);
+            _sessions.send(session, rtype::game::message_type::PlayerJoined,
+                           rtype::game::encode(rtype::game::PlayerJoinedMessage{other.slot, other.playerId,
+                                                                                other.name, other.accountId}),
+                           Delivery::Reliable);
         }
     }
     // The newcomer, for everyone, itself included
-    sendToConnected(
-        rtype::game::message_type::PlayerJoined,
-        rtype::game::encode(rtype::game::PlayerJoinedMessage{player.slot, player.playerId, player.name}),
-        Delivery::Reliable);
+    sendToConnected(rtype::game::message_type::PlayerJoined,
+                    rtype::game::encode(rtype::game::PlayerJoinedMessage{player.slot, player.playerId,
+                                                                         player.name, player.accountId}),
+                    Delivery::Reliable);
     // What carries the voice of the others, for the newcomer; its own is None until it says
     _sessions.send(session, rtype::game::message_type::VoiceRoster, rtype::game::encode(voiceRoster()),
+                   Delivery::Reliable);
+    _sessions.send(session, rtype::game::message_type::VoiceStatuses, rtype::game::encode(voiceStatuses()),
                    Delivery::Reliable);
     if (_handlers.onConnected) {
         _handlers.onConnected(player.playerId);
@@ -143,6 +146,9 @@ void GameHost::received(std::uint32_t session, std::uint8_t type, std::span<cons
         return;
     case rtype::game::message_type::VoiceState:
         receivedVoiceState(found->second, session, payload);
+        return;
+    case rtype::game::message_type::VoiceStatus:
+        receivedVoiceStatus(found->second, session, payload);
         return;
     default:
         logger().debug("Message {:#04x} of session {} ignored: not one a client sends", type, session);
@@ -202,6 +208,37 @@ void GameHost::receivedVoiceState(Player &player, std::uint32_t session, std::sp
     sendVoiceRoster();
 }
 
+void GameHost::receivedVoiceStatus(Player &player, std::uint32_t session, std::span<const std::byte> payload)
+{
+    const std::optional<rtype::game::VoiceStatusMessage> status = rtype::game::decodeVoiceStatus(payload);
+    if (!status) {
+        logger().debug("Malformed VOICE_STATUS of session {} dropped", session);
+        return;
+    }
+    if (status->status == player.voiceStatus) {
+        return;
+    }
+    player.voiceStatus = status->status;
+    sendVoiceStatuses();
+}
+
+rtype::game::VoiceStatusesMessage GameHost::voiceStatuses() const
+{
+    rtype::game::VoiceStatusesMessage statuses;
+    for (const auto &[session, player] : _players) {
+        if (player.connected && player.slot < statuses.statuses.size()) {
+            statuses.statuses[player.slot] = player.voiceStatus;
+        }
+    }
+    return statuses;
+}
+
+void GameHost::sendVoiceStatuses()
+{
+    sendToConnected(rtype::game::message_type::VoiceStatuses, rtype::game::encode(voiceStatuses()),
+                    Delivery::Reliable);
+}
+
 rtype::game::VoiceRosterMessage GameHost::voiceRoster() const
 {
     rtype::game::VoiceRosterMessage roster;
@@ -238,6 +275,9 @@ void GameHost::leave(std::uint32_t session, rtype::game::LeaveReason reason)
                         Delivery::Reliable);
         if (player.voice != rtype::voice::Backend::None) {
             sendVoiceRoster();
+        }
+        if (player.voiceStatus != rtype::voice::Status{}) {
+            sendVoiceStatuses();
         }
     }
 }

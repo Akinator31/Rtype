@@ -97,6 +97,8 @@ private:
     bool _selfMuted = true;
     bool _talking = false;
     bool _captureOpen = false;
+    /// The microphone could not be opened, the last time it was tried.
+    bool _microphoneMissing = false;
     bool _deafened = false;
     float _inputVolume = DefaultVolume;
     float _outputVolume = DefaultVolume;
@@ -137,6 +139,7 @@ public:
     void addParticipant(Slot slot) override;
     void removeParticipant(Slot slot) override;
     void setBackend(Slot slot, Backend backend) override;
+    void setStatus(Slot slot, Status status) override;
     void setSelfMute(bool muted) override;
     void setTalking(bool talking) override;
     void setParticipantVolume(Slot slot, float volume) override;
@@ -163,6 +166,11 @@ public:
     [[nodiscard]] bool joined() const { return _joined.has_value(); }
     /// The microphone is open.
     [[nodiscard]] bool microphoneOpen() const { return _captureOpen; }
+    /// The microphone could not be opened the last time the player was unmuted: it listens only. Cleared when
+    /// one opens.
+    [[nodiscard]] bool microphoneMissing() const { return _microphoneMissing; }
+    /// The voice of the player goes out now: a talk spurt is being sent. Lit in the HUD of the player.
+    [[nodiscard]] bool transmitting() const { return _spurt; }
     /// The player is muted by itself (the default).
     [[nodiscard]] bool selfMuted() const { return _selfMuted; }
     /// Deafened by setDeafened().

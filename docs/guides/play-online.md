@@ -55,6 +55,10 @@ Run a server and play the same game from several machines, or from several clien
    activity, off), the threshold of the voice activity over the level of your microphone, the microphone, the
    volumes and these keys. A headset keeps the sound of the game out of the microphone. Without a microphone
    you only listen; without an audio output, you have no voice ([Voice](../architecture/voice.md)).
+   In the HUD, the name of a player who talks lights up, and a microphone shows above its ship; an icon beside
+   each name says when it is muted, muted by you, or without a microphone. In the pause menu, **Player voices**
+   sets the volume of each player for you (Left, Right), and Enter mutes or unmutes it: the choice is kept for
+   its account, and found again in the next game.
 
 ## Result
 

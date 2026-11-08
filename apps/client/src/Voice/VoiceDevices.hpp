@@ -4,10 +4,29 @@
 #include "rtype/voice/Talk.hpp"
 #include "rtype/voice/VoiceChannel.hpp"
 
+#include <cstdint>
+#include <map>
 #include <string>
+#include <string_view>
 
 namespace rtype::client
 {
+
+/// How the player hears another player, chosen in the pause menu of a game: kept for the next games.
+struct PlayerVoice {
+    /// From 0 to 1.
+    float volume = voice::DefaultVolume;
+    bool muted = false;
+
+    friend bool operator==(const PlayerVoice &, const PlayerVoice &) = default;
+};
+
+/// What the choices for another player are kept under: its account on the server of the game, or its name
+/// there for a guest.
+/// @param server The address of the server, as the player wrote it ("host:port").
+/// @param accountId The id of its account, 0 for a guest (`PLAYER_JOINED`).
+[[nodiscard]] std::string playerVoiceKey(std::string_view server, std::uint64_t accountId,
+                                         std::string_view name);
 
 /// How the player wants to talk and hear, from the Voice page (Settings/VoiceSettings.hpp).
 struct VoicePreferences {
@@ -19,6 +38,9 @@ struct VoicePreferences {
     /// The volume of the microphone, and of the voices of the others, from 0 to 1.
     float inputVolume = voice::DefaultVolume;
     float voiceVolume = voice::DefaultVolume;
+    /// How it hears each other player it changed, by playerVoiceKey(). A player not there is heard at full
+    /// volume.
+    std::map<std::string, PlayerVoice, std::less<>> players{};
 
     friend bool operator==(const VoicePreferences &, const VoicePreferences &) = default;
 };

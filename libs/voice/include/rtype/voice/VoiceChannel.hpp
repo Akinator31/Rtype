@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/voice/Backend.hpp"
+#include "rtype/voice/Status.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -47,8 +48,8 @@ struct Participant {
     Backend backend = Backend::None;
     /// It talks now: lit in the HUD.
     bool speaking = false;
-    /// Muted by itself.
-    bool selfMuted = false;
+    /// What it tells about its voice (`VOICE_STATUSES`): muted or deafened by itself, without a microphone.
+    Status status{};
     /// Muted by the player of this client, for this client only.
     bool mutedByMe = false;
     /// Its volume for this client, from 0 to MaxVolume.
@@ -91,6 +92,9 @@ public:
     virtual void removeParticipant(Slot slot) = 0;
     /// What carries the voice of a player, from the roster of the game.
     virtual void setBackend(Slot slot, Backend backend) = 0;
+    /// What a player tells about its voice, from the game (`VOICE_STATUSES`): for the HUD. A player muted by
+    /// itself sends nothing, so it is heard by nobody whatever this says.
+    virtual void setStatus(Slot slot, Status status) = 0;
 
     /// Mutes the player of this client: nobody hears it, whatever it does.
     virtual void setSelfMute(bool muted) = 0;

@@ -245,10 +245,11 @@ CMake warns and leaves `r-type_client` out, the server and the tests are built.
 |---|---|---|
 | Client → instance | `INPUT`: the input of the player, stamped with a tick, with the inputs of the 7 ticks before | 60 per second, whatever the frame rate |
 | Client → instance | `VOICE_STATE`: what carries the voice of the player (`setVoiceBackend()`) | Once accepted, then at every change |
+| Client → instance | `VOICE_STATUS`: the player muted, deafened, without a microphone | Once accepted, then at every change |
 | Client → instance | `VOICE`: a frame of the voice of the player (`sendVoice()`) | 50 per second while the player talks |
-| Instance → client | `VOICE_FRAME`: the voice of the others, for `takeVoiceFrames()` or the `GameVoice`; `VOICE_ROSTER`: what carries each voice, `voiceRoster()` | As they come |
+| Instance → client | `VOICE_FRAME`: the voice of the others, for `takeVoiceFrames()` or the `GameVoice`; `VOICE_ROSTER`: what carries each voice, `voiceRoster()`; `VOICE_STATUSES`: what each player tells about its voice, `voiceStatuses()` | As they come |
 | Instance → client | `SNAPSHOT` parts and `ENTITIES_DESTROYED`, into a `RemoteWorld` | 30 and as they come |
-| Instance → client | `PLAYER_JOINED`, `PLAYER_LEFT`: the names of the players | When they join and leave |
+| Instance → client | `PLAYER_JOINED`, `PLAYER_LEFT`: the names of the players and their accounts (`playerNames()`, `accountOf()`) | When they join and leave |
 | Instance → client | `GAME_OVER`, `DISCONNECT`, or nothing for 5 seconds: the end | Once |
 
 - **The tick of an input** is the one at which the game should apply it (section 9.2 of the
@@ -271,7 +272,10 @@ CMake warns and leaves `r-type_client` out, the server and the tests are built.
   `GameVoice` joins at `ACCEPTED`, gets the players of `PLAYER_JOINED` and `PLAYER_LEFT` and the roster, is
   polled at each update before the inputs go, after `applyVoice()` gave it the mode, the keys and the volumes
   ([The talk modes](voice.md#the-talk-modes)), and leaves at the end. `main.cpp` gives the devices through
-  `OnlineScenes`.
+  `OnlineScenes`, with the address of the server. At each update, the session also hears each other player as
+  its player chose in the pause menu (`VoicePreferences::players`, under `voiceKey()`), tells the game the
+  status of its player when it changes (`VOICE_STATUS`), and gives the HUD the voice of the game
+  (`voiceView()`) ([In the HUD and the pause menu](voice.md#in-the-hud-and-the-pause-menu)).
 
 ## Input clock
 

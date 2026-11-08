@@ -28,7 +28,7 @@ acknowledgements and the messages.*
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Magic | `u16` | `0x5254` (`"RT"`) |
-| 2 | Version | `u8` | Protocol version, 2 |
+| 2 | Version | `u8` | Protocol version, 3 |
 | 3 | Reserved | `u8` | 0 |
 | 4 | Session id | `u32` | Session given by the master, never 0, unique across the master |
 | 8 | Packet number | `u64` | Number of this datagram in its direction, from 1 |
@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-02                        version 2
+03                        version 3
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -275,6 +275,10 @@ message malformed.
 | 0 | Player slot | `u8` | 0 to 3 |
 | 1 | Player id | `u32` | Id given by the master |
 | 5 | Name | `str8` | 1 to 16 bytes |
+| 6 + n | Account id | `u64` | The account of the player on the server, 0 for a guest (version 3) |
+
+**Receiver behaviour:** the client names the player in its HUD, and keeps what its player chose for it (its
+volume, muted) under its account, or under its name for a guest ([section 9.4](#94-the-voice)).
 
 ### PLAYER_LEFT (`0x05`)
 
@@ -309,12 +313,14 @@ player does, and draws the world the game sends back.
 | `0x40` | [`INPUT`](#input-0x40) | Client → Game | Unreliable, sent again in the next datagrams |
 | `0x41` | [`VOICE`](#voice-0x41) | Client → Game | Unreliable |
 | `0x42` | [`VOICE_STATE`](#voice_state-0x42) | Client → Game | Reliable |
+| `0x43` | [`VOICE_STATUS`](#voice_status-0x43) | Client → Game | Reliable |
 | `0x80` | [`SNAPSHOT`](#snapshot-0x80) | Game → Client | Unreliable, replaced by the next one |
 | `0x81` | [`ENTITIES_DESTROYED`](#entities_destroyed-0x81) | Game → Client | Reliable |
 | `0x82` | [`WAVE_STARTED`](#wave_started-0x82) | Game → Client | Reliable |
 | `0x83` | [`GAME_OVER`](#game_over-0x83) | Game → Client | Reliable |
 | `0x84` | [`VOICE_FRAME`](#voice_frame-0x84) | Game → Client | Unreliable |
 | `0x85` | [`VOICE_ROSTER`](#voice_roster-0x85) | Game → Client | Reliable |
+| `0x86` | [`VOICE_STATUSES`](#voice_statuses-0x86) | Game → Client | Reliable |
 
 Types `0x40`–`0x7F` are sent by the client, `0x80`–`0xFF` by the game. The client MUST NOT send game messages
 before `ACCEPTED`, and the game sends them only to connected sessions.
@@ -488,8 +494,23 @@ receiver from the copy the next one carries (the in-band FEC of Opus), or made u
 order of their sequence numbers, after a short buffer that evens out the network. It refuses a frame that is not
 a valid Opus packet of 20 ms. It never stores nor logs the voice.
 
-These messages are new types that older receivers ignore: the version of the protocol does not change
-([versioning](index.md#4-versioning)).
+**Status.** Each player tells the others what it does with its voice, for their HUD: muted by itself, deafened,
+or without a microphone. A client sends it with [`VOICE_STATUS`](#voice_status-0x43), and the game tells every
+client the status of each player with [`VOICE_STATUSES`](#voice_statuses-0x86). It only informs: the game
+forwards the frames of a player whatever its status says. The flags:
+
+| Bit | Flag | Set while |
+|---|---|---|
+| 0 | Muted | The player muted itself: nobody hears it |
+| 1 | Deafened | The player hears nobody |
+| 2 | No microphone | The player has no microphone it can open: it listens only |
+| 3–7 | Reserved | Senders set them to 0, receivers ignore them |
+
+**Choices of each player.** A client may turn down or mute another player for its own player only. It keeps
+that choice under the account of that player (`PLAYER_JOINED`), and the address of the server, or under its
+name for a guest: the choice comes back in the next game with the same player.
+
+The messages of the voice are new types that older receivers ignore ([versioning](index.md#4-versioning)).
 
 ### INPUT (`0x40`)
 
@@ -544,6 +565,21 @@ frame shorter than the size, makes the message malformed. The reserved bits of t
 **Receiver behaviour:** the game keeps the backend of the player, forwards its voice and the voice of the
 others to it from then on, and sends [`VOICE_ROSTER`](#voice_roster-0x85) to every client. An unknown backend is
 treated as `NONE`.
+
+### VOICE_STATUS (`0x43`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Reliable |
+| **Sent when** | Once connected, then at every change: the player muted or deafened itself, or its microphone could not be opened. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Flags | `u8` | The status of the player ([section 9.4](#94-the-voice)) |
+
+**Receiver behaviour:** the game keeps the status of the player, and sends
+[`VOICE_STATUSES`](#voice_statuses-0x86) to every client if it changed. The reserved bits are ignored.
 
 ### SNAPSHOT (`0x80`)
 
@@ -699,6 +735,21 @@ above 3, a size of 0 or above 160, or a frame shorter than the size, makes the m
 
 **Receiver behaviour:** the client knows from it which voices come through the game, and which through Discord.
 An unknown backend is treated as `NONE`.
+
+### VOICE_STATUSES (`0x86`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Reliable |
+| **Sent when** | To a client that connects, after `VOICE_ROSTER`; to every client when a player changes its status (`VOICE_STATUS`), or leaves with flags set. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Flags | `bytes[4]` | The status of the player of slot 0, 1, 2 and 3 ([section 9.4](#94-the-voice)); 0 for a slot without a player |
+
+**Receiver behaviour:** the client shows the status of each player beside its name. The reserved bits are
+ignored.
 
 ## 10. Example
 

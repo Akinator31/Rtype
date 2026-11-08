@@ -56,6 +56,13 @@ struct FakeVoiceChannel final : rtype::voice::VoiceChannel {
         }
     }
 
+    void setStatus(rtype::voice::Slot slot, rtype::voice::Status status) override
+    {
+        if (rtype::voice::Participant *player = find(slot)) {
+            player->status = status;
+        }
+    }
+
     void setSelfMute(bool muted) override { selfMuted = muted; }
     void setTalking(bool value) override { talking = value; }
 

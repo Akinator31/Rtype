@@ -5,6 +5,7 @@
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/voice/Backend.hpp"
 #include "rtype/voice/Format.hpp"
+#include "rtype/voice/Status.hpp"
 
 #include <array>
 #include <cstddef>
@@ -55,6 +56,8 @@ inline constexpr std::uint8_t Input = 0x40;
 inline constexpr std::uint8_t Voice = 0x41;
 /// Client → game: what carries the voice of the player.
 inline constexpr std::uint8_t VoiceState = 0x42;
+/// Client → game: whether the player is muted, deafened, without a microphone.
+inline constexpr std::uint8_t VoiceStatus = 0x43;
 /// Game → client: one part of a snapshot.
 inline constexpr std::uint8_t Snapshot = 0x80;
 /// Game → client: the entities destroyed during a tick.
@@ -67,6 +70,8 @@ inline constexpr std::uint8_t GameOver = 0x83;
 inline constexpr std::uint8_t VoiceFrame = 0x84;
 /// Game → client: what carries the voice of each player.
 inline constexpr std::uint8_t VoiceRoster = 0x85;
+/// Game → client: what each player tells about its voice.
+inline constexpr std::uint8_t VoiceStatuses = 0x86;
 } // namespace message_type
 
 /// Most inputs in one INPUT message.
@@ -117,6 +122,9 @@ struct PlayerJoinedMessage {
     std::uint32_t playerId = 0;
     /// 1 to MaxPlayerNameLength bytes of UTF-8, without control characters.
     std::string name;
+    /// The id of its account on the server, 0 for a guest (version 3): the other clients keep their choices
+    /// for this player (its volume, muted) under it.
+    std::uint64_t accountId = 0;
 
     friend bool operator==(const PlayerJoinedMessage &, const PlayerJoinedMessage &) = default;
 };
@@ -242,6 +250,21 @@ struct VoiceRosterMessage {
     friend bool operator==(const VoiceRosterMessage &, const VoiceRosterMessage &) = default;
 };
 
+/// `VOICE_STATUS`: what the player tells about its voice.
+struct VoiceStatusMessage {
+    voice::Status status{};
+
+    friend bool operator==(const VoiceStatusMessage &, const VoiceStatusMessage &) = default;
+};
+
+/// `VOICE_STATUSES`: what each player tells about its voice, by slot; nothing set for a slot without a
+/// player.
+struct VoiceStatusesMessage {
+    std::array<voice::Status, MaxPlayers> statuses{};
+
+    friend bool operator==(const VoiceStatusesMessage &, const VoiceStatusesMessage &) = default;
+};
+
 /// Tells whether a kind is one this version knows: a client skips the others (docs/protocol/game.md,
 /// section 9.1).
 [[nodiscard]] bool isKnown(EntityKind kind);
@@ -267,6 +290,8 @@ struct VoiceRosterMessage {
 [[nodiscard]] std::vector<std::byte> encode(const VoiceFrameMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const VoiceStateMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const VoiceRosterMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceStatusMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceStatusesMessage &message);
 
 /// The messages read from their payloads, strictly: nothing for every case the protocol calls malformed, or
 /// for bytes left after the last field. Unknown reasons, causes, outcomes and backends are read as the
@@ -284,6 +309,8 @@ decodeEntitiesDestroyed(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceFrameMessage> decodeVoiceFrame(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceStateMessage> decodeVoiceState(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceRosterMessage> decodeVoiceRoster(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceStatusMessage> decodeVoiceStatus(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceStatusesMessage> decodeVoiceStatuses(std::span<const std::byte> payload);
 
 /// Most entities in one part of a snapshot with this many players: 69 with four players.
 [[nodiscard]] std::size_t maxEntitiesPerPart(std::size_t playerCount);
