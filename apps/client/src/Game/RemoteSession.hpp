@@ -13,6 +13,7 @@
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/Session.hpp"
 #include "rtype/network/UdpSocket.hpp"
+#include "rtype/voice/Backend.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -43,6 +44,10 @@ namespace rtype::client
 /// - **The ship of the player** is predicted: each input moves it at once, and each snapshot that has it
 ///   reconciles the prediction with the game (Prediction). It is drawn where it is predicted, and its shots
 ///   in its time (ShotPrediction), the rest where the interpolation draws it.
+/// - **The voice** (section 9.4): it tells the game what carries the voice of the player (VOICE_STATE, at
+///   the connection and at every change), sends its frames (VOICE), and keeps those of the others
+///   (VOICE_FRAME) for takeVoiceFrames(), with what carries the voice of each player (VOICE_ROSTER). It
+///   neither captures nor plays: the voice channel does.
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why.
 ///
 /// The loop must be polled, by the game loop of the client.
@@ -51,6 +56,9 @@ class RemoteSession final : public GameSession
 public:
     /// Inputs in each INPUT: the last ticks, so that a lost datagram loses none (docs/protocol/game.md, 9.2).
     static constexpr std::size_t InputHistory = game::InputRedundancy;
+    /// Frames of the voice of the others kept until takeVoiceFrames(): one second of three players. Beyond,
+    /// the oldest go.
+    static constexpr std::size_t MaxVoiceFrames = 150;
 
 private:
     using Clock = network::ClientSession::Clock;
@@ -89,12 +97,18 @@ private:
     bool _over = false;
     std::string _endReason;
 
+    /// What carries the voice of the player, told to the game once accepted.
+    voice::Backend _voiceBackend = voice::Backend::None;
+    game::VoiceRosterMessage _voiceRoster;
+    std::deque<game::VoiceFrameMessage> _voiceFrames;
+
     void received(std::uint8_t type, std::span<const std::byte> payload);
     /// The game accepted the player: its slot is known, the shots of its weapon can be predicted.
     void accept(std::span<const std::byte> payload);
     /// Corrects the prediction with a part of a snapshot that has the ship of the player.
     void reconcile(const game::SnapshotPart &part);
     void sendInput();
+    void sendVoiceState();
     [[nodiscard]] std::uint32_t estimateTick() const;
 
 public:
@@ -119,6 +133,17 @@ public:
     void setPaused(bool /*paused*/) override {}
     [[nodiscard]] bool isOver() const override { return _over; }
     [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override;
+
+    /// What carries the voice of the player: VOICE_STATE, now if the game accepted the player, then at its
+    /// acceptance. None, the default, hears and says nothing.
+    void setVoiceBackend(voice::Backend backend);
+    /// Sends a frame of the voice of the player (VOICE), unreliable, with the next datagram.
+    /// @return false before the game accepted the player, after the end, or on None.
+    bool sendVoice(const game::VoiceMessage &frame);
+    /// The frames of the voice of the others received since the last call, in the order they came.
+    [[nodiscard]] std::vector<game::VoiceFrameMessage> takeVoiceFrames();
+    /// What carries the voice of each player, from the latest VOICE_ROSTER.
+    [[nodiscard]] const game::VoiceRosterMessage &voiceRoster() const { return _voiceRoster; }
 
     /// The game accepted the player.
     [[nodiscard]] bool accepted() const { return _accepted.has_value(); }
