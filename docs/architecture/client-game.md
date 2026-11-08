@@ -62,6 +62,13 @@ entities the scene draws.*
 3. **The world.** Each snapshot holds the whole world at its tick. An entity of the game gets an entity of the
    scene the first time it appears (`Replicated` with its id, `Position`, `Drawable`, and its look), is moved
    by the next ones, and is destroyed when a snapshot no longer has it.
+4. **Between two ticks.** The screen draws more frames than the game steps (144 per second against 60):
+   `between()` gives where to draw the entities at this frame, positions only, no event. The `LocalSession`
+   moves each one on with its velocity by the fraction of the time to the next step, and the ship of the player
+   with the input held, as the next step will move it, walls included: a key pressed shows at the next frame,
+   without drawing anything a tick late. Not during the rescue, which flies the ship on its own. Online, the
+   `RemoteSession` gives nothing: its snapshots are drawn at the frame rate already
+   ([The client online](client-online.md#interpolation)).
 
 The `GameSessionSystem` runs after the `InterfaceSystem`: Escape opens the pause menu before the game reads
 the input. When the game scene closes, the engine destroys its entities and the system forgets its session.
@@ -210,7 +217,7 @@ entity of its own (`Impact`, `Model`, `ModelAnimation` with a speed of 0), 300 u
 the game so that the wings of the ships do not hide it. The `ImpactSystem` moves the time of its animation,
 fades it out during the last quarter, and destroys it at its end, before the animation would loop.
 
-Online, `ENTITIES_DESTROYED` arrives while the entity is still drawn, about 100 ms in the past: the
+Online, `ENTITIES_DESTROYED` arrives while the entity is still drawn, 50 ms or more in the past: the
 `GameSessionSystem` remembers the ids killed, and the impact appears when the entity goes. Several impacts of
 the same model share it in different poses: the renderer poses the model again before drawing each one, in
 the glow of the frame too.
@@ -268,8 +275,9 @@ destructions (`setDestructionSound()`), both set by `GameScenes`. The `GameSessi
 gives an `engine::SoundEffect`, heard from the side of the screen the entity is on (pan up to 0.6 at the
 edges), and the engine's `SoundSystem`, registered right after the game, plays it in the same frame
 ([Audio](audio.md#in-the-engine)). The shot that appears carries its sound; the ship destroyed is gone at once,
-so its sound is carried by its impact: a kind without an `ImpactLook` makes no sound when destroyed. Online, the
-sounds play when the shot is drawn and when the ship disappears, about 100 ms after the game. `medium_blaster.wav`
+so its sound is carried by its impact: a kind without an `ImpactLook` makes no sound when destroyed. Online, a
+shot of the player sounds when it is fired, predicted ([Shots of the player](client-online.md#shots-of-the-player));
+the others' and the destructions when they are drawn, 50 ms or more after the game. `medium_blaster.wav`
 is not used yet; the destruction sound of `config/ships/` (`ShipSounds`) is not read by the client, which does not
 know which enemy a Bydo is.
 
@@ -442,7 +450,9 @@ added with a line in one of the tables and its name in `en.lang` and `fr.lang`.
 `tests/client_game.cpp` (tag `[client]`) runs without a window, with the `FakeInput` keyboard:
 
 - the `LocalSession`: 60 steps per second of game time with frames of any length, at most 5 per update, its
-  player moved by its input, nothing while paused;
+  player moved by its input, nothing while paused; between two steps, its ship moving at every frame at 144
+  frames per second and stopping at the next frame when the key is let go, without events, nothing while
+  paused;
 - `inputFrom()` and `lookOf()`: the controls held become the bits of the input, the ship has the size of the
   rules, the four players have four colours, the Bydos a look of their own;
 - `computeGameView()`: an orthographic camera centred on the visible area, as high as it, y pointing down;

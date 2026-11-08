@@ -131,6 +131,15 @@ void Simulation::removePlayer(std::uint8_t slot)
     logger().debug("Player {} left at tick {}", slot, _context.tick);
 }
 
+std::optional<Armed> Simulation::weaponOf(std::uint8_t slot)
+{
+    const std::optional<ecs::entity_t> ship = findPlayerShip(_ecs, slot);
+    if (!ship || !_ecs.hasComponent<Armed>(*ship)) {
+        return std::nullopt;
+    }
+    return _ecs.getComponent<Armed>(*ship);
+}
+
 bool Simulation::hasPlayer(std::uint8_t slot) const
 {
     return slot < MaxPlayers && _context.players[slot].present;
@@ -177,6 +186,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<Invulnerable> &invulnerables = _ecs.cache<Invulnerable>();
     ecs::ComponentCache<PlayerShip> &ships = _ecs.cache<PlayerShip>();
     ecs::ComponentCache<EnemyOrders> &orders = _ecs.cache<EnemyOrders>();
+    ecs::ComponentCache<Projectile> &projectiles = _ecs.cache<Projectile>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -192,6 +202,9 @@ void Simulation::buildSnapshot()
             state.velocityY = velocities.get(entity).y;
         }
         state.health = healths.has(entity) ? healths.get(entity).points : 0;
+        if (projectiles.has(entity)) {
+            state.age = static_cast<std::uint8_t>(std::min<std::uint32_t>(projectiles.get(entity).age, 255));
+        }
         if (invulnerables.has(entity) && invulnerables.get(entity).ticks > 0) {
             state.flags |= EntityState::Invulnerable;
         }

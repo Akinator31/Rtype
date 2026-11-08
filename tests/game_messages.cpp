@@ -45,6 +45,8 @@ SnapshotPart examplePart()
     SnapshotPart part;
     part.tick = 1000;
     part.lastInput = 998;
+    part.inputLead = 2;
+    part.weapon = {4, 7, 0};
     part.players = {{0, 3, 1500}};
     part.entities = {
         {7, EntityKind::PlayerShip, 0, 200.0f, 540.5f, 0.0f, -300.0f, 3, EntityState::Invulnerable}};
@@ -55,6 +57,8 @@ SnapshotPart examplePart()
 const std::vector<std::byte> ExampleSnapshot = bytes({
     0x00, 0x00, 0x03, 0xE8,             // tick 1000
     0x00, 0x00, 0x03, 0xE6,             // last input 998
+    0x02,                               // input lead 2
+    0x00, 0x04, 0x00, 0x07, 0x00, 0x00, // weapon: cooldown 4, ammo 7, not reloading
     0x00, 0x01,                         // part 0 of 1
     0x01, 0x00, 0x03, 0x00, 0x00, 0x05, // 1 player: slot 0, 3 lives,
     0xDC,                               //   score 1500
@@ -163,6 +167,8 @@ TEST_CASE("Every message survives a round trip", "[game][messages]")
     SnapshotPart part;
     part.tick = 77;
     part.lastInput = 75;
+    part.inputLead = -127;
+    part.weapon = {0xFFFF, 0, 1};
     part.part = 15;
     part.parts = 16;
     part.players = {{3, 0, 0xFFFFFFFF}, {0, 255, 0}};
@@ -205,7 +211,7 @@ TEST_CASE("The reserved bits of inputs are dropped; every bit of the flags is de
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")
 {
     std::vector<std::byte> payload = ExampleSnapshot;
-    payload[22] = std::byte{0x60}; // the kind of the entity: reserved for later kinds
+    payload[29] = std::byte{0x60}; // the kind of the entity: reserved for later kinds
     const auto part = decodeSnapshotPart(payload);
 
     REQUIRE(part);
@@ -267,22 +273,24 @@ TEST_CASE("A snapshot part refuses the values the specification forbids", "[game
         return decodeSnapshotPart(payload);
     };
 
-    CHECK_FALSE(changed(8, 1));  // part 1 of 1
-    CHECK_FALSE(changed(9, 0));  // 0 parts
-    CHECK_FALSE(changed(9, 17)); // 17 parts
-    CHECK(changed(9, 16));       // part 0 of 16
-    CHECK_FALSE(changed(11, 4)); // slot 4
-    CHECK_FALSE(changed(21, 0)); // entity id 0
-    CHECK_FALSE(changed(22, 0)); // kind 0
-    CHECK_FALSE(changed(17, 2)); // 2 entities announced, 1 given
-    CHECK_FALSE(changed(17, 0)); // 0 entities announced, 1 given
-    CHECK_FALSE(changed(10, 5)); // 5 players
+    CHECK(changed(8, 0x80));      // input lead: any value
+    CHECK(changed(9, 0xFF));      // weapon: any value
+    CHECK_FALSE(changed(15, 1));  // part 1 of 1
+    CHECK_FALSE(changed(16, 0));  // 0 parts
+    CHECK_FALSE(changed(16, 17)); // 17 parts
+    CHECK(changed(16, 16));       // part 0 of 16
+    CHECK_FALSE(changed(18, 4));  // slot 4
+    CHECK_FALSE(changed(28, 0));  // entity id 0
+    CHECK_FALSE(changed(29, 0));  // kind 0
+    CHECK_FALSE(changed(24, 2));  // 2 entities announced, 1 given
+    CHECK_FALSE(changed(24, 0));  // 0 entities announced, 1 given
+    CHECK_FALSE(changed(17, 5));  // 5 players
 
     // The same slot twice
     SnapshotPart part = examplePart();
     part.players = {{1, 3, 0}, {2, 3, 0}};
     std::vector<std::byte> payload = encode(part);
-    payload[17] = std::byte{1}; // the slot of the second player
+    payload[24] = std::byte{1}; // the slot of the second player
     CHECK_FALSE(decodeSnapshotPart(payload));
 }
 
@@ -349,7 +357,7 @@ TEST_CASE("A part of a snapshot holds 69 entities with four players, and always 
           "[game][messages]")
 {
     CHECK(maxEntitiesPerPart(4) == 69);
-    CHECK(maxEntitiesPerPart(0) == 71);
+    CHECK(maxEntitiesPerPart(0) == 70);
     CHECK_THROWS_AS(maxEntitiesPerPart(5), std::invalid_argument);
 
     for (std::size_t players = 0; players <= MaxPlayers; ++players) {
@@ -374,7 +382,7 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
         snapshot.entities.push_back(entity(id, static_cast<float>(id) * 0.125f, static_cast<float>(id)));
     }
 
-    const std::vector<SnapshotPart> parts = splitSnapshot(snapshot, 498);
+    const std::vector<SnapshotPart> parts = splitSnapshot(snapshot, 498, 3);
 
     REQUIRE(parts.size() == 3);
     std::vector<EntityState> entities;
@@ -385,6 +393,7 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
         REQUIRE(part);
         CHECK(part->tick == 500);
         CHECK(part->lastInput == 498);
+        CHECK(part->inputLead == 3);
         CHECK(part->part == i);
         CHECK(part->parts == 3);
         CHECK(part->players == snapshot.players);
@@ -443,7 +452,7 @@ TEST_CASE("The world of a client follows the parts, and an entity missing from o
     RemoteWorld world;
     CHECK_FALSE(world.hasSnapshot());
 
-    SnapshotPart first{10, 8, 0, 1, {{0, 3, 100}}, {entity(1, 50.0f), entity(2)}};
+    SnapshotPart first{10, 8, 0, 1, {{0, 3, 100}}, {entity(1, 50.0f), entity(2)}, NoInputLead, {}};
     CHECK(world.apply(first));
     CHECK(world.hasSnapshot());
     CHECK(world.tick() == 10);
@@ -452,7 +461,7 @@ TEST_CASE("The world of a client follows the parts, and an entity missing from o
     CHECK(world.entities().size() == 2);
 
     // Entity 2 is in a part that was lost
-    SnapshotPart second{12, 10, 0, 1, {{0, 2, 150}}, {entity(1, 60.0f)}};
+    SnapshotPart second{12, 10, 0, 1, {{0, 2, 150}}, {entity(1, 60.0f)}, NoInputLead, {}};
     CHECK(world.apply(second));
     REQUIRE(world.find(1));
     CHECK(world.find(1)->x == 60.0f);
@@ -464,12 +473,12 @@ TEST_CASE("The world of a client ignores late parts, but applies every part of t
           "[game][world]")
 {
     RemoteWorld world;
-    CHECK(world.apply({20, 0, 0, 2, {}, {entity(1, 10.0f)}}));
-    CHECK(world.apply({20, 0, 1, 2, {}, {entity(2)}}));
+    CHECK(world.apply({20, 0, 0, 2, {}, {entity(1, 10.0f)}, NoInputLead, {}}));
+    CHECK(world.apply({20, 0, 1, 2, {}, {entity(2)}, NoInputLead, {}}));
     CHECK(world.entities().size() == 2);
 
     // Tick 18 arrives after tick 20
-    CHECK_FALSE(world.apply({18, 0, 0, 1, {}, {entity(1, 99.0f), entity(3)}}));
+    CHECK_FALSE(world.apply({18, 0, 0, 1, {}, {entity(1, 99.0f), entity(3)}, NoInputLead, {}}));
     CHECK(world.find(1)->x == 10.0f);
     CHECK_FALSE(world.find(3));
     CHECK(world.tick() == 20);
@@ -478,7 +487,7 @@ TEST_CASE("The world of a client ignores late parts, but applies every part of t
 TEST_CASE("The world of a client removes the destroyed entities, and gives their last state", "[game][world]")
 {
     RemoteWorld world;
-    world.apply({10, 0, 0, 1, {}, {entity(1, 30.0f), entity(2)}});
+    world.apply({10, 0, 0, 1, {}, {entity(1, 30.0f), entity(2)}, NoInputLead, {}});
 
     const std::vector<RemovedEntity> removed =
         world.apply(EntitiesDestroyedMessage{10, {{1, DestroyCause::Killed}, {99, DestroyCause::Removed}}});
@@ -492,17 +501,17 @@ TEST_CASE("The world of a client removes the destroyed entities, and gives their
 TEST_CASE("A destruction that arrives before older parts is not undone by them", "[game][world]")
 {
     RemoteWorld world;
-    world.apply({10, 0, 0, 1, {}, {entity(1)}});
+    world.apply({10, 0, 0, 1, {}, {entity(1)}, NoInputLead, {}});
 
     // The reliable message of tick 14 arrives before the snapshot of tick 12
     world.apply(EntitiesDestroyedMessage{14, {{1, DestroyCause::Killed}, {5, DestroyCause::Killed}}});
-    CHECK(world.apply({12, 0, 0, 1, {}, {entity(1), entity(5)}}));
+    CHECK(world.apply({12, 0, 0, 1, {}, {entity(1), entity(5)}, NoInputLead, {}}));
     CHECK_FALSE(world.find(1));
     // Even an entity it had never seen: its first snapshot was older than its destruction
     CHECK_FALSE(world.find(5));
 
     // Once the snapshots reach tick 14, the ids are forgotten: they are never given again
-    CHECK(world.apply({14, 0, 0, 1, {}, {entity(2)}}));
+    CHECK(world.apply({14, 0, 0, 1, {}, {entity(2)}, NoInputLead, {}}));
     CHECK(world.find(2));
 }
 
@@ -512,7 +521,7 @@ TEST_CASE("The world of a client skips the kinds it does not know", "[game][worl
     EntityState future = entity(4);
     future.kind = EntityKind{0x60};
 
-    world.apply({1, 0, 0, 1, {}, {future, entity(5)}});
+    world.apply({1, 0, 0, 1, {}, {future, entity(5)}, NoInputLead, {}});
 
     CHECK_FALSE(world.find(4));
     CHECK(world.find(5));
@@ -559,4 +568,60 @@ TEST_CASE("A whole game sent through the messages gives the client the world of 
         }
         CHECK(world.players() == snapshot.players);
     }
+}
+
+TEST_CASE("A shot gives its age in the byte of the health, the other kinds their health", "[game][messages]")
+{
+    CHECK(isShot(EntityKind::PlayerShot));
+    CHECK(isShot(EntityKind::PlayerChargedShot));
+    CHECK(isShot(EntityKind::BydoShot));
+    CHECK(isShot(EntityKind::BydoPlasmaShot));
+    CHECK(isShot(EntityKind{0x5F}));
+    CHECK_FALSE(isShot(EntityKind::PlayerShip));
+    CHECK_FALSE(isShot(EntityKind::BydoBoss));
+    CHECK_FALSE(isShot(EntityKind{0x60}));
+
+    SnapshotPart part = examplePart();
+    part.entities.push_back({8, EntityKind::PlayerShot, 0, 300.0f, 540.0f, 1500.0f, 0.0f, 0, 0, 12});
+    const auto decoded = decodeSnapshotPart(encode(part));
+    REQUIRE(decoded);
+    CHECK(decoded == part);
+    CHECK(decoded->entities[0].health == 3);
+    CHECK(decoded->entities[0].age == 0);
+    CHECK(decoded->entities[1].age == 12);
+    CHECK(decoded->entities[1].health == 0);
+}
+
+TEST_CASE("The world of a client ignores a destruction received again", "[game][world]")
+{
+    RemoteWorld world;
+    REQUIRE(world.apply({10, 0, 0, 1, {}, {entity(1), entity(2)}, NoInputLead, {}}));
+    const EntitiesDestroyedMessage destroyed{11, {{1, DestroyCause::Killed}}};
+
+    CHECK(world.apply(destroyed).size() == 1);
+    // Its copies, with the next snapshots: nothing more removed, no second explosion
+    CHECK(world.apply(destroyed).empty());
+    CHECK(world.apply(destroyed).empty());
+    CHECK_FALSE(world.find(1));
+    CHECK(world.find(2));
+}
+
+TEST_CASE("The world of a client removes an entity no snapshot had for StaleTicks", "[game][world]")
+{
+    RemoteWorld world;
+    REQUIRE(world.apply({10, 0, 0, 1, {}, {entity(1), entity(2)}, NoInputLead, {}}));
+    // Entity 2 is no longer in the snapshots, and every copy of its destruction was lost
+    for (std::uint32_t tick = 12; tick <= 10 + RemoteWorld::StaleTicks; tick += 2) {
+        REQUIRE(world.apply({tick, 0, 0, 1, {}, {entity(1)}, NoInputLead, {}}));
+        CHECK(world.forgetStale().empty());
+    }
+    CHECK(world.find(2));
+
+    REQUIRE(world.apply({12 + RemoteWorld::StaleTicks, 0, 0, 1, {}, {entity(1)}, NoInputLead, {}}));
+    const std::vector<RemovedEntity> removed = world.forgetStale();
+    REQUIRE(removed.size() == 1);
+    CHECK(removed[0].last.id == 2);
+    CHECK(removed[0].cause == DestroyCause::Removed);
+    CHECK_FALSE(world.find(2));
+    CHECK(world.find(1));
 }

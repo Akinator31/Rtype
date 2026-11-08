@@ -1,6 +1,7 @@
 // Tests of libs/game: a Simulation stepped tick by tick, given inputs, and checked through its snapshots
 // (ADR 0015, docs/architecture/game.md).
 
+#include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/game/Game.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <numbers>
 #include <optional>
 #include <random>
@@ -519,6 +521,85 @@ TEST_CASE("moveShip() moves a ship exactly as the game does, to the bit", "[game
         REQUIRE(ship);
         REQUIRE(ship->x == predicted.x);
         REQUIRE(ship->y == predicted.y);
+    }
+}
+
+TEST_CASE("stepWeapon(), playerShot() and moveShot() fire and move the shots exactly as the game does, to "
+          "the bit",
+          "[game]")
+{
+    // Every weapon of the repository, on the ship of a player, without Bydos to stop the shots
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    GameConfig config = loaded.config;
+    config.waves.clear();
+    const Rules rules;
+
+    for (const WeaponDefinition &weapon : config.weapons) {
+        CAPTURE(weapon.id);
+        Simulation simulation(rules, config);
+        simulation.addPlayer(0);
+        simulation.step();
+        const rtype::ecs::entity_t ship = *findPlayerShip(simulation.ecs(), 0);
+        equipWeapon(simulation.ecs(), simulation.context(), ship, weapon.id);
+        Armed armed = simulation.ecs().getComponent<Armed>(ship);
+        const float projectileHalfWidth =
+            halfSizeOf(simulation.context().projectiles.getDefinition(weapon.projectile).collider).x;
+        const EntityState start = *shipOf(simulation.snapshot(), 0);
+        rtype::ecs::Position position{start.x, start.y};
+
+        struct Predicted {
+            rtype::ecs::Position position;
+            rtype::physics::Velocity launch;
+            std::uint32_t age = 0;
+        };
+        std::map<std::uint32_t, Predicted> shots;
+        std::mt19937 random(7);
+        std::uniform_int_distribution<int> buttons(0, 0x7F);
+        std::size_t fired = 0;
+
+        for (int tick = 0; tick < 600; ++tick) {
+            const PlayerInput input{static_cast<std::uint8_t>(buttons(random))};
+            // The client: the shots of before move on, the weapon fires from where the ship was, then it
+            // moves
+            for (auto &[id, shot] : shots) {
+                shot.position = moveShot(shot.position, weapon.mechanic, shot.launch, shot.age, rules);
+                ++shot.age;
+            }
+            std::optional<ShotLaunch> launch;
+            if (stepWeapon(armed, weapon, input.isHeld(PlayerInput::Fire))) {
+                launch = playerShot(weapon, projectileHalfWidth, 0, position, input.aim(), rules);
+            }
+            position = moveShip(position, input, rules);
+
+            simulation.setInput(0, input);
+            simulation.step();
+            std::map<std::uint32_t, Predicted> alive;
+            for (const EntityState &shot : shotsOf(simulation.snapshot())) {
+                auto found = shots.find(shot.id);
+                if (found == shots.end()) {
+                    // Fired this tick: the one the client predicted
+                    REQUIRE(launch);
+                    found = shots.emplace(shot.id, Predicted{launch->position, launch->velocity, 0}).first;
+                    launch.reset();
+                    ++fired;
+                }
+                REQUIRE(shot.x == found->second.position.x);
+                REQUIRE(shot.y == found->second.position.y);
+                // Its age in the snapshot: the client finds the tick it was fired at
+                REQUIRE(shot.age == std::min<std::uint32_t>(found->second.age, 255));
+                alive.insert(*found);
+            }
+            // Fired by the client, by the game too
+            REQUIRE_FALSE(launch);
+            shots = std::move(alive);
+            const Armed real = *simulation.weaponOf(0);
+            REQUIRE(real.cooldown == armed.cooldown);
+            REQUIRE(real.ammo == armed.ammo);
+            REQUIRE(real.reloadLeft == armed.reloadLeft);
+        }
+        // The slowest weapons fire a few times only, the fastest many
+        CHECK(fired >= 3);
     }
 }
 

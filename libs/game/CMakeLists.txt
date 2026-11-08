@@ -31,6 +31,7 @@ add_library(rtype_game
     src/System/WeaponSystem.cpp
     src/Wave/MusicTimeline.cpp
     src/Wave/WaveRegistry.cpp
+    src/Weapon/WeaponFiring.cpp
     src/Weapon/WeaponRegistry.cpp
 )
 add_library(rtype::game ALIAS rtype_game)

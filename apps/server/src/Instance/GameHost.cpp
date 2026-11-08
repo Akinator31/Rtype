@@ -25,6 +25,15 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
+/// The input lead of a SNAPSHOT: within what an i8 holds, the lowest value meaning none.
+std::int8_t toInputLead(std::optional<std::int64_t> lead)
+{
+    if (!lead) {
+        return rtype::game::NoInputLead;
+    }
+    return static_cast<std::int8_t>(std::clamp<std::int64_t>(*lead, rtype::game::NoInputLead + 1, 127));
+}
+
 } // namespace
 
 GameHost::GameHost(rtype::network::EventLoop &loop, std::unique_ptr<GameTransport> transport,
@@ -202,10 +211,20 @@ void GameHost::publish(const TickResult &result)
     _tick = snapshot.tick;
     _wave = snapshot.waveStarted.value_or(_wave);
     _states = snapshot.players;
-    for (const rtype::game::EntitiesDestroyedMessage &message : rtype::game::destroyedMessages(snapshot)) {
-        sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
-                        Delivery::Reliable);
+    for (std::size_t slot = 0; slot < _inputLeads.size(); ++slot) {
+        if (const std::optional<std::int64_t> lead = result.inputLeads[slot]) {
+            _inputLeads[slot] = _inputLeads[slot] ? std::min(*_inputLeads[slot], *lead) : *lead;
+        }
     }
+    // Unreliable, as soon as they happen, then again with the snapshots: a lost one costs a snapshot
+    // interval, and holds back nothing behind it
+    const std::vector<rtype::game::EntitiesDestroyedMessage> destroyed =
+        rtype::game::destroyedMessages(snapshot);
+    for (const rtype::game::EntitiesDestroyedMessage &message : destroyed) {
+        sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
+                        Delivery::Unreliable);
+    }
+    _destructions.add(snapshot.tick, destroyed);
     if (snapshot.waveStarted) {
         sendToConnected(
             rtype::game::message_type::WaveStarted,
@@ -218,11 +237,17 @@ void GameHost::publish(const TickResult &result)
             if (!player.connected) {
                 continue;
             }
-            for (const rtype::game::SnapshotPart &part :
-                 rtype::game::splitSnapshot(snapshot, result.lastInputs[player.slot])) {
+            for (const rtype::game::SnapshotPart &part : rtype::game::splitSnapshot(
+                     snapshot, result.lastInputs[player.slot], toInputLead(_inputLeads[player.slot]),
+                     result.weapons[player.slot])) {
                 _sessions.send(session, rtype::game::message_type::Snapshot, rtype::game::encode(part),
                                Delivery::Unreliable);
             }
+        }
+        _inputLeads.fill(std::nullopt);
+        for (const rtype::game::EntitiesDestroyedMessage &message : _destructions.again(snapshot.tick)) {
+            sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
+                            Delivery::Unreliable);
         }
     }
     if (snapshot.gameOver) {

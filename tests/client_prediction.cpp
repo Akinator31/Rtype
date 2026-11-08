@@ -283,3 +283,52 @@ TEST_CASE("A tick skipped when stamping repeats the previous input, as the game 
     prediction.apply(14, right);
     CHECK(prediction.pending() == 4);
 }
+
+TEST_CASE("Between two inputs, the ship is drawn on the way to the next tick with the input held",
+          "[prediction]")
+{
+    const rtype::game::Rules rules;
+    Prediction prediction(rules);
+    prediction.reconcile(rtype::ecs::Position{500.0f, 500.0f}, 10);
+    const PlayerInput right{PlayerInput::Right};
+    prediction.apply(11, right);
+    const rtype::ecs::Position at = *prediction.position();
+
+    CHECK(prediction.position(0.0, right)->x == at.x);
+    // Halfway: half a tick of the speed of the rules
+    CHECK(prediction.position(0.5, right)->x == Approx(at.x + (rules.shipSpeed * 0.5f / 60.0f)));
+    CHECK(prediction.position(0.5, right)->y == at.y);
+    // A key let go, or another one pressed, shows at once
+    CHECK(prediction.position(0.5, PlayerInput{})->x == at.x);
+    CHECK(prediction.position(0.5, PlayerInput{PlayerInput::Up})->y < at.y);
+    // Never past the next tick, nor through a wall
+    CHECK(prediction.position(3.0, right)->x == Approx(at.x + (rules.shipSpeed / 60.0f)));
+    Prediction cornered(rules);
+    cornered.reconcile(rtype::ecs::Position{rules.shipHalfWidth, 500.0f}, 10);
+    CHECK(cornered.position(0.9, PlayerInput{PlayerInput::Left})->x == rules.shipHalfWidth);
+}
+
+TEST_CASE("At 144 frames per second, the ship moves at every frame, and lands on each tick", "[prediction]")
+{
+    const rtype::game::Rules rules;
+    Prediction prediction(rules);
+    prediction.reconcile(rtype::ecs::Position{300.0f, 500.0f}, 10);
+    const PlayerInput right{PlayerInput::Right};
+    const double frame = 1.0 / 144.0;
+    double pending = 0.0;
+    std::uint32_t stamp = 10;
+    float previous = prediction.position(0.0, right)->x;
+    const float perFrame = rules.shipSpeed * static_cast<float>(frame);
+    for (int i = 0; i < 288; ++i) {
+        // As RemoteSession: the inputs at 60 per second, the drawing at the frame rate
+        pending += frame;
+        while (pending >= Tick) {
+            pending -= Tick;
+            prediction.apply(++stamp, right);
+        }
+        const float x = prediction.position(pending / Tick, right)->x;
+        // Without it, two frames in three would not move it, and the third would move it 10 units
+        REQUIRE(x - previous == Approx(perFrame).margin(perFrame * 0.05f));
+        previous = x;
+    }
+}

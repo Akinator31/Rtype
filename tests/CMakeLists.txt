@@ -13,10 +13,12 @@ add_executable(rtype_tests
     audio.cpp
     beat.cpp
     client_game.cpp
+    client_input_clock.cpp
     client_interpolation.cpp
     client_lore.cpp
     client_online.cpp
     client_profiles.cpp
+    client_shot_prediction.cpp
     client_prediction.cpp
     color_filter.cpp
     collider_debug_renderer.cpp

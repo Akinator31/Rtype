@@ -41,6 +41,7 @@ void Interpolation::receive(std::uint32_t tick, const std::map<std::uint32_t, ga
         _worlds.back().players = std::move(players);
         return;
     }
+    arrived(tick);
     _worlds.push_back({tick, entities, std::move(players)});
     if (_worlds.size() > MaxWorlds) {
         _worlds.pop_front();
@@ -52,13 +53,48 @@ void Interpolation::destroyed(std::uint32_t id, std::uint32_t tick)
     _destroyed.insert_or_assign(id, tick);
 }
 
+void Interpolation::arrived(std::uint32_t tick)
+{
+    const std::uint32_t gap =
+        _arrivals.empty() || tick <= _arrivals.back().tick ? 0 : tick - _arrivals.back().tick;
+    _arrivals.push_back({_time, tick, gap});
+    while (_arrivals.front().time < _time - Window) {
+        _arrivals.pop_front();
+    }
+}
+
+double Interpolation::delay() const
+{
+    if (_arrivals.size() < MinArrivals) {
+        return DefaultDelay;
+    }
+    // How late each world came, against the time of its tick: the earliest is the network without jitter
+    const auto lateness = [](const Arrival &arrival) {
+        return arrival.time - (static_cast<double>(arrival.tick) / TicksPerSecond);
+    };
+    double earliest = lateness(_arrivals.front());
+    for (const Arrival &arrival : _arrivals) {
+        earliest = std::min(earliest, lateness(arrival));
+    }
+    // What each one needed not to be waited for: the ticks since the previous one, its jitter, a tick of
+    // margin
+    double needed = 0.0;
+    for (const Arrival &arrival : _arrivals) {
+        const double wait =
+            (static_cast<double>(arrival.gap) / TicksPerSecond) + (lateness(arrival) - earliest);
+        needed = std::max(needed, wait + (1.0 / TicksPerSecond));
+    }
+    return std::clamp(needed, MinDelay, MaxDelay);
+}
+
 double Interpolation::target() const
 {
-    return static_cast<double>(_worlds.back().tick) - (Delay * TicksPerSecond);
+    return static_cast<double>(_worlds.back().tick) - (delay() * TicksPerSecond);
 }
 
 void Interpolation::advance(double elapsed)
 {
+    _time += std::max(0.0, elapsed);
     if (_worlds.empty()) {
         return;
     }

@@ -19,8 +19,9 @@ namespace
 using rtype::network::Reader;
 using rtype::network::Writer;
 
-/// The fields before the players in SNAPSHOT: tick, last input, part, parts, player count.
-constexpr std::size_t SnapshotHeaderSize = 11;
+/// The fields before the players in SNAPSHOT: tick, last input, input lead, weapon (cooldown, ammo, reload),
+/// part, parts, player count.
+constexpr std::size_t SnapshotHeaderSize = 18;
 /// One player in SNAPSHOT: slot, lives, score.
 constexpr std::size_t PlayerStateSize = 6;
 /// One entity in SNAPSHOT.
@@ -102,7 +103,7 @@ void writeEntity(Writer &writer, const EntityState &entity)
     writer.writeI16(toFixed(entity.y));
     writer.writeI16(toFixed(entity.velocityX));
     writer.writeI16(toFixed(entity.velocityY));
-    writer.writeU8(entity.health);
+    writer.writeU8(isShot(entity.kind) ? entity.age : entity.health);
     writer.writeU8(static_cast<std::uint8_t>(entity.flags & KnownFlags));
 }
 
@@ -117,7 +118,12 @@ EntityState readEntity(Reader &reader)
     entity.y = fromFixed(reader.readI16());
     entity.velocityX = fromFixed(reader.readI16());
     entity.velocityY = fromFixed(reader.readI16());
-    entity.health = reader.readU8();
+    const std::uint8_t healthOrAge = reader.readU8();
+    if (isShot(entity.kind)) {
+        entity.age = healthOrAge;
+    } else {
+        entity.health = healthOrAge;
+    }
     entity.flags = static_cast<std::uint8_t>(reader.readU8() & KnownFlags);
     if (entity.id == 0 || kind == 0) {
         reader.fail();
@@ -149,6 +155,13 @@ constexpr std::array<LeaveReason, 3> LeaveReasons{LeaveReason::Quit, LeaveReason
 bool isKnown(EntityKind kind)
 {
     return KnownKinds[static_cast<std::uint8_t>(kind)];
+}
+
+bool isShot(EntityKind kind)
+{
+    const auto value = static_cast<std::uint8_t>(kind);
+    return kind == EntityKind::PlayerShot || kind == EntityKind::PlayerChargedShot ||
+           (value >= 0x40 && value <= 0x5F);
 }
 
 // --- ACCEPTED, PLAYER_JOINED, PLAYER_LEFT ---
@@ -292,6 +305,10 @@ std::vector<std::byte> encode(const SnapshotPart &part)
                   (EntityStateSize * part.entities.size()));
     writer.writeU32(part.tick);
     writer.writeU32(part.lastInput);
+    writer.writeU8(static_cast<std::uint8_t>(part.inputLead));
+    writer.writeU16(part.weapon.cooldown);
+    writer.writeU16(part.weapon.ammo);
+    writer.writeU16(part.weapon.reloadLeft);
     writer.writeU8(part.part);
     writer.writeU8(part.parts);
     writePlayers(writer, part.players);
@@ -308,6 +325,10 @@ std::optional<SnapshotPart> decodeSnapshotPart(std::span<const std::byte> payloa
     SnapshotPart part;
     part.tick = reader.readU32();
     part.lastInput = reader.readU32();
+    part.inputLead = static_cast<std::int8_t>(reader.readU8());
+    part.weapon.cooldown = reader.readU16();
+    part.weapon.ammo = reader.readU16();
+    part.weapon.reloadLeft = reader.readU16();
     part.part = reader.readU8();
     part.parts = reader.readU8();
     if (part.parts == 0 || part.parts > MaxSnapshotParts || part.part >= part.parts) {
@@ -346,7 +367,8 @@ std::optional<SnapshotPart> decodeSnapshotPart(std::span<const std::byte> payloa
     return part;
 }
 
-std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t lastInput)
+std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t lastInput,
+                                        std::int8_t inputLead, WeaponState weapon)
 {
     const std::size_t perPart = maxEntitiesPerPart(snapshot.players.size());
     const std::size_t needed = std::max<std::size_t>(1, (snapshot.entities.size() + perPart - 1) / perPart);
@@ -357,6 +379,8 @@ std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t 
         SnapshotPart &part = parts[i];
         part.tick = snapshot.tick;
         part.lastInput = lastInput;
+        part.inputLead = inputLead;
+        part.weapon = weapon;
         part.part = static_cast<std::uint8_t>(i);
         part.parts = static_cast<std::uint8_t>(count);
         part.players = snapshot.players;

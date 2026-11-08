@@ -4,6 +4,7 @@
 #include "rtype/game/Simulation.hpp"
 #include "rtype/log/Logger.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <utility>
 
@@ -17,6 +18,15 @@ const rtype::log::Logger &logger()
 {
     static const rtype::log::Logger instance("game");
     return instance;
+}
+
+/// The weapon of a ship in a SNAPSHOT: each count within what a u16 holds.
+rtype::game::WeaponState toWeaponState(const rtype::game::Armed &armed)
+{
+    const auto clamp = [](std::uint32_t value) {
+        return static_cast<std::uint16_t>(std::min<std::uint32_t>(value, 0xFFFF));
+    };
+    return {clamp(armed.cooldown), clamp(armed.ammo), clamp(armed.reloadLeft)};
 }
 
 template <typename... Visitors>
@@ -130,10 +140,16 @@ void GameThread::run()
                     simulation.setInput(slot, buffers[slot].take(tick));
                 }
                 result.lastInputs[slot] = buffers[slot].lastApplied();
+                result.inputLeads[slot] = buffers[slot].takeLead();
             }
 
             simulation.step();
             _tick = simulation.tick();
+            for (std::uint8_t slot = 0; slot < buffers.size(); ++slot) {
+                if (const std::optional<rtype::game::Armed> armed = simulation.weaponOf(slot)) {
+                    result.weapons[slot] = toWeaponState(*armed);
+                }
+            }
             result.snapshot = simulation.snapshot();
             _publish(std::move(result));
 

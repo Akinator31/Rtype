@@ -201,6 +201,53 @@ TEST_CASE("A local session paused does not step", "[client]")
     CHECK(session.takeSnapshots().size() == 1);
 }
 
+TEST_CASE("Between two steps, a local session draws its ship on the way to the next tick, at every frame",
+          "[client]")
+{
+    LocalSession session;
+    CHECK_FALSE(session.between());
+    rtype::game::PlayerInput right;
+    right.set(rtype::game::PlayerInput::Right, true);
+    session.setInput(right);
+    session.update(Tick);
+    (void)session.takeSnapshots();
+
+    // 144 frames per second: without between(), two frames in three would not move it
+    const float speed = session.simulation().rules().shipSpeed;
+    const float perFrame = speed / 144.0f;
+    float previous = shipOf(*session.between())->x;
+    for (int i = 0; i < 144; ++i) {
+        session.update(1.0f / 144.0f);
+        (void)session.takeSnapshots();
+        const auto drawn = session.between();
+        REQUIRE(drawn);
+        const float x = shipOf(*drawn)->x;
+        REQUIRE(x - previous == Approx(perFrame).margin(perFrame * 0.1f));
+        previous = x;
+    }
+    // A key let go shows at the next frame
+    session.setInput({});
+    CHECK(shipOf(*session.between())->x <= previous + 0.001f);
+}
+
+TEST_CASE("What a local session draws between two steps carries no event, and nothing while paused",
+          "[client]")
+{
+    LocalSession session;
+    session.update(Tick);
+    const rtype::game::Snapshot stepped = session.takeSnapshots().back();
+    const auto drawn = session.between();
+    REQUIRE(drawn);
+    CHECK(drawn->tick == stepped.tick);
+    CHECK(drawn->entities.size() == stepped.entities.size());
+    CHECK(drawn->destroyed.empty());
+    CHECK_FALSE(drawn->waveStarted);
+    CHECK_FALSE(drawn->gameOver);
+
+    session.setPaused(true);
+    CHECK_FALSE(session.between());
+}
+
 // --- The input and the look ---
 
 TEST_CASE("The controls of the engine become the input of the player", "[client]")

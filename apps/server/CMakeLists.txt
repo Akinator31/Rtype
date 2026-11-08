@@ -146,6 +146,7 @@ add_library(r-type_server_core STATIC
     src/Instance/GameHost.cpp
     src/Instance/GameThread.cpp
     src/Instance/InputBuffer.cpp
+    src/Instance/RecentDestructions.cpp
     src/Instance/Instance.cpp
     src/Instance/MasterLink.cpp
     src/Instance/RelayedTransport.cpp
