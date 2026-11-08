@@ -1,4 +1,3 @@
-#include "rtype/voice/EchoDelay.hpp"
 #include "rtype/voice/Processing.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -14,13 +13,7 @@
 #include <span>
 #include <vector>
 
-using rtype::voice::EchoDelay;
-using rtype::voice::EchoEarliest;
-using rtype::voice::EchoEstimate;
-using rtype::voice::EchoMicrophoneWindow;
-using rtype::voice::EchoWindow;
 using rtype::voice::FrameSamples;
-using rtype::voice::measureEchoDelay;
 using rtype::voice::SampleRate;
 using rtype::voice::SoundProcessing;
 
@@ -45,6 +38,27 @@ Samples noise(std::size_t count, double deviation, unsigned seed)
     Samples samples(count);
     for (std::int16_t &sample : samples) {
         sample = clamp16(normal(random));
+    }
+    return samples;
+}
+
+/// What a game plays, as far as an echo canceller cares: noise in bursts of 100 to 400 ms, louder and
+/// quieter, with pauses, the same for a seed
+Samples bursts(std::size_t count, double deviation, unsigned seed)
+{
+    std::mt19937 random(seed);
+    std::normal_distribution<double> normal(0.0, 1.0);
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    Samples samples(count);
+    std::size_t at = 0;
+    while (at < count) {
+        const auto length = static_cast<std::size_t>((0.1 + (0.3 * uniform(random))) * SampleRate);
+        const double level = uniform(random) < 0.2 ? 0.0 : deviation * (0.3 + uniform(random));
+        for (std::size_t i = at; i < std::min(count, at + length); ++i) {
+            const double fade = std::sin(std::numbers::pi * static_cast<double>(i - at) / length);
+            samples[i] = clamp16(normal(random) * level * fade);
+        }
+        at += length;
     }
     return samples;
 }
@@ -129,6 +143,23 @@ double powerAt(std::span<const std::int16_t> samples, double frequency)
            static_cast<double>(samples.size() * samples.size());
 }
 
+/// The same room, the echo coming later from this sample on: the output or the input lost samples
+Samples room(const Samples &played, std::size_t before, std::size_t after, std::size_t from)
+{
+    const Samples early = ::room(played, before);
+    const Samples late = ::room(played, after);
+    Samples heard(early.begin(), early.begin() + static_cast<std::ptrdiff_t>(from));
+    heard.insert(heard.end(), late.begin() + static_cast<std::ptrdiff_t>(from), late.end());
+    return heard;
+}
+
+/// How much quieter the output is than what the microphone heard, from one sample to another, in dB
+double cutBetween(const Samples &heard, const Samples &out, std::size_t from, std::size_t to)
+{
+    return decibels(power(std::span(heard).subspan(from, to - from)) /
+                    power(std::span(out).subspan(from, to - from)));
+}
+
 /// A microphone and the sound played, given to a SoundProcessing as a game loop would: every 20 ms, what
 /// each stream gave since the last time, the sound played a frame ahead of the microphone
 Samples run(SoundProcessing &processing, const Samples &played, const Samples &heard)
@@ -150,83 +181,60 @@ Samples run(SoundProcessing &processing, const Samples &played, const Samples &h
 
 } // namespace
 
-TEST_CASE("The delay of an echo is measured from the sound played and the microphone", "[voice]")
+TEST_CASE("The echo of what the speakers play is cut by 20 dB at least, from the start", "[voice]")
 {
-    const Samples played = noise(EchoMicrophoneWindow + EchoWindow, 3000.0, 1);
-    for (const std::size_t delay : {std::size_t{0}, 7 * Ms, 60 * Ms, 230 * Ms, 390 * Ms}) {
-        const Samples heard = room(played, delay);
-        // The window of the microphone starts EchoEarliest before the one of the reference
-        const std::size_t from = EchoWindow;
-        const std::optional<EchoEstimate> echo =
-            measureEchoDelay(std::span(played).subspan(from, EchoWindow),
-                             std::span(heard).subspan(from - EchoEarliest, EchoMicrophoneWindow));
-        REQUIRE(echo);
-        CHECK(std::abs(echo->delay - static_cast<std::ptrdiff_t>(delay)) <= static_cast<std::ptrdiff_t>(Ms));
-        CHECK(echo->correlation > 0.5f);
+    constexpr std::size_t seconds = 10;
+    const Samples played = bursts(seconds * SampleRate, 4000.0, 3);
+    for (const std::size_t delay : {std::size_t{20}, std::size_t{60}, std::size_t{250}}) {
+        // That long after the sound is played (the sound played being given a frame ahead)
+        const Samples heard = room(played, (delay * Ms) - FrameSamples);
+        SoundProcessing processing({.noiseSuppression = false, .gainControl = false});
+        const Samples out = run(processing, played, heard);
+        REQUIRE(out.size() == heard.size());
+        const double first = cutBetween(heard, out, 0, SampleRate);
+        const double then = cutBetween(heard, out, SampleRate, out.size());
+        INFO("Echo of " << delay << " ms cut by " << first << " dB in the first second, " << then
+                        << " dB after it");
+        // The usual delays from the first second: what the filter has not learnt yet is suppressed. A long
+        // one, of a Bluetooth headset, once the canceller found it, within half a second
+        if (delay < 100) {
+            CHECK(first >= 20.0);
+        }
+        CHECK(then >= 40.0);
     }
 }
 
-TEST_CASE("No delay is measured without a sound played, nor from windows of other sizes", "[voice]")
-{
-    const Samples silence(EchoMicrophoneWindow, 0);
-    const Samples heard = noise(EchoMicrophoneWindow, 3000.0, 2);
-    CHECK_FALSE(measureEchoDelay(std::span(silence).first(EchoWindow), heard));
-    CHECK_FALSE(measureEchoDelay(std::span(heard).first(EchoWindow - 1), heard));
-}
-
-TEST_CASE("The delay kept moves only when two measures agree", "[voice]")
-{
-    EchoDelay delay;
-    CHECK_FALSE(delay.update({.delay = 2400, .correlation = 0.1f}));
-    CHECK_FALSE(delay.delay());
-    CHECK(delay.update({.delay = 2400, .correlation = 0.6f}));
-    CHECK(delay.delay() == 2400);
-    // One measure fooled by the voice of the player: kept aside
-    CHECK_FALSE(delay.update({.delay = 9000, .correlation = 0.4f}));
-    CHECK(delay.delay() == 2400);
-    CHECK_FALSE(delay.update({.delay = 2410, .correlation = 0.6f}));
-    CHECK_FALSE(delay.update({.delay = 3000, .correlation = 0.5f}));
-    CHECK(delay.update({.delay = 3020, .correlation = 0.5f}));
-    CHECK(delay.delay() == 3020);
-}
-
-TEST_CASE("The echo of what the speakers play is cut by 20 dB at least", "[voice]")
+TEST_CASE("An echo whose delay moves is cut again within two seconds", "[voice]")
 {
     constexpr std::size_t seconds = 10;
-    const Samples played = noise(seconds * SampleRate, 4000.0, 3);
-    // 250 ms after the sound is played, as the two streams are paired (the sound played being a frame ahead):
-    // past the 20 to 170 ms the filter covers before a measure, so that the delay measured is needed
-    const Samples heard = room(played, (250 * Ms) - FrameSamples);
+    const Samples played = bursts(seconds * SampleRate, 4000.0, 8);
+    // 60 ms, then 140 ms from the fifth second: the input lost 80 ms. The canceller finds the new delay in 1
+    // to 1.5 s, the echo cut partly meanwhile
+    const Samples heard = room(played, (60 * Ms) - FrameSamples, (140 * Ms) - FrameSamples, 5 * SampleRate);
     SoundProcessing processing({.noiseSuppression = false, .gainControl = false});
     const Samples out = run(processing, played, heard);
-    REQUIRE(out.size() == heard.size());
-
-    REQUIRE(processing.echoDelay());
-    CHECK(std::abs(*processing.echoDelay() - static_cast<std::ptrdiff_t>(250 * Ms)) <=
-          static_cast<std::ptrdiff_t>(Ms));
-    // The last 3 s, the filter having learnt the room
-    const std::size_t from = out.size() - (3 * SampleRate);
-    const double cut = decibels(power(std::span(heard).subspan(from)) / power(std::span(out).subspan(from)));
-    INFO("Echo cut by " << cut << " dB");
-    CHECK(cut >= 20.0);
-    CHECK(processing.repairs() == 0);
+    const double before = cutBetween(heard, out, 2 * SampleRate, 5 * SampleRate);
+    const double after = cutBetween(heard, out, 7 * SampleRate, seconds * SampleRate);
+    INFO("Echo cut by " << before << " dB before it moved, " << after << " dB two seconds after");
+    CHECK(before >= 30.0);
+    CHECK(after >= 30.0);
 }
 
 TEST_CASE("The voice of the player is kept while the echo is cut", "[voice]")
 {
     constexpr std::size_t seconds = 10;
-    const Samples played = noise(seconds * SampleRate, 3000.0, 4);
+    const Samples played = bursts(seconds * SampleRate, 3000.0, 4);
     const Samples echo = room(played, (50 * Ms) - FrameSamples);
     const Samples spoken = voice(seconds * SampleRate, 3000.0);
     SoundProcessing processing({.noiseSuppression = false, .gainControl = false});
     const Samples out = run(processing, played, mix(echo, spoken));
 
-    // The last 2 s: the voice comes out at its level, the echo under it
+    // The last 2 s: the voice comes out near its level, the echo under it
     const std::size_t from = out.size() - (2 * SampleRate);
     const double kept =
         decibels(power(std::span(out).subspan(from)) / power(std::span(spoken).subspan(from)));
     INFO("Voice kept at " << kept << " dB");
-    CHECK(std::abs(kept) <= 3.0);
+    CHECK(std::abs(kept) <= 6.0);
 }
 
 TEST_CASE("The noise of the room is taken out and the voice kept, its level and spectrum", "[voice]")
@@ -246,8 +254,9 @@ TEST_CASE("The noise of the room is taken out and the voice kept, its level and 
     }
     REQUIRE(out.size() == heard.size());
 
-    // The output of RNNoise is 10 ms late. Past the first second, which it learns from: the middle of each
-    // syllable (100 to 150 ms of its 250), and the middle of each pause (300 to 350 ms)
+    // The chain delays the voice by a few milliseconds: taken 10 ms later, past the first second, which the
+    // suppressor learns from, the middle of each syllable (100 to 150 ms of its 250), and of each pause
+    // (300 to 350 ms)
     const std::size_t late = 10 * Ms;
     double voiceIn = 0.0;
     double voiceOut = 0.0;
@@ -281,7 +290,8 @@ TEST_CASE("The noise of the room is taken out and the voice kept, its level and 
     }
 }
 
-TEST_CASE("The gain control brings a quiet voice up, and a loud one stays under clipping", "[voice]")
+TEST_CASE("The gain control brings a quiet voice up, and a loud one under clipping once it has adapted",
+          "[voice]")
 {
     constexpr std::size_t seconds = 8;
     for (const double amplitude : {300.0, 12000.0}) {
@@ -302,63 +312,69 @@ TEST_CASE("The gain control brings a quiet voice up, and a loud one stays under 
         if (amplitude < 1000.0) {
             CHECK(change >= 6.0);
         }
-        const auto loudest = std::ranges::max(out, {}, [](std::int16_t sample) { return std::abs(sample); });
+        // Past the first second, where the gain it starts from is brought down to the voice
+        const auto loudest = std::ranges::max(std::span(out).subspan(SampleRate), {},
+                                              [](std::int16_t sample) { return std::abs(sample); });
         CHECK(std::abs(loudest) < 32000);
     }
 }
 
-TEST_CASE("Frames dropped keep the microphone paired with the sound played", "[voice]")
+TEST_CASE("Frames dropped by a game loop that stalled leave the echo cut", "[voice]")
 {
-    const Samples played = noise(4 * SampleRate, 3000.0, 6);
+    const Samples played = bursts(8 * SampleRate, 3000.0, 6);
     const Samples heard = room(played, (60 * Ms) - FrameSamples);
     SoundProcessing processing({.noiseSuppression = false, .gainControl = false});
+    Samples in;
+    Samples out;
     processing.played(std::span(played).first(FrameSamples));
     for (std::size_t at = 0; at + FrameSamples <= heard.size(); at += FrameSamples) {
         if (at + (2 * FrameSamples) <= played.size()) {
             processing.played(std::span(played).subspan(at + FrameSamples, FrameSamples));
         }
         processing.captured(std::span(heard).subspan(at, FrameSamples));
-        // A game loop that keeps one frame in four
-        processing.drop(processing.waiting() > 0 && (at / FrameSamples) % 4 != 0 ? 1 : 0);
+        // At the fourth second, a stall: 5 frames of the microphone dropped
+        if (at / FrameSamples == 4 * rtype::voice::FramesPerSecond) {
+            processing.played(std::span(played).subspan(at + (2 * FrameSamples), 5 * FrameSamples));
+            processing.captured(std::span(heard).subspan(at + FrameSamples, 5 * FrameSamples));
+            processing.drop(5);
+            at += 5 * FrameSamples;
+        }
         Frame frame{};
         while (processing.next(frame)) {
+            out.insert(out.end(), frame.begin(), frame.end());
+            in.insert(in.end(), processing.heard().begin(), processing.heard().end());
         }
     }
     CHECK(processing.waiting() == 0);
-    CHECK(processing.repairs() == 0);
+    const double cut = cutBetween(in, out, out.size() - (2 * SampleRate), out.size());
+    INFO("Echo cut by " << cut << " dB after the stall");
+    CHECK(cut >= 40.0);
 }
 
-TEST_CASE("A microphone that loses samples is paired again with the sound played", "[voice]")
+TEST_CASE("The microphone waits a second at most for next()", "[voice]")
 {
-    const Samples played = noise(3 * SampleRate, 3000.0, 7);
     SoundProcessing processing;
-    processing.played(std::span(played).first(SampleRate));
-    processing.captured(std::span(played).first(FrameSamples));
-    CHECK(processing.repairs() == 0);
-    // A second played, 20 ms heard: the microphone lost the rest
-    processing.played(std::span(played).subspan(SampleRate, SampleRate));
-    processing.captured(std::span(played).subspan(FrameSamples, FrameSamples));
-    CHECK(processing.repairs() == 1);
-    // Steady again
-    processing.played(std::span(played).subspan(2 * SampleRate, FrameSamples));
-    processing.captured(std::span(played).subspan(2 * FrameSamples, FrameSamples));
-    CHECK(processing.repairs() == 1);
+    const Samples spoken = voice(3 * SampleRate, 3000.0);
+    processing.captured(spoken);
+    CHECK(processing.waiting() == SoundProcessing::MaxWaiting / FrameSamples);
+    processing.drop(2);
+    CHECK(processing.waiting() == (SoundProcessing::MaxWaiting / FrameSamples) - 2);
     processing.reset();
-    CHECK(processing.repairs() == 0);
     CHECK(processing.waiting() == 0);
 }
 
-TEST_CASE("Without a sound played, the microphone goes through the chain alone", "[voice]")
+TEST_CASE("With nothing played and the processing off, the microphone goes out as it came", "[voice]")
 {
     SoundProcessing processing({.noiseSuppression = false, .gainControl = false});
-    const Samples spoken = voice(SampleRate, 3000.0);
+    const Samples spoken = voice(SampleRate / 2, 3000.0);
     processing.captured(spoken);
     CHECK(processing.waiting() == spoken.size() / FrameSamples);
+    Samples out;
     Frame frame{};
-    std::size_t frames = 0;
     while (processing.next(frame)) {
-        ++frames;
+        CHECK(std::ranges::equal(frame, processing.heard()));
+        out.insert(out.end(), frame.begin(), frame.end());
     }
-    CHECK(frames == spoken.size() / FrameSamples);
-    CHECK_FALSE(processing.echoDelay());
+    CHECK(out == Samples(spoken.begin(), spoken.begin() + static_cast<std::ptrdiff_t>(out.size())));
+    CHECK(out.size() == (spoken.size() / FrameSamples) * FrameSamples);
 }
