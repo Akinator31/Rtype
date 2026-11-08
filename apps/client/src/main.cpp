@@ -16,10 +16,8 @@
 #include "Online/OnlineScenes.hpp"
 #include "Quests/Quests.hpp"
 #include "ShipSelector/ShipSelection.hpp"
-#include "Voice/VoiceKeysSystem.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
-#include "rtype/audio/VoiceStreams.hpp"
 #include "rtype/discord/SocialSdkAuthorizer.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -31,7 +29,6 @@
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
-#include "rtype/voice/Microphone.hpp"
 
 #include <cstdlib>
 #include <exception>
@@ -51,13 +48,6 @@ struct StopWorkers {
     ~StopWorkers() { threads.stopAll(); }
 };
 
-/// Ends the game played before the devices of the voice its session uses.
-struct StopSessions {
-    rtype::client::GameSessionSystem &sessions;
-
-    ~StopSessions() { sessions.stop(); }
-};
-
 /// Unloads the assets of the scenes before the ResourceManager and the AudioPlayer that hold them.
 struct UnloadSceneAssets {
     rtype::engine::Engine &engine;
@@ -73,11 +63,6 @@ void run()
     rtype::engine::Engine engine;
     rtype::client::readSettings(engine.getSettings());
     const rtype::audio::AudioDevice audioDevice;
-    // The voice of the games online: the microphone, opened only while the player can talk in a game or tries
-    // it on the Voice page, and the voices of the others
-    rtype::voice::Microphone microphone;
-    rtype::audio::VoiceStreams voiceStreams(audioDevice);
-    rtype::client::VoiceDevices voice{.capture = microphone, .playback = voiceStreams};
     rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
                                     engine.getThreads().getAssetsWorker());
     ResourceManager resources(window, applicationDirectory() / "assets",
@@ -112,8 +97,7 @@ void run()
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
-    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer,
-                                                         window,       voice, microphone};
+    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer, window};
     // The choices of the player at the last run
     rtype::client::applySavedSettings(engine, settingsTargets);
 
@@ -126,7 +110,6 @@ void run()
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions =
         rtype::client::registerClientSystems(engine, devices, audio, metrics, style);
-    StopSessions stopSessions{sessions};
     rtype::client::SceneAssetLoader sceneAssets(resources, audio);
     UnloadSceneAssets unloadSceneAssets{engine};
     rtype::client::AssetPreload preload(resources);
@@ -188,11 +171,10 @@ void run()
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord, ships,
-                                       rtype::render::userDataDirectory() / "pictures", config, voice);
+                                       rtype::render::userDataDirectory() / "pictures", config);
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     rtype::client::registerQuests(engine, translations);
-    engine.getEcs().registerSystem<rtype::client::VoiceKeysSystem>(engine, sessions, voice, translations);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
         playFrame();

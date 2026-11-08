@@ -8,7 +8,6 @@
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/SettingsMenu.hpp"
 #include "MainMenu/Submenus.hpp"
-#include "MainMenu/VoiceMenu.hpp"
 #include "ShipSelector/ShipSelector.hpp"
 
 #include <memory>
@@ -49,7 +48,6 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
         [&engine, &ships] { openShipSelector(engine, ships); });
     createSettingsScene(engine, style, targets);
     createControlsScenes(engine, style, translations);
-    createVoiceScenes(engine, style, targets);
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
 }

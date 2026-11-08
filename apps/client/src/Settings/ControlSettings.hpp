@@ -5,7 +5,6 @@
 #include "rtype/input/Keys.hpp"
 
 #include <array>
-#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,16 +20,8 @@ struct GameAction {
     std::string_view name;
 };
 
-/// The controls of the voice chat (docs/architecture/voice.md#the-keys), on controls of the virtual gamepad
-/// the game does not read: held to talk in push-to-talk (V, LT), pressed to mute and unmute (M, Y), pressed
-/// to deafen and hear again (N, View).
-inline constexpr engine::Control PushToTalkControl = engine::Control::LeftTrigger;
-inline constexpr engine::Control MuteControl = engine::Control::FaceUp;
-inline constexpr engine::Control DeafenControl = engine::Control::Select;
-
-/// Every action the player can rebind: those of the game, in the order of the Controls page, then those of
-/// the voice, in the order of the Voice page. A key does one thing among all of them.
-inline constexpr std::array<GameAction, 10> BoundActions{{
+/// The actions of the game, in the order of the Controls page.
+inline constexpr std::array<GameAction, 7> GameActions{{
     {engine::Control::Up, "move_up"},
     {engine::Control::Down, "move_down"},
     {engine::Control::Left, "move_left"},
@@ -38,14 +29,7 @@ inline constexpr std::array<GameAction, 10> BoundActions{{
     {engine::Control::FaceDown, "fire"},
     {engine::Control::LeftShoulder, "aim_up"},
     {engine::Control::RightShoulder, "aim_down"},
-    {PushToTalkControl, "push_to_talk"},
-    {MuteControl, "mute"},
-    {DeafenControl, "deafen"},
 }};
-/// The actions of the game, on the Controls page.
-inline constexpr std::span<const GameAction, 7> GameActions = std::span(BoundActions).first<7>();
-/// The actions of the voice, on the Voice page.
-inline constexpr std::span<const GameAction, 3> VoiceActions = std::span(BoundActions).last<3>();
 
 /// The start of the keys of the actions in the settings, and in the translations.
 inline constexpr std::string_view ControlsSettingsPrefix = "controls.";
@@ -57,11 +41,11 @@ inline constexpr input::Key CancelKey = input::Key::Escape;
 [[nodiscard]] std::vector<input::Key> keysOf(const engine::Controls &controls, engine::Control control);
 
 /// Binds this key alone to the control, instead of its other keys; its gamepad inputs stay. The key leaves
-/// the other BoundActions that had it, so that a key does one thing in the game.
+/// the other GameActions that had it, so that a key does one thing in the game.
 void assignKey(engine::Controls &controls, engine::Control control, input::Key key);
 
-/// The action of BoundActions other than `control` that has this key, which assignKey() would take from it:
-/// the Controls and Voice pages ask before. Nothing if no other action has it.
+/// The GameAction other than `control` that has this key, which assignKey() would take from it: the Controls
+/// page asks before. Nothing if no other action has it.
 [[nodiscard]] const GameAction *findKeyOwner(const engine::Controls &controls, engine::Control control,
                                              input::Key key);
 
@@ -71,10 +55,10 @@ void assignKey(engine::Controls &controls, engine::Control control, input::Key k
 [[nodiscard]] std::vector<std::string> gamepadNamesOf(const engine::Controls &controls,
                                                       engine::Control control);
 
-/// Gives the BoundActions the keys kept in the settings. An action with nothing kept, or with a key that does
+/// Gives the GameActions the keys kept in the settings. An action with nothing kept, or with a key that does
 /// not exist, keeps its default keys.
 void applyControlSettings(const engine::Settings &settings, engine::Controls &controls);
-/// Keeps the keys of the BoundActions in the settings, without writing them: "controls.move_up=Up,W".
+/// Keeps the keys of the GameActions in the settings, without writing them: "controls.move_up=Up,W".
 void keepControlSettings(engine::Settings &settings, const engine::Controls &controls);
 
 } // namespace rtype::client

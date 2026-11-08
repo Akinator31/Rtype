@@ -117,11 +117,10 @@ OnlineScenes::OnlineScenes(engine::Engine &engine, render::ResourceManager &reso
                            network::EventLoop &loop, GameScenes &games, const engine::InterfaceStyle &style,
                            localization::Localization &translations, discord::Authorizer &discord,
                            ShipSelection &ships, std::filesystem::path pictures,
-                           const game::GameConfig &config, VoiceDevices &voice)
+                           const game::GameConfig &config)
     : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord), _games(games),
-      _translations(translations), _ships(ships), _config(config), _voice(voice),
-      _known(engine.getSettings()), _sessions(engine.getSettings()),
-      _profiles(engine.getSettings(), std::move(pictures)),
+      _translations(translations), _ships(ships), _config(config), _known(engine.getSettings()),
+      _sessions(engine.getSettings()), _profiles(engine.getSettings(), std::move(pictures)),
       _sky(resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth)),
       _discordLogo(resources.loadTexture(RTYPE_IMAGE_DISCORD, render::TextureFiltering::Smooth))
 {
@@ -519,8 +518,7 @@ void OnlineScenes::joined(const LobbyClient::JoinResult &result)
     const auto &game = std::get<lobby::GameJoinedMessage>(result);
     try {
         // The game is on the IP address of the master
-        _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config,
-                                                    &_voice, _address),
+        _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config),
                     [this] { gameEnded(); });
     } catch (const std::system_error &error) {
         _engine.showToast(std::format("Cannot join the game: {}", error.what()), engine::ToastType::Error);

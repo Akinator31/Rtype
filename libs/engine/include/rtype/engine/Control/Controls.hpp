@@ -16,10 +16,9 @@ namespace rtype::engine
 ///
 /// Default bindings, on the keyboard and the first gamepad:
 /// - Up, Down, Left, Right: arrows and WASD (ZQSD on AZERTY); D-pad and left stick.
-/// - FaceDown: Space. FaceRight: Left Control. FaceLeft: Left Shift. FaceUp: M.
-/// - LeftShoulder: Q. RightShoulder: E. LeftTrigger: V. RightTrigger: gamepad only. Both triggers as a button
-///   or as an axis.
-/// - Start: Escape and Enter. Select: N.
+/// - FaceDown: Space. FaceRight: Left Control. FaceLeft: Left Shift. FaceUp: F.
+/// - LeftShoulder: Q. RightShoulder: E. LeftTrigger, RightTrigger: gamepad only, as a button or as an axis.
+/// - Start: Escape and Enter. Select: Tab.
 class Controls
 {
     input::ActionMap<Control> _controls;

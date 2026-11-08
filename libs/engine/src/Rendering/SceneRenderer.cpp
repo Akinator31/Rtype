@@ -1074,19 +1074,7 @@ void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider,
     const float captionTop = area.y + style.paddingTop;
     renderer.drawText(text.font, slider.caption, {area.x + style.inset, captionTop}, style.captionSize,
                       faded(mix(style.caption, style.litCaption, shown), opacity), style.letterSpacing);
-    if (const std::optional<Slider::Icon> icon = slider.icon ? slider.icon() : std::nullopt) {
-        const float captionWidth =
-            renderer.measureText(text.font, slider.caption, style.captionSize, style.letterSpacing).x;
-        const float size = style.iconSize;
-        renderer.drawTexture(icon->texture, icon->source,
-                             {area.x + style.inset + captionWidth + style.iconGap,
-                              captionTop + ((style.captionSize - size) / 2.0f), size, size},
-                             0.0f, faded(icon->tint, opacity));
-    }
-    std::string percentage = slider.label ? slider.label() : std::string();
-    if (percentage.empty()) {
-        percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + " %";
-    }
+    const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + " %";
     const render::Vector2 measured =
         renderer.measureText(style.valueFont, percentage, style.valueSize, style.valueSpacing);
     renderer.drawText(style.valueFont, percentage,

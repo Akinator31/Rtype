@@ -40,8 +40,6 @@ std::string_view gamepadButtonName(input::GamepadButton button)
         return "pad.lt";
     case input::GamepadButton::RightTrigger:
         return "pad.rt";
-    case input::GamepadButton::Select:
-        return "pad.view";
     default:
         return {};
     }
@@ -129,7 +127,7 @@ std::vector<input::Key> keysOf(const engine::Controls &controls, engine::Control
 
 void assignKey(engine::Controls &controls, engine::Control control, input::Key key)
 {
-    for (const GameAction &action : BoundActions) {
+    for (const GameAction &action : GameActions) {
         controls.unbind(action.control, input::Binding::key(key));
     }
     replaceKeys(controls, control, {key});
@@ -137,7 +135,7 @@ void assignKey(engine::Controls &controls, engine::Control control, input::Key k
 
 const GameAction *findKeyOwner(const engine::Controls &controls, engine::Control control, input::Key key)
 {
-    for (const GameAction &action : BoundActions) {
+    for (const GameAction &action : GameActions) {
         if (action.control != control && hasKey(controls, action.control, key)) {
             return &action;
         }
@@ -164,7 +162,7 @@ std::vector<std::string> gamepadNamesOf(const engine::Controls &controls, engine
 
 void applyControlSettings(const engine::Settings &settings, engine::Controls &controls)
 {
-    for (const GameAction &action : BoundActions) {
+    for (const GameAction &action : GameActions) {
         const std::optional<std::string> kept = settings.getString(settingsKey(action));
         if (const auto keys = kept ? splitKeys(*kept) : std::nullopt) {
             replaceKeys(controls, action.control, *keys);
@@ -174,7 +172,7 @@ void applyControlSettings(const engine::Settings &settings, engine::Controls &co
 
 void keepControlSettings(engine::Settings &settings, const engine::Controls &controls)
 {
-    for (const GameAction &action : BoundActions) {
+    for (const GameAction &action : GameActions) {
         settings.setString(settingsKey(action), joinKeys(keysOf(controls, action.control)));
     }
 }

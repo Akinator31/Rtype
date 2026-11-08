@@ -31,8 +31,6 @@
 namespace rtype::client
 {
 
-struct VoiceDevices;
-
 /// Name of the list of the games of a server.
 inline constexpr const char *LobbyScene = "online_lobby";
 /// Name of the question asked at the first connection to a server: trust its key?
@@ -110,8 +108,6 @@ class OnlineScenes
     ShipSelection &_ships;
     /// The definitions of the client: the weapon of the player, whose shots its games predict.
     const game::GameConfig &_config;
-    /// The devices of the voice of the games joined.
-    VoiceDevices &_voice;
     KnownServers _known;
     SessionTokens _sessions;
     KnownProfiles _profiles;
@@ -206,7 +202,7 @@ public:
     OnlineScenes(engine::Engine &engine, render::ResourceManager &resources, network::EventLoop &loop,
                  GameScenes &games, const engine::InterfaceStyle &style,
                  localization::Localization &translations, discord::Authorizer &discord, ShipSelection &ships,
-                 std::filesystem::path pictures, const game::GameConfig &config, VoiceDevices &voice);
+                 std::filesystem::path pictures, const game::GameConfig &config);
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;

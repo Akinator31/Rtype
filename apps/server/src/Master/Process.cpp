@@ -5,7 +5,6 @@
 #include <reproc/reproc.h>
 
 #include <algorithm>
-#include <chrono>
 #include <climits>
 #include <cstdint>
 #include <new>
@@ -221,14 +220,7 @@ int Process::stop() noexcept
         logger().warning("Cannot ask process {} to stop ({}): killing it", _pid,
                          systemError(result).message());
     } else {
-        // The whole grace: on Windows, a wait of n ms follows the tick of the system and may end a few ms
-        // early
-        const auto deadline = std::chrono::steady_clock::now() + _stopGrace;
-        do {
-            const auto left =
-                std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-            result = reproc_wait(process, toMilliseconds(std::max(left, std::chrono::milliseconds(1))));
-        } while (result == REPROC_ETIMEDOUT && std::chrono::steady_clock::now() < deadline);
+        result = reproc_wait(process, toMilliseconds(_stopGrace));
         if (result >= 0) {
             return result;
         }

@@ -1,68 +1,22 @@
 version: 2.1
 
-# Port of the GitHub Actions workflows (.github/workflows) to a single CircleCI pipeline. Kept here while CircleCI
-# is disabled: to enable it again, move this folder back to .circleci/ (the paths below name .circleci/).
-#
-# The pipeline has three triggers (Project Settings > Triggers):
-#   - "All pushes": panel, build, sanitizers, Docker image, format and docs on every branch; mirror and docs
-#     deployment on main; Docker publication from main and the v* tags; release on the v* tags
+# Port of the GitHub Actions workflows (.github/workflows) to a single CircleCI pipeline.
+# The pipeline has two triggers (Project Settings > Triggers):
+#   - "All pushes": build on every branch, format and docs, mirror and docs deployment on main, release on v* tags
 #   - "PR opened": format and docs as soon as a pull request is opened, before any new push
-#   - A schedule on main, every night at 05:01 UTC, with the pipeline parameter nightly-tsan = true: the whole
-#     suite under ThreadSanitizer, as tsan.yml (a night that failed blocks the next release)
 #
 # Project environment variables (Project Settings > Environment Variables):
 #   FORMAT_BOT_CLIENT_ID, FORMAT_BOT_PRIVATE_KEY  format bot (also used to deploy the docs and publish releases)
 #   MIRROR_URL, GIT_SSH_PRIVATE_KEY                mirror repository
-#   GHCR_USER, GHCR_TOKEN                          GHCR publication of the server image: GHCR takes no token of a
-#                                                  GitHub App, so a personal access token (classic) with
-#                                                  write:packages, and the login of its owner
-#   CIRCLECI_API_TOKEN                             a personal API token of CircleCI: the release reads the last
-#                                                  ThreadSanitizer night through the Insights API
-#   CIRCLECI_PROJECT_SLUG                          optional, gh/<owner>/<name> by default: the slug of the project
-#                                                  of a GitHub App integration, circleci/<org id>/<project id>
 # Multi-line values (.pem, SSH key) can be stored encoded with base64 -w0.
-#
-# The documentation is deployed by pushing the gh-pages branch: GitHub Pages must then serve that branch
-# (Settings > Pages > Source: Deploy from a branch), not "GitHub Actions" as the GitHub workflow needs.
-
-parameters:
-  nightly-tsan:
-    description: Set by the nightly schedule, or by hand from "Trigger pipeline", to run ThreadSanitizer only
-    type: boolean
-    default: false
 
 executors:
   linux:
     docker:
       - image: cimg/base:2026.03-24.04
-  # The build of Linux with its PostgreSQL: the tests of the database run on SQLite and on this server, as on
-  # the GitHub runner. Windows tests SQLite only
-  linux-postgresql:
-    docker:
-      - image: cimg/base:2026.03-24.04
-      - image: postgres:18
-        environment:
-          POSTGRES_USER: rtype
-          POSTGRES_PASSWORD: rtype
-          POSTGRES_DB: rtype
-    environment:
-      RTYPE_TEST_POSTGRESQL_URL: postgresql://rtype:rtype@127.0.0.1:5432/rtype
   python:
     docker:
       - image: cimg/python:3.13
-  # A virtual machine: Docker for PostgreSQL and the images, and setarch -R, which the seccomp profile of a
-  # container refuses
-  vm:
-    machine:
-      image: ubuntu-2404:current
-  # The two architectures of the published image, each built natively
-  vm-amd64:
-    machine:
-      image: ubuntu-2404:current
-  vm-arm64:
-    machine:
-      image: ubuntu-2404:current
-    resource_class: arm.medium
   windows:
     machine:
       image: windows-server-2022-gui:current
@@ -92,36 +46,6 @@ commands:
               | tar -xz -C /tmp
             sudo mv "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh
             gh --version
-
-  # The latest LTS of Node, as setup-node with lts/*
-  install-node:
-    description: Install the latest LTS of Node
-    steps:
-      - run:
-          name: Install Node (LTS)
-          command: |
-            version=$(curl -fsSL https://nodejs.org/dist/index.json | jq -r '[.[] | select(.lts != false)][0].version')
-            curl -fsSL "https://nodejs.org/dist/${version}/node-${version}-linux-x64.tar.gz" \
-              | sudo tar -xz -C /usr/local --strip-components=1
-            node --version
-            npm --version
-
-  npm-ci:
-    description: Install the dependencies of the panel, with the npm cache of its lock file
-    steps:
-      - restore_cache:
-          name: Restore npm cache
-          keys:
-            - npm-{{ checksum "web/admin/package-lock.json" }}
-      - run:
-          name: Install the dependencies of the panel
-          working_directory: web/admin
-          command: npm ci
-      - save_cache:
-          name: Save npm cache
-          key: npm-{{ checksum "web/admin/package-lock.json" }}
-          paths:
-            - ~/.npm
 
   # Equivalent of the GitHub "paths" filter: the job stops (successfully) when no matching file changed.
   # Pushes to main are compared with the previous commit, other branches with their merge base with main.
@@ -159,13 +83,17 @@ commands:
               circleci-agent step halt
             fi
 
-  # Only the dependency declarations and CPM itself: hashing every CMakeLists.txt saved a new cache (counted
-  # in the storage of the plan) each time a source file was added
-  restore-cpm-cache:
+  cmake-build:
+    description: Configure, build, test and package the project, as the GitHub Build workflow
     parameters:
       platform:
         type: string
+      generator:
+        type: string
     steps:
+      - checkout
+      # Only the dependency declarations and CPM itself: hashing every CMakeLists.txt saved a new cache (counted
+      # in the storage of the plan) each time a source file was added
       - run:
           name: Compute the dependency cache key
           command: |
@@ -176,43 +104,6 @@ commands:
           keys:
             - cpm-<< parameters.platform >>-{{ checksum ".cpm-cache-key" }}
             - cpm-<< parameters.platform >>-
-
-  install-linux-libraries:
-    description: The system libraries of the build (X11 / OpenGL, OpenSSL, libpq, Discord) and extra packages
-    parameters:
-      extra:
-        type: string
-        default: ""
-    steps:
-      # The Discord Social SDK of the client (libs/discord) is linked against PulseAudio and ALSA
-      - run:
-          name: Install build tools and system libraries (X11 / OpenGL, OpenSSL, libpq, Discord)
-          command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
-              build-essential cmake ninja-build \
-              libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev \
-              libpulse0 libasound2t64 \
-              << parameters.extra >>
-
-  cmake-build:
-    description: Configure, build, test and package the project, as the GitHub Build workflow
-    parameters:
-      platform:
-        type: string
-      generator:
-        type: string
-      after-test:
-        description: Steps run between the tests and the package, such as the end-to-end tests of the panel
-        type: steps
-        default: []
-    steps:
-      - checkout
-      # The panel of the panel job: the package takes it, the end-to-end tests serve it
-      - attach_workspace:
-          at: .
-      - restore-cpm-cache:
-          platform: << parameters.platform >>
       - run:
           name: Configure
           command: |
@@ -221,7 +112,6 @@ commands:
             root=$(command -v cygpath > /dev/null && cygpath -m "$PWD" || echo "$PWD")
             cmake -S . -B build -G "<< parameters.generator >>" \
               -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DRTYPE_BUILD_TESTS=ON \
-              -DRTYPE_ADMIN_PANEL_DIR="$root/web/admin/dist" \
               -DCPM_SOURCE_CACHE="$root/.cpm-cache"
       - run:
           name: Build
@@ -234,7 +124,6 @@ commands:
           command: |
             [ -d "/c/Program Files/CMake/bin" ] && export PATH="/c/Program Files/CMake/bin:$PATH"
             ctest --test-dir build -C $BUILD_TYPE --output-on-failure
-      - steps: << parameters.after-test >>
       - run:
           name: Package
           working_directory: build
@@ -276,103 +165,22 @@ commands:
                 paths:
                   - packages
 
-  docker-login:
-    description: Log in to GHCR and export IMAGE, the name of the image there
-    steps:
-      - run:
-          name: Log in to GHCR
-          command: |
-            if [ -z "${GHCR_USER:-}" ] || [ -z "${GHCR_TOKEN:-}" ]; then
-              echo "GHCR_USER and GHCR_TOKEN are not set (Project Settings > Environment Variables): cannot publish."
-              exit 1
-            fi
-            echo "export IMAGE='ghcr.io/${GITHUB_REPOSITORY,,}'" >> "$BASH_ENV"
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-
 jobs:
-  # The administration panel (web/admin): its own toolchain, Node LTS, apart from the game. Its dist/ goes into
-  # the server package of each system; the game itself builds without Node
-  panel:
-    executor: linux
-    steps:
-      - checkout
-      - install-node
-      - npm-ci
-      - run:
-          name: Lint
-          working_directory: web/admin
-          command: |
-            npm run lint
-            npm run format:check
-      - run:
-          name: Type-check
-          working_directory: web/admin
-          command: npm run typecheck
-      - run:
-          name: Test
-          working_directory: web/admin
-          command: npm test
-      - run:
-          name: Build
-          working_directory: web/admin
-          command: npm run build
-      - persist_to_workspace:
-          root: .
-          paths:
-            - web/admin/dist
-
   build-linux:
-    executor: linux-postgresql
+    executor: linux
     environment:
       BUILD_TYPE: Release
     steps:
-      # The second line is what the Chromium of Playwright needs, for the end-to-end tests of the panel: named
-      # here since `playwright install --with-deps` runs `sudo sh`, and knows only the packages of Ubuntu
-      - install-linux-libraries:
-          extra: >-
-            libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 libdbus-1-3 libxkbcommon0
-            libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libatspi2.0-0t64
-      - install-node
       - run:
-          name: Wait for PostgreSQL
+          name: Install build tools and system libraries (X11 / OpenGL)
           command: |
-            # Over TCP: while it initializes, the image runs a server on its Unix socket only, then restarts it
-            for attempt in $(seq 1 30); do
-              (exec 3<> /dev/tcp/127.0.0.1/5432) 2> /dev/null && { echo "PostgreSQL is up."; exit 0; }
-              sleep 1
-            done
-            echo "PostgreSQL did not start."
-            exit 1
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              build-essential cmake ninja-build \
+              libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
       - cmake-build:
           platform: linux
           generator: Ninja
-          # The panel against the master just built and a game of real players
-          after-test:
-            - npm-ci
-            - run:
-                name: End-to-end tests of the panel
-                working_directory: web/admin
-                # A failure is told by the next step: this one keeps going, so that the report is stored. The
-                # report of a run that passed is removed, as it would count towards the storage of the plan
-                command: |
-                  export RTYPE_BUILD_BIN="$(cd ../.. && pwd)/build/bin"
-                  npx playwright install chromium
-                  if npx playwright test; then
-                    rm -rf playwright-report
-                  else
-                    touch /tmp/e2e-failed
-                  fi
-            - store_artifacts:
-                name: Keep the report of the end-to-end tests (failures only)
-                path: web/admin/playwright-report
-                destination: playwright-report
-            - run:
-                name: Fail on a failed end-to-end test
-                command: |
-                  if [ -f /tmp/e2e-failed ]; then
-                    echo "The end-to-end tests of the panel failed: see the playwright-report artifact."
-                    exit 1
-                  fi
 
   build-windows:
     executor: windows
@@ -428,130 +236,6 @@ jobs:
       - cmake-build:
           platform: windows
           generator: Ninja
-
-  # The whole suite under AddressSanitizer and UndefinedBehaviorSanitizer on every branch, or ThreadSanitizer
-  # from the nightly schedule, as sanitizers.yml
-  sanitizers:
-    executor: vm
-    parameters:
-      sanitizers:
-        description: Sanitizers of the build, as RTYPE_SANITIZERS
-        type: string
-    environment:
-      # Optimized as the release, with what the reports need to name the lines
-      BUILD_TYPE: RelWithDebInfo
-      SANITIZERS: << parameters.sanitizers >>
-    steps:
-      - checkout
-      - install-linux-libraries
-      - run:
-          name: Start PostgreSQL for the tests
-          command: |
-            docker run -d --name rtype-ci-postgres -e POSTGRES_USER=rtype -e POSTGRES_PASSWORD=rtype \
-              -e POSTGRES_DB=rtype -p 127.0.0.1:5432:5432 postgres:18
-            # Over TCP: while it initializes, the image runs a server on its Unix socket only, then restarts it
-            for attempt in $(seq 1 30); do
-              docker exec rtype-ci-postgres pg_isready -h 127.0.0.1 -U rtype -d rtype > /dev/null 2>&1 && break
-              sleep 1
-            done
-            docker exec rtype-ci-postgres pg_isready -h 127.0.0.1 -U rtype -d rtype
-            echo "export RTYPE_TEST_POSTGRESQL_URL=postgresql://rtype:rtype@127.0.0.1:5432/rtype" >> "$BASH_ENV"
-      - restore-cpm-cache:
-          platform: linux
-      - run:
-          name: Configure
-          command: |
-            cmake -S . -B build-sanitizers -G Ninja \
-              -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DRTYPE_BUILD_TESTS=ON -DRTYPE_SANITIZERS=$SANITIZERS \
-              -DCPM_SOURCE_CACHE="$PWD/.cpm-cache"
-      - run:
-          name: Build
-          command: cmake --build build-sanitizers --parallel
-      # Without the randomization of the addresses: ThreadSanitizer refuses the layouts of the recent kernels
-      - run:
-          name: Test
-          no_output_timeout: 30m
-          command: setarch "$(uname -m)" -R ctest --test-dir build-sanitizers --output-on-failure
-
-  # The image of the server (docs/guides/deploy-with-docker.md), built and smoke tested on every branch, as
-  # docker.yml
-  docker-image:
-    executor: vm
-    environment:
-      SERVER_IMAGE: rtype-server:ci
-      SMOKE_IMAGE: rtype-smoke:ci
-    steps:
-      - checkout
-      - run:
-          name: Build the image
-          command: |
-            docker build --target server -t "$SERVER_IMAGE" .
-            docker build --target smoke -t "$SMOKE_IMAGE" .
-      - run:
-          name: Smoke test
-          command: docker/smoke-test.sh "$SERVER_IMAGE" "$SMOKE_IMAGE"
-      # The settings of the official server, a fake Discord and a fake mail server: a player and an
-      # administrator sign in
-      - run:
-          name: Smoke test with accounts
-          command: docker/smoke-test-accounts.sh "$SERVER_IMAGE" "$SMOKE_IMAGE"
-
-  # One architecture of the image, on a machine of its own, pushed by digest only: docker-manifest gathers them.
-  # Native arm64 here, where the GitHub runner builds it under QEMU
-  docker-publish:
-    parameters:
-      arch:
-        type: enum
-        enum: [amd64, arm64]
-    executor: vm-<< parameters.arch >>
-    steps:
-      - checkout
-      - set-repo-slug
-      - docker-login
-      - run:
-          name: Build and push linux/<< parameters.arch >>
-          command: |
-            docker buildx create --name rtype --driver docker-container --use
-            docker buildx build --platform linux/<< parameters.arch >> --target server \
-              --output "type=image,name=$IMAGE,push-by-digest=true,name-canonical=true,push=true" \
-              --metadata-file /tmp/metadata.json .
-            mkdir -p /tmp/digests
-            jq -r '."containerimage.digest"' /tmp/metadata.json > /tmp/digests/<< parameters.arch >>
-            cat /tmp/digests/<< parameters.arch >>
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - digests/<< parameters.arch >>
-
-  # The image for linux/amd64 and linux/arm64 in one manifest, Dokploy pulls the one of its machine: main as
-  # main, a tag as its version and latest (never for a prerelease)
-  docker-manifest:
-    executor: vm
-    environment:
-      TAG: << pipeline.git.tag >>
-    steps:
-      - checkout
-      - set-repo-slug
-      - docker-login
-      - attach_workspace:
-          at: /tmp
-      - run:
-          name: Publish the manifest
-          command: |
-            if [ -n "$TAG" ]; then
-              tags=("${TAG#v}")
-              [[ "$TAG" == *-* ]] || tags+=(latest)
-            else
-              tags=(main)
-            fi
-            tag_args=()
-            for tag in "${tags[@]}"; do
-              tag_args+=(-t "$IMAGE:$tag")
-            done
-            docker buildx imagetools create "${tag_args[@]}" \
-              "$IMAGE@$(cat /tmp/digests/amd64)" "$IMAGE@$(cat /tmp/digests/arm64)"
-            docker buildx imagetools inspect "$IMAGE:${tags[0]}"
-            docker logout ghcr.io
 
   # On pull requests, unformatted C++ code is fixed automatically: the format bot (a GitHub App, see
   # docs/contributing/repository-setup.md) commits the result to the branch and comments on the pull request.
@@ -820,7 +504,6 @@ jobs:
       TAG: << pipeline.git.tag >>
     steps:
       - checkout
-      - set-repo-slug
       - run:
           name: Compare the tag with the project version
           command: |
@@ -835,25 +518,6 @@ jobs:
               exit 1
             fi
             echo "Releasing version $tag_version"
-      # A ThreadSanitizer night that failed blocks the release until a run on main passes again: the race fixed,
-      # or explained by a suppression in cmake/Sanitizers.cpp
-      - run:
-          name: Check the last ThreadSanitizer run on main
-          command: |
-            if [ -z "${CIRCLECI_API_TOKEN:-}" ]; then
-              echo "CIRCLECI_API_TOKEN is not set (Project Settings > Environment Variables): cannot read the last ThreadSanitizer night."
-              exit 1
-            fi
-            slug=${CIRCLECI_PROJECT_SLUG:-gh/$GITHUB_REPOSITORY}
-            conclusion=$(curl -fsSL -H "Circle-Token: $CIRCLECI_API_TOKEN" \
-              "https://circleci.com/api/v2/insights/$slug/workflows/tsan?branch=main" \
-              | jq -r '[.items[] | select(.status == "success" or .status == "failed")]
-                  | sort_by(.created_at) | reverse | .[0].status // ""')
-            if [ "$conclusion" = "failed" ]; then
-              echo "The last ThreadSanitizer run on main failed. Fix the race or explain it, then trigger a pipeline on main with nightly-tsan = true."
-              exit 1
-            fi
-            echo "Last ThreadSanitizer run on main: ${conclusion:-none yet}"
 
   release:
     executor: linux
@@ -897,7 +561,6 @@ workflows:
   build:
     when:
       and:
-        - not: << pipeline.parameters.nightly-tsan >>
         - not:
             equal: [pull_request, << pipeline.event.name >>]
         - not:
@@ -905,67 +568,12 @@ workflows:
         - not:
             equal: [gh-pages, << pipeline.git.branch >>]
     jobs:
-      - panel
-      - build-linux:
-          requires:
-            - panel
-      - build-windows:
-          requires:
-            - panel
-
-  sanitizers:
-    when:
-      and:
-        - not: << pipeline.parameters.nightly-tsan >>
-        - not:
-            equal: [pull_request, << pipeline.event.name >>]
-        - not:
-            equal: ["", << pipeline.git.branch >>]
-        - not:
-            equal: [gh-pages, << pipeline.git.branch >>]
-    jobs:
-      - sanitizers:
-          name: sanitizers-address-undefined
-          sanitizers: address,undefined
-
-  # The nightly schedule (or a pipeline triggered by hand with nightly-tsan = true). Its name is read by the
-  # release, through the Insights API
-  tsan:
-    when: << pipeline.parameters.nightly-tsan >>
-    jobs:
-      - sanitizers:
-          name: sanitizers-thread
-          sanitizers: thread
-
-  # Built and smoke tested on every branch, published from main and the v* tags
-  docker:
-    when:
-      and:
-        - not: << pipeline.parameters.nightly-tsan >>
-        - not:
-            equal: [pull_request, << pipeline.event.name >>]
-        - not:
-            equal: [gh-pages, << pipeline.git.branch >>]
-    jobs:
-      - docker-image:
-          filters: pipeline.git.branch != "" or pipeline.git.tag starts-with "v"
-      - docker-publish:
-          matrix:
-            parameters:
-              arch: [amd64, arm64]
-          requires:
-            - docker-image
-          filters: pipeline.git.branch == "main" or pipeline.git.tag starts-with "v"
-      - docker-manifest:
-          requires:
-            - docker-publish
-          filters: pipeline.git.branch == "main" or pipeline.git.tag starts-with "v"
-          serial-group: rtype/docker-publish
+      - build-linux
+      - build-windows
 
   format:
     when:
       and:
-        - not: << pipeline.parameters.nightly-tsan >>
         - not:
             equal: ["", << pipeline.git.branch >>]
         - not:
@@ -978,7 +586,6 @@ workflows:
   docs:
     when:
       and:
-        - not: << pipeline.parameters.nightly-tsan >>
         - not:
             equal: ["", << pipeline.git.branch >>]
         - not:
@@ -995,7 +602,6 @@ workflows:
   mirror:
     when:
       and:
-        - not: << pipeline.parameters.nightly-tsan >>
         - equal: [push, << pipeline.event.name >>]
         - equal: [main, << pipeline.git.branch >>]
     jobs:
@@ -1012,17 +618,13 @@ workflows:
     jobs:
       - check-version:
           filters: pipeline.git.tag starts-with "v"
-      - panel:
+      - build-linux:
           requires:
             - check-version
           filters: pipeline.git.tag starts-with "v"
-      - build-linux:
-          requires:
-            - panel
-          filters: pipeline.git.tag starts-with "v"
       - build-windows:
           requires:
-            - panel
+            - check-version
           filters: pipeline.git.tag starts-with "v"
       - release:
           requires:
