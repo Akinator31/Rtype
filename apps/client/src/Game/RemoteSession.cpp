@@ -184,6 +184,18 @@ std::vector<voice::VoiceTransport::Incoming> RemoteSession::receive()
     return frames;
 }
 
+void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushToTalk)
+{
+    const VoicePreferences &preferences = devices.preferences;
+    const bool activity = preferences.mode == voice::TalkMode::VoiceActivity;
+    voice.setDeafened(devices.deafened);
+    voice.setSelfMute(preferences.mode == voice::TalkMode::Off || devices.muted || devices.deafened);
+    voice.setVoiceActivity(activity ? std::optional<float>(preferences.threshold) : std::nullopt);
+    voice.setTalking(activity || (preferences.mode == voice::TalkMode::PushToTalk && pushToTalk));
+    voice.setInputVolume(preferences.inputVolume);
+    voice.setOutputVolume(preferences.voiceVolume);
+}
+
 void RemoteSession::updateVoice()
 {
     if (!_voice) {
@@ -191,11 +203,14 @@ void RemoteSession::updateVoice()
     }
     if (_over) {
         _voice->leave();
+        _devices->microphoneSilent = false;
         return;
     }
-    _voice->setSelfMute(!_devices->microphoneOn);
-    _voice->setTalking(_devices->microphoneOn);
-    _voice->poll();
+    const voice::TalkClock::time_point now = voice::TalkClock::now();
+    _pushToTalk.update(_devices->pushToTalk, now);
+    applyVoice(*_voice, *_devices, _pushToTalk.talking(now));
+    _voice->poll(now);
+    _devices->microphoneSilent = _voice->microphoneSilent();
 }
 
 std::vector<game::VoiceFrameMessage> RemoteSession::takeVoiceFrames()

@@ -6,14 +6,12 @@
 #include "Commands/QuitCommand.hpp"
 #include "Commands/SceneCommand.hpp"
 #include "Commands/ToastCommand.hpp"
-#include "Commands/VoiceCommand.hpp"
 
 namespace rtype::client
 {
 
 void registerClientCommands(Console &console, engine::Engine &engine, render::Window &window,
-                            GameScenes &games, const game::GameConfig &config, DebugViews &views,
-                            VoiceDevices &voice)
+                            GameScenes &games, const game::GameConfig &config, DebugViews &views)
 {
     registerBossCommand(console, games, config);
     registerFpsCommand(console, views.fps);
@@ -21,7 +19,6 @@ void registerClientCommands(Console &console, engine::Engine &engine, render::Wi
     registerQuitCommand(console, window);
     registerSceneCommand(console, engine);
     registerToastCommand(console, engine);
-    registerVoiceCommand(console, voice);
 }
 
 } // namespace rtype::client

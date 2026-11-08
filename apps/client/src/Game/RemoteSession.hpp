@@ -5,6 +5,7 @@
 #include "Game/Interpolation.hpp"
 #include "Game/Prediction.hpp"
 #include "Game/ShotPrediction.hpp"
+#include "Voice/VoiceDevices.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/RemoteWorld.hpp"
@@ -29,16 +30,11 @@
 namespace rtype::client
 {
 
-/// What the voice of a game online needs (docs/architecture/voice.md): the devices, which outlive the
-/// sessions, and whether the player talks.
-struct VoiceDevices {
-    voice::Capture &capture;
-    voice::Playback &playback;
-    /// The microphone is on: the player talks, with an open microphone (the `voice` command of the
-    /// console). Off by default: nobody hears the player unasked. The talk modes and their settings come
-    /// later.
-    bool microphoneOn = false;
-};
+/// Gives the voice of the game how the player talks: its mode (push-to-talk, voice activity or off), muted
+/// and deafened by its keys, and its volumes.
+/// @param pushToTalk The push-to-talk key is held, or was released less than voice::PushToTalk::ReleaseDelay
+///   ago.
+void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushToTalk);
 
 /// A game online: the session of the player with its game instance, over encrypted UDP
 /// (docs/protocol/game.md), with what GAME_JOINED gave (ADR 0015).
@@ -63,7 +59,7 @@ struct VoiceDevices {
 ///   (VOICE_FRAME) for takeVoiceFrames(), with what carries the voice of each player (VOICE_ROSTER). Given
 ///   VoiceDevices, it runs the voice of the game itself (voice::GameVoice): the player is on Backend::Game
 ///   if the voices can be played, the frames go through the GameVoice instead of takeVoiceFrames(), and it
-///   talks while VoiceDevices::microphoneOn.
+///   talks as VoiceDevices says: in its mode, with its keys and volumes (applyVoice()).
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why.
 ///
 /// The loop must be polled, by the game loop of the client.
@@ -120,6 +116,7 @@ private:
     /// The voice of the game, with VoiceDevices. Last: destroyed first, while the session it sends through is
     /// still there.
     VoiceDevices *_devices = nullptr;
+    voice::PushToTalk _pushToTalk;
     std::unique_ptr<voice::GameVoice> _voice;
 
     void received(std::uint8_t type, std::span<const std::byte> payload);
