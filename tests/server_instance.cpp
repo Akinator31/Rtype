@@ -226,6 +226,23 @@ struct TestClient {
                      rtype::game::encode(rtype::game::VoiceStateMessage{backend}), Delivery::Reliable);
     }
 
+    void sendVoiceStatus(rtype::voice::Status status)
+    {
+        session.send(rtype::game::message_type::VoiceStatus,
+                     rtype::game::encode(rtype::game::VoiceStatusMessage{status}), Delivery::Reliable);
+    }
+
+    /// The latest VOICE_STATUSES received.
+    [[nodiscard]] std::optional<rtype::game::VoiceStatusesMessage> lastStatuses() const
+    {
+        for (auto message = messages.rbegin(); message != messages.rend(); ++message) {
+            if (message->first == rtype::game::message_type::VoiceStatuses) {
+                return rtype::game::decodeVoiceStatuses(message->second);
+            }
+        }
+        return std::nullopt;
+    }
+
     void sendVoice(std::uint16_t sequence)
     {
         session.send(rtype::game::message_type::Voice,
@@ -416,7 +433,10 @@ TEST_CASE("The messages of the instances survive a round trip", "[instance]")
     CHECK(decodeConfigure(encode(relayed)) == relayed);
     const AddPlayerMessage added = player(42, 5, "Alice");
     CHECK(decodeAddPlayer(encode(added)) == added);
-    CHECK(encode(added).size() == 72 + 1 + 5);
+    CHECK(encode(added).size() == 72 + 1 + 5 + 8);
+    AddPlayerMessage signedIn = added;
+    signedIn.accountId = 0x0102030405060708;
+    CHECK(decodeAddPlayer(encode(signedIn)) == signedIn);
     for (const RemovePlayerReason reason :
          {RemovePlayerReason::Left, RemovePlayerReason::LobbyClosed, RemovePlayerReason::Kicked}) {
         const RemovePlayerMessage removed{42, reason};
@@ -947,8 +967,9 @@ TEST_CASE("An instance runs a game for the players the master gives it", "[insta
             }
         }));
 
-    // A second player: both know each other
-    const AddPlayerMessage bob = player(43, 6, "Bob");
+    // A second player, signed in to an account: both know each other, and the account of Bob
+    AddPlayerMessage bob = player(43, 6, "Bob");
+    bob.accountId = 77;
     master.send(instance_message::AddPlayer, bob);
     loop.poll();
     std::this_thread::sleep_for(20ms);
@@ -960,7 +981,7 @@ TEST_CASE("An instance runs a game for the players the master gives it", "[insta
     REQUIRE(waitUntil(loop, [&] { return bobClient.joined().size() == 2; }, updateBoth));
     CHECK(bobClient.accepted->slot == 1);
     REQUIRE(waitUntil(loop, [&] { return aliceClient.joined().size() == 2; }, updateBoth));
-    CHECK(aliceClient.joined()[1] == rtype::game::PlayerJoinedMessage{1, 43, "Bob"});
+    CHECK(aliceClient.joined()[1] == rtype::game::PlayerJoinedMessage{1, 43, "Bob", 77});
 
     // The master removes Bob: Bob is disconnected, Alice is told, the master is not told back
     master.send(instance_message::RemovePlayer, RemovePlayerMessage{43, RemovePlayerReason::LobbyClosed});
@@ -1339,6 +1360,48 @@ TEST_CASE("A client knows what carries the voice of each player: at its connecti
          rtype::voice::Backend::None}};
     CHECK(waitUntil(
         voice.loop, [&] { return newcomer.lastRoster() == afterLeave; },
+        [&] {
+            voice.update();
+            newcomer.update();
+        }));
+}
+
+TEST_CASE("A client knows what each player tells about its voice: at its connection, at every change",
+          "[instance][voice]")
+{
+    using rtype::voice::Status;
+    VoiceGame voice(2);
+    CHECK(waitUntil(
+        voice.loop, [&] { return voice.clients[1]->lastStatuses() == rtype::game::VoiceStatusesMessage{}; },
+        [&] { voice.update(); }));
+
+    voice.clients[0]->sendVoiceStatus({.muted = true});
+    voice.clients[1]->sendVoiceStatus({.noMicrophone = true});
+    const rtype::game::VoiceStatusesMessage expected{{Status{.muted = true}, Status{.noMicrophone = true}}};
+    REQUIRE(waitUntil(
+        voice.loop,
+        [&] {
+            return voice.clients[0]->lastStatuses() == expected &&
+                   voice.clients[1]->lastStatuses() == expected;
+        },
+        [&] { voice.update(); }));
+
+    // A newcomer is told at once
+    const AddPlayerMessage carol = player(50, 20, "Carol");
+    REQUIRE(voice.host.addPlayer(carol));
+    TestClient newcomer(voice.loop, voice.host.localAddress().port(), carol);
+    REQUIRE(waitUntil(
+        voice.loop, [&] { return newcomer.lastStatuses() == expected; },
+        [&] {
+            voice.update();
+            newcomer.update();
+        }));
+
+    // The muted player leaves: its slot is told empty
+    voice.host.removePlayer(40, RemovePlayerReason::Kicked);
+    const rtype::game::VoiceStatusesMessage afterLeave{{Status{}, Status{.noMicrophone = true}}};
+    CHECK(waitUntil(
+        voice.loop, [&] { return newcomer.lastStatuses() == afterLeave; },
         [&] {
             voice.update();
             newcomer.update();

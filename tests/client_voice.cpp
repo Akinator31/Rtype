@@ -89,6 +89,59 @@ TEST_CASE("The preferences of the voice are kept in the settings and found again
     CHECK(readVoiceSettings(settings) == chosen);
 }
 
+TEST_CASE("The choices for the other players are kept by account, or by name for a guest",
+          "[settings][voice]")
+{
+    using rtype::client::PlayerVoice;
+    using rtype::client::playerVoiceKey;
+    CHECK(playerVoiceKey("rtype.example:4242", 7, "Nova") == "rtype.example:4242/7");
+    CHECK(playerVoiceKey("rtype.example:4242", 0, "~Nova") == "rtype.example:4242/guest/~Nova");
+    // The same account on another server is another player
+    CHECK(playerVoiceKey("10.0.0.7:4242", 7, "Nova") != playerVoiceKey("rtype.example:4242", 7, "Nova"));
+
+    VoicePreferences chosen;
+    chosen.players[playerVoiceKey("10.0.0.7:4242", 7, "Nova")] = {.volume = 0.35f, .muted = false};
+    chosen.players[playerVoiceKey("10.0.0.7:4242", 0, "~Orion")] = {.volume = 1.0f, .muted = true};
+    // Heard as by default: not kept
+    chosen.players[playerVoiceKey("10.0.0.7:4242", 9, "Vortex")] = {};
+    rtype::engine::Settings settings;
+    settings.setFloat("voice.player.old:4242/3.volume", 0.2f);
+    rtype::client::keepVoiceSettings(settings, chosen);
+
+    CHECK(settings.getFloat("voice.player.10.0.0.7:4242/7.volume") == 0.35f);
+    CHECK(settings.getBool("voice.player.10.0.0.7:4242/guest/~Orion.muted") == true);
+    CHECK_FALSE(settings.hasKey("voice.player.10.0.0.7:4242/9.volume"));
+    // A player forgotten since is not kept either
+    CHECK_FALSE(settings.hasKey("voice.player.old:4242/3.volume"));
+    const VoicePreferences read = readVoiceSettings(settings);
+    CHECK(read.players.size() == 2);
+    CHECK(read.players.at(playerVoiceKey("10.0.0.7:4242", 7, "Nova")) == PlayerVoice{0.35f, false});
+    CHECK(read.players.at(playerVoiceKey("10.0.0.7:4242", 0, "~Orion")) == PlayerVoice{1.0f, true});
+
+    // A volume out of range is clamped
+    settings.setFloat("voice.player.10.0.0.7:4242/7.volume", 4.0f);
+    CHECK(readVoiceSettings(settings).players.at(playerVoiceKey("10.0.0.7:4242", 7, "Nova")).volume == 1.0f);
+}
+
+TEST_CASE("The voice of the game tells what the player does with it", "[voice]")
+{
+    Player player;
+    rtype::voice::GameVoice &voice = player.voice;
+    voice.setSelfMute(false);
+    CHECK(voice.microphoneOpen());
+    CHECK_FALSE(voice.microphoneMissing());
+
+    // Unplugged: it cannot open again, and listens only
+    voice.setSelfMute(true);
+    player.microphone.present = false;
+    voice.setSelfMute(false);
+    CHECK(voice.microphoneMissing());
+
+    // What another player tells is given to the HUD
+    voice.setStatus(1, {.muted = true});
+    CHECK(voice.participants().at(0).status == rtype::voice::Status{.muted = true});
+}
+
 TEST_CASE("Wrong preferences of the voice leave the defaults, numbers out of range are clamped",
           "[settings][voice]")
 {
