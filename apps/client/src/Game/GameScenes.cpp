@@ -4,14 +4,19 @@
 #include "Game/GameView.hpp"
 #include "Game/Hud.hpp"
 #include "Game/LocalSession.hpp"
+#include "Game/RemoteSession.hpp"
 #include "Game/RescueCameraSystem.hpp"
+#include "MainMenu/Layout.hpp"
 #include "MainMenu/MainMenu.hpp"
+#include "MainMenu/SettingsPage.hpp"
+#include "Settings/PlayerSettings.hpp"
+#include "Settings/VoiceSettings.hpp"
 #include "ShipModel.hpp"
 #include "ShipSelector/ShipCatalog.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Layout.hpp"
-#include "rtype/engine/Interface/MenuBuilder.hpp"
+#include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
@@ -42,6 +47,12 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::SmoothTexture, RTYPE_IMAGE_GLOW_CORE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE_LOST},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_SPEAKING},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_MUTED},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_MUTED_BY_ME},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_NO_MICROPHONE},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_DEAFENED},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_BADGE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_DEEP},
     {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_NEBULA},
     {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_STARS},
@@ -144,6 +155,18 @@ constexpr render::Color DamageColor{255, 220, 90, 255};
 constexpr HealthBarLook BydoHealthBar{100.0f, 42.0f, 0.3f};
 constexpr HealthBarLook BossHealthBar{240.0f, 180.0f, 0.3f};
 constexpr HealthBarLook AllyHealthBar{110.0f, 62.0f, 0.3f};
+
+/// The icons of the voice, in the order of VoiceIcon from Speaking, and the badge above the ship of another
+/// player who talks: right of its health bar, on its line (Figma, Série 16, 22 px scaled by 4/3).
+constexpr std::array<const char *, VoiceIconCount> VoiceIconPaths{
+    RTYPE_IMAGE_VOICE_SPEAKING, RTYPE_IMAGE_VOICE_MUTED, RTYPE_IMAGE_VOICE_MUTED_BY_ME,
+    RTYPE_IMAGE_VOICE_NO_MICROPHONE, RTYPE_IMAGE_VOICE_DEAFENED};
+constexpr render::Rectangle VoiceIconSource{0.0f, 0.0f, 64.0f, 64.0f};
+constexpr float VoiceBadgeSize = 29.3f;
+constexpr float VoiceBadgeGap = 12.0f;
+
+/// The volume of another player in the pause menu changes by this much.
+constexpr float PlayerVolumeStep = 0.05f;
 
 /// The animation of the impact models, played once.
 constexpr const char *ImpactAnimation = "Impact";
@@ -467,13 +490,115 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         [this, &resources, &audio, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {
             build(scene, resources, audio, metrics, style);
         });
-    engine.createScene(PauseScene, {.overlay = true},
-                       [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
-                                                    _translations.text("game.pause"), true);
-                           menu.button(_translations.text("game.resume"), [&target] { target.popScene(); });
-                           menu.button(_translations.text("game.leave"), [this] { end(); });
-                       });
+    engine.createScene(PauseScene, {.overlay = true, .onBack = [this] { resume(); }},
+                       [this](engine::Engine & /*target*/, engine::SceneId scene) { buildPause(scene); });
+}
+
+RemoteSession *GameScenes::onlineSession() const
+{
+    return dynamic_cast<RemoteSession *>(_sessions.session());
+}
+
+void GameScenes::keepPlayerVoices()
+{
+    const RemoteSession *session = onlineSession();
+    if (session == nullptr || session->voiceDevices() == nullptr) {
+        return;
+    }
+    engine::Settings &settings = _engine.getSettings();
+    keepVoiceSettings(settings, session->voiceDevices()->preferences);
+    writeSettings(settings);
+}
+
+void GameScenes::resume()
+{
+    keepPlayerVoices();
+    _engine.popScene();
+}
+
+void GameScenes::buildPause(engine::SceneId scene)
+{
+    ecs::Ecs &ecs = _engine.getEcs();
+    engine::InterfaceBuilder interface(ecs, scene, _style);
+    settings_page::addVeil(interface, ecs);
+    const localization::Localization &translations = _translations;
+    interface.boundHeader([&translations] { return translations.text("game.pause"); }, [this] { resume(); },
+                          {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
+
+    const float width = _style.setting.width;
+    const float left = screenMargin;
+    float top = settings_page::addGroup(interface, ecs, _style, translations, "game.group.game", left,
+                                        settings_page::top, width);
+    const ecs::entity_t resumeRow = interface.linkRow(translations.text("game.resume"), [this] { resume(); },
+                                                      {engine::AnchorPoint::TopLeft, left, top});
+    settings_page::bindText(ecs, resumeRow, translations, "game.resume");
+    top += _style.setting.height;
+    const ecs::entity_t leaveRow = interface.linkRow(translations.text("game.leave"),
+                                                     [this] {
+                                                         keepPlayerVoices();
+                                                         end();
+                                                     },
+                                                     {engine::AnchorPoint::TopLeft, left, top});
+    settings_page::bindText(ecs, leaveRow, translations, "game.leave");
+
+    const bool voices = addPlayerVoices(interface, left + width + settings_page::columnGap);
+    settings_page::addKeys(interface, ecs, translations, voices ? "game.keys" : "settings.keys");
+}
+
+bool GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left)
+{
+    const RemoteSession *session = onlineSession();
+    const std::optional<VoiceView> view = session != nullptr ? session->voiceView() : std::nullopt;
+    if (!view || view->others.empty() || session->voiceDevices() == nullptr) {
+        return false;
+    }
+    ecs::Ecs &ecs = _engine.getEcs();
+    const localization::Localization &translations = _translations;
+    const float width = _style.setting.width;
+    float top = settings_page::addGroup(interface, ecs, _style, translations, "game.group.voices", left,
+                                        settings_page::top, width);
+    VoicePreferences &preferences = session->voiceDevices()->preferences;
+    const std::map<std::uint8_t, std::string> names = session->playerNames();
+    for (const voice::Participant &pilot : view->others) {
+        const std::optional<std::string> key = session->voiceKey(pilot.slot);
+        const auto name = names.find(pilot.slot);
+        if (!key || name == names.end()) {
+            continue;
+        }
+        // A player not changed yet is heard at full volume: it is kept once changed
+        const auto choice = [&preferences, key = *key]() -> PlayerVoice & {
+            return preferences.players[key];
+        };
+        const ecs::entity_t slider = interface.slider(
+            name->second, [choice] { return choice().volume; },
+            [choice](float volume) { choice().volume = volume; }, PlayerVolumeStep,
+            {engine::AnchorPoint::TopLeft, left, top});
+        engine::Slider &row = ecs.getComponent<engine::Slider>(slider);
+        row.label = [choice, &translations] {
+            return choice().muted ? translations.text("game.voices.muted") : std::string();
+        };
+        row.onConfirm = [choice] { choice().muted = !choice().muted; };
+        row.icon = [this, slot = pilot.slot]() -> std::optional<engine::Slider::Icon> {
+            const RemoteSession *online = onlineSession();
+            const std::optional<VoiceView> voice = online != nullptr ? online->voiceView() : std::nullopt;
+            if (!voice) {
+                return std::nullopt;
+            }
+            const auto found = std::ranges::find(voice->others, slot, &voice::Participant::slot);
+            const VoiceIcon icon = found == voice->others.end() ? VoiceIcon::None : voiceIconOf(*found);
+            const render::TextureId *texture = voiceIconTexture(_voiceIcons, icon);
+            if (texture == nullptr) {
+                return std::nullopt;
+            }
+            return engine::Slider::Icon{*texture, VoiceIconSource, voiceIconColor(icon)};
+        };
+        top += _style.slider.getHeight();
+    }
+    const ecs::entity_t note = interface.note(
+        translations.text("game.voices.note"),
+        {engine::AnchorPoint::TopLeft, left + _style.setting.inset, top + settings_page::groupGap});
+    settings_page::bindText(ecs, note, translations, "game.voices.note");
+    return true;
 }
 
 void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd)
@@ -686,7 +811,17 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     _camera = ecs.ref(sky);
     ecs.addComponent<engine::Light>(sky, GameLight);
 
-    openHud(ecs, scene, {_deathLook.life, _deathLook.lostLife, style.toast.nameFont}, game::Rules{}.lives);
+    for (std::size_t index = 0; index < VoiceIconPaths.size(); ++index) {
+        _voiceIcons[index] = resources.loadTexture(VoiceIconPaths[index], render::TextureFiltering::Smooth);
+    }
+    _sessions.setVoiceBadgeLook(
+        {.texture = resources.loadTexture(RTYPE_IMAGE_VOICE_BADGE, render::TextureFiltering::Smooth),
+         .source = VoiceIconSource,
+         .size = VoiceBadgeSize,
+         .x = (AllyHealthBar.width / 2.0f) + VoiceBadgeGap + (VoiceBadgeSize / 2.0f),
+         .y = -AllyHealthBar.raise});
+    openHud(ecs, scene, {_deathLook.life, _deathLook.lostLife, style.toast.nameFont, _voiceIcons},
+            game::Rules{}.lives);
 
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });

@@ -95,6 +95,8 @@ add_library(r-type_client_core STATIC
     src/ShipSelector/ShipSelection.cpp
     src/ShipSelector/ShipSelector.cpp
     src/ShipSelector/ShipSelectorSystem.cpp
+    src/Voice/VoiceDevices.cpp
+    src/Voice/VoiceIcons.cpp
     src/Voice/VoiceKeysSystem.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
