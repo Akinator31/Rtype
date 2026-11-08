@@ -206,8 +206,9 @@ rtype::lobby::GameJoinedMessage Games::addPlayer(Game &game, const LobbyPlayer &
     game.sessions.push_back(session);
     // Before the player knows its session: its first datagram finds its game
     _relay.addSession(session, game.id);
-    const AddPlayerMessage added{player.id, session, rtype::network::randomBytes<32>(),
-                                 rtype::network::randomBytes<32>(), player.name};
+    const AddPlayerMessage added{
+        player.id,   session,         rtype::network::randomBytes<32>(), rtype::network::randomBytes<32>(),
+        player.name, player.accountId};
     // To the instance first: it expects the session before the client connects
     send(game, instance_message::AddPlayer, encode(added));
     game.members[player.id] = Game::Member{session, player.name};
