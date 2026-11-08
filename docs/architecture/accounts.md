@@ -76,6 +76,7 @@ lower-case hexadecimal.
 | `account_codes` | `account_id` (deleted with its account), `purpose` (`verify` or `reset`), `code_hash`, `expires_at`, `attempts`; one code per account and purpose | 5 |
 | `discord_identities` | `discord_id` (the id of the Discord user, primary key), `account_id` (unique: one identity per account; deleted with its account), `linked_at` | 6 |
 | | `discord_username`, `discord_display_name`, `avatar_hash` and `avatar_png` (the picture, PNG in base64), `profile_at`: the profile as of the last sign-in or link, all nullable; the hash is kept only with the picture | 7 |
+| `account_progress` | `account_id` (primary key, deleted with its account), `xp`, `games_played`, `total_kills`, `best_waves`, `best_streak`: the [progression](#progression), a row from the first game | 8 |
 
 `Accounts/AccountStore.hpp` gives plain functions on a `Database`, as `Master/AdminStore.hpp` does: the master
 runs them on its database thread, the tests anywhere. Each takes the time it runs at, so that the tests choose
@@ -330,6 +331,18 @@ which proves the id and the secret, then drops it: an application Discord refuse
 server does. The address of Discord is `https://discord.com/api/v10`; the tests give the address of their fake
 Discord through `DiscordClientSettings::apiUrl` and `cdnUrl`, which neither the settings file nor the command
 line reach.
+
+### Progression
+
+The games online earn experience ([ADR 0032](../decisions/0032-endless-waves-and-progression.md)). When a game
+ends, its instance reports what each player connected did (`GAME_OVER`, [instances](../protocol/instances.md)):
+`Games` hands it to the `Lobby`, which finds the account of each player. A guest earns nothing. For each one
+signed in, `AccountService::recordGame()` adds the game on the database thread (`Accounts/ProgressStore.hpp`,
+`addGame()`, in a transaction: the experience and the kills added, the records kept), then the lobby sends its
+connection `PROGRESS` ([lobby](../protocol/lobby.md#progress-0x8e)) if it is still signed in to that account.
+At each sign-in, `AccountService::progress()` reads it for a `PROGRESS` without experience gained.
+
+The level is not kept: `rtype::game::levelOf()` finds it from the experience, in the client as in the master.
 
 ### The purge
 

@@ -405,7 +405,8 @@ TEST_CASE("The messages of the instances are written field by field", "[instance
           bytes({0, 0, 0, 0x2A, 1}));
     CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2, 0, 0}));
     CHECK(encode(ConfigureMessage{"Duo", 2, 4242}) == bytes({3, 'D', 'u', 'o', 2, 0x10, 0x92}));
-    CHECK(encode(GameOverReport{{{1, 1500}}}) == bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC}));
+    CHECK(encode(GameOverReport{{{1, 1500, 12, 3, 2, 450}}}) ==
+          bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC, 0, 0, 0, 12, 0, 3, 0, 2, 0, 0, 0x01, 0xC2}));
     CHECK(encode(ShutdownMessage{ShutdownReason::Empty}) == bytes({0}));
     CHECK(encode(ShutdownMessage{ShutdownReason::EndedByAdmin}) == bytes({2}));
     CHECK(encode(RemovePlayerMessage{42, RemovePlayerReason::Kicked}) == bytes({0, 0, 0, 0x2A, 2}));

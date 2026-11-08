@@ -99,6 +99,7 @@ nav = [
         "decisions/0029-predicted-shots.md",
         "decisions/0030-measured-delays.md",
         "decisions/0031-destructions-sent-again.md",
+        "decisions/0032-endless-waves-and-progression.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

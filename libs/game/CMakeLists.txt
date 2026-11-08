@@ -15,6 +15,7 @@ add_library(rtype_game
     src/Hitbox.cpp
     src/Messages.cpp
     src/PlayerInput.cpp
+    src/Progression.cpp
     src/Projectile/ProjectileBehavior.cpp
     src/Projectile/ProjectileRegistry.cpp
     src/RemoteWorld.cpp

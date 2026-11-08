@@ -150,6 +150,8 @@ class OnlineScenes
     /// The game played ends: leaves it, then back to the list.
     void gameEnded();
     void lobbyClosed(const std::string &reason);
+    /// A game online counted for the account: the experience it gave and the level, LEVEL UP if it went up.
+    void showProgress(const lobby::ProgressMessage &progress);
     /// Forgets the lobby later: this may run in one of its handlers.
     void forgetLobby();
 

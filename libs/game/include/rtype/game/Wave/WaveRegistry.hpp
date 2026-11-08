@@ -32,6 +32,9 @@ public:
     /// the same wave on every machine. Empty if there is none.
     [[nodiscard]] std::vector<std::string> listWavesOfDifficulty(std::uint8_t difficulty) const;
 
+    /// The names of every wave, in alphabetical order, for the same reason.
+    [[nodiscard]] std::vector<std::string> listAllWaves() const;
+
     [[nodiscard]] bool isEmpty() const { return _definitions.empty(); }
 };
 

@@ -99,12 +99,14 @@ keys of the game. It then talks to the game directly, over encrypted datagrams.*
 
 ## 4. Versioning
 
-The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **3** (version 2 adds the
-messages of the administrators, version 3 those of the player accounts, [lobby](lobby.md)). The game protocol has its own, in the header of every
-datagram (as a `u8`), currently **2** (version 2 adds the `Ack delay` of the body, and to `SNAPSHOT` the input
+The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **5** (version 2 adds the
+messages of the administrators, version 3 those of the player accounts, version 4 the profiles, version 5
+`PROGRESS`, [lobby](lobby.md)). The game protocol has its own, in the header of every
+datagram (as a `u8`), currently **3** (version 2 adds the `Ack delay` of the body, and to `SNAPSHOT` the input
 lead, the weapon of the ship of the client and the age of the shots; `ENTITIES_DESTROYED` becomes unreliable,
-sent again with the snapshots). The instances have a version of their own, sent in `INSTANCE_HELLO`,
-currently **4**
+sent again with the snapshots; version 3 adds to the players of `SNAPSHOT` their kills, waves cleared, streaks
+and experience). The instances have a version of their own, sent in `INSTANCE_HELLO`,
+currently **5**
 ([master and instances](instances.md)): master and instances come from the same build, so it changes without
 the clients.
 

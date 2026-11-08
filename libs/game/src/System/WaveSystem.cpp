@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace rtype::game
 {
@@ -66,24 +67,38 @@ bool WaveSystem::hasEnemiesLeft() const
 void WaveSystem::startNextWave()
 {
     WaveProgress &progress = _context.wave;
+    if (_context.rules.endless) {
+        const std::vector<std::string> names = _context.waves.listAllWaves();
+        const auto last = static_cast<std::uint32_t>(names.size() - 1);
+        ++progress.number;
+        startWave(names[_context.randomBetween(0, last)]);
+        return;
+    }
     while (progress.number < MaxWaveDifficulty) {
         ++progress.number;
-        const std::vector<std::string> names = _context.waves.listWavesOfDifficulty(progress.number);
+        const std::vector<std::string> names =
+            _context.waves.listWavesOfDifficulty(static_cast<std::uint8_t>(progress.number));
         if (names.empty()) {
             continue;
         }
         const auto last = static_cast<std::uint32_t>(names.size() - 1);
-        progress.name = names[_context.randomBetween(0, last)];
-        progress.spawned = 0;
-        progress.nextSpawnIn = 0;
-        progress.elapsed = 0;
-        _context.waveStarted = progress.number;
-        _context.waveMusic = _context.waves.getDefinition(progress.name).music;
-        spawnDueEnemies(_context.waves.getDefinition(progress.name));
+        startWave(names[_context.randomBetween(0, last)]);
         return;
     }
     _context.over = true;
     _context.gameOver = GameOutcome::Victory;
+}
+
+void WaveSystem::startWave(std::string name)
+{
+    WaveProgress &progress = _context.wave;
+    progress.name = std::move(name);
+    progress.spawned = 0;
+    progress.nextSpawnIn = 0;
+    progress.elapsed = 0;
+    _context.waveStarted = progress.number;
+    _context.waveMusic = _context.waves.getDefinition(progress.name).music;
+    spawnDueEnemies(_context.waves.getDefinition(progress.name));
 }
 
 void WaveSystem::spawnTimelineEnemies(const WaveDefinition &wave)
@@ -131,11 +146,32 @@ void WaveSystem::spawnEnemyOf(const WaveDefinition &wave, std::uint16_t index)
     spawnAt(spawn);
 }
 
+void WaveSystem::clearWave()
+{
+    for (PlayerSlot &player : _context.players) {
+        if (!player.present) {
+            continue;
+        }
+        if (!player.isAlive()) {
+            player.streak = 0;
+            continue;
+        }
+        ++player.wavesCleared;
+        ++player.streak;
+        player.bestStreak = std::max(player.bestStreak, player.streak);
+        if (_context.rules.endless) {
+            const Progression &progression = _context.progression;
+            player.xp += applyMultiplier(progression.xpPerWave, streakMultiplier(progression, player.streak));
+        }
+    }
+}
+
 void WaveSystem::endWave()
 {
     WaveProgress &progress = _context.wave;
     progress.name.clear();
-    if (progress.number < MaxWaveDifficulty) {
+    clearWave();
+    if (_context.rules.endless || progress.number < MaxWaveDifficulty) {
         progress.pauseLeft = _context.rules.wavePause;
         return;
     }

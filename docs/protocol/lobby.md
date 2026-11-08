@@ -4,7 +4,7 @@ The connection between a client and the master: TLS, framing, the messages to li
 games, and those of the player accounts. Conventions and types are defined in the
 [overview](index.md#2-conventions).
 
-This page describes **version 4**. The client and the master ship together: a master refuses a `HELLO` of
+This page describes **version 5**. The client and the master ship together: a master refuses a `HELLO` of
 another version with `UNSUPPORTED_VERSION`, and the client tells the player to update.
 
 | Version | Change |
@@ -12,6 +12,7 @@ another version with `UNSUPPORTED_VERSION`, and the client tells the player to u
 | 1 | First version |
 | 2 | The administrators of the server ([administration API](admin-api.md)): `SERVER_MESSAGE`; `LEFT_GAME` reasons `KICKED` and `ENDED_BY_ADMIN`; `ERROR` codes `KICKED` and `BANNED`, sent before the master closes the connection |
 | 3 | The player accounts ([section 6](#6-accounts)): `HELLO` carries a locale and an optional session token; `WELCOME` carries the features of the server and the account signed in; the requests `REGISTER` to `DELETE_ACCOUNT`, the replies `SIGNED_IN`, `CODE_SENT`, `DISCORD_AUTHORIZE` and `DONE`, and their error codes |
+| 5 | The progression of the accounts ([section 6.7](#67-progression)): `PROGRESS`, sent once signed in and after each game online |
 | 4 | The profiles ([section 6.6](#66-profiles)): an account carries its email, whether it has a password, and its date; `GET_PROFILE` and `PROFILE`, the Discord profile of an account; `GET_AVATAR` and `AVATAR`, its picture in parts; `DISCORD_CONFIRM` answers `PROFILE` for a new Discord user; the error `NOT_FOUND` |
 
 The version is the first field of `HELLO` in every version, so that a master reads it from a client of any
@@ -99,12 +100,12 @@ TCP carries a stream of bytes with no boundaries. Inside TLS, each message is a 
   a size of 0 or above 16382, without reading the rest.
 - Types `0x01`–`0x7F` are sent by the client, types `0x80`–`0xFF` by the master.
 
-Example: `HELLO` with version 3, the name `"Pavel"`, the locale `"fr"` and no session token:
+Example: `HELLO` with version 5, the name `"Pavel"`, the locale `"fr"` and no session token:
 
 ```
 00 0D   size: 13 bytes follow
 01      type: HELLO
-00 03   version: 3
+00 05   version: 5
 05 50 61 76 65 6C   name: "Pavel"
 02 66 72            locale: "fr"
 00                  no session token
@@ -116,7 +117,8 @@ Example: `HELLO` with version 3, the name `"Pavel"`, the locale `"fr"` and no se
 - The master answers requests **in the order it received them**. A client may send several requests without
   waiting, and match the replies in order.
 - The master may also send **notifications** at any time, between replies: `LEFT_GAME` when the game ends or
-  crashes, or an administrator removes the player from it or ends it; `SERVER_MESSAGE`; and `ERROR` with the
+  crashes, or an administrator removes the player from it or ends it; `SERVER_MESSAGE`; `PROGRESS` once signed
+  in and after each game online; and `ERROR` with the
   request 0 and the code `KICKED` or `BANNED`, after which the master closes the connection. A notification is
   never a reply.
 
@@ -155,7 +157,7 @@ Example: `HELLO` with version 3, the name `"Pavel"`, the locale `"fr"` and no se
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 3 |
+| 0 | Version | `u16` | Protocol version, 5 |
 | 2 | Name | `str8` | Name of a guest, 1 to 16 bytes; empty with a session token |
 | 3 + n | Locale | `str8` | Language of the player, 2 to 16 of `A-Z a-z 0-9 - _`: `en`, `fr-FR`, `fr_CA` |
 | 4 + n + m | Has token | `bool` | Whether a session token follows |
@@ -691,6 +693,26 @@ does not keep already.
 **Receiver behaviour:** the picture is a PNG, of 128 pixels for one of Discord. A part that does not fit the
 picture is malformed.
 
+#### PROGRESS (`0x8E`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Notification (version 5): to a connection signed in, once signed in (`WELCOME` with an account, or `SIGNED_IN`), and after each game online that counted for its account. Never to a guest. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Experience | `u64` | All the experience of the account |
+| 8 | Gained | `u32` | The experience of the game that just ended; 0 when sent at the sign-in |
+| 12 | Games played | `u32` | Games online that counted |
+| 16 | Kills | `u32` | Bydos shot down in them |
+| 20 | Best waves | `u16` | The most waves cleared in a game |
+| 22 | Best streak | `u16` | The most waves cleared in a row |
+
+**Receiver behaviour:** the client finds the level of the account from its experience: level 1 at 0, and
+`round(500 × n^1.5)` more experience to go from level `n` to the next. A `PROGRESS` with experience gained
+tells the player what the game gave, and whether the level went up.
+
 ## 6. Accounts
 
 Version 3. A master with accounts offers them in `WELCOME`; one without answers every request of the accounts
@@ -835,6 +857,25 @@ sequenceDiagram
 
 *Version 4. The picture of Discord is kept by the master at each sign-in with Discord, and read in parts that
 fit in a frame. The client keeps it under its version: it asks it again only when the version changes.*
+
+### 6.7 Progression
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Master
+    participant I as Instance
+    C->>M: SIGN_IN (login, password)
+    M->>C: SIGNED_IN (token, account)
+    M->>C: PROGRESS (experience 2 140, gained 0)
+    Note over C,I: a game online, until every player is out of lives
+    I->>M: GAME_OVER (kills, waves cleared, best streak, experience 820)
+    M->>C: PROGRESS (experience 2 960, gained 820)
+    M->>C: LEFT_GAME (GAME_OVER)
+```
+
+*Version 5. Only a player connected to the game at its end, and signed in, earns its experience: a guest, or a
+player who left before, gets nothing.*
 
 ## 7. When the connection closes
 

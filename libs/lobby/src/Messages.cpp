@@ -743,6 +743,31 @@ std::optional<AvatarMessage> decodeAvatar(std::span<const std::byte> payload)
     return finished(reader, std::move(message));
 }
 
+std::vector<std::byte> encode(const ProgressMessage &message)
+{
+    Writer writer(8 + 4 + 4 + 4 + 2 + 2);
+    writer.writeU64(message.xp);
+    writer.writeU32(message.gained);
+    writer.writeU32(message.gamesPlayed);
+    writer.writeU32(message.totalKills);
+    writer.writeU16(message.bestWaves);
+    writer.writeU16(message.bestStreak);
+    return writer.take();
+}
+
+std::optional<ProgressMessage> decodeProgress(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    ProgressMessage message;
+    message.xp = reader.readU64();
+    message.gained = reader.readU32();
+    message.gamesPlayed = reader.readU32();
+    message.totalKills = reader.readU32();
+    message.bestWaves = reader.readU16();
+    message.bestStreak = reader.readU16();
+    return finished(reader, message);
+}
+
 bool decodeEmpty(std::span<const std::byte> payload)
 {
     return payload.empty();

@@ -88,6 +88,7 @@ Lobby::Lobby(rtype::network::EventLoop &loop, rtype::network::TcpListener listen
         [this](std::uint32_t playerId, const std::optional<rtype::lobby::LeftGameMessage> &left) {
             this->left(playerId, left);
         });
+    _games.setGameOverHandler([this](const GameOverReport &report) { gameOver(report); });
     _listener.startAccepting(
         [this](rtype::network::TcpConnection connection) { accept(std::move(connection)); });
 }
@@ -95,6 +96,7 @@ Lobby::Lobby(rtype::network::EventLoop &loop, rtype::network::TcpListener listen
 Lobby::~Lobby()
 {
     _games.setLeftHandler({});
+    _games.setGameOverHandler({});
     close();
 }
 
@@ -377,6 +379,72 @@ void Lobby::left(std::uint32_t playerId, const std::optional<rtype::lobby::LeftG
     changed(client);
 }
 
+void Lobby::gameOver(const GameOverReport &report)
+{
+    if (_accounts == nullptr) {
+        return;
+    }
+    for (const PlayerScore &score : report.scores) {
+        const Client *client = player(score.playerId);
+        // A guest earns nothing
+        if (client == nullptr || !client->account) {
+            continue;
+        }
+        const auto accountId = static_cast<long long>(client->account->account.id);
+        const GameResult game{.xp = score.xp,
+                              .kills = score.kills,
+                              .wavesCleared = score.wavesCleared,
+                              .bestStreak = score.bestStreak};
+        _accounts->recordGame(
+            accountId, game,
+            [this, alive = std::weak_ptr<bool>(_alive), id = client->id, accountId,
+             gained = score.xp](const std::optional<AccountProgress> &progress) {
+                if (alive.expired()) {
+                    return;
+                }
+                if (!progress) {
+                    logger().warning("The game of account {} could not be recorded: {} experience lost",
+                                     accountId, gained);
+                    return;
+                }
+                logger().info("Account {} earned {} experience, {} in all", accountId, gained, progress->xp);
+                sendProgress(id, accountId, *progress, gained);
+            });
+    }
+}
+
+void Lobby::sendProgress(std::uint64_t id, long long accountId, const AccountProgress &progress,
+                         std::uint32_t gained)
+{
+    const auto found = _clients.find(id);
+    // Signed out or gone meanwhile: the progression is kept, it is sent at the next sign-in
+    if (found == _clients.end() || found->second->closed || !found->second->account ||
+        static_cast<long long>(found->second->account->account.id) != accountId) {
+        return;
+    }
+    reply(*found->second, message_type::Progress,
+          rtype::lobby::encode(rtype::lobby::ProgressMessage{.xp = progress.xp,
+                                                             .gained = gained,
+                                                             .gamesPlayed = progress.gamesPlayed,
+                                                             .totalKills = progress.totalKills,
+                                                             .bestWaves = progress.bestWaves,
+                                                             .bestStreak = progress.bestStreak}));
+}
+
+void Lobby::signedIn(Client &client)
+{
+    if (_accounts == nullptr || !client.account) {
+        return;
+    }
+    const auto accountId = static_cast<long long>(client.account->account.id);
+    _accounts->progress(accountId, [this, alive = std::weak_ptr<bool>(_alive), id = client.id,
+                                    accountId](const std::optional<AccountProgress> &progress) {
+        if (!alive.expired() && progress) {
+            sendProgress(id, accountId, *progress, 0);
+        }
+    });
+}
+
 void Lobby::hello(Client &client, std::span<const std::byte> payload)
 {
     const std::optional<rtype::lobby::HelloMessage> hello = rtype::lobby::decodeHello(payload);
@@ -481,6 +549,7 @@ void Lobby::welcome(Client &client, std::string name, std::optional<SignedInAcco
     if (client.account) {
         logger().info("{} joined the lobby from {}, signed in to account {}", client.describe(),
                       client.address, client.account->account.id);
+        signedIn(client);
     } else {
         logger().info("{} joined the lobby from {}", client.describe(), client.address);
     }
@@ -513,6 +582,7 @@ void Lobby::accountRequest(Client &client, std::uint8_t type, std::span<const st
                           rtype::lobby::encode(rtype::lobby::SignedInMessage{.token = signedIn->token,
                                                                              .account = signedIn->account}));
                     logger().info("{} signed in to account {}", asking.describe(), signedIn->account.id);
+                    this->signedIn(asking);
                     changed(asking);
                 } else if (std::holds_alternative<CodeSent>(answer)) {
                     reply(asking, message_type::CodeSent);

@@ -457,7 +457,10 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         playWaveMusic(music);
     });
     sessions.setRescueHandler([this](game::RescueStage stage) { showRescue(stage); });
-    sessions.setOutcomeHandler([this](game::GameOutcome outcome) { _recorder.recordOutcome(outcome); });
+    sessions.setOutcomeHandler([this](game::GameOutcome outcome) {
+        _recorder.recordOutcome(outcome);
+        showSummary();
+    });
     sessions.setStrikeHandler([this] { showStrike(); });
     engine.createScene(
         GameScene,
@@ -536,9 +539,28 @@ void GameScenes::showKill(const Kill &kill)
     }
 }
 
+void GameScenes::showSummary()
+{
+    const GameSession *session = _sessions.session();
+    if (session == nullptr || !session->isEndless()) {
+        return;
+    }
+    const std::vector<game::PlayerState> &players = _sessions.players();
+    const auto local = std::ranges::find(players, session->localSlot(), &game::PlayerState::slot);
+    if (local == players.end()) {
+        return;
+    }
+    _engine.showToast(_translations.text("summary.title"),
+                      std::format("{} {} - {} {} - +{} XP", local->wavesCleared,
+                                  _translations.text("summary.waves"), local->kills,
+                                  _translations.text("summary.kills"), local->xp),
+                      "", engine::ToastType::Success);
+}
+
 void GameScenes::showWave(std::uint16_t wave)
 {
-    if (wave == game::MaxWaveDifficulty) {
+    const GameSession *session = _sessions.session();
+    if (wave == game::MaxWaveDifficulty && (session == nullptr || !session->isEndless())) {
         _engine.showBanner(_translations.text("event.boss_wave"),
                            _translations.text("event.boss_wave_detail"), engine::ToastType::Error);
         return;

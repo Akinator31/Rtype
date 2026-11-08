@@ -270,7 +270,12 @@ void GameHost::gameOver(const TickResult &result)
         const auto state =
             std::ranges::find(result.snapshot.players, player.slot, &rtype::game::PlayerState::slot);
         if (player.connected && state != result.snapshot.players.end()) {
-            report.scores.push_back({player.playerId, state->score});
+            report.scores.push_back({.playerId = player.playerId,
+                                     .score = state->score,
+                                     .kills = state->kills,
+                                     .wavesCleared = state->wavesCleared,
+                                     .bestStreak = state->bestStreak,
+                                     .xp = state->xp});
         }
     }
     if (_handlers.onGameOver) {

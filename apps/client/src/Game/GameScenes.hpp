@@ -87,6 +87,9 @@ class GameScenes
     /// The fall of the shogun at the end of the rescue shakes the camera.
     void showKill(const Kill &kill);
     void showWave(std::uint16_t wave);
+    /// Online, at the end of the game: the waves cleared, the Bydos shot down and the experience earned by
+    /// the local player.
+    void showSummary();
     /// Plays the music of the wave started, a path of the assets, replacing the current one; nothing if
     /// empty.
     void playWaveMusic(const std::string &music);

@@ -47,7 +47,14 @@ SnapshotPart examplePart()
     part.lastInput = 998;
     part.inputLead = 2;
     part.weapon = {4, 7, 0};
-    part.players = {{0, 3, 1500}};
+    part.players = {{.slot = 0,
+                     .lives = 3,
+                     .score = 1500,
+                     .kills = 12,
+                     .wavesCleared = 2,
+                     .streak = 2,
+                     .bestStreak = 2,
+                     .xp = 350}};
     part.entities = {
         {7, EntityKind::PlayerShip, 0, 200.0f, 540.5f, 0.0f, -300.0f, 3, EntityState::Invulnerable}};
     return part;
@@ -62,6 +69,9 @@ const std::vector<std::byte> ExampleSnapshot = bytes({
     0x00, 0x01,                         // part 0 of 1
     0x01, 0x00, 0x03, 0x00, 0x00, 0x05, // 1 player: slot 0, 3 lives,
     0xDC,                               //   score 1500
+    0x00, 0x00, 0x00, 0x0C,             //   12 Bydos shot down
+    0x00, 0x02, 0x00, 0x02, 0x00, 0x02, //   2 waves cleared, streak 2, best streak 2
+    0x00, 0x00, 0x01, 0x5E,             //   350 experience
     0x01,                               // 1 entity
     0x00, 0x00, 0x00, 0x07,             //   id 7
     0x01, 0x00,                         //   PLAYER_SHIP, slot 0
@@ -211,7 +221,7 @@ TEST_CASE("The reserved bits of inputs are dropped; every bit of the flags is de
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")
 {
     std::vector<std::byte> payload = ExampleSnapshot;
-    payload[29] = std::byte{0x60}; // the kind of the entity: reserved for later kinds
+    payload[43] = std::byte{0x60}; // the kind of the entity: reserved for later kinds
     const auto part = decodeSnapshotPart(payload);
 
     REQUIRE(part);
@@ -280,17 +290,17 @@ TEST_CASE("A snapshot part refuses the values the specification forbids", "[game
     CHECK_FALSE(changed(16, 17)); // 17 parts
     CHECK(changed(16, 16));       // part 0 of 16
     CHECK_FALSE(changed(18, 4));  // slot 4
-    CHECK_FALSE(changed(28, 0));  // entity id 0
-    CHECK_FALSE(changed(29, 0));  // kind 0
-    CHECK_FALSE(changed(24, 2));  // 2 entities announced, 1 given
-    CHECK_FALSE(changed(24, 0));  // 0 entities announced, 1 given
+    CHECK_FALSE(changed(42, 0));  // entity id 0
+    CHECK_FALSE(changed(43, 0));  // kind 0
+    CHECK_FALSE(changed(38, 2));  // 2 entities announced, 1 given
+    CHECK_FALSE(changed(38, 0));  // 0 entities announced, 1 given
     CHECK_FALSE(changed(17, 5));  // 5 players
 
     // The same slot twice
     SnapshotPart part = examplePart();
     part.players = {{1, 3, 0}, {2, 3, 0}};
     std::vector<std::byte> payload = encode(part);
-    payload[24] = std::byte{1}; // the slot of the second player
+    payload[38] = std::byte{1}; // the slot of the second player
     CHECK_FALSE(decodeSnapshotPart(payload));
 }
 
@@ -356,7 +366,7 @@ TEST_CASE("Random bytes never crash a decoder", "[game][messages]")
 TEST_CASE("A part of a snapshot holds 69 entities with four players, and always fits in a datagram",
           "[game][messages]")
 {
-    CHECK(maxEntitiesPerPart(4) == 69);
+    CHECK(maxEntitiesPerPart(4) == 65);
     CHECK(maxEntitiesPerPart(0) == 70);
     CHECK_THROWS_AS(maxEntitiesPerPart(5), std::invalid_argument);
 
@@ -377,7 +387,7 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
     Snapshot snapshot;
     snapshot.tick = 500;
     snapshot.players = {{0, 3, 10}, {1, 2, 20}, {2, 1, 30}, {3, 0, 40}};
-    for (std::uint32_t id = 1; id <= 200; ++id) {
+    for (std::uint32_t id = 1; id <= 190; ++id) {
         // Positions in eighths of a unit: exact once written
         snapshot.entities.push_back(entity(id, static_cast<float>(id) * 0.125f, static_cast<float>(id)));
     }
@@ -399,8 +409,8 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
         CHECK(part->players == snapshot.players);
         entities.insert(entities.end(), part->entities.begin(), part->entities.end());
     }
-    CHECK(parts[0].entities.size() == 69);
-    CHECK(parts[2].entities.size() == 62);
+    CHECK(parts[0].entities.size() == 65);
+    CHECK(parts[2].entities.size() == 60);
     CHECK(entities == snapshot.entities);
 }
 
@@ -420,7 +430,7 @@ TEST_CASE("A snapshot without entities is one part, one with too many is cut at 
     }
     const std::vector<SnapshotPart> parts = splitSnapshot(crowded, 0);
     REQUIRE(parts.size() == MaxSnapshotParts);
-    CHECK(parts.back().entities.back().id == 16 * 69);
+    CHECK(parts.back().entities.back().id == 16 * 65);
 }
 
 TEST_CASE("The destroyed entities of a tick go in as many messages as needed", "[game][messages]")
