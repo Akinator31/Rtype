@@ -448,6 +448,10 @@ void OnlineScenes::connect()
             .onWelcome = [this](std::uint32_t) { welcomed(); },
             .onLeftGame =
                 [this](const lobby::LeftGameMessage &left) {
+                    // The results of the game tell it already
+                    if (left.reason == lobby::LeftGameReason::GameOver && _games.results()) {
+                        return;
+                    }
                     _engine.showToast(leftReason(left.reason),
                                       left.reason == lobby::LeftGameReason::GameCrashed ||
                                               left.reason == lobby::LeftGameReason::Kicked
@@ -522,6 +526,11 @@ void OnlineScenes::joined(const LobbyClient::JoinResult &result)
         return;
     }
     const auto &game = std::get<lobby::GameJoinedMessage>(result);
+    // The experience before the game, from which its results fill the bar of the level
+    _xpBefore.reset();
+    if (_lobby && _lobby->account()) {
+        _xpBefore = _lobby->progress() ? _lobby->progress()->xp : 0;
+    }
     try {
         // The game is on the IP address of the master
         _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config),
@@ -536,6 +545,19 @@ void OnlineScenes::gameEnded()
 {
     if (!_lobby || !_lobby->welcomed()) {
         _engine.switchScene(MainMenuScene);
+        return;
+    }
+    if (_games.results()) {
+        // The game went to its end: its results, then back to the list once the player continues
+        _lobby->leaveGame();
+        _games.showResults(_xpBefore, _lobby->features().passwordAccounts || _lobby->features().discord,
+                           [this] {
+                               if (_lobby) {
+                                   refresh();
+                               } else {
+                                   _engine.switchScene(MainMenuScene);
+                               }
+                           });
         return;
     }
     // Answered NOT_IN_GAME if the game already let the player go: back to the list all the same
@@ -556,6 +578,11 @@ void OnlineScenes::showProgress(const lobby::ProgressMessage &progress)
     refreshIfShown(LobbyScene);
     // At the sign-in, the level shows in the menu: only a game is announced
     if (progress.gained == 0) {
+        return;
+    }
+    // The game just played, or its results, show it; in a toast otherwise
+    _games.setAccountXp(progress.xp);
+    if (_engine.isSceneOpen(GameScene) || _engine.isSceneOpen(ResultsScene)) {
         return;
     }
     const game::Level level = game::levelOf(progress.xp);
