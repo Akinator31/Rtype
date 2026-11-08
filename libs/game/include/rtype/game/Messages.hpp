@@ -3,7 +3,10 @@
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/voice/Backend.hpp"
+#include "rtype/voice/Format.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -48,6 +51,10 @@ inline constexpr std::uint8_t PlayerJoined = 0x04;
 inline constexpr std::uint8_t PlayerLeft = 0x05;
 /// Client → game: the inputs of the last ticks.
 inline constexpr std::uint8_t Input = 0x40;
+/// Client → game: one frame of the voice of the player.
+inline constexpr std::uint8_t Voice = 0x41;
+/// Client → game: what carries the voice of the player.
+inline constexpr std::uint8_t VoiceState = 0x42;
 /// Game → client: one part of a snapshot.
 inline constexpr std::uint8_t Snapshot = 0x80;
 /// Game → client: the entities destroyed during a tick.
@@ -56,6 +63,10 @@ inline constexpr std::uint8_t EntitiesDestroyed = 0x81;
 inline constexpr std::uint8_t WaveStarted = 0x82;
 /// Game → client: the game ended.
 inline constexpr std::uint8_t GameOver = 0x83;
+/// Game → client: one frame of the voice of another player.
+inline constexpr std::uint8_t VoiceFrame = 0x84;
+/// Game → client: what carries the voice of each player.
+inline constexpr std::uint8_t VoiceRoster = 0x85;
 } // namespace message_type
 
 /// Most inputs in one INPUT message.
@@ -193,6 +204,44 @@ struct GameOverMessage {
     friend bool operator==(const GameOverMessage &, const GameOverMessage &) = default;
 };
 
+/// `VOICE`: one frame of the voice of the player, 20 ms of Opus (docs/protocol/game.md, section 9.4).
+struct VoiceMessage {
+    /// The number of the frame: one more every 20 ms while the player talks, wrapping after 65535.
+    std::uint16_t sequence = 0;
+    /// The last frame of a talk spurt: the player stopped talking after it.
+    bool last = false;
+    /// 1 to voice::MaxFrameBytes bytes of Opus. The game does not decode them.
+    std::vector<std::byte> frame;
+
+    friend bool operator==(const VoiceMessage &, const VoiceMessage &) = default;
+};
+
+/// `VOICE_FRAME`: a frame of `VOICE`, forwarded by the game to the other players.
+struct VoiceFrameMessage {
+    /// The slot of the player who talks, 0 to 3.
+    std::uint8_t slot = 0;
+    /// As sent in `VOICE`.
+    std::uint16_t sequence = 0;
+    bool last = false;
+    std::vector<std::byte> frame;
+
+    friend bool operator==(const VoiceFrameMessage &, const VoiceFrameMessage &) = default;
+};
+
+/// `VOICE_STATE`: what carries the voice of the player (ADR 0032).
+struct VoiceStateMessage {
+    voice::Backend backend = voice::Backend::None;
+
+    friend bool operator==(const VoiceStateMessage &, const VoiceStateMessage &) = default;
+};
+
+/// `VOICE_ROSTER`: what carries the voice of each player, by slot; None for a slot without a player.
+struct VoiceRosterMessage {
+    std::array<voice::Backend, MaxPlayers> backends{};
+
+    friend bool operator==(const VoiceRosterMessage &, const VoiceRosterMessage &) = default;
+};
+
 /// Tells whether a kind is one this version knows: a client skips the others (docs/protocol/game.md,
 /// section 9.1).
 [[nodiscard]] bool isKnown(EntityKind kind);
@@ -214,10 +263,14 @@ struct GameOverMessage {
 [[nodiscard]] std::vector<std::byte> encode(const EntitiesDestroyedMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const WaveStartedMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const GameOverMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceFrameMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceStateMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceRosterMessage &message);
 
 /// The messages read from their payloads, strictly: nothing for every case the protocol calls malformed, or
-/// for bytes left after the last field. Unknown reasons, causes and outcomes are read as the protocol says
-/// (Quit, Removed, Defeat), and the reserved bits are dropped.
+/// for bytes left after the last field. Unknown reasons, causes, outcomes and backends are read as the
+/// protocol says (Quit, Removed, Defeat, None), and the reserved bits are dropped.
 [[nodiscard]] std::optional<AcceptedMessage> decodeAccepted(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<PlayerJoinedMessage> decodePlayerJoined(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<PlayerLeftMessage> decodePlayerLeft(std::span<const std::byte> payload);
@@ -227,6 +280,10 @@ struct GameOverMessage {
 decodeEntitiesDestroyed(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<WaveStartedMessage> decodeWaveStarted(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<GameOverMessage> decodeGameOver(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceMessage> decodeVoice(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceFrameMessage> decodeVoiceFrame(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceStateMessage> decodeVoiceState(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceRosterMessage> decodeVoiceRoster(std::span<const std::byte> payload);
 
 /// Most entities in one part of a snapshot with this many players: 69 with four players.
 [[nodiscard]] std::size_t maxEntitiesPerPart(std::size_t playerCount);

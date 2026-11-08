@@ -490,4 +490,137 @@ std::optional<GameOverMessage> decodeGameOver(std::span<const std::byte> payload
                                                                                       : GameOutcome::Defeat};
 }
 
+// --- The voice ---
+
+namespace
+{
+
+/// The flags of VOICE and VOICE_FRAME: bit 0, the last frame of a talk spurt; the others reserved.
+constexpr std::uint8_t LastFrame = 0x01;
+
+voice::Backend toBackend(std::uint8_t value)
+{
+    switch (value) {
+    case static_cast<std::uint8_t>(voice::Backend::Game):
+        return voice::Backend::Game;
+    case static_cast<std::uint8_t>(voice::Backend::Discord):
+        return voice::Backend::Discord;
+    default:
+        return voice::Backend::None;
+    }
+}
+
+void requireFrame(const std::vector<std::byte> &frame)
+{
+    require(!frame.empty() && frame.size() <= voice::MaxFrameBytes, "A frame of the voice is 1 to 160 bytes");
+}
+
+/// The sequence, the flags and the frame, the end of VOICE and VOICE_FRAME.
+void writeVoice(Writer &writer, std::uint16_t sequence, bool last, const std::vector<std::byte> &frame)
+{
+    writer.writeU16(sequence);
+    writer.writeU8(last ? LastFrame : 0);
+    writer.writeU8(static_cast<std::uint8_t>(frame.size()));
+    writer.writeBytes(frame);
+}
+
+/// Reads them, failing the reader for a frame of 0 or more than MaxFrameBytes bytes.
+void readVoice(Reader &reader, std::uint16_t &sequence, bool &last, std::vector<std::byte> &frame)
+{
+    sequence = reader.readU16();
+    last = (reader.readU8() & LastFrame) != 0;
+    const std::uint8_t size = reader.readU8();
+    if (size == 0 || size > voice::MaxFrameBytes) {
+        reader.fail();
+        return;
+    }
+    const std::span<const std::byte> bytes = reader.readBytes(size);
+    frame.assign(bytes.begin(), bytes.end());
+}
+
+} // namespace
+
+std::vector<std::byte> encode(const VoiceMessage &message)
+{
+    requireFrame(message.frame);
+    Writer writer(4 + message.frame.size());
+    writeVoice(writer, message.sequence, message.last, message.frame);
+    return writer.take();
+}
+
+std::optional<VoiceMessage> decodeVoice(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    VoiceMessage message;
+    readVoice(reader, message.sequence, message.last, message.frame);
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return message;
+}
+
+std::vector<std::byte> encode(const VoiceFrameMessage &message)
+{
+    require(isSlot(message.slot), "A player slot is 0 to 3");
+    requireFrame(message.frame);
+    Writer writer(5 + message.frame.size());
+    writer.writeU8(message.slot);
+    writeVoice(writer, message.sequence, message.last, message.frame);
+    return writer.take();
+}
+
+std::optional<VoiceFrameMessage> decodeVoiceFrame(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    VoiceFrameMessage message;
+    message.slot = reader.readU8();
+    if (!isSlot(message.slot)) {
+        reader.fail();
+    }
+    readVoice(reader, message.sequence, message.last, message.frame);
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return message;
+}
+
+std::vector<std::byte> encode(const VoiceStateMessage &message)
+{
+    Writer writer(1);
+    writer.writeU8(static_cast<std::uint8_t>(message.backend));
+    return writer.take();
+}
+
+std::optional<VoiceStateMessage> decodeVoiceState(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    const std::uint8_t backend = reader.readU8();
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return VoiceStateMessage{toBackend(backend)};
+}
+
+std::vector<std::byte> encode(const VoiceRosterMessage &message)
+{
+    Writer writer(MaxPlayers);
+    for (const voice::Backend backend : message.backends) {
+        writer.writeU8(static_cast<std::uint8_t>(backend));
+    }
+    return writer.take();
+}
+
+std::optional<VoiceRosterMessage> decodeVoiceRoster(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    VoiceRosterMessage message;
+    for (voice::Backend &backend : message.backends) {
+        backend = toBackend(reader.readU8());
+    }
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return message;
+}
+
 } // namespace rtype::game
