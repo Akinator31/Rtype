@@ -94,7 +94,8 @@ RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &g
     if (voiceDevices != nullptr) {
         _devices = voiceDevices;
         voice::VoiceTransport &transport = *this;
-        _voice = std::make_unique<voice::GameVoice>(transport, voiceDevices->capture, voiceDevices->playback);
+        _voice = std::make_unique<voice::GameVoice>(transport, voiceDevices->capture, voiceDevices->playback,
+                                                    voiceDevices->loopback);
         // Without an output, no voice: the player neither hears nor is heard
         setVoiceBackend(voiceDevices->playback.available() ? voice::Backend::Game : voice::Backend::None);
     }
@@ -195,6 +196,7 @@ void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushT
     voice.setTalking(activity || (preferences.mode == voice::TalkMode::PushToTalk && pushToTalk));
     voice.setInputVolume(preferences.inputVolume);
     voice.setOutputVolume(preferences.voiceVolume);
+    voice.setProcessing(preferences.processing);
 }
 
 void RemoteSession::updateVoice()

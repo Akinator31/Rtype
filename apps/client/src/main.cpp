@@ -19,6 +19,7 @@
 #include "Voice/VoiceKeysSystem.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
+#include "rtype/audio/OutputLoopback.hpp"
 #include "rtype/audio/VoiceStreams.hpp"
 #include "rtype/discord/SocialSdkAuthorizer.hpp"
 #include "rtype/engine/Engine.hpp"
@@ -74,10 +75,11 @@ void run()
     rtype::client::readSettings(engine.getSettings());
     const rtype::audio::AudioDevice audioDevice;
     // The voice of the games online: the microphone, opened only while the player can talk in a game or tries
-    // it on the Voice page, and the voices of the others
+    // it on the Voice page, the voices of the others, and what the speakers play, for the echo cancellation
     rtype::voice::Microphone microphone;
     rtype::audio::VoiceStreams voiceStreams(audioDevice);
-    rtype::client::VoiceDevices voice{.capture = microphone, .playback = voiceStreams};
+    rtype::audio::OutputLoopback loopback(audioDevice);
+    rtype::client::VoiceDevices voice{.capture = microphone, .playback = voiceStreams, .loopback = &loopback};
     rtype::audio::AudioPlayer audio(audioDevice, applicationDirectory() / "assets",
                                     engine.getThreads().getAssetsWorker());
     ResourceManager resources(window, applicationDirectory() / "assets",
