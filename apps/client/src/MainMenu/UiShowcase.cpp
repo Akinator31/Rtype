@@ -18,7 +18,9 @@ namespace
 
 /// The left column, from the top of the screen: the sliders, then the switches, then the gauges.
 constexpr float slidersTop = 230.0f;
-constexpr float slidersSpacing = 96.0f;
+constexpr float slidersSpacing = 140.0f;
+/// Narrower than on the Settings page, so that the sliders stop before the column of the titles.
+constexpr float slidersWidth = 680.0f;
 constexpr float switchesTop = 540.0f;
 constexpr float switchesSpacing = 64.0f;
 constexpr float gaugesTop = 770.0f;
@@ -56,18 +58,18 @@ float rowTop(float top, float spacing, int row)
 
 void createSliders(engine::InterfaceBuilder &interface, const engine::InterfaceStyle &style)
 {
-    // The area of a slider goes beyond its rail by the handle: the rail starts at the margin, like the others
-    const float railOverhang = style.slider.handleDragRadius;
-    constexpr std::array<std::pair<const char *, float>, 3> sliders{
-        {{"VOLUME", 0.65f}, {"MUSIC", 0.25f}, {"EFFECTS", 1.0f}}};
+    // A slider is a row whose caption and rail start after an inset: they start at the margin, like the
+    // others
+    const float inset = style.slider.inset;
+    constexpr std::array<std::pair<const char *, float>, 2> sliders{{{"Volume", 0.65f}, {"Effects", 1.0f}}};
     int row = 0;
     for (const auto &[caption, value] : sliders) {
         const auto setting = std::make_shared<float>(value);
         interface.slider(
             caption, [setting] { return *setting; }, [setting](float newValue) { *setting = newValue; },
             0.05f,
-            {engine::AnchorPoint::TopLeft, screenMargin - railOverhang,
-             rowTop(slidersTop, slidersSpacing, row++)});
+            {engine::AnchorPoint::TopLeft, screenMargin - inset, rowTop(slidersTop, slidersSpacing, row++)},
+            slidersWidth);
     }
 }
 

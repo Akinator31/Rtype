@@ -61,6 +61,9 @@ void setResolution(render::Window &window, Resolution resolution);
 /// Moves the window to the next screen, back to the first after the last. A window too large for the new
 /// screen goes fullscreen.
 void moveToNextMonitor(render::Window &window);
+/// Moves the window to the next screen for a direction of +1, to the previous one for -1, around at the ends,
+/// as moveToNextMonitor().
+void moveToMonitor(render::Window &window, int direction);
 
 /// Gives the window the limit of frames per second and the vertical synchronisation kept in the settings (on
 /// by default), then moves it to the screen kept in the settings, and gives it the resolution kept if that

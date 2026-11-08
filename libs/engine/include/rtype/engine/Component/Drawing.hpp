@@ -71,6 +71,9 @@ struct Box {
     /// Colour of the bottom edge of a filled box, which fades from `color` at the top into it: a shadow along
     /// an edge of the screen. None for a plain box.
     std::optional<render::Color> bottom = std::nullopt;
+    /// Colour of the right edge of a filled box, which fades from `color` on the left into it: a veil that
+    /// darkens the side of the screen where the interface is. None for a plain box; ignored with `bottom`.
+    std::optional<render::Color> right = std::nullopt;
 };
 
 /// A circle lit along a part of its length, centred on the position of the entity: a countdown that runs

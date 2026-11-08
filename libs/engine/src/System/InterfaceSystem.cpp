@@ -26,7 +26,8 @@ InterfaceSystem::InterfaceSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, Sc
       _tweens(use<Tween>(caches)), _panels(use<Panel>(caches)), _buttons(use<Button>(caches)),
       _toggles(use<Toggle>(caches)), _sliders(use<Slider>(caches)), _tracks(use<SliderTrack>(caches)),
       _switches(use<SwitchTrack>(caches)), _texts(use<Text>(caches)), _choices(use<Choice>(caches)),
-      _fields(use<TextField>(caches)), _sounds(use<SoundEffect>(caches))
+      _fields(use<TextField>(caches)), _settingRows(use<SettingRow>(caches)),
+      _sounds(use<SoundEffect>(caches))
 {
 }
 
@@ -220,7 +221,7 @@ void InterfaceSystem::activate(ecs::entity_t widget)
         const Toggle toggle = _toggles.get(widget);
         playSwitchSound(widget, !toggle.get());
         _ecs.defer([toggle] { toggle.set(!toggle.get()); });
-    } else if (_choices.has(widget)) {
+    } else if (_choices.has(widget) || _settingRows.has(widget)) {
         adjust(widget, 1);
     } else if (_fields.has(widget)) {
         const TextField &field = _fields.get(widget);
@@ -280,6 +281,9 @@ void InterfaceSystem::adjust(ecs::entity_t widget, int direction)
             const std::size_t current = std::min(choice.get(), count - 1);
             choice.set(direction > 0 ? (current + 1) % count : (current + count - 1) % count);
         });
+    } else if (_settingRows.has(widget) && _settingRows.get(widget).change) {
+        playSound(widget, _style.button.clickSound);
+        _ecs.defer([change = _settingRows.get(widget).change, direction] { change(direction); });
     }
 }
 
@@ -300,8 +304,9 @@ void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
     }
     if (_dragged) {
         // The handle follows the pointer along the rail, to the hundredth
-        const float width = _style.slider.width;
-        const float left = _positions.get(*_dragged).x - (width / 2.0f);
+        const float row = _tracks.has(*_dragged) ? _tracks.get(*_dragged).width : 0.0f;
+        const float width = _style.slider.getRailWidth(row);
+        const float left = _style.slider.getRailLeft(_positions.get(*_dragged).x, row);
         const float value = std::round(std::clamp((pointer.x - left) / width, 0.0f, 1.0f) * 100.0f) / 100.0f;
         const Slider slider = _sliders.get(*_dragged);
         if (slider.get && slider.set && std::abs(slider.get() - value) > 0.001f) {
@@ -351,10 +356,11 @@ bool InterfaceSystem::isOverHandle(ecs::entity_t widget, render::Vector2 pointer
     const Slider &slider = _sliders.get(widget);
     const ecs::Position &centre = _positions.get(widget);
     const float value = std::clamp(slider.get ? slider.get() : 0.0f, 0.0f, 1.0f);
-    const float x = centre.x - (style.width / 2.0f) + (value * style.width);
+    const float row = _tracks.has(widget) ? _tracks.get(widget).width : 0.0f;
+    const float x = style.getRailLeft(centre.x, row) + (value * style.getRailWidth(row));
     const float y = style.getRailY(centre.y);
-    const float reach = style.handleHoverRadius + style.handleRingGap;
-    return std::hypot(pointer.x - x, pointer.y - y) <= reach;
+    return std::abs(pointer.x - x) <= (style.handleWidth / 2.0f) + style.handleReach &&
+           std::abs(pointer.y - y) <= (style.handleHoverHeight / 2.0f) + style.handleReach;
 }
 
 bool InterfaceSystem::isOverSwitch(ecs::entity_t widget, render::Vector2 pointer) const
