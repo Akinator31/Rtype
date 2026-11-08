@@ -24,8 +24,8 @@ constexpr std::size_t ReadChunk = 4 * FrameSamples;
 
 } // namespace
 
-GameVoice::GameVoice(VoiceTransport &transport, Capture &capture, Playback &playback)
-    : _transport(transport), _capture(capture), _playback(playback)
+GameVoice::GameVoice(VoiceTransport &transport, Capture &capture, Playback &playback, Loopback *loopback)
+    : _transport(transport), _capture(capture), _playback(playback), _loopback(loopback)
 {
 }
 
@@ -169,6 +169,13 @@ void GameVoice::setInputVolume(float volume)
     _inputVolume = std::clamp(volume, 0.0f, MaxVolume);
 }
 
+void GameVoice::setProcessing(const ProcessingSettings &settings)
+{
+    if (settings != _processing.settings()) {
+        _processing.setSettings(settings);
+    }
+}
+
 void GameVoice::setOutputVolume(float volume)
 {
     _outputVolume = std::clamp(volume, 0.0f, MaxVolume);
@@ -231,10 +238,19 @@ void GameVoice::updateCapture()
             logger().warning("No microphone: the player listens only");
         }
         _microphoneMissing = !_captureOpen;
+        if (!_captureOpen) {
+            return;
+        }
+        // Both streams from now, to be paired by the processing
+        _processing.reset();
+        _loopbackOpen = _loopback != nullptr && _loopback->open();
     } else if (!wanted && _captureOpen) {
         _capture.close();
         _captureOpen = false;
-        _captured.clear();
+        if (_loopbackOpen) {
+            _loopback->close();
+            _loopbackOpen = false;
+        }
         _spurt = false;
         _activity.reset();
         _inputLevel = SilenceFloor;
@@ -262,39 +278,43 @@ void GameVoice::capture()
         return;
     }
     std::array<std::int16_t, ReadChunk> chunk{};
-    while (const std::size_t count = _capture.read(chunk)) {
-        _captured.insert(_captured.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(count));
+    // What was played first: the reference of the echo the microphone heard
+    while (const std::size_t count = _loopbackOpen ? _loopback->read(chunk) : 0) {
+        _processing.played(std::span<const std::int16_t>(chunk.data(), count));
         if (count < chunk.size()) {
             break;
         }
     }
-    if (_captured.size() > MaxCaptureBacklog) {
-        // Whole frames only, the newest kept
-        const std::size_t extra = (_captured.size() - MaxCaptureBacklog + FrameSamples - 1) / FrameSamples;
-        _captured.erase(_captured.begin(),
-                        _captured.begin() + static_cast<std::ptrdiff_t>(extra * FrameSamples));
+    while (const std::size_t count = _capture.read(chunk)) {
+        _processing.captured(std::span<const std::int16_t>(chunk.data(), count));
+        if (count < chunk.size()) {
+            break;
+        }
     }
-    std::size_t used = 0;
-    while (_captured.size() - used >= FrameSamples) {
-        sendFrame(ConstPcm(_captured.data() + used, FrameSamples));
-        used += FrameSamples;
+    // Whole frames only, the newest kept
+    constexpr std::size_t backlog = MaxCaptureBacklog / FrameSamples;
+    if (_processing.waiting() > backlog) {
+        _processing.drop(_processing.waiting() - backlog);
     }
-    _captured.erase(_captured.begin(), _captured.begin() + static_cast<std::ptrdiff_t>(used));
+    std::array<std::int16_t, FrameSamples> processed{};
+    while (_processing.next(processed)) {
+        sendFrame(processed, _processing.heard());
+    }
 }
 
-void GameVoice::sendFrame(ConstPcm captured)
+void GameVoice::sendFrame(ConstPcm processed, ConstPcm heard)
 {
     std::array<std::int16_t, FrameSamples> samples{};
     constexpr float lowest = std::numeric_limits<std::int16_t>::min();
     constexpr float highest = std::numeric_limits<std::int16_t>::max();
     for (std::size_t index = 0; index < FrameSamples; ++index) {
-        const float sample = std::round(static_cast<float>(captured[index]) * _inputVolume);
+        const float sample = std::round(static_cast<float>(processed[index]) * _inputVolume);
         samples[index] = static_cast<std::int16_t>(std::clamp(sample, lowest, highest));
     }
     _inputLevel = levelOf(samples);
 
     const bool allowed = _talking && !_selfMuted;
-    if (_inputLevel >= SilenceLevel) {
+    if (levelOf(heard) >= SilenceLevel) {
         _silence = 0;
     } else if (allowed) {
         ++_silence;
