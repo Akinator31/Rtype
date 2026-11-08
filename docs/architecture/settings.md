@@ -38,6 +38,8 @@ Name keys by domain with dots, so that the file stays readable:
 | `voice.input_volume` | The Voice page: the volume of the microphone, from 0 to 1 |
 | `voice.volume` | The Voice page: the volume of the voices of the others, from 0 to 1, apart from the music and the effects |
 | `voice.player.<server>/<account>.volume`, `.muted` | The pause menu of a game online (`keepVoiceSettings()`): how the player hears another player, its volume from 0 to 1 and muted or not; `<server>/guest/<name>` for a guest. Only the players not heard as by default ([Voice](voice.md#in-the-hud-and-the-pause-menu)) |
+| `voice.noise_suppression` | The Voice page: whether RNNoise takes the noise of the room out of the microphone, `true` by default ([Voice](voice.md#the-sound-processing)) |
+| `voice.gain_control` | The Voice page: whether the automatic gain brings the voice to the same level, `true` by default |
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
 | `servers.session.<host>:<port>` | `SessionTokens`: the session token of the account signed in on that server, 64 hexadecimal digits, sent in the next `HELLO` ([Accounts](client-online.md#accounts)). A secret: never logged |
 | `servers.profile.<host>:<port>` | `KnownProfiles`: the account signed in on that server, shown in the Online menu: `<1 if Discord, else 0>:<version of its picture>:<username>`; the picture itself in `pictures/<version>.png` beside the settings ([Profiles](client-online.md#profiles)) |
@@ -79,7 +81,7 @@ right column, a note explains the row that has the focus (`settings.hint.*` in t
 | Display | Frame rate | Choice: 60, 120, 144, 165, 240, unlimited (`FpsLimits`) | `Window::setTargetFps()` |
 | Display | VSync | Choice: on, off | `Window::setVsync()` |
 | Controls | Keyboard and gamepad | Opens the Controls page, to choose the key of each action ([Input](input.md#choosing-the-keys)) | `assignKey()` |
-| Voice | Voice chat | Opens the Voice page: the talk mode, the microphone, the volumes of the voice and its keys ([Voice](voice.md#the-voice-page)) | `VoiceDevices`, `assignKey()` |
+| Voice | Voice chat | Opens the Voice page: the talk mode, the microphone and its processing, the volumes of the voice and its keys ([Voice](voice.md#the-voice-page)) | `VoiceDevices`, `assignKey()` |
 
 - **At start**, right after the settings are read, `applyDisplaySettings()` moves the window to the kept
   screen and gives it the kept resolution; then, once the translations are loaded, `applyPlayerSettings()`

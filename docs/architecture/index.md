@@ -120,10 +120,10 @@ The programs are built on twelve libraries:
 | `libs/scripting` | Lua 5.4 and LuaBridge3, built from source, and a sandboxed `State` that runs a file in its own environment. Knows no game. Shared with the server. | [Game](game.md#configuration) |
 | `libs/lobby` | The messages of the lobby protocol, between a client and the master: hello, list, create and join games, the messages of the administrators. Shared by the client and the server. | [Server](server.md#the-lobby) |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
-| `libs/audio` | Sound effects, streamed music and the voices of the other players, with separate volumes. Wraps raylib. | [Audio](audio.md) |
+| `libs/audio` | Sound effects, streamed music and the voices of the other players, with separate volumes, and what the output plays, for the echo cancellation. Wraps raylib. | [Audio](audio.md) |
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
 | `libs/discord` | Signing in with Discord from the client: an interface, and its implementation through the Discord Social SDK, kept in `libs/discord/sdk/`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
-| `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord, the devices as interfaces (`rtype::voice`, header only), the codec of the voice (`rtype::voice_codec`), and the voice of the game with its jitter buffer and the microphone (`rtype::voice_client`). Wraps libopus, and the miniaudio of raylib for the microphone. For the client. | [Voice](voice.md) |
+| `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord, the devices as interfaces (`rtype::voice`, header only), the codec of the voice (`rtype::voice_codec`), the echo cancellation, noise suppression and gain control of the microphone (`rtype::voice_processing`), and the voice of the game with its jitter buffer and the microphone (`rtype::voice_client`). Wraps libopus, speexdsp, RNNoise, and the miniaudio of raylib for the microphone. For the client. | [Voice](voice.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
@@ -137,7 +137,9 @@ the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who 
 client of the tests, comes through CPM too, with OpenSSL from the system on Linux. The Discord Social SDK is a
 private dependency of `rtype::discord_sdk`, linked by `r-type_client` alone
 ([ADR 0026](../decisions/0026-discord-social-sdk.md)). libopus, which encodes the voice, is a private dependency
-of `rtype::voice_codec` ([Voice](voice.md#the-codec)); the microphone is captured by the miniaudio raylib
+of `rtype::voice_codec` ([Voice](voice.md#the-codec)); speexdsp and RNNoise, which take the echo and the noise
+out of the microphone, private dependencies of `rtype::voice_processing`
+([Voice](voice.md#the-sound-processing)); the microphone is captured by the miniaudio raylib
 compiles, a private dependency of `rtype::voice_client` ([Voice](voice.md#the-devices)).
 
 ## Repository layout
