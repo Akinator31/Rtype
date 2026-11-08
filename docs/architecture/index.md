@@ -75,7 +75,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | **Game logic** | Players, Bydos, missiles, waves, collisions (`libs/game`, [ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md), [Game](game.md)) | Server, client offline |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
 | **Interface** | Menus, options and HUD, made of entities like the world (`libs/engine`) | Client |
-| **Audio** | Music and sound effects, built on raylib (`libs/audio`) | Client |
+| **Audio** | Music, sound effects and the voices of the players, built on raylib (`libs/audio`) | Client |
 | **Voice** | The voice chat of an online game, through the game or Discord (`libs/voice`, [Voice](voice.md)) | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
 
@@ -120,14 +120,14 @@ The programs are built on twelve libraries:
 | `libs/scripting` | Lua 5.4 and LuaBridge3, built from source, and a sandboxed `State` that runs a file in its own environment. Knows no game. Shared with the server. | [Game](game.md#configuration) |
 | `libs/lobby` | The messages of the lobby protocol, between a client and the master: hello, list, create and join games, the messages of the administrators. Shared by the client and the server. | [Server](server.md#the-lobby) |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
-| `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
+| `libs/audio` | Sound effects, streamed music and the voices of the other players, with separate volumes. Wraps raylib. | [Audio](audio.md) |
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
 | `libs/discord` | Signing in with Discord from the client: an interface, and its implementation through the Discord Social SDK, kept in `libs/discord/sdk/`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
-| `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord (`rtype::voice`, header only), and the codec of the voice (`rtype::voice_codec`). Wraps libopus. For the client. | [Voice](voice.md) |
+| `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord, the devices as interfaces (`rtype::voice`, header only), the codec of the voice (`rtype::voice_codec`), and the voice of the game with its jitter buffer and the microphone (`rtype::voice_client`). Wraps libopus, and the miniaudio of raylib for the microphone. For the client. | [Voice](voice.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
-Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
+Their public headers contain no raylib type: raylib is a private dependency of `render`, `input`, `audio` and `voice_client`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
 raylib: the ECS, the physics, the game, the scripting, the lobby, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
 private dependencies of `network`, and reproc, which starts the instances of the server, toml++, which reads
@@ -137,7 +137,8 @@ the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who 
 client of the tests, comes through CPM too, with OpenSSL from the system on Linux. The Discord Social SDK is a
 private dependency of `rtype::discord_sdk`, linked by `r-type_client` alone
 ([ADR 0026](../decisions/0026-discord-social-sdk.md)). libopus, which encodes the voice, is a private dependency
-of `rtype::voice_codec` ([Voice](voice.md#the-codec)).
+of `rtype::voice_codec` ([Voice](voice.md#the-codec)); the microphone is captured by the miniaudio raylib
+compiles, a private dependency of `rtype::voice_client` ([Voice](voice.md#the-devices)).
 
 ## Repository layout
 
@@ -148,7 +149,7 @@ apps/       executables, one subdirectory per program
   server/   game server (r-type_server)
 config/     the Lua configuration of the game: enemies, weapons... (client and server)
 libs/       libraries shared by the programs, one subdirectory per library
-  audio/    sound effects and music (client)
+  audio/    sound effects, music and the voices played (client)
   core/     handles and resource caches (all)
   database/ SQLite and PostgreSQL through SOCI, migrations (server)
   ecs/      entity component system, hierarchy (client and server)

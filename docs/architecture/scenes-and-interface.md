@@ -167,7 +167,14 @@ of the screen, over the interface (`drawFpsCounter()`, `apps/client/src/Commands
 then orange and red as the frame rate drops. It checks the limit of frames per second and the vertical
 synchronisation chosen on the Settings page ([Settings](settings.md#the-settings-page)).
 
-Both views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
+### The microphone
+
+Type `voice [on|off]` in the console to turn the microphone on or off in the games online
+(`Commands/VoiceCommand.cpp`): an open microphone, heard by the others while it is on
+([Voice](voice.md#the-voice-of-the-game)). It is off at each start; the talk modes and their settings come
+later.
+
+The debug views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
 and hide something read their `on` / `off` argument with `readSwitch()` (`Commands/Switch.hpp`).
 
 | Component | Draws |
