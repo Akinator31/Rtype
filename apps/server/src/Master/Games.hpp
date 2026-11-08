@@ -102,6 +102,8 @@ public:
     /// it closed its session itself (`PLAYER_DISCONNECTED (QUIT)`).
     using LeftHandler = std::function<void(std::uint32_t playerId,
                                            std::optional<rtype::lobby::LeftGameMessage> notification)>;
+    /// A game is over: what each player connected at its end did, before they are told they left it.
+    using GameOverHandler = std::function<void(const GameOverReport &report)>;
     /// Draws a candidate session id, refused if it is 0 or already taken.
     using SessionDraw = std::function<std::uint32_t()>;
 
@@ -118,6 +120,7 @@ private:
     Relay &_relay;
     GamesSettings _settings;
     LeftHandler _onLeft;
+    GameOverHandler _onGameOver;
     AdminObserver *_observer = nullptr;
     SessionDraw _drawSession;
     rtype::network::TcpListener _listener;
@@ -176,6 +179,8 @@ public:
 
     /// Called when a player leaves its game without asking.
     void setLeftHandler(LeftHandler handler) { _onLeft = std::move(handler); }
+    /// Called when an instance reports the end of its game.
+    void setGameOverHandler(GameOverHandler handler) { _onGameOver = std::move(handler); }
     /// Tells the administration what happens to the games; nullptr for nobody. It must outlive the games, or
     /// be taken away first.
     void setObserver(AdminObserver *observer) { _observer = observer; }

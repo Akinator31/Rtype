@@ -147,4 +147,15 @@ std::vector<std::string> WaveRegistry::listWavesOfDifficulty(std::uint8_t diffic
     return names;
 }
 
+std::vector<std::string> WaveRegistry::listAllWaves() const
+{
+    std::vector<std::string> names;
+    names.reserve(_definitions.size());
+    for (const auto &[name, definition] : _definitions) {
+        names.push_back(name);
+    }
+    std::ranges::sort(names);
+    return names;
+}
+
 } // namespace rtype::game

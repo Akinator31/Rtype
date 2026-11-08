@@ -11,8 +11,12 @@
 namespace rtype::network
 {
 
-/// Size of the fields before the messages of a body: `Ack`, `Ack bits` and `Count`.
-inline constexpr std::size_t BodyHeaderSize = 13;
+/// Size of the fields before the messages of a body: `Ack`, `Ack bits`, `Ack delay` and `Count`.
+inline constexpr std::size_t BodyHeaderSize = 15;
+/// The unit of `Ack delay`, in microseconds: a tenth of a millisecond.
+inline constexpr std::uint32_t AckDelayUnitMicroseconds = 100;
+/// The largest `Ack delay`: 6.5535 s or more. A round-trip time is not sampled from it.
+inline constexpr std::uint16_t MaxAckDelay = 0xFFFF;
 /// Size of the header of an unreliable message: type, flags and size.
 inline constexpr std::size_t UnreliableMessageHeaderSize = 4;
 /// Size of the header of a reliable message: type, flags, message id and size.
@@ -45,6 +49,9 @@ struct DatagramBody {
     /// Bit i set: packet `ack - 1 - i` was received.
     std::uint32_t ackBits = 0;
     std::vector<BodyMessage> messages;
+    /// How long the packet `ack` waited before this datagram acknowledged it, in AckDelayUnitMicroseconds, at
+    /// most MaxAckDelay: the peer takes it out of its round-trip time. Written after the ack bits.
+    std::uint16_t ackDelay = 0;
 };
 
 /// Writes a body.

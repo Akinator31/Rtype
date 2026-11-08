@@ -3,6 +3,8 @@
 #include "NetworkLogger.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <format>
 #include <stdexcept>
 
@@ -61,7 +63,7 @@ std::optional<OutgoingDatagram> MessageChannel::next(Clock::time_point now)
         return std::nullopt;
     }
 
-    DatagramBody body{_window.highest(), _window.ackBits(), {}};
+    DatagramBody body{_window.highest(), _window.ackBits(), {}, ackDelayAt(now)};
     SentPacket sent{*number, now, {}, false};
     std::size_t size = BodyHeaderSize;
     const Clock::duration delay = resendDelay();
@@ -154,8 +156,11 @@ MessageChannel::receive(std::uint64_t packetNumber, std::span<const std::byte> b
         return std::nullopt;
     }
     // Only now: a malformed body must not count as received
+    if (packetNumber > _window.highest()) {
+        _highestReceived = now;
+    }
     _window.mark(packetNumber);
-    acknowledge(decoded->ack, decoded->ackBits, now);
+    acknowledge(decoded->ack, decoded->ackBits, decoded->ackDelay, now);
 
     std::vector<ReceivedMessage> delivered;
     for (const BodyMessage &message : decoded->messages) {
@@ -171,7 +176,19 @@ MessageChannel::Clock::duration MessageChannel::resendDelay() const
     return std::max<Clock::duration>(rtt + rtt / 2, MinResendDelay);
 }
 
-void MessageChannel::acknowledge(std::uint64_t ack, std::uint32_t ackBits, Clock::time_point now)
+std::uint16_t MessageChannel::ackDelayAt(Clock::time_point now) const
+{
+    if (!_highestReceived) {
+        return 0;
+    }
+    const auto waited =
+        std::chrono::duration_cast<std::chrono::microseconds>(now - *_highestReceived).count();
+    const auto units = std::max<std::int64_t>(0, waited) / AckDelayUnitMicroseconds;
+    return static_cast<std::uint16_t>(std::min<std::int64_t>(units, MaxAckDelay));
+}
+
+void MessageChannel::acknowledge(std::uint64_t ack, std::uint32_t ackBits, std::uint16_t ackDelay,
+                                 Clock::time_point now)
 {
     if (ack == 0) {
         return;
@@ -181,8 +198,17 @@ void MessageChannel::acknowledge(std::uint64_t ack, std::uint32_t ackBits, Clock
             continue;
         }
         const std::uint64_t distance = ack - packet.number;
+        if (distance == 0 && ackDelay < MaxAckDelay) {
+            // A sample of the round trip, without the time the peer waited to acknowledge it. Only the packet
+            // `ack`: the delay of the others is not known
+            const Clock::duration waited = std::chrono::duration_cast<Clock::duration>(
+                std::chrono::microseconds(std::int64_t{ackDelay} * AckDelayUnitMicroseconds));
+            const Clock::duration sample =
+                std::max<Clock::duration>(now - packet.time - waited, Clock::duration{0});
+            _rtt = _rtt ? (*_rtt * 9 + sample) / 10 : sample;
+        }
         if (distance == 0 || (distance <= AckRange && ((ackBits >> (distance - 1)) & 1U) != 0)) {
-            onAcknowledged(packet, now);
+            onAcknowledged(packet);
         }
     }
     // Packets further than the acknowledgement bits can no longer be acknowledged
@@ -192,11 +218,9 @@ void MessageChannel::acknowledge(std::uint64_t ack, std::uint32_t ackBits, Clock
     }
 }
 
-void MessageChannel::onAcknowledged(SentPacket &packet, Clock::time_point now)
+void MessageChannel::onAcknowledged(SentPacket &packet)
 {
     packet.acknowledged = true;
-    const Clock::duration sample = now - packet.time;
-    _rtt = _rtt ? (*_rtt * 9 + sample) / 10 : sample;
     for (const std::uint16_t id : packet.reliable) {
         // Already gone if another packet that carried it was acknowledged first
         if (const auto found = std::ranges::find(_pending, id, &PendingMessage::id);

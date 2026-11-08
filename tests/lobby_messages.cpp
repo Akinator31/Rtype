@@ -109,6 +109,8 @@ std::vector<std::pair<Bytes, std::function<bool(std::span<const std::byte>)>>> a
          [](auto p) { return decodeProfile(p).has_value(); }},
         {encode(AvatarMessage{9, "a1b2", 20000, 16000, Bytes(4000, std::byte{7})}),
          [](auto p) { return decodeAvatar(p).has_value(); }},
+        {encode(ProgressMessage{5000, 340, 12, 480, 9, 6}),
+         [](auto p) { return decodeProgress(p).has_value(); }},
     };
 }
 
@@ -116,12 +118,12 @@ std::vector<std::pair<Bytes, std::function<bool(std::span<const std::byte>)>>> a
 
 TEST_CASE("HELLO is the frame of the example of the specification", "[lobby]")
 {
-    const HelloMessage hello{.version = 4, .name = "Pavel", .locale = "fr", .token = std::nullopt};
+    const HelloMessage hello{.version = 5, .name = "Pavel", .locale = "fr", .token = std::nullopt};
     const Bytes payload = encode(hello);
 
-    CHECK(payload == bytes({0x00, 0x04, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
+    CHECK(payload == bytes({0x00, 0x05, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
     CHECK(rtype::network::makeFrame(message_type::Hello, payload) ==
-          bytes({0x00, 0x0D, 0x01, 0x00, 0x04, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
+          bytes({0x00, 0x0D, 0x01, 0x00, 0x05, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
     CHECK(decodeHello(payload) == hello);
 }
 
@@ -131,12 +133,12 @@ TEST_CASE("A HELLO with a session token has no name, and the token after the loc
 
     REQUIRE(payload.size() == 2 + 1 + 6 + 1 + 32);
     CHECK(Bytes(payload.begin(), payload.begin() + 10) ==
-          bytes({0x00, 0x04, 0x00, 0x05, 'f', 'r', '-', 'F', 'R', 0x01}));
+          bytes({0x00, 0x05, 0x00, 0x05, 'f', 'r', '-', 'F', 'R', 0x01}));
     CHECK(payload[10] == std::byte{7});
     CHECK(decodeHello(payload) == resuming());
 
     // A name beside a token is malformed: the token signs in an account, whose name the master knows
-    Bytes named = bytes({0x00, 0x04, 0x01, 'A', 0x02, 'e', 'n', 0x01});
+    Bytes named = bytes({0x00, 0x05, 0x01, 'A', 0x02, 'e', 'n', 0x01});
     named.resize(named.size() + 32);
     CHECK_FALSE(decodeHello(named));
     HelloMessage both = resuming();
@@ -152,7 +154,7 @@ TEST_CASE("A HELLO of another version is read as its version alone, for UNSUPPOR
     CHECK(older->version == 2);
     CHECK(older->name.empty());
     CHECK_FALSE(older->token);
-    CHECK(decodeHello(bytes({0x00, 0x05}))->version == 5);
+    CHECK(decodeHello(bytes({0x00, 0x06}))->version == 6);
     CHECK(decodeHello(bytes({0x00, 0x01, 0xFF, 0xFF, 0xFF}))->version == 1);
     CHECK_FALSE(decodeHello(bytes({0x00})));
 }
@@ -244,9 +246,9 @@ TEST_CASE("Names are checked apart from the decoding, for INVALID_NAME", "[lobby
     CHECK_FALSE(isValidGameName(std::string(33, 'g')));
 
     // Decoded as they come: the master answers INVALID_NAME, not MALFORMED
-    CHECK(decodeHello(bytes({0, 4, 0, 2, 'e', 'n', 0}))->name.empty());
-    CHECK(decodeHello(bytes({0, 4, 2, 0xFF, 0xFE, 2, 'e', 'n', 0}))->name == "\xFF\xFE");
-    CHECK(decodeHello(bytes({0,   4,   17,  'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
+    CHECK(decodeHello(bytes({0, 5, 0, 2, 'e', 'n', 0}))->name.empty());
+    CHECK(decodeHello(bytes({0, 5, 2, 0xFF, 0xFE, 2, 'e', 'n', 0}))->name == "\xFF\xFE");
+    CHECK(decodeHello(bytes({0,   5,   17,  'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
                              'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 2,   'e', 'n', 0}))
               ->name.size() == 17);
     CHECK(decodeCreateGame(bytes({0, 2}))->name.empty());
@@ -611,11 +613,11 @@ TEST_CASE("A HELLO refuses a locale that is not one, and a token flag that is no
     CHECK_FALSE(isValidLocale("fr.UTF-8"));
     CHECK_FALSE(isValidLocale("é1"));
 
-    CHECK_FALSE(decodeHello(bytes({0, 4, 1, 'A', 1, 'e', 0})));           // locale of 1 byte
-    CHECK_FALSE(decodeHello(bytes({0, 4, 1, 'A', 3, 'e', ' ', 'n', 0}))); // a space
-    CHECK_FALSE(decodeHello(bytes({0, 4, 1, 'A', 2, 'e', 'n', 2})));      // token flag 2
-    CHECK_FALSE(decodeHello(bytes({0, 4, 1, 'A', 2, 'e', 'n'})));         // no token flag
-    CHECK_FALSE(decodeHello(bytes({0, 4, 0, 2, 'e', 'n', 1, 1, 2, 3})));  // a token cut
+    CHECK_FALSE(decodeHello(bytes({0, 5, 1, 'A', 1, 'e', 0})));           // locale of 1 byte
+    CHECK_FALSE(decodeHello(bytes({0, 5, 1, 'A', 3, 'e', ' ', 'n', 0}))); // a space
+    CHECK_FALSE(decodeHello(bytes({0, 5, 1, 'A', 2, 'e', 'n', 2})));      // token flag 2
+    CHECK_FALSE(decodeHello(bytes({0, 5, 1, 'A', 2, 'e', 'n'})));         // no token flag
+    CHECK_FALSE(decodeHello(bytes({0, 5, 0, 2, 'e', 'n', 1, 1, 2, 3})));  // a token cut
     CHECK_THROWS_AS(encode(guest("Ann", "e")), std::invalid_argument);
     CHECK_THROWS_AS(encode(guest("Ann", "fr FR")), std::invalid_argument);
 }
@@ -630,6 +632,19 @@ TEST_CASE("The requests of the accounts are told apart from the others", "[lobby
                                     std::uint8_t{0x14}, std::uint8_t{0x7F}, message_type::SignedIn}) {
         CHECK_FALSE(isAccountRequest(type));
     }
+}
+
+TEST_CASE("PROGRESS is written field by field and survives a round trip", "[lobby][accounts]")
+{
+    const ProgressMessage progress{.xp = 0x100000000,
+                                   .gained = 340,
+                                   .gamesPlayed = 12,
+                                   .totalKills = 480,
+                                   .bestWaves = 9,
+                                   .bestStreak = 6};
+    CHECK(encode(progress) ==
+          bytes({0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0x01, 0x54, 0, 0, 0, 12, 0, 0, 0x01, 0xE0, 0, 9, 0, 6}));
+    CHECK(decodeProgress(encode(progress)) == progress);
 }
 
 TEST_CASE("The profiles and the pictures are written field by field, within their bounds",

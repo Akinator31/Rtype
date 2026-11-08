@@ -15,6 +15,7 @@ add_library(rtype_game
     src/Hitbox.cpp
     src/Messages.cpp
     src/PlayerInput.cpp
+    src/Progression.cpp
     src/Projectile/ProjectileBehavior.cpp
     src/Projectile/ProjectileRegistry.cpp
     src/RemoteWorld.cpp
@@ -31,6 +32,7 @@ add_library(rtype_game
     src/System/WeaponSystem.cpp
     src/Wave/MusicTimeline.cpp
     src/Wave/WaveRegistry.cpp
+    src/Weapon/WeaponFiring.cpp
     src/Weapon/WeaponRegistry.cpp
 )
 add_library(rtype::game ALIAS rtype_game)

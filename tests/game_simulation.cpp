@@ -1,6 +1,7 @@
 // Tests of libs/game: a Simulation stepped tick by tick, given inputs, and checked through its snapshots
 // (ADR 0015, docs/architecture/game.md).
 
+#include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/game/Game.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <numbers>
 #include <optional>
 #include <random>
@@ -519,6 +521,85 @@ TEST_CASE("moveShip() moves a ship exactly as the game does, to the bit", "[game
         REQUIRE(ship);
         REQUIRE(ship->x == predicted.x);
         REQUIRE(ship->y == predicted.y);
+    }
+}
+
+TEST_CASE("stepWeapon(), playerShot() and moveShot() fire and move the shots exactly as the game does, to "
+          "the bit",
+          "[game]")
+{
+    // Every weapon of the repository, on the ship of a player, without Bydos to stop the shots
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    GameConfig config = loaded.config;
+    config.waves.clear();
+    const Rules rules;
+
+    for (const WeaponDefinition &weapon : config.weapons) {
+        CAPTURE(weapon.id);
+        Simulation simulation(rules, config);
+        simulation.addPlayer(0);
+        simulation.step();
+        const rtype::ecs::entity_t ship = *findPlayerShip(simulation.ecs(), 0);
+        equipWeapon(simulation.ecs(), simulation.context(), ship, weapon.id);
+        Armed armed = simulation.ecs().getComponent<Armed>(ship);
+        const float projectileHalfWidth =
+            halfSizeOf(simulation.context().projectiles.getDefinition(weapon.projectile).collider).x;
+        const EntityState start = *shipOf(simulation.snapshot(), 0);
+        rtype::ecs::Position position{start.x, start.y};
+
+        struct Predicted {
+            rtype::ecs::Position position;
+            rtype::physics::Velocity launch;
+            std::uint32_t age = 0;
+        };
+        std::map<std::uint32_t, Predicted> shots;
+        std::mt19937 random(7);
+        std::uniform_int_distribution<int> buttons(0, 0x7F);
+        std::size_t fired = 0;
+
+        for (int tick = 0; tick < 600; ++tick) {
+            const PlayerInput input{static_cast<std::uint8_t>(buttons(random))};
+            // The client: the shots of before move on, the weapon fires from where the ship was, then it
+            // moves
+            for (auto &[id, shot] : shots) {
+                shot.position = moveShot(shot.position, weapon.mechanic, shot.launch, shot.age, rules);
+                ++shot.age;
+            }
+            std::optional<ShotLaunch> launch;
+            if (stepWeapon(armed, weapon, input.isHeld(PlayerInput::Fire))) {
+                launch = playerShot(weapon, projectileHalfWidth, 0, position, input.aim(), rules);
+            }
+            position = moveShip(position, input, rules);
+
+            simulation.setInput(0, input);
+            simulation.step();
+            std::map<std::uint32_t, Predicted> alive;
+            for (const EntityState &shot : shotsOf(simulation.snapshot())) {
+                auto found = shots.find(shot.id);
+                if (found == shots.end()) {
+                    // Fired this tick: the one the client predicted
+                    REQUIRE(launch);
+                    found = shots.emplace(shot.id, Predicted{launch->position, launch->velocity, 0}).first;
+                    launch.reset();
+                    ++fired;
+                }
+                REQUIRE(shot.x == found->second.position.x);
+                REQUIRE(shot.y == found->second.position.y);
+                // Its age in the snapshot: the client finds the tick it was fired at
+                REQUIRE(shot.age == std::min<std::uint32_t>(found->second.age, 255));
+                alive.insert(*found);
+            }
+            // Fired by the client, by the game too
+            REQUIRE_FALSE(launch);
+            shots = std::move(alive);
+            const Armed real = *simulation.weaponOf(0);
+            REQUIRE(real.cooldown == armed.cooldown);
+            REQUIRE(real.ammo == armed.ammo);
+            REQUIRE(real.reloadLeft == armed.reloadLeft);
+        }
+        // The slowest weapons fire a few times only, the fastest many
+        CHECK(fired >= 3);
     }
 }
 
@@ -1382,6 +1463,172 @@ TEST_CASE("The wave of a difficulty is drawn from the seed of the rules", "[game
     }
     CHECK(std::ranges::count(drawn, "a") > 0);
     CHECK(std::ranges::count(drawn, "b") > 0);
+}
+
+// --- Endless games and experience ---
+
+namespace
+{
+
+Rules endlessRules()
+{
+    Rules rules;
+    rules.endless = true;
+    rules.firstWaveDelay = 1;
+    rules.wavePause = 1;
+    return rules;
+}
+
+/// Destroys the enemies of the wave under way, then steps until the next one starts.
+std::optional<std::uint16_t> clearAndRunUntilWave(Simulation &simulation)
+{
+    destroyEnemies(simulation);
+    return runUntilWave(simulation, 100);
+}
+
+} // namespace
+
+TEST_CASE("An endless game draws every wave, whatever its difficulty, and is never won", "[game]")
+{
+    Simulation simulation(endlessRules(), battleConfig({waveOf("easy", 1), waveOf("hard", 4)}));
+    simulation.addPlayer(0);
+
+    std::vector<std::string> drawn;
+    CHECK(runUntilWave(simulation, 10) == 1);
+    drawn.push_back(simulation.context().wave.name);
+    for (std::uint16_t wave = 2; wave <= 20; ++wave) {
+        REQUIRE(clearAndRunUntilWave(simulation) == wave);
+        drawn.push_back(simulation.context().wave.name);
+    }
+    CHECK(std::ranges::count(drawn, "easy") > 0);
+    CHECK(std::ranges::count(drawn, "hard") > 0);
+    CHECK_FALSE(simulation.context().over);
+}
+
+TEST_CASE("An endless game draws the same waves from the same seed", "[game]")
+{
+    const auto drawWaves = [](std::uint32_t seed) {
+        Rules rules = endlessRules();
+        rules.seed = seed;
+        Simulation simulation(rules, battleConfig({waveOf("a", 1), waveOf("b", 2), waveOf("c", 3)}));
+        simulation.addPlayer(0);
+        std::vector<std::string> names;
+        runUntilWave(simulation, 10);
+        names.push_back(simulation.context().wave.name);
+        for (int wave = 0; wave < 10; ++wave) {
+            clearAndRunUntilWave(simulation);
+            names.push_back(simulation.context().wave.name);
+        }
+        return names;
+    };
+
+    CHECK(drawWaves(7) == drawWaves(7));
+    CHECK(drawWaves(7) != drawWaves(8));
+}
+
+TEST_CASE("An endless game is lost once every player is out of lives", "[game]")
+{
+    Rules rules = endlessRules();
+    rules.lives = 1;
+    Simulation simulation(rules, battleConfig({waveOf("line", 1)}));
+    simulation.addPlayer(0);
+    runUntilWave(simulation, 10);
+    clearAndRunUntilWave(simulation);
+
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x, ship.y);
+    std::optional<GameOutcome> outcome;
+    for (int tick = 0; tick < 600 && !outcome; ++tick) {
+        simulation.step();
+        outcome = simulation.snapshot().gameOver;
+    }
+    CHECK(outcome == GameOutcome::Defeat);
+}
+
+TEST_CASE("A wave is cleared by the players alive at its end, and a streak multiplies its experience",
+          "[game]")
+{
+    Simulation simulation(endlessRules(), battleConfig({waveOf("line", 1)}));
+    simulation.addPlayer(0);
+    simulation.addPlayer(1);
+    runUntilWave(simulation, 10);
+
+    // 100, then 125, then 150: x1 for the first wave of the streak, 25% more for each next one
+    clearAndRunUntilWave(simulation);
+    clearAndRunUntilWave(simulation);
+    clearAndRunUntilWave(simulation);
+    const PlayerSlot &first = simulation.context().players[0];
+    CHECK(first.wavesCleared == 3);
+    CHECK(first.streak == 3);
+    CHECK(first.xp == 100 + 125 + 150);
+
+    // The second player waits for its next ship as the wave ends: no wave cleared, its streak starts again
+    simulation.context().players[1].respawnIn = 1000;
+    clearAndRunUntilWave(simulation);
+    const PlayerSlot &second = simulation.context().players[1];
+    CHECK(second.wavesCleared == 3);
+    CHECK(second.streak == 0);
+    CHECK(second.bestStreak == 3);
+    CHECK(second.xp == 375);
+    CHECK(first.streak == 4);
+    CHECK(first.xp == 375 + 175);
+
+    const PlayerState state = simulation.snapshot().players[0];
+    CHECK(state.wavesCleared == 4);
+    CHECK(state.streak == 4);
+    CHECK(state.bestStreak == 4);
+    CHECK(state.xp == 550);
+}
+
+TEST_CASE("A Bydo shot down counts, and gives its experience times the streak in an endless game", "[game]")
+{
+    EnemyDefinition bydo;
+    bydo.score = 100;
+    bydo.xp = 40;
+
+    Simulation endless(endlessRules(), battleConfig());
+    PlayerSlot &player = endless.context().players[0];
+    endless.context().rewardKill(player, bydo);
+    player.streak = 3;
+    endless.context().rewardKill(player, bydo);
+    CHECK(player.kills == 2);
+    CHECK(player.score == 200);
+    CHECK(player.xp == 40 + 60);
+
+    // Offline, no experience: the kills are still counted, for the stats
+    Simulation story({}, battleConfig());
+    PlayerSlot &pilot = story.context().players[0];
+    story.context().rewardKill(pilot, bydo);
+    CHECK(pilot.kills == 1);
+    CHECK(pilot.xp == 0);
+}
+
+TEST_CASE("The streak multiplier starts from 2 waves and stops at its cap", "[game]")
+{
+    const Progression progression;
+    CHECK(streakMultiplier(progression, 0) == 100);
+    CHECK(streakMultiplier(progression, 1) == 100);
+    CHECK(streakMultiplier(progression, 2) == 125);
+    CHECK(streakMultiplier(progression, 5) == 200);
+    CHECK(streakMultiplier(progression, 9) == 300);
+    CHECK(streakMultiplier(progression, 60000) == 300);
+    CHECK(streakMultiplier({.xpPerWave = 100, .streakBonus = 10, .streakCap = 50}, 4) == 100);
+
+    CHECK(applyMultiplier(100, 125) == 125);
+    CHECK(applyMultiplier(7, 150) == 10);
+    CHECK(applyMultiplier(0xFFFFFFFF, 300) == 0xFFFFFFFF);
+}
+
+TEST_CASE("A level needs 500 times its number to the power 1.5 of experience", "[game]")
+{
+    CHECK(xpToNextLevel(1) == 500);
+    CHECK(xpToNextLevel(2) == 1414);
+    CHECK(xpToNextLevel(4) == 4000);
+
+    CHECK(levelOf(0) == Level{1, 0, 500});
+    CHECK(levelOf(499) == Level{1, 499, 500});
+    CHECK(levelOf(500) == Level{2, 0, 1414});
+    CHECK(levelOf(500 + 1414 + 10) == Level{3, 10, 2598});
 }
 
 // --- The behaviors of the Bydos ---

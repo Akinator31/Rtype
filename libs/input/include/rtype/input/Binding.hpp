@@ -58,6 +58,10 @@ public:
 
     /// The key of a keyboard binding, nothing for another input.
     [[nodiscard]] std::optional<Key> asKey() const;
+    /// The button of a gamepad button binding, nothing for another input.
+    [[nodiscard]] std::optional<GamepadButton> asGamepadButton() const;
+    /// The axis of a gamepad axis binding, nothing for another input.
+    [[nodiscard]] std::optional<GamepadAxis> asGamepadAxis() const;
 
     /// How strongly the input is held, from 0 (released) to 1 (fully pressed).
     ///

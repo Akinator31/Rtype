@@ -490,7 +490,8 @@ flowchart LR
   Behind by more than 250 ms (a machine that slept, a debugger), it goes on from now instead of running fast.
   The commands of the network thread apply at the start of the next tick. The inputs of each player wait in an
   `InputBuffer` for the tick they are stamped with ([below](#inputs)), and the result of each tick goes back with
-  the tick of the last input applied for each player.
+  the tick of the last input applied for each player, the smallest lead of its `INPUT` messages, and the state
+  of the weapon of its ship (`Simulation::weaponOf()`).
 - **`GameHost`** is the game seen from the network ([game protocol](../protocol/game.md)):
   - its datagrams come and go through a `GameTransport`, with the real address of each client, so its
     `SessionHost` limits and follows clients by their address whatever carries the datagrams. The instance
@@ -506,9 +507,12 @@ flowchart LR
   - on `CONNECT`, the client receives `ACCEPTED`, then `PLAYER_JOINED` for each player connected, itself
     included; the others receive its `PLAYER_JOINED`;
   - the inputs of each `INPUT` go to the game, which applies each one at its tick;
-  - every 2 ticks, each client receives the snapshot in parts, with its last input; every tick, the entities
-    destroyed. They leave as soon as the tick is published, not at the next update of the sessions: up to a
-    tick of delay less, and no jitter from it;
+  - every 2 ticks, each client receives the snapshot in parts, with its last input, the smallest lead of its
+    `INPUT` messages over those 2 ticks and the weapon of its ship; every tick, the entities
+    destroyed, unreliable, then again with each snapshot of the next 30 ticks (`RecentDestructions`): a lost one
+    costs a snapshot interval, never a resend that holds back the messages behind it. They leave as soon as the
+    tick is published, not at the next update of the sessions: up to a tick of delay less, and no jitter from
+    it;
   - the game over goes to every client (`GAME_OVER`, with the last snapshot), then to the instance with the
     score of each player; nothing is published after it;
   - a session that closes takes the ship away; the others receive `PLAYER_LEFT`, and the master
@@ -535,8 +539,13 @@ should apply it ([game protocol, 9.2](../protocol/game.md#92-inputs)). The game 
 | 30 ticks without any input | An empty input: the ship of a player who lost the connection stops |
 
 The 8 inputs of each `INPUT` are what makes a lost datagram harmless: the next one brings the missing ticks again.
-The client stamps its inputs a little ahead of the game, from the round-trip time it measures
-([The client online](client-online.md)), so that they arrive before their tick.
+
+Each `INPUT` received also gives its **lead**, ignored or not: its tick minus the last tick simulated (1 just in
+time, 0 or less too late, above 60 too early). `InputBuffer::takeLead()` gives the smallest since the previous
+tick, `GameHost` keeps the smallest until the next snapshot, and the snapshot tells it to the client, −128 if no
+`INPUT` came. The client paces its inputs on it so that they arrive about 2 ticks early
+([The client online](client-online.md#input-clock), [ADR 0028](../decisions/0028-input-stamps-follow-the-lead.md)):
+nothing on the side of the game corrects a client, it only reports.
 
 ### Stopping an instance
 
@@ -716,10 +725,11 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   until asked to stop, then exits with 0; without it, it exits with 1.
 - `tests/server_replication.cpp` (tag `[replication]`): the `InputBuffer`: an input applied at its tick, the
   last one repeated then emptied after a silence, the ticks of a lost datagram filled by the next one, inputs
-  too late, too far ahead or received twice ignored.
+  too late, too far ahead or received twice ignored, and the lead of each `INPUT` measured, even ignored; the
+  destructions sent again with the snapshots of the next 30 ticks, then forgotten.
 - `tests/server_instance.cpp` (tag `[instance]`): the messages between the master and its instances (round
   trips, bytes, every malformed case, random bytes), the game thread (its rate, each input applied at its
-  tick, whatever their order, nothing after `stop()`), the game over of `GameHost` (sent, reported with the
+  tick, whatever their order, the lead of the inputs, nothing after `stop()`), the game over of `GameHost` (sent, reported with the
   scores, acknowledged, nothing after), a `GameHost` on a fake transport (a client far away connected, every
   datagram sent back to its address, the transport closed with the game), a `RelayedTransport` (only the frames
   of the relay read, malformed ones dropped, every datagram sent in a frame to the relay), every failure of

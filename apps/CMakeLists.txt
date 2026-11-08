@@ -10,9 +10,12 @@ add_custom_target(r-type_config
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/config $<TARGET_FILE_DIR:r-type_server>/config
     COMMENT "Copying the game configuration"
 )
-add_dependencies(r-type_client r-type_config)
 add_dependencies(r-type_server r-type_config)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/config/ DESTINATION config COMPONENT client)
+# No client where there is no Discord Social SDK (libs/discord)
+if(TARGET r-type_client)
+  add_dependencies(r-type_client r-type_config)
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/config/ DESTINATION config COMPONENT client)
+endif()
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/config/ DESTINATION config COMPONENT server)
 # The server analyses the music of the waves that follow one (placement "music"): it needs those files, not the
 # other assets of the client

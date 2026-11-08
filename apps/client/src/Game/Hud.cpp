@@ -47,6 +47,8 @@ constexpr float AllySize = 12.0f;
 constexpr float AllySpacing = 1.3f;
 constexpr render::Color AllyNameColor{107, 113, 119, 255};
 constexpr render::Color AllyScoreColor{201, 205, 210, 255};
+/// The experience of the local player, online.
+constexpr render::Color XpColor{255, 214, 102, 255};
 
 constexpr float PingSize = 13.3f;
 constexpr float PingSpacing = 1.3f;
@@ -103,6 +105,8 @@ ecs::entity_t openHud(ecs::Ecs &ecs, engine::SceneId scene, const HudLook &look,
                            render::colors::White, ScoreSpacing);
     hud.health = createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, HealthSize, HealthColor,
                             HealthSpacing);
+    hud.xp =
+        createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, AllySize, XpColor, AllySpacing);
 
     for (std::uint8_t index = 1; index < game::MaxPlayers; ++index) {
         const ecs::entity_t name = createText(ecs, scene, engine::AnchorPoint::BottomRight, look.font,

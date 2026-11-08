@@ -89,6 +89,7 @@ void Simulation::registerConfig(const GameConfig &config)
         _context.waves.addDefinition(wave, _context.enemies);
     }
     registerPlayer(config.player);
+    _context.progression = config.progression;
 }
 
 void Simulation::registerPlayer(const PlayerDefinition &player)
@@ -114,7 +115,9 @@ void Simulation::addPlayer(std::uint8_t slot)
     if (player.present) {
         throw std::invalid_argument(std::format("the player slot {} is taken", slot));
     }
-    player = {true, {}, _context.rules.lives, 0};
+    player = {};
+    player.present = true;
+    player.lives = _context.rules.lives;
     spawnPlayerShip(_ecs, _context, slot);
     logger().debug("Player {} joined at tick {}", slot, _context.tick);
 }
@@ -129,6 +132,15 @@ void Simulation::removePlayer(std::uint8_t slot)
     }
     _context.players[slot] = {};
     logger().debug("Player {} left at tick {}", slot, _context.tick);
+}
+
+std::optional<Armed> Simulation::weaponOf(std::uint8_t slot)
+{
+    const std::optional<ecs::entity_t> ship = findPlayerShip(_ecs, slot);
+    if (!ship || !_ecs.hasComponent<Armed>(*ship)) {
+        return std::nullopt;
+    }
+    return _ecs.getComponent<Armed>(*ship);
 }
 
 bool Simulation::hasPlayer(std::uint8_t slot) const
@@ -164,7 +176,14 @@ void Simulation::buildSnapshot()
     for (std::size_t slot = 0; slot < MaxPlayers; ++slot) {
         const PlayerSlot &player = _context.players[slot];
         if (player.present) {
-            snapshot.players.push_back({static_cast<std::uint8_t>(slot), player.lives, player.score});
+            snapshot.players.push_back({.slot = static_cast<std::uint8_t>(slot),
+                                        .lives = player.lives,
+                                        .score = player.score,
+                                        .kills = player.kills,
+                                        .wavesCleared = player.wavesCleared,
+                                        .streak = player.streak,
+                                        .bestStreak = player.bestStreak,
+                                        .xp = player.xp});
         }
     }
 
@@ -177,6 +196,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<Invulnerable> &invulnerables = _ecs.cache<Invulnerable>();
     ecs::ComponentCache<PlayerShip> &ships = _ecs.cache<PlayerShip>();
     ecs::ComponentCache<EnemyOrders> &orders = _ecs.cache<EnemyOrders>();
+    ecs::ComponentCache<Projectile> &projectiles = _ecs.cache<Projectile>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -192,6 +212,9 @@ void Simulation::buildSnapshot()
             state.velocityY = velocities.get(entity).y;
         }
         state.health = healths.has(entity) ? healths.get(entity).points : 0;
+        if (projectiles.has(entity)) {
+            state.age = static_cast<std::uint8_t>(std::min<std::uint32_t>(projectiles.get(entity).age, 255));
+        }
         if (invulnerables.has(entity) && invulnerables.get(entity).ticks > 0) {
             state.flags |= EntityState::Invulnerable;
         }

@@ -24,6 +24,7 @@ config/
   enemies/       a kind of Bydo: its ship, its health, its speed, its weapon
   waves/         a group of enemies that appear one after the other
   player.lua     what every player starts with: its ship, its weapon, its health
+  progression.lua  the experience the players earn online, optional
 ```
 
 - **One file per definition.** The file returns the table of one projectile, one weapon... Its name is free
@@ -173,6 +174,7 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `acceleration` | number, 0 or more | `600` | Speed gained per second until the top speed, 0 for its top speed at once |
 | `weapon` | string | *required* | The id of its weapon |
 | `score` | whole number, 0 or more | `100` | Points for the player who destroys it |
+| `xp` | whole number, 0 or more | a tenth of `score` | Experience for the player who destroys it, online only, times its streak ([The experience](#the-experience-configprogressionlua)) |
 | `collisionDamage` | whole number from 0 to 255 | `20` | Hit points a player ship loses when it runs into it; the enemy keeps going |
 | `update` | function | none | Its behavior, called at every tick: see [Script the behavior of an enemy](script-enemy-behaviors.md). Without one, it flies left and fires as soon as it is in the game area |
 | `phases` | whole number from 1 to 255 | `1` | How many times its `health` is filled: once it runs out, it gets all of it back, until its last phase. A boss lasts `health × phases` hit points |
@@ -247,6 +249,19 @@ One file, at the root of `config/`, **required**: without it, the configuration 
 | `ship` | string | *required* | The id of the ship of every player |
 | `weapon` | string | *required* | The id of the weapon every player fires while Fire is held |
 | `health` | whole number from 1 to 255 | `100` | Hit points of each ship: the damage of the Bydos is taken from them, and a ship with none left costs a life |
+
+### The experience (`config/progression.lua`)
+
+One file, at the root of `config/`, optional: without it, the defaults below. Online, the waves follow each
+other until every player is out of lives, and the players signed in earn experience for their account
+([ADR 0032](../decisions/0032-endless-waves-and-progression.md)). A player **clears** a wave when its ship is
+alive as the wave ends; its **streak** counts the waves it cleared in a row.
+
+| Field | Type | Default | What it is |
+|---|---|---|---|
+| `xpPerWave` | whole number, 0 or more | `100` | Experience for a wave cleared, times the multiplier of the streak |
+| `streakBonus` | whole number from 0 to 65535 | `25` | Percent added to the multiplier for each wave of the streak after the first: `25` gives x1, x1.25, x1.5... It counts for the Bydos shot down too |
+| `streakCap` | whole number from 100 to 65535 | `300` | Highest multiplier, in percent |
 
 ## Computing values
 

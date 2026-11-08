@@ -496,9 +496,13 @@ Received:     2   0   3   1
 Delivered:    –   0   –   1 2 3
 ```
 
-**Round-trip time.** When a packet is acknowledged, the time since it was sent is a sample of the RTT, smoothed
-as `0.9 × rtt + 0.1 × sample`. It sets the resend delay, and it is the ping shown to the player. Until the first
-sample, it is assumed to be 100 ms.
+**Round-trip time.** Each body says how long its `Ack` waited before being acknowledged (`Ack delay`, in tenths
+of a millisecond): a game acknowledges an `INPUT` only with its next datagram, a snapshot up to 2 ticks later.
+When the packet `Ack` is acknowledged for the first time, the time since it was sent, minus that delay, is a
+sample of the RTT, smoothed as `0.9 × rtt + 0.1 × sample`; the packets acknowledged by the bits only give none.
+It sets the resend delay, and it is the ping shown to the player. Until the first sample, it is assumed to be
+100 ms. The client receives its datagrams once per frame, when the game loop polls the network: up to a frame
+is still in its samples.
 
 **Failing.** If the peer stops acknowledging, the reliable messages pile up: at 256 waiting, the channel
 **fails** and the session must close. Likewise once every packet number was used.

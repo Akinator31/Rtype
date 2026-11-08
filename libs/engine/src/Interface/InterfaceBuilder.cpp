@@ -68,12 +68,12 @@ ecs::entity_t InterfaceBuilder::boundTitle(std::function<std::string()> get, Anc
 }
 
 ecs::entity_t InterfaceBuilder::slider(const std::string &caption, std::function<float()> get,
-                                       std::function<void(float)> set, float step, Anchor anchor)
+                                       std::function<void(float)> set, float step, Anchor anchor, float width)
 {
     const ecs::entity_t entity = element(anchor);
     _ecs.addComponent<Text>(entity, caption, _style.slider.font, _style.slider.captionSize, _style.text);
     _ecs.addComponent<Slider>(entity, Slider{caption, std::move(get), std::move(set), step});
-    _ecs.addComponent<SliderTrack>(entity);
+    _ecs.addComponent<SliderTrack>(entity, SliderTrack{.width = width});
     _ecs.addComponent<Focusable>(entity, _count++);
     return entity;
 }
@@ -201,6 +201,60 @@ ecs::entity_t InterfaceBuilder::avatar(Avatar avatar, Anchor anchor)
     const ecs::entity_t entity = element(anchor);
     _ecs.addComponent<Extent>(entity, avatar.size, avatar.size);
     _ecs.addComponent<Avatar>(entity, std::move(avatar));
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::settingRow(const std::string &caption, std::function<std::string()> value,
+                                           std::function<void(int)> change, Anchor anchor, float width)
+{
+    const SettingStyle &style = _style.setting;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, caption, style.captionFont, style.captionSize, style.caption,
+                            style.captionSpacing);
+    _ecs.addComponent<SettingRow>(
+        entity, SettingRow{std::move(value), std::move(change), width > 0.0f ? width : style.width});
+    _ecs.addComponent<Panel>(entity, style.height);
+    _ecs.addComponent<Focusable>(entity, _count++);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::linkRow(const std::string &caption, std::function<void()> onPress,
+                                        Anchor anchor, float width)
+{
+    const ecs::entity_t entity = settingRow(caption, {}, {}, anchor, width);
+    _ecs.addComponent<Button>(entity, std::move(onPress));
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::keyRow(const std::string &action, KeyRow row, std::function<void()> onPress,
+                                       Anchor anchor)
+{
+    const SettingStyle &style = _style.setting;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, action, style.captionFont, style.captionSize, style.caption,
+                            style.captionSpacing);
+    _ecs.addComponent<KeyRow>(entity, std::move(row));
+    _ecs.addComponent<Panel>(entity, _style.keys.rowHeight);
+    _ecs.addComponent<Focusable>(entity, _count++);
+    _ecs.addComponent<Button>(entity, std::move(onPress));
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::sectionLabel(const std::string &text, Anchor anchor, float width)
+{
+    const SettingStyle &style = _style.setting;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, text, style.captionFont, style.sectionSize, style.section,
+                            style.sectionSpacing);
+    _ecs.addComponent<SectionLabel>(entity, width);
+    return entity;
+}
+
+ecs::entity_t InterfaceBuilder::note(const std::string &text, Anchor anchor)
+{
+    const SettingStyle &style = _style.setting;
+    const ecs::entity_t entity = element(anchor);
+    _ecs.addComponent<Text>(entity, text, style.captionFont, style.noteSize, style.note, style.noteSpacing);
     return entity;
 }
 

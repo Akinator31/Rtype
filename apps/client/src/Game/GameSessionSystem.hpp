@@ -125,6 +125,8 @@ class GameSessionSystem : public ecs::System
     float _clock = 0.0f;
 
     void apply(const game::Snapshot &snapshot);
+    /// Moves the entities to where the session draws them between two ticks: positions only.
+    void place(const game::Snapshot &drawn);
     /// Online, an entity is still drawn for a while after the game tells its destruction: the entities killed
     /// are remembered until they go.
     void rememberKilled(const std::vector<game::DestroyedEntity> &destroyed);

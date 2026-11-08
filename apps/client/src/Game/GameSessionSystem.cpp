@@ -230,6 +230,9 @@ void GameSessionSystem::update(float elapsed)
     for (const game::Snapshot &snapshot : _session->takeSnapshots()) {
         apply(snapshot);
     }
+    if (const std::optional<game::Snapshot> drawn = _session->between()) {
+        place(*drawn);
+    }
     placeShipModels(elapsed);
     if (_session->isOver() && _onOver) {
         // Once: it usually switches scenes, at the next update
@@ -279,6 +282,15 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         removeEntity(entry->first, entry->second);
         entry = _entities.erase(entry);
+    }
+}
+
+void GameSessionSystem::place(const game::Snapshot &drawn)
+{
+    for (const game::EntityState &state : drawn.entities) {
+        if (const std::optional<ecs::entity_t> entity = entityOf(state.id)) {
+            moveEntity(*entity, state);
+        }
     }
 }
 

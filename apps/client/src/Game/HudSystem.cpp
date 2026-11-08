@@ -20,6 +20,8 @@ constexpr float LivesCentre = 146.7f;
 constexpr float PilotCentre = 114.0f;
 constexpr float ScoreCentre = 75.3f;
 constexpr float HealthCentre = 38.0f;
+/// Between the score and the experience.
+constexpr float XpGap = 21.3f;
 
 /// The line of the other player nearest to the ping, and the distance between two lines.
 constexpr float AllyCentre = 92.7f;
@@ -41,6 +43,17 @@ constexpr render::Color BarOff{58, 62, 67, 255};
 std::string formatScore(std::uint32_t score)
 {
     return std::format("{:07}", score);
+}
+
+std::string formatXp(const game::PlayerState &player)
+{
+    if (player.xp == 0 && player.streak < 2) {
+        return {};
+    }
+    if (player.streak < 2) {
+        return std::format("+{} XP", player.xp);
+    }
+    return std::format("+{} XP  x{}", player.xp, player.streak);
 }
 
 std::size_t countSignalBars(std::chrono::milliseconds ping)
@@ -106,6 +119,9 @@ void HudSystem::showPilot(const Hud &hud, std::uint8_t slot)
     engine::Text &score = _texts.get(hud.score);
     score.text = formatScore(player == players.end() ? 0 : player->score);
     placeAbove(hud.score, Margin, ScoreCentre, score.size);
+    engine::Text &xp = _texts.get(hud.xp);
+    xp.text = player == players.end() ? std::string() : formatXp(*player);
+    placeAbove(hud.xp, Margin + measureWidth(hud.score) + XpGap, ScoreCentre, xp.size);
 }
 
 void HudSystem::showHealth(const Hud &hud)

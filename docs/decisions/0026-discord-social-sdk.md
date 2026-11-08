@@ -65,8 +65,9 @@ to another connection is refused. Five codes refused by Discord need a new `DISC
   application set up as a confidential client with the redirect `http://127.0.0.1/callback`.
 - The master no longer needs to be reachable from the Internet for players to sign in with Discord. The panel
   still does, for its administrators, in step 12.
-- The client is built for Linux x86-64 and Windows x64 only, the platforms the SDK is kept for; CMake refuses
-  the others. The Linux library needs PulseAudio and ALSA at run time (`libpulse0`, `libasound2`), even though
+- The client is built for Linux x86-64 and Windows x64 only, the platforms the SDK is kept for. On the
+  others, CMake warns and leaves the client out, so that the server still builds there (its image for
+  linux/arm64). The Linux library needs PulseAudio and ALSA at run time (`libpulse0`, `libasound2`), even though
   the voice of the SDK is not used.
 - A new version of the SDK replaces the files of `libs/discord/sdk/` in one commit, with its version in
   `libs/discord/sdk/README.md`.

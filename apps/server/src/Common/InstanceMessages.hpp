@@ -18,7 +18,7 @@ namespace rtype::server
 {
 
 /// The version of this protocol, in INSTANCE_HELLO.
-inline constexpr std::uint16_t InstanceProtocolVersion = 4;
+inline constexpr std::uint16_t InstanceProtocolVersion = 5;
 /// Longest name of a game, in bytes of UTF-8.
 inline constexpr std::size_t MaxGameNameLength = 32;
 /// Longest name of a player, in bytes of UTF-8.
@@ -86,10 +86,15 @@ struct PlayerDisconnectedMessage {
     friend bool operator==(const PlayerDisconnectedMessage &, const PlayerDisconnectedMessage &) = default;
 };
 
-/// The score of a player at the end of a game.
+/// The score of a player at the end of a game, and what it earned (version 5).
 struct PlayerScore {
     std::uint32_t playerId = 0;
     std::uint32_t score = 0;
+    std::uint32_t kills = 0;
+    std::uint16_t wavesCleared = 0;
+    std::uint16_t bestStreak = 0;
+    /// The experience earned in the game.
+    std::uint32_t xp = 0;
 
     friend bool operator==(const PlayerScore &, const PlayerScore &) = default;
 };

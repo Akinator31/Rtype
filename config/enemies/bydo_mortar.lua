@@ -6,7 +6,7 @@ local Shots = 9
 
 return {
     id = "bydo_mortar",
-    ship = "bydo_wasp",
+    ship = "bydo_mortar",
     health = 70,
     speed = 260,
     acceleration = 520,

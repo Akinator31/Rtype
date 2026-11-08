@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <optional>
+#include <string>
 #include <vector>
 
 using rtype::engine::Control;
@@ -31,6 +32,44 @@ TEST_CASE("A binding tells its key, and only a key", "[settings][input]")
 {
     CHECK(Binding::key(Key::Space).asKey() == Key::Space);
     CHECK_FALSE(Binding::gamepadButton(rtype::input::GamepadButton::FaceDown).asKey());
+}
+
+TEST_CASE("A binding tells its gamepad button or axis, and only those", "[settings][input]")
+{
+    using rtype::input::AxisDirection;
+    using rtype::input::GamepadAxis;
+    using rtype::input::GamepadButton;
+    CHECK(Binding::gamepadButton(GamepadButton::LeftBumper).asGamepadButton() == GamepadButton::LeftBumper);
+    CHECK_FALSE(Binding::gamepadButton(GamepadButton::LeftBumper).asGamepadAxis());
+    CHECK(Binding::gamepadAxis(GamepadAxis::LeftY, AxisDirection::Negative).asGamepadAxis() ==
+          GamepadAxis::LeftY);
+    CHECK_FALSE(Binding::key(Key::Space).asGamepadButton());
+    CHECK_FALSE(Binding::key(Key::Space).asGamepadAxis());
+}
+
+TEST_CASE("The Controls page shows each gamepad input of an action once", "[settings]")
+{
+    const Controls controls;
+
+    // The D-pad, then both directions of the left stick under one name
+    CHECK(gamepadNamesOf(controls, Control::Up) == std::vector<std::string>{"pad.dpad_up", "pad.left_stick"});
+    CHECK(gamepadNamesOf(controls, Control::FaceDown) == std::vector<std::string>{"pad.a"});
+    CHECK(gamepadNamesOf(controls, Control::LeftShoulder) == std::vector<std::string>{"pad.lb"});
+}
+
+TEST_CASE("The action that already has a key is found before it is taken", "[settings]")
+{
+    Controls controls;
+
+    const GameAction *owner = findKeyOwner(controls, Control::FaceDown, Key::W);
+    REQUIRE(owner != nullptr);
+    CHECK(owner->control == Control::Up);
+    // The action itself, and a key no action has, have no other owner
+    CHECK(findKeyOwner(controls, Control::Up, Key::W) == nullptr);
+    CHECK(findKeyOwner(controls, Control::FaceDown, Key::I) == nullptr);
+
+    assignKey(controls, Control::FaceDown, Key::W);
+    CHECK(findKeyOwner(controls, Control::Up, Key::W)->control == Control::FaceDown);
 }
 
 TEST_CASE("A key chosen replaces the keys of the action, and its gamepad buttons stay", "[settings]")

@@ -41,11 +41,20 @@ public:
     /// none or several. Each one holds the whole world at its tick.
     [[nodiscard]] virtual std::vector<game::Snapshot> takeSnapshots() = 0;
 
+    /// Where to draw the entities at this frame, between the last tick and the next, after the snapshots:
+    /// positions only, no events. Nothing when the snapshots are already drawn at the frame rate (online, the
+    /// interpolation), or when nothing moves (paused).
+    [[nodiscard]] virtual std::optional<game::Snapshot> between() const { return std::nullopt; }
+
     /// Offline, stops the game while the pause menu is open; online, the game goes on without the player.
     virtual void setPaused(bool paused) = 0;
 
     /// The game is over: the scene can go back to the menu.
     [[nodiscard]] virtual bool isOver() const = 0;
+
+    /// Online, the waves follow each other without end and earn experience (game::Rules::endless): no final
+    /// boss, no victory.
+    [[nodiscard]] virtual bool isEndless() const { return false; }
 
     /// The round-trip time to the game, once measured; none offline, where there is no network.
     [[nodiscard]] virtual std::optional<std::chrono::milliseconds> ping() const = 0;

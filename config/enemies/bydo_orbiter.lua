@@ -17,7 +17,7 @@ end
 
 return {
     id = "bydo_orbiter",
-    ship = "bydo_scout",
+    ship = "bydo_orbiter",
     health = 90,
     speed = 460,
     acceleration = 1200,

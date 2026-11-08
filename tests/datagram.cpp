@@ -71,9 +71,9 @@ TEST_CASE("A datagram is the one the specification describes", "[network]")
     const DatagramKey key = testKey();
 
     CHECK(sealDatagram(key, {42, 1}, bytesOf("R-Type")) ==
-          fromHex("525401000000002a00000000000000012c4395abd9e20b0feba34c068442aad2ec8f6184bbf6"));
+          fromHex("525403000000002a00000000000000012c4395abd9e2643d9b275a7b8f89d4abd8c6fee80923"));
     CHECK(sealDatagram(key, {7, 0x0102030405060708}, {}) ==
-          fromHex("52540100000000070102030405060708a40db4a166b00da6a8525d78a81754f0"));
+          fromHex("52540300000000070102030405060708db5aaf918fd2429ac7fb0646cfc08985"));
 }
 
 TEST_CASE("A datagram opens with its key and gives back its body", "[network]")
@@ -183,7 +183,7 @@ TEST_CASE("A header is refused if a fixed field is wrong, or if its session or p
     // Magic, magic, version, reserved, last byte of the session, last byte of the packet number
     for (const std::size_t offset : {0, 1, 2, 3, 7, 15}) {
         std::vector<std::byte> changed = datagram;
-        changed[offset] = offset == 7 || offset == 15 ? std::byte{0} : std::byte{0x02};
+        changed[offset] = offset == 7 || offset == 15 ? std::byte{0} : std::byte{0x7F};
         CAPTURE(offset);
         CHECK_FALSE(parseDatagramHeader(changed));
     }

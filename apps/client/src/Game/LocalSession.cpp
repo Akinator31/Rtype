@@ -2,6 +2,7 @@
 
 #include "rtype/game/Component/Components.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/ShipMovement.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -40,6 +41,7 @@ void LocalSession::update(float elapsed)
         _simulation.setInput(localSlot(), _input);
         _simulation.step();
         _snapshots.push_back(_simulation.snapshot());
+        _last = _simulation.snapshot();
         _over = _over || _simulation.snapshot().gameOver.has_value();
         _pending -= Tick;
         ++steps;
@@ -61,6 +63,33 @@ std::optional<physics::Collider> LocalSession::findCollider(const game::EntitySt
         }
     }
     return std::nullopt;
+}
+
+std::optional<game::Snapshot> LocalSession::between() const
+{
+    if (_paused || !_last) {
+        return std::nullopt;
+    }
+    const auto fraction = static_cast<float>(std::clamp(_pending / Tick, 0.0, 1.0));
+    game::Snapshot drawn;
+    drawn.tick = _last->tick;
+    drawn.players = _last->players;
+    drawn.rescue = _last->rescue;
+    drawn.entities = _last->entities;
+    for (game::EntityState &entity : drawn.entities) {
+        if (entity.kind == game::EntityKind::PlayerShip && entity.owner == localSlot() &&
+            _last->rescue == game::RescueStage::None) {
+            // As the next step will move it, walls included. Not during the rescue, which flies it on its own
+            const game::Rules &rules = _simulation.rules();
+            const ecs::Position next = game::moveShip({entity.x, entity.y}, _input, rules);
+            entity.x += (next.x - entity.x) * fraction;
+            entity.y += (next.y - entity.y) * fraction;
+            continue;
+        }
+        entity.x += entity.velocityX * game::TickDuration * fraction;
+        entity.y += entity.velocityY * game::TickDuration * fraction;
+    }
+    return drawn;
 }
 
 std::vector<game::Snapshot> LocalSession::takeSnapshots()
