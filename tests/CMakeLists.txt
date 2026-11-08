@@ -17,6 +17,7 @@ add_executable(rtype_tests
     client_interpolation.cpp
     client_lore.cpp
     client_online.cpp
+    client_voice.cpp
     client_profiles.cpp
     client_shot_prediction.cpp
     client_prediction.cpp
@@ -93,6 +94,7 @@ add_executable(rtype_tests
     voice_codec.cpp
     voice_game.cpp
     voice_jitter.cpp
+    voice_talk.cpp
     helpers/FakeDiscord.cpp
 )
 # The fake Discord is a Crow server: Asio for Windows 10 and later, as libs/network, and on MSVC, Crow and Asio in

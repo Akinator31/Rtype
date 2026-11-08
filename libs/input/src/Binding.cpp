@@ -21,6 +21,22 @@ std::optional<Key> Binding::asKey() const
     return std::nullopt;
 }
 
+std::optional<GamepadButton> Binding::asGamepadButton() const
+{
+    if (const auto *input = std::get_if<ButtonInput>(&_input)) {
+        return input->button;
+    }
+    return std::nullopt;
+}
+
+std::optional<GamepadAxis> Binding::asGamepadAxis() const
+{
+    if (const auto *input = std::get_if<AxisInput>(&_input)) {
+        return input->axis;
+    }
+    return std::nullopt;
+}
+
 Binding Binding::gamepadButton(GamepadButton button, int gamepad)
 {
     return Binding(ButtonInput{button, gamepad});

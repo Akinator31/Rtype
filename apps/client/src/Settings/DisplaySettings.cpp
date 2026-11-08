@@ -90,11 +90,16 @@ void setResolution(render::Window &window, Resolution resolution)
 
 void moveToNextMonitor(render::Window &window)
 {
+    moveToMonitor(window, 1);
+}
+
+void moveToMonitor(render::Window &window, int direction)
+{
     const auto count = static_cast<int>(window.monitors().size());
     if (count < 2) {
         return;
     }
-    window.moveToMonitor((window.monitor() + 1) % count);
+    window.moveToMonitor((window.monitor() + (direction < 0 ? count - 1 : 1)) % count);
     if (!offers(window, currentResolution(window))) {
         window.setFullscreen(true);
     }

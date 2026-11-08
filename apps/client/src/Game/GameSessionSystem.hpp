@@ -213,6 +213,8 @@ public:
     [[nodiscard]] bool running() const { return _session != nullptr; }
     /// The session played, if any.
     [[nodiscard]] GameSession *session() const { return _session.get(); }
+    /// The scene the session is played in, if any.
+    [[nodiscard]] std::optional<engine::SceneId> scene() const { return _scene; }
     /// The players of the latest snapshot, by slot: for the HUD.
     [[nodiscard]] const std::vector<game::PlayerState> &players() const { return _players; }
     /// The tick of the latest snapshot.

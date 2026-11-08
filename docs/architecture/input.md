@@ -69,6 +69,9 @@ Binding::gamepadAxis(GamepadAxis::LeftY, AxisDirection::Negative)   // left stic
 Binding::mouseButton(MouseButton::Left)
 ```
 
+`asKey()`, `asGamepadButton()` and `asGamepadAxis()` tell what a binding reads, and give nothing for another
+kind of input: the Controls page shows the keys and the gamepad buttons of an action this way.
+
 An axis binding only uses **one half** of the axis: the left stick pushed up triggers `MoveUp`, pushed down
 triggers `MoveDown`. Each binding gives a **strength** between 0 and 1:
 
@@ -194,10 +197,29 @@ if (length > 1.0f) {
 
 The Controls page, opened from the Settings page, lets the player choose the keyboard key of each action of the
 game (`GameActions`, `apps/client/src/Settings/ControlSettings.hpp`): move up, down, left and right, fire, aim
-up and aim down. Pressing a row opens a scene that waits for a key (`KeyCaptureSystem`): the first key pressed,
-other than one already held when the scene opened, replaces the keys of the action (`assignKey()`), and leaves
-the other actions that had it, so that a key does one thing. ++escape++ cancels, and is never bound. The
-gamepads keep their buttons. A last row puts every key back to its default (`Controls::resetDefaults()`).
+up and aim down. It is a table ([Pages of settings](scenes-and-interface.md#pages-of-settings)): one row per
+action, in two groups (moving, firing), with its keys each in a frame like a key of a keyboard, and the buttons
+of the gamepad in pills (`gamepadNamesOf()`, from `Binding::asGamepadButton()` and `asGamepadAxis()`: the
+D-pad, both directions of a stick under one name).
+
+Pressing a row opens a scene over the page, which stays visible (`KeyCaptureSystem`): the row shows an empty
+key in dashes, the other rows dim, and a banner under the table asks for the key. The first key pressed, other
+than one already held when the scene opened:
+
+- **is bound at once** if no other action has it: it replaces the keys of the action (`assignKey()`);
+- **is asked about** if another action has it (`findKeyOwner()`): the key turns red on that action, and the
+  banner says which one. ++enter++ gives it to the chosen action, which takes it from the other one, so that a
+  key does one thing; another key is tried instead; ++escape++ keeps the keys as they were. ++enter++ can
+  therefore not be chosen while the banner asks.
+
+++escape++ cancels, and is never bound. The gamepads keep their buttons. A button under the table puts every
+key back to its default (`Controls::resetDefaults()`), those of the voice included.
+
+The keys of the voice (push to talk, mute, deafen) are chosen the same way on the Voice page
+([Voice](voice.md#the-keys)): they are actions too (`VoiceActions`), on controls the game does not read, and
+`assignKey()` and `findKeyOwner()` go through every action (`BoundActions`), so that a key does one thing among
+those of the game and those of the voice. Both pages share their rows and the scene that asks for the key
+(`Controls/KeyChoice.hpp`).
 
 A key is shown as it is printed on the keyboard of the player (`input::keyLabel()`, from GLFW): `Key::W` shows
 "Z" on AZERTY. A key that prints no character is shown by its translated name, `key.<name>` in the

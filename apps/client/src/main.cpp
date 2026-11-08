@@ -16,6 +16,7 @@
 #include "Online/OnlineScenes.hpp"
 #include "Quests/Quests.hpp"
 #include "ShipSelector/ShipSelection.hpp"
+#include "Voice/VoiceKeysSystem.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/audio/VoiceStreams.hpp"
@@ -72,8 +73,8 @@ void run()
     rtype::engine::Engine engine;
     rtype::client::readSettings(engine.getSettings());
     const rtype::audio::AudioDevice audioDevice;
-    // The voice of the games online: the microphone, opened only while it is on in a game, and the voices of
-    // the others
+    // The voice of the games online: the microphone, opened only while the player can talk in a game or tries
+    // it on the Voice page, and the voices of the others
     rtype::voice::Microphone microphone;
     rtype::audio::VoiceStreams voiceStreams(audioDevice);
     rtype::client::VoiceDevices voice{.capture = microphone, .playback = voiceStreams};
@@ -97,7 +98,9 @@ void run()
         .flare = {.font = resources.loadFont(RTYPE_FONT_FLARE, 96)},
         .toast = {.nameFont = display, .messageFont = messageFont},
         .title = {.font = display},
-        .slider = {.font = display},
+        .setting = {.captionFont = messageFont, .valueFont = display},
+        .slider = {.font = messageFont, .valueFont = display},
+        .keys = {.font = display},
         .toggle = {.font = display},
         .gauge = {.font = display},
         .field = {.captionFont = messageFont, .valueFont = display},
@@ -109,7 +112,8 @@ void run()
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
-    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer, window};
+    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer,
+                                                         window,       voice, microphone};
     // The choices of the player at the last run
     rtype::client::applySavedSettings(engine, settingsTargets);
 
@@ -186,8 +190,9 @@ void run()
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord, ships,
                                        rtype::render::userDataDirectory() / "pictures", config, voice);
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
-    rtype::client::registerClientCommands(console, engine, window, games, config, debugViews, voice);
+    rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     rtype::client::registerQuests(engine, translations);
+    engine.getEcs().registerSystem<rtype::client::VoiceKeysSystem>(engine, sessions, voice, translations);
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
         playFrame();

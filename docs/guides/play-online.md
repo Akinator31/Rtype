@@ -49,11 +49,12 @@ Run a server and play the same game from several machines, or from several clien
    second client, on this machine or another, joins the same game: each player has a ship of its colour.
    Escape opens the pause menu, where **Leave the game** goes back to the list.
 
-7. **Talk.** In a game, the players hear each other through the game. The microphone is off at each start:
-   open the console and type `voice on` to turn it on, `voice off` to turn it off. While it is on, the others
-   hear everything it picks up, silence aside: a headset keeps the sound of the game out of it. Without a
-   microphone you only listen; without an audio output, you have no voice. The talk modes (push-to-talk) and
-   their settings come later ([Voice](../architecture/voice.md)).
+7. **Talk.** In a game, the players hear each other through the game. Hold ++v++ (LT on a gamepad) to talk:
+   the others hear you while it is held. ++m++ (Y) mutes and unmutes you, ++n++ (View) cuts the voices of the
+   others, and your microphone with them. **Settings → Voice chat** chooses the mode (push-to-talk, voice
+   activity, off), the threshold of the voice activity over the level of your microphone, the microphone, the
+   volumes and these keys. A headset keeps the sound of the game out of the microphone. Without a microphone
+   you only listen; without an audio output, you have no voice ([Voice](../architecture/voice.md)).
 
 ## Result
 

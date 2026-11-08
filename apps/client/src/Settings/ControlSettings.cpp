@@ -1,13 +1,75 @@
 #include "Settings/ControlSettings.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace rtype::client
 {
 
 namespace
 {
+
+/// The key in the translations of the name of a gamepad button, or nothing for a button the Controls page
+/// does not show.
+std::string_view gamepadButtonName(input::GamepadButton button)
+{
+    switch (button) {
+    case input::GamepadButton::FaceDown:
+        return "pad.a";
+    case input::GamepadButton::FaceRight:
+        return "pad.b";
+    case input::GamepadButton::FaceLeft:
+        return "pad.x";
+    case input::GamepadButton::FaceUp:
+        return "pad.y";
+    case input::GamepadButton::DPadUp:
+        return "pad.dpad_up";
+    case input::GamepadButton::DPadDown:
+        return "pad.dpad_down";
+    case input::GamepadButton::DPadLeft:
+        return "pad.dpad_left";
+    case input::GamepadButton::DPadRight:
+        return "pad.dpad_right";
+    case input::GamepadButton::LeftBumper:
+        return "pad.lb";
+    case input::GamepadButton::RightBumper:
+        return "pad.rb";
+    case input::GamepadButton::LeftTrigger:
+        return "pad.lt";
+    case input::GamepadButton::RightTrigger:
+        return "pad.rt";
+    case input::GamepadButton::Select:
+        return "pad.view";
+    default:
+        return {};
+    }
+}
+
+/// The key in the translations of the name of a gamepad axis: both directions of a stick have the same.
+std::string_view gamepadAxisName(input::GamepadAxis axis)
+{
+    switch (axis) {
+    case input::GamepadAxis::LeftX:
+    case input::GamepadAxis::LeftY:
+        return "pad.left_stick";
+    case input::GamepadAxis::RightX:
+    case input::GamepadAxis::RightY:
+        return "pad.right_stick";
+    case input::GamepadAxis::LeftTrigger:
+        return "pad.lt";
+    case input::GamepadAxis::RightTrigger:
+        return "pad.rt";
+    }
+    return {};
+}
+
+bool hasKey(const engine::Controls &controls, engine::Control control, input::Key key)
+{
+    const std::vector<input::Key> keys = keysOf(controls, control);
+    return std::ranges::find(keys, key) != keys.end();
+}
 
 std::string settingsKey(const GameAction &action)
 {
@@ -67,15 +129,42 @@ std::vector<input::Key> keysOf(const engine::Controls &controls, engine::Control
 
 void assignKey(engine::Controls &controls, engine::Control control, input::Key key)
 {
-    for (const GameAction &action : GameActions) {
+    for (const GameAction &action : BoundActions) {
         controls.unbind(action.control, input::Binding::key(key));
     }
     replaceKeys(controls, control, {key});
 }
 
+const GameAction *findKeyOwner(const engine::Controls &controls, engine::Control control, input::Key key)
+{
+    for (const GameAction &action : BoundActions) {
+        if (action.control != control && hasKey(controls, action.control, key)) {
+            return &action;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<std::string> gamepadNamesOf(const engine::Controls &controls, engine::Control control)
+{
+    std::vector<std::string> names;
+    for (const input::Binding &binding : controls.getBindings(control)) {
+        std::string_view name;
+        if (const std::optional<input::GamepadButton> button = binding.asGamepadButton()) {
+            name = gamepadButtonName(*button);
+        } else if (const std::optional<input::GamepadAxis> axis = binding.asGamepadAxis()) {
+            name = gamepadAxisName(*axis);
+        }
+        if (!name.empty() && std::ranges::find(names, name) == names.end()) {
+            names.emplace_back(name);
+        }
+    }
+    return names;
+}
+
 void applyControlSettings(const engine::Settings &settings, engine::Controls &controls)
 {
-    for (const GameAction &action : GameActions) {
+    for (const GameAction &action : BoundActions) {
         const std::optional<std::string> kept = settings.getString(settingsKey(action));
         if (const auto keys = kept ? splitKeys(*kept) : std::nullopt) {
             replaceKeys(controls, action.control, *keys);
@@ -85,7 +174,7 @@ void applyControlSettings(const engine::Settings &settings, engine::Controls &co
 
 void keepControlSettings(engine::Settings &settings, const engine::Controls &controls)
 {
-    for (const GameAction &action : GameActions) {
+    for (const GameAction &action : BoundActions) {
         settings.setString(settingsKey(action), joinKeys(keysOf(controls, action.control)));
     }
 }

@@ -557,11 +557,12 @@ TEST_CASE("The microphone of a client online is heard from the stream of its slo
                bobSession.voice()->participants().size() == 1;
     }));
     CHECK(bobPlayback.streams[0]);
-    // The microphone is off by default: closed
-    CHECK_FALSE(aliceMicrophone.isOpen);
+    // In push-to-talk by default: the microphone is open, and nothing is sent until the key is held
+    CHECK(aliceMicrophone.isOpen);
+    CHECK(aliceSession.voice()->sentFrames() == 0);
 
-    // Alice turns it on and talks: a frame of her voice every 20 ms
-    aliceVoice.microphoneOn = true;
+    // Alice holds the key and talks: a frame of her voice every 20 ms
+    aliceVoice.pushToTalk = true;
     double phase = 0.0;
     auto nextFrame = std::chrono::steady_clock::now();
     REQUIRE(play(master.loop, both, [&] {
@@ -588,8 +589,9 @@ TEST_CASE("The microphone of a client online is heard from the stream of its slo
     CHECK(alicePlayback.played[0].empty());
     CHECK(alicePlayback.played[1].empty());
 
-    // She turns it off: closed
-    aliceVoice.microphoneOn = false;
+    // She mutes herself with its key: closed
+    aliceVoice.pushToTalk = false;
+    aliceVoice.muted = true;
     REQUIRE(play(master.loop, both, [&] { return !aliceMicrophone.isOpen; }));
 }
 

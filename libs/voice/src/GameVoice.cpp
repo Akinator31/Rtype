@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <limits>
 
 namespace rtype::voice
 {
@@ -145,6 +147,47 @@ void GameVoice::setParticipantMute(Slot slot, bool muted)
     }
 }
 
+void GameVoice::setVoiceActivity(std::optional<float> threshold)
+{
+    if (threshold != _threshold) {
+        _threshold = threshold;
+        _activity.reset();
+    }
+}
+
+void GameVoice::setInputVolume(float volume)
+{
+    _inputVolume = std::clamp(volume, 0.0f, MaxVolume);
+}
+
+void GameVoice::setOutputVolume(float volume)
+{
+    _outputVolume = std::clamp(volume, 0.0f, MaxVolume);
+    for (const std::optional<Remote> &other : _remotes) {
+        if (other) {
+            applyVolume(*other);
+        }
+    }
+}
+
+void GameVoice::setDeafened(bool deafened)
+{
+    if (deafened == _deafened) {
+        return;
+    }
+    _deafened = deafened;
+    for (std::optional<Remote> &other : _remotes) {
+        if (other) {
+            if (deafened) {
+                other->jitter.reset();
+                other->player.speaking = false;
+                other->heard.reset();
+            }
+            applyVolume(*other);
+        }
+    }
+}
+
 void GameVoice::setParticipantPosition(Slot /*slot*/, Position /*position*/)
 {
     // Heard from where the ship is with the spatial voice, to come
@@ -164,7 +207,9 @@ std::vector<Participant> GameVoice::participants() const
 void GameVoice::applyVolume(const Remote &remote)
 {
     if (_joined) {
-        _playback.setVolume(remote.player.slot, remote.player.mutedByMe ? 0.0f : remote.player.volume);
+        const bool silent = remote.player.mutedByMe || _deafened;
+        _playback.setVolume(remote.player.slot,
+                            silent ? 0.0f : std::min(remote.player.volume * _outputVolume, MaxVolume));
     }
 }
 
@@ -181,6 +226,9 @@ void GameVoice::updateCapture()
         _captureOpen = false;
         _captured.clear();
         _spurt = false;
+        _activity.reset();
+        _inputLevel = SilenceFloor;
+        _silence = 0;
     }
 }
 
@@ -224,9 +272,29 @@ void GameVoice::capture()
     _captured.erase(_captured.begin(), _captured.begin() + static_cast<std::ptrdiff_t>(used));
 }
 
-void GameVoice::sendFrame(ConstPcm samples)
+void GameVoice::sendFrame(ConstPcm captured)
 {
-    const bool talking = _talking && !_selfMuted;
+    std::array<std::int16_t, FrameSamples> samples{};
+    constexpr float lowest = std::numeric_limits<std::int16_t>::min();
+    constexpr float highest = std::numeric_limits<std::int16_t>::max();
+    for (std::size_t index = 0; index < FrameSamples; ++index) {
+        const float sample = std::round(static_cast<float>(captured[index]) * _inputVolume);
+        samples[index] = static_cast<std::int16_t>(std::clamp(sample, lowest, highest));
+    }
+    _inputLevel = levelOf(samples);
+
+    const bool allowed = _talking && !_selfMuted;
+    if (_inputLevel >= SilenceLevel) {
+        _silence = 0;
+    } else if (allowed) {
+        ++_silence;
+    }
+    bool talking = allowed;
+    if (!allowed) {
+        _activity.reset();
+    } else if (_threshold) {
+        talking = _activity.update(_inputLevel, *_threshold);
+    }
     if (!talking && !_spurt) {
         return;
     }
@@ -253,7 +321,7 @@ void GameVoice::receive(Clock::time_point now)
 {
     for (VoiceTransport::Incoming &frame : _transport.receive()) {
         Remote *other = remote(frame.slot);
-        if (other == nullptr || other->player.mutedByMe ||
+        if (other == nullptr || other->player.mutedByMe || _deafened ||
             !carriedByGame(other->player.backend, Backend::Game)) {
             continue;
         }

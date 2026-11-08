@@ -1,14 +1,16 @@
 #include "MainMenu/ControlsMenu.hpp"
 
-#include "Controls/KeyCaptureSystem.hpp"
-#include "MainMenu/Column.hpp"
+#include "Controls/KeyChoice.hpp"
+#include "MainMenu/Layout.hpp"
+#include "MainMenu/SettingsPage.hpp"
 #include "Settings/ControlSettings.hpp"
 #include "Settings/PlayerSettings.hpp"
-#include "rtype/input/Devices.hpp"
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace rtype::client
@@ -17,93 +19,90 @@ namespace rtype::client
 namespace
 {
 
-/// The texts of the scene that asks for a key, above and under the middle of the screen.
-constexpr float captureTextOffset = 50.0f;
+/// The table of the controls, from the left margin: its width, and where its columns of keys and of gamepad
+/// buttons start.
+constexpr float tableWidth = 1752.0f;
+constexpr float keysColumn = 688.0f;
+constexpr float buttonsColumn = 1248.0f;
+/// The heads of the columns, the rule under them, and the top of the first group.
+constexpr float headsTop = 192.0f;
+constexpr float headsRuleTop = 230.0f;
+constexpr float headsRuleThickness = 2.0f;
+constexpr render::Color headsRule{255, 255, 255, 36};
+constexpr float groupsTop = 256.0f;
+/// Space between the groups of the table, smaller than on the Settings page: the rows are lower.
+constexpr float groupGap = 16.0f;
+/// The first action of the group of the fire: the first ones move the ship.
+constexpr std::size_t fireGroupStart = 4;
+/// Space between the table and the button of the default keys, where the banner of a choice of key is too.
+constexpr float bottomGap = 32.0f;
+/// The table of the page.
+constexpr KeyTable table{
+    .left = screenMargin, .width = tableWidth, .keysColumn = keysColumn, .buttonsColumn = buttonsColumn};
 
-/// The action whose key is being chosen, shared by the Controls page and the scene that asks for the key.
-using ChosenAction = std::shared_ptr<const GameAction *>;
-
-std::string actionKey(const GameAction &action)
+/// The heads of the columns of the table, and the rule under them.
+void addHeads(engine::InterfaceBuilder &interface, ecs::Ecs &ecs, const engine::InterfaceStyle &style,
+              const localization::Localization &translations)
 {
-    return std::string(ControlsSettingsPrefix).append(action.name);
-}
-
-/// The name of a key for the player: the character printed on it on their layout ("Z" for Key::W on AZERTY),
-/// or its translated name for a key without one ("Espace").
-std::string keyText(const localization::Localization &translations, input::Key key)
-{
-    if (std::string label = input::keyLabel(key); !label.empty()) {
-        return label;
-    }
-    const std::string name(input::keyName(key));
-    const std::string translationKey = "key." + name;
-    const std::string translated = translations.text(translationKey);
-    return translated != translationKey ? translated : name;
-}
-
-/// "Up / Z", the keys of an action, or "None".
-std::string keysText(const localization::Localization &translations, const std::vector<input::Key> &keys)
-{
-    if (keys.empty()) {
-        return translations.text("controls.none");
-    }
-    std::string text;
-    for (const input::Key key : keys) {
-        text.append(text.empty() ? "" : " / ").append(keyText(translations, key));
-    }
-    return text;
-}
-
-/// "Fire: Space": opens the scene that asks for a new key for the action.
-void addActionButton(engine::InterfaceBuilder &interface, engine::Engine &engine,
-                     const localization::Localization &translations, const GameAction &action, int row,
-                     const ChosenAction &chosen)
-{
-    const engine::Controls &controls = engine.getControls();
-    const auto label = [&translations, &controls, &action] {
-        return choiceLabel(translations, actionKey(action),
-                           keysText(translations, keysOf(controls, action.control)));
+    const std::vector<std::pair<std::string, float>> heads{
+        {"controls.column.action", screenMargin + style.setting.inset},
+        {"controls.column.keyboard", screenMargin + keysColumn},
+        {"controls.column.gamepad", screenMargin + buttonsColumn},
     };
-    const auto choose = [&engine, &action, chosen] {
-        *chosen = &action;
-        engine.pushScene(KeyCaptureScene);
-    };
-    boundButton(interface, engine.getEcs(), label, choose, rowTop(row));
+    for (const auto &[key, left] : heads) {
+        const ecs::entity_t head =
+            interface.sectionLabel(translations.text(key), {engine::AnchorPoint::TopLeft, left, headsTop});
+        settings_page::bindText(ecs, head, translations, key);
+    }
+    interface.box(tableWidth, headsRuleThickness, headsRule,
+                  {engine::AnchorPoint::TopLeft, screenMargin, headsRuleTop});
+}
+
+/// The name of a group of the table, without rule.
+/// @return The top of its first row.
+float addGroupName(engine::InterfaceBuilder &interface, ecs::Ecs &ecs, const engine::InterfaceStyle &style,
+                   const localization::Localization &translations, const std::string &key, float top)
+{
+    const ecs::entity_t name = interface.sectionLabel(
+        translations.text(key), {engine::AnchorPoint::TopLeft, screenMargin + style.setting.inset, top});
+    settings_page::bindText(ecs, name, translations, key);
+    return top + settings_page::labelHeight;
+}
+
+/// The top of the button of the default keys, under the table: the banner of a choice of key takes its place.
+float bottomTop(const engine::InterfaceStyle &style)
+{
+    const float rows = static_cast<float>(GameActions.size()) * style.keys.rowHeight;
+    return groupsTop + (2.0f * settings_page::labelHeight) + groupGap + rows + bottomGap;
 }
 
 void buildControlsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
-                       const localization::Localization &translations, const ChosenAction &chosen,
+                       const localization::Localization &translations, const SharedKeyChoice &choice,
                        const std::function<void()> &close)
 {
     ecs::Ecs &ecs = engine.getEcs();
     engine::InterfaceBuilder interface(ecs, scene, style);
+    settings_page::addVeil(interface, ecs);
     interface.boundHeader([&translations] { return translations.text("settings.controls"); }, close,
                           {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
-    int row = 0;
-    for (const GameAction &action : GameActions) {
-        addActionButton(interface, engine, translations, action, row++, chosen);
-    }
-    boundButton(
-        interface, ecs, [&translations] { return translations.text("controls.reset"); },
-        [&engine] { engine.getControls().resetDefaults(); }, rowTop(row));
-}
+    addHeads(interface, ecs, style, translations);
 
-/// "Press a key for: Fire", and how to cancel. The first key pressed goes to the action, and the scene
-/// closes.
-void buildKeyCapture(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
-                     const localization::Localization &translations, const GameAction &action)
-{
-    engine::InterfaceBuilder interface(engine.getEcs(), scene, style);
-    const ecs::entity_t question =
-        interface.title(translations.text("controls.press") + " " + translations.text(actionKey(action)),
-                        {engine::AnchorPoint::Center, 0.0f, -captureTextOffset});
-    interface.text(translations.text("controls.cancel"),
-                   {engine::AnchorPoint::Center, 0.0f, captureTextOffset});
-    engine.getEcs().addComponent<KeyCapture>(question,
-                                             KeyCapture{.onKey = [&engine, &action](input::Key key) {
-                                                 assignKey(engine.getControls(), action.control, key);
-                                                 engine.popScene();
-                                             }});
+    float top = addGroupName(interface, ecs, style, translations, "controls.group.movement", groupsTop);
+    for (std::size_t index = 0; index < GameActions.size(); ++index) {
+        if (index == fireGroupStart) {
+            top = addGroupName(interface, ecs, style, translations, "controls.group.fire", top + groupGap);
+        }
+        addActionRow(interface, engine, translations, GameActions[index], choice, table, KeyCaptureScene,
+                     top);
+        top += style.keys.rowHeight;
+    }
+
+    const ecs::entity_t reset = interface.button(
+        translations.text("controls.reset"), [&engine] { engine.getControls().resetDefaults(); },
+        {engine::AnchorPoint::TopLeft, screenMargin, bottomTop(style)});
+    choice->hidden = reset;
+    settings_page::bindText(ecs, reset, translations, "controls.reset");
+    settings_page::addKeys(interface, ecs, translations, "controls.keys");
 }
 
 } // namespace
@@ -111,7 +110,7 @@ void buildKeyCapture(engine::Engine &engine, engine::SceneId scene, const engine
 void createControlsScenes(engine::Engine &engine, const engine::InterfaceStyle &style,
                           localization::Localization &translations)
 {
-    const auto chosen = std::make_shared<const GameAction *>(&GameActions.front());
+    const auto choice = std::make_shared<KeyChoice>();
     // Written when the page closes, not at each key
     const auto close = [&engine] {
         keepControlSettings(engine.getSettings(), engine.getControls());
@@ -119,13 +118,12 @@ void createControlsScenes(engine::Engine &engine, const engine::InterfaceStyle &
         engine.popScene();
     };
     engine.createScene(ControlsMenuScene, {.overlay = true, .hidesInterfaceBelow = true, .onBack = close},
-                       [&style, &translations, chosen, close](engine::Engine &target, engine::SceneId scene) {
-                           buildControlsPage(target, scene, style, translations, chosen, close);
+                       [&style, &translations, choice, close](engine::Engine &target, engine::SceneId scene) {
+                           buildControlsPage(target, scene, style, translations, choice, close);
                        });
-    engine.createScene(KeyCaptureScene, {.overlay = true, .hidesInterfaceBelow = true},
-                       [&style, &translations, chosen](engine::Engine &target, engine::SceneId scene) {
-                           buildKeyCapture(target, scene, style, translations, **chosen);
-                       });
+    // The banner takes the place of the button of the default keys
+    createKeyChoiceScene(engine, KeyCaptureScene, style, translations, choice, screenMargin,
+                         bottomTop(style));
 }
 
 } // namespace rtype::client

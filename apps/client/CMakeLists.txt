@@ -21,11 +21,11 @@ add_library(r-type_client_core STATIC
     src/Commands/SceneCommand.cpp
     src/Commands/Switch.cpp
     src/Commands/ToastCommand.cpp
-    src/Commands/VoiceCommand.cpp
     src/Console/Console.cpp
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
     src/Controls/KeyCaptureSystem.cpp
+    src/Controls/KeyChoice.cpp
     src/Game/BossLooks.cpp
     src/Game/DamageLooks.cpp
     src/Game/DamageNumberSystem.cpp
@@ -74,6 +74,7 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
     src/MainMenu/UiShowcase.cpp
+    src/MainMenu/VoiceMenu.cpp
     src/Online/AccountScenes.cpp
     src/Online/FormErrors.cpp
     src/Online/KnownProfiles.cpp
@@ -85,6 +86,7 @@ add_library(r-type_client_core STATIC
     src/Settings/ControlSettings.cpp
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
+    src/Settings/VoiceSettings.cpp
     src/Quests/EventQuest.cpp
     src/Quests/Quests.cpp
     src/Quests/StatQuest.cpp
@@ -93,6 +95,7 @@ add_library(r-type_client_core STATIC
     src/ShipSelector/ShipSelection.cpp
     src/ShipSelector/ShipSelector.cpp
     src/ShipSelector/ShipSelectorSystem.cpp
+    src/Voice/VoiceKeysSystem.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core

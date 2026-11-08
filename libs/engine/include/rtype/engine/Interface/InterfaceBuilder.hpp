@@ -73,13 +73,14 @@ public:
     /// lit look and glows while it has the focus. For an arrow of a carousel.
     ecs::entity_t arrowButton(const std::string &text, std::function<void()> onPress, Anchor anchor);
     /// A value between 0 and 1 the player sets by dragging the handle of a rail, or with Left and Right, the
-    /// mouse wheel and the keys (InterfaceStyle::slider): its caption above the rail, its value as a
-    /// percentage on the right. It gets the focus in the same order as the buttons. The anchor places the
-    /// centre of the rail.
+    /// mouse wheel and the keys (InterfaceStyle::slider): a row of a page of settings, its caption on the
+    /// left, its value as a percentage on the column of the values, and the rail under them. It gets the
+    /// focus in the same order as the buttons. The anchor places the row.
     /// @param get, set Read and write the setting, so that the slider always shows the real value.
     /// @param step How much a key or a notch of the wheel changes the value.
+    /// @param width Width of the row, or 0 for the width of the style.
     ecs::entity_t slider(const std::string &caption, std::function<float()> get,
-                         std::function<void(float)> set, float step, Anchor anchor);
+                         std::function<void(float)> set, float step, Anchor anchor, float width = 0.0f);
     /// An on / off setting drawn as a switch (InterfaceStyle::toggle): its caption, then "OFF", a link with a
     /// dot that slides to the side that is on, and "ON". A click, Confirm, Left and Right set it, as for
     /// every Toggle. It gets the focus in the same order as the buttons. The anchor places the centre of its
@@ -118,6 +119,25 @@ public:
     /// The round picture of a player, or their initial, in a ring (InterfaceStyle::avatar). It does not get
     /// the focus.
     ecs::entity_t avatar(Avatar avatar, Anchor anchor);
+    /// A row of a page of settings that goes through values (InterfaceStyle::setting): its caption on the
+    /// left, its value on the right. Left, Right, the mouse wheel, Confirm and a click call `change` with -1
+    /// or +1. It gets the focus in the same order as the buttons.
+    /// @param value Read every frame, so that the row always shows the real setting.
+    /// @param width Width of the row, or 0 for the width of the style.
+    ecs::entity_t settingRow(const std::string &caption, std::function<std::string()> value,
+                             std::function<void(int)> change, Anchor anchor, float width = 0.0f);
+    /// A row of a page of settings that opens something, another page for instance: its caption, and a
+    /// chevron on its right. It is pressed as a button.
+    ecs::entity_t linkRow(const std::string &caption, std::function<void()> onPress, Anchor anchor,
+                          float width = 0.0f);
+    /// A row of the table of the controls (InterfaceStyle::keys): the action, its keys and its gamepad
+    /// buttons, as the KeyRow says. It is pressed as a button: to choose a new key, for instance.
+    ecs::entity_t keyRow(const std::string &action, KeyRow row, std::function<void()> onPress, Anchor anchor);
+    /// The name of a group of rows, followed by a rule to `width` from its left; without width, the name
+    /// alone, the head of a column of a table. It does not get the focus.
+    ecs::entity_t sectionLabel(const std::string &text, Anchor anchor, float width = 0.0f);
+    /// A small text in grey (SettingStyle::note): a hint, or the keys of a page.
+    ecs::entity_t note(const std::string &text, Anchor anchor);
     /// A button with a leftwards arrow, to go back to the previous screen. It gets the focus in the same
     /// order as the other buttons.
     ecs::entity_t backButton(std::function<void()> onPress, Anchor anchor);

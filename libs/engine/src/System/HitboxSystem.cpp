@@ -7,7 +7,8 @@ HitboxSystem::HitboxSystem(ecs::ComponentCaches &caches, const Metrics &metrics,
     : _metrics(metrics), _style(style), _focusables(use<Focusable>(caches)), _items(use<ColumnItem>(caches)),
       _texts(use<Text>(caches)), _panels(use<Panel>(caches)), _tracks(use<SliderTrack>(caches)),
       _switches(use<SwitchTrack>(caches)), _scales(use<Scale>(caches)), _hitboxes(use<Hitbox>(caches)),
-      _fields(use<TextField>(caches)), _rows(use<ListRow>(caches))
+      _fields(use<TextField>(caches)), _rows(use<ListRow>(caches)), _settingRows(use<SettingRow>(caches)),
+      _keyRows(use<KeyRow>(caches))
 {
 }
 
@@ -30,6 +31,12 @@ render::Vector2 HitboxSystem::measure(ecs::entity_t entity) const
     if (_rows.has(entity)) {
         return {_rows.get(entity).width, _style.list.height};
     }
+    if (_settingRows.has(entity)) {
+        return {_settingRows.get(entity).width, _style.setting.height};
+    }
+    if (_keyRows.has(entity)) {
+        return {_keyRows.get(entity).width, _style.keys.rowHeight};
+    }
     if (_fields.has(entity) && _fields.get(entity).type == TextFieldType::Line) {
         return {_style.field.width, _style.field.getHeight()};
     }
@@ -43,7 +50,7 @@ render::Vector2 HitboxSystem::measure(ecs::entity_t entity) const
         return {style.computeWidth(width), style.height};
     }
     if (_tracks.has(entity)) {
-        return {_style.slider.getAreaWidth(), _style.slider.getHeight()};
+        return {_style.slider.getAreaWidth(_tracks.get(entity).width), _style.slider.getHeight()};
     }
     if (_switches.has(entity)) {
         return {_style.toggle.width, _style.toggle.height};

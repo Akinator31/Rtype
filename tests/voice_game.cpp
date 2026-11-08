@@ -265,3 +265,142 @@ TEST_CASE("Without a microphone the player listens, and leaving closes every dev
     CHECK_FALSE(playback.streams[2]);
     CHECK(voice.participants().empty());
 }
+
+TEST_CASE("With the voice activity, only the frames of the voice go, and those just after", "[voice]")
+{
+    Player alice(0, 1);
+    alice.talk();
+    alice.voice.setVoiceActivity(-40.0f);
+    Voice voice;
+    // The breath of the room, under the threshold
+    const auto quiet = [&voice] {
+        Frame frame = voice.next();
+        for (std::int16_t &sample : frame) {
+            sample = static_cast<std::int16_t>(sample / 100);
+        }
+        return frame;
+    };
+    for (int i = 0; i < 20; ++i) {
+        alice.microphone.say(quiet());
+        alice.voice.poll(Start);
+    }
+    CHECK(alice.transport.sent.empty());
+    CHECK(alice.voice.inputLevel() < -40.0f);
+
+    for (int i = 0; i < 5; ++i) {
+        alice.microphone.say(voice.next());
+        alice.voice.poll(Start);
+    }
+    CHECK(alice.transport.sent.size() == 5);
+    CHECK(alice.voice.inputLevel() > -40.0f);
+
+    // The voice stops: the hold, then the last frame of the spurt, then nothing
+    for (int i = 0; i < 30; ++i) {
+        alice.microphone.say(quiet());
+        alice.voice.poll(Start);
+    }
+    REQUIRE_FALSE(alice.transport.sent.empty());
+    CHECK(alice.transport.sent.back().last);
+    CHECK(alice.transport.sent.size() <= 5 + rtype::voice::VoiceActivity::Hold + 1);
+    const std::size_t sent = alice.transport.sent.size();
+    for (int i = 0; i < 10; ++i) {
+        alice.microphone.say(quiet());
+        alice.voice.poll(Start);
+    }
+    CHECK(alice.transport.sent.size() == sent);
+}
+
+TEST_CASE("The volume of the microphone is applied before the level and the encoder", "[voice]")
+{
+    Player alice(0, 1);
+    alice.talk();
+    Voice voice;
+    alice.microphone.say(voice.next());
+    alice.voice.poll(Start);
+    const float full = alice.voice.inputLevel();
+
+    alice.voice.setInputVolume(0.5f);
+    alice.microphone.say(voice.next());
+    alice.voice.poll(Start);
+    CHECK(std::abs(alice.voice.inputLevel() - (full - 6.02f)) < 0.5f);
+
+    // At 0, the others hear silence: Opus stops sending it
+    alice.voice.setInputVolume(0.0f);
+    alice.transport.sent.clear();
+    for (int i = 0; i < 50; ++i) {
+        alice.microphone.say(voice.next());
+        alice.voice.poll(Start);
+    }
+    CHECK(alice.voice.inputLevel() == rtype::voice::SilenceFloor);
+    CHECK(alice.transport.sent.size() <= 10);
+}
+
+TEST_CASE("Deafened, the player hears no voice; the voice volume scales every player", "[voice]")
+{
+    Player alice(0, 1);
+    Player bob(1, 0);
+    alice.talk();
+    Voice voice;
+    auto now = Start;
+    const auto talkFor = [&](int frames) {
+        bob.playback.played[0].clear();
+        for (int i = 0; i < frames; ++i) {
+            alice.microphone.say(voice.next());
+            alice.voice.poll(now);
+            bob.transport.deliver(alice.transport, 0);
+            bob.voice.poll(now);
+            now += 20ms;
+        }
+        for (int i = 0; i < 10; ++i) {
+            bob.voice.poll(now);
+            now += 20ms;
+        }
+        return bob.playback.played[0].size();
+    };
+
+    bob.voice.setDeafened(true);
+    CHECK(bob.voice.deafened());
+    CHECK(bob.playback.volume[0] == 0.0f);
+    CHECK(talkFor(10) == 0);
+    CHECK_FALSE(bob.voice.participants().at(0).speaking);
+
+    bob.voice.setDeafened(false);
+    CHECK(bob.playback.volume[0] == rtype::voice::DefaultVolume);
+    CHECK(talkFor(10) > 0);
+
+    bob.voice.setOutputVolume(0.5f);
+    CHECK(bob.playback.volume[0] == 0.5f);
+    bob.voice.setParticipantVolume(0, rtype::voice::MaxVolume);
+    CHECK(bob.playback.volume[0] == rtype::voice::DefaultVolume);
+    bob.voice.setOutputVolume(rtype::voice::MaxVolume);
+    CHECK(bob.playback.volume[0] == rtype::voice::MaxVolume);
+}
+
+TEST_CASE("A microphone that gives only silence for 10 s while the player talks is said silent", "[voice]")
+{
+    Player alice(0, 1);
+    alice.talk();
+    const Frame silence{};
+    for (std::size_t i = 0; i + 1 < GameVoice::SilentFrames; ++i) {
+        alice.microphone.say(silence);
+        alice.voice.poll(Start);
+    }
+    CHECK_FALSE(alice.voice.microphoneSilent());
+    alice.microphone.say(silence);
+    alice.voice.poll(Start);
+    CHECK(alice.voice.microphoneSilent());
+
+    // A sound: it works
+    Voice voice;
+    alice.microphone.say(voice.next());
+    alice.voice.poll(Start);
+    CHECK_FALSE(alice.voice.microphoneSilent());
+
+    // Not talking, the silence of the microphone says nothing
+    alice.voice.setTalking(false);
+    for (std::size_t i = 0; i < 2 * GameVoice::SilentFrames; ++i) {
+        alice.microphone.say(silence);
+        alice.voice.poll(Start);
+    }
+    CHECK_FALSE(alice.voice.microphoneSilent());
+}
