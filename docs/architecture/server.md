@@ -52,7 +52,8 @@ apps/server/src/
   Instance/                an instance: one game
     Instance.cpp           runInstance(): the life of the instance, with or without a master
     MasterLink.cpp         the connection to the master
-    GameHost.cpp           the network side of the game: sessions, players, game messages
+    GameHost.cpp           the network side of the game: sessions, players, game messages, the voice
+    VoiceRate.cpp          how many frames of the voice of a player the game forwards
     GameTransport.hpp      how the datagrams of the game come and go, for GameHost
     DirectTransport.cpp    the transport of a game with a UDP port of its own
     RelayedTransport.cpp   the transport of a game behind the relay of the master, on the loopback
@@ -443,7 +444,7 @@ sequenceDiagram
     M->>I: CONFIGURE (name, max players, relay port)
     Note over I: opens a UDP port on the loopback, behind the relay, starts the game thread
     I->>M: READY (UDP port)
-    M->>I: ADD_PLAYER (player, session, keys, name)
+    M->>I: ADD_PLAYER (player, session, keys, name, account)
     C->>I: CONNECT
     I->>C: ACCEPTED (slot, 60, tick), PLAYER_JOINED
     I->>M: PLAYER_CONNECTED
@@ -505,8 +506,18 @@ flowchart LR
       127.0.0.1:4242, receiving on 127.0.0.1:40213`. A master always gives one ([The relay](#the-relay));
   - a player added gets the lowest free slot, and its ship when its client connects;
   - on `CONNECT`, the client receives `ACCEPTED`, then `PLAYER_JOINED` for each player connected, itself
-    included; the others receive its `PLAYER_JOINED`;
+    included, with the account the master gave in `ADD_PLAYER` (0 for a guest); the others receive its
+    `PLAYER_JOINED`;
   - the inputs of each `INPUT` go to the game, which applies each one at its tick;
+  - the voice ([game protocol](../protocol/game.md#94-the-voice), [Voice](voice.md)) never reaches the game
+    thread. Each player has a backend, `NONE` until its `VOICE_STATE`; each `VOICE_STATE` that changes it sends
+    `VOICE_ROSTER` to every client, and a client that connects receives it after the `PLAYER_JOINED` of the
+    others. In the same way, each `VOICE_STATUS` that changes the status of a player (muted, deafened, without
+    a microphone) sends `VOICE_STATUSES` to every client, and a newcomer receives it after the roster. Each `VOICE` goes as `VOICE_FRAME`, with the slot of the player, to the other players connected,
+    unless one of the two is on `NONE` or both are on Discord (`rtype::voice::carriedByGame()`). A
+    `VoiceRate` per player, a token bucket of 60 frames per second with bursts of 10, drops the frames beyond;
+    the frames dropped are counted and logged at `debug` when the player leaves. The game never decodes the
+    frames, and logs none;
   - every 2 ticks, each client receives the snapshot in parts, with its last input, the smallest lead of its
     `INPUT` messages over those 2 ticks and the weapon of its ship; every tick, the entities
     destroyed, unreliable, then again with each snapshot of the next 30 ticks (`RecentDestructions`): a lost one
@@ -730,7 +741,11 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
 - `tests/server_instance.cpp` (tag `[instance]`): the messages between the master and its instances (round
   trips, bytes, every malformed case, random bytes), the game thread (its rate, each input applied at its
   tick, whatever their order, the lead of the inputs, nothing after `stop()`), the game over of `GameHost` (sent, reported with the
-  scores, acknowledged, nothing after), a `GameHost` on a fake transport (a client far away connected, every
+  scores, acknowledged, nothing after), the voice of `GameHost` (tag `[voice]`: the roster and the statuses at the connection,
+  at every change and when a player on a voice leaves; a game of two players on Discord and two on the game
+  where each voice is carried once; a player on `NONE` neither heard nor sent anything; the rate and a
+  malformed frame) and its `VoiceRate` (a burst of 10, a voice of 50 frames per second never cut, one of 100
+  cut to 60), a `GameHost` on a fake transport (a client far away connected, every
   datagram sent back to its address, the transport closed with the game), a `RelayedTransport` (only the frames
   of the relay read, malformed ones dropped, every datagram sent in a frame to the relay), every failure of
   `MasterLink`, and whole instances run by `runInstance()` on

@@ -646,7 +646,7 @@ one implementation.
 | Message | Type | Direction | Struct |
 |---|---|---|---|
 | `ACCEPTED` | `0x02` | Game → Client | `AcceptedMessage`: slot, tick rate, tick |
-| `PLAYER_JOINED` | `0x04` | Game → Client | `PlayerJoinedMessage`: slot, player id, name |
+| `PLAYER_JOINED` | `0x04` | Game → Client | `PlayerJoinedMessage`: slot, player id, name, account (0 for a guest) |
 | `PLAYER_LEFT` | `0x05` | Game → Client | `PlayerLeftMessage`: slot, reason |
 | `INPUT` | `0x40` | Client → Game | `InputMessage`: tick, inputs newest first |
 | `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, input lead, weapon of the ship of the client, part, players, entities (the age of the shots in the byte of the health) |

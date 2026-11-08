@@ -3,6 +3,7 @@
 #include "MainMenu/ControlsMenu.hpp"
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/SettingsPage.hpp"
+#include "MainMenu/VoiceMenu.hpp"
 #include "Settings/DisplaySettings.hpp"
 #include "Settings/NextValue.hpp"
 #include "Settings/PlayerSettings.hpp"
@@ -182,7 +183,20 @@ void addControlsRow(Page &page, float left, float top)
     page.hints->emplace_back(row, "settings.hint.controls");
 }
 
-/// On the left, the language, the volumes and the colour filter; on the right, the display and the controls.
+/// "Voice chat": opens the Voice page.
+void addVoiceRow(Page &page, float left, float top)
+{
+    const localization::Localization &translations = page.targets.translations;
+    engine::Engine &engine = page.engine;
+    const ecs::entity_t row = page.interface.linkRow(translations.text("settings.voice_chat"),
+                                                     [&engine] { engine.pushScene(VoiceMenuScene); },
+                                                     {engine::AnchorPoint::TopLeft, left, top});
+    settings_page::bindText(page.ecs, row, translations, "settings.voice_chat");
+    page.hints->emplace_back(row, "settings.hint.voice_chat");
+}
+
+/// On the left, the language, the volumes and the colour filter; on the right, the display, the controls and
+/// the voice.
 /// The widgets get the focus in the order they are made: down the left column, then down the right one.
 void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
                        const SettingsTargets &targets, const std::function<void()> &close)
@@ -220,6 +234,9 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     top = addVsyncRow(page, right, top) + groupGap;
     top = addGroup(interface, ecs, style, translations, "settings.group.controls", right, top, width);
     addControlsRow(page, right, top);
+    top += style.setting.height + groupGap;
+    top = addGroup(interface, ecs, style, translations, "settings.group.voice", right, top, width);
+    addVoiceRow(page, right, top);
 
     // The hint of the focused row, under the right column
     top += style.setting.height + groupGap;

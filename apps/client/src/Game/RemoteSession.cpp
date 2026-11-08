@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <iterator>
 #include <utility>
 
 namespace rtype::client
@@ -82,12 +83,21 @@ std::string reasonOf(const network::SessionEnd &end)
 } // namespace
 
 RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &game,
-                             const lobby::GameJoinedMessage &joined, const game::GameConfig &config)
+                             const lobby::GameJoinedMessage &joined, const game::GameConfig &config,
+                             VoiceDevices *voiceDevices, std::string server)
     : _socket(loop, game.isIpv6() ? network::Address::anyIpv6(0) : network::Address::anyIpv4(0)), _game(game),
+      _server(std::move(server)),
       _session(joined.sessionId, network::DatagramKey(joined.clientKey),
                network::DatagramKey(joined.serverKey),
                [this](std::span<const std::byte> datagram) { _socket.send(_game, datagram); })
 {
+    if (voiceDevices != nullptr) {
+        _devices = voiceDevices;
+        voice::VoiceTransport &transport = *this;
+        _voice = std::make_unique<voice::GameVoice>(transport, voiceDevices->capture, voiceDevices->playback);
+        // Without an output, no voice: the player neither hears nor is heard
+        setVoiceBackend(voiceDevices->playback.available() ? voice::Backend::Game : voice::Backend::None);
+    }
     _weapon = playerWeapon(config);
     if (_weapon) {
         _projectileHalfWidth = projectileHalfWidth(config, *_weapon);
@@ -124,10 +134,161 @@ void RemoteSession::accept(std::span<const std::byte> payload)
         _prediction.arm(*_weapon, _projectileHalfWidth, _accepted->slot);
         _shots.arm(_weapon->mechanic, game::Rules{});
     }
+    if (_voiceBackend != voice::Backend::None) {
+        sendVoiceState();
+    }
+    if (_voice) {
+        _voice->join({.self = _accepted->slot});
+    }
+}
+
+void RemoteSession::sendVoiceState()
+{
+    _session.send(game::message_type::VoiceState, game::encode(game::VoiceStateMessage{_voiceBackend}),
+                  network::Delivery::Reliable);
+}
+
+void RemoteSession::setVoiceBackend(voice::Backend backend)
+{
+    if (backend == _voiceBackend) {
+        return;
+    }
+    _voiceBackend = backend;
+    logger().info("Voice of the player on {}", voice::name(backend));
+    if (_accepted && !_over) {
+        sendVoiceState();
+    }
+}
+
+bool RemoteSession::sendVoice(const game::VoiceMessage &frame)
+{
+    if (!_accepted || _over || _voiceBackend == voice::Backend::None) {
+        return false;
+    }
+    return _session.send(game::message_type::Voice, game::encode(frame), network::Delivery::Unreliable);
+}
+
+bool RemoteSession::send(const Outgoing &frame)
+{
+    const auto *bytes = reinterpret_cast<const std::byte *>(frame.bytes.data());
+    return sendVoice({frame.sequence, frame.last, std::vector<std::byte>(bytes, bytes + frame.bytes.size())});
+}
+
+std::vector<voice::VoiceTransport::Incoming> RemoteSession::receive()
+{
+    std::vector<Incoming> frames;
+    for (game::VoiceFrameMessage &frame : takeVoiceFrames()) {
+        const auto *bytes = reinterpret_cast<const std::uint8_t *>(frame.frame.data());
+        frames.push_back({frame.slot, frame.sequence, frame.last,
+                          std::vector<std::uint8_t>(bytes, bytes + frame.frame.size())});
+    }
+    return frames;
+}
+
+void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushToTalk)
+{
+    const VoicePreferences &preferences = devices.preferences;
+    const bool activity = preferences.mode == voice::TalkMode::VoiceActivity;
+    voice.setDeafened(devices.deafened);
+    voice.setSelfMute(preferences.mode == voice::TalkMode::Off || devices.muted || devices.deafened);
+    voice.setVoiceActivity(activity ? std::optional<float>(preferences.threshold) : std::nullopt);
+    voice.setTalking(activity || (preferences.mode == voice::TalkMode::PushToTalk && pushToTalk));
+    voice.setInputVolume(preferences.inputVolume);
+    voice.setOutputVolume(preferences.voiceVolume);
+}
+
+void RemoteSession::updateVoice()
+{
+    if (!_voice) {
+        return;
+    }
+    if (_over) {
+        _voice->leave();
+        _devices->microphoneSilent = false;
+        return;
+    }
+    const voice::TalkClock::time_point now = voice::TalkClock::now();
+    _pushToTalk.update(_devices->pushToTalk, now);
+    applyVoice(*_voice, *_devices, _pushToTalk.talking(now));
+    applyPlayerVoices();
+    _voice->poll(now);
+    _devices->microphoneSilent = _voice->microphoneSilent();
+    tellVoiceStatus();
+}
+
+void RemoteSession::applyPlayerVoices()
+{
+    for (const auto &[slot, name] : _names) {
+        if (_accepted && slot == _accepted->slot) {
+            continue;
+        }
+        const std::optional<std::string> key = voiceKey(slot);
+        const auto &players = _devices->preferences.players;
+        const auto found = key ? players.find(*key) : players.end();
+        const PlayerVoice choice = found == players.end() ? PlayerVoice{} : found->second;
+        _voice->setParticipantVolume(slot, choice.volume);
+        _voice->setParticipantMute(slot, choice.muted);
+    }
+}
+
+void RemoteSession::tellVoiceStatus()
+{
+    if (!_accepted || _over) {
+        return;
+    }
+    const voice::Status status{.muted = _voice->selfMuted(),
+                               .deafened = _voice->deafened(),
+                               .noMicrophone = _voice->microphoneMissing()};
+    if (status == _toldStatus) {
+        return;
+    }
+    _toldStatus = status;
+    _session.send(game::message_type::VoiceStatus, game::encode(game::VoiceStatusMessage{status}),
+                  network::Delivery::Reliable);
+}
+
+std::optional<std::string> RemoteSession::voiceKey(std::uint8_t slot) const
+{
+    const auto name = _names.find(slot);
+    const std::optional<std::uint64_t> account = accountOf(slot);
+    if (name == _names.end() || !account) {
+        return std::nullopt;
+    }
+    return playerVoiceKey(_server, *account, name->second);
+}
+
+std::optional<std::uint64_t> RemoteSession::accountOf(std::uint8_t slot) const
+{
+    const auto account = _accounts.find(slot);
+    if (account == _accounts.end()) {
+        return std::nullopt;
+    }
+    return account->second;
+}
+
+std::optional<VoiceView> RemoteSession::voiceView() const
+{
+    if (!_voice || !_voice->joined()) {
+        return std::nullopt;
+    }
+    return VoiceView{.local = {.transmitting = _voice->transmitting(),
+                               .muted = _voice->selfMuted(),
+                               .deafened = _voice->deafened()},
+                     .others = _voice->participants()};
+}
+
+std::vector<game::VoiceFrameMessage> RemoteSession::takeVoiceFrames()
+{
+    std::vector<game::VoiceFrameMessage> frames(std::make_move_iterator(_voiceFrames.begin()),
+                                                std::make_move_iterator(_voiceFrames.end()));
+    _voiceFrames.clear();
+    return frames;
 }
 
 RemoteSession::~RemoteSession()
 {
+    // The microphone and the voices closed before the goodbye
+    _voice.reset();
     if (_session.state() == network::ClientSession::State::Connected ||
         _session.state() == network::ClientSession::State::Connecting) {
         _session.close(network::DisconnectReason::Quit);
@@ -183,11 +344,19 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
     case game::message_type::PlayerJoined:
         if (const auto joined = game::decodePlayerJoined(payload)) {
             _names[joined->slot] = joined->name;
+            _accounts[joined->slot] = joined->accountId;
+            if (_voice) {
+                _voice->addParticipant(joined->slot);
+            }
         }
         return;
     case game::message_type::PlayerLeft:
         if (const auto left = game::decodePlayerLeft(payload)) {
             _names.erase(left->slot);
+            _accounts.erase(left->slot);
+            if (_voice) {
+                _voice->removeParticipant(left->slot);
+            }
         }
         return;
     case game::message_type::GameOver:
@@ -200,6 +369,34 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
         if (const auto started = game::decodeWaveStarted(payload)) {
             _waveStarted = started->wave;
             _waveMusic = started->music;
+        }
+        return;
+    case game::message_type::VoiceFrame:
+        if (auto frame = game::decodeVoiceFrame(payload)) {
+            _voiceFrames.push_back(std::move(*frame));
+            if (_voiceFrames.size() > MaxVoiceFrames) {
+                _voiceFrames.pop_front();
+            }
+        }
+        return;
+    case game::message_type::VoiceRoster:
+        if (const auto roster = game::decodeVoiceRoster(payload)) {
+            _voiceRoster = *roster;
+            if (_voice) {
+                for (voice::Slot slot = 0; slot < roster->backends.size(); ++slot) {
+                    _voice->setBackend(slot, roster->backends[slot]);
+                }
+            }
+        }
+        return;
+    case game::message_type::VoiceStatuses:
+        if (const auto statuses = game::decodeVoiceStatuses(payload)) {
+            _voiceStatuses = *statuses;
+            if (_voice) {
+                for (voice::Slot slot = 0; slot < statuses->statuses.size(); ++slot) {
+                    _voice->setStatus(slot, statuses->statuses[slot]);
+                }
+            }
         }
         return;
     default:
@@ -270,6 +467,7 @@ void RemoteSession::update(float elapsed)
     _interpolation.advance(elapsed);
     _prediction.advance(elapsed);
     _inputClock.advance(elapsed);
+    updateVoice();
     if (!_accepted || _over) {
         return;
     }

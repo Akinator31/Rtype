@@ -1,12 +1,14 @@
 # Audio
 
-The audio library (`libs/audio`, namespace `rtype::audio`) plays the sound effects and the music of the client.
+The audio library (`libs/audio`, namespace `rtype::audio`) plays the sound effects and the music of the client,
+and the voices of the other players of a game online.
 Like the render library, it wraps raylib: its public headers contain no raylib type.
 
 | Class         | Role                                                                              |
 | ------------- | --------------------------------------------------------------------------------- |
 | `AudioDevice` | Opens the audio output and closes it when destroyed. Only one can exist.          |
 | `AudioPlayer` | Loads sounds and music once, plays them, and holds the music and effects volumes. |
+| `VoiceStreams` | Plays the voices of the other players, one stream each ([The voices](#the-voices)). Only one can exist. |
 
 ```cpp
 Window window;
@@ -127,16 +129,41 @@ the game, others are disturbed by the music. In the options menu, _Effects volum
 **WAV** suits short sound effects (no decoding cost), **OGG** suits music (small files, good quality, free
 format).
 
+## The voices
+
+`VoiceStreams` is the `voice::Playback` of the client ([Voice](voice.md#the-devices)): one `AudioStream` of
+raylib per slot, 48 kHz mono, signed 16 bits, mixed by raylib with the music and the effects, each at the volume
+of its player (`setVolume()`, from 0 to 2, under the master volume).
+
+```cpp
+const AudioDevice device;
+VoiceStreams voices(device);                      // destroyed before the device
+voice::GameVoice voice(session, microphone, voices);
+```
+
+- **Fed without a wait.** `write()`, on the game loop, puts the voice decoded in a ring buffer of 200 ms; the
+  callback of the stream, on the audio thread of raylib, takes what is there and plays silence for the rest
+  ([Threads](threads.md#the-audio-threads)). A stream 200 ms behind drops what does not fit.
+- **PCM, not Opus.** Whatever carried a voice, the game or Discord, it is played here: one mixer, one volume
+  per player, and one place for the spatial voice and the echo cancellation to come.
+- **One at a time.** The callbacks of raylib take no pointer: each slot has its own function, which finds the
+  streams in a variable of `VoiceStreams.cpp`. A second `VoiceStreams` throws, as a second `AudioDevice`.
+- **Without an audio output** (`AudioDevice::isAvailable()` false), it is not `available()` and plays nothing:
+  the player has no voice.
+
 ## Testing
 
 `tests/audio.cpp` tests the library with audio disabled, so that the tests give the same result with or
 without a sound card: volumes, single device, handles of sounds loaded twice, missing files, and the state of
 the music. Missing files are reported even when audio is disabled, so that they are noticed on every
-computer.
+computer. The voice is tested with a fake `voice::Playback` ([Voice](voice.md#testing)): `VoiceStreams` needs
+an audio output.
 
 ## Limits and next steps
 
 - **No spatial sound** beyond left-right panning. For VR, sounds positioned in 3D around the player would help;
   raylib does not provide it, so it would need another approach.
+- **The voices** are played here, but the voice chat itself is apart, in `libs/voice` ([Voice](voice.md)); no
+  pan per voice yet, which the spatial voice adds.
 - **No fading** between two musics: `playMusic()` switches at once.
 - The effects volume does not change the sounds already playing, which are short.

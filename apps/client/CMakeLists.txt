@@ -25,6 +25,7 @@ add_library(r-type_client_core STATIC
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
     src/Controls/KeyCaptureSystem.cpp
+    src/Controls/KeyChoice.cpp
     src/Game/BossLooks.cpp
     src/Game/DamageLooks.cpp
     src/Game/DamageNumberSystem.cpp
@@ -73,6 +74,7 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
     src/MainMenu/UiShowcase.cpp
+    src/MainMenu/VoiceMenu.cpp
     src/Online/AccountScenes.cpp
     src/Online/FormErrors.cpp
     src/Online/KnownProfiles.cpp
@@ -84,6 +86,7 @@ add_library(r-type_client_core STATIC
     src/Settings/ControlSettings.cpp
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
+    src/Settings/VoiceSettings.cpp
     src/Quests/EventQuest.cpp
     src/Quests/Quests.cpp
     src/Quests/StatQuest.cpp
@@ -92,11 +95,14 @@ add_library(r-type_client_core STATIC
     src/ShipSelector/ShipSelection.cpp
     src/ShipSelector/ShipSelector.cpp
     src/ShipSelector/ShipSelectorSystem.cpp
+    src/Voice/VoiceDevices.cpp
+    src/Voice/VoiceIcons.cpp
+    src/Voice/VoiceKeysSystem.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
     PUBLIC rtype::audio rtype::discord rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
-           rtype::log rtype::network rtype::physics rtype::render
+           rtype::log rtype::network rtype::physics rtype::render rtype::voice_client
     PRIVATE rtype_options)
 
 # Without the Discord Social SDK for this platform (libs/discord), the core above only, for the tests

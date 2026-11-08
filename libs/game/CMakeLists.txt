@@ -4,7 +4,8 @@
 # (Messages.hpp, RemoteWorld.hpp) are written with the serialization of libs/network, a private dependency.
 # The configuration files are read, and the behaviors of the enemies run, with libs/scripting (Lua, ADR 0019),
 # private too: no public header of the game includes Lua. The beats of the music of a wave are found with
-# libs/beat, private as well.
+# libs/beat, private as well. The messages of the voice carry the backends and the frames of libs/voice, public
+# and header only: no Opus.
 add_library(rtype_game
     src/Config/DefinitionReaders.cpp
     src/Config/GameConfigLoader.cpp
@@ -37,5 +38,5 @@ add_library(rtype_game
 add_library(rtype::game ALIAS rtype_game)
 target_include_directories(rtype_game PUBLIC include PRIVATE src)
 target_link_libraries(rtype_game
-    PUBLIC rtype::ecs rtype::physics
+    PUBLIC rtype::ecs rtype::physics rtype::voice
     PRIVATE rtype_options rtype::beat rtype::log rtype::network rtype::scripting)
