@@ -4,11 +4,13 @@
 #include "Instance/GameThread.hpp"
 #include "Instance/GameTransport.hpp"
 #include "Instance/RecentDestructions.hpp"
+#include "Instance/VoiceRate.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/Session.hpp"
 #include "rtype/network/Timer.hpp"
+#include "rtype/voice/Backend.hpp"
 
 #include <array>
 #include <cstdint>
@@ -42,6 +44,10 @@ namespace rtype::server
 /// - On `CONNECT`, the client receives `ACCEPTED` (its slot, the tick rate, the tick), then `PLAYER_JOINED`
 ///   for each player connected, itself included; the others receive its `PLAYER_JOINED`.
 /// - The inputs of each `INPUT` go to the game, which applies each one at its tick.
+/// - The voice (section 9.4, ADR 0032): each player tells what carries its voice (`VOICE_STATE`, None until
+///   then), and every client knows it for all (`VOICE_ROSTER`, at its connection and at every change). Each
+///   `VOICE` goes as `VOICE_FRAME` to the other players, unless both are on Discord
+///   (rtype::voice::carriedByGame()), and within the rate of VoiceRate. The game never decodes the voice.
 /// - Every 2 ticks, each client receives the snapshot in parts; every tick, the destroyed entities. They
 ///   leave at once, not at the next update of the sessions: no delay, no jitter.
 /// - A session that closes takes the ship away, and the others receive `PLAYER_LEFT`.
@@ -72,6 +78,11 @@ private:
         std::uint8_t slot = 0;
         std::string name;
         bool connected = false;
+        /// What carries its voice (`VOICE_STATE`).
+        rtype::voice::Backend voice = rtype::voice::Backend::None;
+        VoiceRate voiceRate;
+        /// Frames of its voice dropped: too many, or sent on None. Logged when it leaves.
+        std::uint32_t voiceDropped = 0;
     };
 
     std::unique_ptr<GameTransport> _transport;
@@ -98,6 +109,14 @@ private:
     [[nodiscard]] std::optional<std::uint8_t> freeSlot() const;
     void connected(std::uint32_t session, const rtype::network::Address &from);
     void received(std::uint32_t session, std::uint8_t type, std::span<const std::byte> payload);
+    /// `INPUT`, `VOICE` and `VOICE_STATE` of a player.
+    void receivedInput(Player &player, std::uint32_t session, std::span<const std::byte> payload);
+    void receivedVoice(Player &player, std::uint32_t session, std::span<const std::byte> payload);
+    void receivedVoiceState(Player &player, std::uint32_t session, std::span<const std::byte> payload);
+    /// What carries the voice of each connected player, by slot.
+    [[nodiscard]] rtype::game::VoiceRosterMessage voiceRoster() const;
+    /// `VOICE_ROSTER` to every connected player.
+    void sendVoiceRoster();
     void closed(std::uint32_t session, rtype::network::SessionEnd end);
     /// The player leaves: its ship goes, the others are told.
     void leave(std::uint32_t session, rtype::game::LeaveReason reason);

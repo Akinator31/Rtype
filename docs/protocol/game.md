@@ -307,10 +307,14 @@ player does, and draws the world the game sends back.
 | Type | Message | Direction | Reliability |
 |---|---|---|---|
 | `0x40` | [`INPUT`](#input-0x40) | Client → Game | Unreliable, sent again in the next datagrams |
+| `0x41` | [`VOICE`](#voice-0x41) | Client → Game | Unreliable |
+| `0x42` | [`VOICE_STATE`](#voice_state-0x42) | Client → Game | Reliable |
 | `0x80` | [`SNAPSHOT`](#snapshot-0x80) | Game → Client | Unreliable, replaced by the next one |
 | `0x81` | [`ENTITIES_DESTROYED`](#entities_destroyed-0x81) | Game → Client | Reliable |
 | `0x82` | [`WAVE_STARTED`](#wave_started-0x82) | Game → Client | Reliable |
 | `0x83` | [`GAME_OVER`](#game_over-0x83) | Game → Client | Reliable |
+| `0x84` | [`VOICE_FRAME`](#voice_frame-0x84) | Game → Client | Unreliable |
+| `0x85` | [`VOICE_ROSTER`](#voice_roster-0x85) | Game → Client | Reliable |
 
 Types `0x40`–`0x7F` are sent by the client, `0x80`–`0xFF` by the game. The client MUST NOT send game messages
 before `ACCEPTED`, and the game sends them only to connected sessions.
@@ -444,6 +448,49 @@ losses, closer shows a more recent world. A fixed **100 ms** is safe; the client
 instead: for each snapshot that arrives, the ticks since the previous one plus how much later than the
 earliest of the last 3 s it arrived, plus a tick, the largest over those 3 s, from 50 to 250 ms.
 
+### 9.4 The voice
+
+The players of a game talk to each other ([ADR 0032](../decisions/0032-voice-chat-in-the-game-session.md)).
+The voice is **Opus** ([RFC 6716](https://www.rfc-editor.org/rfc/rfc6716)), 48 kHz, mono, in **frames of
+20 ms** of 1 to 160 bytes: 50 frames per second while a player talks. The game forwards the frames without
+decoding them.
+
+**Backends.** What carries the voice of a player is its backend:
+
+| Backend | Value | The player talks and hears |
+|---|---|---|
+| `NONE` | 0 | Not at all: no voice, or the client has none. The backend of every player until it says otherwise |
+| `GAME` | 1 | Through the game: `VOICE` and `VOICE_FRAME` |
+| `DISCORD` | 2 | Through a voice lobby of Discord, and through the game for the players on `GAME` |
+
+A client tells the game its backend with [`VOICE_STATE`](#voice_state-0x42), and the game tells every client
+the backend of each player with [`VOICE_ROSTER`](#voice_roster-0x85).
+
+**Forwarding.** The game forwards each [`VOICE`](#voice-0x41) of a player as a
+[`VOICE_FRAME`](#voice_frame-0x84) to every other connected player, except:
+
+- to and from a player on `NONE`;
+- from a player on `DISCORD` to a player on `DISCORD`: Discord already carries it between them.
+
+| From → to | `GAME` | `DISCORD` | `NONE` |
+|---|---|---|---|
+| `GAME` | forwarded | forwarded | — |
+| `DISCORD` | forwarded | — | — |
+| `NONE` | — | — | — |
+
+So in a game of two players on Discord and two on the game, each player hears each of the three others once.
+
+**Rate.** The game SHOULD forward at most 60 frames per second of one player, with bursts of 10: a token bucket.
+A client that sends more loses the frames beyond. Frames are never resent: a lost frame is rebuilt by the
+receiver from the copy the next one carries (the in-band FEC of Opus), or made up.
+
+**Receiver behaviour:** the client keeps one Opus decoder per player, and decodes the frames of each in the
+order of their sequence numbers, after a short buffer that evens out the network. It refuses a frame that is not
+a valid Opus packet of 20 ms. It never stores nor logs the voice.
+
+These messages are new types that older receivers ignore: the version of the protocol does not change
+([versioning](index.md#4-versioning)).
+
 ### INPUT (`0x40`)
 
 | | |
@@ -460,6 +507,43 @@ earliest of the last 3 s it arrived, plus a tick, the largest over those 3 s, fr
 
 **Receiver behaviour:** the game keeps the inputs as [section 9.2](#92-inputs) says. A count of 0 or above 32,
 or more inputs than `Tick + 1`, makes the message malformed.
+
+### VOICE (`0x41`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Unreliable |
+| **Sent when** | Every 20 ms while the player talks, once connected, on a backend other than `NONE`. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Sequence | `u16` | Number of the frame: one more every 20 ms while the player talks, 0 after 65535 |
+| 2 | Flags | `u8` | Bit 0: the last frame of a talk spurt, the player stopped talking. Other bits: 0 |
+| 3 | Size | `u8` | Size of the frame, 1 to 160 |
+| 4 | Frame | `bytes[Size]` | 20 ms of Opus |
+
+A client SHOULD send it in the datagram of its next `INPUT`: the voice then costs no datagram of its own.
+
+**Receiver behaviour:** the game forwards it as [section 9.4](#94-the-voice) says, as a `VOICE_FRAME` with the
+slot of the player. A frame of a player on `NONE`, or beyond its rate, is dropped. A size of 0 or above 160, or a
+frame shorter than the size, makes the message malformed. The reserved bits of the flags are ignored.
+
+### VOICE_STATE (`0x42`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Reliable |
+| **Sent when** | Once connected, if the player has a voice; then at every change: its Discord call started or ended, the voice turned off. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Backend | `u8` | The backend of the player ([section 9.4](#94-the-voice)) |
+
+**Receiver behaviour:** the game keeps the backend of the player, forwards its voice and the voice of the
+others to it from then on, and sends [`VOICE_ROSTER`](#voice_roster-0x85) to every client. An unknown backend is
+treated as `NONE`.
 
 ### SNAPSHOT (`0x80`)
 
@@ -581,6 +665,40 @@ closes the sessions with [`DISCONNECT`](#disconnect-0x03) (`GAME_OVER`).
 
 **Receiver behaviour:** the client shows the outcome with the last scores it received. Unknown outcomes are
 treated as `DEFEAT`.
+
+### VOICE_FRAME (`0x84`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Unreliable |
+| **Sent when** | A `VOICE` of another player is received, unless [section 9.4](#94-the-voice) says otherwise. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Player slot | `u8` | The player who talks, 0 to 3 |
+| 1 | Sequence | `u16` | As in its `VOICE` |
+| 3 | Flags | `u8` | As in its `VOICE`, the reserved bits 0 |
+| 4 | Size | `u8` | 1 to 160 |
+| 5 | Frame | `bytes[Size]` | As in its `VOICE` |
+
+**Receiver behaviour:** the client plays it as the voice of that player ([section 9.4](#94-the-voice)). A slot
+above 3, a size of 0 or above 160, or a frame shorter than the size, makes the message malformed.
+
+### VOICE_ROSTER (`0x85`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Reliable |
+| **Sent when** | To a client that connects, after the `PLAYER_JOINED` of the others; to every client when a player changes its backend (`VOICE_STATE`), or leaves with a backend other than `NONE`. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Backends | `bytes[4]` | The backend of the player of slot 0, 1, 2 and 3; `NONE` for a slot without a player |
+
+**Receiver behaviour:** the client knows from it which voices come through the game, and which through Discord.
+An unknown backend is treated as `NONE`.
 
 ## 10. Example
 

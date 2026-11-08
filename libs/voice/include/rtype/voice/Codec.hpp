@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rtype/voice/Format.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -10,13 +12,6 @@
 /// mono, frames of 20 ms. Opus stays out of this header.
 namespace rtype::voice
 {
-
-/// The rate of the samples of the voice, captured, sent and played.
-inline constexpr int SampleRate = 48000;
-/// The samples of one frame: 20 ms at 48 kHz, mono.
-inline constexpr std::size_t FrameSamples = 960;
-/// The largest frame the encoder gives and the decoder accepts.
-inline constexpr std::size_t MaxFrameBytes = 160;
 
 /// One frame of samples, signed 16 bits.
 using Pcm = std::span<std::int16_t, FrameSamples>;

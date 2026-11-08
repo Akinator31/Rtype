@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <iterator>
 #include <utility>
 
 namespace rtype::client
@@ -124,6 +125,43 @@ void RemoteSession::accept(std::span<const std::byte> payload)
         _prediction.arm(*_weapon, _projectileHalfWidth, _accepted->slot);
         _shots.arm(_weapon->mechanic, game::Rules{});
     }
+    if (_voiceBackend != voice::Backend::None) {
+        sendVoiceState();
+    }
+}
+
+void RemoteSession::sendVoiceState()
+{
+    _session.send(game::message_type::VoiceState, game::encode(game::VoiceStateMessage{_voiceBackend}),
+                  network::Delivery::Reliable);
+}
+
+void RemoteSession::setVoiceBackend(voice::Backend backend)
+{
+    if (backend == _voiceBackend) {
+        return;
+    }
+    _voiceBackend = backend;
+    logger().info("Voice of the player on {}", voice::name(backend));
+    if (_accepted && !_over) {
+        sendVoiceState();
+    }
+}
+
+bool RemoteSession::sendVoice(const game::VoiceMessage &frame)
+{
+    if (!_accepted || _over || _voiceBackend == voice::Backend::None) {
+        return false;
+    }
+    return _session.send(game::message_type::Voice, game::encode(frame), network::Delivery::Unreliable);
+}
+
+std::vector<game::VoiceFrameMessage> RemoteSession::takeVoiceFrames()
+{
+    std::vector<game::VoiceFrameMessage> frames(std::make_move_iterator(_voiceFrames.begin()),
+                                                std::make_move_iterator(_voiceFrames.end()));
+    _voiceFrames.clear();
+    return frames;
 }
 
 RemoteSession::~RemoteSession()
@@ -200,6 +238,19 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
         if (const auto started = game::decodeWaveStarted(payload)) {
             _waveStarted = started->wave;
             _waveMusic = started->music;
+        }
+        return;
+    case game::message_type::VoiceFrame:
+        if (auto frame = game::decodeVoiceFrame(payload)) {
+            _voiceFrames.push_back(std::move(*frame));
+            if (_voiceFrames.size() > MaxVoiceFrames) {
+                _voiceFrames.pop_front();
+            }
+        }
+        return;
+    case game::message_type::VoiceRoster:
+        if (const auto roster = game::decodeVoiceRoster(payload)) {
+            _voiceRoster = *roster;
         }
         return;
     default:

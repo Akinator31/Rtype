@@ -150,6 +150,7 @@ add_library(r-type_server_core STATIC
     src/Instance/Instance.cpp
     src/Instance/MasterLink.cpp
     src/Instance/RelayedTransport.cpp
+    src/Instance/VoiceRate.cpp
     src/Master/AddressBans.cpp
     src/Master/Administration.cpp
     src/Master/AdminStore.cpp
@@ -169,7 +170,7 @@ add_library(r-type_server_core STATIC
 target_include_directories(r-type_server_core PUBLIC src)
 # SYSTEM: the warnings of toml++'s headers are not ours
 target_include_directories(r-type_server_core SYSTEM PRIVATE ${tomlplusplus_SOURCE_DIR}/include)
-target_link_libraries(r-type_server_core PUBLIC rtype::database rtype::game rtype::lobby rtype::log rtype::network PRIVATE rtype_options reproc Crow::Crow CURL::libcurl rtype_argon2)
+target_link_libraries(r-type_server_core PUBLIC rtype::database rtype::game rtype::lobby rtype::log rtype::network rtype::voice PRIVATE rtype_options reproc Crow::Crow CURL::libcurl rtype_argon2)
 # Crow serves files itself only from CROW_STATIC_DIRECTORY: ours are served by Web/WebServer.cpp, inside the
 # panel folder only
 target_compile_definitions(r-type_server_core PRIVATE CROW_DISABLE_STATIC_DIR)
