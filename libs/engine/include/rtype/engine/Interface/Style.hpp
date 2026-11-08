@@ -254,49 +254,172 @@ struct TitleStyle {
     float glowBlur = 10.0f;
 };
 
-/// Look of the sliders (InterfaceBuilder::slider()): a fine rail, its filled part in light, and a ring open
-/// on its sides for the handle, which grows when pointed at and when dragged. Sizes are in game units.
-struct SliderStyle {
-    render::FontId font;
-    float captionSize = 24.0f;
-    float letterSpacing = 3.0f;
-    float width = 560.0f;
-    /// Space between the caption and the rail.
-    float captionGap = 14.0f;
-    float railThickness = 2.0f;
-    float fillThickness = 3.0f;
-    render::Color rail{46, 49, 53, 255};
-    render::Color fill{255, 255, 255, 217};
-    /// Light along the filled part: two fainter lines around it, stronger when pointed at and dragged.
-    render::Color fillGlow{255, 255, 255, 22};
-    /// Radius of the handle at rest, pointed at and dragged, and the thickness of its ring.
-    float handleRadius = 16.0f;
-    float handleHoverRadius = 19.0f;
-    float handleDragRadius = 22.0f;
-    float handleThickness = 3.0f;
-    /// Angle of the opening of the ring on each side, in degrees.
-    float handleOpening = 42.0f;
-    render::Color handle{255, 255, 255, 255};
-    /// Soft light around the handle, spreading this far, when pointed at and dragged.
-    render::Color handleGlow{255, 255, 255, 56};
-    float handleGlowSpread = 16.0f;
-    /// A faint ring around the handle when it is pointed at, this far from it.
-    render::Color handleRing{255, 255, 255, 90};
-    float handleRingGap = 7.0f;
-    render::Color caption{138, 144, 151, 255};
+/// Look of the rows of a page of settings (SettingRow), shared by the sliders and the rows of the controls
+/// (KeyRow): the caption on the left, the value on the right on a column shared by every row, a fine rule
+/// under the row. A lit row gets a veil from its left, a mark on its left edge, and a line of light along its
+/// bottom; the chevrons of a choice appear around its value. Also the names of the groups of rows
+/// (SectionLabel) and the small notes of a page (InterfaceBuilder::note()). Sizes are in game units.
+struct SettingStyle {
+    /// Font of the captions, the names of the groups and the notes.
+    render::FontId captionFont;
+    /// Font of the values.
+    render::FontId valueFont;
+    float width = 840.0f;
+    float height = 80.0f;
+    float captionSize = 28.0f;
+    float captionSpacing = 0.6f;
+    float valueSize = 24.0f;
+    float valueSpacing = 3.0f;
+    /// Space between the left edge and the caption, and between the right edge and the last chevron.
+    float inset = 32.0f;
+    float valueInset = 24.0f;
+    /// A chevron, and the space between it and the value.
+    float chevronWidth = 9.0f;
+    float chevronHeight = 20.0f;
+    float chevronThickness = 2.5f;
+    float chevronGap = 22.0f;
+    render::Color caption{213, 217, 221, 255};
     render::Color litCaption{255, 255, 255, 255};
+    render::Color value{195, 200, 205, 255};
+    render::Color litValue{255, 255, 255, 255};
+    /// The veil of a lit row, from its left edge, fading out along this part of its width.
+    render::Color veil{255, 255, 255, 23};
+    float veilLength = 0.75f;
+    /// The mark on the left edge of a lit row, with its light.
+    float markWidth = 4.0f;
+    float markHeight = 40.0f;
+    render::Color mark{255, 255, 255, 255};
+    render::Color markGlow{255, 255, 255, 110};
+    float markGlowBlur = 12.0f;
+    /// The rule under every row, and the line of light along a lit row.
+    float ruleThickness = 2.0f;
+    render::Color rule{255, 255, 255, 18};
+    render::Color light{255, 255, 255, 160};
+    render::Color lightGlow{255, 255, 255, 60};
+    float lightGlowBlur = 12.0f;
+    /// The name of a group, and its rule, this far after it.
+    float sectionSize = 20.0f;
+    float sectionSpacing = 4.0f;
+    float sectionGap = 24.0f;
+    render::Color section{174, 179, 184, 255};
+    render::Color sectionRule{255, 255, 255, 26};
+    /// A note: a hint under a column, the keys of a page at its bottom.
+    float noteSize = 22.0f;
+    float noteSpacing = 0.4f;
+    render::Color note{174, 179, 184, 255};
+    /// A dimmed row (KeyRow::dimmed) is drawn at this opacity.
+    float dimOpacity = 0.4f;
+
+    /// Distance from the right edge of a row to the right of its value: the values of every row end there.
+    [[nodiscard]] float getValueInset() const { return valueInset + chevronWidth + chevronGap; }
+};
+
+/// Look of the sliders (InterfaceBuilder::slider()), a row as SettingStyle: the caption on the left, the
+/// percentage on the column of the values, and under them a fine rail from the caption to the percentage, its
+/// filled part in light, and a bar for the handle, which grows when pointed at and when dragged. Sizes are in
+/// game units.
+struct SliderStyle {
+    /// Font of the caption, and of the percentage.
+    render::FontId font;
+    render::FontId valueFont;
+    float captionSize = 28.0f;
+    float letterSpacing = 0.6f;
+    float valueSize = 24.0f;
+    float valueSpacing = 3.0f;
+    /// Width of the row.
+    float width = 840.0f;
+    /// Space between the left edge and the caption and the rail, and between the right edge and the end of
+    /// the rail and of the percentage: the column of the values of SettingStyle.
+    float inset = 32.0f;
+    float valueInset = 55.0f;
+    /// Space above the caption, between the caption and the handle, and under the handle.
+    float paddingTop = 20.0f;
+    float captionGap = 22.0f;
+    float paddingBottom = 26.0f;
+    float railThickness = 3.0f;
+    float fillThickness = 4.0f;
+    render::Color rail{255, 255, 255, 41};
+    render::Color fill{255, 255, 255, 191};
+    render::Color litFill{255, 255, 255, 255};
+    /// Light along the filled part, stronger when lit, pointed at and dragged.
+    render::Color fillGlow{255, 255, 255, 50};
+    float fillGlowBlur = 10.0f;
+    /// The handle, a bar across the rail: its width, and its height at rest, pointed at and dragged.
+    float handleWidth = 6.0f;
+    float handleHeight = 24.0f;
+    float handleHoverHeight = 30.0f;
+    float handleDragHeight = 34.0f;
+    /// How far the pointer can be from the handle to point at it, on each side and above and below.
+    float handleReach = 12.0f;
+    render::Color handle{255, 255, 255, 255};
+    /// Soft light around the handle, stronger when pointed at and dragged.
+    render::Color handleGlow{255, 255, 255, 90};
+    float handleGlowBlur = 14.0f;
+    render::Color caption{213, 217, 221, 255};
+    render::Color litCaption{255, 255, 255, 255};
+    render::Color value{195, 200, 205, 255};
     /// Time to go from one look to another, in seconds.
     float fadeDuration = 0.15f;
 
-    /// Height of the area the mouse points at: the caption, then the handle at its largest.
-    [[nodiscard]] float getHeight() const { return captionSize + captionGap + (2.0f * handleDragRadius); }
-    /// Width of that area: the rail, and the handle that sticks out of it at each end.
-    [[nodiscard]] float getAreaWidth() const { return width + (2.0f * handleDragRadius); }
-    /// Height of the rail, from the middle of the area.
+    /// Height of the row: the caption, then the handle at its largest.
+    [[nodiscard]] float getHeight() const
+    {
+        return paddingTop + captionSize + captionGap + handleDragHeight + paddingBottom;
+    }
+    /// Width of a row, the area the mouse points at: `rowWidth` (SliderTrack::width), or the width of the
+    /// style for 0.
+    [[nodiscard]] float getAreaWidth(float rowWidth = 0.0f) const
+    {
+        return rowWidth > 0.0f ? rowWidth : width;
+    }
+    /// Left end of the rail of a row this wide, from the middle of the row.
+    [[nodiscard]] float getRailLeft(float centreX, float rowWidth = 0.0f) const
+    {
+        return centreX - (getAreaWidth(rowWidth) / 2.0f) + inset;
+    }
+    /// Length of the rail of a row this wide, from 0 to 100 %.
+    [[nodiscard]] float getRailWidth(float rowWidth = 0.0f) const
+    {
+        return getAreaWidth(rowWidth) - inset - valueInset;
+    }
+    /// Height of the rail, from the middle of the row.
     [[nodiscard]] float getRailY(float centreY) const
     {
-        return centreY - (getHeight() / 2.0f) + captionSize + captionGap + handleDragRadius;
+        return centreY - (getHeight() / 2.0f) + paddingTop + captionSize + captionGap +
+               (handleDragHeight / 2.0f);
     }
+};
+
+/// Look of the keys of the rows of the controls (KeyRow): each key in a frame like a key of a keyboard, the
+/// buttons of the gamepad in pills, read only. The row itself looks like a SettingStyle row. Sizes are in
+/// game units.
+struct KeyStyle {
+    render::FontId font;
+    float rowHeight = 72.0f;
+    float textSize = 22.0f;
+    float letterSpacing = 2.0f;
+    float height = 52.0f;
+    float padding = 20.0f;
+    float minWidth = 72.0f;
+    float gap = 16.0f;
+    float radius = 8.0f;
+    float border = 2.0f;
+    /// Dashes of the frame of a key being waited for.
+    float dash = 6.0f;
+    render::Color text{255, 255, 255, 255};
+    render::Color fill{255, 255, 255, 15};
+    render::Color frame{255, 255, 255, 82};
+    render::Color newFill{255, 255, 255, 36};
+    render::Color newFrame{255, 255, 255, 242};
+    render::Color newGlow{255, 255, 255, 70};
+    float glowBlur = 14.0f;
+    render::Color waitingFrame{255, 255, 255, 204};
+    render::Color conflict{232, 114, 110, 255};
+    render::Color conflictFill{232, 114, 110, 20};
+    render::Color conflictFrame{232, 114, 110, 204};
+    render::Color buttonText{174, 179, 184, 255};
+    render::Color buttonFill{255, 255, 255, 10};
+    render::Color buttonFrame{255, 255, 255, 41};
 };
 
 /// Look of the switches (InterfaceBuilder::toggle()): its caption on the left, then on the right "OFF", a
@@ -511,7 +634,9 @@ struct InterfaceStyle {
     ConsoleStyle console{};
     ToastStyle toast{};
     TitleStyle title{};
+    SettingStyle setting{};
     SliderStyle slider{};
+    KeyStyle keys{};
     SwitchStyle toggle{};
     GaugeStyle gauge{};
     FieldStyle field{};
