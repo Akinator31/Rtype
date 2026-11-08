@@ -47,6 +47,8 @@ add_library(r-type_client_core STATIC
     src/Game/LocalSession.cpp
     src/Game/Prediction.cpp
     src/Game/RemoteSession.cpp
+    src/Game/ResultsScreen.cpp
+    src/Game/ResultsSystem.cpp
     src/Game/RescueCameraSystem.cpp
     src/Game/ShipLooks.cpp
     src/Game/ShotPrediction.cpp

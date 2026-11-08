@@ -357,6 +357,42 @@ void AccountService::resume(const SessionToken &token,
     }
 }
 
+template <typename Task>
+void AccountService::onProgress(std::string description, Task task, ProgressDone done)
+{
+    const bool queued =
+        _database.run(std::move(description), std::move(task),
+                      [alive = std::weak_ptr<bool>(_alive), done](std::optional<AccountProgress> progress) {
+                          if (!alive.expired()) {
+                              done(progress);
+                          }
+                      });
+    if (!queued) {
+        logger().warning("The database thread is full: a progression is not read nor written");
+        _loop.post([alive = std::weak_ptr<bool>(_alive), done] {
+            if (!alive.expired()) {
+                done(std::nullopt);
+            }
+        });
+    }
+}
+
+void AccountService::progress(long long accountId, ProgressDone done)
+{
+    onProgress(
+        "read the progression of an account",
+        [accountId](rtype::database::Database &database) { return readProgress(database, accountId); },
+        std::move(done));
+}
+
+void AccountService::recordGame(long long accountId, GameResult game, ProgressDone done)
+{
+    onProgress(
+        "add a game to the progression of an account",
+        [accountId, game](rtype::database::Database &database) { return addGame(database, accountId, game); },
+        std::move(done));
+}
+
 void AccountService::checkGuestName(const std::string &name,
                                     std::function<void(std::optional<ErrorCode>)> done)
 {

@@ -379,7 +379,7 @@ void RescueSystem::runCombined(ecs::entity_t boss)
         _healths.get(boss).points = 0;
     }
     if (const std::optional<std::uint8_t> slot = findRescuedSlot()) {
-        _context.players[*slot].score += _context.enemies.getDefinition(_enemies.get(boss).id).score;
+        _context.rewardKill(_context.players[*slot], _context.enemies.getDefinition(_enemies.get(boss).id));
     }
     const ecs::EntityRef reference = _ecs.ref(boss);
     _ecs.defer([this, reference] {

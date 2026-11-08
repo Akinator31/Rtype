@@ -186,6 +186,7 @@ EnemyDefinition readEnemyDefinition(TableReader &table)
         table.readNumber("acceleration", NumberRange::ZeroOrMore, definition.acceleration);
     definition.weapon = table.readString("weapon");
     definition.score = static_cast<std::uint32_t>(table.readInteger("score", 0, MaxU32, definition.score));
+    definition.xp = static_cast<std::uint32_t>(table.readInteger("xp", 0, MaxU32, definition.score / 10));
     definition.collisionDamage =
         static_cast<std::uint8_t>(table.readInteger("collisionDamage", 0, MaxU8, definition.collisionDamage));
     if (table.readFunction("update")) {
@@ -238,6 +239,19 @@ PlayerDefinition readPlayerDefinition(TableReader &table)
     definition.health = static_cast<std::uint8_t>(table.readInteger("health", 1, MaxU8, definition.health));
     table.checkAllFieldsRead();
     return definition;
+}
+
+Progression readProgression(TableReader &table)
+{
+    Progression progression;
+    progression.xpPerWave =
+        static_cast<std::uint32_t>(table.readInteger("xpPerWave", 0, MaxU32, progression.xpPerWave));
+    progression.streakBonus =
+        static_cast<std::uint32_t>(table.readInteger("streakBonus", 0, MaxU16, progression.streakBonus));
+    progression.streakCap =
+        static_cast<std::uint32_t>(table.readInteger("streakCap", 100, MaxU16, progression.streakCap));
+    table.checkAllFieldsRead();
+    return progression;
 }
 
 } // namespace rtype::game

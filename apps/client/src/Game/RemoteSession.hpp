@@ -43,7 +43,9 @@ namespace rtype::client
 /// - **The ship of the player** is predicted: each input moves it at once, and each snapshot that has it
 ///   reconciles the prediction with the game (Prediction). It is drawn where it is predicted, and its shots
 ///   in its time (ShotPrediction), the rest where the interpolation draws it.
-/// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why.
+/// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why. The
+///   snapshot taken after GAME_OVER has its outcome, and the players as the latest snapshot received has
+///   them, their final scores, not those of 100 ms before.
 ///
 /// The loop must be polled, by the game loop of the client.
 class RemoteSession final : public GameSession
@@ -86,6 +88,8 @@ private:
     /// The wave WAVE_STARTED told, until the next snapshot taken.
     std::optional<std::uint16_t> _waveStarted;
     std::string _waveMusic;
+    /// The outcome GAME_OVER told, until the next snapshot taken: the snapshots of the game do not carry it.
+    std::optional<game::GameOutcome> _outcome;
     bool _over = false;
     std::string _endReason;
 
@@ -119,6 +123,7 @@ public:
     void setPaused(bool /*paused*/) override {}
     [[nodiscard]] bool isOver() const override { return _over; }
     [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override;
+    [[nodiscard]] bool isEndless() const override { return true; }
 
     /// The game accepted the player.
     [[nodiscard]] bool accepted() const { return _accepted.has_value(); }

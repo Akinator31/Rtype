@@ -4,7 +4,7 @@ The local connection between the master and the game processes it starts
 ([ADR 0013](../decisions/0013-one-process-per-game.md)). Clients never see this protocol. Conventions and types
 are defined in the [overview](index.md#2-conventions).
 
-This page describes **version 4**. Master and instances come from the same build, so a master refuses an
+This page describes **version 5**. Master and instances come from the same build, so a master refuses an
 `INSTANCE_HELLO` of another version.
 
 | Version | Change |
@@ -13,6 +13,7 @@ This page describes **version 4**. Master and instances come from the same build
 | 2 | `GAME_STATUS`: the instance tells the master where its game stands, every second |
 | 3 | The actions of the administrators ([administration](../architecture/administration.md)): `REMOVE_PLAYER` reason `KICKED`, `SHUTDOWN` reason `ENDED_BY_ADMIN` |
 | 4 | The relay of the master: `CONFIGURE` carries the port of the relay, `READY` the port on the loopback the relay sends to, and the [relay frame](#5-the-relay-frame) |
+| 5 | `GAME_OVER` carries what each player did: kills, waves cleared, best streak and experience, for the progression of its account |
 
 ## 1. Starting an instance
 
@@ -95,7 +96,7 @@ An instance exits with code 0 after `GAME_OVER` or `SHUTDOWN`, and with a non-ze
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 4 |
+| 0 | Version | `u16` | Protocol version, 5 |
 | 2 | Instance id | `u32` | The `--id` argument |
 | 6 | Secret | `bytes[32]` | The secret read on the standard input |
 
@@ -152,10 +153,22 @@ not presented itself yet, and that the secret matches, comparing it in constant 
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Count | `u8` | Number of entries that follow, at most 4 |
-| 1 | Scores | | Count entries: player id (`u32`), then score (`u32`) |
+| 1 | Scores | | Count entries of 20 bytes, below |
 
-**Receiver behaviour:** the master sends `LEFT_GAME (GAME_OVER)` to the players of the game and frees its
-port.
+Each entry, a player connected at the end of the game:
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Player id | `u32` | |
+| 4 | Score | `u32` | |
+| 8 | Kills | `u32` | Bydos it shot down (version 5) |
+| 12 | Waves cleared | `u16` | Waves that ended while its ship was alive |
+| 14 | Best streak | `u16` | Most waves cleared in a row |
+| 16 | Experience | `u32` | Experience earned in the game |
+
+**Receiver behaviour:** the master adds the game to the progression of the account of each player signed in
+(a guest earns nothing), and sends it `PROGRESS`. Then it sends `LEFT_GAME (GAME_OVER)` to the players of the
+game and frees its port.
 
 #### GAME_STATUS (`0x06`)
 

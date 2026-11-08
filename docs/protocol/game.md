@@ -28,7 +28,7 @@ acknowledgements and the messages.*
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Magic | `u16` | `0x5254` (`"RT"`) |
-| 2 | Version | `u8` | Protocol version, 2 |
+| 2 | Version | `u8` | Protocol version, 3 |
 | 3 | Reserved | `u8` | 0 |
 | 4 | Session id | `u32` | Session given by the master, never 0, unique across the master |
 | 8 | Packet number | `u64` | Number of this datagram in its direction, from 1 |
@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-02                        version 2
+03                        version 3
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -74,7 +74,7 @@ The body is encrypted with **AEAD_CHACHA20_POLY1305** as defined in
 A receiver processes a datagram in this order, and drops it silently at the first failed step:
 
 1. The size is between 32 and 1200 bytes.
-2. The magic is `0x5254`, the version is 2, the reserved byte is 0.
+2. The magic is `0x5254`, the version is 3, the reserved byte is 0.
 3. The session id is a known session.
 4. The source address has not sent more than 200 datagrams in the last second.
 5. The packet number is accepted by the replay window ([section 4](#4-replay-window)).
@@ -422,7 +422,7 @@ predicted one. A predicted shot the game never sends is a wrong guess: the clien
 **Sending.** Every **2** ticks (30 times per second), after simulating the tick, the game sends each connected
 client a snapshot: the players' scores and lives, and the state of every entity. When the entities do not fit
 in one datagram, the snapshot is split in **parts** (at most 16), each in its own datagram, each with the tick
-and the players. With four players, a part holds up to 69 entities.
+and the players. With four players, a part holds up to 65 entities.
 
 **Receiving.** The client keeps the tick `L` of the latest snapshot it applied, and for each part received:
 
@@ -481,16 +481,21 @@ or more inputs than `Tick + 1`, makes the message malformed.
 | 16 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
 | 17 | Player count | `u8` | 0 to 4 |
 | 18 | Players | | Player count times the fields below |
-| 18 + 6p | Entity count | `u8` | Number of entities in this part |
-| 19 + 6p | Entities | | Entity count times the fields below |
+| 18 + 20p | Entity count | `u8` | Number of entities in this part |
+| 19 + 20p | Entities | | Entity count times the fields below |
 
-Each player:
+Each player, 20 bytes:
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Slot | `u8` | 0 to 3 |
 | 1 | Lives | `u8` | Lives left, 0 once out of the game |
 | 2 | Score | `u32` | |
+| 6 | Kills | `u32` | Bydos it shot down in this game (version 3) |
+| 10 | Waves cleared | `u16` | Waves that ended while its ship was alive |
+| 12 | Streak | `u16` | Waves cleared in a row up to the last one, 0 after a wave it did not clear |
+| 14 | Best streak | `u16` | The longest streak of the game |
+| 16 | Experience | `u32` | Experience earned in this game; always 0 offline. Online, the waves follow each other without end and earn experience ([progression](../architecture/accounts.md#progression)) |
 
 Each entity, 16 bytes:
 
@@ -604,13 +609,14 @@ FF FF FF FF               ack bits: the 32 packets before were received
 
 The body is 27 bytes; once sealed ([section 3](#3-encryption)), the datagram is 59 bytes.
 
-The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives and 1500 points, and its ship
+The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives and 1500 points, shot down
+12 Bydos, cleared 2 waves in a row and earned 350 experience, and its ship
 (entity 7) is at (200, 540.5), going up at 300 units per second, invulnerable:
 
 ```
 80                        type: SNAPSHOT
 00                        flags: unreliable
-00 29                     size: 41 bytes
+00 37                     size: 55 bytes
 00 00 03 E8                 tick: 1000
 00 00 03 E6                 last input applied: tick 998
 02                          input lead: 2 ticks
@@ -621,6 +627,9 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 01                          of 1 part
 01                          1 player
 00 03 00 00 05 DC             slot 0, 3 lives, score 1500
+00 00 00 0C                   12 Bydos shot down
+00 02 00 02 00 02             2 waves cleared, streak 2, best streak 2
+00 00 01 5E                   350 experience
 01                          1 entity
 00 00 00 07                   id 7
 01                            kind: PLAYER_SHIP

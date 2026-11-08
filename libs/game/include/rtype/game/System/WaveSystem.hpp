@@ -15,6 +15,11 @@ namespace rtype::game
 /// later; the first one Rules::firstWaveDelay ticks after the game starts. Once the last one ends, the game
 /// is won (GameOutcome::Victory).
 ///
+/// In an endless game (Rules::endless, online), each wave is drawn at random among all of them and they
+/// follow each other until every player is out of lives (CombatSystem): no victory. As a wave ends, each
+/// player whose ship is alive clears it and earns its experience (Progression); the streak of the others
+/// goes back to 0.
+///
 /// Nothing happens without a wave in context.waves, nor while no player is in the game, nor during the
 /// rescue against the final boss (RescueSystem), which ends the game itself. The enemies are created after
 /// the systems of the tick.
@@ -27,6 +32,8 @@ class WaveSystem : public ecs::System
     [[nodiscard]] bool hasPlayers() const;
     [[nodiscard]] bool hasEnemiesLeft() const;
     void startNextWave();
+    void startWave(std::string name);
+    void clearWave();
     void spawnDueEnemies(const WaveDefinition &wave);
     void spawnTimelineEnemies(const WaveDefinition &wave);
     void spawnAt(const WaveSpawn &spawn);

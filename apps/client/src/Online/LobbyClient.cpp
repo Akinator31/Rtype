@@ -325,6 +325,18 @@ void LobbyClient::received(std::uint8_t type, std::span<const std::byte> payload
         }
         return;
     }
+    if (type == message_type::Progress) {
+        const std::optional<lobby::ProgressMessage> progress = lobby::decodeProgress(payload);
+        if (!progress) {
+            fail("The server sent a malformed PROGRESS");
+            return;
+        }
+        _progress = progress;
+        if (_handlers.onProgress) {
+            _handlers.onProgress(*progress);
+        }
+        return;
+    }
     // An error after which the master closes the connection: KICKED and BANNED without a request, BANNED
     // after a SIGN_IN. The one of HELLO goes to it, for SESSION_EXPIRED
     if (type == message_type::Error) {
@@ -450,6 +462,7 @@ void LobbyClient::doneRequest(std::uint8_t type, std::vector<std::byte> payload,
                     // The master closes the connection after DONE: not a connection lost
                     logger().info("Signed out of {}", _name);
                     _account.reset();
+                    _progress.reset();
                     close();
                 }
                 if (done) {

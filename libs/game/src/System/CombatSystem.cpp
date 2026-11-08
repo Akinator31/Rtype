@@ -149,7 +149,7 @@ void CombatSystem::rewardKill(ecs::entity_t shot, ecs::entity_t enemy)
     const std::uint8_t slot = _owners.get(shot).slot;
     PlayerSlot &player = _context.players[slot];
     if (player.present) {
-        player.score += _context.enemies.getDefinition(_enemies.get(enemy).id).score;
+        _context.rewardKill(player, _context.enemies.getDefinition(_enemies.get(enemy).id));
     }
 }
 
