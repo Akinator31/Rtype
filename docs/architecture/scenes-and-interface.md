@@ -346,7 +346,11 @@ lights up as a `SettingRow` while it is under the pointer or has the focus; the 
 pointed at, and more while it is dragged: the `InterfaceSystem` writes the `SliderTrack` of the slider, and
 moves the value to the pointer while the mouse button is held. Left, Right and the wheel step the value as for
 every `Slider`. The row is `SliderStyle::width` wide, or `SliderTrack::width` (the last parameter of
-`slider()`); `getRailLeft()` and `getRailWidth()` give its rail.
+`slider()`); `getRailLeft()` and `getRailWidth()` give its rail. Three fields of the `Slider`, set after
+`slider()`, are optional: `label`, a text written instead of the percentage when it gives one; `onConfirm`, what
+Confirm does on the row; and `icon`, a picture tinted after the caption (`SliderStyle::iconSize`, `iconGap`).
+The voice of a player in the pause menu uses all three: its volume, *MUTED* once Confirm muted it, and the icon
+of its voice ([Voice](voice.md#in-the-hud-and-the-pause-menu)).
 
 `InterfaceBuilder::toggle()` makes an on / off setting drawn as "OFF - dot - ON" (`InterfaceStyle::toggle`,
 `SwitchStyle`): the dot slides to the side that is on, and the label of that side lights up. The switch lights

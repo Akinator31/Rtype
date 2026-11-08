@@ -4,7 +4,7 @@ The local connection between the master and the game processes it starts
 ([ADR 0013](../decisions/0013-one-process-per-game.md)). Clients never see this protocol. Conventions and types
 are defined in the [overview](index.md#2-conventions).
 
-This page describes **version 4**. Master and instances come from the same build, so a master refuses an
+This page describes **version 5**. Master and instances come from the same build, so a master refuses an
 `INSTANCE_HELLO` of another version.
 
 | Version | Change |
@@ -13,6 +13,7 @@ This page describes **version 4**. Master and instances come from the same build
 | 2 | `GAME_STATUS`: the instance tells the master where its game stands, every second |
 | 3 | The actions of the administrators ([administration](../architecture/administration.md)): `REMOVE_PLAYER` reason `KICKED`, `SHUTDOWN` reason `ENDED_BY_ADMIN` |
 | 4 | The relay of the master: `CONFIGURE` carries the port of the relay, `READY` the port on the loopback the relay sends to, and the [relay frame](#5-the-relay-frame) |
+| 5 | `ADD_PLAYER` carries the account of the player, which the game tells the other players in `PLAYER_JOINED` |
 
 ## 1. Starting an instance
 
@@ -53,7 +54,7 @@ sequenceDiagram
     M->>I: CONFIGURE (name, max players, relay port)
     Note over I: opens its UDP port, or one on the loopback behind the relay
     I->>M: READY (UDP port)
-    M->>I: ADD_PLAYER (player id, name, session id, keys)
+    M->>I: ADD_PLAYER (player id, name, session id, keys, account)
     I->>M: PLAYER_CONNECTED (player id)
     loop every second
         I->>M: GAME_STATUS (tick, wave, players)
@@ -95,7 +96,7 @@ An instance exits with code 0 after `GAME_OVER` or `SHUTDOWN`, and with a non-ze
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 4 |
+| 0 | Version | `u16` | Protocol version, 5 |
 | 2 | Instance id | `u32` | The `--id` argument |
 | 6 | Secret | `bytes[32]` | The secret read on the standard input |
 
@@ -220,6 +221,7 @@ game back as a frame to the relay. Either way it answers `READY` with the port i
 | 8 | Client key | `bytes[32]` | |
 | 40 | Server key | `bytes[32]` | |
 | 72 | Name | `str8` | 1 to 16 bytes |
+| 73 + n | Account id | `u64` | The account the player is signed in to, 0 for a guest (version 5) |
 
 **Receiver behaviour:** the instance expects a `CONNECT` on this session. If none arrives within 10 seconds,
 it forgets the session and sends `PLAYER_DISCONNECTED (TIMED_OUT)`.

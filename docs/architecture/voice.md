@@ -3,9 +3,9 @@
 !!! warning "In progress"
 
     The voice chat is being built. This page describes what exists: the interface, the rule of the backends,
-    the codec, the messages of the game protocol, the devices, the voice of the game, the talk modes, the keys
-    and the Voice page. The voice in the HUD, the sound processing and the spatial voice come with the next
-    steps.
+    the codec, the messages of the game protocol, the devices, the voice of the game, the talk modes, the keys,
+    the Voice page, and the voice in the HUD and in the pause menu. The sound processing and the spatial voice
+    come with the next steps.
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
@@ -18,6 +18,7 @@ targets:
 |---|---|---|
 | `rtype::voice` | `rtype/voice/VoiceChannel.hpp` | `VoiceChannel`, the voice of one game for the player of this client; `Participant`, `Join`, `Position`, `Slot` |
 | `rtype::voice` | `rtype/voice/Backend.hpp` | `Backend` (`None`, `Game`, `Discord`), `carriedByGame()` and `name()` |
+| `rtype::voice` | `rtype/voice/Status.hpp` | `Status`: what a player tells about its voice, muted, deafened, without a microphone |
 | `rtype::voice` | `rtype/voice/Format.hpp` | `SampleRate`, `FrameSamples`, `FramesPerSecond`, `MaxFrameBytes`: what the codec, the protocol and the devices agree on |
 | `rtype::voice` | `rtype/voice/Devices.hpp` | `Capture` and `Playback`: the microphone and the voices played, as interfaces |
 | `rtype::voice` | `rtype/voice/RingBuffer.hpp` | `RingBuffer`: what an audio thread and the game loop share, without a lock |
@@ -83,10 +84,11 @@ voice.leave();                                     // LEFT_GAME, or the session 
 | `join(Join)` / `leave()` | Joins the voice of the game this client joined; leaves it, closing the devices |
 | `addParticipant(slot)` / `removeParticipant(slot)` | Another player came in, or left; a new one is on `None` until the roster says otherwise |
 | `setBackend(slot, backend)` | What carries the voice of a player |
+| `setStatus(slot, Status)` | What a player tells about its voice ([The status of each player](#the-status-of-each-player)) |
 | `setSelfMute(bool)` / `setTalking(bool)` | Nobody hears the player of this client; it talks now (push-to-talk held or voice detected) |
 | `setParticipantVolume(slot, v)` / `setParticipantMute(slot, bool)` | For this client only; the volume from 0 to `MaxVolume` (2), 1 by default |
 | `setParticipantPosition(slot, Position)` | Where the ship of a player is, for the spatial voice; a 3D vector, `z` 0 in the 2D game |
-| `participants()` | The other players: slot, backend, speaking, muted by itself or by me, volume |
+| `participants()` | The other players: slot, backend, speaking, its status, muted by me, volume |
 | `poll()` | Once per frame: what came since the last call |
 
 A device that cannot be opened is not an error, as for the [audio](audio.md): the player hears nothing or is
@@ -132,7 +134,7 @@ another length (10 ms, 40 ms) is refused, so that every frame is the same 960 sa
 ## In the game session
 
 The voice travels in the UDP session of the game
-([game protocol, section 9.4](../protocol/game.md#94-the-voice)), in four messages of `libs/game`
+([game protocol, section 9.4](../protocol/game.md#94-the-voice)), in six messages of `libs/game`
 (`rtype/game/Messages.hpp`):
 
 | Message | Direction | Content |
@@ -141,8 +143,12 @@ The voice travels in the UDP session of the game
 | `VOICE_STATE` (`0x42`) | Client → game, reliable | `VoiceStateMessage`: the backend of the player |
 | `VOICE_FRAME` (`0x84`) | Game → client, unreliable | `VoiceFrameMessage`: the slot of the player who talks, then as `VOICE` |
 | `VOICE_ROSTER` (`0x85`) | Game → client, reliable | `VoiceRosterMessage`: the backend of each slot |
+| `VOICE_STATUS` (`0x43`) | Client → game, reliable | `VoiceStatusMessage`: the `Status` of the player, one byte of flags |
+| `VOICE_STATUSES` (`0x86`) | Game → client, reliable | `VoiceStatusesMessage`: the `Status` of each slot |
 
-These are new types, which an older client or game ignores: the game protocol stays at version 2.
+These are new types, which an older client or game would ignore. Game protocol 3 adds the account of each
+player to `PLAYER_JOINED`, so that a client keeps its choices for another player under it
+([In the HUD and the pause menu](#in-the-hud-and-the-pause-menu)).
 
 ```mermaid
 sequenceDiagram
@@ -168,6 +174,21 @@ Discord. A frame of D, on Discord, would go to A and B, never to another player 
 - **The client** (`RemoteSession`, [The client online](client-online.md#remotesession)) tells its backend,
   sends the frames it is given in the datagram of the next `INPUT`, and keeps the frames of the others and the
   roster. Given the devices of the voice, it runs a [`GameVoice`](#the-voice-of-the-game) through them.
+
+## The status of each player
+
+Each player tells the others what it does with its voice (`voice::Status`), so that their HUD shows it:
+
+| Flag | Set while |
+|---|---|
+| `muted` | Muted by itself: its mute key, deafened, or its voice turned off (`GameVoice::selfMuted()`) |
+| `deafened` | Deafened by its key (`GameVoice::deafened()`) |
+| `noMicrophone` | Its microphone could not be opened the last time it was unmuted (`GameVoice::microphoneMissing()`): it listens only |
+
+`RemoteSession` sends `VOICE_STATUS` once accepted, then at every change; the game keeps the status of each
+player and sends `VOICE_STATUSES` to everyone at every change, and to a newcomer at its connection; the client
+gives each status to its `GameVoice` (`setStatus()`), which keeps it in the `Participant`. The status only
+informs: a player muted by itself sends no voice, whatever it says.
 
 ## The devices
 
@@ -248,6 +269,39 @@ page, and the state of the keys): on `GAME` if the voices can be played, it join
 players and the roster, polls it at each update, and leaves at the end. Before each poll, `applyVoice()` gives
 it the mode, the keys and the volumes ([The talk modes](#the-talk-modes)); after it, the session tells
 `VoiceDevices::microphoneSilent`.
+
+## In the HUD and the pause menu
+
+From the Figma design, Série 16 (`Voix en jeu`): who talks shows at a glance, and each player sets how it hears
+the others.
+
+```mermaid
+flowchart LR
+    V["GameVoice<br/>participants(), transmitting()"] --> W["RemoteSession::voiceView()"]
+    W --> H["HudSystem<br/>names and icons"]
+    W --> B["GameSessionSystem<br/>badge above the ship"]
+    W --> P["Pause menu<br/>a slider per player"]
+    P -- "VoicePreferences::players" --> R["RemoteSession<br/>setParticipantVolume / Mute"]
+```
+
+- **The icon of a pilot** (`VoiceIcon`, `apps/client/src/Voice/VoiceIcons.hpp`), from its `Participant`
+  (`voiceIconOf()`): muted by me first, then speaking, then muted (or deafened) by itself, then without a
+  microphone; nothing otherwise. For the player of this client: deafened, then muted, then its voice going out
+  (`GameVoice::transmitting()`). The icons are white pictures of Lucide (ISC license, beside them in
+  `assets/images/hud/voice/`), tinted: white while talking, grey for a choice, dark grey without a microphone.
+- **The HUD** ([The game in the client](client-game.md#hud)): online, the line of each other pilot shows,
+  from the right, its score, its name, its slot and its icon; its name turns white while it talks. The line of
+  the player shows "1P · NAME" and its icon.
+- **The badge** above the ship of another pilot while it talks: a microphone in a dark disc, right of its
+  health bar, faded in and out over an eighth of a second (`GameSessionSystem::setVoiceBadgeLook()`).
+- **The pause menu** shows, online with other players, a group *Player voices*: one slider per player, its
+  name and its icon, its volume for this client from 0 to 100 % (Left and Right, by 5 %), muted or not with
+  Confirm, which then reads *MUTED*.
+- **The choices are kept** in `VoicePreferences::players`, under `playerVoiceKey()`: the address of the server
+  as the player wrote it, then the id of the account of the other player (`PLAYER_JOINED`), or `guest/` and its
+  name for a guest. The same account on another server is another player. `RemoteSession` applies them to the
+  `GameVoice` at each update; the settings are written when the pause menu closes
+  ([Settings](settings.md#the-file)). A player heard as by default is not kept.
 
 ## The talk modes
 
@@ -351,6 +405,17 @@ push-to-talk key and its release delay; the voice activity and its hold; the lev
 of the meter and the threshold. `tests/client_voice.cpp` (tags `[settings][voice]`): the preferences of a first
 run, kept and read back, wrong or out of range; each mode, muted and deafened, through `applyVoice()`. The keys
 of the voice, in `tests/control_settings.cpp`: their defaults, and a key shared with an action of the game.
+`tests/client_voice.cpp` also checks the choices for the other players: their keys by account or by name and
+server, kept, read back, clamped, those heard as by default and those forgotten dropped; and a microphone
+missing told.
+
+The voice in the HUD, in `tests/client_game.cpp` (tags `[client][voice]`): no name and no icon offline; online,
+the names, the icon of each pilot and of the player, the name lit while talking, the parts in their order; the
+badge above the ship of a player who talks, faded out once muted by me; the icon of every state. The slider of
+the pause menu, in `tests/engine.cpp`: its label instead of the percentage, and Confirm. The statuses, in
+`tests/game_messages.cpp` and `tests/server_instance.cpp` (told at the connection, at every change, and when a
+player leaves), and two clients online, in `tests/client_online.cpp`: the status of one told to the other, and
+its volume and mute applied from the choices of the other.
 
 `tests/voice_codec.cpp` (tag `[voice]`), on a voice-like sound (a pitch gliding from 140 to 220 Hz, with its
 harmonics): its level within 3 dB and its pitch kept after the codec; about 60 bytes per frame; never more than
