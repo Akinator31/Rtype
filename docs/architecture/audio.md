@@ -138,6 +138,5 @@ computer.
 
 - **No spatial sound** beyond left-right panning. For VR, sounds positioned in 3D around the player would help;
   raylib does not provide it, so it would need another approach.
-- **No voice**: the voice chat of the players is apart, in `libs/voice` ([Voice](voice.md)).
 - **No fading** between two musics: `playMusic()` switches at once.
 - The effects volume does not change the sounds already playing, which are short.
