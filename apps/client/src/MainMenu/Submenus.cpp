@@ -1,5 +1,6 @@
 #include "MainMenu/Submenus.hpp"
 
+#include "Campaign/CampaignScene.hpp"
 #include "Lore/LoreScene.hpp"
 #include "MainMenu/Column.hpp"
 #include "MainMenu/UiShowcase.hpp"
@@ -53,7 +54,8 @@ void createSubmenuScenes(engine::Engine &engine, const engine::InterfaceStyle &s
                          std::function<void()> openHangar)
 {
     createSubmenuScene(engine, style, PlayMenuScene, translations, "menu.play",
-                       {{"menu.solo", std::move(playSolo)},
+                       {{"menu.campaign", [&engine] { engine.pushScene(CampaignScene); }},
+                        {"menu.solo", std::move(playSolo)},
                         {"menu.ships", std::move(openHangar)},
                         {"menu.lore", [&engine] { engine.pushScene(LoreScene); }}});
     createUiShowcaseScene(engine, style, translations);

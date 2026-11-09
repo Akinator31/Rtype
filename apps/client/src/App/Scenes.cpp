@@ -1,5 +1,6 @@
 #include "App/Scenes.hpp"
 
+#include "Campaign/CampaignScene.hpp"
 #include "Console/ConsoleScene.hpp"
 #include "Game/LocalSession.hpp"
 #include "Loading/LoadingScene.hpp"
@@ -38,18 +39,18 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     localization::Localization &translations = targets.translations;
     createMainMenuScene(engine, resources, style, metrics, translations,
                         [&window = targets.window] { window.requestClose(); });
-    createSubmenuScenes(
-        engine, style, translations,
-        [&engine, &ships, &games, &config] {
-            openShipSelector(engine, ships, [&games, &config] {
-                games.play(std::make_unique<LocalSession>(game::Rules{}, config));
-            });
-        },
-        [&engine, &ships] { openShipSelector(engine, ships); });
+    const auto playSolo = [&engine, &ships, &games, &config] {
+        openShipSelector(engine, ships, [&games, &config] {
+            games.play(std::make_unique<LocalSession>(game::Rules{}, config));
+        });
+    };
+    createSubmenuScenes(engine, style, translations, playSolo,
+                        [&engine, &ships] { openShipSelector(engine, ships); });
     createSettingsScene(engine, style, targets);
     createControlsScenes(engine, style, translations);
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
+    createCampaignScene(engine, resources, targets.audio, metrics, translations, playSolo);
 }
 
 } // namespace rtype::client

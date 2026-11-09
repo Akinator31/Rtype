@@ -1,5 +1,6 @@
 #include "App/Systems.hpp"
 
+#include "Campaign/TransmissionSystem.hpp"
 #include "Console/ConsoleSystem.hpp"
 #include "Controls/KeyCaptureSystem.hpp"
 #include "Game/DamageNumberSystem.hpp"
@@ -39,6 +40,8 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     ecs.registerSystem<HealthBarSystem>();
     // Before the sounds, which play those of the results in the frame they give them
     ecs.registerSystem<ResultsSystem>(ecs);
+    // Before the sounds, which play its keys, and the anchors, which place its lines as they grow
+    ecs.registerSystem<TransmissionSystem>(ecs, engine.getScenes(), engine.getControls(), devices);
     // After the session, which gives the players, and before the anchors, which place the HUD
     ecs.registerSystem<HudSystem>(sessions, metrics);
     // After the menus and the game, to play their sounds in the frame they give them

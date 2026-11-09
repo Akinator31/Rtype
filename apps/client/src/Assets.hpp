@@ -31,6 +31,9 @@
 // The story of the game, in each language, laid out for the crawl of the lore scene (see LoreLineKind)
 #define RTYPE_LORE_FRENCH "lore/fr.txt"
 #define RTYPE_LORE_ENGLISH "lore/en.txt"
+// The briefing of the campaign, received as a transmission, in each language (a "# " title, then lines)
+#define RTYPE_CAMPAIGN_BRIEFING_FRENCH "campaign/fr.txt"
+#define RTYPE_CAMPAIGN_BRIEFING_ENGLISH "campaign/en.txt"
 
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
@@ -77,3 +80,13 @@
 #define RTYPE_SOUND_RESULTS_LEVEL_UP "sounds/fx/results/level_up.wav"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"
+/// The transmission of the briefing of the campaign (TransmissionSystem): the static as the radio opens, the
+/// beeps of the incoming signal, the channel that connects, a key of the teletype, the end of a line, and the
+/// over and out. The hum of the open channel loops under it.
+#define RTYPE_SOUND_TRANSMISSION_STATIC "sounds/fx/transmission/static.wav"
+#define RTYPE_SOUND_TRANSMISSION_BEEP "sounds/fx/transmission/beep.wav"
+#define RTYPE_SOUND_TRANSMISSION_CONNECT "sounds/fx/transmission/connect.wav"
+#define RTYPE_SOUND_TRANSMISSION_TYPE "sounds/fx/transmission/type.wav"
+#define RTYPE_SOUND_TRANSMISSION_LINE "sounds/fx/transmission/line.wav"
+#define RTYPE_SOUND_TRANSMISSION_END "sounds/fx/transmission/end.wav"
+#define RTYPE_MUSIC_TRANSMISSION_HUM "sounds/fx/transmission/hum.wav"
