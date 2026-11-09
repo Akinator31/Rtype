@@ -297,13 +297,6 @@ else()
   target_link_libraries(rtype_webrtc_apm PRIVATE Threads::Threads)
 endif()
 set_source_files_properties(${WEBRTC_DIR}/third_party/pffft/src/pffft.c PROPERTIES COMPILE_DEFINITIONS _GNU_SOURCE)
-# rtc_base/trace_event.h uses uint8_t without <cstdint>, which recent GCC no longer includes through <string>:
-# included before each C++ file, the sources left as they are
-if(MSVC)
-  target_compile_options(rtype_webrtc_apm PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/FIcstdint>)
-else()
-  target_compile_options(rtype_webrtc_apm PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include cstdint>")
-endif()
 
 # The parts written for SSE2 and AVX2, chosen at run time by the CPU: AVX2 only where it is compiled for it
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
@@ -338,3 +331,15 @@ endif()
 install(FILES ${webrtc_audio_processing_SOURCE_DIR}/COPYING DESTINATION licenses RENAME webrtc-audio-processing.txt
         COMPONENT client)
 install(FILES ${abseil_SOURCE_DIR}/LICENSE DESTINATION licenses RENAME abseil.txt COMPONENT client)
+
+# rtc_base/trace_event.h uses uint8_t without <cstdint>, which recent GCC no longer includes through <string>:
+# included before each C++ file, the sources left as they are. Set on the .cc files themselves, after the SSE2 and
+# AVX2 ones: the Visual Studio generators do not tell C from C++ in $<COMPILE_LANGUAGE> of a target, and gave it
+# to the .c files too, which <cstdint> refuses
+get_target_property(webrtc_sources rtype_webrtc_apm SOURCES)
+list(FILTER webrtc_sources INCLUDE REGEX "\\.cc$")
+if(MSVC)
+  set_property(SOURCE ${webrtc_sources} APPEND PROPERTY COMPILE_OPTIONS /FIcstdint)
+else()
+  set_property(SOURCE ${webrtc_sources} APPEND PROPERTY COMPILE_OPTIONS -include cstdint)
+endif()

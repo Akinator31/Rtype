@@ -424,7 +424,8 @@ CPU), so that neither meson nor its subproject is needed on Linux or Windows. Th
 an update. abseil, which it is written against, comes through CPM too, at the release its meson wrap pins
 (20240722.0). One header of WebRTC uses `uint8_t` without `<cstdint>`, which recent GCC no longer includes
 through `<string>`: the build includes it before each of its C++ files (`-include cstdint`, `/FIcstdint`),
-the sources left as they are. Its warnings are not ours (`-w`). Its license (BSD) is installed with the client
+the sources left as they are, set on the `.cc` files one by one, not its C files: the Visual Studio generators
+do not tell C from C++ in the options of a target. Its warnings are not ours (`-w`). Its license (BSD) is installed with the client
 in `licenses/webrtc-audio-processing.txt`, the one of abseil (Apache 2.0) in `licenses/abseil.txt`. The whole
 chain costs under 1 % of a core.
 
