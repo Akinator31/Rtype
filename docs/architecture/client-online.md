@@ -236,8 +236,8 @@ before, and the client shows it again, as the application of the master.
 
 **The voice of a game**: connected to Discord, the client joins the Discord lobby of each game it plays with the
 secret of `GAME_JOINED` (lobby protocol 7) and the id `WELCOME` gave it, and talks there once the call is
-connected; without the connection, or a call that fails, it talks through the game
-([Voice](voice.md#the-voice-of-discord)).
+connected, and through the game to the players who are not on Discord; without the connection, or while a
+call that dropped is joined again, it talks through the game ([Voice](voice.md#mixed-games)).
 
 ### Profiles
 
@@ -511,8 +511,11 @@ shots.apply(snapshot, slot, drawnTick, inputTick); // then, on the world of the 
   other, and closed once turned off;
 - two clients with Discord on a master with the lobbies of the games (tags `[voice][discord]`), against the fake
   call of `tests/helpers/FakeSocialSdk.hpp`: the same lobby, each with its id, both on `DISCORD` once their
-  calls connect, the voice of one heard by the other, one back on the voice of the game when its call drops; and
-  a client on a master without the lobbies, which joins none;
+  calls connect, the voice of one heard by the other, one back on the voice of the game when its call drops,
+  heard and hearing through the game, then on Discord again once its call is joined again; four clients, two
+  with Discord and two without, each hearing the three others, those on Discord each other through Discord
+  only, and one muted by an administrator heard by none; and a client on a master without the lobbies, which
+  joins none;
 - a game that crashes reported to its player, who can create another one, and a game that stops ending the
   session of its player.
 

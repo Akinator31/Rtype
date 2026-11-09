@@ -146,9 +146,11 @@ which forwards it to the other players without decoding it ([Voice](../architect
 The server keeps none of it: no recording, no log of what is said, so a voice cannot be reported, and an
 administrator cannot hear what a player said. What an administrator can do is mute a player, for the rest of
 its game or its account for a time, from the panel ([Administer a server](administer-a-server.md)). With
-`[discord] social`, the players connected to Discord talk in the Discord lobby of their game instead: Discord
-carries their voice, not the server, whose mute closes their microphone and silences them for the others of the
-game, without removing them from the lobby.
+`[discord] social`, the players connected to Discord talk in the Discord lobby of their game: Discord carries
+the voice between two of them, and the server between them and the players on the voice of the game, as
+before. Its mute closes their microphone and silences them for the others of the game, without removing them
+from the lobby. The two paths do not have the same latency: a player on Discord heard by one on the game may
+come a little earlier or later than through Discord.
 
 ## Result
 

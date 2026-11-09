@@ -1,14 +1,14 @@
 # Voice
 
-!!! warning "In progress"
+!!! note "To check against the real SDK of Discord"
 
-    The voice chat is being built. This page describes what exists: the interface, the rule of the backends,
-    the codec, the messages of the game protocol, the devices, the voice of the game, the sound processing of
-    the microphone, the talk modes, the keys, the Voice page, the voice in the HUD and in the pause menu, the
-    rules of the server with the moderation of the voice, and Discord as a second backend, a game at a time.
-    The mixed games, some players on Discord and the others on the game hearing each other, come with the next
-    step. The spatial voice was tried and left out: in a shoot'em up the ships stay on the left of the screen,
-    stacked vertically, which stereo cannot render, and it added little.
+    Every step of the voice chat is there: the interface, the rule of the backends, the codec, the messages of
+    the game protocol, the devices, the voice of the game, the sound processing of the microphone, the talk
+    modes, the keys, the Voice page, the voice in the HUD and in the pause menu, the rules of the server with
+    the moderation of the voice, Discord as a second backend, and the mixed games. What Discord does is tested
+    against a fake of its SDK only: a few behaviours of the real one are still to check with two Discord
+    accounts ([Mixed games](#mixed-games)). The spatial voice was tried and left out: in a shoot'em up the
+    ships stay on the left of the screen, stacked vertically, which stereo cannot render, and it added little.
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
@@ -29,6 +29,7 @@ targets:
 | `rtype::voice_processing` | `rtype/voice/Processing.hpp` | `SoundProcessing`, `ProcessingSettings`: the echo cancellation, the noise suppression and the gain control of the microphone, by WebRTC |
 | `rtype::voice_client` | `rtype/voice/JitterBuffer.hpp` | `JitterBuffer`: the frames of one player put back in order and in time |
 | `rtype::voice_client` | `rtype/voice/GameVoice.hpp` | `GameVoice`, the `VoiceChannel` of the voice of the game, and the `VoiceTransport` it goes through |
+| `rtype::voice_client` | `rtype/voice/SharedPlayback.hpp` | `SharedPlayback`: one `Playback` for the voice of the game and the one of Discord in a mixed game, each slot heard from one of them |
 | `rtype::voice_client` | `rtype/voice/Talk.hpp` | `TalkMode`, `PushToTalk`, `VoiceActivity`, `LevelMeter`, `levelOf()`: how the player talks, pure |
 | `rtype::voice_client` | `rtype/voice/Microphone.hpp` | `Microphone`: the `Capture` of a microphone of the system, the default one or one chosen |
 
@@ -67,8 +68,9 @@ rtype::voice::carriedByGame(Backend::Discord, Backend::Game);    // true
 rtype::voice::carriedByGame(Backend::Discord, Backend::Discord); // false: Discord carries it
 ```
 
-So in a game of two players on Discord and two on the game, each hears the three others once: the test
-`In a game of two players on Discord and two on the game, each hears the three others once` checks every pair.
+So in a game of two players on Discord and two on the game, each hears the three others once
+([Mixed games](#mixed-games)): the rule is checked for every pair in `tests/voice.cpp`, and the voices of four
+real clients in `tests/client_online.cpp`.
 
 ## The voice channel
 
@@ -327,10 +329,10 @@ sequenceDiagram
 - **The switch.** `RemoteSession` stays on `GameVoice` while the call connects, hearing the others through the
   game, its microphone closed: Discord opens it, and closing a microphone at the moment Discord opens the same
   one stalls `ma_device_uninit()` on some systems (a Bluetooth headset on PipeWire, whose profile changes). A
-  call not connected within 10 s is given up. Once it is connected, it
-  leaves the `GameVoice` (its microphone and its streams closed), tells `VOICE_STATE DISCORD`, and runs
-  `DiscordVoice`. A call that fails, or drops, is ended: the session joins the `GameVoice` again with the
-  players of the game, and tells `VOICE_STATE GAME`, for the rest of the game.
+  call not connected within 10 s is given up. Once it is connected, it tells `VOICE_STATE DISCORD` and runs
+  `DiscordVoice` beside the `GameVoice`, which goes on for the players on the game
+  ([Mixed games](#mixed-games)). A call that fails before it ever connected is given up for the game: it
+  would fail the same way again.
 - **In.** `StartCallWithAudioCallbacks` gives the voice of each member on the audio thread of Discord; its
   received callback sets `outShouldMute`, so that Discord plays none of it. The samples, mixed down to mono
   and resampled to 48 kHz if they are not, go to a `RingBuffer` of the slot of the member, at most 500 ms;
@@ -346,16 +348,68 @@ sequenceDiagram
 
 | Class | Target | What |
 |---|---|---|
-| `discord::VoiceCall` | `rtype::discord` | The interface: `start(secret, metadata, received)`, `end()`, `status()` (`Idle`, `Joining`, `Connected`, `Failed`), `members()`, `speaking()`, and the settings of the call |
+| `discord::VoiceCall` | `rtype::discord` | The interface: `start(secret, metadata, received, captured)`, `end()`, `status()` (`Idle`, `Joining`, `Connected`, `Failed`), `members()`, `speaking()`, and the settings of the call |
 | `discord::SocialSdkVoiceCall` | `rtype::discord_sdk` | It, on the Social SDK and the client of the `Session` |
 | `discord::DiscordVoice` | `rtype::discord_voice` | The `VoiceChannel` of a player on Discord, on a `VoiceCall` and the `Playback` |
 
-**For now, the two backends do not meet**: a player whose call failed, or who has no Discord, stays on
-`GAME`, but a Discord player does not yet send its voice to the game, nor hear the frames of the game. In a
-game of players on both, those on Discord hear each other, and those on the game too; the next step bridges
-the two. Two things are still to check against the real SDK, with two Discord accounts: the rate and channels
-the received callback gives (any is taken, 8 to 192 kHz, up to 8 channels), and whether the speaking callback
-tells the player itself, which `transmitting()` reads.
+## Mixed games
+
+Two players on Discord and two on the game: the four hear each other and talk. The game protocol and the
+forwarding of the game are those of the start ([The backends](#the-backends)); what changes is in the client
+of each player on Discord, which bridges **its own voice only**: no client relays another, and no single
+client cuts the voice of the others when it goes.
+
+| From → to | `GAME` | `DISCORD` |
+|---|---|---|
+| `GAME` | the game forwards `VOICE_FRAME` | the game forwards `VOICE_FRAME` |
+| `DISCORD` | the client of the player on Discord sends `VOICE` too | Discord only |
+
+```mermaid
+flowchart LR
+  Mic["Microphone"] --> D["Discord (its call)"]
+  D -- "captured callback" --> GV["GameVoice: processing, Opus"]
+  GV -- "VOICE" --> G["Game"]
+  D -- "received callback" --> DV["DiscordVoice"]
+  G -- "VOICE_FRAME" --> GV2["GameVoice: jitter, Opus"]
+  DV --> SP["SharedPlayback"]
+  GV2 --> SP
+  SP --> VS["VoiceStreams, one per slot"]
+```
+
+- **Both voices run.** On Discord, `RemoteSession` keeps its `GameVoice` joined beside the `DiscordVoice`, and
+  gives both the mode, the keys and the volumes (`applyVoice()`): push-to-talk and mute drive both at once.
+- **Up.** The microphone is opened once, by Discord. Its captured callback gives the raw samples, before the
+  processing of Discord, to `DiscordVoice::capture()`, a `Capture` the `GameVoice` reads instead of the
+  microphone (`GameVoice::setCapture()`): they go through the processing of the game
+  ([The sound processing](#the-sound-processing)), the encoder, and leave as `VOICE`. While no other player is
+  on `GAME`, the `GameVoice` is muted: nothing is encoded nor sent. If Discord gives no sample for 2 s while
+  the player talks on it (the captured callback not called, as the real SDK may do), the `GameVoice` opens the
+  microphone of the client instead, for the rest of the game: both share it, in the shared mode of PipeWire,
+  PulseAudio and WASAPI.
+- **Down.** The voices of the members come from Discord, those of the players on the game from `VOICE_FRAME`,
+  each into the stream of its slot. The game never sends a player on Discord the frames of another one.
+- **Nobody twice.** Both voices play through one `voice::SharedPlayback`, which gives each a `Playback` of its
+  own: each slot is heard from one source, the one of the roster (`setSource()`), Discord for a player on
+  `DISCORD` while this one is on Discord too, the game for all the others. What the other source writes for
+  it, a frame of the game or a voice of Discord during a change, is dropped. A stream is open while either
+  voice has it open, and has the volume its source gives.
+- **Changes during the game.** A player whose call drops sends `VOICE_STATE GAME`: the `GameVoice` takes the
+  microphone of the client back, the game forwards it everything from its next frame, and the others hear it
+  through the game. 5 s later the session joins the call again, its microphone open meanwhile, up to 3 times
+  in a game; connected, it is on `DISCORD` again. A gap of a few hundred milliseconds each time.
+- **Moderation.** A player muted by an administrator has its `VOICE` dropped by the game, is muted in its call,
+  and the clients on Discord mute its slot themselves on `mutedByAdmin` of `VOICE_STATUSES`: its member is not
+  played. A modified client could still be heard by the others on Discord: removing the member from the lobby
+  from the master closes that (the D6 of the Discord plan).
+- **The latency** differs between the two paths, the servers of Discord against the game: a player on Discord
+  is heard by one on the game a little earlier or later than by one on Discord. Accepted.
+- **In the HUD**, each other player is drawn from the `GameVoice` (its backend, status, volume), speaking as
+  its source says: Discord for those heard from Discord.
+
+Still to check against the real SDK, with two Discord accounts: the rate and channels the callbacks give (any
+is taken, 8 to 192 kHz, up to 8 channels), whether the speaking callback tells the player itself, which
+`transmitting()` reads, and whether the captured callback runs while push-to-talk is held or the voice
+detected (the fallback to the microphone of the client covers it if not).
 
 ## The rules of the server
 
@@ -625,8 +679,13 @@ dropped; muted by me, by an administrator, or deafened, nothing played, and the 
 the volume and the processing given to the call; a call that fails, or that Discord, not connected, refuses.
 In `tests/client_online.cpp`, two clients on a real master with the lobbies: the same secret, each with its
 id, both on `DISCORD` in the roster once connected, the microphone of the game closed, the voice of one heard by
-the other; a call that drops, back on `GAME` with the microphone open; the call ended with the game. A client
-on a master without the lobbies joins none. The secret, per game and the same for its players, in
+the other; a call that drops, back on `GAME` with the microphone open, heard through the game, then joined
+again and on `DISCORD`; the call ended with the game. Four clients, two with Discord and two without: each hears
+the three others, the two on Discord each other through Discord only, the exact samples Discord gave; muted by
+an administrator, one is heard by none of the three. A client on a master without the lobbies joins none. In
+`tests/discord_voice.cpp` too, the microphone Discord captures, kept only while the voice of the game reads it,
+at 48 kHz mono, and counted. In `tests/voice_game.cpp`, a `GameVoice` that changes its capture, and a
+`SharedPlayback`: the source of each slot, its volume, its stream open while either voice has it. The secret, per game and the same for its players, in
 `tests/server_games.cpp`; `GAME_JOINED` with and without it in `tests/lobby_messages.cpp`.
 
 `tests/voice_talk.cpp` (tag `[voice]`): the names of the modes; the level of silence and of sines; the
