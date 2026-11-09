@@ -298,8 +298,9 @@ void setCollisionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
 const ShipEntry *findCatalogEntry(const std::string &model)
 {
     const auto &catalog = getShipCatalog();
-    const auto found = std::ranges::find(catalog, std::string_view(model),
-                                         [](const ShipEntry &entry) { return std::string_view(entry.modelPath); });
+    const auto found = std::ranges::find(catalog, std::string_view(model), [](const ShipEntry &entry) {
+        return std::string_view(entry.modelPath);
+    });
     return found != catalog.end() ? &*found : nullptr;
 }
 
@@ -321,9 +322,10 @@ void setConfiguredShipLooks(GameSessionSystem &sessions, render::ResourceManager
             continue;
         }
         const physics::Vec3 half = game::halfSizeOf(ship.collider);
-        sessions.setShipLook(static_cast<std::uint8_t>(index),
-                             {loadShipModel(resources, entry->modelPath), entry->hull, true, entry->trailMeshes},
-                             {half.x * 2.0f, half.y * 2.0f});
+        sessions.setShipLook(
+            static_cast<std::uint8_t>(index),
+            {loadShipModel(resources, entry->modelPath), entry->hull, true, entry->trailMeshes},
+            {half.x * 2.0f, half.y * 2.0f});
     }
 }
 

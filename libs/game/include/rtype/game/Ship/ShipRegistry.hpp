@@ -11,8 +11,8 @@ namespace rtype::game
 
 /// The kinds of ship of a game, by id. Shared by the systems through the GameContext.
 ///
-/// Each ship also has an index, its rank among the ids in alphabetical order: the snapshots send it so that the
-/// client, which reads the same configuration, draws the model of the ship (EntityState::ship).
+/// Each ship also has an index, its rank among the ids in alphabetical order: the snapshots send it so that
+/// the client, which reads the same configuration, draws the model of the ship (EntityState::ship).
 class ShipRegistry
 {
     std::map<std::string, ShipDefinition> _definitions;
@@ -29,7 +29,8 @@ public:
 
     [[nodiscard]] std::size_t getDefinitionCount() const;
 
-    /// The index of a ship, from 0 to getDefinitionCount() - 1. Throws std::out_of_range if the id is unknown.
+    /// The index of a ship, from 0 to getDefinitionCount() - 1. Throws std::out_of_range if the id is
+    /// unknown.
     [[nodiscard]] std::size_t getIndex(const std::string &id) const;
 
     /// The ship at an index. Throws std::out_of_range if the index is not below getDefinitionCount().
