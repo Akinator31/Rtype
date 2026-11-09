@@ -324,7 +324,10 @@ sequenceDiagram
   each player comes with `PLAYER_JOINED`. A member matched to no player of the game is not heard. Without the
   connection of Discord (the token of the player, [The client online](client-online.md#discord)), the call
   fails at once, and the player stays on the voice of the game.
-- **The switch.** `RemoteSession` stays on `GameVoice` while the call connects. Once it is connected, it
+- **The switch.** `RemoteSession` stays on `GameVoice` while the call connects, hearing the others through the
+  game, its microphone closed: Discord opens it, and closing a microphone at the moment Discord opens the same
+  one stalls `ma_device_uninit()` on some systems (a Bluetooth headset on PipeWire, whose profile changes). A
+  call not connected within 10 s is given up. Once it is connected, it
   leaves the `GameVoice` (its microphone and its streams closed), tells `VOICE_STATE DISCORD`, and runs
   `DiscordVoice`. A call that fails, or drops, is ended: the session joins the `GameVoice` again with the
   players of the game, and tells `VOICE_STATE GAME`, for the rest of the game.
