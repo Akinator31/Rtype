@@ -5,6 +5,7 @@
 #include "Commands/Commands.hpp"
 #include "Commands/FpsCommand.hpp"
 #include "Console/Console.hpp"
+#include "Discord/DiscordPresence.hpp"
 #include "Game/GameScenes.hpp"
 #include "Game/GameSessionSystem.hpp"
 #include "Loading/AssetPreload.hpp"
@@ -20,6 +21,7 @@
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/discord/Session.hpp"
 #include "rtype/discord/SocialSdkAuthorizer.hpp"
+#include "rtype/discord/SocialSdkPresence.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
@@ -31,6 +33,7 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <string_view>
@@ -98,7 +101,14 @@ void run()
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
-    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer, window};
+    // The one client of the Discord Social SDK, polled by the game loop, and the activity of the player shown
+    // in its Discord profile
+    rtype::discord::Session discordSession;
+    rtype::discord::SocialSdkPresence discordPresence(
+        discordSession, rtype::client::readDiscordApplication(engine.getSettings()));
+    rtype::client::PresenceTracker presence(discordPresence, translations,
+                                            rtype::client::readDiscordActivity(engine.getSettings()));
+    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer, window, presence};
     // The choices of the player at the last run
     rtype::client::applySavedSettings(engine, settingsTargets);
 
@@ -106,8 +116,7 @@ void run()
     const rtype::game::GameConfig config = rtype::client::readGameConfig(console);
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
-    // The one client of the Discord Social SDK, polled by the game loop too, and signing in with it
-    rtype::discord::Session discordSession;
+    // Signing in with Discord, on the client of the Social SDK
     rtype::discord::SocialSdkAuthorizer discord(discordSession);
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions =
@@ -180,6 +189,8 @@ void run()
     engine.switchScene(rtype::client::MainMenuScene);
     while (!window.shouldClose()) {
         playFrame();
+        presence.update(rtype::client::observeActivity(engine, sessions, ships),
+                        std::chrono::steady_clock::now());
     }
 }
 

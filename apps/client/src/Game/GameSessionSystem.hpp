@@ -15,6 +15,7 @@
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Snapshot.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -121,6 +122,10 @@ class GameSessionSystem : public ecs::System
     /// Hit points of the ship of the local player in the latest snapshot, 0 while it is not there.
     std::uint8_t _localHealth = 0;
     std::uint32_t _tick = 0;
+    /// The last wave started in the session, 0 before the first.
+    std::uint16_t _wave = 0;
+    /// When the session started, for the time Discord counts since.
+    std::chrono::system_clock::time_point _startedAt;
     /// Seconds the session has been played: the time of the animations of the ships.
     float _clock = 0.0f;
 
@@ -221,6 +226,10 @@ public:
     [[nodiscard]] std::uint8_t localHealth() const { return _localHealth; }
     /// The tick of the latest snapshot.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }
+    /// The last wave started in the session played, from 1; 0 before the first.
+    [[nodiscard]] std::uint16_t wave() const { return _wave; }
+    /// When the session played started.
+    [[nodiscard]] std::chrono::system_clock::time_point startedAt() const { return _startedAt; }
     /// The stage of the rescue against the final boss in the latest snapshot.
     [[nodiscard]] game::RescueStage rescue() const { return _rescue; }
     /// The entity of the scene that draws an entity of the game, if it is drawn.

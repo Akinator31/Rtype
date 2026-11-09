@@ -17,7 +17,10 @@ apps/client/src/
     FormErrors.cpp     the field of a form each error of the master is about
     SessionTokens.cpp  the session token of the account signed in on each server, kept in the settings
     KnownProfiles.cpp  the account remembered for each server, and the pictures kept on disk
-  main.cpp             the discord::Session of libs/discord, polled every frame, and its SocialSdkAuthorizer
+  Discord/
+    DiscordPresence.cpp  the activity of the player in its Discord profile, from the scenes and the game
+  main.cpp             the discord::Session of libs/discord, polled every frame, its SocialSdkAuthorizer and
+                       its SocialSdkPresence
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn a little in the past, between the snapshots around that time
@@ -240,7 +243,7 @@ implementations, linked by the executable `r-type_client` alone.
 | Interface | Feature | Implementation |
 |---|---|---|
 | `Authorizer` | the sign-in, above | `SocialSdkAuthorizer` |
-| `Presence` | the activity of the player in its Discord profile, without a token | to come |
+| `Presence` | the activity of the player in its Discord profile, without a token ([below](#rich-presence)) | `SocialSdkPresence` |
 | `Connection` | the connection with the token of the player, which lobbies and voice need | to come |
 
 The implementations share **one `discordpp::Client`**, owned by `discord::Session`: its log callback (the logger
@@ -252,6 +255,39 @@ destroyed before the session. The tests use `tests/helpers/FakeSocialSdk.hpp`, a
 x86-64 and Windows x64; its library is copied beside the executable, in the build and in the package. On
 another platform (Linux aarch64, the image of the server for linux/arm64), `rtype::discord_sdk` does not exist:
 CMake warns and leaves `r-type_client` out, the server and the tests are built.
+
+### Rich presence
+
+The Discord profile of the player shows that it plays R-Type, and what it does in it, while the Discord client
+runs on its computer. It needs no token, nor a server that offers Discord: the SDK tells the Discord client
+through its local connection (IPC), as the activity of one application, the official one of R-Type
+(`RTYPE_DISCORD_APPLICATION_ID` at the configure, `1565673565163102250` by default: the application the official
+server signs in with, `[discord] client_id`; `discord.presence_application_id` in the [settings](settings.md) to
+change it). Without an application, nothing is shown and the SDK never starts.
+
+Every frame, once the scenes are built, `observeActivity()` (`apps/client/src/Discord/DiscordPresence.hpp`) reads
+what the player does: the game played (`GameSessionSystem`: online or not, the last wave, when it started, the
+players), else the screens open. `describeActivity()` makes the texts, in the language of the game:
+
+| Where | First line | Second line | Party | Time |
+|---|---|---|---|---|
+| The menus, the hangar, the settings | In the hangar | | | |
+| The screens of a server | Online | Choosing a game | | |
+| A solo game | Solo | Wave 7/12 | | since it started |
+| A game online | Online game | Wave 7 | 3 of 4 | since it started |
+| The results of a game online | Online game | Game over | | |
+
+The large image is the ship equipped, its key the code of the ship in lower case (`vx-03`), its code and name
+over it: the images are uploaded under those keys on the *Rich Presence* page of the application. Nothing tells
+where the player is: neither the address of the server nor the name of the game, which another player chose.
+
+`PresenceTracker` sends the changes only, at most one every 4 s, the last one once that time passed: Discord
+limits a presence to 5 updates in 20 s. **Activity on Discord** on the Settings page turns it off, which clears
+the activity at once; `SocialSdkPresence` clears it when the client closes. Discord not running, the SDK answers
+an error, logged by the logger `discord` (info), and the game goes on.
+
+Once the client connects to Discord with a token (`Connection`), `Connect()` clears the activity set before it,
+and the activity is the one of the application of the master: a later step chooses which.
 
 ## RemoteSession
 

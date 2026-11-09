@@ -31,6 +31,8 @@ struct Activity {
     std::optional<std::chrono::system_clock::time_point> startedAt;
     /// The key of an image uploaded on the Rich Presence page of the application: the ship.
     std::string largeImage;
+    /// Shown over the image: the name of the ship.
+    std::string largeText;
 
     friend bool operator==(const Activity &, const Activity &) = default;
 };

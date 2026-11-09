@@ -31,6 +31,7 @@ set_target_properties(discord_partner_sdk PROPERTIES INTERFACE_INCLUDE_DIRECTORI
 add_library(rtype_discord_sdk STATIC
     src/Session.cpp
     src/SocialSdkAuthorizer.cpp
+    src/SocialSdkPresence.cpp
 )
 add_library(rtype::discord_sdk ALIAS rtype_discord_sdk)
 target_link_libraries(rtype_discord_sdk PUBLIC rtype::discord PRIVATE rtype_options rtype::log discord_partner_sdk)

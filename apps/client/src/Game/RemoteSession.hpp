@@ -124,6 +124,7 @@ public:
     [[nodiscard]] bool isOver() const override { return _over; }
     [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override;
     [[nodiscard]] bool isEndless() const override { return true; }
+    [[nodiscard]] bool isOnline() const override { return true; }
 
     /// The game accepted the player.
     [[nodiscard]] bool accepted() const { return _accepted.has_value(); }
