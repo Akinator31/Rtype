@@ -199,10 +199,16 @@ std::vector<std::byte> encode(const ConfigureMessage &message)
     require(!message.name.empty() && message.name.size() <= MaxGameNameLength,
             "A game name is 1 to 32 bytes");
     require(message.maxPlayers >= 1 && message.maxPlayers <= MaxInstancePlayers, "A game has 1 to 4 players");
-    Writer writer(4 + message.name.size());
+    require(message.voice.maxFrameBytes >= 1 && message.voice.maxFrameBytes <= rtype::voice::MaxFrameBytes,
+            "A frame of voice is 1 to 160 bytes");
+    require(message.voice.maxFramesPerSecond != 0, "The rate of the voice is never 0");
+    Writer writer(7 + message.name.size());
     writer.writeString(message.name);
     writer.writeU8(message.maxPlayers);
     writer.writeU16(message.relayPort);
+    writer.writeU8(message.voice.enabled ? 1 : 0);
+    writer.writeU8(message.voice.maxFrameBytes);
+    writer.writeU8(message.voice.maxFramesPerSecond);
     return writer.take();
 }
 
@@ -213,7 +219,13 @@ std::optional<ConfigureMessage> decodeConfigure(std::span<const std::byte> paylo
     message.name = reader.readString(1, MaxGameNameLength);
     message.maxPlayers = reader.readU8();
     message.relayPort = reader.readU16();
-    if (message.maxPlayers == 0 || message.maxPlayers > MaxInstancePlayers) {
+    const std::uint8_t enabled = reader.readU8();
+    message.voice.enabled = enabled == 1;
+    message.voice.maxFrameBytes = reader.readU8();
+    message.voice.maxFramesPerSecond = reader.readU8();
+    if (message.maxPlayers == 0 || message.maxPlayers > MaxInstancePlayers || enabled > 1 ||
+        message.voice.maxFrameBytes == 0 || message.voice.maxFrameBytes > rtype::voice::MaxFrameBytes ||
+        message.voice.maxFramesPerSecond == 0) {
         reader.fail();
     }
     return finished(reader, message);
@@ -224,13 +236,14 @@ std::vector<std::byte> encode(const AddPlayerMessage &message)
     require(message.sessionId != 0, "A session id is never 0");
     require(!message.name.empty() && message.name.size() <= MaxInstancePlayerNameLength,
             "A player name is 1 to 16 bytes");
-    Writer writer(81 + message.name.size());
+    Writer writer(85 + message.name.size());
     writer.writeU32(message.playerId);
     writer.writeU32(message.sessionId);
     writer.writeBytes(message.clientKey);
     writer.writeBytes(message.serverKey);
     writer.writeString(message.name);
     writer.writeU64(message.accountId);
+    writer.writeU32(message.voiceMuted);
     return writer.take();
 }
 
@@ -244,6 +257,7 @@ std::optional<AddPlayerMessage> decodeAddPlayer(std::span<const std::byte> paylo
     message.serverKey = reader.readBytes<32>();
     message.name = reader.readString(1, MaxInstancePlayerNameLength);
     message.accountId = reader.readU64();
+    message.voiceMuted = reader.readU32();
     if (message.sessionId == 0) {
         reader.fail();
     }
@@ -286,6 +300,23 @@ std::optional<ShutdownMessage> decodeShutdown(std::span<const std::byte> payload
         reader.fail();
     }
     return finished(reader, ShutdownMessage{static_cast<ShutdownReason>(reason)});
+}
+
+std::vector<std::byte> encode(const MuteVoiceMessage &message)
+{
+    Writer writer(8);
+    writer.writeU32(message.playerId);
+    writer.writeU32(message.duration);
+    return writer.take();
+}
+
+std::optional<MuteVoiceMessage> decodeMuteVoice(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    MuteVoiceMessage message;
+    message.playerId = reader.readU32();
+    message.duration = reader.readU32();
+    return finished(reader, message);
 }
 
 } // namespace rtype::server

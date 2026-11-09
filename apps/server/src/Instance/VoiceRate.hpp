@@ -22,17 +22,21 @@ class VoiceRate
 public:
     using Clock = std::chrono::steady_clock;
 
-    /// Frames per second, in the long run.
+    /// Frames per second, in the long run, without `[voice] max_frames_per_second`.
     static constexpr double Rate = 60.0;
     /// Frames in a burst: 200 ms of voice.
     static constexpr double Burst = 10.0;
 
 private:
+    double _rate = Rate;
     double _tokens = Burst;
     Clock::time_point _last{};
     bool _started = false;
 
 public:
+    /// @param rate Frames per second in the long run, more than 0.
+    explicit VoiceRate(double rate = Rate) : _rate(rate) {}
+
     /// Tells whether the frame received now is forwarded, and counts it if so.
     [[nodiscard]] bool allow(Clock::time_point now);
 };

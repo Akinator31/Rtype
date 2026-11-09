@@ -153,6 +153,11 @@ client_secret_file = "secrets/discord_secret"
 
 [admin]
 admins = ["pavel@example.org", "discord:123456789012345678"]
+
+[voice]
+enabled = true
+max_frame_bytes = 160
+max_frames_per_second = 60
 )");
 
     const ServerSettings settings = loadSettings(file, Log);
@@ -189,6 +194,8 @@ admins = ["pavel@example.org", "discord:123456789012345678"]
 
     CHECK(settings.admin.admins ==
           std::vector<std::string>{"pavel@example.org", "discord:123456789012345678"});
+
+    CHECK(settings.voice == VoiceRules{.enabled = true, .maxFrameBytes = 160, .maxFramesPerSecond = 60});
 }
 
 TEST_CASE("An empty settings file leaves every default", "[server][settings]")
@@ -210,6 +217,8 @@ TEST_CASE("An empty settings file leaves every default", "[server][settings]")
     CHECK_FALSE(settings.mail);
     CHECK_FALSE(settings.discord);
     CHECK(settings.admin.admins.empty());
+    CHECK(settings.voice == VoiceRules{});
+    CHECK(settings.voice.enabled);
 
     // The same as without --settings
     const Options without = parseOptions(std::vector<std::string_view>{});
@@ -307,6 +316,22 @@ TEST_CASE("Invalid values are refused", "[server][settings]")
     CHECK_THAT(refusal("[accounts]\n[mail]\nhost = \"mail\"\n"), ContainsSubstring("[mail] needs from"));
     CHECK_THAT(refusal(std::string(Accounts) + "username = \"rtype\"\n"),
                ContainsSubstring("[mail] username and password_file go together"));
+}
+
+TEST_CASE("The voice of the games is turned off, or bounded, in [voice]", "[server][settings][voice]")
+{
+    CHECK_FALSE(parse("[voice]\nenabled = false\n").voice.enabled);
+    const VoiceRules bounded = parse("[voice]\nmax_frame_bytes = 80\nmax_frames_per_second = 50\n").voice;
+    CHECK(bounded == VoiceRules{.enabled = true, .maxFrameBytes = 80, .maxFramesPerSecond = 50});
+    CHECK(parse("[voice]\nmax_frames_per_second = 120\n").voice.maxFramesPerSecond == 120);
+
+    CHECK_THAT(refusal("[voice]\nmax_frame_bytes = 0\n"), ContainsSubstring("from 1 to 160"));
+    CHECK_THAT(refusal("[voice]\nmax_frame_bytes = 161\n"), ContainsSubstring("from 1 to 160"));
+    CHECK_THAT(refusal("[voice]\nmax_frames_per_second = 49\n"), ContainsSubstring("from 50 to 120"));
+    CHECK_THAT(refusal("[voice]\nmax_frames_per_second = 121\n"), ContainsSubstring("from 50 to 120"));
+    CHECK_THAT(refusal("[voice]\nenabled = \"yes\"\n"), ContainsSubstring("true or false"));
+    CHECK_THAT(refusal("[voice]\nbitrate = 24000\n"), ContainsSubstring("unknown key 'bitrate' in [voice]"));
+    CHECK_THAT(refusal("voice = true\n"), ContainsSubstring("must be a section, [voice]"));
 }
 
 TEST_CASE("The sender of the mails holds an address", "[server][settings]")

@@ -9,7 +9,7 @@ bool VoiceRate::allow(Clock::time_point now)
 {
     if (_started && now > _last) {
         const double elapsed = std::chrono::duration<double>(now - _last).count();
-        _tokens = std::min(Burst, _tokens + elapsed * Rate);
+        _tokens = std::min(Burst, _tokens + elapsed * _rate);
     }
     if (!_started || now > _last) {
         _last = now;
