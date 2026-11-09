@@ -47,6 +47,7 @@ else.
     [discord]
     client_id = "123456789012345678"
     client_secret_file = "/run/secrets/discord_secret"
+    social = false            # true: the players get their Discord token, for the voice of Discord
 
     [admin]
     admins = ["pavel@example.org", "discord:123456789012345678"]   # always admins
@@ -114,6 +115,7 @@ else.
 | | `from` | | The sender of the mails, `R-Type <rtype@example.org>` or `rtype@example.org`: its address is also the sender SMTP announces. Required |
 | `[discord]` | `client_id` | | The id of the Discord application, its digits. Required |
 | | `client_secret_file` | | The file of its secret. Required |
+| | `social` | `false` | The players who sign in with Discord get their Discord token, which the Social SDK of the game needs for the voice and the friends of Discord ([ADR 0034](../decisions/0034-discord-token-in-the-client.md)): the server asks `identify openid sdk.social_layer` instead of `identify` ([Set up accounts](set-up-accounts.md#the-social-features-of-discord)) |
 | `[admin]` | `admins` | `[]` | The administrators, each an email or `discord:<id>`. Never a username, which anyone could take by registering it first. Administrators of the panel whatever their role, once their account exists, its email verified; given the role `admin` at every start. The panel can neither demote, ban nor delete them |
 
 The sections go together:

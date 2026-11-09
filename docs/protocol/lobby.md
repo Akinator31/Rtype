@@ -4,7 +4,7 @@ The connection between a client and the master: TLS, framing, the messages to li
 games, and those of the player accounts. Conventions and types are defined in the
 [overview](index.md#2-conventions).
 
-This page describes **version 5**. The client and the master ship together: a master refuses a `HELLO` of
+This page describes **version 6**. The client and the master ship together: a master refuses a `HELLO` of
 another version with `UNSUPPORTED_VERSION`, and the client tells the player to update.
 
 | Version | Change |
@@ -14,6 +14,7 @@ another version with `UNSUPPORTED_VERSION`, and the client tells the player to u
 | 3 | The player accounts ([section 6](#6-accounts)): `HELLO` carries a locale and an optional session token; `WELCOME` carries the features of the server and the account signed in; the requests `REGISTER` to `DELETE_ACCOUNT`, the replies `SIGNED_IN`, `CODE_SENT`, `DISCORD_AUTHORIZE` and `DONE`, and their error codes |
 | 5 | The progression of the accounts ([section 6.7](#67-progression)): `PROGRESS`, sent once signed in and after each game online |
 | 4 | The profiles ([section 6.6](#66-profiles)): an account carries its email, whether it has a password, and its date; `GET_PROFILE` and `PROFILE`, the Discord profile of an account; `GET_AVATAR` and `AVATAR`, its picture in parts; `DISCORD_CONFIRM` answers `PROFILE` for a new Discord user; the error `NOT_FOUND` |
+| 6 | The Discord token of the player ([section 6.8](#68-the-discord-token), [ADR 0034](../decisions/0034-discord-token-in-the-client.md)): `DISCORD_AUTHORIZE` carries the scopes; `DISCORD_TOKEN`, before the reply of a sign-in with Discord on a master with the social features; `DISCORD_REFRESH`; the error `DISCORD_TOKEN_REFUSED` |
 
 The version is the first field of `HELLO` in every version, so that a master reads it from a client of any
 version and answers `UNSUPPORTED_VERSION`, never `MALFORMED`.
@@ -100,12 +101,12 @@ TCP carries a stream of bytes with no boundaries. Inside TLS, each message is a 
   a size of 0 or above 16382, without reading the rest.
 - Types `0x01`–`0x7F` are sent by the client, types `0x80`–`0xFF` by the master.
 
-Example: `HELLO` with version 5, the name `"Pavel"`, the locale `"fr"` and no session token:
+Example: `HELLO` with version 6, the name `"Pavel"`, the locale `"fr"` and no session token:
 
 ```
 00 0D   size: 13 bytes follow
 01      type: HELLO
-00 05   version: 5
+00 06   version: 6
 05 50 61 76 65 6C   name: "Pavel"
 02 66 72            locale: "fr"
 00                  no session token
@@ -143,6 +144,7 @@ Example: `HELLO` with version 5, the name `"Pavel"`, the locale `"fr"` and no se
 | `DELETE_ACCOUNT` | `DONE` |
 | `GET_PROFILE` | `PROFILE` |
 | `GET_AVATAR` | `AVATAR` |
+| `DISCORD_REFRESH` | `DISCORD_TOKEN` |
 
 ## 5. Messages
 
@@ -157,7 +159,7 @@ Example: `HELLO` with version 5, the name `"Pavel"`, the locale `"fr"` and no se
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 5 |
+| 0 | Version | `u16` | Protocol version, 6 |
 | 2 | Name | `str8` | Name of a guest, 1 to 16 bytes; empty with a session token |
 | 3 + n | Locale | `str8` | Language of the player, 2 to 16 of `A-Z a-z 0-9 - _`: `en`, `fr-FR`, `fr_CA` |
 | 4 + n + m | Has token | `bool` | Whether a session token follows |
@@ -249,9 +251,9 @@ No payload.
 **Receiver behaviour:** the master answers `PONG`. A master closes a connection on which it received nothing
 for 30 seconds.
 
-#### Requests of the accounts (`0x07`–`0x13`)
+#### Requests of the accounts (`0x07`–`0x14`)
 
-Version 3, and `GET_PROFILE` and `GET_AVATAR` in version 4. A master without the feature a request needs (`WELCOME` tells which it has) answers
+Version 3, `GET_PROFILE` and `GET_AVATAR` in version 4, `DISCORD_REFRESH` in version 6. A master without the feature a request needs (`WELCOME` tells which it has) answers
 `ERROR (ACCOUNTS_DISABLED)` to it, after the check of the state (`HELLO_REQUIRED`) and without reading its
 payload. The flows they make are in [section 6](#6-accounts).
 
@@ -261,8 +263,8 @@ of `A-Z a-z 0-9 _ -` is `INVALID_NAME`, an email that is not an address `INVALID
 not 10 to 128 characters, or that is the username or the email, `WEAK_PASSWORD`.
 
 A **password** is only ever in `REGISTER`, `SIGN_IN`, `RESET_PASSWORD` and `DELETE_ACCOUNT`, inside TLS. A
-password, a code, a code verifier and a session token MUST NOT be written to any log, at any level, by the
-client or the master.
+password, a code, a code verifier, a session token and a Discord token MUST NOT be written to any log, at any
+level, by the client or the master.
 
 | Field | Type | Range |
 |---|---|---|
@@ -274,6 +276,7 @@ client or the master.
 | Discord code | `str8` | 1 to 255 bytes: the authorization code Discord gave the client |
 | Code verifier | `str8` | 43 to 128 of `A-Z a-z 0-9 - . _ ~`, the code verifier of PKCE ([RFC 7636](https://www.rfc-editor.org/rfc/rfc7636#section-4.1)): anything else is `MALFORMED` |
 | Redirect address | `str16` | 1 to 2048 bytes |
+| Discord token | `str16` | 1 to 1024 printable ASCII characters (`!` to `~`), no space (version 6): anything else is `MALFORMED` |
 
 ##### REGISTER (`0x07`)
 
@@ -369,7 +372,8 @@ in, it starts the link of a Discord identity to the account, or the confirmation
 **Receiver behaviour:** what the client got from Discord once the player accepted the application, through
 the Discord Social SDK ([ADR 0026](../decisions/0026-discord-social-sdk.md)). The master exchanges the code,
 with the verifier, the redirect address and the secret of its application, for a token of Discord, then asks
-who the user is, scope `identify` only, and drops the token. It needs a `DISCORD_SIGN_IN` of this connection
+who the user is, and drops the token, or, with the social features, gives it to the client in `DISCORD_TOKEN`
+before the reply that signs in or links ([section 6.8](#68-the-discord-token)). It needs a `DISCORD_SIGN_IN` of this connection
 less than ten minutes old, which it uses up. Only this request signs in or links anything. Then:
 
 - not signed in, an identity that has an account: `SIGNED_IN`;
@@ -392,7 +396,8 @@ this connection, or used already), `DISCORD_UNAVAILABLE` (the master cannot reac
 
 **Receiver behaviour:** creates the account of the new Discord identity this connection confirmed, with this
 username, and signs it in: `SIGNED_IN`. Errors: `DISCORD_NOT_CONFIRMED` (no new identity confirmed on this
-connection, or more than ten minutes ago), `INVALID_NAME`, `USERNAME_TAKEN`, `ALREADY_SIGNED_IN`.
+connection, or more than ten minutes ago), `INVALID_NAME`, `USERNAME_TAKEN`, `ALREADY_SIGNED_IN`. With the
+social features, `DISCORD_TOKEN` comes before the `SIGNED_IN`.
 
 ##### DELETE_ACCOUNT (`0x11`)
 
@@ -405,6 +410,19 @@ Discord confirmation on this connection less than five minutes old: the account,
 are deleted; its administration actions stay, without its name, email or address. The master answers `DONE`,
 then closes the connection. Errors: `INVALID_CREDENTIALS`, `DISCORD_NOT_CONFIRMED`, `BUSY`,
 `TOO_MANY_ATTEMPTS`, `NOT_SIGNED_IN`.
+
+##### DISCORD_REFRESH (`0x14`)
+
+| Offset | Field | Type |
+|---|---|---|
+| 0 | Refresh token | `str16`, Discord token |
+
+**Receiver behaviour:** version 6. A new Discord token from the refresh token of the last `DISCORD_TOKEN`, which
+the master renews with the secret of its application (`grant_type=refresh_token`): `DISCORD_TOKEN`, if the token
+belongs to the Discord identity of the account signed in. The refresh token is single use: the new one replaces
+it. Errors: `NOT_SIGNED_IN`, `DISCORD_TOKEN_REFUSED` (Discord refused it, it is the token of another identity,
+or the master has no social features: the client forgets it), `DISCORD_UNAVAILABLE`, `BUSY`,
+`TOO_MANY_ATTEMPTS` (more than five on this connection).
 
 ### 5.2 Master to client
 
@@ -589,6 +607,7 @@ No payload.
 | `DISCORD_TAKEN` | 32 | This Discord identity belongs to another account | Kept |
 | `DISCORD_UNAVAILABLE` | 33 | The master cannot reach Discord now, or Discord answers with an error: try again in a moment | Kept |
 | `NOT_FOUND` | 34 | `GET_PROFILE` of no account, `GET_AVATAR` of an account without picture or beyond its end (version 4) | Kept |
+| `DISCORD_TOKEN_REFUSED` | 35 | The refresh token of `DISCORD_REFRESH` is refused: the client forgets it (version 6) | Kept |
 
 **Receiver behaviour:** the client shows a message matching the code. Unknown codes are shown as a generic
 error. An `ERROR` with the request 0 and the code `KICKED` or `BANNED` is not the reply to the request the
@@ -642,10 +661,11 @@ No payload. "If this email has an account, a code was sent": the client asks for
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Application id | `u64` | The id (client id) of the Discord application of the master, never 0 |
+| 8 | Scopes | `str8` | Version 6: 1 to 255 of `A-Z a-z 0-9 . _`, separated by single spaces: `identify`, or `identify openid sdk.social_layer` on a master with the social features |
 
 **Receiver behaviour:** the client asks the player to accept this application through the Discord Social SDK,
-scope `identify`, with the challenge of a code verifier of PKCE it keeps, then sends what Discord gave in
-`DISCORD_CONFIRM`. An id of 0 is malformed.
+with these scopes and the challenge of a code verifier of PKCE it keeps, then sends what Discord gave in
+`DISCORD_CONFIRM`. An id of 0, or scopes that cannot be ones, are malformed.
 
 #### DONE (`0x8B`)
 
@@ -712,6 +732,23 @@ picture is malformed.
 **Receiver behaviour:** the client finds the level of the account from its experience: level 1 at 0, and
 `round(500 × n^1.5)` more experience to go from level `n` to the next. A `PROGRESS` with experience gained
 tells the player what the game gave, and whether the level went up.
+
+#### DISCORD_TOKEN (`0x8F`)
+
+| | |
+|---|---|
+| **Direction** | Master → Client |
+| **Sent when** | Version 6, on a master with the social features: just before the `SIGNED_IN` or `DONE` of a `DISCORD_CONFIRM` that signs in or links, and before the `SIGNED_IN` of a `CHOOSE_USERNAME`; and as the reply to `DISCORD_REFRESH`. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Access token | `str16` | Discord token, for the Social SDK (`Client::UpdateToken`, Bearer) |
+| 2 + a | Refresh token | `str16` | Discord token, for the next `DISCORD_REFRESH` |
+| 4 + a + r | Expires in | `u32` | Seconds before the access token expires |
+
+**Receiver behaviour:** the client connects the Social SDK with the access token, and keeps the refresh token
+for this server, beside its session token. Before a reply, it is not the reply: the client waits for the next
+message. The master keeps neither token.
 
 ## 6. Accounts
 
@@ -876,6 +913,30 @@ sequenceDiagram
 
 *Version 5. Only a player connected to the game at its end, and signed in, earns its experience: a guest, or a
 player who left before, gets nothing.*
+
+### 6.8 The Discord token
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant D as Discord
+    participant M as Master
+    C->>M: DISCORD_SIGN_IN
+    M->>C: DISCORD_AUTHORIZE (application id, identify openid sdk.social_layer)
+    Note over C,D: the player accepts, as in 6.4
+    C->>M: DISCORD_CONFIRM (code, verifier, redirect address)
+    M->>D: code exchanged: access token, refresh token
+    M->>C: DISCORD_TOKEN (access, refresh, expires in)
+    M->>C: SIGNED_IN (token, account)
+    Note over C: connects the Social SDK, keeps the refresh token
+    C->>M: later, on another connection, signed in by HELLO: DISCORD_REFRESH (refresh token)
+    M->>D: refresh token renewed, /users/@me
+    M->>C: DISCORD_TOKEN (a new pair)
+```
+
+*Version 6, `[discord] social` on the master. A new Discord user gets its token only once its account exists,
+before the `SIGNED_IN` of `CHOOSE_USERNAME`; a master without the social features asks `identify` only, never
+sends `DISCORD_TOKEN`, and refuses `DISCORD_REFRESH` with `DISCORD_TOKEN_REFUSED`.*
 
 ## 7. When the connection closes
 
