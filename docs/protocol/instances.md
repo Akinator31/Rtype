@@ -4,7 +4,7 @@ The local connection between the master and the game processes it starts
 ([ADR 0013](../decisions/0013-one-process-per-game.md)). Clients never see this protocol. Conventions and types
 are defined in the [overview](index.md#2-conventions).
 
-This page describes **version 5**. Master and instances come from the same build, so a master refuses an
+This page describes **version 6**. Master and instances come from the same build, so a master refuses an
 `INSTANCE_HELLO` of another version.
 
 | Version | Change |
@@ -14,6 +14,7 @@ This page describes **version 5**. Master and instances come from the same build
 | 3 | The actions of the administrators ([administration](../architecture/administration.md)): `REMOVE_PLAYER` reason `KICKED`, `SHUTDOWN` reason `ENDED_BY_ADMIN` |
 | 4 | The relay of the master: `CONFIGURE` carries the port of the relay, `READY` the port on the loopback the relay sends to, and the [relay frame](#5-the-relay-frame) |
 | 5 | `ADD_PLAYER` carries the account of the player, which the game tells the other players in `PLAYER_JOINED` |
+| 6 | The rules and the moderation of the voice ([Voice](../architecture/voice.md#the-rules-of-the-server)): `CONFIGURE` carries `[voice]`, `ADD_PLAYER` how long the account of the player is muted, and `MUTE_VOICE` |
 
 ## 1. Starting an instance
 
@@ -96,7 +97,7 @@ An instance exits with code 0 after `GAME_OVER` or `SHUTDOWN`, and with a non-ze
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | Version | `u16` | Protocol version, 5 |
+| 0 | Version | `u16` | Protocol version, 6 |
 | 2 | Instance id | `u32` | The `--id` argument |
 | 6 | Secret | `bytes[32]` | The secret read on the standard input |
 
@@ -201,6 +202,9 @@ the game, like any malformed message.
 | 0 | Name | `str8` | Name of the game, 1 to 32 bytes |
 | 1 + n | Max players | `u8` | 1 to 4 |
 | 2 + n | Relay port | `u16` | Port of the relay of the master on `127.0.0.1` (version 4), which a master always gives; 0: no relay |
+| 4 + n | Voice | `u8` | 1: the game carries the voice; 0: it drops every `VOICE`, and `ACCEPTED` says so (version 6). Other values are malformed |
+| 5 + n | Max frame bytes | `u8` | The largest `VOICE` forwarded, 1 to 160 (version 6) |
+| 6 + n | Max frames per second | `u8` | The frames of one player forwarded per second in the long run, never 0 (version 6) |
 
 **Receiver behaviour:** without a relay, the instance opens its UDP port, `--udp-port` (a port of the system
 without it), for its clients. With a relay, it opens a UDP port on `127.0.0.1` chosen by the system instead, takes there only the
@@ -222,6 +226,7 @@ game back as a frame to the relay. Either way it answers `READY` with the port i
 | 40 | Server key | `bytes[32]` | |
 | 72 | Name | `str8` | 1 to 16 bytes |
 | 73 + n | Account id | `u64` | The account the player is signed in to, 0 for a guest (version 5) |
+| 81 + n | Voice muted | `u32` | Seconds its account is muted for from now, 0 if not (version 6): its voice is dropped until then |
 
 **Receiver behaviour:** the instance expects a `CONNECT` on this session. If none arrives within 10 seconds,
 it forgets the session and sends `PLAYER_DISCONNECTED (TIMED_OUT)`.
@@ -255,6 +260,22 @@ game protocol has no reason for a removal, which the lobby tells the player itse
 | 0 | Reason | `u8` | `EMPTY` (0), `MASTER_STOPPING` (1) or `ENDED_BY_ADMIN` (2, version 3) |
 
 **Receiver behaviour:** the instance sends `DISCONNECT (SHUTDOWN)` to its clients and exits with code 0.
+
+#### MUTE_VOICE (`0x85`)
+
+| | |
+|---|---|
+| **Direction** | Master → Instance |
+| **Sent when** | An administrator mutes a player for the rest of its game, or lets it talk, or the mute of the account of a player in the game changes. Since version 6. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Player id | `u32` | |
+| 4 | Duration | `u32` | Seconds from now: 0 lets it talk again, `0xFFFFFFFF` until the end of the game |
+
+**Receiver behaviour:** the instance drops the `VOICE` of the player until then, and sends `VOICE_STATUSES`
+to its clients with `mutedByAdmin` set for its slot ([game protocol](game.md#94-the-voice)); once the time is
+over, it lets the player talk again and tells them. A player unknown is ignored.
 
 ## 5. The relay frame
 

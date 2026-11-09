@@ -42,7 +42,8 @@ apps/server/src/
     Administration.cpp     what an administrator sees and does (Administration page)
     AdminModel.hpp         its view of the games and the lobby, and the interfaces it acts through
     AddressBans.cpp        the bans of IP addresses, checked by the lobby at HELLO
-    AdminStore.cpp         its tables: admin_actions, address_bans
+    VoiceMutes.cpp         the mutes of the voice of the accounts, read when a player joins a game
+    AdminStore.cpp         its tables: admin_actions, address_bans, voice_mutes
   Web/                     the web server of the master, for its panel (Web server page)
     WebServer.cpp          Crow on two threads: the files of the panel, the sessions, the API, its WebSocket
     AdminJson.cpp          the JSON of the administration API
@@ -213,6 +214,8 @@ that crashes cannot damage the data.
 | 3 | `accounts`: the accounts of the players | [Accounts](accounts.md#the-tables) |
 | 4 | `account_sessions`: their sessions, by the SHA-256 of their token | [Accounts](accounts.md#sessions) |
 | 5 | `account_codes`: the codes sent by email, by their hash | [Accounts](accounts.md#codes) |
+| 6, 7 | `discord_identities`: the Discord users who sign in to the accounts, then their profile | [Accounts](accounts.md#the-tables) |
+| 8 | `voice_mutes`: the accounts whose voice the games drop for a time, read at start | [Administration](administration.md#the-voice) |
 
 ```
 INFO  master   Database postgresql://rtype:***@db.example.org/rtype, schema 0
@@ -514,10 +517,13 @@ flowchart LR
     `VOICE_ROSTER` to every client, and a client that connects receives it after the `PLAYER_JOINED` of the
     others. In the same way, each `VOICE_STATUS` that changes the status of a player (muted, deafened, without
     a microphone) sends `VOICE_STATUSES` to every client, and a newcomer receives it after the roster. Each `VOICE` goes as `VOICE_FRAME`, with the slot of the player, to the other players connected,
-    unless one of the two is on `NONE` or both are on Discord (`rtype::voice::carriedByGame()`). A
-    `VoiceRate` per player, a token bucket of 60 frames per second with bursts of 10, drops the frames beyond;
-    the frames dropped are counted and logged at `debug` when the player leaves. The game never decodes the
-    frames, and logs none;
+    unless one of the two is on `NONE` or both are on Discord (`rtype::voice::carriedByGame()`). The rules of
+    the server (`VoiceRules`, from `[voice]` in `CONFIGURE`) drop the frames when the voice is off, those over
+    `max_frame_bytes`, and beyond the rate of a `VoiceRate` per player, a token bucket of
+    `max_frames_per_second` (60) with bursts of 10. A player muted by an administrator (`ADD_PLAYER`,
+    `MUTE_VOICE`) has its frames dropped until its mute ends, which the game checks at each update, and is
+    `mutedByAdmin` in the `VOICE_STATUSES` of every client. The frames dropped are counted and logged at `debug`
+    when the player leaves. The game never decodes the frames, and logs none;
   - every 2 ticks, each client receives the snapshot in parts, with its last input, the smallest lead of its
     `INPUT` messages over those 2 ticks and the weapon of its ship; every tick, the entities
     destroyed, unreliable, then again with each snapshot of the next 30 ticks (`RecentDestructions`): a lost one
@@ -744,7 +750,8 @@ The master reads the exit code of its instances: anything but 0 is a crash, whic
   scores, acknowledged, nothing after), the voice of `GameHost` (tag `[voice]`: the roster and the statuses at the connection,
   at every change and when a player on a voice leaves; a game of two players on Discord and two on the game
   where each voice is carried once; a player on `NONE` neither heard nor sent anything; the rate and a
-  malformed frame) and its `VoiceRate` (a burst of 10, a voice of 50 frames per second never cut, one of 100
+  malformed frame; a game without voice, a frame over the bound, a player muted for the game, let talk, muted
+  for a second, and one that joins muted) and its `VoiceRate` (a burst of 10, a voice of 50 frames per second never cut, one of 100
   cut to 60), a `GameHost` on a fake transport (a client far away connected, every
   datagram sent back to its address, the transport closed with the game), a `RelayedTransport` (only the frames
   of the relay read, malformed ones dropped, every datagram sent in a frame to the relay), every failure of

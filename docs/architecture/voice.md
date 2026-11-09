@@ -4,8 +4,10 @@
 
     The voice chat is being built. This page describes what exists: the interface, the rule of the backends,
     the codec, the messages of the game protocol, the devices, the voice of the game, the sound processing of
-    the microphone, the talk modes, the keys, the Voice page, and the voice in the HUD and in the pause menu.
-    The spatial voice comes with the next steps.
+    the microphone, the talk modes, the keys, the Voice page, the voice in the HUD and in the pause menu, and
+    the rules of the server with the moderation of the voice. Discord as a second backend comes with the next
+    steps. The spatial voice was tried and left out: in a shoot'em up the ships stay on the left of the screen,
+    stacked vertically, which stereo cannot render, and it added little.
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
@@ -91,7 +93,7 @@ voice.leave();                                     // LEFT_GAME, or the session 
 | `setStatus(slot, Status)` | What a player tells about its voice ([The status of each player](#the-status-of-each-player)) |
 | `setSelfMute(bool)` / `setTalking(bool)` | Nobody hears the player of this client; it talks now (push-to-talk held or voice detected) |
 | `setParticipantVolume(slot, v)` / `setParticipantMute(slot, bool)` | For this client only; the volume from 0 to `MaxVolume` (2), 1 by default |
-| `setParticipantPosition(slot, Position)` | Where the ship of a player is, for the spatial voice; a 3D vector, `z` 0 in the 2D game |
+| `setParticipantPosition(slot, Position)` | Where the ship of a player is: a 3D vector, `z` 0 in the 2D game. Kept for the 3D and VR of later; `GameVoice` does nothing with it |
 | `participants()` | The other players: slot, backend, speaking, its status, muted by me, volume |
 | `poll()` | Once per frame: what came since the last call |
 
@@ -152,7 +154,9 @@ The voice travels in the UDP session of the game
 
 These are new types, which an older client or game would ignore. Game protocol 3 adds the account of each
 player to `PLAYER_JOINED`, so that a client keeps its choices for another player under it
-([In the HUD and the pause menu](#in-the-hud-and-the-pause-menu)).
+([In the HUD and the pause menu](#in-the-hud-and-the-pause-menu)). Game protocol 4 adds to `ACCEPTED` whether
+the game carries the voice, and to `VOICE_STATUSES` a player muted by an administrator
+([The rules of the server](#the-rules-of-the-server)).
 
 ```mermaid
 sequenceDiagram
@@ -173,8 +177,9 @@ sequenceDiagram
 Discord. A frame of D, on Discord, would go to A and B, never to another player on Discord, who hears D there.*
 
 - **The game** (`GameHost`, [Server](server.md)) keeps the backend of each player, sends the roster at every
-  change, and forwards each frame to the others, within the rate of a `VoiceRate`: 60 frames per second, bursts
-  of 10.
+  change, and forwards each frame to the others, within the rules of the server: the voice on, frames of 160
+  bytes at most, and the rate of a `VoiceRate`, 60 frames per second with bursts of 10, by default
+  ([The rules of the server](#the-rules-of-the-server)).
 - **The client** (`RemoteSession`, [The client online](client-online.md#remotesession)) tells its backend,
   sends the frames it is given in the datagram of the next `INPUT`, and keeps the frames of the others and the
   roster. Given the devices of the voice, it runs a [`GameVoice`](#the-voice-of-the-game) through them.
@@ -188,11 +193,13 @@ Each player tells the others what it does with its voice (`voice::Status`), so t
 | `muted` | Muted by itself: its mute key, deafened, or its voice turned off (`GameVoice::selfMuted()`) |
 | `deafened` | Deafened by its key (`GameVoice::deafened()`) |
 | `noMicrophone` | Its microphone could not be opened the last time it was unmuted (`GameVoice::microphoneMissing()`): it listens only |
+| `mutedByAdmin` | Muted by an administrator (game protocol 4): set by the game in `VOICE_STATUSES` only, dropped from a `VOICE_STATUS` |
 
 `RemoteSession` sends `VOICE_STATUS` once accepted, then at every change; the game keeps the status of each
-player and sends `VOICE_STATUSES` to everyone at every change, and to a newcomer at its connection; the client
-gives each status to its `GameVoice` (`setStatus()`), which keeps it in the `Participant`. The status only
-informs: a player muted by itself sends no voice, whatever it says.
+player and sends `VOICE_STATUSES` to everyone at every change, and to a newcomer at its connection (to
+everyone when the newcomer is muted already); the client gives each status to its `GameVoice` (`setStatus()`),
+which keeps it in the `Participant`. The status only informs: a player muted by itself sends no voice,
+whatever it says, and the voice of a player muted by an administrator is dropped by the game.
 
 ## The devices
 
@@ -284,6 +291,40 @@ preferences of the Voice page, and the state of the keys): on `GAME` if the voic
 poll, `applyVoice()` gives it the mode, the keys, the volumes and the processing
 ([The talk modes](#the-talk-modes)); after it, the session tells `VoiceDevices::microphoneSilent`.
 
+## The rules of the server
+
+The host of a server decides what its games do with the voice, and its administrators who may talk. The server
+never hears the voice: it checks the size and the rate of the frames, and drops those it must.
+
+| Setting (`server.toml`) | Default | What it does |
+|---|---|---|
+| `[voice] enabled` | `true` | `false`: no game carries the voice. `ACCEPTED` says so, the client opens no microphone, sends nothing and shows no voice |
+| `[voice] max_frame_bytes` | `160` | The largest frame forwarded, 1 to 160 bytes; a frame of the client is 40 to 80 at 24 kbit/s |
+| `[voice] max_frames_per_second` | `60` | The rate of each player, 50 to 120: a voice is 50 |
+
+The master reads them at start (`--check` too) and gives them to every game in `CONFIGURE`
+([instances protocol](../protocol/instances.md)); `GameHost` applies them (`VoiceRules`).
+
+**Moderation** ([Administration](administration.md#the-voice)): from the panel or the administration API, an
+administrator mutes a player for the rest of its game, or an account for a time, 30 days at most, in every game
+it plays, now and after a restart. The game drops the voice of the player until then, and sends the others
+`VOICE_STATUSES` with `mutedByAdmin`; the client of the player closes its microphone while it lasts. No voice is
+reported, nor recorded: the server cannot hear what it forwards, by design.
+
+```mermaid
+sequenceDiagram
+    participant P as Panel
+    participant M as Master
+    participant G as Game (GameHost)
+    participant A as Client A (muted)
+    participant B as Client B
+    P->>M: POST /api/players/7/mute-voice
+    M->>G: MUTE_VOICE 7, for the game
+    G->>A: VOICE_STATUSES slot 0 mutedByAdmin
+    G->>B: VOICE_STATUSES slot 0 mutedByAdmin
+    A--xG: VOICE (dropped)
+```
+
 ## In the HUD and the pause menu
 
 From the Figma design, Série 16 (`Voix en jeu`): who talks shows at a glance, and each player sets how it hears
@@ -299,10 +340,12 @@ flowchart LR
 ```
 
 - **The icon of a pilot** (`VoiceIcon`, `apps/client/src/Voice/VoiceIcons.hpp`), from its `Participant`
-  (`voiceIconOf()`): muted by me first, then speaking, then muted (or deafened) by itself, then without a
-  microphone; nothing otherwise. For the player of this client: deafened, then muted, then its voice going out
-  (`GameVoice::transmitting()`). The icons are white pictures of Lucide (ISC license, beside them in
-  `assets/images/hud/voice/`), tinted: white while talking, grey for a choice, dark grey without a microphone.
+  (`voiceIconOf()`): muted by an administrator first, then muted by me, then speaking, then muted (or deafened)
+  by itself, then without a microphone; nothing otherwise. For the player of this client: muted by an
+  administrator, then deafened, then muted, then its voice going out (`GameVoice::transmitting()`). The icons
+  are white pictures of Lucide (ISC license, beside them in `assets/images/hud/voice/`), tinted: white while
+  talking, grey for a choice, dark grey without a microphone, red (`#E8726E`, a shield struck out) when an
+  administrator muted it.
 - **The HUD** ([The game in the client](client-game.md#hud)): online, the line of each other pilot shows,
   from the right, its score, its name, its slot and its icon; its name turns white while it talks. The line of
   the player shows "1P · NAME" and its icon.
@@ -310,7 +353,9 @@ flowchart LR
   health bar, faded in and out over an eighth of a second (`GameSessionSystem::setVoiceBadgeLook()`).
 - **The pause menu** shows, online with other players, a group *Player voices*: one slider per player, its
   name and its icon, its volume for this client from 0 to 100 % (Left and Right, by 5 %), muted or not with
-  Confirm, which then reads *MUTED*.
+  Confirm, which then reads *MUTED*. The row of a player muted by an administrator is locked
+  (`Slider::locked`): dimmed, its value *MUTED BY AN ADMIN* in red, and passed over by the focus and the
+  pointer, as nothing the player chooses changes it.
 - **The choices are kept** in `VoicePreferences::players`, under `playerVoiceKey()`: the address of the server
   as the player wrote it, then the id of the account of the other player (`PLAYER_JOINED`), or `guest/` and its
   name for a guest. The same account on another server is another player. `RemoteSession` applies them to the
@@ -455,7 +500,8 @@ is built as the other pages of settings ([Pages of settings](scenes-and-interfac
 
 - **The voice is never stored nor logged**, by the game or the client, and a replay has no voice. The logs
   tell the microphone opened and closed, never what it heard.
-- **The server never decodes**: it checks the sizes and rates of the frames and forwards them.
+- **The server never decodes**: it checks the sizes and rates of the frames and forwards them, or drops them
+  as its rules and its administrators say ([The rules of the server](#the-rules-of-the-server)).
 - **The tests open no device**: they use `testing::FakeVoiceChannel` (`tests/helpers/FakeVoiceChannel.hpp`),
   which keeps what it is told, `speak(slot, bool)` making a player talk, and the fake devices of
   `tests/helpers/FakeVoiceDevices.hpp`: a microphone that gives what the test says, a playback that keeps what
@@ -469,9 +515,21 @@ channel that knows the other players of its game, not its own.
 
 The messages, in `tests/game_messages.cpp` (tags `[game][messages][voice]`): field by field, round trips with
 frames of 1, 60 and 160 bytes, every malformed case, an unknown backend read as `NONE`, the reserved bits
-dropped, random bytes. The game, in `tests/server_instance.cpp`, and two clients online, in
+dropped, random bytes; `ACCEPTED` with and without the voice, and `mutedByAdmin` kept in `VOICE_STATUSES`
+and dropped from `VOICE_STATUS`. The game, in `tests/server_instance.cpp`, and two clients online, in
 `tests/client_online.cpp`, both tag `[voice]`: see [Server](server.md#tests) and
 [The client online](client-online.md#tests).
+
+The rules of the server and the moderation (tag `[voice]`): `[voice]` read and refused out of its bounds, in
+`tests/server_settings.cpp`; in `tests/server_instance.cpp`, a game without voice that tells it in `ACCEPTED`
+and forwards none, a frame over `max_frame_bytes` dropped, a player muted for the game, then let talk, then
+muted for a second that ends by itself, and one that joins muted, each seen by every client; in
+`tests/server_games.cpp`, real instances: an account muted when its player joins, a player muted for its game,
+the mute of an account lifted, and a master whose voice is off; the administration and its record in
+`tests/server_admin.cpp`, the routes in `tests/server_panel_accounts.cpp`; in `tests/client_online.cpp`, a
+client muted by an administrator that closes its microphone and is shown muted to the other, and a client in a
+game without voice that opens nothing; the icon in `tests/client_game.cpp`, the locked slider in
+`tests/engine.cpp`.
 
 `tests/voice_jitter.cpp` (tag `[voice]`): the jitter buffer against frames reordered, late, received twice,
 lost one by one or in a row, the end of a spurt, a game loop that stalls, sequences that go around; the delay

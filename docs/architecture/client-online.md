@@ -269,12 +269,13 @@ CMake warns and leaves `r-type_client` out, the server and the tests are built.
 - **The voice of the game**: given `VoiceDevices` (the microphone, the voices played, the preferences of the
   Voice page and the state of the keys), the session runs a `voice::GameVoice` ([Voice](voice.md#the-voice-of-the-game)), its
   `VoiceTransport` being the session itself. It is on `GAME` if the voices can be played, `NONE` otherwise; the
-  `GameVoice` joins at `ACCEPTED`, gets the players of `PLAYER_JOINED` and `PLAYER_LEFT` and the roster, is
+  `GameVoice` joins at `ACCEPTED`, unless the game carries no voice (game protocol 4), gets the players of `PLAYER_JOINED` and `PLAYER_LEFT` and the roster, is
   polled at each update before the inputs go, after `applyVoice()` gave it the mode, the keys and the volumes
   ([The talk modes](voice.md#the-talk-modes)), and leaves at the end. `main.cpp` gives the devices through
   `OnlineScenes`, with the address of the server. At each update, the session also hears each other player as
   its player chose in the pause menu (`VoicePreferences::players`, under `voiceKey()`), tells the game the
-  status of its player when it changes (`VOICE_STATUS`), and gives the HUD the voice of the game
+  status of its player when it changes (`VOICE_STATUS`), keeps its microphone closed while an administrator
+  muted it (`mutedByAdmin()`, from `VOICE_STATUSES`), and gives the HUD the voice of the game
   (`voiceView()`) ([In the HUD and the pause menu](voice.md#in-the-hud-and-the-pause-menu)).
 
 ## Input clock
