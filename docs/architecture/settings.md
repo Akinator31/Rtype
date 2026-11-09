@@ -23,6 +23,7 @@ Name keys by domain with dots, so that the file stays readable:
 
 | Keys | Written by |
 |---|---|
+| `account.level` | `writePlayerLevel()`: the level of the last account signed in (PROGRESS), which opens the ships of the hangar offline and as a guest ([hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-of-the-hangar-confighangarlua)) |
 | `audio.effects_volume` | The Settings page (`keepPlayerSettings()`): the volume of the sound effects, from 0 to 1 |
 | `audio.music_volume` | The Settings page: the volume of the music, from 0 to 1 |
 | `display.color_filter` | The Settings page: the colour filter of the image, `none`, `protanopia`, `deuteranopia`, `tritanopia` or `high_contrast` |
