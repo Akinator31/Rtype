@@ -110,7 +110,7 @@ struct AcceptedMessage {
     std::uint8_t tickRate = TickRate;
     /// The tick the game is at.
     std::uint32_t tick = 0;
-    /// The game carries the voice (version 4, `[voice] enabled` of the server): without it, the client hides
+    /// The game carries the voice (version 5, `[voice] enabled` of the server): without it, the client hides
     /// the voice and sends none.
     bool voice = true;
 
@@ -125,7 +125,7 @@ struct PlayerJoinedMessage {
     std::uint32_t playerId = 0;
     /// 1 to MaxPlayerNameLength bytes of UTF-8, without control characters.
     std::string name;
-    /// The id of its account on the server, 0 for a guest (version 3): the other clients keep their choices
+    /// The id of its account on the server, 0 for a guest (version 4): the other clients keep their choices
     /// for this player (its volume, muted) under it.
     std::uint64_t accountId = 0;
 
@@ -239,7 +239,7 @@ struct VoiceFrameMessage {
     friend bool operator==(const VoiceFrameMessage &, const VoiceFrameMessage &) = default;
 };
 
-/// `VOICE_STATE`: what carries the voice of the player (ADR 0032).
+/// `VOICE_STATE`: what carries the voice of the player (ADR 0035).
 struct VoiceStateMessage {
     voice::Backend backend = voice::Backend::None;
 

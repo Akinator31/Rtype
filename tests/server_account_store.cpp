@@ -5,6 +5,7 @@
 #include "Accounts/AccountRules.hpp"
 #include "Accounts/AccountStore.hpp"
 #include "Accounts/PasswordHasher.hpp"
+#include "Accounts/ProgressStore.hpp"
 #include "Master/AdminStore.hpp"
 #include "Master/ServerDatabase.hpp"
 #include "TestDatabase.hpp"
@@ -681,4 +682,33 @@ TEST_CASE("Accounts not verified within 24 hours are purged, with their codes an
     create(database, "old", "OLD@example.org", Noon + 24h);
     CHECK(purgeUnverifiedAccounts(database, Noon + 26h) == 1);
     CHECK_FALSE(findAccount(database, recent.id));
+}
+
+TEST_CASE("The progression of an account adds up its games, keeps its records, and goes with it",
+          "[server][accounts][database]")
+{
+    const auto engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    Fixture fixture(engine, "accounts_progress");
+    Database &database = fixture.database;
+    const Account pilot = create(database, "Pilot", "pilot@example.org");
+    const Account other = create(database, "Other", "other@example.org");
+
+    CHECK(readProgress(database, pilot.id) == AccountProgress{});
+
+    const AccountProgress first =
+        addGame(database, pilot.id, {.xp = 300, .kills = 20, .wavesCleared = 5, .bestStreak = 4});
+    CHECK(first ==
+          AccountProgress{.xp = 300, .gamesPlayed = 1, .totalKills = 20, .bestWaves = 5, .bestStreak = 4});
+    const AccountProgress second =
+        addGame(database, pilot.id, {.xp = 150, .kills = 7, .wavesCleared = 2, .bestStreak = 6});
+    CHECK(second ==
+          AccountProgress{.xp = 450, .gamesPlayed = 2, .totalKills = 27, .bestWaves = 5, .bestStreak = 6});
+    CHECK(readProgress(database, pilot.id) == second);
+    CHECK(readProgress(database, other.id) == AccountProgress{});
+
+    REQUIRE(deleteAccount(database, pilot.id));
+    long long rows = 0;
+    database.session() << "SELECT COUNT(*) FROM account_progress", soci::into(rows);
+    CHECK(rows == 0);
 }

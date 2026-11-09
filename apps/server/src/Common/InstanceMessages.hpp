@@ -19,7 +19,7 @@ namespace rtype::server
 {
 
 /// The version of this protocol, in INSTANCE_HELLO.
-inline constexpr std::uint16_t InstanceProtocolVersion = 6;
+inline constexpr std::uint16_t InstanceProtocolVersion = 7;
 /// Longest name of a game, in bytes of UTF-8.
 inline constexpr std::size_t MaxGameNameLength = 32;
 /// Longest name of a player, in bytes of UTF-8.
@@ -88,10 +88,15 @@ struct PlayerDisconnectedMessage {
     friend bool operator==(const PlayerDisconnectedMessage &, const PlayerDisconnectedMessage &) = default;
 };
 
-/// The score of a player at the end of a game.
+/// The score of a player at the end of a game, and what it earned (version 5).
 struct PlayerScore {
     std::uint32_t playerId = 0;
     std::uint32_t score = 0;
+    std::uint32_t kills = 0;
+    std::uint16_t wavesCleared = 0;
+    std::uint16_t bestStreak = 0;
+    /// The experience earned in the game.
+    std::uint32_t xp = 0;
 
     friend bool operator==(const PlayerScore &, const PlayerScore &) = default;
 };
@@ -133,7 +138,7 @@ struct GameStatusMessage {
 
 // --- Master to instance ---
 
-/// What the game does with the voice, from `[voice]` of the settings of the master (version 6).
+/// What the game does with the voice, from `[voice]` of the settings of the master (version 7).
 struct VoiceRules {
     /// Whether the game carries the voice: without it, every VOICE is dropped and ACCEPTED tells the client.
     bool enabled = true;
@@ -158,7 +163,7 @@ struct ConfigureMessage {
     /// The port of the relay of the master, on 127.0.0.1 (version 4): the game takes its datagrams from it in
     /// relay frames (Common/RelayFrame.hpp). 0: no relay, the game opens its own port, `--udp-port`.
     std::uint16_t relayPort = 0;
-    /// The voice of the game (version 6).
+    /// The voice of the game (version 7).
     VoiceRules voice{};
 
     friend bool operator==(const ConfigureMessage &, const ConfigureMessage &) = default;
@@ -174,9 +179,9 @@ struct AddPlayerMessage {
     std::array<std::byte, 32> serverKey{};
     /// 1 to MaxInstancePlayerNameLength bytes.
     std::string name;
-    /// The id of its account, 0 for a guest (version 5): told to the other players in PLAYER_JOINED.
+    /// The id of its account, 0 for a guest (version 6): told to the other players in PLAYER_JOINED.
     std::uint64_t accountId = 0;
-    /// Its account is muted by an administrator for this many seconds more (version 6), 0 if not: its voice
+    /// Its account is muted by an administrator for this many seconds more (version 7), 0 if not: its voice
     /// is dropped until then.
     std::uint32_t voiceMuted = 0;
 
@@ -218,7 +223,7 @@ struct ShutdownMessage {
     friend bool operator==(const ShutdownMessage &, const ShutdownMessage &) = default;
 };
 
-/// `MUTE_VOICE` (version 6): an administrator mutes the voice of a player, or lets it talk again.
+/// `MUTE_VOICE` (version 7): an administrator mutes the voice of a player, or lets it talk again.
 struct MuteVoiceMessage {
     std::uint32_t playerId = 0;
     /// Seconds, from now: 0 lets it talk, VoiceMutedForTheGame until the end of the game.

@@ -4,6 +4,7 @@
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
 #include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/PlayerInput.hpp"
+#include "rtype/game/Progression.hpp"
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Ship/ShipRegistry.hpp"
@@ -31,6 +32,17 @@ struct PlayerSlot {
     std::uint32_t score = 0;
     /// Ticks left before its next ship appears, 0 when it has one or no lives left.
     std::uint32_t respawnIn = 0;
+    /// Bydos it shot down.
+    std::uint32_t kills = 0;
+    /// Waves that ended while its ship was alive, and how many of them in a row up to the last one.
+    std::uint16_t wavesCleared = 0;
+    std::uint16_t streak = 0;
+    std::uint16_t bestStreak = 0;
+    /// Experience earned in this game, endless games only (Progression).
+    std::uint32_t xp = 0;
+
+    /// Its ship is in the game: it has lives left and is not waiting for the next one.
+    [[nodiscard]] bool isAlive() const { return present && lives > 0 && respawnIn == 0; }
 };
 
 /// Where the rescue against the final boss is, run by the RescueSystem (Rules::rescue).
@@ -66,6 +78,8 @@ struct GameContext {
     WaveRegistry waves;
     /// The ship and the weapon of every player.
     PlayerDefinition player;
+    /// The experience of the endless games.
+    Progression progression;
     /// The tick being simulated, from 1.
     std::uint32_t tick = 0;
     std::array<PlayerSlot, MaxPlayers> players{};
@@ -82,6 +96,16 @@ struct GameContext {
     std::optional<GameOutcome> gameOver;
     /// The ships the blade of the shogun went through during the rescue, by NetworkId.
     std::vector<std::uint32_t> struck;
+
+    /// Counts a Bydo shot down by a player, and its experience in an endless game.
+    void rewardKill(PlayerSlot &killer, const EnemyDefinition &enemy)
+    {
+        killer.score += enemy.score;
+        ++killer.kills;
+        if (rules.endless) {
+            killer.xp += applyMultiplier(enemy.xp, streakMultiplier(progression, killer.streak));
+        }
+    }
 
     /// A number from `first` to `last` included. Same result on every platform, unlike the distributions of
     /// the standard library, so that a game replays the same everywhere.

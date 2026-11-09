@@ -1,4 +1,4 @@
-# The voice chat of an online game (docs/architecture/voice.md, ADR 0032), in three targets:
+# The voice chat of an online game (docs/architecture/voice.md, ADR 0035), in three targets:
 #   rtype::voice         the interface the client knows (rtype/voice/VoiceChannel.hpp), what carries the voice
 #                        of each player (rtype/voice/Backend.hpp), the format of the voice
 #                        (rtype/voice/Format.hpp), the devices as interfaces (rtype/voice/Devices.hpp) and the

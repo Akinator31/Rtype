@@ -85,6 +85,19 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::Sound, RTYPE_SOUND_DASH_WIND},
 };
 
+/// The sky of the game, behind the results, and their sounds.
+const std::vector<engine::SceneAsset> ResultsAssets{
+    {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_DEEP},   {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_NEBULA},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_STARS},  {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_NEAR},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_GALAXY}, {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_MOON},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_PLANET}, {AssetType::Sound, RTYPE_SOUND_RESULTS_GAME_OVER},
+    {AssetType::Sound, RTYPE_SOUND_RESULTS_STAT},       {AssetType::Sound, RTYPE_SOUND_RESULTS_TICK},
+    {AssetType::Sound, RTYPE_SOUND_RESULTS_COUNTED},    {AssetType::Sound, RTYPE_SOUND_RESULTS_LEVEL_UP},
+};
+
+/// The Continue of the results, at the bottom of the screen.
+constexpr float ContinueAboveBottom = 140.0f;
+
 /// The hulls of the ship models seen through the camera of the game, flames excluded, in model units:
 /// measured on the models in their Move pose, the ship of the players facing right, the drop ship of the
 /// Bydos facing left. The colliders of the ships have the same proportions (Rules::shipHalfWidth,
@@ -481,7 +494,10 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         playWaveMusic(music);
     });
     sessions.setRescueHandler([this](game::RescueStage stage) { showRescue(stage); });
-    sessions.setOutcomeHandler([this](game::GameOutcome outcome) { _recorder.recordOutcome(outcome); });
+    sessions.setOutcomeHandler([this](game::GameOutcome outcome) {
+        _recorder.recordOutcome(outcome);
+        recordResults();
+    });
     sessions.setStrikeHandler([this] { showStrike(); });
     engine.createScene(
         GameScene,
@@ -493,6 +509,10 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         });
     engine.createScene(PauseScene, {.overlay = true, .onBack = [this] { resume(); }},
                        [this](engine::Engine & /*target*/, engine::SceneId scene) { buildPause(scene); });
+    engine.createScene(ResultsScene, {.onBack = [this] { leaveResults(); }, .assets = ResultsAssets},
+                       [this, &resources](engine::Engine & /*target*/, engine::SceneId scene) {
+                           buildResults(scene, resources);
+                       });
 }
 
 RemoteSession *GameScenes::onlineSession() const
@@ -620,7 +640,38 @@ void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()
 {
     _next = std::move(session);
     _nextEnd = std::move(onEnd);
+    _results.reset();
+    _xpAfter.reset();
     _engine.switchScene(GameScene);
+}
+
+void GameScenes::showResults(std::optional<std::uint64_t> accountXp, bool canSignIn,
+                             std::function<void()> onContinue)
+{
+    _xpBefore = accountXp;
+    _canSignIn = canSignIn;
+    _onContinue = std::move(onContinue);
+    _engine.switchScene(ResultsScene);
+}
+
+void GameScenes::setAccountXp(std::uint64_t xp)
+{
+    _xpAfter = xp;
+    ecs::Ecs &ecs = _engine.getEcs();
+    if (_resultsScreen && ecs.isAlive(*_resultsScreen)) {
+        client::setAccountXp(ecs.getComponent<ResultsScreen>(_resultsScreen->id), xp);
+    }
+}
+
+void GameScenes::leaveResults()
+{
+    _resultsScreen.reset();
+    const std::function<void()> onContinue = std::exchange(_onContinue, nullptr);
+    if (onContinue) {
+        onContinue();
+    } else {
+        _engine.switchScene(MainMenuScene);
+    }
 }
 
 void GameScenes::end()
@@ -676,9 +727,59 @@ void GameScenes::showKill(const Kill &kill)
     }
 }
 
+void GameScenes::recordResults()
+{
+    const GameSession *session = _sessions.session();
+    if (session == nullptr || !session->isEndless()) {
+        return;
+    }
+    const std::vector<game::PlayerState> &players = _sessions.players();
+    const auto local = std::ranges::find(players, session->localSlot(), &game::PlayerState::slot);
+    if (local == players.end()) {
+        return;
+    }
+    _results = GameResults{.wavesCleared = local->wavesCleared,
+                           .kills = local->kills,
+                           .bestStreak = local->bestStreak,
+                           .score = local->score,
+                           .xp = local->xp};
+}
+
+void GameScenes::buildResults(engine::SceneId scene, render::ResourceManager &resources)
+{
+    ecs::Ecs &ecs = _engine.getEcs();
+    createGameSky(ecs, scene, resources);
+    const ResultsLook look{.captionFont = _style.toast.messageFont,
+                           .valueFont = _style.toast.nameFont,
+                           .sounds = {.gameOver = _audio.loadSound(RTYPE_SOUND_RESULTS_GAME_OVER),
+                                      .stat = _audio.loadSound(RTYPE_SOUND_RESULTS_STAT),
+                                      .tick = _audio.loadSound(RTYPE_SOUND_RESULTS_TICK),
+                                      .counted = _audio.loadSound(RTYPE_SOUND_RESULTS_COUNTED),
+                                      .levelUp = _audio.loadSound(RTYPE_SOUND_RESULTS_LEVEL_UP)},
+                           .title = _translations.text("summary.title"),
+                           .waves = _translations.text("summary.waves"),
+                           .kills = _translations.text("summary.kills"),
+                           .streak = _translations.text("summary.streak"),
+                           .score = _translations.text("summary.score"),
+                           .xp = _translations.text("progress.gained"),
+                           .level = _translations.text("progress.level"),
+                           .levelUp = _translations.text("progress.level_up"),
+                           .guest = _canSignIn ? _translations.text("progress.guest") : std::string()};
+    const ecs::entity_t screen =
+        openResultsScreen(ecs, scene, _metrics, look, _results.value_or(GameResults{}), _xpBefore);
+    if (_xpAfter) {
+        client::setAccountXp(ecs.getComponent<ResultsScreen>(screen), *_xpAfter);
+    }
+    _resultsScreen = ecs.ref(screen);
+    engine::InterfaceBuilder(ecs, scene, _style)
+        .button(_translations.text("summary.continue"), [this] { leaveResults(); },
+                {engine::AnchorPoint::Bottom, 0.0f, -ContinueAboveBottom});
+}
+
 void GameScenes::showWave(std::uint16_t wave)
 {
-    if (wave == game::MaxWaveDifficulty) {
+    const GameSession *session = _sessions.session();
+    if (wave == game::MaxWaveDifficulty && (session == nullptr || !session->isEndless())) {
         _engine.showBanner(_translations.text("event.boss_wave"),
                            _translations.text("event.boss_wave_detail"), engine::ToastType::Error);
         return;

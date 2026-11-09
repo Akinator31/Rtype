@@ -15,7 +15,7 @@
 #include <span>
 #include <vector>
 
-/// The voice carried by the game (docs/architecture/voice.md#the-voice-of-the-game, ADR 0032).
+/// The voice carried by the game (docs/architecture/voice.md#the-voice-of-the-game, ADR 0035).
 namespace rtype::voice
 {
 

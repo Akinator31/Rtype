@@ -806,10 +806,13 @@ TEST_CASE("From the panel, an administrator mutes the voice of an account for a 
     const HttpResponse muted = panel.post(mute, R"({"duration":3600,"reason":"spam"})");
     INFO(muted.body);
     REQUIRE(muted.status == 200);
-    const crow::json::rvalue account = parse(muted.body)["account"];
+    // The values in a crow::json::rvalue point into the text of the one load returned: it lives while they
+    // are read
+    const crow::json::rvalue answer = parse(muted.body);
+    const crow::json::rvalue &account = answer["account"];
     CHECK(account["voiceMute"]["reason"].s() == "spam");
     CHECK(account["voiceMute"]["actor"].s() == std::to_string(admin.id));
-    CHECK(parse(muted.body)["removed"].i() == 1);
+    CHECK(answer["removed"].i() == 1);
     CHECK(server.games.accountsVoiceChanged == std::vector<long long>{pilot.id});
     CHECK(server.voiceMutes.find(pilot.id));
     server.settle();

@@ -382,6 +382,7 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
     case game::message_type::GameOver:
         if (const auto over = game::decodeGameOver(payload)) {
             _over = true;
+            _outcome = over->outcome;
             _endReason = over->outcome == game::GameOutcome::Victory ? "Victory!" : "Game over";
         }
         return;
@@ -554,6 +555,10 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
     }
     snapshot.waveStarted = std::exchange(_waveStarted, std::nullopt);
     snapshot.waveMusic = std::exchange(_waveMusic, {});
+    snapshot.gameOver = std::exchange(_outcome, std::nullopt);
+    if (snapshot.gameOver) {
+        snapshot.players = _world.players();
+    }
     return {std::move(snapshot)};
 }
 

@@ -76,6 +76,7 @@ lower-case hexadecimal.
 | `account_codes` | `account_id` (deleted with its account), `purpose` (`verify` or `reset`), `code_hash`, `expires_at`, `attempts`; one code per account and purpose | 5 |
 | `discord_identities` | `discord_id` (the id of the Discord user, primary key), `account_id` (unique: one identity per account; deleted with its account), `linked_at` | 6 |
 | | `discord_username`, `discord_display_name`, `avatar_hash` and `avatar_png` (the picture, PNG in base64), `profile_at`: the profile as of the last sign-in or link, all nullable; the hash is kept only with the picture | 7 |
+| `account_progress` | `account_id` (primary key, deleted with its account), `xp`, `games_played`, `total_kills`, `best_waves`, `best_streak`: the [progression](#progression), a row from the first game | 8 |
 
 `Accounts/AccountStore.hpp` gives plain functions on a `Database`, as `Master/AdminStore.hpp` does: the master
 runs them on its database thread, the tests anywhere. Each takes the time it runs at, so that the tests choose
@@ -232,6 +233,7 @@ never after the service is gone.
 | `DISCORD_SIGN_IN` | An attempt started on the connection ([Discord](#discord)) | `DISCORD_AUTHORIZE`, the id of the application |
 | `DISCORD_CONFIRM` | The code exchanged by the Discord client, then `findAccountByDiscord()` and `createSession()`, or, signed in, `linkDiscord()` | `SIGNED_IN` for an identity with an account; `DONE` for a new one, or, signed in, the identity linked or confirmed; `DISCORD_TAKEN`, `BANNED` (then closed) |
 | `CHOOSE_USERNAME` | `createDiscordAccount()`, `createSession()` | `SIGNED_IN`; `DISCORD_NOT_CONFIRMED` without a new identity confirmed on the connection within ten minutes |
+| `DISCORD_REFRESH` | The refresh token renewed by the Discord client, then `discordIdentity()` | `DISCORD_TOKEN`; `DISCORD_TOKEN_REFUSED`, `NOT_SIGNED_IN` ([The Discord token](#the-discord-token-of-the-player)) |
 
 In a game, every request of the accounts gets `ALREADY_IN_GAME`, before any work: a player signs in, out, or
 deletes its account from the lobby only, so that nobody changes identity in a game. A request that signs in gives
@@ -260,6 +262,7 @@ Nothing tells the accounts of others:
 | `RESEND_CODE` for one login | Once a minute | `TOO_MANY_ATTEMPTS` |
 | Wrong codes of an account | 5 per code, 20 a day ([Codes](#codes)) | `TOO_MANY_ATTEMPTS`; on the 20th, the holder of the account gets the "too many wrong codes" mail |
 | Codes Discord refuses after one `DISCORD_SIGN_IN` (`discordAttempts`) | 5 | `TOO_MANY_ATTEMPTS`, Discord not asked, until the next `DISCORD_SIGN_IN` |
+| `DISCORD_REFRESH` of a connection (`discordAttempts`) | 5 | `TOO_MANY_ATTEMPTS`, Discord not asked |
 | A `DISCORD_SIGN_IN`, a new Discord user (`discordLifetime`) | 10 minutes | `CODE_EXPIRED`; `DISCORD_NOT_CONFIRMED` for `CHOOSE_USERNAME` |
 | The Discord confirmation of a deletion (`deletionConfirmation`) | 5 minutes | `DISCORD_NOT_CONFIRMED` |
 | The hasher, the database thread, the Discord client | Their queues | `BUSY` |
@@ -305,8 +308,9 @@ results posted to the loop:
 1. `POST /oauth2/token` with the code, the code verifier of PKCE and the redirect address of `DISCORD_CONFIRM`,
    the application authenticated with its id and its secret (HTTP Basic). `invalid_grant` is a code Discord
    refuses (`INVALID_CODE`); any other answer is `DISCORD_UNAVAILABLE`.
-2. `GET /users/@me` with the token, scope `identify`: the id of the user, its name (`username`), its display
-   name (`global_name`) and the version of its picture (`avatar`). The token is dropped at once.
+2. `GET /users/@me` with the token: the id of the user, its name (`username`), its display name (`global_name`)
+   and the version of its picture (`avatar`). The token is dropped at once, unless the master has the social
+   features ([below](#the-discord-token-of-the-player)).
 3. `GET <cdn>/avatars/<id>/<avatar>.png?size=128`, if it has a picture: kept when it is a PNG (its signature) of
    at most 256 KiB, else dropped with a warning, the user signing in without picture.
 
@@ -321,6 +325,21 @@ service on the loop: the `DISCORD_SIGN_IN` not used yet and the codes refused si
 `DISCORD_SIGN_IN` when Discord gives a user: one sign-in, one confirmation. Discord down keeps the attempt, so
 that the player tries again.
 
+#### The Discord token of the player
+
+With `[discord] social = true` ([ADR 0034](../decisions/0034-discord-token-in-the-client.md)), `DISCORD_AUTHORIZE`
+asks `identify openid sdk.social_layer`, and the `DiscordUser` of an exchange carries its tokens (`DiscordTokens`:
+access token, refresh token, expiry), which the client needs to connect its Social SDK. The service puts them in
+the `DiscordProgress` of the connection once it signs in or links (for a new user, once `CHOOSE_USERNAME` made
+its account), and the lobby sends them in `DISCORD_TOKEN` just before the reply, then forgets them: the master
+keeps no token, in memory or in the database.
+
+`DISCORD_REFRESH` gives the refresh token back: `DiscordClient::refresh()` asks `POST /oauth2/token`
+(`grant_type=refresh_token`, the secret of the application), then `GET /users/@me` with the new access token,
+and the service checks with `discordIdentity()` that the user is the identity of the account signed in. Then
+`DISCORD_TOKEN`, or `DISCORD_TOKEN_REFUSED` for a token Discord refuses (`invalid_grant`), of another identity, or
+on a master without the social features; five per connection (`discordAttempts`), then `TOO_MANY_ATTEMPTS`.
+
 The panel signs its administrators in with Discord too, through the browser rather than the SDK: the same
 `DiscordClient`, the code given back to `<public_url>/auth/discord/callback` with the verifier of PKCE the master
 made ([Web server](web.md#accounts)).
@@ -330,6 +349,18 @@ which proves the id and the secret, then drops it: an application Discord refuse
 server does. The address of Discord is `https://discord.com/api/v10`; the tests give the address of their fake
 Discord through `DiscordClientSettings::apiUrl` and `cdnUrl`, which neither the settings file nor the command
 line reach.
+
+### Progression
+
+The games online earn experience ([ADR 0032](../decisions/0032-endless-waves-and-progression.md)). When a game
+ends, its instance reports what each player connected did (`GAME_OVER`, [instances](../protocol/instances.md)):
+`Games` hands it to the `Lobby`, which finds the account of each player. A guest earns nothing. For each one
+signed in, `AccountService::recordGame()` adds the game on the database thread (`Accounts/ProgressStore.hpp`,
+`addGame()`, in a transaction: the experience and the kills added, the records kept), then the lobby sends its
+connection `PROGRESS` ([lobby](../protocol/lobby.md#progress-0x8e)) if it is still signed in to that account.
+At each sign-in, `AccountService::progress()` reads it for a `PROGRESS` without experience gained.
+
+The level is not kept: `rtype::game::levelOf()` finds it from the experience, in the client as in the master.
 
 ### The purge
 

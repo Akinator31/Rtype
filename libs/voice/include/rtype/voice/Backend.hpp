@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string_view>
 
-/// What carries the voice of each player of a game (docs/architecture/voice.md, ADR 0032).
+/// What carries the voice of each player of a game (docs/architecture/voice.md, ADR 0035).
 namespace rtype::voice
 {
 

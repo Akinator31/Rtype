@@ -17,6 +17,7 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -135,7 +136,13 @@ class GameSessionSystem : public ecs::System
     std::unordered_set<std::uint32_t> _killed;
     std::optional<VoiceBadgeLook> _voiceBadgeLook;
     std::vector<game::PlayerState> _players;
+    /// Hit points of the ship of the local player in the latest snapshot, 0 while it is not there.
+    std::uint8_t _localHealth = 0;
     std::uint32_t _tick = 0;
+    /// The last wave started in the session, 0 before the first.
+    std::uint16_t _wave = 0;
+    /// When the session started, for the time Discord counts since.
+    std::chrono::system_clock::time_point _startedAt;
     /// Seconds the session has been played: the time of the animations of the ships.
     float _clock = 0.0f;
 
@@ -238,8 +245,14 @@ public:
     [[nodiscard]] std::optional<engine::SceneId> scene() const { return _scene; }
     /// The players of the latest snapshot, by slot: for the HUD.
     [[nodiscard]] const std::vector<game::PlayerState> &players() const { return _players; }
+    /// Hit points of the ship of the local player in the latest snapshot: for the HUD.
+    [[nodiscard]] std::uint8_t localHealth() const { return _localHealth; }
     /// The tick of the latest snapshot.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }
+    /// The last wave started in the session played, from 1; 0 before the first.
+    [[nodiscard]] std::uint16_t wave() const { return _wave; }
+    /// When the session played started.
+    [[nodiscard]] std::chrono::system_clock::time_point startedAt() const { return _startedAt; }
     /// The stage of the rescue against the final boss in the latest snapshot.
     [[nodiscard]] game::RescueStage rescue() const { return _rescue; }
     /// The entity of the scene that draws an entity of the game, if it is drawn.

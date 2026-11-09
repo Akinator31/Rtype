@@ -52,6 +52,12 @@ inline const std::vector<rtype::database::Migration> ServerMigrations{
       "ALTER TABLE discord_identities ADD COLUMN avatar_png TEXT",
       "ALTER TABLE discord_identities ADD COLUMN profile_at BIGINT"}},
     {8,
+     "create the account_progress table: the experience the accounts earned online, and their records",
+     {"CREATE TABLE account_progress (account_id BIGINT PRIMARY KEY REFERENCES accounts (id) ON DELETE "
+      "CASCADE, "
+      "xp BIGINT NOT NULL, games_played BIGINT NOT NULL, total_kills BIGINT NOT NULL, "
+      "best_waves BIGINT NOT NULL, best_streak BIGINT NOT NULL)"}},
+    {9,
      "create the voice_mutes table: the accounts whose voice the games drop for a time",
      {"CREATE TABLE voice_mutes (account_id BIGINT PRIMARY KEY REFERENCES accounts (id) ON DELETE CASCADE, "
       "created_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, reason TEXT NOT NULL, actor TEXT NOT NULL)"}},

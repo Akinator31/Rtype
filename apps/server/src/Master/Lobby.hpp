@@ -111,6 +111,13 @@ class Lobby final : public AdminLobby
     void joined(Client &client, std::uint8_t request, const Games::JoinResult &result);
     /// A player left its game without asking.
     void left(std::uint32_t playerId, const std::optional<rtype::lobby::LeftGameMessage> &notification);
+    /// Adds what each player signed in did in a game to the progression of its account.
+    void gameOver(const GameOverReport &report);
+    /// Sends PROGRESS to a connection still signed in to the account.
+    void sendProgress(std::uint64_t id, long long accountId, const AccountProgress &progress,
+                      std::uint32_t gained);
+    /// Sends the progression of the account just signed in.
+    void signedIn(Client &client);
     void reply(Client &client, std::uint8_t type, std::span<const std::byte> payload = {});
     void fail(Client &client, std::uint8_t request, rtype::lobby::ErrorCode code);
     /// Closes a connection, after what was sent to it, and forgets it.

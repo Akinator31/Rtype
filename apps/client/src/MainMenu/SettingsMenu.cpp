@@ -112,6 +112,19 @@ float addColorFilterRow(Page &page, float left, float top)
     return addRow(page, "settings.color_filter", value, change, "settings.hint.color_filter", left, top);
 }
 
+/// "Activity on Discord: On": whether the profile of the player in Discord shows what it plays.
+float addDiscordActivityRow(Page &page, float left, float top)
+{
+    const localization::Localization &translations = page.targets.translations;
+    PresenceTracker &presence = page.targets.presence;
+    const auto value = [&translations, &presence] {
+        return translations.text(presence.isEnabled() ? "settings.on" : "settings.off");
+    };
+    const auto change = [&presence](int /*direction*/) { presence.setEnabled(!presence.isEnabled()); };
+    return addRow(page, "settings.discord_activity", value, change, "settings.hint.discord_activity", left,
+                  top);
+}
+
 /// "Screen: 2 · DELL U2720Q": moves the game to another screen.
 float addMonitorRow(Page &page, float left, float top)
 {
@@ -195,9 +208,9 @@ void addVoiceRow(Page &page, float left, float top)
     page.hints->emplace_back(row, "settings.hint.voice_chat");
 }
 
-/// On the left, the language, the volumes and the colour filter; on the right, the display, the controls and
-/// the voice.
-/// The widgets get the focus in the order they are made: down the left column, then down the right one.
+/// On the left, the language, the volumes, the colour filter and the activity on Discord; on the right, the
+/// display, the controls and the voice. The widgets get the focus in the order they are made: down the left
+/// column, then down the right one.
 void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
                        const SettingsTargets &targets, const std::function<void()> &close)
 {
@@ -224,7 +237,9 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     *sliders = addVolumeSliders(page, left, top);
     top += 2.0f * style.slider.getHeight() + groupGap;
     top = addGroup(interface, ecs, style, translations, "settings.group.accessibility", left, top, width);
-    addColorFilterRow(page, left, top);
+    top = addColorFilterRow(page, left, top) + groupGap;
+    top = addGroup(interface, ecs, style, translations, "settings.group.discord", left, top, width);
+    addDiscordActivityRow(page, left, top);
 
     top = addGroup(interface, ecs, style, translations, "settings.group.display", right, settings_page::top,
                    width);
@@ -254,6 +269,7 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
         engine::Settings &settings = engine.getSettings();
         keepPlayerSettings(settings, targets.translations, targets.audio, targets.renderer.colorFilter());
         keepDisplaySettings(settings, targets.window);
+        settings.setBool(DiscordActivitySettingsKey, targets.presence.isEnabled());
         writeSettings(settings);
         engine.popScene();
     };

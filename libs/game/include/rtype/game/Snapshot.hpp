@@ -71,6 +71,14 @@ struct PlayerState {
     /// Lives left, 0 once out of the game.
     std::uint8_t lives = 0;
     std::uint32_t score = 0;
+    /// Bydos it shot down.
+    std::uint32_t kills = 0;
+    /// Waves cleared, alive at their end, and how many in a row up to the last one.
+    std::uint16_t wavesCleared = 0;
+    std::uint16_t streak = 0;
+    std::uint16_t bestStreak = 0;
+    /// Experience earned in this game, 0 but online (Rules::endless).
+    std::uint32_t xp = 0;
 
     friend bool operator==(const PlayerState &, const PlayerState &) = default;
 };

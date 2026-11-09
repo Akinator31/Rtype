@@ -396,7 +396,8 @@ void readMail(const Reader &reader, const toml::table &root, ServerSettings &set
 
 void readDiscord(const Reader &reader, const toml::table &root, ServerSettings &settings)
 {
-    const toml::table *discord = reader.section(root, "discord", {"client_id", "client_secret_file"});
+    const toml::table *discord =
+        reader.section(root, "discord", {"client_id", "client_secret_file", "social"});
     if (discord == nullptr) {
         return;
     }
@@ -416,6 +417,7 @@ void readDiscord(const Reader &reader, const toml::table &root, ServerSettings &
         reader.fail(discord->source(), "[discord] needs client_secret_file, the file of its secret");
     }
     result.clientSecret = *secret;
+    result.social = reader.boolean(*discord, "discord", "social").value_or(false);
 }
 
 void readAdmin(const Reader &reader, const toml::table &root, ServerSettings &settings)

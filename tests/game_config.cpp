@@ -358,6 +358,40 @@ TEST_CASE("The files are read from sub-folders too, in the order of their paths,
     CHECK(loaded.config.projectiles[3].id == "pulse");
 }
 
+TEST_CASE("The experience is read from progression.lua, with its defaults without it", "[game]")
+{
+    const ConfigDirectory directory("progression");
+    directory.writeValid();
+    const LoadedGameConfig defaults = loadGameConfig(directory.path);
+    INFO(listErrors(defaults));
+    REQUIRE(defaults.isValid());
+    CHECK(defaults.config.progression.xpPerWave == Progression{}.xpPerWave);
+    // An enemy without xp gives a tenth of its score
+    CHECK(defaults.config.enemies.front().xp == defaults.config.enemies.front().score / 10);
+
+    directory.write("progression.lua", "return { xpPerWave = 80, streakBonus = 10, streakCap = 200 }");
+    const LoadedGameConfig loaded = loadGameConfig(directory.path);
+    INFO(listErrors(loaded));
+    REQUIRE(loaded.isValid());
+    CHECK(loaded.config.progression.xpPerWave == 80);
+    CHECK(loaded.config.progression.streakBonus == 10);
+    CHECK(loaded.config.progression.streakCap == 200);
+
+    CHECK(errorWith("progression_cap", "progression.lua", "return { streakCap = 50 }") ==
+          "progression.lua: streakCap: expected an integer from 100 to 65535");
+    CHECK_THAT(errorWith("progression_unknown", "progression.lua", "return { bonus = 2 }"),
+               ContainsSubstring("bonus"));
+}
+
+TEST_CASE("The progression of the repository loads", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    CHECK(loaded.config.progression.xpPerWave == 100);
+    CHECK(loaded.config.progression.streakBonus == 25);
+    CHECK(loaded.config.progression.streakCap == 300);
+}
+
 TEST_CASE("A directory without player.lua is an error, as a missing one", "[game]")
 {
     const ConfigDirectory directory("empty");

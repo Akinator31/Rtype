@@ -11,7 +11,7 @@
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
-([ADR 0032](../decisions/0032-voice-chat-in-the-game-session.md)).
+([ADR 0035](../decisions/0035-voice-chat-in-the-game-session.md)).
 
 The voice library (`libs/voice`, namespace `rtype::voice`) holds what the client knows of the voice, in four
 targets:
@@ -152,9 +152,9 @@ The voice travels in the UDP session of the game
 | `VOICE_STATUS` (`0x43`) | Client → game, reliable | `VoiceStatusMessage`: the `Status` of the player, one byte of flags |
 | `VOICE_STATUSES` (`0x86`) | Game → client, reliable | `VoiceStatusesMessage`: the `Status` of each slot |
 
-These are new types, which an older client or game would ignore. Game protocol 3 adds the account of each
+These are new types, which an older client or game would ignore. Game protocol 4 adds the account of each
 player to `PLAYER_JOINED`, so that a client keeps its choices for another player under it
-([In the HUD and the pause menu](#in-the-hud-and-the-pause-menu)). Game protocol 4 adds to `ACCEPTED` whether
+([In the HUD and the pause menu](#in-the-hud-and-the-pause-menu)). Game protocol 5 adds to `ACCEPTED` whether
 the game carries the voice, and to `VOICE_STATUSES` a player muted by an administrator
 ([The rules of the server](#the-rules-of-the-server)).
 
@@ -193,7 +193,7 @@ Each player tells the others what it does with its voice (`voice::Status`), so t
 | `muted` | Muted by itself: its mute key, deafened, or its voice turned off (`GameVoice::selfMuted()`) |
 | `deafened` | Deafened by its key (`GameVoice::deafened()`) |
 | `noMicrophone` | Its microphone could not be opened the last time it was unmuted (`GameVoice::microphoneMissing()`): it listens only |
-| `mutedByAdmin` | Muted by an administrator (game protocol 4): set by the game in `VOICE_STATUSES` only, dropped from a `VOICE_STATUS` |
+| `mutedByAdmin` | Muted by an administrator (game protocol 5): set by the game in `VOICE_STATUSES` only, dropped from a `VOICE_STATUS` |
 
 `RemoteSession` sends `VOICE_STATUS` once accepted, then at every change; the game keeps the status of each
 player and sends `VOICE_STATUSES` to everyone at every change, and to a newcomer at its connection (to
@@ -424,13 +424,14 @@ CPU), so that neither meson nor its subproject is needed on Linux or Windows. Th
 an update. abseil, which it is written against, comes through CPM too, at the release its meson wrap pins
 (20240722.0). One header of WebRTC uses `uint8_t` without `<cstdint>`, which recent GCC no longer includes
 through `<string>`: the build includes it before each of its C++ files (`-include cstdint`, `/FIcstdint`),
-the sources left as they are. Its warnings are not ours (`-w`). Its license (BSD) is installed with the client
+the sources left as they are, set on the `.cc` files one by one, not its C files: the Visual Studio generators
+do not tell C from C++ in the options of a target. Its warnings are not ours (`-w`). Its license (BSD) is installed with the client
 in `licenses/webrtc-audio-processing.txt`, the one of abseil (Apache 2.0) in `licenses/abseil.txt`. The whole
 chain costs under 1 % of a core.
 
 The first version of this step was built on speexdsp, for the echo and the gain, and RNNoise, for the noise,
 with a measure of the delay of ours: the filter of speexdsp learnt slowly, and let the echo through for a
-moment at each start and each new delay. AEC3 replaced both ([ADR 0033](../decisions/0033-webrtc-audio-processing.md)).
+moment at each start and each new delay. AEC3 replaced both ([ADR 0036](../decisions/0036-webrtc-audio-processing.md)).
 
 ## The talk modes
 

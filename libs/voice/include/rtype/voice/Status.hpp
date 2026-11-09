@@ -15,7 +15,7 @@ struct Status {
     /// Its microphone cannot be opened: it listens only.
     bool noMicrophone = false;
     /// Muted by an administrator of the server: the game drops its voice. Set by the game only, never by the
-    /// player (game protocol 4).
+    /// player (game protocol 5).
     bool mutedByAdmin = false;
 
     friend bool operator==(const Status &, const Status &) = default;

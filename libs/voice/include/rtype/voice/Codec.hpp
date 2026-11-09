@@ -8,7 +8,7 @@
 #include <memory>
 #include <span>
 
-/// The encoder and the decoder of the voice (docs/architecture/voice.md#the-codec, ADR 0032): Opus, 48 kHz
+/// The encoder and the decoder of the voice (docs/architecture/voice.md#the-codec, ADR 0035): Opus, 48 kHz
 /// mono, frames of 20 ms. Opus stays out of this header.
 namespace rtype::voice
 {

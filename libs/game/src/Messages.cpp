@@ -22,8 +22,8 @@ using rtype::network::Writer;
 /// The fields before the players in SNAPSHOT: tick, last input, input lead, weapon (cooldown, ammo, reload),
 /// part, parts, player count.
 constexpr std::size_t SnapshotHeaderSize = 18;
-/// One player in SNAPSHOT: slot, lives, score.
-constexpr std::size_t PlayerStateSize = 6;
+/// One player in SNAPSHOT: slot, lives, score, kills, waves cleared, streak, best streak, experience.
+constexpr std::size_t PlayerStateSize = 20;
 /// One entity in SNAPSHOT.
 constexpr std::size_t EntityStateSize = 16;
 /// The fields before the entities in ENTITIES_DESTROYED: tick, count.
@@ -88,6 +88,11 @@ void writePlayers(Writer &writer, const std::vector<PlayerState> &players)
         writer.writeU8(player.slot);
         writer.writeU8(player.lives);
         writer.writeU32(player.score);
+        writer.writeU32(player.kills);
+        writer.writeU16(player.wavesCleared);
+        writer.writeU16(player.streak);
+        writer.writeU16(player.bestStreak);
+        writer.writeU32(player.xp);
     }
 }
 
@@ -358,6 +363,11 @@ std::optional<SnapshotPart> decodeSnapshotPart(std::span<const std::byte> payloa
         player.slot = reader.readU8();
         player.lives = reader.readU8();
         player.score = reader.readU32();
+        player.kills = reader.readU32();
+        player.wavesCleared = reader.readU16();
+        player.streak = reader.readU16();
+        player.bestStreak = reader.readU16();
+        player.xp = reader.readU32();
         if (!isSlot(player.slot) || seen[player.slot]) {
             reader.fail();
             break;
@@ -515,7 +525,7 @@ constexpr std::uint8_t LastFrame = 0x01;
 constexpr std::uint8_t MutedFlag = 0x01;
 constexpr std::uint8_t DeafenedFlag = 0x02;
 constexpr std::uint8_t NoMicrophoneFlag = 0x04;
-/// In VOICE_STATUSES only, set by the game (version 4); dropped from a VOICE_STATUS.
+/// In VOICE_STATUSES only, set by the game (version 5); dropped from a VOICE_STATUS.
 constexpr std::uint8_t MutedByAdminFlag = 0x08;
 
 std::uint8_t toFlags(const voice::Status &status)

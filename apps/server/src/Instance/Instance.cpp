@@ -48,6 +48,14 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
+/// Online, the waves follow each other until every player is out of lives, and earn experience.
+rtype::game::Rules onlineRules()
+{
+    rtype::game::Rules rules;
+    rules.endless = true;
+    return rules;
+}
+
 /// Why the master shuts the game down, for the logs.
 std::string_view describe(ShutdownReason reason)
 {
@@ -172,7 +180,7 @@ public:
     Instance(const InstanceOptions &options, rtype::game::GameConfig config, rtype::network::EventLoop &loop)
         : _options(options), _loop(loop),
           _game(
-              {}, std::move(config),
+              onlineRules(), std::move(config),
               // Each tick, from the game thread to the network thread
               [this](TickResult result) {
                   _loop.post([this, result = std::move(result)] {

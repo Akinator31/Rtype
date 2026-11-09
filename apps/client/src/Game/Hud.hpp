@@ -41,6 +41,10 @@ struct Hud {
     ecs::entity_t pilot = 0;
     ecs::entity_t pilotVoice = 0;
     ecs::entity_t score = 0;
+    /// The hit points of the ship of the local player, in green, under the score.
+    ecs::entity_t health = 0;
+    /// Online, right of the score: the experience earned in the game, and the streak from 2 waves.
+    ecs::entity_t xp = 0;
     /// One line per other player at most.
     std::vector<HudAlly> allies;
     /// The bars of the signal, from the shortest, left of the ping.

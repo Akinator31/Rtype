@@ -39,6 +39,8 @@ using DefinitionReader = Definition (*)(TableReader &);
 
 /// The file of the player, at the root of the directory.
 constexpr std::string_view PlayerFile = "player.lua";
+/// The file of the experience of the endless games, at the root of the directory, optional.
+constexpr std::string_view ProgressionFile = "progression.lua";
 
 /// The `.lua` files under `folder`, by path, so that every machine reads them in the same order.
 std::vector<std::filesystem::path> listScripts(const std::filesystem::path &folder,
@@ -160,6 +162,7 @@ struct ReadFiles {
     std::vector<FromFile<EnemyDefinition>> enemies;
     std::vector<FromFile<WaveDefinition>> waves;
     std::optional<FromFile<PlayerDefinition>> player;
+    Progression progression;
 };
 
 /// The assets of the programs, next to the configuration: `assets/` beside `config/` once built or installed,
@@ -220,6 +223,17 @@ std::optional<FromFile<PlayerDefinition>> readPlayerFile(const std::filesystem::
     return std::nullopt;
 }
 
+/// The file of the experience, at the root of the directory: the defaults of Progression without it.
+Progression readProgressionFile(const std::filesystem::path &directory, std::vector<std::string> &errors)
+{
+    const std::string name(ProgressionFile);
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(directory / name, error)) {
+        return {};
+    }
+    return readScript(directory / name, name, readProgression, errors).value_or(Progression{});
+}
+
 ReadFiles readFiles(const std::filesystem::path &directory, const std::filesystem::path &assets,
                     std::vector<std::string> &errors)
 {
@@ -235,6 +249,7 @@ ReadFiles readFiles(const std::filesystem::path &directory, const std::filesyste
         analyseMusics(assets, files.waves, errors);
     }
     files.player = readPlayerFile(directory, errors);
+    files.progression = readProgressionFile(directory, errors);
     return files;
 }
 
@@ -270,9 +285,13 @@ void checkDefinitions(const ReadFiles &files, std::vector<std::string> &errors)
 
 GameConfig takeConfig(ReadFiles &files)
 {
-    return {takeDefinitions(files.projectiles), takeDefinitions(files.weapons),
-            takeDefinitions(files.ships),       takeDefinitions(files.enemies),
-            takeDefinitions(files.waves),       std::move(files.player->definition)};
+    return {takeDefinitions(files.projectiles),
+            takeDefinitions(files.weapons),
+            takeDefinitions(files.ships),
+            takeDefinitions(files.enemies),
+            takeDefinitions(files.waves),
+            std::move(files.player->definition),
+            files.progression};
 }
 
 } // namespace

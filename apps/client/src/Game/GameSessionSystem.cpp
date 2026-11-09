@@ -102,6 +102,7 @@ void GameSessionSystem::start(std::unique_ptr<GameSession> session, engine::Scen
     stop();
     _session = std::move(session);
     _scene = scene;
+    _startedAt = std::chrono::system_clock::now();
     _onOver = std::move(onOver);
 }
 
@@ -113,7 +114,9 @@ void GameSessionSystem::stop()
     _entities.clear();
     _killed.clear();
     _players.clear();
+    _localHealth = 0;
     _tick = 0;
+    _wave = 0;
     _rescue = game::RescueStage::None;
     _outcomeTold = false;
     _clock = 0.0f;
@@ -250,11 +253,15 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
 {
     _tick = snapshot.tick;
     _players = snapshot.players;
+    _localHealth = 0;
 
     std::unordered_set<std::uint32_t> present;
     present.reserve(snapshot.entities.size());
     for (const game::EntityState &state : snapshot.entities) {
         present.insert(state.id);
+        if (isLocalShip(state)) {
+            _localHealth = state.health;
+        }
         const auto found = _entities.find(state.id);
         if (found == _entities.end() || !_ecs.isAlive(found->second)) {
             createEntity(state);
@@ -265,8 +272,11 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     showStrikes(snapshot.struck);
     rememberKilled(snapshot.destroyed);
     reportKills(snapshot.destroyed);
-    if (snapshot.waveStarted && _onWave) {
-        _onWave(*snapshot.waveStarted, snapshot.waveMusic);
+    if (snapshot.waveStarted) {
+        _wave = *snapshot.waveStarted;
+        if (_onWave) {
+            _onWave(*snapshot.waveStarted, snapshot.waveMusic);
+        }
     }
     if (snapshot.rescue != std::exchange(_rescue, snapshot.rescue) && _onRescue) {
         _onRescue(snapshot.rescue);
