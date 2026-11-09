@@ -354,6 +354,52 @@ TEST_CASE("A slider can write a label instead of its percentage, and do somethin
     CHECK_FALSE(muted);
 }
 
+TEST_CASE("A locked slider is passed over by the focus and the pointer, and changes nothing",
+          "[engine][interface][slider]")
+{
+    World world;
+    float first = 0.5f;
+    float second = 0.5f;
+    bool locked = true;
+    bool confirmed = false;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t muted = ui.slider(
+        "Nova", [&] { return first; }, [&](float value) { first = value; }, 0.25f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    Slider &row = world.ecs.getComponent<Slider>(muted);
+    row.locked = [&] { return locked; };
+    row.onConfirm = [&] { confirmed = true; };
+    const entity_t other = ui.slider(
+        "Orion", [&] { return second; }, [&](float value) { second = value; }, 0.25f,
+        {AnchorPoint::TopLeft, 100.0f, 300.0f});
+    world.update();
+
+    // The focus goes to the other one, and stays there
+    CHECK_FALSE(world.isFocused(muted));
+    CHECK(world.isFocused(other));
+    world.press({Key::Up});
+    CHECK(world.isFocused(other));
+    world.press({Key::Right});
+    world.press({Key::Enter});
+    CHECK(first == 0.5f);
+    CHECK(std::abs(second - 0.75f) < 1e-6f);
+    CHECK_FALSE(confirmed);
+
+    // A click on its rail moves nothing
+    const rtype::ecs::Position rail = world.ecs.getComponent<rtype::ecs::Position>(muted);
+    world.input.mouse = {world.style.slider.getRailLeft(rail.x), world.style.slider.getRailY(rail.y)};
+    world.input.mouseButtons = {MouseButton::Left};
+    world.update();
+    world.input.mouseButtons.clear();
+    world.update();
+    CHECK(first == 0.5f);
+
+    // Unlocked, it is one again
+    locked = false;
+    world.press({Key::Up});
+    CHECK(world.isFocused(muted));
+}
+
 TEST_CASE("A click on a slider moves its handle and never runs its action", "[engine][interface][slider]")
 {
     World world;
