@@ -32,6 +32,7 @@ add_executable(rtype_tests
     debug_commands.cpp
     discord.cpp
     discord_presence.cpp
+    discord_voice.cpp
     display_settings.cpp
     ecs.cpp
     ecs_world.cpp

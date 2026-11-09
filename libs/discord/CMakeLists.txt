@@ -1,6 +1,9 @@
-# Discord in the client (docs/architecture/client-online.md#discord), in two targets:
+# Discord in the client (docs/architecture/client-online.md#discord), in three targets:
 #   rtype::discord      the interfaces the client and its tests know, one per feature (rtype/discord/Authorizer.hpp,
-#                       Presence.hpp, Connection.hpp), faked in tests/helpers/FakeSocialSdk.hpp
+#                       Presence.hpp, Connection.hpp, VoiceCall.hpp), faked in tests/helpers/FakeSocialSdk.hpp
+#   rtype::discord_voice  the voice of a game carried by Discord (rtype/discord/DiscordVoice.hpp), a
+#                       rtype::voice::VoiceChannel on the VoiceCall interface: without the SDK, so the client
+#                       core and its tests link it on every platform
 #   rtype::discord_sdk  their implementations through the Discord Social SDK, on the one client of a Session,
 #                       linked by the executable of the client alone: the tests never load the SDK
 # The SDK is downloaded only from the developer portal of Discord, with an account: its files for Linux x86-64
@@ -9,6 +12,12 @@
 add_library(rtype_discord INTERFACE)
 add_library(rtype::discord ALIAS rtype_discord)
 target_include_directories(rtype_discord INTERFACE include)
+
+add_library(rtype_discord_voice STATIC
+    src/DiscordVoice.cpp
+)
+add_library(rtype::discord_voice ALIAS rtype_discord_voice)
+target_link_libraries(rtype_discord_voice PUBLIC rtype::discord rtype::voice PRIVATE rtype_options rtype::log)
 
 set(discord_sdk_dir ${CMAKE_CURRENT_SOURCE_DIR}/sdk)
 if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64")
@@ -33,6 +42,7 @@ add_library(rtype_discord_sdk STATIC
     src/SocialSdkAuthorizer.cpp
     src/SocialSdkPresence.cpp
     src/SocialSdkConnection.cpp
+    src/SocialSdkVoiceCall.cpp
 )
 add_library(rtype::discord_sdk ALIAS rtype_discord_sdk)
 target_link_libraries(rtype_discord_sdk PUBLIC rtype::discord PRIVATE rtype_options rtype::log discord_partner_sdk)
