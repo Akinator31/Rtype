@@ -101,6 +101,7 @@ nav = [
         "decisions/0030-measured-delays.md",
         "decisions/0031-destructions-sent-again.md",
         "decisions/0032-voice-chat-in-the-game-session.md",
+        "decisions/0033-webrtc-audio-processing.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

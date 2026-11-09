@@ -1,7 +1,8 @@
 # Audio
 
 The audio library (`libs/audio`, namespace `rtype::audio`) plays the sound effects and the music of the client,
-and the voices of the other players of a game online.
+the voices of the other players of a game online, and gives what the output plays, the reference of the echo
+cancellation of the microphone.
 Like the render library, it wraps raylib: its public headers contain no raylib type.
 
 | Class         | Role                                                                              |
@@ -9,6 +10,7 @@ Like the render library, it wraps raylib: its public headers contain no raylib t
 | `AudioDevice` | Opens the audio output and closes it when destroyed. Only one can exist.          |
 | `AudioPlayer` | Loads sounds and music once, plays them, and holds the music and effects volumes. |
 | `VoiceStreams` | Plays the voices of the other players, one stream each ([The voices](#the-voices)). Only one can exist. |
+| `OutputLoopback` | Gives what the output plays, all mixed, for the echo cancellation ([What is played](#what-is-played)). Only one can exist. |
 
 ```cpp
 Window window;
@@ -145,19 +147,44 @@ voice::GameVoice voice(session, microphone, voices);
   callback of the stream, on the audio thread of raylib, takes what is there and plays silence for the rest
   ([Threads](threads.md#the-audio-threads)). A stream 200 ms behind drops what does not fit.
 - **PCM, not Opus.** Whatever carried a voice, the game or Discord, it is played here: one mixer, one volume
-  per player, and one place for the spatial voice and the echo cancellation to come.
+  per player, one place for the spatial voice to come, and one reference for the echo cancellation.
 - **One at a time.** The callbacks of raylib take no pointer: each slot has its own function, which finds the
   streams in a variable of `VoiceStreams.cpp`. A second `VoiceStreams` throws, as a second `AudioDevice`.
 - **Without an audio output** (`AudioDevice::isAvailable()` false), it is not `available()` and plays nothing:
   the player has no voice.
+- **At 48 kHz.** raylib is compiled with `AUDIO_DEVICE_SAMPLE_RATE=48000` (`libs/CMakeLists.txt`): it mixes at
+  the rate of the voice, and miniaudio converts when the device runs at another one. The voices are played
+  without being resampled.
+
+## What is played
+
+`OutputLoopback` is the `voice::Loopback` of the client ([Voice](voice.md#the-sound-processing)): what the
+output plays, the voices, the music and the effects, taken where raylib has mixed them, and given to the echo
+cancellation of the microphone as its reference.
+
+```cpp
+const AudioDevice device;
+OutputLoopback loopback(device);                  // destroyed before the device
+voice::GameVoice voice(session, microphone, voices, &loopback);
+```
+
+- **Open with the microphone.** `GameVoice` opens it when it opens the microphone, and closes it with it:
+  `open()` attaches a processor to the mix (`AttachAudioMixedProcessor()`), `close()` detaches it.
+- **Before the master volume.** The processor sees the mix of raylib, which miniaudio scales by the master
+  volume afterwards: the echo canceller learns that gain with the room.
+- **In mono, without a wait.** The callback, on the audio thread of raylib, mixes the two channels down to one,
+  as signed 16 bits, into a ring buffer of one second that `read()` empties on the game loop
+  ([Threads](threads.md#the-audio-threads)); what does not fit is dropped.
+- **One at a time**, as `VoiceStreams`: the processor of raylib takes no pointer. Without an audio output,
+  `open()` fails: nothing is played, there is no echo.
 
 ## Testing
 
 `tests/audio.cpp` tests the library with audio disabled, so that the tests give the same result with or
 without a sound card: volumes, single device, handles of sounds loaded twice, missing files, and the state of
 the music. Missing files are reported even when audio is disabled, so that they are noticed on every
-computer. The voice is tested with a fake `voice::Playback` ([Voice](voice.md#testing)): `VoiceStreams` needs
-an audio output.
+computer. The voice is tested with a fake `voice::Playback` and a fake `voice::Loopback`
+([Voice](voice.md#testing)): `VoiceStreams` and `OutputLoopback` need an audio output.
 
 ## Limits and next steps
 

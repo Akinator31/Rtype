@@ -3,6 +3,7 @@
 #include "rtype/voice/Codec.hpp"
 #include "rtype/voice/Devices.hpp"
 #include "rtype/voice/JitterBuffer.hpp"
+#include "rtype/voice/Processing.hpp"
 #include "rtype/voice/Talk.hpp"
 #include "rtype/voice/VoiceChannel.hpp"
 
@@ -47,8 +48,9 @@ public:
 
 /// The voice of a game carried by the game: the player of this client is on Backend::Game.
 ///
-/// - **Out**: while it talks and is not muted, the samples of the microphone, by frames of 20 ms, are given
-///   their volume, encoded and sent, each with its sequence; silence is not sent (DTX). With the voice
+/// - **Out**: while it talks and is not muted, the samples of the microphone, by frames of 20 ms, go through
+///   the SoundProcessing (the echo of what the Loopback says is played, the noise, the gain), are given their
+///   volume, encoded and sent, each with its sequence; silence is not sent (DTX). With the voice
 ///   activity on, only the frames of the voice go (VoiceActivity). The microphone is open only while the
 ///   player is not muted: the system shows it in use only then. Without one, the player listens only.
 /// - **In**: the frames of each other player go into its JitterBuffer, which gives back 20 ms at a time in
@@ -57,7 +59,7 @@ public:
 ///   frames played are less than 200 ms old. Deafened, the player hears none of them.
 ///
 /// @code
-/// voice::GameVoice voice(session, microphone, streams);
+/// voice::GameVoice voice(session, microphone, streams, &loopback);    // no loopback: no echo cancellation
 /// voice.join({.self = accepted.slot});
 /// voice.setSelfMute(false);
 /// voice.setTalking(pushToTalk.talking(now));     // or setVoiceActivity(threshold) and setTalking(true)
@@ -92,6 +94,8 @@ private:
     VoiceTransport &_transport;
     Capture &_capture;
     Playback &_playback;
+    Loopback *_loopback;
+    bool _loopbackOpen = false;
     std::optional<Join> _joined;
     std::array<std::optional<Remote>, MaxParticipants> _remotes;
     bool _selfMuted = true;
@@ -109,12 +113,12 @@ private:
     /// Frames of silence in a row while the player talks.
     std::size_t _silence = 0;
 
+    /// The microphone, and what is played, before the encoder: the samples not encoded yet wait there.
+    SoundProcessing _processing;
     Encoder _encoder;
     /// A talk spurt is being sent: the next frame not sent is its last.
     bool _spurt = false;
     std::uint16_t _sequence = 0;
-    /// Samples of the microphone not encoded yet.
-    std::vector<std::int16_t> _captured;
     std::size_t _sent = 0;
 
     [[nodiscard]] Remote *remote(Slot slot);
@@ -123,12 +127,13 @@ private:
     void updateCapture();
     void applyVolume(const Remote &remote);
     void capture();
-    void sendFrame(ConstPcm captured);
+    void sendFrame(ConstPcm processed, ConstPcm heard);
     void receive(Clock::time_point now);
     void play(Slot slot, Remote &remote, Clock::time_point now);
 
 public:
-    GameVoice(VoiceTransport &transport, Capture &capture, Playback &playback);
+    /// @param loopback What the speakers play, for the echo cancellation; nothing without it.
+    GameVoice(VoiceTransport &transport, Capture &capture, Playback &playback, Loopback *loopback = nullptr);
     ~GameVoice() override;
 
     GameVoice(const GameVoice &) = delete;
@@ -152,6 +157,8 @@ public:
     /// The volume of the microphone, from 0 to MaxVolume: the samples are multiplied by it before they are
     /// encoded.
     void setInputVolume(float volume);
+    /// What the microphone goes through, before its volume: the noise suppression and the gain control.
+    void setProcessing(const ProcessingSettings &settings);
     /// The volume of every voice, from 0 to MaxVolume, times the volume of each player.
     void setOutputVolume(float volume);
     /// Deafens the player: the voices of the others are not played. It does not mute it: the client does,
@@ -178,11 +185,14 @@ public:
     /// The level of the last frame of the microphone, in dBFS, after its volume; SilenceFloor while it is
     /// closed.
     [[nodiscard]] float inputLevel() const { return _inputLevel; }
-    /// The microphone gave only silence (SilenceLevel) for SilentFrames while the player talked: it is
-    /// probably unplugged, or muted by a switch of its own. A frame with a sound clears it.
+    /// The microphone gave only silence (SilenceLevel, as it heard it, before the processing and its volume)
+    /// for SilentFrames while the player talked: it is probably unplugged, or muted by a switch of its own. A
+    /// frame with a sound clears it.
     [[nodiscard]] bool microphoneSilent() const { return _silence >= SilentFrames; }
     /// Frames of the player sent, since the start.
     [[nodiscard]] std::size_t sentFrames() const { return _sent; }
+    /// The processing of the microphone, for its echo delay measured.
+    [[nodiscard]] const SoundProcessing &processing() const { return _processing; }
 };
 
 } // namespace rtype::voice

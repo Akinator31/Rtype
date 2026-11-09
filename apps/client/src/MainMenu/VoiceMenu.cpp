@@ -202,6 +202,25 @@ float addInputVolume(Page &page, float left, float top)
         top);
 }
 
+/// "Noise suppression: On" and "Gain control: On": what the microphone goes through before it is sent.
+/// @return The top of the next row.
+float addProcessingRows(Page &page, float left, float top)
+{
+    const localization::Localization &translations = page.targets.translations;
+    voice::ProcessingSettings &processing = page.targets.voice.preferences.processing;
+    const auto onOff = [&translations](const bool &value) {
+        return [&translations, &value] { return translations.text(value ? "settings.on" : "settings.off"); };
+    };
+    top = addRow(
+        page, "voice.noise_suppression", onOff(processing.noiseSuppression),
+        [&processing](int /*direction*/) { processing.noiseSuppression = !processing.noiseSuppression; },
+        "voice.hint.noise_suppression", left, top);
+    return addRow(
+        page, "voice.gain_control", onOff(processing.gainControl),
+        [&processing](int /*direction*/) { processing.gainControl = !processing.gainControl; },
+        "voice.hint.gain_control", left, top);
+}
+
 /// The volume of the voices of the others.
 float addVoiceVolume(Page &page, float left, float top)
 {
@@ -266,7 +285,8 @@ void buildVoicePage(engine::Engine &engine, engine::SceneId scene, const engine:
     top = addThreshold(page, test, left, top) + groupGap;
     top = addGroup(interface, ecs, style, translations, "voice.group.microphone", left, top, width);
     top = addDeviceRow(page, left, top);
-    addInputVolume(page, left, top);
+    top = addInputVolume(page, left, top);
+    addProcessingRows(page, left, top);
 
     top =
         addGroup(interface, ecs, style, translations, "voice.group.listen", right, settings_page::top, width);

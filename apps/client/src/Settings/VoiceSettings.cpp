@@ -64,6 +64,10 @@ VoicePreferences readVoiceSettings(const engine::Settings &settings)
     preferences.voiceVolume =
         readNumber(settings, VoiceVolumeSettingsKey, preferences.voiceVolume, 0.0f, voice::DefaultVolume);
     readPlayerVoices(settings, preferences);
+    preferences.processing.noiseSuppression =
+        settings.getBool(NoiseSuppressionSettingsKey).value_or(preferences.processing.noiseSuppression);
+    preferences.processing.gainControl =
+        settings.getBool(GainControlSettingsKey).value_or(preferences.processing.gainControl);
     return preferences;
 }
 
@@ -85,6 +89,8 @@ void keepVoiceSettings(engine::Settings &settings, const VoicePreferences &prefe
         settings.setFloat(prefix + std::string(VolumeSuffix), choice.volume);
         settings.setBool(prefix + std::string(MutedSuffix), choice.muted);
     }
+    settings.setBool(NoiseSuppressionSettingsKey, preferences.processing.noiseSuppression);
+    settings.setBool(GainControlSettingsKey, preferences.processing.gainControl);
 }
 
 } // namespace rtype::client

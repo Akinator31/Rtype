@@ -3,15 +3,15 @@
 !!! warning "In progress"
 
     The voice chat is being built. This page describes what exists: the interface, the rule of the backends,
-    the codec, the messages of the game protocol, the devices, the voice of the game, the talk modes, the keys,
-    the Voice page, and the voice in the HUD and in the pause menu. The sound processing and the spatial voice
-    come with the next steps.
+    the codec, the messages of the game protocol, the devices, the voice of the game, the sound processing of
+    the microphone, the talk modes, the keys, the Voice page, and the voice in the HUD and in the pause menu.
+    The spatial voice comes with the next steps.
 
 The players of an online game talk to each other. Each player's voice is carried by one **backend**: the voice
 of the game, in its UDP session, or Discord; both in the same game
 ([ADR 0032](../decisions/0032-voice-chat-in-the-game-session.md)).
 
-The voice library (`libs/voice`, namespace `rtype::voice`) holds what the client knows of the voice, in three
+The voice library (`libs/voice`, namespace `rtype::voice`) holds what the client knows of the voice, in four
 targets:
 
 | Target | Header | Content |
@@ -20,9 +20,10 @@ targets:
 | `rtype::voice` | `rtype/voice/Backend.hpp` | `Backend` (`None`, `Game`, `Discord`), `carriedByGame()` and `name()` |
 | `rtype::voice` | `rtype/voice/Status.hpp` | `Status`: what a player tells about its voice, muted, deafened, without a microphone |
 | `rtype::voice` | `rtype/voice/Format.hpp` | `SampleRate`, `FrameSamples`, `FramesPerSecond`, `MaxFrameBytes`: what the codec, the protocol and the devices agree on |
-| `rtype::voice` | `rtype/voice/Devices.hpp` | `Capture` and `Playback`: the microphone and the voices played, as interfaces |
+| `rtype::voice` | `rtype/voice/Devices.hpp` | `Capture`, `Playback` and `Loopback`: the microphone, the voices played and what the speakers play, as interfaces |
 | `rtype::voice` | `rtype/voice/RingBuffer.hpp` | `RingBuffer`: what an audio thread and the game loop share, without a lock |
 | `rtype::voice_codec` | `rtype/voice/Codec.hpp` | `Encoder`, `Decoder`, `isValidFrame()`: the voice in Opus |
+| `rtype::voice_processing` | `rtype/voice/Processing.hpp` | `SoundProcessing`, `ProcessingSettings`: the echo cancellation, the noise suppression and the gain control of the microphone, by WebRTC |
 | `rtype::voice_client` | `rtype/voice/JitterBuffer.hpp` | `JitterBuffer`: the frames of one player put back in order and in time |
 | `rtype::voice_client` | `rtype/voice/GameVoice.hpp` | `GameVoice`, the `VoiceChannel` of the voice of the game, and the `VoiceTransport` it goes through |
 | `rtype::voice_client` | `rtype/voice/Talk.hpp` | `TalkMode`, `PushToTalk`, `VoiceActivity`, `LevelMeter`, `levelOf()`: how the player talks, pure |
@@ -31,9 +32,12 @@ targets:
 `rtype::voice` is header only, without dependency: `libs/game` (the messages) and the server know the backends
 and the format without Opus.
 `rtype::voice_codec` is built on libopus, a private dependency: no Opus type in its header.
-`rtype::voice_client` links the codec, and raylib for its miniaudio, privately: no miniaudio in its headers.
+`rtype::voice_processing` is built on webrtc-audio-processing and abseil, private dependencies: neither in
+its headers.
+`rtype::voice_client` links the codec and the processing, and raylib for its miniaudio, privately: no
+miniaudio in its headers.
 The voices are played by `audio::VoiceStreams` of `libs/audio` ([Audio](audio.md#the-voices)), the `Playback`
-of the client.
+of the client; what the speakers play is taken by its `audio::OutputLoopback`, the `Loopback` of the client.
 
 ## The backends
 
@@ -192,15 +196,17 @@ informs: a player muted by itself sends no voice, whatever it says.
 
 ## The devices
 
-The voice has two devices, interfaces of `rtype/voice/Devices.hpp`, called on the game loop only: a `Capture`
-(`open()`, `close()`, `read()` the samples captured) and a `Playback`, one stream per player (`open(slot)`,
-`close(slot)`, `write(slot, samples)`, `setVolume(slot, volume)`, `available()`). Both are 48 kHz mono, signed
-16 bits. The client gives the real ones; the tests give fakes (`tests/helpers/FakeVoiceDevices.hpp`).
+The voice has three devices, interfaces of `rtype/voice/Devices.hpp`, called on the game loop only: a
+`Capture` (`open()`, `close()`, `read()` the samples captured), a `Playback`, one stream per player
+(`open(slot)`, `close(slot)`, `write(slot, samples)`, `setVolume(slot, volume)`, `available()`), and a
+`Loopback`, what the speakers play (`open()`, `close()`, `read()` the samples played). All are 48 kHz mono,
+signed 16 bits. The client gives the real ones; the tests give fakes (`tests/helpers/FakeVoiceDevices.hpp`).
 
 | Device | Real one | How |
 |---|---|---|
 | Microphone | `voice::Microphone` | A `ma_device` of capture through the miniaudio raylib compiles: its callback writes to a `RingBuffer` of one second, which `read()` empties |
 | Voices | `audio::VoiceStreams` | One `AudioStream` of raylib per slot, with a callback that reads a `RingBuffer` of 200 ms, silence when it is empty |
+| What is played | `audio::OutputLoopback` | A processor of the mix of raylib (`AttachAudioMixedProcessor()`): its callback mixes the two channels down to one and writes them to a `RingBuffer` of one second, which `read()` empties |
 
 - **One miniaudio.** raylib 6.0 compiles miniaudio 0.11.24 into itself, capture included. `Microphone.cpp`
   includes its `external/miniaudio.h` without the implementation, with the defines raylib compiles it with
@@ -215,6 +221,10 @@ The voice has two devices, interfaces of `rtype/voice/Devices.hpp`, called on th
 - **The output is the one of raylib**: the voices are mixed with the music and the effects, on the device
   raylib opened, the default of the system (`InitAudioDevice()` takes no device). Choosing another output for
   the voices would mean a second playback device of ours, beside raylib's.
+- **The output runs at 48 kHz**, the rate of the voice, whatever the device: raylib is compiled with
+  `AUDIO_DEVICE_SAMPLE_RATE=48000` (`libs/CMakeLists.txt`), and miniaudio converts when the device differs.
+  The voices are played without being resampled, and what the speakers play is the reference of the echo
+  cancellation sample for sample.
 - **Without a device, no error**: no microphone, the player listens only; no audio output
   (`Playback::available()` false), the player has no voice, `NONE`.
 - **The audio threads never wait**: each callback shares a `RingBuffer` with the game loop, one producer and
@@ -227,14 +237,17 @@ session with the game (`send()` a frame, `receive()` those of the others), which
 
 ```mermaid
 flowchart LR
-    M["Microphone<br/>(audio thread)"] -- RingBuffer --> E["poll(): 960 samples<br/>Encoder"]
+    L["OutputLoopback<br/>(audio thread)"] -- RingBuffer --> S
+    M["Microphone<br/>(audio thread)"] -- RingBuffer --> S["poll(): SoundProcessing<br/>echo, noise, gain"]
+    S -- "960 samples" --> E["Encoder"]
     E -- "VOICE" --> T["VoiceTransport<br/>(RemoteSession)"]
     T -- "VOICE_FRAME" --> J["JitterBuffer<br/>of the slot"]
     J --> D["Decoder<br/>of the slot"]
     D -- RingBuffer --> P["VoiceStreams<br/>(audio thread)"]
 ```
 
-- **Out.** While the player talks and is not muted, each 960 samples of the microphone are given their volume
+- **Out.** While the player talks and is not muted, each 960 samples of the microphone go through the
+  [sound processing](#the-sound-processing) (`setProcessing()`), are given their volume
   (`setInputVolume()`), encoded and sent with their sequence. With the voice activity on
   (`setVoiceActivity(threshold)`), only the frames of the voice go ([The talk modes](#the-talk-modes)).
   Silence is not sent (DTX); when the player stops talking, the next frame goes with `last`.
@@ -247,9 +260,10 @@ flowchart LR
 - **The players** are those of `PLAYER_JOINED`, on `NONE` until the roster; each has its stream, open from
   `join()` to `removeParticipant()` or `leave()`, at its volume times the volume of the voices
   (`setOutputVolume()`), 0 while muted by this player or deafened.
-- **The level** of the last frame of the microphone, after its volume, is `inputLevel()`, in dBFS. A
-  microphone that gives only silence (under -85 dBFS) for 10 s while the player talks is
-  `microphoneSilent()`: unplugged, or muted by a switch of its own. A frame with a sound clears it.
+- **The level** of the last frame of the microphone, after its processing and its volume, is `inputLevel()`,
+  in dBFS. A microphone that gives only silence (under -85 dBFS, as it heard it: before the processing, whose
+  noise suppression gives silence too) for 10 s while the player talks is `microphoneSilent()`: unplugged, or
+  muted by a switch of its own. A frame with a sound clears it.
 
 **The jitter buffer** (`JitterBuffer`, pure: the time is given, nothing is decoded) puts the frames of a player
 back in order and plays them one every 20 ms:
@@ -264,11 +278,11 @@ back in order and plays them one every 20 ms:
 | Far ahead | A frame 50 frames or more ahead of the one to play starts a new spurt |
 
 **In the client**, `RemoteSession` runs a `GameVoice` when it is given the `VoiceDevices` of `main.cpp`
-(`apps/client/src/Voice/VoiceDevices.hpp`: the `Microphone`, the `VoiceStreams`, the preferences of the Voice
-page, and the state of the keys): on `GAME` if the voices can be played, it joins at `ACCEPTED`, gives it the
-players and the roster, polls it at each update, and leaves at the end. Before each poll, `applyVoice()` gives
-it the mode, the keys and the volumes ([The talk modes](#the-talk-modes)); after it, the session tells
-`VoiceDevices::microphoneSilent`.
+(`apps/client/src/Voice/VoiceDevices.hpp`: the `Microphone`, the `VoiceStreams`, the `OutputLoopback`, the
+preferences of the Voice page, and the state of the keys): on `GAME` if the voices can be played, it joins at
+`ACCEPTED`, gives it the players and the roster, polls it at each update, and leaves at the end. Before each
+poll, `applyVoice()` gives it the mode, the keys, the volumes and the processing
+([The talk modes](#the-talk-modes)); after it, the session tells `VoiceDevices::microphoneSilent`.
 
 ## In the HUD and the pause menu
 
@@ -302,6 +316,76 @@ flowchart LR
   name for a guest. The same account on another server is another player. `RemoteSession` applies them to the
   `GameVoice` at each update; the settings are written when the pause menu closes
   ([Settings](settings.md#the-file)). A player heard as by default is not kept.
+
+## The sound processing
+
+Without a headset, the speakers come back in the microphone, and the others hear themselves. Between the
+microphone and the encoder, `GameVoice` puts each frame through a `SoundProcessing`
+(`rtype/voice/Processing.hpp`), on the game loop, never in an audio callback. It is the audio processing of
+WebRTC ([webrtc-audio-processing](https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing) 2.1, the
+one PipeWire and PulseAudio use), in two halves of 10 ms per frame:
+
+| Step | By | Setting |
+|---|---|---|
+| 1. High-pass filter | Takes the hum and the rumble under 80 Hz out | None: always on |
+| 2. Echo cancellation | AEC3, the reference being what the speakers play | None: on whenever something is played |
+| 3. Noise suppression | The noise suppressor of WebRTC, at its level `kHigh`: the steady noises (a fan, a hum, a breath) | `noiseSuppression`, on by default |
+| 4. Gain control | AGC2, its adaptive digital gain: the voice brought to about -12 dBFS (`headroom_db` 12), from +6 dB, raised by 30 dB at most, with a limiter | `gainControl`, on by default |
+
+With nothing played and both settings off, the samples go out as they came.
+
+**The reference** is the mix of everything played, the voices of the others, the music and the effects,
+taken where raylib has mixed them, before the master volume (`audio::OutputLoopback`). It opens and closes with
+the microphone, and is given to the canceller as it comes (`played()`, `ProcessReverseStream()`), before the
+microphone of the same `poll()` (`captured()`, then `next()` and `ProcessStream()`). Without an audio output,
+or a `Loopback` (`GameVoice` takes one or `nullptr`), there is no echo cancellation, and the rest of the chain
+runs.
+
+**AEC3 does what a filter alone cannot**:
+
+- **The delay** between what is played and its echo, the latencies of the output and of the input and the
+  way through the room, is estimated by AEC3 itself, and followed when it moves: a game loop that stalls and
+  drops frames of the microphone (`drop()`), or two devices whose clocks drift.
+- **From the start**: what its adaptive filter has not learnt yet is suppressed, so that an echo of the usual
+  delays (20 to 100 ms) is cut from the first second. A long one, of a Bluetooth headset (250 ms), passes for
+  about 400 ms, the time it finds the delay; a delay that moves, for 1 to 1.5 s.
+- **What the filter cannot follow**, the echo of small speakers driven hard (not linear), and the moments where
+  both ends talk at once, are left to its suppressor, which keeps the voice of the player.
+
+**What it cannot cancel**:
+
+- **The sounds of other programs** (a video, a music player, another voice chat): they do not go through the
+  mix of raylib, so they are not in the reference, and a player on speakers sends them.
+- **Another computer in the same room**: each client cancels only what its own speakers play. A player who
+  talks into one computer while the other plays its voice beside it hears itself back, and the microphone of
+  the second one hears the player itself. Two computers side by side test nothing of the echo cancellation.
+
+The settings are two rows of the [Voice page](#the-voice-page), applied at each update by `applyVoice()`.
+
+```cpp
+rtype::voice::SoundProcessing processing({.noiseSuppression = true, .gainControl = true});
+processing.played(loopbackSamples);      // what the speakers played since the last time, first
+processing.captured(microphoneSamples);  // what the microphone heard since the last time
+std::array<std::int16_t, rtype::voice::FrameSamples> frame;
+while (processing.next(frame)) {
+    encoder.encode(frame);
+}
+```
+
+**The dependency.** webrtc-audio-processing is built only with meson: CPM downloads its release archive from
+freedesktop (`DOWNLOAD_ONLY`, with its hash), and `libs/voice/cmake/WebRtcAudioProcessing.cmake` compiles the
+sources its `meson.build` files list for x86 (about 250, the parts for SSE2 and AVX2 chosen at run time by the
+CPU), so that neither meson nor its subproject is needed on Linux or Windows. The list is to be read again at
+an update. abseil, which it is written against, comes through CPM too, at the release its meson wrap pins
+(20240722.0). One header of WebRTC uses `uint8_t` without `<cstdint>`, which recent GCC no longer includes
+through `<string>`: the build includes it before each of its C++ files (`-include cstdint`, `/FIcstdint`),
+the sources left as they are. Its warnings are not ours (`-w`). Its license (BSD) is installed with the client
+in `licenses/webrtc-audio-processing.txt`, the one of abseil (Apache 2.0) in `licenses/abseil.txt`. The whole
+chain costs under 1 % of a core.
+
+The first version of this step was built on speexdsp, for the echo and the gain, and RNNoise, for the noise,
+with a measure of the delay of ours: the filter of speexdsp learnt slowly, and let the echo through for a
+moment at each start and each new delay. AEC3 replaced both ([ADR 0033](../decisions/0033-webrtc-audio-processing.md)).
 
 ## The talk modes
 
@@ -353,6 +437,8 @@ is built as the other pages of settings ([Pages of settings](scenes-and-interfac
 | Left | Talk | Activation threshold, a slider, then the level of the microphone under it on the same scale | `threshold` |
 | Left | Microphone | Microphone: the default of the system, then those it has | `inputDevice`, `Microphone::setDevice()` |
 | Left | Microphone | Microphone volume, a slider | `inputVolume` |
+| Left | Microphone | Noise suppression: on, off | `processing.noiseSuppression` |
+| Left | Microphone | Automatic gain: on, off | `processing.gainControl` |
 | Right | Listen | Voice volume, a slider, apart from the music and the effects | `voiceVolume` |
 | Right | Keys | Push to talk, Mute, Deafen: a key each, chosen as on the Controls page | `assignKey()` |
 
@@ -373,7 +459,8 @@ is built as the other pages of settings ([Pages of settings](scenes-and-interfac
 - **The tests open no device**: they use `testing::FakeVoiceChannel` (`tests/helpers/FakeVoiceChannel.hpp`),
   which keeps what it is told, `speak(slot, bool)` making a player talk, and the fake devices of
   `tests/helpers/FakeVoiceDevices.hpp`: a microphone that gives what the test says, a playback that keeps what
-  it plays, and a transport that links two `GameVoice` as the game would.
+  it plays, a loopback that gives what the test plays, and a transport that links two `GameVoice` as the game
+  would.
 
 ## Testing
 
@@ -396,15 +483,18 @@ on the other, as loud, and speaking; silence not sent and the end of a spurt tol
 without voice, muted, or gone; the backlog of a stall dropped; no microphone, and leaving; with the voice
 activity, the frames of the voice and the hold only; the volume of the microphone before the level; deafened,
 nothing heard, and the volume of the voices over the one of each player; a microphone silent for 10 s while
-talking, and not while not. Two real clients with a real game, in `tests/client_online.cpp`: in push-to-talk,
+talking, and not while not; in voice activity, the echo of a noise played not sent once the room is learnt,
+and sent without a loopback, the loopback open only with the microphone. These tests turn the noise
+suppression and the gain control off: they check what `GameVoice` does with the samples, which the processing
+would change. Two real clients with a real game, in `tests/client_online.cpp`: in push-to-talk,
 the microphone of one heard from the stream of its slot on the other while the key is held, closed once
 muted.
 
 `tests/voice_talk.cpp` (tag `[voice]`): the names of the modes; the level of silence and of sines; the
 push-to-talk key and its release delay; the voice activity and its hold; the level meter that falls; the scale
 of the meter and the threshold. `tests/client_voice.cpp` (tags `[settings][voice]`): the preferences of a first
-run, kept and read back, wrong or out of range; each mode, muted and deafened, through `applyVoice()`. The keys
-of the voice, in `tests/control_settings.cpp`: their defaults, and a key shared with an action of the game.
+run, kept and read back (the processing included), wrong or out of range; each mode, muted and deafened,
+through `applyVoice()`. The keys of the voice, in `tests/control_settings.cpp`: their defaults, and a key shared with an action of the game.
 `tests/client_voice.cpp` also checks the choices for the other players: their keys by account or by name and
 server, kept, read back, clamped, those heard as by default and those forgotten dropped; and a microphone
 missing told.
@@ -416,6 +506,24 @@ the pause menu, in `tests/engine.cpp`: its label instead of the percentage, and 
 `tests/game_messages.cpp` and `tests/server_instance.cpp` (told at the connection, at every change, and when a
 player leaves), and two clients online, in `tests/client_online.cpp`: the status of one told to the other, and
 its volume and mute applied from the choices of the other.
+
+`tests/voice_processing.cpp` (tag `[voice]`), without a device, on what a game plays (noise in bursts, louder and
+quieter, with pauses) in a room of four reflections, and a voice-like sound in syllables: an echo of 20 and
+60 ms cut by 20 dB at least from the first second, and one of 250 ms too; all of them by 40 dB at least after
+it; an echo whose delay moves by 80 ms cut by 30 dB again two seconds after; the voice of the player kept
+within 6 dB while the echo is cut; the noise of a room cut by 10 dB at least while the voice keeps its level
+within 6 dB and each of its harmonics up to 2.9 kHz within 6 dB; a quiet voice raised by 6 dB at least by the
+gain control, a loud one under clipping once it has adapted; the echo still cut after frames dropped; a second
+of microphone kept at most; the microphone going out as it came with nothing played and the processing off.
+The echo is synthetic there.
+
+**By ear**, with two computers, the one tried on speakers, the other in a headset, in the same online game:
+nobody talks, the computer on speakers sends all the time (voice activity with a low threshold, or the
+push-to-talk key held). The music of the game it plays is not heard in the headset: it is cancelled. A video
+played beside it in another program is heard: it is not in the reference. Both together show that the
+microphone hears the speakers and that the echo of the game is taken out. Talking spoils the test when both
+computers are in the same room: the microphone of the one on speakers hears the player itself. Tried on
+2026-11-09, a tower on speakers and a laptop in a headset: the music of the game cut, a video heard.
 
 `tests/voice_codec.cpp` (tag `[voice]`), on a voice-like sound (a pitch gliding from 140 to 220 Hz, with its
 harmonics): its level within 3 dB and its pitch kept after the codec; about 60 bytes per frame; never more than

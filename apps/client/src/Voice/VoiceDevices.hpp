@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/voice/Devices.hpp"
+#include "rtype/voice/Processing.hpp"
 #include "rtype/voice/Talk.hpp"
 #include "rtype/voice/VoiceChannel.hpp"
 
@@ -41,6 +42,8 @@ struct VoicePreferences {
     /// How it hears each other player it changed, by playerVoiceKey(). A player not there is heard at full
     /// volume.
     std::map<std::string, PlayerVoice, std::less<>> players{};
+    /// The noise suppression and the gain control of the microphone, both on by default.
+    voice::ProcessingSettings processing{};
 
     friend bool operator==(const VoicePreferences &, const VoicePreferences &) = default;
 };
@@ -51,6 +54,8 @@ struct VoicePreferences {
 struct VoiceDevices {
     voice::Capture &capture;
     voice::Playback &playback;
+    /// What the speakers play, for the echo cancellation; none without it.
+    voice::Loopback *loopback = nullptr;
     VoicePreferences preferences{};
     /// Muted with its key: nobody hears the player, whatever the mode. Until the client closes.
     bool muted = false;

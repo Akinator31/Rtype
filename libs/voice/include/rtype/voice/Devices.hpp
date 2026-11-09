@@ -55,4 +55,24 @@ public:
     virtual void setVolume(Slot slot, float volume) = 0;
 };
 
+/// What the speakers play, all mixed: the voices, the music and the effects of the game, 48 kHz mono, signed
+/// 16 bits. The reference of the echo cancellation (Processing.hpp): what the microphone hears of it is echo.
+///
+/// Every call is made on the thread of the game loop. The samples are mixed on another thread, the one of the
+/// output, and wait for read() without a lock.
+class Loopback
+{
+public:
+    virtual ~Loopback() = default;
+
+    /// Starts keeping what is played. Nothing if it already does.
+    /// @return false without an audio output: nothing is played, there is no echo.
+    virtual bool open() = 0;
+    /// Stops keeping it and forgets the samples not read. Nothing if closed.
+    virtual void close() = 0;
+    /// Takes the samples played since the last call, oldest first, as many as fit.
+    /// @return The samples taken.
+    virtual std::size_t read(std::span<std::int16_t> samples) = 0;
+};
+
 } // namespace rtype::voice

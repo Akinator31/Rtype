@@ -1,7 +1,8 @@
 #pragma once
 
 // The devices of the voice without a sound card, for the tests of the voice: a microphone that gives what the
-// test says, a playback that keeps what it plays, and a transport that links two GameVoice as the game would.
+// test says, a playback that keeps what it plays, a loopback that gives what the test plays, and a transport
+// that links two GameVoice as the game would.
 
 #include "rtype/voice/Devices.hpp"
 #include "rtype/voice/Format.hpp"
@@ -76,6 +77,41 @@ struct FakePlayback final : rtype::voice::Playback {
     }
 
     void setVolume(rtype::voice::Slot slot, float value) override { volume.at(slot) = value; }
+};
+
+/// What the speakers play, as play() says, as fast as it is read.
+struct FakeLoopback final : rtype::voice::Loopback {
+    bool present = true;
+    bool isOpen = false;
+    std::vector<std::int16_t> pending;
+
+    bool open() override
+    {
+        isOpen = present;
+        return present;
+    }
+
+    void close() override
+    {
+        isOpen = false;
+        pending.clear();
+    }
+
+    std::size_t read(std::span<std::int16_t> samples) override
+    {
+        const std::size_t count = std::min(samples.size(), pending.size());
+        std::copy_n(pending.begin(), count, samples.begin());
+        pending.erase(pending.begin(), pending.begin() + static_cast<std::ptrdiff_t>(count));
+        return count;
+    }
+
+    /// Samples played by the speakers, kept if it is open.
+    void play(std::span<const std::int16_t> samples)
+    {
+        if (isOpen) {
+            pending.insert(pending.end(), samples.begin(), samples.end());
+        }
+    }
 };
 
 /// The frames a GameVoice sends, kept, and those given to it.

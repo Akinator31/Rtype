@@ -6,6 +6,10 @@
 #                        game protocol and the server use it without Opus
 #   rtype::voice_codec   the encoder and the decoder of the voice (rtype/voice/Codec.hpp), built on libopus, a
 #                        private dependency. For the client
+#   rtype::voice_processing  what the microphone goes through before the encoder
+#                        (rtype/voice/Processing.hpp): the echo cancellation, the noise suppression and the gain
+#                        control of WebRTC (cmake/WebRtcAudioProcessing.cmake), a private dependency. For the
+#                        client
 #   rtype::voice_client  the voice of the game for the client: the jitter buffer (rtype/voice/JitterBuffer.hpp),
 #                        the channel of the game (rtype/voice/GameVoice.hpp), the talk modes
 #                        (rtype/voice/Talk.hpp) and the microphone (rtype/voice/Microphone.hpp), through the
@@ -42,6 +46,14 @@ target_link_libraries(rtype_voice_codec PUBLIC rtype::voice PRIVATE rtype_option
 # distribution
 install(FILES ${opus_SOURCE_DIR}/COPYING DESTINATION licenses RENAME opus.txt COMPONENT client)
 
+include(cmake/WebRtcAudioProcessing.cmake)
+
+add_library(rtype_voice_processing STATIC
+    src/Processing.cpp
+)
+add_library(rtype::voice_processing ALIAS rtype_voice_processing)
+target_link_libraries(rtype_voice_processing PUBLIC rtype::voice PRIVATE rtype_options rtype::log rtype_webrtc_apm)
+
 add_library(rtype_voice_client STATIC
     src/GameVoice.cpp
     src/JitterBuffer.cpp
@@ -51,4 +63,4 @@ add_library(rtype_voice_client STATIC
 add_library(rtype::voice_client ALIAS rtype_voice_client)
 # raylib for its miniaudio: its header (external/miniaudio.h, a system header) and its symbols, which raudio.c
 # compiles. Private: no miniaudio in the headers
-target_link_libraries(rtype_voice_client PUBLIC rtype::voice_codec PRIVATE rtype_options rtype::log raylib)
+target_link_libraries(rtype_voice_client PUBLIC rtype::voice_codec rtype::voice_processing PRIVATE rtype_options rtype::log raylib)

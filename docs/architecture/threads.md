@@ -140,6 +140,7 @@ games online ([Voice](voice.md#the-devices)) uses two of them:
 | Thread | Calls | Shares with Main |
 |---|---|---|
 | **Output** of raylib | the callback of each `AudioStream` of `audio::VoiceStreams`, while it mixes | a `RingBuffer` of 200 ms per player: Main writes the voice decoded, the callback reads it, silence when it is empty |
+| **Output** of raylib, while the microphone is open | the processor of `audio::OutputLoopback`, once the mix is done | a `RingBuffer` of one second: the callback writes what is played, in mono, Main reads it as the reference of the echo cancellation |
 | **Capture** of `voice::Microphone`, while it is open | its data callback, every 10 ms | a `RingBuffer` of one second: the callback writes the samples, Main reads them by frames of 20 ms |
 | A thread of miniaudio, while the microphone is open | its notification callback, when the device stops | an `atomic<bool>`: the device was lost (unplugged), and Main opens a microphone again at its next `read()`. A stop asked by Main sets another flag first, so that it is not taken for a loss |
 
@@ -151,8 +152,13 @@ games online ([Voice](voice.md#the-devices)) uses two of them:
 - **Nothing else crosses.** The callbacks touch their ring buffer only, and the notification its flag: the decoding, the encoding and the
   jitter buffer run on Main, in `GameVoice::poll()`. They find their buffer without a lock: the user pointer of
   the device for the capture; for the streams, whose callbacks of raylib take no pointer, one function per slot
-  and a variable of `VoiceStreams.cpp`, set before the first stream opens and cleared after the last closes.
-- **They stop before their buffer goes.** `UnloadAudioStream()` takes the lock of the output thread, and
+  and a variable of `VoiceStreams.cpp`, set before the first stream opens and cleared after the last closes; for
+  the loopback, a variable of `OutputLoopback.cpp`, set before `AttachAudioMixedProcessor()` and cleared after
+  `DetachAudioMixedProcessor()`. The sound processing of the microphone (the echo cancellation, the noise
+  suppression and the gain control of WebRTC) runs on Main too, in `GameVoice::poll()`, never in a callback
+  ([Voice](voice.md#the-sound-processing)).
+- **They stop before their buffer goes.** `UnloadAudioStream()` and `DetachAudioMixedProcessor()` take the
+  lock of the output thread, and
   `ma_device_uninit()` waits for the capture callback: no callback runs after either, so the ring buffers can
   be freed. In `main.cpp`, the game played stops before the devices of the voice (`StopSessions`).
 

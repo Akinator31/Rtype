@@ -34,6 +34,8 @@ struct Player {
 
     Player()
     {
+        // The samples as they are said: the processing has its tests (voice_processing.cpp)
+        devices.preferences.processing = {.noiseSuppression = false, .gainControl = false};
         voice.addParticipant(1);
         voice.setBackend(1, rtype::voice::Backend::Game);
         voice.join({.self = 0});
@@ -72,6 +74,8 @@ TEST_CASE("A first run talks in push-to-talk, at full volume, with the default m
     CHECK(preferences.inputDevice.empty());
     CHECK(preferences.inputVolume == 1.0f);
     CHECK(preferences.voiceVolume == 1.0f);
+    CHECK(preferences.processing.noiseSuppression);
+    CHECK(preferences.processing.gainControl);
 }
 
 TEST_CASE("The preferences of the voice are kept in the settings and found again", "[settings][voice]")
@@ -80,12 +84,15 @@ TEST_CASE("The preferences of the voice are kept in the settings and found again
                                   .threshold = -52.5f,
                                   .inputDevice = "USB Headset Mono",
                                   .inputVolume = 0.75f,
-                                  .voiceVolume = 0.4f};
+                                  .voiceVolume = 0.4f,
+                                  .processing = {.noiseSuppression = false, .gainControl = true}};
     rtype::engine::Settings settings;
     rtype::client::keepVoiceSettings(settings, chosen);
 
     CHECK(settings.getString("voice.mode") == "voice_activity");
     CHECK(settings.getString("voice.input_device") == "USB Headset Mono");
+    CHECK(settings.getBool("voice.noise_suppression") == false);
+    CHECK(settings.getBool("voice.gain_control") == true);
     CHECK(readVoiceSettings(settings) == chosen);
 }
 
