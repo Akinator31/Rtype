@@ -92,7 +92,7 @@ private:
     };
 
     VoiceTransport &_transport;
-    Capture &_capture;
+    Capture *_capture;
     Playback &_playback;
     Loopback *_loopback;
     bool _loopbackOpen = false;
@@ -164,6 +164,10 @@ public:
     /// Deafens the player: the voices of the others are not played. It does not mute it: the client does,
     /// with setSelfMute().
     void setDeafened(bool deafened);
+    /// Where the voice of the player comes from from now on: the microphone, or the one Discord captures in a
+    /// mixed game (discord::DiscordVoice::capture()). The one before is closed, this one opened if the
+    /// player is heard. It must outlive the GameVoice, or the next setCapture().
+    void setCapture(Capture &capture);
     [[nodiscard]] std::vector<Participant> participants() const override;
     void poll() override { poll(Clock::now()); }
     /// poll() at a time given, for the tests.

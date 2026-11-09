@@ -25,7 +25,7 @@ constexpr std::size_t ReadChunk = 4 * FrameSamples;
 } // namespace
 
 GameVoice::GameVoice(VoiceTransport &transport, Capture &capture, Playback &playback, Loopback *loopback)
-    : _transport(transport), _capture(capture), _playback(playback), _loopback(loopback)
+    : _transport(transport), _capture(&capture), _playback(playback), _loopback(loopback)
 {
 }
 
@@ -204,6 +204,34 @@ void GameVoice::setDeafened(bool deafened)
     }
 }
 
+void GameVoice::setCapture(Capture &capture)
+{
+    if (&capture == _capture) {
+        return;
+    }
+    const bool wasOpen = _captureOpen;
+    if (wasOpen) {
+        _capture->close();
+        _captureOpen = false;
+    }
+    _capture = &capture;
+    _microphoneMissing = false;
+    if (wasOpen) {
+        // The samples of the one before are not those of this one: neither its echo nor its spurt go on
+        _spurt = false;
+        _activity.reset();
+        _silence = 0;
+        _inputLevel = SilenceFloor;
+        _captureOpen = _capture->open();
+        _microphoneMissing = !_captureOpen;
+        _processing.reset();
+        if (!_captureOpen && _loopbackOpen) {
+            _loopback->close();
+            _loopbackOpen = false;
+        }
+    }
+}
+
 void GameVoice::setParticipantPosition(Slot /*slot*/, Position /*position*/)
 {
     // Heard from where the ship is with the spatial voice, to come
@@ -233,7 +261,7 @@ void GameVoice::updateCapture()
 {
     const bool wanted = _joined && !_selfMuted;
     if (wanted && !_captureOpen) {
-        _captureOpen = _capture.open();
+        _captureOpen = _capture->open();
         if (!_captureOpen && !_microphoneMissing) {
             logger().warning("No microphone: the player listens only");
         }
@@ -245,7 +273,7 @@ void GameVoice::updateCapture()
         _processing.reset();
         _loopbackOpen = _loopback != nullptr && _loopback->open();
     } else if (!wanted && _captureOpen) {
-        _capture.close();
+        _capture->close();
         _captureOpen = false;
         if (_loopbackOpen) {
             _loopback->close();
@@ -285,7 +313,7 @@ void GameVoice::capture()
             break;
         }
     }
-    while (const std::size_t count = _capture.read(chunk)) {
+    while (const std::size_t count = _capture->read(chunk)) {
         _processing.captured(std::span<const std::int16_t>(chunk.data(), count));
         if (count < chunk.size()) {
             break;
