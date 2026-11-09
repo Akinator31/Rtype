@@ -9,6 +9,7 @@
 #include "Accounts/Discord.hpp"
 #include "Accounts/MailMessages.hpp"
 #include "Accounts/PasswordHasher.hpp"
+#include "Accounts/ProgressStore.hpp"
 #include "Common/Secret.hpp"
 #include "FakeDiscord.hpp"
 #include "FakeMailer.hpp"
@@ -85,6 +86,8 @@ struct Setup {
     bool games = false;
     /// Signing in with Discord, through a fake Discord.
     bool discord = false;
+    /// `[discord] social`: the players get their Discord token.
+    bool social = false;
 };
 
 /// A lobby with accounts, its database of its own, and a fake mailer. The test reaches the database through
@@ -134,7 +137,9 @@ struct Server {
         hasher.emplace(post, setup.hasher);
         if (setup.discord) {
             fakeDiscord.emplace();
-            discord.emplace(fakeDiscord->settings(), post);
+            DiscordClientSettings settings = fakeDiscord->settings();
+            settings.discord.social = setup.social;
+            discord.emplace(std::move(settings), post);
         }
         accounts.emplace(loop, *database, *hasher, mailer, setup.accounts, discord ? &*discord : nullptr);
         lobby.emplace(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games);
@@ -180,13 +185,18 @@ struct Player {
             waitUntil(loop, [&] { return client->connection.has_value() || client->closed.has_value(); }));
     }
 
-    /// The next reply, once received.
+    /// The next reply, once received. PROGRESS, which the master sends on its own once signed in, is no
+    /// reply: it is skipped.
     std::pair<std::uint8_t, Bytes> next()
     {
-        const auto reply = client->reply(loop, answered);
-        REQUIRE(reply);
-        ++answered;
-        return *reply;
+        while (true) {
+            const auto reply = client->reply(loop, answered);
+            REQUIRE(reply);
+            ++answered;
+            if (reply->first != message_type::Progress) {
+                return *reply;
+            }
+        }
     }
 
     std::pair<std::uint8_t, Bytes> ask(std::uint8_t type, std::span<const std::byte> payload = {})
@@ -240,6 +250,27 @@ struct Player {
         const auto authorize = rtype::lobby::decodeDiscordAuthorize(reply.second);
         REQUIRE(authorize);
         CHECK(std::to_string(authorize->applicationId) == FakeDiscord::ClientId);
+        scopes = authorize->scopes;
+    }
+
+    /// The scopes of the last DISCORD_AUTHORIZE.
+    std::string scopes;
+
+    /// The DISCORD_TOKEN of a reply, if it is one.
+    static std::optional<rtype::lobby::DiscordTokenMessage>
+    tokenOf(const std::pair<std::uint8_t, Bytes> &reply)
+    {
+        if (reply.first != message_type::DiscordToken) {
+            return std::nullopt;
+        }
+        return rtype::lobby::decodeDiscordToken(reply.second);
+    }
+
+    /// DISCORD_REFRESH with a refresh token.
+    std::pair<std::uint8_t, Bytes> discordRefresh(const std::string &refreshToken)
+    {
+        return ask(message_type::DiscordRefresh,
+                   rtype::lobby::encode(rtype::lobby::DiscordRefreshMessage{refreshToken}));
     }
 
     /// DISCORD_CONFIRM with what the client got from Discord.
@@ -466,6 +497,31 @@ TEST_CASE("A player signs in by username or email; a wrong password and an unkno
     CHECK(second.account == signedIn.account);
     CHECK(second.token != signedIn.token);
     CHECK(server.mailer.mails.empty());
+}
+
+TEST_CASE("A player signed in receives the progression of its account, a guest nothing",
+          "[server][accounts][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_accounts_progress");
+    const Account account = server.seed("Pilot_7", "pilot@example.org");
+    addGame(server.direct, account.id, {.xp = 640, .kills = 30, .wavesCleared = 6, .bestStreak = 5});
+    server.start();
+
+    Player player(server);
+    player.welcome("Someone");
+    // A request answered: a PROGRESS sent to the guest would have come before
+    CHECK(errorOf(player.ask(message_type::SignIn, signingIn("Nobody")), message_type::SignIn) ==
+          ErrorCode::InvalidCredentials);
+    CHECK(player.client->count(message_type::Progress) == 0);
+
+    player.signIn("Pilot_7");
+    REQUIRE(waitUntil(server.loop, [&] { return player.client->count(message_type::Progress) == 1; }));
+    const auto progress = rtype::lobby::decodeProgress(*player.client->last(message_type::Progress));
+    REQUIRE(progress);
+    CHECK(*progress ==
+          rtype::lobby::ProgressMessage{
+              .xp = 640, .gained = 0, .gamesPlayed = 1, .totalKills = 30, .bestWaves = 6, .bestStreak = 5});
 }
 
 TEST_CASE("An account not verified gets a new code, only after its right password",
@@ -1125,6 +1181,158 @@ TEST_CASE("Discord down: the player tries again, without losing an attempt",
     }
     server.fakeDiscord->setDown(false);
     CHECK(player.discordConfirm(accepted).first == message_type::Profile);
+}
+
+namespace
+{
+
+Setup withSocial()
+{
+    Setup setup;
+    setup.discord = true;
+    setup.social = true;
+    return setup;
+}
+
+} // namespace
+
+TEST_CASE("With the social features, a Discord player gets its token once signed in, and renews it",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_social", withSocial());
+    const Account pilot = server.seed("Pilot_7", "pilot@example.org");
+    server.start();
+
+    rtype::lobby::DiscordTokenMessage first;
+    {
+        Player player(server);
+        player.welcome("Someone");
+        // A new user gets no token before its account exists
+        CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Profile);
+        CHECK(player.scopes == "identify openid sdk.social_layer");
+        const auto token = Player::tokenOf(player.ask(message_type::ChooseUsername, choosing("Wing")));
+        REQUIRE(token);
+        CHECK(token->expiresIn == 604800);
+        CHECK(signedInOf(player.next()));
+        first = *token;
+
+        // Renewed: a new pair, and the refresh token used is spent
+        const auto renewed = Player::tokenOf(player.discordRefresh(first.refreshToken));
+        REQUIRE(renewed);
+        CHECK(renewed->accessToken != first.accessToken);
+        CHECK(renewed->refreshToken != first.refreshToken);
+        CHECK(errorOf(player.discordRefresh(first.refreshToken), message_type::DiscordRefresh) ==
+              ErrorCode::DiscordTokenRefused);
+        CHECK(server.fakeDiscord->refreshes() == 2);
+    }
+
+    // A sign-in with Discord: the token, then SIGNED_IN
+    {
+        Player player(server);
+        player.welcome("Someone");
+        REQUIRE(Player::tokenOf(player.discord(*server.fakeDiscord, WingUser)));
+        CHECK(signedInOf(player.next()));
+    }
+
+    // A link: the token, then DONE
+    Player linking(server);
+    linking.welcome("Someone");
+    linking.signIn("Pilot_7");
+    REQUIRE(Player::tokenOf(linking.discord(*server.fakeDiscord, NovaUser)));
+    CHECK(linking.next().first == message_type::Done);
+    CHECK(discordIdentity(server.direct, pilot.id) == NovaUser.id);
+}
+
+TEST_CASE("A refresh is for the Discord identity of the account signed in only",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_refresh", withSocial());
+    const auto wing =
+        createDiscordAccount(server.direct, "Wing", WingUser.id, std::chrono::system_clock::now());
+    REQUIRE(std::holds_alternative<Account>(wing));
+    server.seed("Pilot_7", "pilot@example.org");
+    server.start();
+
+    Player player(server);
+    player.welcome("Someone");
+    CHECK(errorOf(player.discordRefresh(server.fakeDiscord->refreshTokenOf(WingUser)),
+                  message_type::DiscordRefresh) == ErrorCode::NotSignedIn);
+    CHECK(server.fakeDiscord->refreshes() == 0);
+
+    // Signed in with a password to an account without Discord: no token is its own
+    player.signIn("Pilot_7");
+    CHECK(errorOf(player.discordRefresh(server.fakeDiscord->refreshTokenOf(WingUser)),
+                  message_type::DiscordRefresh) == ErrorCode::DiscordTokenRefused);
+
+    Player wingPlayer(server);
+    wingPlayer.welcome("Someone");
+    REQUIRE(Player::tokenOf(wingPlayer.discord(*server.fakeDiscord, WingUser)));
+    REQUIRE(signedInOf(wingPlayer.next()));
+    // The token of another user
+    CHECK(errorOf(wingPlayer.discordRefresh(server.fakeDiscord->refreshTokenOf(NovaUser)),
+                  message_type::DiscordRefresh) == ErrorCode::DiscordTokenRefused);
+    // Discord down
+    server.fakeDiscord->setDown(true);
+    CHECK(errorOf(wingPlayer.discordRefresh("any"), message_type::DiscordRefresh) ==
+          ErrorCode::DiscordUnavailable);
+    server.fakeDiscord->setDown(false);
+    CHECK(Player::tokenOf(wingPlayer.discordRefresh(server.fakeDiscord->refreshTokenOf(WingUser))));
+    // Five refreshes per connection
+    for (int i = 0; i < 2; ++i) {
+        CHECK(errorOf(wingPlayer.discordRefresh("any"), message_type::DiscordRefresh) ==
+              ErrorCode::DiscordTokenRefused);
+    }
+    CHECK(errorOf(wingPlayer.discordRefresh("any"), message_type::DiscordRefresh) ==
+          ErrorCode::TooManyAttempts);
+}
+
+TEST_CASE("Without the social features, the master asks identify only and gives no token",
+          "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_no_social", withDiscord());
+    server.start();
+    Player player(server);
+    player.welcome("Someone");
+    CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Profile);
+    CHECK(player.scopes == "identify");
+    CHECK(signedInOf(player.ask(message_type::ChooseUsername, choosing("Wing"))));
+    CHECK(player.client->count(message_type::DiscordToken) == 0);
+    CHECK(errorOf(player.discordRefresh(server.fakeDiscord->refreshTokenOf(WingUser)),
+                  message_type::DiscordRefresh) == ErrorCode::DiscordTokenRefused);
+    CHECK(server.fakeDiscord->refreshes() == 0);
+}
+
+TEST_CASE("No Discord token reaches the logs", "[server][accounts][discord][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_discord_token_logs", withSocial());
+    auto capture = std::make_shared<Capture>();
+    const rtype::log::Level previous = rtype::log::level();
+    rtype::log::setSink(capture);
+    rtype::log::setLevel(rtype::log::Level::Trace);
+
+    server.start();
+    Player player(server);
+    player.welcome("Someone");
+    CHECK(player.discord(*server.fakeDiscord, WingUser).first == message_type::Profile);
+    const auto token = Player::tokenOf(player.ask(message_type::ChooseUsername, choosing("Wing")));
+    REQUIRE(token);
+    REQUIRE(signedInOf(player.next()));
+    const auto renewed = Player::tokenOf(player.discordRefresh(token->refreshToken));
+    REQUIRE(renewed);
+    server.settle();
+
+    rtype::log::setLevel(previous);
+    rtype::log::setSink(nullptr);
+    const std::string logs = capture->text();
+    CHECK_THAT(logs, ContainsSubstring("renewed its Discord token"));
+    for (const rtype::lobby::DiscordTokenMessage &secret : {*token, *renewed}) {
+        CHECK_THAT(logs, !ContainsSubstring(secret.accessToken));
+        CHECK_THAT(logs, !ContainsSubstring(secret.refreshToken));
+    }
 }
 
 TEST_CASE("Signed in, a player links Discord, which then signs in to its account",

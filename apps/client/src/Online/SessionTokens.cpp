@@ -23,6 +23,11 @@ std::string settingsKey(const std::string &address)
     return std::string(SessionTokens::SettingsKeyPrefix).append(address);
 }
 
+std::string discordKey(const std::string &address)
+{
+    return std::string(SessionTokens::DiscordSettingsKeyPrefix).append(address);
+}
+
 std::optional<unsigned> hexValue(char digit)
 {
     if (digit >= '0' && digit <= '9') {
@@ -90,7 +95,16 @@ bool SessionTokens::keep(const std::string &address, const lobby::SessionToken &
 
 bool SessionTokens::forget(const std::string &address)
 {
+    const bool discord = _settings.hasKey(discordKey(address));
+    _settings.removeKey(discordKey(address));
     if (!_settings.hasKey(settingsKey(address))) {
+        if (discord) {
+            try {
+                write(_settings);
+            } catch (const std::exception &) {
+                // Forgotten in memory all the same
+            }
+        }
         return false;
     }
     _settings.removeKey(settingsKey(address));
@@ -101,6 +115,45 @@ bool SessionTokens::forget(const std::string &address)
         // Forgotten in memory all the same: the next connection is a guest
     }
     return true;
+}
+
+std::optional<std::string> SessionTokens::discordRefreshToken(const std::string &address) const
+{
+    std::optional<std::string> token = _settings.getString(discordKey(address));
+    if (!token || !lobby::isValidDiscordToken(*token)) {
+        return std::nullopt;
+    }
+    return token;
+}
+
+bool SessionTokens::keepDiscord(const std::string &address, const std::string &refreshToken)
+{
+    if (!lobby::isValidDiscordToken(refreshToken)) {
+        return false;
+    }
+    _settings.setString(discordKey(address), refreshToken);
+    // A secret: only the server is logged
+    logger().info("Discord token kept for {}", address);
+    try {
+        write(_settings);
+    } catch (const std::exception &) {
+        return false;
+    }
+    return true;
+}
+
+void SessionTokens::forgetDiscord(const std::string &address)
+{
+    if (!_settings.hasKey(discordKey(address))) {
+        return;
+    }
+    _settings.removeKey(discordKey(address));
+    logger().info("Discord token of {} forgotten", address);
+    try {
+        write(_settings);
+    } catch (const std::exception &) {
+        // Forgotten in memory all the same
+    }
 }
 
 } // namespace rtype::client

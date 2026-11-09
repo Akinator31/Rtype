@@ -522,6 +522,20 @@ stateDiagram-v2
 - Nothing happens without a wave in the registry (the tests made by hand), nor while no player is in. Once
   the game is over (`GameContext::over`), won or lost, the waves stop.
 
+### An endless game
+
+Online, the instance sets `Rules::endless` ([ADR 0032](../decisions/0032-endless-waves-and-progression.md)):
+each wave is drawn at random among all of them (`WaveRegistry::listAllWaves()`, in alphabetical order for the
+same draw everywhere), their number grows without end, and the game ends only once every player is out of
+lives (`GameOutcome::Defeat`). The waves of the final boss are left out by the server.
+
+As a wave ends, the `WaveSystem` counts it for each player whose ship is alive (`PlayerSlot::isAlive()`: lives
+left, not waiting for its next ship): `wavesCleared`, `streak`, `bestStreak`; the streak of the others goes
+back to 0. A Bydo shot down counts in `kills` (`GameContext::rewardKill()`). In an endless game they earn
+experience, `PlayerSlot::xp`, with the multiplier of the streak (`Progression.hpp`, from
+`config/progression.lua`). The snapshots carry all of it in their `PlayerState`, and the instance reports it to
+the master at the end ([progression](accounts.md#progression)).
+
 ### The rescue against the final boss
 
 Offline, in the story mode of the client, the fight against the shogun cannot be lost: `Rules::rescue` (set by

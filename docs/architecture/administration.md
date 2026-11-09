@@ -9,7 +9,7 @@ on its event loop, independent of what shows it: the web server serves it as the
 |---|---|
 | Code | `Master/Administration.{hpp,cpp}` (what it shows and does), `Master/AdminModel.hpp` (its view of the games and the lobby, and their interfaces), `Master/AddressBans.{hpp,cpp}` (the bans in memory), `Master/VoiceMutes.{hpp,cpp}` (the mutes of the voice in memory), `Master/AdminStore.{hpp,cpp}` (its tables), `Web/AdminJson.{hpp,cpp}` (its JSON) |
 | Thread | The event loop of the master; its records on the database thread |
-| Tables | `admin_actions`, `address_bans`, `voice_mutes` (migrations 1, 2 and 8 of `ServerMigrations`) |
+| Tables | `admin_actions`, `address_bans`, `voice_mutes` (migrations 1, 2 and 9 of `ServerMigrations`) |
 | Tests | `tests/server_admin.cpp`, tag `[admin]`; the accounts in `tests/server_panel_accounts.cpp`, tag `[panel]`; `tests/client_online.cpp` for what the client shows |
 
 ## The pieces

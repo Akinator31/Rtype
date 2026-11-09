@@ -19,6 +19,8 @@
 #include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
 #include "Game/RescueCameraSystem.hpp"
+#include "Game/ResultsScreen.hpp"
+#include "Game/ResultsSystem.hpp"
 #include "Game/ShotLooks.hpp"
 #include "Quests/StatQuest.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
@@ -1413,6 +1415,160 @@ TEST_CASE("The death screen shows the lives left lit, and puts out the one just 
     client.wait(DeathScreenSystem::LifeOutDelay + DeathScreenSystem::LifeOut);
     CHECK(client.opacityOf(parts.lostLife) == Approx(0.0f));
     CHECK(client.opacityOf(parts.countdown) == Approx(1.0f));
+}
+
+// --- Results ---
+
+namespace
+{
+
+const ResultsLook ResultsCaptions{
+    .sounds = {.gameOver = {1}, .stat = {2}, .tick = {3}, .counted = {4}, .levelUp = {5}},
+    .title = "THE R-TYPE SECTION HAS FALLEN",
+    .waves = "waves cleared",
+    .kills = "Bydos shot down",
+    .streak = "best streak",
+    .score = "score",
+    .xp = "experience earned",
+    .level = "LEVEL",
+    .levelUp = "level up",
+    .guest = "SIGN IN TO KEEP THE EXPERIENCE YOU EARN"};
+
+/// The engine of the client with its results screens.
+struct ResultsClient {
+    rtype::engine::Engine engine;
+    rtype::ecs::Ecs &ecs = engine.getEcs();
+    rtype::engine::SceneId scene = engine.getScenes().open({});
+    GameMetrics metrics;
+
+    ResultsClient() { ecs.registerSystem<ResultsSystem>(ecs); }
+
+    rtype::ecs::entity_t open(std::optional<std::uint64_t> accountXp)
+    {
+        return openResultsScreen(ecs, scene, metrics, ResultsCaptions,
+                                 {.wavesCleared = 7, .kills = 42, .bestStreak = 5, .score = 12300, .xp = 820},
+                                 accountXp);
+    }
+
+    /// Frames of one tick each, up to `seconds` after the screen opened.
+    void waitUntil(rtype::ecs::entity_t screen, float seconds)
+    {
+        while (ecs.getComponent<ResultsScreen>(screen).time < seconds) {
+            engine.update(Tick);
+        }
+    }
+
+    [[nodiscard]] const std::string &textOf(rtype::ecs::entity_t entity)
+    {
+        return ecs.getComponent<rtype::engine::Text>(entity).text;
+    }
+
+    [[nodiscard]] float opacityOf(rtype::ecs::entity_t entity)
+    {
+        return ecs.getComponent<rtype::engine::Opacity>(entity).value;
+    }
+
+    /// The sound given to an entity to play, if any.
+    [[nodiscard]] std::optional<rtype::audio::SoundId> soundOf(rtype::ecs::entity_t entity)
+    {
+        if (!ecs.hasComponent<rtype::engine::SoundEffect>(entity)) {
+            return std::nullopt;
+        }
+        return ecs.getComponent<rtype::engine::SoundEffect>(entity).sound;
+    }
+};
+
+} // namespace
+
+TEST_CASE("The results land the figures of the game one after the other, each with its sound", "[client]")
+{
+    ResultsClient client;
+    const rtype::ecs::entity_t screen = client.open(400);
+    const ResultsScreen parts = client.ecs.getComponent<ResultsScreen>(screen);
+    REQUIRE(parts.figures.size() == 4);
+    CHECK(client.textOf(parts.figures[0]) == "7");
+    CHECK(client.textOf(parts.figures[1]) == "42");
+    CHECK(client.textOf(parts.figures[2]) == "x5");
+    CHECK(client.textOf(parts.figures[3]) == "0012300");
+    CHECK(client.textOf(parts.captions[0]) == "WAVES CLEARED");
+
+    client.engine.update(Tick);
+    // The game over as it opens, nothing landed yet
+    CHECK(client.soundOf(parts.title) == ResultsCaptions.sounds.gameOver);
+    CHECK(client.opacityOf(parts.figures[0]) == 0.0f);
+
+    client.waitUntil(screen, ResultsSystem::FiguresDelay);
+    CHECK(client.soundOf(parts.figures[0]) == ResultsCaptions.sounds.stat);
+    CHECK(client.ecs.hasComponent<rtype::engine::Tween>(parts.figures[0]));
+    CHECK_FALSE(client.soundOf(parts.figures[1]));
+
+    client.waitUntil(screen, ResultsSystem::FiguresDelay + (3 * ResultsSystem::FiguresGap));
+    CHECK(client.soundOf(parts.figures[3]) == ResultsCaptions.sounds.stat);
+    CHECK(client.opacityOf(parts.figures[0]) == Approx(1.0f));
+    // The experience waits for the figures
+    CHECK(client.opacityOf(parts.xp) == 0.0f);
+}
+
+TEST_CASE("The results count the experience up while the bar of the level fills, LEVEL UP as it goes up",
+          "[client]")
+{
+    ResultsClient client;
+    // Level 1, 400 of its 500
+    const rtype::ecs::entity_t screen = client.open(400);
+    const ResultsScreen parts = client.ecs.getComponent<ResultsScreen>(screen);
+
+    // Shown as it fades in, before it counts
+    client.waitUntil(screen, ResultsSystem::CountDelay - Tick);
+    CHECK(client.textOf(parts.level) == "LEVEL 1");
+    CHECK(client.textOf(parts.levelXp) == "400 / 500 XP");
+    CHECK(client.ecs.getComponent<rtype::engine::Box>(parts.barFill).width ==
+          Approx(ResultsBarWidth * 400.0f / 500.0f));
+    CHECK(client.opacityOf(parts.levelUp) == 0.0f);
+
+    client.waitUntil(screen, ResultsSystem::CountDelay + (ResultsSystem::CountDuration / 2.0f));
+    CHECK(client.soundOf(parts.xp) == ResultsCaptions.sounds.tick);
+    // 1220 in all: level 2 from 500, 720 of its 1414
+    client.waitUntil(screen, ResultsSystem::CountDelay + ResultsSystem::CountDuration);
+    client.engine.update(Tick);
+    CHECK(client.textOf(parts.xp) == "+820 XP");
+    CHECK(client.textOf(parts.level) == "LEVEL 2");
+    CHECK(client.textOf(parts.levelXp) == "720 / 1414 XP");
+    CHECK(client.opacityOf(parts.levelUp) == 1.0f);
+    CHECK(client.soundOf(parts.levelUp) == ResultsCaptions.sounds.levelUp);
+    CHECK(client.soundOf(parts.xpCaption) == ResultsCaptions.sounds.counted);
+}
+
+TEST_CASE("The results fill the bar up to the experience the master tells", "[client]")
+{
+    ResultsClient client;
+    const rtype::ecs::entity_t screen = client.open(400);
+    // The account earned more than the game showed: 2000 in all, level 3 from 1914
+    setAccountXp(client.ecs.getComponent<ResultsScreen>(screen), 2000);
+
+    client.waitUntil(screen, ResultsSystem::CountDelay + ResultsSystem::CountDuration);
+    client.engine.update(Tick);
+    const ResultsScreen parts = client.ecs.getComponent<ResultsScreen>(screen);
+    CHECK(client.textOf(parts.xp) == "+820 XP");
+    CHECK(client.textOf(parts.level) == "LEVEL 3");
+    CHECK(client.textOf(parts.levelXp) == "86 / 2598 XP");
+    CHECK(parts.levelShown == 3);
+}
+
+TEST_CASE("The results of a guest show what it earned and that it keeps nothing", "[client]")
+{
+    ResultsClient client;
+    const rtype::ecs::entity_t screen = client.open(std::nullopt);
+    const ResultsScreen parts = client.ecs.getComponent<ResultsScreen>(screen);
+    REQUIRE(parts.guest);
+    CHECK(parts.experience.size() == 2);
+
+    client.waitUntil(screen, ResultsSystem::CountDelay + ResultsSystem::CountDuration - Tick);
+    CHECK(client.opacityOf(*parts.guest) == 0.0f);
+    client.waitUntil(screen,
+                     ResultsSystem::CountDelay + ResultsSystem::CountDuration + ResultsSystem::TitleIn);
+    client.engine.update(Tick);
+    CHECK(client.textOf(parts.xp) == "+820 XP");
+    CHECK(client.opacityOf(*parts.guest) == Approx(1.0f));
 }
 
 // --- HUD ---

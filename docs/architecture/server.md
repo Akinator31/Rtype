@@ -215,7 +215,8 @@ that crashes cannot damage the data.
 | 4 | `account_sessions`: their sessions, by the SHA-256 of their token | [Accounts](accounts.md#sessions) |
 | 5 | `account_codes`: the codes sent by email, by their hash | [Accounts](accounts.md#codes) |
 | 6, 7 | `discord_identities`: the Discord users who sign in to the accounts, then their profile | [Accounts](accounts.md#the-tables) |
-| 8 | `voice_mutes`: the accounts whose voice the games drop for a time, read at start | [Administration](administration.md#the-voice) |
+| 8 | `account_progress`: the experience the accounts earned online, and their records | [Accounts](accounts.md#progression) |
+| 9 | `voice_mutes`: the accounts whose voice the games drop for a time, read at start | [Administration](administration.md#the-voice) |
 
 ```
 INFO  master   Database postgresql://rtype:***@db.example.org/rtype, schema 0

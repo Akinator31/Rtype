@@ -55,6 +55,16 @@ public:
     /// The game is over: the scene can go back to the menu.
     [[nodiscard]] virtual bool isOver() const = 0;
 
+    /// Online, the waves follow each other without end and earn experience (game::Rules::endless): no final
+    /// boss, no victory.
+    [[nodiscard]] virtual bool isEndless() const { return false; }
+
+    /// The game is played on a server (RemoteSession), not in the client.
+    [[nodiscard]] virtual bool isOnline() const { return false; }
+
+    /// The waves of the game, when it has an end: none online, where they follow each other without end.
+    [[nodiscard]] virtual std::optional<std::uint16_t> waveCount() const { return std::nullopt; }
+
     /// The round-trip time to the game, once measured; none offline, where there is no network.
     [[nodiscard]] virtual std::optional<std::chrono::milliseconds> ping() const = 0;
 

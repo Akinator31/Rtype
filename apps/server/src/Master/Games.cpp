@@ -611,6 +611,9 @@ void Games::gameOver(Game &game, std::span<const std::byte> payload)
     if (running) {
         ended(game, GameEnd::Over);
     }
+    if (_onGameOver) {
+        _onGameOver(*report);
+    }
     for (const auto &[playerId, member] : members) {
         _playerGames.erase(playerId);
         if (_onLeft) {

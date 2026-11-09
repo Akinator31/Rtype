@@ -4,6 +4,7 @@
 #include "Accounts/Discord.hpp"
 #include "Accounts/Mailer.hpp"
 #include "Accounts/PasswordHasher.hpp"
+#include "Accounts/ProgressStore.hpp"
 #include "rtype/database/DatabaseThread.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/Address.hpp"
@@ -75,6 +76,11 @@ struct DiscordProgress {
     Time newUserAt;
     /// Signed in, the account's own Discord identity confirmed: DELETE_ACCOUNT needs no password.
     std::optional<Time> confirmedAt;
+    /// The Discord token of the player, for the lobby to send in DISCORD_TOKEN before the reply that signs in
+    /// or links, then forget (`[discord] social`). Secret: never logged.
+    std::optional<rtype::lobby::DiscordTokenMessage> token;
+    /// DISCORD_REFRESH asked on this connection: beyond AccountLimits::discordAttempts, TOO_MANY_ATTEMPTS.
+    unsigned refreshes = 0;
 };
 
 /// What a request of the accounts needs to know of its connection.
@@ -95,10 +101,10 @@ struct AccountDone {
 };
 
 /// What a request of the accounts gets: ERROR with its code, SIGNED_IN (the connection is now signed in to
-/// that account), CODE_SENT, DONE, DISCORD_AUTHORIZE, PROFILE or AVATAR.
+/// that account), CODE_SENT, DONE, DISCORD_AUTHORIZE, PROFILE, AVATAR or DISCORD_TOKEN.
 using AccountReply = std::variant<rtype::lobby::ErrorCode, SignedInAccount, CodeSent, AccountDone,
                                   rtype::lobby::DiscordAuthorizeMessage, rtype::lobby::ProfileMessage,
-                                  rtype::lobby::AvatarMessage>;
+                                  rtype::lobby::AvatarMessage, rtype::lobby::DiscordTokenMessage>;
 
 /// The accounts of the lobby (docs/architecture/accounts.md#in-the-lobby): the requests REGISTER to
 /// DELETE_ACCOUNT, the sessions resumed by HELLO, the names of guests, on the thread of the loop.
@@ -113,7 +119,9 @@ using AccountReply = std::variant<rtype::lobby::ErrorCode, SignedInAccount, Code
 ///   request of a connection at a time, the next ones waiting.
 /// - **Discord**, with a DiscordClient: DISCORD_SIGN_IN gives the application, DISCORD_CONFIRM the code the
 ///   client got from Discord, which the DiscordClient exchanges for the user. Only DISCORD_CONFIRM signs in
-///   or links anything; a new user chooses its username with CHOOSE_USERNAME.
+///   or links anything; a new user chooses its username with CHOOSE_USERNAME. With `[discord] social`, the
+///   player then gets its Discord token (DiscordProgress::token), once signed in to the account of that
+///   identity, and DISCORD_REFRESH renews it.
 /// - **Nothing tells the accounts of others**: REGISTER answers CODE_SENT whether the email has an account or
 ///   not, FORGOT_PASSWORD and RESEND_CODE too, a wrong login and a wrong password get the same error after
 ///   the same work, and EMAIL_NOT_VERIFIED comes only after the right password.
@@ -128,6 +136,7 @@ class AccountService
 {
 public:
     using Done = std::function<void(AccountReply)>;
+    using ProgressDone = std::function<void(std::optional<AccountProgress>)>;
 
 private:
     using SteadyClock = std::chrono::steady_clock;
@@ -157,6 +166,10 @@ private:
 
     /// Calls `done` later, on the loop.
     void later(const Done &done, AccountReply reply);
+    /// Runs `task` on the database thread, then `done` on the loop with the progression it gives; nothing
+    /// if the database thread is full or the task failed.
+    template <typename Task>
+    void onProgress(std::string description, Task task, ProgressDone done);
     /// Runs `task` on the database thread, then `then` on the loop with its result; BUSY if the database
     /// thread is full or the task failed.
     template <typename Task, typename Then>
@@ -189,6 +202,7 @@ private:
     void discordConfirm(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
     /// DISCORD_CONFIRM, once Discord told who the player is.
     void discordUser(const AccountConnection &connection, const DiscordUser &user, const Done &done);
+    void discordRefresh(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
     void chooseUsername(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
     void getProfile(std::span<const std::byte> payload, Done done);
     void getAvatar(const AccountConnection &connection, std::span<const std::byte> payload, Done done);
@@ -221,6 +235,13 @@ public:
     /// account, ignoring case, BUSY if the database cannot answer.
     void checkGuestName(const std::string &name,
                         std::function<void(std::optional<rtype::lobby::ErrorCode>)> done);
+
+    /// Reads the progression of an account, for PROGRESS: nothing if the database cannot answer.
+    void progress(long long accountId, ProgressDone done);
+
+    /// Adds a game online to the progression of an account, then gives the progression with it: nothing if
+    /// the database cannot answer, and the game is lost.
+    void recordGame(long long accountId, GameResult game, ProgressDone done);
 
     /// Answers a request of the accounts (rtype::lobby::isAccountRequest()), its state already checked by the
     /// lobby. MALFORMED for a payload that cannot be read.

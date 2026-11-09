@@ -1,7 +1,8 @@
-# Signing in with Discord from the client (docs/architecture/client-online.md#discord), in two targets:
-#   rtype::discord      the interface the client and its tests know (rtype/discord/Authorizer.hpp)
-#   rtype::discord_sdk  its implementation through the Discord Social SDK, linked by the executable of the
-#                       client alone: the tests never load the SDK
+# Discord in the client (docs/architecture/client-online.md#discord), in two targets:
+#   rtype::discord      the interfaces the client and its tests know, one per feature (rtype/discord/Authorizer.hpp,
+#                       Presence.hpp, Connection.hpp), faked in tests/helpers/FakeSocialSdk.hpp
+#   rtype::discord_sdk  their implementations through the Discord Social SDK, on the one client of a Session,
+#                       linked by the executable of the client alone: the tests never load the SDK
 # The SDK is downloaded only from the developer portal of Discord, with an account: its files for Linux x86-64
 # and Windows x64 are kept in sdk/ (sdk/README.md). Elsewhere (Linux aarch64, the image of the server for
 # linux/arm64), rtype::discord_sdk does not exist and the executable of the client is not built
@@ -28,7 +29,10 @@ endif()
 set_target_properties(discord_partner_sdk PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${discord_sdk_dir}/include)
 
 add_library(rtype_discord_sdk STATIC
+    src/Session.cpp
     src/SocialSdkAuthorizer.cpp
+    src/SocialSdkPresence.cpp
+    src/SocialSdkConnection.cpp
 )
 add_library(rtype::discord_sdk ALIAS rtype_discord_sdk)
 target_link_libraries(rtype_discord_sdk PUBLIC rtype::discord PRIVATE rtype_options rtype::log discord_partner_sdk)

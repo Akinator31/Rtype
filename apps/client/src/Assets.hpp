@@ -76,5 +76,12 @@
 #define RTYPE_SOUND_RESCUE_VOICE "sounds/rescue_voice.wav"
 /// The music of the lore scene, played once while the story scrolls: about as long as the crawl.
 #define RTYPE_MUSIC_LORE "sounds/lore.mp3"
+/// The results of a game online (ResultsScreen): the game over as the screen opens, a figure that lands, the
+/// experience counting up, then counted, and a level gained.
+#define RTYPE_SOUND_RESULTS_GAME_OVER "sounds/fx/results/game_over.wav"
+#define RTYPE_SOUND_RESULTS_STAT "sounds/fx/results/stat.wav"
+#define RTYPE_SOUND_RESULTS_TICK "sounds/fx/results/tick.wav"
+#define RTYPE_SOUND_RESULTS_COUNTED "sounds/fx/results/counted.wav"
+#define RTYPE_SOUND_RESULTS_LEVEL_UP "sounds/fx/results/level_up.wav"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"

@@ -71,9 +71,9 @@ TEST_CASE("A datagram is the one the specification describes", "[network]")
     const DatagramKey key = testKey();
 
     CHECK(sealDatagram(key, {42, 1}, bytesOf("R-Type")) ==
-          fromHex("525404000000002a00000000000000012c4395abd9e2935473e9e03515ad69984e624d1b3139"));
+          fromHex("525405000000002a00000000000000012c4395abd9e2c26b4bab67f09ad0fe84c4fd9b4d584f"));
     CHECK(sealDatagram(key, {7, 0x0102030405060708}, {}) ==
-          fromHex("525404000000000701020304050607087401ad09a4635d1457d0dbac629524d0"));
+          fromHex("5254050000000007010203040506070812a8aa81b8f4778ee6a4b013f669bf1a"));
 }
 
 TEST_CASE("A datagram opens with its key and gives back its body", "[network]")

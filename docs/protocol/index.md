@@ -99,15 +99,16 @@ keys of the game. It then talks to the game directly, over encrypted datagrams.*
 
 ## 4. Versioning
 
-The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **4** (version 2 adds the
-messages of the administrators, version 3 those of the player accounts, version 4 their profiles and pictures,
-[lobby](lobby.md)). The game protocol has its own, in the header of every
-datagram (as a `u8`), currently **4** (version 2 adds the `Ack delay` of the body, and to `SNAPSHOT` the input
-lead, the weapon of the ship of the client and the age of the shots; `ENTITIES_DESTROYED` becomes unreliable,
-sent again with the snapshots; the messages of the voice, new types, came without a new version; version 3
-adds the account of each player to `PLAYER_JOINED`; version 4, to `ACCEPTED` whether the game carries the
+The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **6** (version 2 adds the
+messages of the administrators, version 3 those of the player accounts, version 4 the profiles, version 5
+`PROGRESS`, version 6 the Discord token of the player, [lobby](lobby.md)). The game protocol has its own, in the
+header of every datagram (as a `u8`), currently **5** (version 2 adds the `Ack delay` of the body, and to
+`SNAPSHOT` the input lead, the weapon of the ship of the client and the age of the shots; `ENTITIES_DESTROYED`
+becomes unreliable, sent again with the snapshots; the messages of the voice, new types, came without a new
+version; version 3 adds to the players of `SNAPSHOT` their kills, waves cleared, streaks and experience;
+version 4, the account of each player to `PLAYER_JOINED`; version 5, to `ACCEPTED` whether the game carries the
 voice, and to `VOICE_STATUSES` a player muted by an administrator). The instances have a version of their own,
-sent in `INSTANCE_HELLO`, currently **6**
+sent in `INSTANCE_HELLO`, currently **7**
 ([master and instances](instances.md)): master and instances come from the same build, so it changes without
 the clients.
 

@@ -45,7 +45,7 @@ namespace rtype::server
 ///   for each player connected, itself included, with the id of its account; the others receive its
 ///   `PLAYER_JOINED`.
 /// - The inputs of each `INPUT` go to the game, which applies each one at its tick.
-/// - The voice (section 9.4, ADR 0032): each player tells what carries its voice (`VOICE_STATE`, None until
+/// - The voice (section 9.4, ADR 0035): each player tells what carries its voice (`VOICE_STATE`, None until
 ///   then), and every client knows it for all (`VOICE_ROSTER`, at its connection and at every change). Each
 ///   player also tells whether it is muted, deafened or without a microphone (`VOICE_STATUS`), and every
 ///   client knows it for all in the same way (`VOICE_STATUSES`), for its HUD. Each

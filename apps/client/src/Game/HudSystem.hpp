@@ -40,6 +40,7 @@ class HudSystem : public ecs::System
     void stretchShadows(const Hud &hud);
     void showPilot(const Hud &hud, std::uint8_t slot, const std::map<std::uint8_t, std::string> &names,
                    const std::optional<VoiceView> &voice);
+    void showHealth(const Hud &hud);
     void showAllies(const Hud &hud, std::uint8_t local, const std::map<std::uint8_t, std::string> &names,
                     const std::optional<VoiceView> &voice);
     /// Shows an icon of the voice, or hides it for VoiceIcon::None.
@@ -67,6 +68,10 @@ public:
 
 /// The score of a player as the HUD writes it: seven digits.
 [[nodiscard]] std::string formatScore(std::uint32_t score);
+
+/// The experience of a player as the HUD writes it, "+340 XP  x3" with its streak from 2 waves: empty while
+/// it has none, as offline.
+[[nodiscard]] std::string formatXp(const game::PlayerState &player);
 
 /// The signal bars lit for a ping, from 1 to 4.
 [[nodiscard]] std::size_t countSignalBars(std::chrono::milliseconds ping);

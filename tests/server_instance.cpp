@@ -468,7 +468,7 @@ TEST_CASE("The messages of the instances are written field by field", "[instance
     CHECK(encode(ReadyMessage{4251}) == bytes({0x10, 0x9B}));
     CHECK(encode(PlayerDisconnectedMessage{42, PlayerDisconnectedReason::TimedOut}) ==
           bytes({0, 0, 0, 0x2A, 1}));
-    // The voice: on, frames of 160 bytes at most, 60 per second (version 6)
+    // The voice: on, frames of 160 bytes at most, 60 per second (version 7)
     CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2, 0, 0, 1, 160, 60}));
     CHECK(encode(ConfigureMessage{"Duo", 2, 4242}) == bytes({3, 'D', 'u', 'o', 2, 0x10, 0x92, 1, 160, 60}));
     CHECK(encode(ConfigureMessage{
@@ -477,7 +477,8 @@ TEST_CASE("The messages of the instances are written field by field", "[instance
     CHECK(encode(MuteVoiceMessage{42, 600}) == bytes({0, 0, 0, 0x2A, 0, 0, 0x02, 0x58}));
     CHECK(encode(MuteVoiceMessage{42, VoiceMutedForTheGame}) ==
           bytes({0, 0, 0, 0x2A, 0xFF, 0xFF, 0xFF, 0xFF}));
-    CHECK(encode(GameOverReport{{{1, 1500}}}) == bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC}));
+    CHECK(encode(GameOverReport{{{1, 1500, 12, 3, 2, 450}}}) ==
+          bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC, 0, 0, 0, 12, 0, 3, 0, 2, 0, 0, 0x01, 0xC2}));
     CHECK(encode(ShutdownMessage{ShutdownReason::Empty}) == bytes({0}));
     CHECK(encode(ShutdownMessage{ShutdownReason::EndedByAdmin}) == bytes({2}));
     CHECK(encode(RemovePlayerMessage{42, RemovePlayerReason::Kicked}) == bytes({0, 0, 0, 0x2A, 2}));

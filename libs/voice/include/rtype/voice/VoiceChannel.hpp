@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-/// The voice chat of an online game (docs/architecture/voice.md, ADR 0032): the client knows this interface
+/// The voice chat of an online game (docs/architecture/voice.md, ADR 0035): the client knows this interface
 /// only, whatever carries the voice of each player, the game or Discord. Its implementations come with the
 /// steps of the voice; the tests use a fake (tests/helpers/FakeVoiceChannel.hpp).
 namespace rtype::voice

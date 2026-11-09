@@ -41,6 +41,11 @@ struct Rules {
     /// Ticks between the end of a wave and the start of the next one.
     std::uint32_t wavePause = 180;
 
+    /// Online mode: the waves are drawn at random among all of them, one after the other, until every player
+    /// is out of lives, and the players earn experience (Progression). Off: wave n is a wave of difficulty n,
+    /// up to the final boss.
+    bool endless = false;
+
     /// Offline story mode: when the last ship of the last player is lost against the final boss, allies come
     /// to the rescue instead of the defeat (RescueStage, RescueSystem). Off for the games online.
     bool rescue = false;

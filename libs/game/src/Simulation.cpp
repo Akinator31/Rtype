@@ -89,6 +89,7 @@ void Simulation::registerConfig(const GameConfig &config)
         _context.waves.addDefinition(wave, _context.enemies);
     }
     registerPlayer(config.player);
+    _context.progression = config.progression;
 }
 
 void Simulation::registerPlayer(const PlayerDefinition &player)
@@ -114,7 +115,9 @@ void Simulation::addPlayer(std::uint8_t slot)
     if (player.present) {
         throw std::invalid_argument(std::format("the player slot {} is taken", slot));
     }
-    player = {true, {}, _context.rules.lives, 0};
+    player = {};
+    player.present = true;
+    player.lives = _context.rules.lives;
     spawnPlayerShip(_ecs, _context, slot);
     logger().debug("Player {} joined at tick {}", slot, _context.tick);
 }
@@ -173,7 +176,14 @@ void Simulation::buildSnapshot()
     for (std::size_t slot = 0; slot < MaxPlayers; ++slot) {
         const PlayerSlot &player = _context.players[slot];
         if (player.present) {
-            snapshot.players.push_back({static_cast<std::uint8_t>(slot), player.lives, player.score});
+            snapshot.players.push_back({.slot = static_cast<std::uint8_t>(slot),
+                                        .lives = player.lives,
+                                        .score = player.score,
+                                        .kills = player.kills,
+                                        .wavesCleared = player.wavesCleared,
+                                        .streak = player.streak,
+                                        .bestStreak = player.bestStreak,
+                                        .xp = player.xp});
         }
     }
 

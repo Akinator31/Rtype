@@ -25,7 +25,7 @@ game::Rules storyRules(game::Rules rules)
 } // namespace
 
 LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config)
-    : _simulation(storyRules(rules), config)
+    : _simulation(storyRules(rules), config), _waveCount(static_cast<std::uint16_t>(config.waves.size()))
 {
     _simulation.addPlayer(localSlot());
 }

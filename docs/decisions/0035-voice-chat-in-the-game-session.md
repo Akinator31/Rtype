@@ -1,4 +1,4 @@
-# 0032 — A voice chat of our own in the game session, and Discord beside it in the same game
+# 0035 — A voice chat of our own in the game session, and Discord beside it in the same game
 
 | | |
 |---|---|

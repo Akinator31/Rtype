@@ -26,7 +26,7 @@ main thread.
 
 | Thread     | Owns (only this thread touches it)                                                                                                               | Work                                                                                     |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| **Main**   | window, raylib (graphics, input, audio), `Renderer`, `ResourceManager`, `AudioPlayer`, `Ecs`, scenes, events, game systems, `network::EventLoop` | the frame loop: input, `network.poll()`, `engine.update()`, finishing the loads, drawing |
+| **Main**   | window, raylib (graphics, input, audio), `Renderer`, `ResourceManager`, `AudioPlayer`, `Ecs`, scenes, events, game systems, `network::EventLoop`, `discord::Session` | the frame loop: input, `network.poll()`, `discordSession.poll()`, `engine.update()`, finishing the loads, drawing |
 | **Assets** | nothing persistent                                                                                                                               | reads asset files and decodes them in CPU memory, one request at a time                  |
 
 Why nothing else gets a thread:

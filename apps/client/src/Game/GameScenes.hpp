@@ -4,6 +4,7 @@
 #include "Game/GameRecorder.hpp"
 #include "Game/GameSession.hpp"
 #include "Game/GameSessionSystem.hpp"
+#include "Game/ResultsScreen.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "Voice/VoiceIcons.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
@@ -24,6 +25,8 @@ namespace rtype::client
 /// Names of the scenes of a game.
 inline constexpr const char *GameScene = "game";
 inline constexpr const char *PauseScene = "pause";
+/// Name of the results of a game online that went to its end.
+inline constexpr const char *ResultsScene = "game_results";
 
 class RemoteSession;
 
@@ -51,6 +54,9 @@ class RemoteSession;
 ///   (VoicePreferences::players). Offline, the game stops while it is open.
 /// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
 ///   back to the main menu by default.
+/// - Online, a game that went to its end keeps what the local player did in it (results()), which
+///   showResults() shows on the results screen (openResultsScreen()) over the sky of the game: the figures of
+///   the game, the experience earned and the level of the account, with their sounds.
 ///
 /// @code
 /// auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
@@ -81,6 +87,16 @@ class GameScenes
     std::function<void()> _onEnd;
     /// The icons of the voice, loaded with the game scene.
     VoiceIconTextures _voiceIcons{};
+    /// Online, what the local player did in the game played, once it went to its end.
+    std::optional<GameResults> _results;
+    /// The results shown: the experience of the account before the game and after it, once the master told
+    /// it, whether a guest could sign in, and what Continue does.
+    std::optional<std::uint64_t> _xpBefore;
+    std::optional<std::uint64_t> _xpAfter;
+    bool _canSignIn = false;
+    std::function<void()> _onContinue;
+    /// The ResultsScreen of the results scene open.
+    std::optional<ecs::EntityRef> _resultsScreen;
 
     /// The game ends: once.
     void end();
@@ -106,6 +122,11 @@ class GameScenes
     /// The fall of the shogun at the end of the rescue shakes the camera.
     void showKill(const Kill &kill);
     void showWave(std::uint16_t wave);
+    /// Online, at the end of the game: keeps what the local player did in it, for showResults().
+    void recordResults();
+    void buildResults(engine::SceneId scene, render::ResourceManager &resources);
+    /// Leaves the results: what showResults() was given, else back to the main menu. Once.
+    void leaveResults();
     /// Plays the music of the wave started, a path of the assets, replacing the current one; nothing if
     /// empty.
     void playWaveMusic(const std::string &music);
@@ -139,6 +160,18 @@ public:
     /// @param onEnd Called once when the player leaves the game or its session is over. Empty: back to the
     /// main menu.
     void play(std::unique_ptr<GameSession> session, std::function<void()> onEnd = {});
+
+    /// Online, what the local player did in the game played, if it went to its end; none before, offline,
+    /// or once the player left it.
+    [[nodiscard]] const std::optional<GameResults> &results() const { return _results; }
+    /// Shows the results of the game played, which went to its end (results()), in place of every scene.
+    /// @param accountXp The experience of the account before the game; none for a guest.
+    /// @param canSignIn A guest could have kept its experience by signing in: it is told so.
+    /// @param onContinue Called once when the player leaves the results. Empty: back to the main menu.
+    void showResults(std::optional<std::uint64_t> accountXp, bool canSignIn,
+                     std::function<void()> onContinue);
+    /// The master told the experience of the account after the game played (PROGRESS): its results show it.
+    void setAccountXp(std::uint64_t xp);
 };
 
 } // namespace rtype::client

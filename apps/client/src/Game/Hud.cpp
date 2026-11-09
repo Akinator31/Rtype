@@ -39,11 +39,17 @@ constexpr render::Color PilotColor{138, 144, 151, 255};
 constexpr float ScoreSize = 34.7f;
 constexpr float ScoreSpacing = 4.0f;
 
+constexpr float HealthSize = 20.0f;
+constexpr float HealthSpacing = 2.0f;
+constexpr render::Color HealthColor{80, 220, 100, 255};
+
 constexpr float AllySize = 12.0f;
 constexpr float AllySpacing = 1.3f;
 constexpr render::Color AllySlotColor{107, 113, 119, 255};
 constexpr render::Color AllyNameColor{138, 144, 151, 255};
 constexpr render::Color AllyScoreColor{201, 205, 210, 255};
+/// The experience of the local player, online.
+constexpr render::Color XpColor{255, 214, 102, 255};
 
 /// The icons of the voice: a square of the texture, drawn at the size of the text beside it.
 constexpr render::Rectangle VoiceIconSource{0.0f, 0.0f, 64.0f, 64.0f};
@@ -114,6 +120,10 @@ ecs::entity_t openHud(ecs::Ecs &ecs, engine::SceneId scene, const HudLook &look,
     hud.pilotVoice = createVoiceIcon(ecs, scene, engine::AnchorPoint::BottomLeft, look, PilotVoiceSize);
     hud.score = createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, ScoreSize,
                            render::colors::White, ScoreSpacing);
+    hud.health = createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, HealthSize, HealthColor,
+                            HealthSpacing);
+    hud.xp =
+        createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, AllySize, XpColor, AllySpacing);
 
     for (std::uint8_t index = 1; index < game::MaxPlayers; ++index) {
         const ecs::entity_t slot = createText(ecs, scene, engine::AnchorPoint::BottomRight, look.font,

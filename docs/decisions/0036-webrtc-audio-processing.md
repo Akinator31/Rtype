@@ -1,4 +1,4 @@
-# 0033 — The echo, the noise and the gain of the microphone by the audio processing of WebRTC
+# 0036 — The echo, the noise and the gain of the microphone by the audio processing of WebRTC
 
 | | |
 |---|---|
@@ -11,7 +11,7 @@ Without a headset, the speakers of a player come back in its microphone, and the
 ([Voice](../architecture/voice.md#the-sound-processing)). Between the microphone and the encoder, the client
 needs an echo canceller, whose reference is what the speakers play, a noise suppression and a gain control.
 
-[ADR 0032](0032-voice-chat-in-the-game-session.md) named speexdsp and RNNoise for them, and the first version
+[ADR 0035](0035-voice-chat-in-the-game-session.md) named speexdsp and RNNoise for them, and the first version
 of the step was built so: the echo canceller of speexdsp, its preprocessor for what is left of the echo and the
 gain, RNNoise for the noise, and a measure of the delay of the echo of ours, since speexdsp is a filter only.
 Tried by ear, the echo came through for a moment at each start, and each time the delay was measured again:
@@ -29,7 +29,7 @@ linear; both ends talking at once.
 | B. **webrtc-audio-processing** 2.1 (the audio processing of WebRTC, as PulseAudio publishes it, used by PipeWire and PulseAudio) | **Yes** | AEC3, which finds and follows the delay, suppresses what its filter has not learnt and keeps the voice in double talk; its noise suppression, its gain control AGC2, a high-pass filter; BSD; under 1 % of a core |
 | C. PJSIP (pjmedia) | No | A whole SIP stack around the same AEC3; GPL v2 or a paid license, and a GPL client could not link the Discord Social SDK |
 | D. The echo cancellation of the system (PipeWire echo-cancel, the communications mode of Windows) | No | Set up by each player, out of our hands, not on every system |
-| E. A middleware (Krisp, Vivox) | No | Proprietary, paid, or an external service: refused by ADR 0032 already |
+| E. A middleware (Krisp, Vivox) | No | Proprietary, paid, or an external service: refused by ADR 0035 already |
 
 ## Decision
 
@@ -37,7 +37,7 @@ linear; both ends talking at once.
 microphone**; speexdsp, RNNoise and the measure of the delay of ours are removed.
 
 - Only the audio processing module is taken: not the transport, the encryption nor the signalling of WebRTC,
-  which ADR 0032 refused (its option E). The voice still travels in the game session, in Opus.
+  which ADR 0035 refused (its option E). The voice still travels in the game session, in Opus.
 - Built from its release archive by our CMake (`libs/voice/cmake/WebRtcAudioProcessing.cmake`): the sources its
   `meson.build` files list, so that meson is needed neither on Linux nor on Windows; abseil through CPM, at the
   release its meson wrap pins.

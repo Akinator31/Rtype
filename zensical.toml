@@ -100,8 +100,10 @@ nav = [
         "decisions/0029-predicted-shots.md",
         "decisions/0030-measured-delays.md",
         "decisions/0031-destructions-sent-again.md",
-        "decisions/0032-voice-chat-in-the-game-session.md",
-        "decisions/0033-webrtc-audio-processing.md",
+        "decisions/0032-endless-waves-and-progression.md",
+        "decisions/0034-discord-token-in-the-client.md",
+        "decisions/0035-voice-chat-in-the-game-session.md",
+        "decisions/0036-webrtc-audio-processing.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

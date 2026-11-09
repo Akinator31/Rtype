@@ -7,6 +7,7 @@
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Widget.hpp"
+#include "rtype/log/Logger.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -19,6 +20,12 @@ namespace rtype::client
 
 namespace
 {
+
+const log::Logger &logger()
+{
+    static const log::Logger instance("online");
+    return instance;
+}
 
 using online_layout::columnLeft;
 using online_layout::rightLeft;
@@ -98,12 +105,45 @@ void OnlineScenes::showError(lobby::ErrorCode code, const std::map<FormField, ec
 void OnlineScenes::welcomed()
 {
     if (_lobby && _lobby->account()) {
+        // Signed in by the token of HELLO: the Discord token too, from the refresh token kept
+        refreshDiscord();
         readProfile();
     } else if (_lobby && (_lobby->features().passwordAccounts || _lobby->features().discord)) {
         _engine.switchScene(AccountsScene);
         return;
     }
     refresh();
+}
+
+void OnlineScenes::discordToken(const lobby::DiscordTokenMessage &token)
+{
+    if (!_sessions.keepDiscord(_address, token.refreshToken)) {
+        logger().warning("The Discord token of {} is not kept: it is asked again at the next sign-in",
+                         _address);
+    }
+    _discordConnection.connect(token.accessToken);
+}
+
+void OnlineScenes::refreshDiscord()
+{
+    if (!_lobby || !_lobby->account()) {
+        return;
+    }
+    const std::optional<std::string> refreshToken = _sessions.discordRefreshToken(_address);
+    if (!refreshToken) {
+        return;
+    }
+    _lobby->discordRefresh(*refreshToken, [this](std::optional<lobby::ErrorCode> error) {
+        if (!error) {
+            return;
+        }
+        if (*error == lobby::ErrorCode::DiscordTokenRefused) {
+            // Discord, or the server, will not renew it: the next sign-in with Discord gives another
+            _sessions.forgetDiscord(_address);
+            _discordConnection.disconnect();
+        }
+        logger().info("No Discord token from {}: {}", _address, describe(*error));
+    });
 }
 
 void OnlineScenes::signedIn(const LobbyClient::SignInResult &result)
@@ -164,35 +204,37 @@ void OnlineScenes::startDiscord(DiscordPurpose purpose)
         // Discord opens: the player accepts there, then comes back
         _discordStep = 1;
         _engine.pushScene(DiscordScene);
-        const std::uint64_t application = std::get<lobby::DiscordAuthorizeMessage>(result).applicationId;
-        _discord.authorize(application, [this, purpose](const discord::AuthorizationResult &authorization) {
-            if (!_lobby) {
-                return;
-            }
-            if (const auto *error = std::get_if<discord::AuthorizationError>(&authorization)) {
-                _engine.showToast(_translations.text(*error == discord::AuthorizationError::Refused
-                                                         ? "account.discord_refused"
-                                                         : "account.discord_failed"),
-                                  engine::ToastType::Warning);
+        const auto &authorize = std::get<lobby::DiscordAuthorizeMessage>(result);
+        _discord.authorize(
+            authorize.applicationId, authorize.scopes,
+            [this, purpose](const discord::AuthorizationResult &authorization) {
+                if (!_lobby) {
+                    return;
+                }
+                if (const auto *error = std::get_if<discord::AuthorizationError>(&authorization)) {
+                    _engine.showToast(_translations.text(*error == discord::AuthorizationError::Refused
+                                                             ? "account.discord_refused"
+                                                             : "account.discord_failed"),
+                                      engine::ToastType::Warning);
+                    if (_engine.isSceneOpen(DiscordScene)) {
+                        _engine.popScene();
+                    }
+                    return;
+                }
+                // Accepted: the server checks it with Discord
+                _discordStep = 2;
                 if (_engine.isSceneOpen(DiscordScene)) {
                     _engine.popScene();
+                    _engine.pushScene(DiscordScene);
                 }
-                return;
-            }
-            // Accepted: the server checks it with Discord
-            _discordStep = 2;
-            if (_engine.isSceneOpen(DiscordScene)) {
-                _engine.popScene();
-                _engine.pushScene(DiscordScene);
-            }
-            const auto &accepted = std::get<discord::Authorization>(authorization);
-            _lobby->discordConfirm({.code = accepted.code,
-                                    .codeVerifier = accepted.codeVerifier,
-                                    .redirectUri = accepted.redirectUri},
-                                   [this, purpose](const LobbyClient::DiscordConfirmResult &confirmed) {
-                                       discordConfirmed(purpose, confirmed);
-                                   });
-        });
+                const auto &accepted = std::get<discord::Authorization>(authorization);
+                _lobby->discordConfirm({.code = accepted.code,
+                                        .codeVerifier = accepted.codeVerifier,
+                                        .redirectUri = accepted.redirectUri},
+                                       [this, purpose](const LobbyClient::DiscordConfirmResult &confirmed) {
+                                           discordConfirmed(purpose, confirmed);
+                                       });
+            });
     });
 }
 
