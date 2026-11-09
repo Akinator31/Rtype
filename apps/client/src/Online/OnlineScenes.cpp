@@ -537,8 +537,10 @@ void OnlineScenes::joined(const LobbyClient::JoinResult &result)
     }
     try {
         // The game is on the IP address of the master
+        // The id of the player, for the Discord lobby of the game
+        const std::uint32_t playerId = _lobby ? _lobby->playerId().value_or(0) : 0;
         _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config,
-                                                    &_voice, _address),
+                                                    &_voice, _address, playerId),
                     [this] { gameEnded(); });
     } catch (const std::system_error &error) {
         _engine.showToast(std::format("Cannot join the game: {}", error.what()), engine::ToastType::Error);

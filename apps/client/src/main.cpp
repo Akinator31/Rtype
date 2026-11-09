@@ -26,6 +26,7 @@
 #include "rtype/discord/SocialSdkAuthorizer.hpp"
 #include "rtype/discord/SocialSdkConnection.hpp"
 #include "rtype/discord/SocialSdkPresence.hpp"
+#include "rtype/discord/SocialSdkVoiceCall.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
@@ -138,6 +139,9 @@ void run()
     // Signing in with Discord, on the client of the Social SDK, and connecting it with the token of a server
     rtype::discord::SocialSdkAuthorizer discord(discordSession);
     rtype::discord::SocialSdkConnection discordConnection(discordSession);
+    // The voice of the games through their Discord lobby, for a player connected to Discord
+    rtype::discord::SocialSdkVoiceCall discordCall(discordSession);
+    voice.discordCall = &discordCall;
     // Connected, the activity shown before is cleared by Discord: shown again
     discordConnection.onStatusChanged([&presence](rtype::discord::ConnectionStatus status) {
         if (status == rtype::discord::ConnectionStatus::Ready) {

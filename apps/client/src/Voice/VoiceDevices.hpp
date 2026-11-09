@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/discord/VoiceCall.hpp"
 #include "rtype/voice/Devices.hpp"
 #include "rtype/voice/Processing.hpp"
 #include "rtype/voice/Talk.hpp"
@@ -56,6 +57,8 @@ struct VoiceDevices {
     voice::Playback &playback;
     /// What the speakers play, for the echo cancellation; none without it.
     voice::Loopback *loopback = nullptr;
+    /// The Discord lobby of a game and its call, for the players with Discord; none without the SDK.
+    discord::VoiceCall *discordCall = nullptr;
     VoicePreferences preferences{};
     /// Muted with its key: nobody hears the player, whatever the mode. Until the client closes.
     bool muted = false;

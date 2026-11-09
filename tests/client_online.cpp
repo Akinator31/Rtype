@@ -8,6 +8,7 @@
 #include "Accounts/PasswordHasher.hpp"
 #include "FakeDiscord.hpp"
 #include "FakeMailer.hpp"
+#include "FakeSocialSdk.hpp"
 #include "FakeVoiceDevices.hpp"
 #include "Game/RemoteSession.hpp"
 #include "GameServers.hpp"
@@ -35,6 +36,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <numbers>
 #include <optional>
 #include <set>
@@ -1199,4 +1201,118 @@ TEST_CASE(
     CHECK_FALSE(client->welcomed());
     rtype::database::Database direct = master.test.open();
     CHECK_FALSE(rtype::server::findAccountByDiscord(direct, wing.id));
+}
+
+TEST_CASE(
+    "Two clients with Discord talk through the Discord lobby of their game, and fall back to the voice of "
+    "the game when its call drops",
+    "[online][voice][discord]")
+{
+    rtype::server::GamesSettings settings = testing::instances();
+    settings.discordVoice = true;
+    Master master(settings);
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    Events bobEvents;
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
+                    bobEvents.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed() && bob.welcomed(); }));
+    const lobby::GameJoinedMessage aliceGame = create(master.loop, alice, "Voices");
+    const auto bobJoined = answer<LobbyClient::JoinResult>(
+        master.loop, [&](auto done) { bob.joinGame(aliceGame.gameId, std::move(done)); });
+    REQUIRE(bobJoined);
+    const lobby::GameJoinedMessage &bobGame = std::get<lobby::GameJoinedMessage>(*bobJoined);
+    REQUIRE(aliceGame.voiceSecret);
+
+    testing::FakeSocialSdk aliceDiscord;
+    testing::FakeMicrophone aliceMicrophone;
+    testing::FakePlayback alicePlayback;
+    VoiceDevices aliceVoice{
+        .capture = aliceMicrophone, .playback = alicePlayback, .discordCall = &aliceDiscord.call};
+    testing::FakeSocialSdk bobDiscord;
+    testing::FakeMicrophone bobMicrophone;
+    testing::FakePlayback bobPlayback;
+    VoiceDevices bobVoice{.capture = bobMicrophone, .playback = bobPlayback, .discordCall = &bobDiscord.call};
+    RemoteSession aliceSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), aliceGame, {},
+                               &aliceVoice, {}, *alice.playerId());
+    RemoteSession bobSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), bobGame, {}, &bobVoice,
+                             {}, *bob.playerId());
+    const std::vector<RemoteSession *> both = {&aliceSession, &bobSession};
+    const auto playWithDiscord = [&](const std::function<bool()> &condition) {
+        return play(master.loop, both, [&] {
+            aliceDiscord.poll();
+            bobDiscord.poll();
+            return condition();
+        });
+    };
+
+    // Accepted, both join the same lobby, each with the id the master gave it, on the voice of the game
+    // meanwhile
+    REQUIRE(playWithDiscord([&] {
+        return aliceSession.accepted() && bobSession.accepted() && !aliceDiscord.call.secrets.empty() &&
+               !bobDiscord.call.secrets.empty();
+    }));
+    CHECK(aliceDiscord.call.secrets == bobDiscord.call.secrets);
+    CHECK(aliceDiscord.call.secrets.at(0) == rtype::discord::lobbySecret(*aliceGame.voiceSecret));
+    CHECK(aliceDiscord.call.metadata.at(0).at("player") == std::to_string(*alice.playerId()));
+    CHECK_FALSE(aliceSession.onDiscord());
+
+    // Their calls connect: both are on Discord, as the game knows
+    aliceDiscord.call.addMember(2000, *bob.playerId());
+    bobDiscord.call.addMember(1000, *alice.playerId());
+    aliceDiscord.call.connect();
+    bobDiscord.call.connect();
+    const game::VoiceRosterMessage onDiscord{{voice::Backend::Discord, voice::Backend::Discord}};
+    REQUIRE(playWithDiscord([&] {
+        return aliceSession.voiceRoster() == onDiscord && bobSession.voiceRoster() == onDiscord &&
+               bobSession.discordVoice()->participants().size() == 1;
+    }));
+    CHECK(aliceSession.onDiscord());
+    // The microphone of the game closed: Discord has it
+    CHECK_FALSE(aliceMicrophone.isOpen);
+    CHECK_FALSE(aliceDiscord.call.selfMuted);
+
+    // Alice talks on Discord: Bob hears her from the stream of her slot
+    std::vector<std::int16_t> voice(voice::FrameSamples, 3000);
+    REQUIRE(playWithDiscord([&] {
+        bobDiscord.call.talk(1000, voice);
+        return bobPlayback.played[0].size() >= 5 * voice::FrameSamples;
+    }));
+
+    // Bob's call drops: he is back on the voice of the game, his microphone open again
+    bobDiscord.call.fail();
+    const game::VoiceRosterMessage mixed{{voice::Backend::Discord, voice::Backend::Game}};
+    REQUIRE(playWithDiscord([&] { return aliceSession.voiceRoster() == mixed && bobMicrophone.isOpen; }));
+    CHECK_FALSE(bobSession.onDiscord());
+    CHECK(bobSession.discordVoice() == nullptr);
+    REQUIRE(bobSession.voice()->participants().size() == 1);
+    CHECK(bobSession.voice()->participants().at(0).backend == voice::Backend::Discord);
+    CHECK(bobPlayback.streams[0]);
+
+    // Leaving the game ends the call of Alice
+    alice.leaveGame([] {});
+    REQUIRE(playWithDiscord([&] { return aliceSession.isOver(); }));
+    REQUIRE(playWithDiscord([&] { return aliceDiscord.call.ends > 0; }));
+}
+
+TEST_CASE("A client without Discord, or on a master without its lobbies, stays on the voice of the game",
+          "[online][voice][discord]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed(); }));
+    const lobby::GameJoinedMessage game = create(master.loop, alice, "Voices");
+    CHECK_FALSE(game.voiceSecret);
+    testing::FakeSocialSdk discord;
+    testing::FakeMicrophone microphone;
+    testing::FakePlayback playback;
+    VoiceDevices devices{.capture = microphone, .playback = playback, .discordCall = &discord.call};
+    RemoteSession session(master.loop, Address::loopbackIpv4(game.udpPort), game, {}, &devices, {},
+                          *alice.playerId());
+    REQUIRE(play(master.loop, {&session}, [&] { return session.accepted(); }));
+    CHECK(session.discordVoice() == nullptr);
+    CHECK(discord.call.secrets.empty());
 }
