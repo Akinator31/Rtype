@@ -8,8 +8,8 @@
 #   docker build --target smoke -t rtype-smoke .   the programs of the smoke tests in docker/, for the CI
 #
 # The panel is built by Node, the server by CMake, then both go into a small runtime, run as a user that is not
-# root. The downloads of CPM and the build folder are kept in cache mounts: a change of the code rebuilds what
-# it changed only. The CI publishes it for linux/amd64 and linux/arm64 (.github/workflows/docker.yml).
+# root. The downloads of CPM and the objects compiled by ccache are kept in cache mounts: a change of the code
+# recompiles what it changed only. The CI publishes it for linux/amd64 and linux/arm64 (.github/workflows/docker.yml).
 
 ARG DEBIAN=trixie
 
@@ -25,20 +25,24 @@ RUN npm run build
 # --- The server: CMake and Ninja, patch for the patches of Crow, libpq for PostgreSQL. raylib, which the server
 # never uses, needs the headers of X11 and OpenGL to configure the project ---
 FROM debian:${DEBIAN} AS build
-# The build folder is one per architecture: an image for linux/amd64 and linux/arm64 builds both
+# The objects of ccache are one cache per architecture: an image for linux/amd64 and linux/arm64 builds both
 ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates cmake g++ git ninja-build patch python3 libpq-dev libssl-dev \
+        ca-certificates ccache cmake g++ git ninja-build patch python3 libpq-dev libssl-dev \
         libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
 COPY --from=panel /src/web/admin/dist web/admin/dist
-ENV CPM_SOURCE_CACHE=/cache/cpm
+# ccache finds an object by the content of what it is compiled from, never by its date: the builds of every
+# branch share its cache on a runner without mixing their objects, as a shared build folder did, which Ninja
+# trusts by the dates of the files
+ENV CPM_SOURCE_CACHE=/cache/cpm CCACHE_DIR=/cache/ccache
 RUN --mount=type=cache,target=/cache/cpm,sharing=locked \
-    --mount=type=cache,id=rtype-build-${TARGETARCH},target=/src/build,sharing=locked \
+    --mount=type=cache,id=rtype-ccache-${TARGETARCH},target=/cache/ccache \
     cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRTYPE_BUILD_TESTS=OFF \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DRTYPE_WITH_POSTGRESQL=ON -DRTYPE_ADMIN_PANEL_DIR=/src/web/admin/dist \
     && cmake --build build --target r-type_server \
     && cmake --install build --component server --prefix /opt/rtype
@@ -48,8 +52,9 @@ RUN --mount=type=cache,target=/cache/cpm,sharing=locked \
 # (fake_services.cpp) ---
 FROM build AS players
 ARG TARGETARCH
+# The build folder of the server, in its stage, with the tests
 RUN --mount=type=cache,target=/cache/cpm,sharing=locked \
-    --mount=type=cache,id=rtype-build-${TARGETARCH},target=/src/build,sharing=locked \
+    --mount=type=cache,id=rtype-ccache-${TARGETARCH},target=/cache/ccache \
     cmake -S . -B build -DRTYPE_BUILD_TESTS=ON \
     && cmake --build build --target rtype_panel_players rtype_panel_accounts rtype_fake_services \
     && install -D -t /opt/smoke build/bin/rtype_panel_players build/bin/rtype_panel_accounts \

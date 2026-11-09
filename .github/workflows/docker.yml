@@ -32,7 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # BuildKit keeps the downloads of CPM and the build folder in its cache mounts, on this runner
+      # BuildKit keeps the downloads of CPM and the objects of ccache in its cache mounts, on this runner
       - name: Build the image
         run: |
           if ! command -v docker >/dev/null || ! docker info >/dev/null 2>&1; then
