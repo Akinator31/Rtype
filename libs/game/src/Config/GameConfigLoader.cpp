@@ -41,6 +41,8 @@ using DefinitionReader = Definition (*)(TableReader &);
 constexpr std::string_view PlayerFile = "player.lua";
 /// The file of the experience of the endless games, at the root of the directory, optional.
 constexpr std::string_view ProgressionFile = "progression.lua";
+/// The file of the levels the ships of the hangar need, at the root of the directory, optional.
+constexpr std::string_view HangarFile = "hangar.lua";
 
 /// The `.lua` files under `folder`, by path, so that every machine reads them in the same order.
 std::vector<std::filesystem::path> listScripts(const std::filesystem::path &folder,
@@ -163,6 +165,7 @@ struct ReadFiles {
     std::vector<FromFile<WaveDefinition>> waves;
     std::optional<FromFile<PlayerDefinition>> player;
     Progression progression;
+    std::vector<ShipUnlock> shipUnlocks;
 };
 
 /// The assets of the programs, next to the configuration: `assets/` beside `config/` once built or installed,
@@ -234,6 +237,18 @@ Progression readProgressionFile(const std::filesystem::path &directory, std::vec
     return readScript(directory / name, name, readProgression, errors).value_or(Progression{});
 }
 
+/// The file of the hangar, at the root of the directory: no ship needs a level without it.
+std::vector<ShipUnlock> readHangarFile(const std::filesystem::path &directory,
+                                       std::vector<std::string> &errors)
+{
+    const std::string name(HangarFile);
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(directory / name, error)) {
+        return {};
+    }
+    return readScript(directory / name, name, readShipUnlocks, errors).value_or(std::vector<ShipUnlock>{});
+}
+
 ReadFiles readFiles(const std::filesystem::path &directory, const std::filesystem::path &assets,
                     std::vector<std::string> &errors)
 {
@@ -250,6 +265,7 @@ ReadFiles readFiles(const std::filesystem::path &directory, const std::filesyste
     }
     files.player = readPlayerFile(directory, errors);
     files.progression = readProgressionFile(directory, errors);
+    files.shipUnlocks = readHangarFile(directory, errors);
     return files;
 }
 
@@ -291,7 +307,8 @@ GameConfig takeConfig(ReadFiles &files)
             takeDefinitions(files.enemies),
             takeDefinitions(files.waves),
             std::move(files.player->definition),
-            files.progression};
+            files.progression,
+            std::move(files.shipUnlocks)};
 }
 
 } // namespace
