@@ -166,6 +166,7 @@ ship.armor=BLINDAGE
 ship.equip=ÉQUIPER
 ship.equipped=ÉQUIPÉ
 ship.launch=LANCER
+ship.unlocked=VAISSEAU DÉBLOQUÉ
 ship.locked=VERROUILLÉ
 ship.vx01=ÉCLAIREUR
 ship.vx02=LANCE

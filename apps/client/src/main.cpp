@@ -166,8 +166,10 @@ void run()
 
     assetsLoaded = true;
     // The scenes of the game are built from the loaded assets, which they find in the cache
-    // The ship equipped at the last run
+    // The ships the level of the last account opens, and the ship equipped at the last run
     rtype::client::ShipSelection ships;
+    rtype::client::readRequiredLevels(ships, config.shipUnlocks);
+    rtype::client::readPlayerLevel(ships, engine.getSettings());
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord, ships,

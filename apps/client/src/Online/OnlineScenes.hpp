@@ -20,6 +20,7 @@
 #include "rtype/network/Tls.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -156,6 +157,8 @@ class OnlineScenes
     /// A game online counted for the account: its results show the experience it gave; in a toast with the
     /// level, LEVEL UP if it went up, if they are not shown.
     void showProgress(const lobby::ProgressMessage &progress);
+    /// A toast for each ship of the hangar that a level up from `before` to `level` unlocks.
+    void showUnlockedShips(std::uint32_t before, std::uint32_t level);
     /// Forgets the lobby later: this may run in one of its handlers.
     void forgetLobby();
 
