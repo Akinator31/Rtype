@@ -38,8 +38,9 @@
 namespace rtype::lobby
 {
 
-/// The version of the lobby protocol, in HELLO: 5 adds PROGRESS, with the endless games online.
-inline constexpr std::uint16_t ProtocolVersion = 5;
+/// The version of the lobby protocol, in HELLO: 6 gives the Discord token of the player to its client
+/// (DISCORD_AUTHORIZE with the scopes, DISCORD_TOKEN, DISCORD_REFRESH).
+inline constexpr std::uint16_t ProtocolVersion = 6;
 /// Longest name of a player, in bytes of UTF-8.
 inline constexpr std::size_t MaxPlayerNameLength = 16;
 /// Longest name of a game, in bytes of UTF-8.
@@ -74,6 +75,10 @@ inline constexpr std::size_t MaxRedirectUriLength = 2048;
 inline constexpr std::size_t MaxDiscordUsernameLength = 64;
 inline constexpr std::size_t MaxDisplayNameLength = 128;
 inline constexpr std::size_t MaxAvatarHashLength = 64;
+/// Longest scopes of DISCORD_AUTHORIZE, and longest token of Discord in DISCORD_TOKEN and DISCORD_REFRESH, in
+/// bytes (version 6).
+inline constexpr std::size_t MaxDiscordScopesLength = 255;
+inline constexpr std::size_t MaxDiscordTokenLength = 1024;
 /// Largest picture of an account, in bytes, and largest part of it in one AVATAR.
 inline constexpr std::size_t MaxAvatarSize = 256 * 1024;
 inline constexpr std::size_t MaxAvatarChunk = 16000;
@@ -103,6 +108,7 @@ inline constexpr std::uint8_t ChooseUsername = 0x10;
 inline constexpr std::uint8_t DeleteAccount = 0x11;
 inline constexpr std::uint8_t GetProfile = 0x12;
 inline constexpr std::uint8_t GetAvatar = 0x13;
+inline constexpr std::uint8_t DiscordRefresh = 0x14;
 inline constexpr std::uint8_t Welcome = 0x81;
 inline constexpr std::uint8_t GameList = 0x82;
 inline constexpr std::uint8_t GameJoined = 0x83;
@@ -117,10 +123,11 @@ inline constexpr std::uint8_t Done = 0x8B;
 inline constexpr std::uint8_t Profile = 0x8C;
 inline constexpr std::uint8_t Avatar = 0x8D;
 inline constexpr std::uint8_t Progress = 0x8E;
+inline constexpr std::uint8_t DiscordToken = 0x8F;
 } // namespace message_type
 
-/// Tells whether a request is one of the accounts (version 3): REGISTER to DELETE_ACCOUNT, and GET_PROFILE
-/// and GET_AVATAR (version 4).
+/// Tells whether a request is one of the accounts (version 3): REGISTER to DELETE_ACCOUNT, GET_PROFILE and
+/// GET_AVATAR (version 4), and DISCORD_REFRESH (version 6).
 [[nodiscard]] bool isAccountRequest(std::uint8_t type);
 
 /// Tells whether a name can be the name of a player: 1 to 16 bytes of UTF-8, without control characters.
@@ -136,6 +143,11 @@ inline constexpr std::uint8_t Progress = 0x8E;
 [[nodiscard]] bool isValidEmailCode(std::string_view code);
 /// Tells whether a text can be the code verifier of PKCE: 43 to 128 of `A-Z a-z 0-9 - . _ ~` (RFC 7636).
 [[nodiscard]] bool isValidCodeVerifier(std::string_view verifier);
+/// Tells whether a text can be the scopes of DISCORD_AUTHORIZE: 1 to 255 of `A-Z a-z 0-9 . _`, separated by
+/// single spaces.
+[[nodiscard]] bool isValidDiscordScopes(std::string_view scopes);
+/// Tells whether a text can be a token of Discord: 1 to 1024 printable ASCII characters, without space.
+[[nodiscard]] bool isValidDiscordToken(std::string_view token);
 
 // --- Client to master ---
 
@@ -461,6 +473,9 @@ enum class ErrorCode : std::uint16_t {
     /// GET_PROFILE of no account, or GET_AVATAR of an account without picture, or from beyond its end
     /// (version 4).
     NotFound = 34,
+    /// Discord refuses the refresh token of DISCORD_REFRESH, or it is not the one of the Discord identity of
+    /// the account: the client forgets it (version 6).
+    DiscordTokenRefused = 35,
 };
 
 /// Tells whether the master closes the connection after this error: MALFORMED, UNSUPPORTED_VERSION, KICKED,
@@ -554,8 +569,35 @@ struct ProgressMessage {
 struct DiscordAuthorizeMessage {
     /// The id of the application (its client id): never 0, which is malformed.
     std::uint64_t applicationId = 0;
+    /// What the master asks of the player (version 6): `identify`, or `identify openid sdk.social_layer` when
+    /// the client gets a token of the player (`[discord] social`). isValidDiscordScopes().
+    std::string scopes = "identify";
 
     friend bool operator==(const DiscordAuthorizeMessage &, const DiscordAuthorizeMessage &) = default;
+};
+
+/// `DISCORD_TOKEN`: the token of the player on Discord, for the Social SDK of its client (version 6). Sent
+/// before the SIGNED_IN or DONE of a DISCORD_CONFIRM, and before the SIGNED_IN of the CHOOSE_USERNAME of a
+/// new Discord user, when the master has the social features; and as the answer to DISCORD_REFRESH. The
+/// master keeps neither token. Secret: never logged.
+struct DiscordTokenMessage {
+    /// isValidDiscordToken(), both.
+    std::string accessToken;
+    std::string refreshToken;
+    /// The access token expires in this many seconds.
+    std::uint32_t expiresIn = 0;
+
+    friend bool operator==(const DiscordTokenMessage &, const DiscordTokenMessage &) = default;
+};
+
+/// `DISCORD_REFRESH`: a new access token from the refresh token of DISCORD_TOKEN, which only the master can
+/// exchange, with the secret of its application (version 6). Signed in to an account linked to Discord only.
+/// Secret: never logged.
+struct DiscordRefreshMessage {
+    /// isValidDiscordToken().
+    std::string refreshToken;
+
+    friend bool operator==(const DiscordRefreshMessage &, const DiscordRefreshMessage &) = default;
 };
 
 /// The payloads. LIST_GAMES, LEAVE_GAME, PING, SIGN_OUT, DISCORD_SIGN_IN, PONG, CODE_SENT and DONE have none:
@@ -586,6 +628,8 @@ struct DiscordAuthorizeMessage {
 [[nodiscard]] std::vector<std::byte> encode(const ProfileMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const AvatarMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const ProgressMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const DiscordTokenMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const DiscordRefreshMessage &message);
 
 [[nodiscard]] std::optional<HelloMessage> decodeHello(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<CreateGameMessage> decodeCreateGame(std::span<const std::byte> payload);
@@ -613,6 +657,8 @@ decodeDiscordAuthorize(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<ProfileMessage> decodeProfile(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<AvatarMessage> decodeAvatar(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<ProgressMessage> decodeProgress(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<DiscordTokenMessage> decodeDiscordToken(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<DiscordRefreshMessage> decodeDiscordRefresh(std::span<const std::byte> payload);
 /// For the messages without payload: true if it is empty.
 [[nodiscard]] bool decodeEmpty(std::span<const std::byte> payload);
 

@@ -35,6 +35,7 @@ Name keys by domain with dots, so that the file stays readable:
 | `display.vsync` | The Settings page: the vertical synchronisation, `true` (by default) or `false` |
 | `interface.language` | The Settings page: the language of the interface, `en` or `fr` |
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
+| `servers.discord.<host>:<port>` | `SessionTokens`: the Discord refresh token the server gave with `DISCORD_TOKEN`, renewed by `DISCORD_REFRESH` at the next connection ([Discord](client-online.md#discord)); forgotten with the session token. A secret: never logged |
 | `servers.session.<host>:<port>` | `SessionTokens`: the session token of the account signed in on that server, 64 hexadecimal digits, sent in the next `HELLO` ([Accounts](client-online.md#accounts)). A secret: never logged |
 | `servers.profile.<host>:<port>` | `KnownProfiles`: the account signed in on that server, shown in the Online menu: `<1 if Discord, else 0>:<version of its picture>:<username>`; the picture itself in `pictures/<version>.png` beside the settings ([Profiles](client-online.md#profiles)) |
 | `ship.equipped` | The hangar (`writeEquippedShip()`): the code of the ship the player equipped last, such as `VX-03`, on which the hangar opens at the next run |

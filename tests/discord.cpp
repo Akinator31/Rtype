@@ -21,7 +21,8 @@ TEST_CASE("Discord fake: an authorization is answered at the next poll only", "[
 {
     testing::FakeSocialSdk sdk;
     std::vector<AuthorizationResult> results;
-    sdk.authorizer.authorize(42, [&](const AuthorizationResult &result) { results.push_back(result); });
+    sdk.authorizer.authorize(42, "identify",
+                             [&](const AuthorizationResult &result) { results.push_back(result); });
     CHECK(sdk.authorizer.running());
     CHECK(sdk.authorizer.applications == std::vector<std::uint64_t>{42});
 
@@ -46,7 +47,7 @@ TEST_CASE("Discord fake: a cancelled or replaced authorization never calls its d
     int first = 0;
     int second = 0;
 
-    sdk.authorizer.authorize(1, [&](const AuthorizationResult &) { ++first; });
+    sdk.authorizer.authorize(1, "identify", [&](const AuthorizationResult &) { ++first; });
     sdk.authorizer.refuse(AuthorizationError::Failed);
     sdk.authorizer.cancel();
     sdk.poll();
@@ -54,9 +55,9 @@ TEST_CASE("Discord fake: a cancelled or replaced authorization never calls its d
     CHECK_FALSE(sdk.authorizer.running());
 
     // The answer of the first, posted before the second started, is dropped
-    sdk.authorizer.authorize(1, [&](const AuthorizationResult &) { ++first; });
+    sdk.authorizer.authorize(1, "identify", [&](const AuthorizationResult &) { ++first; });
     sdk.authorizer.refuse(AuthorizationError::Refused);
-    sdk.authorizer.authorize(2, [&](const AuthorizationResult &result) {
+    sdk.authorizer.authorize(2, "identify", [&](const AuthorizationResult &result) {
         ++second;
         CHECK(std::get<AuthorizationError>(result) == AuthorizationError::Refused);
     });

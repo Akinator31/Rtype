@@ -5,8 +5,9 @@
 
 /// The connection of the client to Discord with the token of the player
 /// (docs/architecture/client-online.md#discord), which lobbies, voice, relationships and invitations need.
-/// The client and its tests know only this interface; its implementation on the Social SDK comes with the
-/// token of Discord in the client.
+/// The client and its tests know only this interface; SocialSdkConnection
+/// (rtype/discord/SocialSdkConnection.hpp) is its implementation on the Social SDK, with the token a master
+/// gives (DISCORD_TOKEN, ADR 0034).
 namespace rtype::discord
 {
 

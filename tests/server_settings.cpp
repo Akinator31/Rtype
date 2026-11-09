@@ -391,6 +391,11 @@ TEST_CASE("Discord needs the accounts, not the public address of the panel", "[s
     CHECK_THROWS_WITH(load(std::string(Accounts) + publicUrl +
                            "[discord]\nclient_id = \"rtype\"\nclient_secret_file = \"discord_secret\"\n"),
                       ContainsSubstring("[discord] client_id must be the digits of a Discord id"));
+
+    // The social features: off unless asked
+    CHECK_FALSE(load(std::string(Accounts) + discord).discord->social);
+    CHECK(load(std::string(Accounts) + discord + "social = true\n").discord->social);
+    CHECK_THROWS(load(std::string(Accounts) + discord + "social = \"yes\"\n"));
 }
 
 TEST_CASE("Without accounts, the panel listens on the loopback only", "[server][settings]")

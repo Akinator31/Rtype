@@ -69,7 +69,7 @@ struct Master {
 };
 
 /// The last code of an ERROR (lobby protocol 3).
-constexpr std::uint16_t LastErrorCode = static_cast<std::uint16_t>(lobby::ErrorCode::DiscordUnavailable);
+constexpr std::uint16_t LastErrorCode = static_cast<std::uint16_t>(lobby::ErrorCode::DiscordTokenRefused);
 
 /// The password of the accounts of the tests.
 const std::string Password = "correct horse battery";
@@ -93,7 +93,8 @@ struct AccountsMaster {
     std::optional<rtype::server::AccountService> accounts;
     std::optional<rtype::server::Lobby> lobby;
 
-    AccountsMaster(rtype::database::Engine engine, std::string_view name, bool withDiscord = false)
+    AccountsMaster(rtype::database::Engine engine, std::string_view name, bool withDiscord = false,
+                   bool social = false)
         : test(engine, name)
     {
         test.open().migrate(rtype::server::ServerMigrations);
@@ -104,7 +105,9 @@ struct AccountsMaster {
                       .threads = 2, .maxPending = 32, .parameters = {.memory = 64, .passes = 1, .lanes = 1}});
         if (withDiscord) {
             fakeDiscord.emplace();
-            discord.emplace(fakeDiscord->settings(), post);
+            rtype::server::DiscordClientSettings settings = fakeDiscord->settings();
+            settings.discord.social = social;
+            discord.emplace(std::move(settings), post);
         }
         // Limits per address far away: every client of the tests comes from the loopback
         accounts.emplace(loop, *database, *hasher, mailer,
@@ -162,6 +165,7 @@ struct Events {
     std::optional<std::uint32_t> welcomed;
     std::vector<lobby::LeftGameMessage> left;
     std::vector<std::string> messages;
+    std::vector<lobby::DiscordTokenMessage> discordTokens;
     std::optional<std::string> closed;
 
     LobbyClient::Handlers handlers()
@@ -170,6 +174,9 @@ struct Events {
             .onWelcome = [this](std::uint32_t player) { welcomed = player; },
             .onLeftGame = [this](const lobby::LeftGameMessage &message) { left.push_back(message); },
             .onServerMessage = [this](const std::string &text) { messages.push_back(text); },
+            .onProgress = {},
+            .onDiscordToken =
+                [this](const lobby::DiscordTokenMessage &token) { discordTokens.push_back(token); },
             .onClosed = [this](const std::string &reason) { closed = reason; },
             .onUntrusted = {},
             .onSessionExpired = {},
@@ -276,7 +283,7 @@ TEST_CASE("Every error of the master has a message in English and in French", "[
         CAPTURE(language);
         rtype::localization::Localization translations(language);
         translations.load(language, locales / (std::string(language) + ".lang"));
-        for (std::uint16_t code = 1; code <= LastErrorCode + 1; ++code) {
+        for (std::uint16_t code = 1; code <= LastErrorCode; ++code) {
             const std::string_view key = rtype::client::errorKey(static_cast<lobby::ErrorCode>(code));
             CAPTURE(key);
             // A key missing from the catalog is shown as the key itself
@@ -800,6 +807,73 @@ TEST_CASE("The session token of a server is kept in the settings, readable by th
     CHECK(sessions.forget(address));
     CHECK_FALSE(sessions.forget(address));
     CHECK_FALSE(sessions.token(address));
+
+    // The Discord refresh token beside it, forgotten with it
+    CHECK_FALSE(sessions.discordRefreshToken(address));
+    CHECK(sessions.keep(address, token));
+    CHECK(sessions.keepDiscord(address, "refresh_0123.abc"));
+    CHECK_FALSE(sessions.keepDiscord(address, "not a token"));
+    CHECK(sessions.discordRefreshToken(address) == "refresh_0123.abc");
+    CHECK_FALSE(sessions.discordRefreshToken(rtype::client::serverAddress("other.example.org", 4242)));
+    file.settings.setString("servers.discord.other.example.org:4242", "with a space");
+    CHECK_FALSE(sessions.discordRefreshToken(rtype::client::serverAddress("other.example.org", 4242)));
+    sessions.forgetDiscord(address);
+    CHECK_FALSE(sessions.discordRefreshToken(address));
+    CHECK(sessions.token(address) == token);
+    CHECK(sessions.keepDiscord(address, "refresh_0123.abc"));
+    CHECK(sessions.forget(address));
+    CHECK_FALSE(sessions.discordRefreshToken(address));
+}
+
+TEST_CASE(
+    "On a master with the social features, a player signed in with Discord gets its token, and renews it",
+    "[online][accounts][discord]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_discord_social", true, true);
+    const rtype::server::DiscordUser wing{.id = "80351110224678912", .username = "wing"};
+    Events events;
+    const auto client = master.client("Pilot", events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
+
+    std::optional<std::variant<lobby::DiscordAuthorizeMessage, lobby::ErrorCode>> authorize;
+    client->discordSignIn([&](const auto &result) { authorize = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return authorize.has_value(); }));
+    REQUIRE(std::holds_alternative<lobby::DiscordAuthorizeMessage>(*authorize));
+    CHECK(std::get<lobby::DiscordAuthorizeMessage>(*authorize).scopes == "identify openid sdk.social_layer");
+    const rtype::server::DiscordAuthorization accepted = master.fakeDiscord->accept(wing);
+    std::optional<LobbyClient::DiscordConfirmResult> confirmed;
+    client->discordConfirm(
+        {.code = accepted.code, .codeVerifier = accepted.codeVerifier, .redirectUri = accepted.redirectUri},
+        [&](const auto &result) { confirmed = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return confirmed.has_value(); }));
+    CHECK(events.discordTokens.empty());
+    std::optional<LobbyClient::SignInResult> created;
+    client->chooseUsername("Wing", [&](const auto &result) { created = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return created.has_value(); }));
+    REQUIRE(std::holds_alternative<lobby::SignedInMessage>(*created));
+    // The token came before SIGNED_IN
+    REQUIRE(events.discordTokens.size() == 1);
+    CHECK(events.discordTokens[0].expiresIn == 604800);
+
+    std::optional<std::optional<lobby::ErrorCode>> renewed;
+    client->discordRefresh(events.discordTokens[0].refreshToken, [&](auto error) { renewed = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return renewed.has_value(); }));
+    CHECK_FALSE(*renewed);
+    REQUIRE(events.discordTokens.size() == 2);
+    CHECK(events.discordTokens[1].accessToken != events.discordTokens[0].accessToken);
+
+    // Spent, or not a token at all
+    std::optional<std::optional<lobby::ErrorCode>> spent;
+    client->discordRefresh(events.discordTokens[0].refreshToken, [&](auto error) { spent = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return spent.has_value(); }));
+    CHECK(*spent == lobby::ErrorCode::DiscordTokenRefused);
+    std::optional<std::optional<lobby::ErrorCode>> malformed;
+    client->discordRefresh("not a token", [&](auto error) { malformed = error; });
+    REQUIRE(malformed);
+    CHECK(*malformed == lobby::ErrorCode::DiscordTokenRefused);
+    CHECK(events.discordTokens.size() == 2);
+    CHECK(client->welcomed());
 }
 
 TEST_CASE(

@@ -246,6 +246,7 @@ error.already_signed_in=Already signed in
 error.discord_taken=This Discord account belongs to another account
 error.discord_unavailable=The server cannot reach Discord now: try again in a moment
 error.not_found=Nothing was found
+error.discord_token_refused=Discord refused the token: sign in with Discord again
 error.unknown=The server refused
 online.server_hint=Port 4242 by default · IPv6 in brackets: [::1]:4242
 online.known=Servers met

@@ -62,16 +62,18 @@ class FakeAuthorizer final : public rtype::discord::Authorizer
     }
 
 public:
-    /// The applications asked, in order.
+    /// The applications asked, in order, and their scopes.
     std::vector<std::uint64_t> applications;
+    std::vector<std::string> scopes;
 
     explicit FakeAuthorizer(FakeCallbacks &callbacks) : _callbacks(callbacks) {}
 
-    void authorize(std::uint64_t applicationId, Done done) override
+    void authorize(std::uint64_t applicationId, const std::string &asked, Done done) override
     {
         cancel();
         ++_attempt;
         applications.push_back(applicationId);
+        scopes.push_back(asked);
         _done = std::move(done);
     }
 

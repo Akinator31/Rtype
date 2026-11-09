@@ -21,6 +21,7 @@
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/discord/Session.hpp"
 #include "rtype/discord/SocialSdkAuthorizer.hpp"
+#include "rtype/discord/SocialSdkConnection.hpp"
 #include "rtype/discord/SocialSdkPresence.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -116,8 +117,15 @@ void run()
     const rtype::game::GameConfig config = rtype::client::readGameConfig(console);
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
-    // Signing in with Discord, on the client of the Social SDK
+    // Signing in with Discord, on the client of the Social SDK, and connecting it with the token of a server
     rtype::discord::SocialSdkAuthorizer discord(discordSession);
+    rtype::discord::SocialSdkConnection discordConnection(discordSession);
+    // Connected, the activity shown before is cleared by Discord: shown again
+    discordConnection.onStatusChanged([&presence](rtype::discord::ConnectionStatus status) {
+        if (status == rtype::discord::ConnectionStatus::Ready) {
+            presence.resend();
+        }
+    });
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions =
         rtype::client::registerClientSystems(engine, devices, audio, metrics, style);
@@ -181,7 +189,8 @@ void run()
     rtype::client::ShipSelection ships;
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
-    rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord, ships,
+    rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord,
+                                       discordConnection, ships,
                                        rtype::render::userDataDirectory() / "pictures", config);
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);

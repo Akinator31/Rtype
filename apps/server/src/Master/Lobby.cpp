@@ -573,8 +573,17 @@ void Lobby::accountRequest(Client &client, std::uint8_t type, std::span<const st
                           .discord = client.discord},
         [this, resume = waitFor(client), type](const AccountReply &answer) {
             resume([&](Client &asking) {
+                // The Discord token of the player, before the reply that signs in or links: never kept here
+                if (std::optional<rtype::lobby::DiscordTokenMessage> token =
+                        std::exchange(asking.discord->token, std::nullopt);
+                    token && !std::holds_alternative<ErrorCode>(answer)) {
+                    reply(asking, message_type::DiscordToken, rtype::lobby::encode(*token));
+                }
                 if (const auto *code = std::get_if<ErrorCode>(&answer)) {
                     fail(asking, type, *code);
+                } else if (const auto *discordToken =
+                               std::get_if<rtype::lobby::DiscordTokenMessage>(&answer)) {
+                    reply(asking, message_type::DiscordToken, rtype::lobby::encode(*discordToken));
                 } else if (const auto *signedIn = std::get_if<SignedInAccount>(&answer)) {
                     asking.account = *signedIn;
                     asking.name = signedIn->account.username;

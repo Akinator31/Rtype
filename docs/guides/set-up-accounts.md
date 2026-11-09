@@ -121,9 +121,32 @@ reachable from the Internet for it.
     ```
 
 The server asks Discord the scope `identify` only, and keeps the id of the Discord user, its names and its
-picture, refreshed at each sign-in: never its token, its email nor its friends. The picture comes from
+picture, refreshed at each sign-in: never its token, its email nor its friends (with the social features below,
+it gives the token to the player, and keeps it no more). The picture comes from
 `cdn.discordapp.com`, which the machine must reach on 443 too; without it, players sign in all the same,
 without picture. A new Discord user chooses the username of its account in the game, its Discord name proposed.
+
+### The social features of Discord
+
+Optional, on top of the sign-in: the players who sign in with Discord get their Discord token, so that the game
+connects to Discord as them, for the voice of Discord in a game and, later, the friends and the invitations
+([ADR 0034](../decisions/0034-discord-token-in-the-client.md)).
+
+```toml
+[discord]
+client_id = "123456789012345678"
+client_secret_file = "/run/secrets/discord_secret"
+social = true
+```
+
+- The game then asks the player more than who they are: Discord shows it on the page the player accepts
+  (`openid sdk.social_layer`). Players who signed in before are asked again at their next sign-in with Discord.
+- The server gives the token to the game of the player and keeps none: the game keeps it beside its session, and
+  the server renews it when it expires, with the secret of the application.
+- **Limited access**: the communication features of the Social SDK (lobbies, voice) work, before Discord approves
+  the application, for the members of its team only (*Team* on the developer portal: add the players who try
+  it). To open them to every player, ask Discord for the access from the *Social SDK* page of the application.
+- Players with a password only, and guests, get nothing from it: the voice of the game works for them.
 
 ## Result
 

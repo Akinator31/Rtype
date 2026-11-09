@@ -26,7 +26,7 @@ public:
     SocialSdkAuthorizer(const SocialSdkAuthorizer &) = delete;
     SocialSdkAuthorizer &operator=(const SocialSdkAuthorizer &) = delete;
 
-    void authorize(std::uint64_t applicationId, Done done) override;
+    void authorize(std::uint64_t applicationId, const std::string &scopes, Done done) override;
     void cancel() override;
 };
 

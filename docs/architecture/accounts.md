@@ -233,6 +233,7 @@ never after the service is gone.
 | `DISCORD_SIGN_IN` | An attempt started on the connection ([Discord](#discord)) | `DISCORD_AUTHORIZE`, the id of the application |
 | `DISCORD_CONFIRM` | The code exchanged by the Discord client, then `findAccountByDiscord()` and `createSession()`, or, signed in, `linkDiscord()` | `SIGNED_IN` for an identity with an account; `DONE` for a new one, or, signed in, the identity linked or confirmed; `DISCORD_TAKEN`, `BANNED` (then closed) |
 | `CHOOSE_USERNAME` | `createDiscordAccount()`, `createSession()` | `SIGNED_IN`; `DISCORD_NOT_CONFIRMED` without a new identity confirmed on the connection within ten minutes |
+| `DISCORD_REFRESH` | The refresh token renewed by the Discord client, then `discordIdentity()` | `DISCORD_TOKEN`; `DISCORD_TOKEN_REFUSED`, `NOT_SIGNED_IN` ([The Discord token](#the-discord-token-of-the-player)) |
 
 In a game, every request of the accounts gets `ALREADY_IN_GAME`, before any work: a player signs in, out, or
 deletes its account from the lobby only, so that nobody changes identity in a game. A request that signs in gives
@@ -261,6 +262,7 @@ Nothing tells the accounts of others:
 | `RESEND_CODE` for one login | Once a minute | `TOO_MANY_ATTEMPTS` |
 | Wrong codes of an account | 5 per code, 20 a day ([Codes](#codes)) | `TOO_MANY_ATTEMPTS`; on the 20th, the holder of the account gets the "too many wrong codes" mail |
 | Codes Discord refuses after one `DISCORD_SIGN_IN` (`discordAttempts`) | 5 | `TOO_MANY_ATTEMPTS`, Discord not asked, until the next `DISCORD_SIGN_IN` |
+| `DISCORD_REFRESH` of a connection (`discordAttempts`) | 5 | `TOO_MANY_ATTEMPTS`, Discord not asked |
 | A `DISCORD_SIGN_IN`, a new Discord user (`discordLifetime`) | 10 minutes | `CODE_EXPIRED`; `DISCORD_NOT_CONFIRMED` for `CHOOSE_USERNAME` |
 | The Discord confirmation of a deletion (`deletionConfirmation`) | 5 minutes | `DISCORD_NOT_CONFIRMED` |
 | The hasher, the database thread, the Discord client | Their queues | `BUSY` |
@@ -306,8 +308,9 @@ results posted to the loop:
 1. `POST /oauth2/token` with the code, the code verifier of PKCE and the redirect address of `DISCORD_CONFIRM`,
    the application authenticated with its id and its secret (HTTP Basic). `invalid_grant` is a code Discord
    refuses (`INVALID_CODE`); any other answer is `DISCORD_UNAVAILABLE`.
-2. `GET /users/@me` with the token, scope `identify`: the id of the user, its name (`username`), its display
-   name (`global_name`) and the version of its picture (`avatar`). The token is dropped at once.
+2. `GET /users/@me` with the token: the id of the user, its name (`username`), its display name (`global_name`)
+   and the version of its picture (`avatar`). The token is dropped at once, unless the master has the social
+   features ([below](#the-discord-token-of-the-player)).
 3. `GET <cdn>/avatars/<id>/<avatar>.png?size=128`, if it has a picture: kept when it is a PNG (its signature) of
    at most 256 KiB, else dropped with a warning, the user signing in without picture.
 
@@ -321,6 +324,21 @@ service on the loop: the `DISCORD_SIGN_IN` not used yet and the codes refused si
 `CHOOSE_USERNAME`; the account's own identity confirmed, for `DELETE_ACCOUNT`. A `DISCORD_CONFIRM` uses up its
 `DISCORD_SIGN_IN` when Discord gives a user: one sign-in, one confirmation. Discord down keeps the attempt, so
 that the player tries again.
+
+#### The Discord token of the player
+
+With `[discord] social = true` ([ADR 0034](../decisions/0034-discord-token-in-the-client.md)), `DISCORD_AUTHORIZE`
+asks `identify openid sdk.social_layer`, and the `DiscordUser` of an exchange carries its tokens (`DiscordTokens`:
+access token, refresh token, expiry), which the client needs to connect its Social SDK. The service puts them in
+the `DiscordProgress` of the connection once it signs in or links (for a new user, once `CHOOSE_USERNAME` made
+its account), and the lobby sends them in `DISCORD_TOKEN` just before the reply, then forgets them: the master
+keeps no token, in memory or in the database.
+
+`DISCORD_REFRESH` gives the refresh token back: `DiscordClient::refresh()` asks `POST /oauth2/token`
+(`grant_type=refresh_token`, the secret of the application), then `GET /users/@me` with the new access token,
+and the service checks with `discordIdentity()` that the user is the identity of the account signed in. Then
+`DISCORD_TOKEN`, or `DISCORD_TOKEN_REFUSED` for a token Discord refuses (`invalid_grant`), of another identity, or
+on a master without the social features; five per connection (`discordAttempts`), then `TOO_MANY_ATTEMPTS`.
 
 The panel signs its administrators in with Discord too, through the browser rather than the SDK: the same
 `DiscordClient`, the code given back to `<public_url>/auth/discord/callback` with the verifier of PKCE the master

@@ -208,8 +208,9 @@ On a server whose `WELCOME` offers Discord ([ADR 0026](../decisions/0026-discord
    application of the master, and the client opens `online_discord` over the screen: the ring of the logo, and
    the three steps (Discord opened, the answer of the player, the server checking), with **Cancel**.
 2. `discord::Authorizer::authorize()` asks the player: the Discord client if it runs, the browser otherwise.
-   `SocialSdkAuthorizer` (`libs/discord`) does it with `Client::Authorize` of the Discord Social SDK, scope
-   `identify`, and the challenge of a code verifier of PKCE it makes; the SDK receives the code on the loopback
+   `SocialSdkAuthorizer` (`libs/discord`) does it with `Client::Authorize` of the Discord Social SDK, the scopes
+   of `DISCORD_AUTHORIZE` (`identify`, or `identify openid sdk.social_layer`), and the challenge of a code
+   verifier of PKCE it makes; the SDK receives the code on the loopback
    of the player. Its callbacks run in `Session::poll()`, which the game loop calls every frame, after the
    network.
 3. The code, the verifier and the redirect address go in `DISCORD_CONFIRM`. `SIGNED_IN` keeps the token as any
@@ -222,6 +223,16 @@ The player who refuses in Discord, or a Discord that cannot be reached, gets a t
 SDK starts at the first sign-in with Discord only; its logs go to the logger `discord`, warnings and errors.
 Cancel, or the connection lost, gives up the authorization running (`cancel()`): what Discord answers then goes
 nowhere.
+
+**The Discord token** ([ADR 0034](../decisions/0034-discord-token-in-the-client.md)), on a master with the
+social features: `DISCORD_TOKEN` comes before the `SIGNED_IN` or `DONE` of a sign-in with Discord
+(`LobbyClient::Handlers::onDiscordToken`). The client keeps its refresh token for the server in `SessionTokens`
+(`servers.discord.<address>`, beside the session token, forgotten with it), and connects to Discord with the
+access token (`discord::Connection::connect()`, `SocialSdkConnection`: `UpdateToken` then `Connect`). Signed in
+by the token of `HELLO` at the next connection, or when Discord says the token expires, it sends
+`DISCORD_REFRESH` (`LobbyClient::discordRefresh()`); `DISCORD_TOKEN_REFUSED` forgets the refresh token. The
+connection to Discord ends when the player leaves the server. Once connected, Discord clears the activity shown
+before, and the client shows it again, as the application of the master.
 
 ### Profiles
 
@@ -244,7 +255,7 @@ implementations, linked by the executable `r-type_client` alone.
 |---|---|---|
 | `Authorizer` | the sign-in, above | `SocialSdkAuthorizer` |
 | `Presence` | the activity of the player in its Discord profile, without a token ([below](#rich-presence)) | `SocialSdkPresence` |
-| `Connection` | the connection with the token of the player, which lobbies and voice need | to come |
+| `Connection` | the connection with the token of the player, which lobbies and voice need ([above](#discord)) | `SocialSdkConnection` |
 
 The implementations share **one `discordpp::Client`**, owned by `discord::Session`: its log callback (the logger
 `discord`, warnings and errors only), and `poll()`, the `RunCallbacks()` of the SDK, called once per frame by the

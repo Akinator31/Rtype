@@ -38,7 +38,7 @@ SocialSdkAuthorizer::~SocialSdkAuthorizer()
     cancel();
 }
 
-void SocialSdkAuthorizer::authorize(std::uint64_t applicationId, Done done)
+void SocialSdkAuthorizer::authorize(std::uint64_t applicationId, const std::string &scopes, Done done)
 {
     cancel();
     State &state = *_state;
@@ -48,10 +48,10 @@ void SocialSdkAuthorizer::authorize(std::uint64_t applicationId, Done done)
     discordpp::AuthorizationCodeVerifier verifier = client.CreateAuthorizationCodeVerifier();
     discordpp::AuthorizationArgs args;
     args.SetClientId(applicationId);
-    // The master needs to know who the player is, nothing more
-    args.SetScopes("identify");
+    // What the master asks: who the player is, and the social features when it gives the token
+    args.SetScopes(scopes);
     args.SetCodeChallenge(verifier.Challenge());
-    logger().info("Asking Discord for application {}", applicationId);
+    logger().info("Asking Discord for application {}, scopes {}", applicationId, scopes);
     client.Authorize(args, [this, attempt, codeVerifier = verifier.Verifier(), done = std::move(done)](
                                discordpp::ClientResult result, std::string code, std::string redirectUri) {
         if (attempt != _state->attempt || !_state->running) {
