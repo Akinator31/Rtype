@@ -353,7 +353,8 @@ std::optional<VoiceView> RemoteSession::voiceView() const
         return VoiceView{.local = {.transmitting = _discord->transmitting(),
                                    .muted = _discord->selfMuted(),
                                    .deafened = _discord->deafened(),
-                                   .mutedByAdmin = mutedByAdmin()},
+                                   .mutedByAdmin = mutedByAdmin(),
+                                   .backend = _voiceBackend},
                          .others = _discord->participants()};
     }
     if (!_voice || !_voice->joined()) {
@@ -362,7 +363,8 @@ std::optional<VoiceView> RemoteSession::voiceView() const
     return VoiceView{.local = {.transmitting = _voice->transmitting(),
                                .muted = _voice->selfMuted(),
                                .deafened = _voice->deafened(),
-                               .mutedByAdmin = mutedByAdmin()},
+                               .mutedByAdmin = mutedByAdmin(),
+                               .backend = _voiceBackend},
                      .others = _voice->participants()};
 }
 

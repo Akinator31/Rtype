@@ -612,7 +612,7 @@ TEST_CASE("The microphone of a client online is heard from the stream of its slo
     REQUIRE(play(master.loop, both, [&] { return !aliceMicrophone.isOpen; }));
     REQUIRE(play(master.loop, both, [&] { return bobSession.voice()->participants().at(0).status.muted; }));
     CHECK(bobSession.voiceStatuses().statuses[0] == voice::Status{.muted = true});
-    CHECK(bobSession.voiceView()->local == rtype::client::LocalVoice{});
+    CHECK(bobSession.voiceView()->local == rtype::client::LocalVoice{.backend = voice::Backend::Game});
     CHECK(aliceSession.voiceView()->local.muted);
 
     // Bob turns Alice down, then mutes her, from his pause menu: kept under her name, a guest
@@ -1269,6 +1269,9 @@ TEST_CASE(
                bobSession.discordVoice()->participants().size() == 1;
     }));
     CHECK(aliceSession.onDiscord());
+    // Told in the pause menu
+    CHECK(aliceSession.voiceView()->local.backend == voice::Backend::Discord);
+    CHECK(aliceSession.voiceView()->others.at(0).backend == voice::Backend::Discord);
     // The microphone of the game closed: Discord has it
     CHECK_FALSE(aliceMicrophone.isOpen);
     CHECK_FALSE(aliceDiscord.call.selfMuted);

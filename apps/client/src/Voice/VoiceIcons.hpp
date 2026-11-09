@@ -47,6 +47,8 @@ struct LocalVoice {
     bool deafened = false;
     /// Muted by an administrator: the game drops its voice.
     bool mutedByAdmin = false;
+    /// What carries its voice now: the game, or Discord once its call is connected. Told in the pause menu.
+    voice::Backend backend = voice::Backend::None;
 
     friend bool operator==(const LocalVoice &, const LocalVoice &) = default;
 };

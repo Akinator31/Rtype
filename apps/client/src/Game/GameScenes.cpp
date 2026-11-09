@@ -177,6 +177,22 @@ constexpr std::array<const char *, VoiceIconCount> VoiceIconPaths{
     RTYPE_IMAGE_VOICE_NO_MICROPHONE, RTYPE_IMAGE_VOICE_DEAFENED, RTYPE_IMAGE_VOICE_MUTED_BY_ADMIN};
 constexpr render::Rectangle VoiceIconSource{0.0f, 0.0f, 64.0f, 64.0f};
 constexpr float VoiceBadgeSize = 29.3f;
+/// From the line that tells what carries the voice of the player to the note under it, in the pause menu.
+constexpr float VoiceNoteLine = 34.0f;
+
+/// What carries the voice of another pilot, beside its name in the pause menu: nothing without a voice.
+std::string backendLabel(const localization::Localization &translations, voice::Backend backend)
+{
+    switch (backend) {
+    case voice::Backend::Game:
+        return translations.text("game.voices.backend.game");
+    case voice::Backend::Discord:
+        return translations.text("game.voices.backend.discord");
+    case voice::Backend::None:
+        break;
+    }
+    return {};
+}
 constexpr float VoiceBadgeGap = 12.0f;
 
 /// The volume of another player in the pause menu changes by this much.
@@ -606,11 +622,21 @@ bool GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left
             return found != voice->others.end() && found->status.mutedByAdmin;
         };
         row.locked = byAdmin;
-        row.label = [choice, byAdmin, &translations] {
+        row.label = [this, slot = pilot.slot, choice, byAdmin, &translations] {
             if (byAdmin()) {
                 return translations.text("game.voices.muted_by_admin");
             }
-            return choice().muted ? translations.text("game.voices.muted") : std::string();
+            if (choice().muted) {
+                return translations.text("game.voices.muted");
+            }
+            // What carries its voice, from the roster of the game
+            const RemoteSession *online = onlineSession();
+            const std::optional<VoiceView> voice = online != nullptr ? online->voiceView() : std::nullopt;
+            if (!voice) {
+                return std::string();
+            }
+            const auto found = std::ranges::find(voice->others, slot, &voice::Participant::slot);
+            return found != voice->others.end() ? backendLabel(translations, found->backend) : std::string();
         };
         row.onConfirm = [choice] { choice().muted = !choice().muted; };
         row.icon = [this, slot = pilot.slot]() -> std::optional<engine::Slider::Icon> {
@@ -629,9 +655,20 @@ bool GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left
         };
         top += _style.slider.getHeight();
     }
-    const ecs::entity_t note = interface.note(
-        translations.text("game.voices.note"),
-        {engine::AnchorPoint::TopLeft, left + _style.setting.inset, top + settings_page::groupGap});
+    // What carries the voice of the player, then where the choices are kept
+    const ecs::entity_t through = interface.note(
+        {}, {engine::AnchorPoint::TopLeft, left + _style.setting.inset, top + settings_page::groupGap});
+    ecs.addComponent<engine::BoundText>(through, [this, &translations] {
+        const RemoteSession *online = onlineSession();
+        const std::optional<VoiceView> voice = online != nullptr ? online->voiceView() : std::nullopt;
+        const voice::Backend backend = voice ? voice->local.backend : voice::Backend::None;
+        return translations.text(backend == voice::Backend::Discord ? "game.voices.through.discord"
+                                 : backend == voice::Backend::Game  ? "game.voices.through.game"
+                                                                    : "game.voices.through.none");
+    });
+    const ecs::entity_t note = interface.note(translations.text("game.voices.note"),
+                                              {engine::AnchorPoint::TopLeft, left + _style.setting.inset,
+                                               top + settings_page::groupGap + VoiceNoteLine});
     settings_page::bindText(ecs, note, translations, "game.voices.note");
     return true;
 }

@@ -418,7 +418,9 @@ flowchart LR
   name and its icon, its volume for this client from 0 to 100 % (Left and Right, by 5 %), muted or not with
   Confirm, which then reads *MUTED*. The row of a player muted by an administrator is locked
   (`Slider::locked`): dimmed, its value *MUTED BY AN ADMIN* in red, and passed over by the focus and the
-  pointer, as nothing the player chooses changes it.
+  pointer, as nothing the player chooses changes it. Otherwise each row tells what carries the voice of its
+  player, *GAME* or *DISCORD*, from the roster; under the rows, a line tells what carries the voice of the
+  player of this client (`LocalVoice::backend`): the game, Discord once its call is connected, or none.
 - **The choices are kept** in `VoicePreferences::players`, under `playerVoiceKey()`: the address of the server
   as the player wrote it, then the id of the account of the other player (`PLAYER_JOINED`), or `guest/` and its
   name for a guest. The same account on another server is another player. `RemoteSession` applies them to the
