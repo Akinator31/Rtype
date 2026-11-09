@@ -1,5 +1,6 @@
 // One game, live (node 147:432): its wave and its time of play; its pilots with their address,
-// score, state and latency; a message to its players; its own events. End it, remove a pilot, ban its address.
+// score, state and latency; a message to its players; its own events. End it, remove a pilot, mute its voice, ban
+// its address.
 
 import { Box, Flex, Grid, Table, Text } from '@chakra-ui/react';
 import type { FormEvent } from 'react';
@@ -14,7 +15,7 @@ import { Card, Empty } from '../components/Layout';
 import { usePageTitle } from '../components/pageTitle';
 import { MessageField } from '../components/MessageField';
 import { useSendMessage } from '../components/useSendMessage';
-import { duration, score, tenths, wave } from '../format';
+import { dayTime, duration, score, tenths, wave } from '../format';
 import { useLive } from '../live/context';
 import { strings } from '../strings';
 import { glow } from '../theme/system';
@@ -48,6 +49,17 @@ function PilotState({ pilot }: { pilot: GamePlayer }) {
     <Badge tone="active">{strings.game.alive}</Badge>
   ) : (
     <Badge tone="muted">{strings.game.destroyed}</Badge>
+  );
+}
+
+/** Its voice muted by an administrator: for this game, or as its account until a date. */
+function VoiceState({ pilot }: { pilot: GamePlayer }) {
+  const until = pilot.voiceMutedUntil ?? null;
+  if (pilot.voiceMuted !== true && until === null) return null;
+  return (
+    <Badge tone="alert" title={until === null ? undefined : strings.game.voiceMutedUntil(dayTime(until))}>
+      {strings.game.voiceMuted}
+    </Badge>
   );
 }
 
@@ -114,13 +126,24 @@ function Pilots({
                       )}
                     </Table.Cell>
                     <Table.Cell>
-                      <PilotState pilot={pilot} />
+                      <Flex gap="8px" wrap="wrap">
+                        <PilotState pilot={pilot} />
+                        <VoiceState pilot={pilot} />
+                      </Flex>
                     </Table.Cell>
                     <Table.Cell>
                       <Latency value={pilot.latency} />
                     </Table.Cell>
                     <Table.Cell>
                       <Flex justify="flex-end" gap="10px">
+                        {game.voice !== false && (
+                          <RowAction
+                            onClick={() => actions.voice(pilot, pilot.voiceMuted !== true)}
+                            aria-label={`${pilot.voiceMuted === true ? t.unmuteVoice : t.muteVoice} ${pilot.name}`}
+                          >
+                            {pilot.voiceMuted === true ? t.unmuteVoice : t.muteVoice}
+                          </RowAction>
+                        )}
                         <RowAction
                           onClick={() => actions.kick(pilot)}
                           aria-label={`${t.remove} ${pilot.name}`}
@@ -205,6 +228,7 @@ export function GamePage() {
           <Flex gap="8px">
             <GameState game={game} />
             <Badge tone="neutral">{t.seats(game.players.length, game.maxPlayers)}</Badge>
+            {game.voice === false && <Badge tone="muted">{t.noVoice}</Badge>}
           </Flex>
           <Button variant="danger" onClick={() => actions.end(gameRef(game))}>
             {t.end}

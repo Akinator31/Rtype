@@ -4,7 +4,7 @@
 import { Box, Field, Flex, Input, Text } from '@chakra-ui/react';
 import { useState } from 'react';
 
-import { ban, end, kick, type GameRef, type PlayerRef } from '../actions';
+import { ban, end, kick, muteVoice, type GameRef, type PlayerRef } from '../actions';
 import { api } from '../api/client';
 import { dayTime, shortDuration } from '../format';
 import { useLive } from '../live/context';
@@ -56,6 +56,34 @@ export function KickDialog({ player, onClose }: { player: PlayerRef; onClose: ()
   );
 }
 
+/** Mutes a pilot for the rest of its game, or lets it talk again. */
+export function VoiceDialog({
+  player,
+  muted,
+  onClose,
+}: {
+  player: PlayerRef;
+  muted: boolean;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const t = strings.dialog;
+  const name = `${player.name} #${player.id}`;
+  return (
+    <ConfirmDialog
+      title={muted ? t.muteVoiceTitle : t.unmuteVoiceTitle}
+      body={muted ? t.muteVoiceBody(name) : t.unmuteVoiceBody(name)}
+      confirmLabel={muted ? t.muteVoiceConfirm : t.unmuteVoiceConfirm}
+      tone={muted ? undefined : 'info'}
+      ready={fits(reason)}
+      onClose={onClose}
+      onConfirm={() => muteVoice(player, muted, reason)}
+    >
+      <ReasonField value={reason} onChange={setReason} />
+    </ConfirmDialog>
+  );
+}
+
 export function EndGameDialog({ game, onClose }: { game: GameRef; onClose: () => void }) {
   const [reason, setReason] = useState('');
   return (
@@ -72,25 +100,31 @@ export function EndGameDialog({ game, onClose }: { game: GameRef; onClose: () =>
   );
 }
 
-/** The durations of a ban to choose from, then any other in seconds. */
+/** The durations of a ban, or of a mute, to choose from, then any other in seconds. */
 export function DurationField({
   seconds,
   onChange,
   other,
   onOther,
+  choices = strings.dialog.durations,
+  isValid = isValidBanDuration,
+  invalidText = strings.bans.formSecondsInvalid,
 }: {
   seconds: number;
   onChange: (seconds: number) => void;
   other: boolean;
   onOther: (other: boolean) => void;
+  choices?: readonly { label: string; seconds: number }[];
+  isValid?: (seconds: number) => boolean;
+  invalidText?: string;
 }) {
-  const valid = isValidBanDuration(seconds);
+  const valid = isValid(seconds);
   return (
     <>
       <Field.Root>
         <Field.Label>{strings.dialog.duration}</Field.Label>
         <Flex gap="8px" wrap="wrap" role="group" aria-label={strings.dialog.duration}>
-          {strings.dialog.durations.map((choice) => (
+          {choices.map((choice) => (
             <Chip
               key={choice.seconds}
               pressed={!other && seconds === choice.seconds}
@@ -118,7 +152,7 @@ export function DurationField({
             }
             autoComplete="off"
           />
-          {!valid && <Field.ErrorText>{strings.bans.formSecondsInvalid}</Field.ErrorText>}
+          {!valid && <Field.ErrorText>{invalidText}</Field.ErrorText>}
         </Field.Root>
       )}
     </>
