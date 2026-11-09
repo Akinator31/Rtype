@@ -55,7 +55,7 @@ SocialSdkVoiceCall::~SocialSdkVoiceCall()
 }
 
 void SocialSdkVoiceCall::start(const std::string &secret, const std::map<std::string, std::string> &metadata,
-                               Received received)
+                               Received received, Captured captured)
 {
     end();
     const std::uint64_t attempt = ++_state->attempt;
@@ -71,7 +71,8 @@ void SocialSdkVoiceCall::start(const std::string &secret, const std::map<std::st
     client.CreateOrJoinLobbyWithMetadata(
         secret, {}, member,
         [this, session = &_session, state = std::weak_ptr<State>(_state), attempt,
-         received = std::move(received)](const discordpp::ClientResult &result, std::uint64_t lobbyId) {
+         received = std::move(received),
+         captured = std::move(captured)](const discordpp::ClientResult &result, std::uint64_t lobbyId) {
             const std::shared_ptr<State> alive = state.lock();
             if (!alive || attempt != alive->attempt) {
                 // Ended meanwhile: not kept in the lobby
@@ -98,7 +99,15 @@ void SocialSdkVoiceCall::start(const std::string &secret, const std::map<std::st
                                  data, static_cast<std::size_t>(samplesPerChannel * channels)),
                              sampleRate, static_cast<std::size_t>(channels));
                 },
-                [](std::int16_t *, std::uint64_t, std::int32_t, std::uint64_t) {});
+                [captured](std::int16_t *data, std::uint64_t samplesPerChannel, std::int32_t sampleRate,
+                           std::uint64_t channels) {
+                    // The microphone, for the players on the voice of the game
+                    if (captured) {
+                        captured(std::span<const std::int16_t>(
+                                     data, static_cast<std::size_t>(samplesPerChannel * channels)),
+                                 sampleRate, static_cast<std::size_t>(channels));
+                    }
+                });
             if (!call) {
                 // Already in it
                 call = client.GetCall(lobbyId);

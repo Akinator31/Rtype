@@ -191,6 +191,8 @@ public:
     std::vector<std::map<std::string, std::string>> metadata;
     /// Where the voices received go, as the SDK keeps it until the call ends.
     Received received;
+    /// Where the microphone goes, as the SDK keeps it until the call ends.
+    Captured captured;
     int ends = 0;
     std::vector<rtype::discord::CallMember> others;
     bool selfSpeaking = false;
@@ -207,8 +209,8 @@ public:
 
     explicit FakeVoiceCall(FakeCallbacks &callbacks) : _callbacks(callbacks) {}
 
-    void start(const std::string &secret, const std::map<std::string, std::string> &asked,
-               Received sink) override
+    void start(const std::string &secret, const std::map<std::string, std::string> &asked, Received sink,
+               Captured microphone) override
     {
         end();
         ++_attempt;
@@ -220,6 +222,7 @@ public:
         }
         _status = rtype::discord::CallStatus::Joining;
         received = std::move(sink);
+        captured = std::move(microphone);
     }
 
     void end() override
@@ -231,6 +234,7 @@ public:
         ++ends;
         _status = rtype::discord::CallStatus::Idle;
         received = nullptr;
+        captured = nullptr;
         others.clear();
     }
 
@@ -261,6 +265,13 @@ public:
     {
         others.push_back(
             {.userId = userId, .metadata = {{"player", std::to_string(playerId)}}, .speaking = false});
+    }
+    /// The player talks in its microphone: its samples, as the audio thread of Discord gives them.
+    void say(std::span<const std::int16_t> samples, std::int32_t rate = 48000, std::size_t channels = 1)
+    {
+        if (captured) {
+            captured(samples, rate, channels);
+        }
     }
     /// A member talks: its samples, as the audio thread of Discord gives them.
     void talk(std::uint64_t userId, std::span<const std::int16_t> samples, std::int32_t rate = 48000,

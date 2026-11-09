@@ -48,36 +48,25 @@ std::string lobbySecret(std::span<const std::byte, 32> secret)
     return text;
 }
 
-/// The voice of each slot, written by the audio thread of Discord and read by the game loop.
-struct DiscordVoice::Inbox {
-    struct Entry {
-        /// The member whose voice goes there, 0 for none: written by the game loop, read by Discord.
-        std::atomic<std::uint64_t> user{0};
-        voice::RingBuffer<std::int16_t> samples{InboxSamples};
-        // The resampling of its voice, on the thread of Discord only
-        double phase = 0.0;
-        std::int16_t previous = 0;
-    };
+namespace
+{
 
-    std::array<Entry, voice::MaxParticipants> slots;
+/// A voice of Discord to 48 kHz mono, on its audio thread: mixed down, then resampled linearly. Keeps where
+/// the resampling is between two calls.
+struct Converter {
+    double phase = 0.0;
+    std::int16_t previous = 0;
 
-    /// On the audio thread of Discord: the voice of a member to the slot it is matched to, at 48 kHz mono.
-    void receive(std::uint64_t user, std::span<const std::int16_t> data, std::int32_t rate,
-                 std::size_t channels)
+    /// Whether Discord may give that: beyond, the voice is dropped.
+    [[nodiscard]] static bool takes(std::int32_t rate, std::size_t channels)
     {
-        if (user == 0 || channels == 0 || channels > MaxChannels || rate < LowestRate || rate > HighestRate) {
-            return;
-        }
-        Entry *entry = nullptr;
-        for (Entry &slot : slots) {
-            if (slot.user.load(std::memory_order_acquire) == user) {
-                entry = &slot;
-                break;
-            }
-        }
-        if (entry == nullptr) {
-            return;
-        }
+        return channels != 0 && channels <= MaxChannels && rate >= LowestRate && rate <= HighestRate;
+    }
+
+    /// Converts `data` and writes it to `out`; what does not fit is dropped: the game loop is far behind.
+    void convert(std::span<const std::int16_t> data, std::int32_t rate, std::size_t channels,
+                 voice::RingBuffer<std::int16_t> &out)
+    {
         const std::size_t frames = data.size() / channels;
         // Each input sample goes forward this much in the samples at 48 kHz
         const double step = static_cast<double>(rate) / voice::SampleRate;
@@ -96,24 +85,107 @@ struct DiscordVoice::Inbox {
                     continue;
                 }
                 // Linear, between the previous sample and this one
-                while (entry->phase < 1.0 && written < converted.size()) {
-                    const double value = entry->previous + (mono - entry->previous) * entry->phase;
+                while (phase < 1.0 && written < converted.size()) {
+                    const double value = previous + (mono - previous) * phase;
                     converted[written++] = static_cast<std::int16_t>(std::lround(value));
-                    entry->phase += step;
+                    phase += step;
                 }
-                entry->phase -= 1.0;
-                entry->previous = mono;
+                phase -= 1.0;
+                previous = mono;
             }
-            // What does not fit is dropped: the game loop is far behind
-            (void)entry->samples.write(std::span<const std::int16_t>(converted.data(), written));
+            (void)out.write(std::span<const std::int16_t>(converted.data(), written));
         }
+    }
+};
+
+} // namespace
+
+/// The voice of each slot and the microphone, written by the audio thread of Discord and read by the game
+/// loop.
+struct DiscordVoice::Inbox {
+    struct Entry {
+        /// The member whose voice goes there, 0 for none: written by the game loop, read by Discord.
+        std::atomic<std::uint64_t> user{0};
+        voice::RingBuffer<std::int16_t> samples{InboxSamples};
+        /// On the thread of Discord only
+        Converter converter;
+    };
+
+    /// The microphone of the player, as Discord captures it.
+    struct Microphone {
+        /// The voice of the game reads it: written by the game loop, read by Discord.
+        std::atomic<bool> open{false};
+        /// Samples Discord gave, open or not: whether its captured callback runs at all.
+        std::atomic<std::uint64_t> captured{0};
+        voice::RingBuffer<std::int16_t> samples{CaptureSamples};
+        /// On the thread of Discord only
+        Converter converter;
+    };
+
+    std::array<Entry, voice::MaxParticipants> slots;
+    Microphone microphone;
+
+    /// On the audio thread of Discord: the voice of a member to the slot it is matched to, at 48 kHz mono.
+    void receive(std::uint64_t user, std::span<const std::int16_t> data, std::int32_t rate,
+                 std::size_t channels)
+    {
+        if (user == 0 || !Converter::takes(rate, channels)) {
+            return;
+        }
+        for (Entry &slot : slots) {
+            if (slot.user.load(std::memory_order_acquire) == user) {
+                slot.converter.convert(data, rate, channels, slot.samples);
+                return;
+            }
+        }
+    }
+
+    /// On the audio thread of Discord: the microphone of the player, at 48 kHz mono, while the voice of the
+    /// game reads it.
+    void capture(std::span<const std::int16_t> data, std::int32_t rate, std::size_t channels)
+    {
+        if (!Converter::takes(rate, channels)) {
+            return;
+        }
+        microphone.captured.fetch_add(data.size() / channels, std::memory_order_relaxed);
+        if (microphone.open.load(std::memory_order_acquire)) {
+            microphone.converter.convert(data, rate, channels, microphone.samples);
+        }
+    }
+};
+
+/// The microphone of Discord, for the voice of the game.
+class DiscordVoice::Capture final : public voice::Capture
+{
+    std::shared_ptr<Inbox> _inbox;
+
+public:
+    explicit Capture(std::shared_ptr<Inbox> inbox) : _inbox(std::move(inbox)) {}
+
+    /// Discord has the microphone already: always there.
+    bool open() override
+    {
+        _inbox->microphone.samples.discard();
+        _inbox->microphone.open.store(true, std::memory_order_release);
+        return true;
+    }
+
+    void close() override
+    {
+        _inbox->microphone.open.store(false, std::memory_order_release);
+        _inbox->microphone.samples.discard();
+    }
+
+    std::size_t read(std::span<std::int16_t> samples) override
+    {
+        return _inbox->microphone.samples.read(samples);
     }
 };
 
 DiscordVoice::DiscordVoice(VoiceCall &call, voice::Playback &playback, std::string secret,
                            std::uint32_t playerId)
     : _call(call), _playback(playback), _secret(std::move(secret)), _playerId(playerId),
-      _inbox(std::make_shared<Inbox>())
+      _inbox(std::make_shared<Inbox>()), _capture(std::make_unique<Capture>(_inbox))
 {
 }
 
@@ -137,9 +209,13 @@ void DiscordVoice::join(const voice::Join &join)
         _remotes[join.self].reset();
     }
     logger().info("Joining the voice of Discord as player {}", _playerId);
-    _call.start(_secret, {{"player", std::to_string(_playerId)}},
-                [inbox = _inbox](std::uint64_t user, std::span<const std::int16_t> samples, std::int32_t rate,
-                                 std::size_t channels) { inbox->receive(user, samples, rate, channels); });
+    _call.start(
+        _secret, {{"player", std::to_string(_playerId)}},
+        [inbox = _inbox](std::uint64_t user, std::span<const std::int16_t> samples, std::int32_t rate,
+                         std::size_t channels) { inbox->receive(user, samples, rate, channels); },
+        [inbox = _inbox](std::span<const std::int16_t> samples, std::int32_t rate, std::size_t channels) {
+            inbox->capture(samples, rate, channels);
+        });
     _call.setSelfMute(_selfMuted);
     _call.setSelfDeaf(_deafened);
     _call.setInputVolume(std::min(_inputVolume, 1.0f));
@@ -342,6 +418,16 @@ std::vector<voice::Participant> DiscordVoice::participants() const
         }
     }
     return players;
+}
+
+voice::Capture &DiscordVoice::capture()
+{
+    return *_capture;
+}
+
+std::uint64_t DiscordVoice::capturedSamples() const
+{
+    return _inbox->microphone.captured.load(std::memory_order_relaxed);
 }
 
 bool DiscordVoice::connected() const

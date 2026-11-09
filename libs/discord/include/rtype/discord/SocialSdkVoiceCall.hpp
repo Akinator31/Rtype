@@ -35,7 +35,7 @@ public:
     SocialSdkVoiceCall &operator=(const SocialSdkVoiceCall &) = delete;
 
     void start(const std::string &secret, const std::map<std::string, std::string> &metadata,
-               Received received) override;
+               Received received, Captured captured) override;
     void end() override;
     [[nodiscard]] CallStatus status() const override;
     [[nodiscard]] std::vector<CallMember> members() const override;

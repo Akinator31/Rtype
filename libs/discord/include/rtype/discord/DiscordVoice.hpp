@@ -34,7 +34,9 @@ namespace rtype::discord
 ///   stream of the slot of the Playback, as the voice of the game: the same mixer, the same volumes. Discord
 ///   plays none of it. The streams are opened once the call is connected, and closed when it ends.
 /// - **Out**: Discord captures and sends the microphone itself. Muted, deafened, the talk mode and the
-///   push-to-talk key, the volume of the microphone and its processing are given to the call.
+///   push-to-talk key, the volume of the microphone and its processing are given to the call. What it
+///   captures is also given, before its processing, to capture(): in a mixed game, the voice of the game
+///   sends it to the players on the game (docs/architecture/voice.md#mixed-games).
 ///
 /// @code
 /// discord::DiscordVoice voice(call, playback, discord::lobbySecret(*joined.voiceSecret), playerId);
@@ -50,10 +52,14 @@ class DiscordVoice final : public voice::VoiceChannel
 public:
     /// Samples of each member kept for the next poll() at most: 500 ms. Beyond, Discord's are dropped.
     static constexpr std::size_t InboxSamples = 24000;
+    /// Samples of the microphone kept for the voice of the game at most: 500 ms.
+    static constexpr std::size_t CaptureSamples = 24000;
 
     /// What the audio thread of Discord writes, shared with the call: it may run a little after the voice is
     /// gone.
     struct Inbox;
+    /// The microphone of Discord, as a voice::Capture.
+    class Capture;
 
 private:
     struct Remote {
@@ -67,6 +73,7 @@ private:
     std::string _secret;
     std::uint32_t _playerId;
     std::shared_ptr<Inbox> _inbox;
+    std::unique_ptr<Capture> _capture;
     std::optional<voice::Join> _joined;
     std::array<std::optional<Remote>, voice::MaxParticipants> _remotes;
     bool _streamsOpen = false;
@@ -142,6 +149,13 @@ public:
     [[nodiscard]] bool microphoneMissing() const { return false; }
     /// Discord says nothing of a silent microphone: always false.
     [[nodiscard]] bool microphoneSilent() const { return false; }
+
+    /// The microphone as Discord captures it, before its processing, at 48 kHz mono (resampled and mixed
+    /// down if needed): what the voice of the game sends in a mixed game (voice::GameVoice::setCapture()).
+    /// Open, it takes what Discord captures from then on; it never fails, Discord having the microphone.
+    [[nodiscard]] voice::Capture &capture();
+    /// The samples Discord captured since the start, read or not: whether it gives its microphone at all.
+    [[nodiscard]] std::uint64_t capturedSamples() const;
 };
 
 } // namespace rtype::discord
