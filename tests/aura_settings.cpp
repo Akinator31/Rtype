@@ -1,5 +1,5 @@
-// Tests of the colours of the auras around the ships, chosen on the Settings page and kept from one run of the
-// client to the next.
+// Tests of the colours of the auras around the ships, chosen on the Settings page and kept from one run of
+// the client to the next.
 
 #include "Settings/AuraSettings.hpp"
 #include "Settings/NextValue.hpp"

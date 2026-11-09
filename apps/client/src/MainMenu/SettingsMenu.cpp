@@ -213,8 +213,9 @@ void addControlsRow(Page &page, float left, float top)
     page.hints->emplace_back(row, "settings.hint.controls");
 }
 
-/// On the left, the language, the volumes, the colour filter and the auras of the ships; on the right, the display and the controls.
-/// The widgets get the focus in the order they are made: down the left column, then down the right one.
+/// On the left, the language, the volumes, the colour filter and the auras of the ships; on the right, the
+/// display and the controls. The widgets get the focus in the order they are made: down the left column, then
+/// down the right one.
 void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
                        const SettingsTargets &targets, const std::function<void()> &close)
 {

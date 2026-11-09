@@ -89,8 +89,7 @@ struct AccountConnection {
 };
 
 /// The reply CODE_SENT.
-struct CodeSent {
-};
+struct CodeSent {};
 /// The reply DONE. After SIGN_OUT and DELETE_ACCOUNT, the connection is signed out and closed.
 struct AccountDone {
     bool closes = false;

@@ -202,10 +202,10 @@ public:
     void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
                          Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
                          float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
-    /// Draws the aura of a 3D model placed as by drawModel(): a light of its colour on a shell a little larger
-    /// than the model, bright along its silhouette, added over the model and what is behind it. Draw it after
-    /// the model, in its pose. Its light also spreads around it when drawGlow() is called, as much as its
-    /// bloom. The other parameters are those of drawModel().
+    /// Draws the aura of a 3D model placed as by drawModel(): a light of its colour on a shell a little
+    /// larger than the model, bright along its silhouette, added over the model and what is behind it. Draw
+    /// it after the model, in its pose. Its light also spreads around it when drawGlow() is called, as much
+    /// as its bloom. The other parameters are those of drawModel().
     /// @throws std::logic_error if no frame is started.
     void drawAura(ModelId model, const Camera &camera, const Aura &aura, Vector3 position,
                   Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,

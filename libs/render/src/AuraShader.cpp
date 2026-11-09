@@ -50,10 +50,10 @@ void AuraShader::draw(const Model &model, const Aura &aura, const Camera3D &came
     if (!_available) {
         return;
     }
-    const std::array<float, 4> color{static_cast<float>(aura.color.r) / 255.0f,
-                                     static_cast<float>(aura.color.g) / 255.0f,
-                                     static_cast<float>(aura.color.b) / 255.0f,
-                                     static_cast<float>(aura.color.a) / 255.0f * std::clamp(strength, 0.0f, 1.0f)};
+    const std::array<float, 4> color{
+        static_cast<float>(aura.color.r) / 255.0f, static_cast<float>(aura.color.g) / 255.0f,
+        static_cast<float>(aura.color.b) / 255.0f,
+        static_cast<float>(aura.color.a) / 255.0f * std::clamp(strength, 0.0f, 1.0f)};
     const ::Vector3 viewDirection = viewDirectionOf(camera);
     const int orthographic = camera.projection == CAMERA_ORTHOGRAPHIC ? 1 : 0;
     const auto time = static_cast<float>(GetTime());

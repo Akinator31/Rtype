@@ -688,9 +688,8 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
     _impl->beginGameView();
     if (detail::LightingShader::hasEmission(drawn.get())) {
         _impl->glowQueue.push_back({model, view, std::nullopt, std::nullopt, toRaylib(position),
-                                    toRaylib(rotationAxis),
-                                    rotationAngle, scale, spinAngle, fade(tint, emissionBloom),
-                                    drawn.getPose(), hiddenMeshes});
+                                    toRaylib(rotationAxis), rotationAngle, scale, spinAngle,
+                                    fade(tint, emissionBloom), drawn.getPose(), hiddenMeshes});
     }
 }
 
