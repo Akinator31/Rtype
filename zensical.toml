@@ -40,6 +40,7 @@ nav = [
         "architecture/minigame.md",
         "architecture/audio.md",
         "architecture/voice.md",
+        "architecture/vr.md",
         "architecture/scenes-and-interface.md",
         "architecture/threads.md",
     ] },
@@ -60,6 +61,7 @@ nav = [
         "guides/deploy-with-docker.md",
         "guides/use-an-external-database.md",
         "guides/play-online.md",
+        "guides/play-in-vr.md",
     ] },
     { "Network protocol" = [
         "protocol/index.md",
@@ -105,6 +107,7 @@ nav = [
         "decisions/0034-discord-token-in-the-client.md",
         "decisions/0035-voice-chat-in-the-game-session.md",
         "decisions/0036-webrtc-audio-processing.md",
+        "decisions/0037-vr-through-openxr.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [
