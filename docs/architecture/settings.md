@@ -31,6 +31,9 @@ Name keys by domain with dots, so that the file stays readable:
 | `display.monitor` | The Settings page (`keepDisplaySettings()`): the screen of the game, by its index, from 0 for the primary screen |
 | `display.resolution` | The Settings page: `fullscreen`, or the size of the window, such as `1600x900` |
 | `display.vsync` | The Settings page: the vertical synchronisation, `true` (by default) or `false` |
+| `game.aura.allies` | The Settings page (`keepAuraColors()`): the colour of the aura around the ships of the other players and of their allies, `off`, `blue` (by default), `cyan`, `green`, `yellow`, `orange`, `red`, `purple` or `white` |
+| `game.aura.enemies` | The Settings page: the colour of the aura around the Bydos, as above (`red` by default) |
+| `game.aura.own` | The Settings page: the colour of the aura around the ship of the player, as above (`green` by default) |
 | `interface.language` | The Settings page: the language of the interface, `en` or `fr` |
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
 | `servers.session.<host>:<port>` | `SessionTokens`: the session token of the account signed in on that server, 64 hexadecimal digits, sent in the next `HELLO` ([Accounts](client-online.md#accounts)). A secret: never logged |
@@ -41,15 +44,16 @@ Name keys by domain with dots, so that the file stays readable:
 
 The Settings page of the main menu (`apps/client/src/MainMenu/SettingsMenu.cpp`) sets the language, the
 volumes of the music and of the sound effects, the colour filter of the image
-([Rendering](rendering.md#colour-filters)), the screen the game is on and its resolution. Two files of
+([Rendering](rendering.md#colour-filters)), the colours of the auras around the ships in the game
+([Auras](client-game.md#auras)), the screen the game is on and its resolution. Three files of
 `apps/client/src/Settings/` keep them: `PlayerSettings.hpp` the language, the volumes and the filter,
-`DisplaySettings.hpp` the screen and the resolution.
+`AuraSettings.hpp` the auras, `DisplaySettings.hpp` the screen and the resolution.
 
 ```mermaid
 flowchart LR
     File["settings.txt"] -- "readSettings()" --> Settings["engine::Settings"]
-    Settings -- "applyDisplaySettings()<br/>applyPlayerSettings()<br/>at start" --> Apply["Window · Localization<br/>AudioPlayer · Renderer"]
-    Page["Settings page<br/>six choices, two sliders"] -- "each change, at once" --> Apply
+    Settings -- "applyDisplaySettings()<br/>applyPlayerSettings()<br/>readAuraColors()<br/>at start" --> Apply["Window · Localization<br/>AudioPlayer · Renderer<br/>AuraColors"]
+    Page["Settings page<br/>nine choices, two sliders"] -- "each change, at once" --> Apply
     Page -- "closes: keep...Settings()" --> Settings
     Settings -- "writeSettings()" --> File
 ```

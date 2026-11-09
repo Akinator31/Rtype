@@ -299,6 +299,12 @@ Models emit their emission map multiplied by their emissive colour, or that colo
 (the engine flames of some ships): it shows on the night side and glows (`drawGlow()`). The emissive
 strength of glTF is not applied.
 
+`drawAura()`, called right after `drawModel()` with the same placement, casts a `render::Aura` on the model
+(`Aura.vert`, `Aura.frag`): its meshes are drawn again, pushed `thickness` world units out along their normals,
+in the colour of the aura where they graze the view and clear where they face the camera (Fresnel), breathing
+with the time. The shell is added to the image, both of its sides, without writing its depth: it hides nothing.
+The game uses it to tell apart the sides of the ships ([Auras](client-game.md#auras)).
+
 ### Antialiasing, glow, vignette and dithering
 
 `drawGlow()`, called after the 3D models and before the interface:
@@ -306,8 +312,8 @@ strength of glTF is not applied.
 1. smooths the jagged edges of what the frame holds (FXAA, `Antialiasing.frag`, `setAntialiasing()`, on by
    default). The frame is drawn in an image without multisampling: without it, the edges of the models are
    staircases of pixels that crawl as they move. The interface, drawn afterwards, keeps its sharp text;
-2. draws the energy models and the light the lit models emit (engine flames, windows, beacons) again, at a
-   quarter of the resolution. The lit models write their depth there, so that a hull hides the glow of what
+2. draws the energy models, the auras (as much as their `bloom`) and the light the lit models emit (engine
+   flames, windows, beacons) again, at a quarter of the resolution. The lit models write their depth there, so that a hull hides the glow of what
    is behind it;
 3. blurs this image, then blurs it again at an eighth of the resolution and adds it back as a wider, fainter
    halo, so that the light fades out slowly instead of stopping at the edge of the blur;
