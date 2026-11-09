@@ -82,11 +82,15 @@ struct Player {
     std::unique_ptr<GameClient> game;
 };
 
-/// Reply number `index` of a player, which must be of this type.
+/// The next reply of a player from `index`, which must be of this type, and moves `index` past it. The
+/// progression of a signed-in account (Progress) is skipped: the lobby sends it whenever it has read it.
 std::optional<testing::LobbyClient::Bytes> expect(EventLoop &loop, testing::LobbyClient &client,
-                                                  std::size_t index, std::uint8_t type)
+                                                  std::size_t &index, std::uint8_t type)
 {
-    const auto answer = client.reply(loop, index);
+    auto answer = client.reply(loop, index++);
+    while (answer && answer->first == lobby::message_type::Progress) {
+        answer = client.reply(loop, index++);
+    }
     if (!answer || answer->first != type) {
         return std::nullopt;
     }
@@ -112,15 +116,15 @@ int run(std::uint16_t port, const std::string &keyFile, const std::string &gameN
             return Failed;
         }
         player.lobby->hello(colon == std::string::npos ? name : "Pilot");
-        if (!expect(loop, *player.lobby, 0, lobby::message_type::Welcome)) {
+        std::size_t next = 0;
+        if (!expect(loop, *player.lobby, next, lobby::message_type::Welcome)) {
             std::cerr << name << " was not welcomed\n";
             return Failed;
         }
-        std::size_t next = 1;
         if (colon != std::string::npos) {
             player.lobby->send(lobby::message_type::SignIn,
                                lobby::encode(lobby::SignInMessage{name, given.substr(colon + 1)}));
-            if (!expect(loop, *player.lobby, next++, lobby::message_type::SignedIn)) {
+            if (!expect(loop, *player.lobby, next, lobby::message_type::SignedIn)) {
                 std::cerr << name << " could not sign in\n";
                 return Failed;
             }

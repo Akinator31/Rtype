@@ -60,6 +60,7 @@ This produces one archive per program (client and server): `.tar.gz` on Linux, `
 ```sh
 ./build/bin/r-type_server
 ./build/bin/r-type_client
+./build/bin/orbit_breaker   # a brick breaker made with the same engine, see docs/architecture/minigame.md
 ```
 
 ## Tests
