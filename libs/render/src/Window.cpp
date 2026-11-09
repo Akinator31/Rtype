@@ -156,6 +156,7 @@ Window::Window(const WindowSettings &settings)
     }
     // raylib closes the window when Escape is pressed: disable it, the game decides what Escape does
     SetExitKey(KEY_NULL);
+    _vsync = settings.vsync;
     setTargetFps(settings.targetFps);
     windowOpen = true;
     if (settings.fullscreen) {
@@ -302,6 +303,10 @@ bool Window::isCursorVisible() const
 
 void Window::setVsync(bool vsync)
 {
+    _vsync = vsync;
+    if (_pacedElsewhere) {
+        return;
+    }
     if (vsync) {
         SetWindowState(FLAG_VSYNC_HINT);
     } else {
@@ -311,18 +316,41 @@ void Window::setVsync(bool vsync)
 
 bool Window::isVsync() const
 {
-    return IsWindowState(FLAG_VSYNC_HINT);
+    return _vsync;
 }
 
 void Window::setTargetFps(int fps)
 {
     _targetFps = std::max(fps, 0);
-    SetTargetFPS(_targetFps);
+    if (!_pacedElsewhere) {
+        SetTargetFPS(_targetFps);
+    }
 }
 
 int Window::targetFps() const
 {
     return _targetFps;
+}
+
+void Window::setPacedElsewhere(bool paced)
+{
+    if (paced == _pacedElsewhere) {
+        return;
+    }
+    if (paced) {
+        ClearWindowState(FLAG_VSYNC_HINT);
+        SetTargetFPS(0);
+        _pacedElsewhere = true;
+    } else {
+        _pacedElsewhere = false;
+        setVsync(_vsync);
+        setTargetFps(_targetFps);
+    }
+}
+
+bool Window::isPacedElsewhere() const
+{
+    return _pacedElsewhere;
 }
 
 } // namespace rtype::render
