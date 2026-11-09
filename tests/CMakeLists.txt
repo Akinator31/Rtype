@@ -30,6 +30,7 @@ add_executable(rtype_tests
     datagram.cpp
     debug_commands.cpp
     discord.cpp
+    discord_presence.cpp
     display_settings.cpp
     ecs.cpp
     ecs_world.cpp

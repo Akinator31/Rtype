@@ -97,6 +97,7 @@ void GameSessionSystem::start(std::unique_ptr<GameSession> session, engine::Scen
     stop();
     _session = std::move(session);
     _scene = scene;
+    _startedAt = std::chrono::system_clock::now();
     _onOver = std::move(onOver);
 }
 
@@ -110,6 +111,7 @@ void GameSessionSystem::stop()
     _players.clear();
     _localHealth = 0;
     _tick = 0;
+    _wave = 0;
     _rescue = game::RescueStage::None;
     _outcomeTold = false;
     _clock = 0.0f;
@@ -264,8 +266,11 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     showStrikes(snapshot.struck);
     rememberKilled(snapshot.destroyed);
     reportKills(snapshot.destroyed);
-    if (snapshot.waveStarted && _onWave) {
-        _onWave(*snapshot.waveStarted, snapshot.waveMusic);
+    if (snapshot.waveStarted) {
+        _wave = *snapshot.waveStarted;
+        if (_onWave) {
+            _onWave(*snapshot.waveStarted, snapshot.waveMusic);
+        }
     }
     if (snapshot.rescue != std::exchange(_rescue, snapshot.rescue) && _onRescue) {
         _onRescue(snapshot.rescue);
