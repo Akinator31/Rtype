@@ -45,10 +45,16 @@ constexpr render::Color HealthColor{80, 220, 100, 255};
 
 constexpr float AllySize = 12.0f;
 constexpr float AllySpacing = 1.3f;
-constexpr render::Color AllyNameColor{107, 113, 119, 255};
+constexpr render::Color AllySlotColor{107, 113, 119, 255};
+constexpr render::Color AllyNameColor{138, 144, 151, 255};
 constexpr render::Color AllyScoreColor{201, 205, 210, 255};
 /// The experience of the local player, online.
 constexpr render::Color XpColor{255, 214, 102, 255};
+
+/// The icons of the voice: a square of the texture, drawn at the size of the text beside it.
+constexpr render::Rectangle VoiceIconSource{0.0f, 0.0f, 64.0f, 64.0f};
+constexpr float AllyVoiceSize = 14.7f;
+constexpr float PilotVoiceSize = 16.0f;
 
 constexpr float PingSize = 13.3f;
 constexpr float PingSpacing = 1.3f;
@@ -76,6 +82,16 @@ ecs::entity_t createText(ecs::Ecs &ecs, engine::SceneId scene, engine::AnchorPoi
     return text;
 }
 
+/// The icon of the voice of a pilot, hidden until the HudSystem shows it.
+ecs::entity_t createVoiceIcon(ecs::Ecs &ecs, engine::SceneId scene, engine::AnchorPoint point,
+                              const HudLook &look, float size)
+{
+    const ecs::entity_t icon = createPart(ecs, scene, HudOrder, point);
+    ecs.addComponent<engine::Sprite>(icon, look.voice[0], VoiceIconSource, size, size);
+    ecs.addComponent<engine::Opacity>(icon, 0.0f);
+    return icon;
+}
+
 ecs::entity_t createShadow(ecs::Ecs &ecs, engine::SceneId scene, engine::AnchorPoint point, float height,
                            render::Color top, render::Color bottom)
 {
@@ -101,6 +117,7 @@ ecs::entity_t openHud(ecs::Ecs &ecs, engine::SceneId scene, const HudLook &look,
     }
     hud.pilot = createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, PilotSize, PilotColor,
                            PilotSpacing);
+    hud.pilotVoice = createVoiceIcon(ecs, scene, engine::AnchorPoint::BottomLeft, look, PilotVoiceSize);
     hud.score = createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, ScoreSize,
                            render::colors::White, ScoreSpacing);
     hud.health = createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, HealthSize, HealthColor,
@@ -109,11 +126,15 @@ ecs::entity_t openHud(ecs::Ecs &ecs, engine::SceneId scene, const HudLook &look,
         createText(ecs, scene, engine::AnchorPoint::BottomLeft, look.font, AllySize, XpColor, AllySpacing);
 
     for (std::uint8_t index = 1; index < game::MaxPlayers; ++index) {
+        const ecs::entity_t slot = createText(ecs, scene, engine::AnchorPoint::BottomRight, look.font,
+                                              AllySize, AllySlotColor, 0.0f);
         const ecs::entity_t name = createText(ecs, scene, engine::AnchorPoint::BottomRight, look.font,
-                                              AllySize, AllyNameColor, 0.0f);
+                                              AllySize, AllyNameColor, AllySpacing);
         const ecs::entity_t score = createText(ecs, scene, engine::AnchorPoint::BottomRight, look.font,
                                                AllySize, AllyScoreColor, AllySpacing);
-        hud.allies.push_back({name, score});
+        const ecs::entity_t voice =
+            createVoiceIcon(ecs, scene, engine::AnchorPoint::BottomRight, look, AllyVoiceSize);
+        hud.allies.push_back({slot, name, score, voice});
     }
     for (const float height : BarHeights) {
         const ecs::entity_t bar = createPart(ecs, scene, HudOrder, engine::AnchorPoint::BottomRight);

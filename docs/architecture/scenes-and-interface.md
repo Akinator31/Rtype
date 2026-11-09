@@ -167,7 +167,7 @@ of the screen, over the interface (`drawFpsCounter()`, `apps/client/src/Commands
 then orange and red as the frame rate drops. It checks the limit of frames per second and the vertical
 synchronisation chosen on the Settings page ([Settings](settings.md#the-settings-page)).
 
-Both views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
+The debug views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
 and hide something read their `on` / `off` argument with `readSwitch()` (`Commands/Switch.hpp`).
 
 | Component | Draws |
@@ -346,7 +346,13 @@ lights up as a `SettingRow` while it is under the pointer or has the focus; the 
 pointed at, and more while it is dragged: the `InterfaceSystem` writes the `SliderTrack` of the slider, and
 moves the value to the pointer while the mouse button is held. Left, Right and the wheel step the value as for
 every `Slider`. The row is `SliderStyle::width` wide, or `SliderTrack::width` (the last parameter of
-`slider()`); `getRailLeft()` and `getRailWidth()` give its rail.
+`slider()`); `getRailLeft()` and `getRailWidth()` give its rail. Four fields of the `Slider`, set after
+`slider()`, are optional: `label`, a text written instead of the percentage when it gives one; `onConfirm`, what
+Confirm does on the row; `icon`, a picture tinted after the caption (`SliderStyle::iconSize`, `iconGap`); and
+`locked`, read every frame: while it says so, the row is dimmed (`SliderStyle::lockedOpacity`), its value red
+(`lockedValue`), and the focus, the pointer and a drag pass it over. The voice of a player in the pause menu
+uses all four: its volume, *MUTED* once Confirm muted it, the icon of its voice, and locked while an
+administrator muted it ([Voice](voice.md#in-the-hud-and-the-pause-menu)).
 
 `InterfaceBuilder::toggle()` makes an on / off setting drawn as "OFF - dot - ON" (`InterfaceStyle::toggle`,
 `SwitchStyle`): the dot slides to the side that is on, and the label of that side lights up. The switch lights
@@ -377,7 +383,7 @@ The client shows all of them, with the toasts, in the *Interface* menu of the se
 
 ### Pages of settings
 
-The Settings and Controls pages of the client are made of rows that share one look (`InterfaceStyle::setting`,
+The Settings, Controls and Voice pages of the client are made of rows that share one look (`InterfaceStyle::setting`,
 `SettingStyle`), drawn by `SceneRenderer::drawRowFrame()`: a fine rule under each row, and while the row is lit
 (its `Panel`, as a button), a veil from its left, a mark on its left edge and a line of light that traces
 itself along its bottom. The caption is on the left, in the font of the text (Exo 2); the value is on the
@@ -396,7 +402,9 @@ right, in the font of the values (Audiowide), and every value ends on the same c
 The client lays them out in `MainMenu/SettingsPage.hpp`: a veil (a `Box` that fades to the right) darkens the
 side of the screen where the page is, so that its text reads over the planet of the main menu; the groups are
 in columns, and the hint of the focused row and the keys of the page are notes. The design is the series 15 of
-the Figma of the interface.
+the Figma of the interface. The rows of keys and the scene that asks for a key over the page are shared by the
+Controls and Voice pages (`Controls/KeyChoice.hpp`: `addActionRow()`, `createKeyChoiceScene()`), each with its
+table and the place of its banner.
 
 ### Forms
 

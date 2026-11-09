@@ -95,14 +95,17 @@ account is banned, demoted or deleted.
   "maxGames": 57,
   "players": 3,
   "games": 1,
-  "bans": 0
+  "bans": 0,
+  "voice": true,
+  "voiceMutes": 0
 }
 ```
 
 `ports.lobby` is TCP, `ports.game` the one UDP port of every game, the one of the relay
 ([Server](../architecture/server.md#the-relay)); `maxGames` the most games at once. `players` counts the players
 of the lobby, in a game or not; `games` the running games; `bans` the addresses
-banned now.
+banned now; `voice` whether the games carry the voice (`[voice] enabled`); `voiceMutes` the accounts whose voice
+is muted now.
 
 ### `GET /api/games`
 
@@ -121,9 +124,10 @@ shown until it is ready (10 seconds at most).
     "wave": 2,
     "statusAge": 412,
     "stale": false,
+    "voice": true,
     "players": [
-      {"id": 7, "name": "Alice", "score": 1500, "alive": true, "latency": 35},
-      {"id": 9, "name": "Bob", "score": null, "alive": null, "latency": null}
+      {"id": 7, "name": "Alice", "voiceMuted": false, "voiceMutedUntil": null, "score": 1500, "alive": true, "latency": 35},
+      {"id": 9, "name": "Bob", "voiceMuted": false, "voiceMutedUntil": 1798003600123, "score": null, "alive": null, "latency": null}
     ]
   }
 ]
@@ -135,7 +139,8 @@ shown until it is ready (10 seconds at most).
 | `tick`, `wave` | From the last `GAME_STATUS` of the instance ([instances, 4.1](instances.md#game_status-0x06)); `null` before the first |
 | `statusAge` | Since that status, or since the game got ready |
 | `stale` | No status for 3 seconds: the instance, or its game thread, is stuck |
-| `players` | The players the master added, sorted by id. `score`, `alive` and `latency` (in milliseconds) come from the status: `null` until the client of the player connected, and `latency` until it was measured |
+| `voice` | Whether the game carries the voice |
+| `players` | The players the master added, sorted by id. `score`, `alive` and `latency` (in milliseconds) come from the status: `null` until the client of the player connected, and `latency` until it was measured. `voiceMuted`: its voice muted for the rest of the game; `voiceMutedUntil`: its account muted until then, `null` if not |
 
 ### `GET /api/games/{id}`
 
@@ -184,6 +189,9 @@ if given, for the next page.
 | `unban_account` | `account:<id>` | `account`, `name`, `reason` |
 | `role` | `account:<id>` | `account`, `name`, `role` (`admin` or `player`) |
 | `delete_account` | `account:<id>` | `reason`, `removed`: neither its name nor its address, the account is gone |
+| `mute_voice`, `unmute_voice` | `player:<id>` | `name`, `address`, `account` if it was signed in, `gameId`, `reason` |
+| `mute_account_voice` | `account:<id>` | `account`, `name`, `duration` (seconds), `expiresAt`, `reason`, `players` (its players in a game, muted at once) |
+| `unmute_account_voice` | `account:<id>` | `account`, `name`, `expiresAt` (when the mute would have ended), `mutedBy` (the actor of the mute), `reason` |
 
 `actor` is `local` for the local access token, the id of the account of an administrator signed in, and
 `deleted` once its account is deleted. A player who deletes its account is taken out of the actions done to it:
@@ -212,6 +220,16 @@ The player is taken out of its game, its instance told (`REMOVE_PLAYER (KICKED)`
 ([lobby](lobby.md#error-0x86)). It may connect again: to keep it out, ban its address.
 
 `200 {"playerId": 7}`, or `404` if no player of the lobby has this id.
+
+### `POST /api/players/{id}/mute-voice` and `/unmute-voice`
+
+Body: `{"reason": "…"}`, optional.
+
+The voice of the player is muted for the rest of its game, or let talk again: its instance gets `MUTE_VOICE`
+([instances](instances.md#mute_voice-0x85)), drops its voice, and tells every client of the game
+(`VOICE_STATUSES`, `mutedByAdmin`). A player whose account is muted stays muted until that ends.
+
+`200 {"playerId": 7, "voiceMuted": true}`, or `404` if no player of the lobby with this id is in a running game.
 
 ### `POST /api/games/{id}/end`
 
@@ -258,7 +276,8 @@ expired.
 ## 5. Accounts
 
 With a database, every server has these routes; the panel shows them when the master has accounts. The
-administrators of `[admin] admins` are `locked`: demoting, banning or deleting them is `409`.
+administrators of `[admin] admins` are `locked`: demoting, banning, deleting them or muting their voice is
+`409`.
 
 ### `GET /api/accounts`
 
@@ -281,7 +300,8 @@ email, Discord name or Discord display name holds it, ignoring case, or whose Di
     "bannedAt": null,
     "banReason": "",
     "createdAt": 1797900000000,
-    "lastSeenAt": 1798000000123
+    "lastSeenAt": 1798000000123,
+    "voiceMute": null
   }
 ]
 ```
@@ -289,7 +309,8 @@ email, Discord name or Discord display name holds it, ignoring case, or whose Di
 `email` is `null` for an account made with Discord only, `password` whether it has one; `role` is `admin` for
 an administrator of `[admin] admins`, whatever the database holds. `discord` is the profile of its Discord
 identity as of its last sign-in with Discord, `null` without one: `username` (`@username`), `displayName` or
-`null`, and `avatar`, the version of its picture, or `null` without one.
+`null`, and `avatar`, the version of its picture, or `null` without one. `voiceMute` is the mute of its voice
+that runs now, `null` without one: `{"accountId", "createdAt", "expiresAt", "reason", "actor"}`.
 
 ### `GET /api/accounts/{id}`
 
@@ -320,6 +341,25 @@ Body: `{"reason": "appeal"}`, optional. `{"account": {…}, "removed": 0}`.
 Body: `{"role": "admin"}` or `{"role": "player"}`. A player made administrator signs in to the panel; an
 administrator made player loses it at its next request, its WebSockets closed. `{"account": {…}, "removed": 0}`.
 
+### `POST /api/accounts/{id}/mute-voice`
+
+Body: `{"duration": 86400, "reason": "spam"}`. `duration` in seconds, 1 to 2592000 (30 days), required; `reason`
+optional. The games drop the voice of the account until then: its players in a game are muted at once, those
+who join one later from their `ADD_PLAYER`, after a restart of the master too. A mute of an account muted
+already replaces it. Its players are not removed: they play on, silent.
+
+```json
+{"account": {…, "voiceMute": {"accountId": 2, "createdAt": 1798000000123, "expiresAt": 1798086400123, "reason": "spam", "actor": "1"}}, "removed": 1}
+```
+
+`removed` is here the number of its players in a game that were muted. `400` without a valid duration.
+
+### `POST /api/accounts/{id}/unmute-voice`
+
+Body: `{"reason": "…"}`, optional. The mute ends at once; its players in a game talk again.
+`{"account": {…, "voiceMute": null}, "removed": 1}`. A mute that ended already is not lifted again, nor
+recorded.
+
 ### `POST /api/accounts/{id}/delete`
 
 Body: `{"reason": "asked by mail"}`, optional. The account, its sessions, codes and Discord identity are deleted;
@@ -346,7 +386,7 @@ The first frame is a snapshot; the events follow, in the order they happen. What
 | `player.updated` | `player` | A player entered or left a game |
 | `player.left` | `playerId` | A player left the lobby: its connection closed, or it was removed |
 | `game.started` | `game` | A game is ready |
-| `game.updated` | `game` | A player came or went, or its instance sent its status: every second for each game |
+| `game.updated` | `game` | A player came or went or had its voice muted, or its instance sent its status: every second for each game |
 | `game.ended` | `gameId`, `reason` | A running game ended: `empty`, `over`, `crashed`, `ended_by_admin` or `master_stopping` |
 | `action` | `action` | An action was recorded, as in `/api/actions` |
 

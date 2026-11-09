@@ -25,12 +25,12 @@ a host acts on, and no more: no route of the API, no technical detail, a count o
 |---|---|
 | `/` | The overview: players connected, games running and stuck, banned addresses and the next end, uptime, each opening its page; the games; the live feed; the players of each minute of the last hour since the panel opened; the latest actions. The master lost, its last values dimmed, and the last events |
 | `/games` | The running games, live: their seats, wave, time of play and state; searched by name or id, filtered by state (running, stuck, waiting); an instance stuck on top, to end it. A line opens its game |
-| `/games/{id}` | A game: its wave and time of play; its pilots, their address, score, state and latency; a message to its players; its own events. End it, remove a pilot, ban its address |
+| `/games/{id}` | A game: its wave and time of play; its pilots, their address, score, state and latency, *Muted* when an administrator muted their voice (the end of the mute of their account in its tooltip); a message to its players; its own events. End it, remove a pilot, mute its voice for the rest of the game or let it talk, ban its address; *No voice in this game* without `[voice]` |
 | `/players` | The players of the lobby, searched, filtered (in a game, in the lobby); a line opens and closes the card of its player, with the other pilots of its address. Remove one, ban its address |
 | `/bans` | The addresses banned now and the time left of each, lifted from here; those lifted or expired lately, from the record; a new ban: address, duration, reason, the pilots it removes |
 | `/messages` | A message to the whole lobby or to a game, from a template kept in the browser, previewed as the game shows it; the messages sent, from the record |
 | `/history` | The record of the actions, newest first, a page of 100 at a time, searched and filtered by kind; an entry unfolded under its line into its details |
-| `/accounts` | With accounts only, in the navigation: the accounts, newest first, searched by username, email, Discord name or id; their avatar (their Discord picture, else their initial), email and whether it is verified, Discord name, role, state, last sign-in. The account chosen, the first at first, shows in a sheet on the right (P9′ of the Série 14): its avatar and names, its email, its password, its Discord id, its dates, and its actions. Ban one with a reason, unban it, make it an administrator or a player, delete it, each behind its window; the administrators of `[admin] admins` marked **Settings**, without these actions |
+| `/accounts` | With accounts only, in the navigation: the accounts, newest first, searched by username, email, Discord name or id; their avatar (their Discord picture, else their initial), email and whether it is verified, Discord name, role, state, last sign-in. The account chosen, the first at first, shows in a sheet on the right (P9′ of the Série 14): its avatar and names, its email, its password, its Discord id, its dates, the mute of its voice with its end and reason, and its actions. Ban one with a reason, unban it, mute its voice for 1 hour to 30 days or lift the mute, make it an administrator or a player, delete it, each behind its window; the administrators of `[admin] admins` marked **Settings**, without these actions |
 | `/settings` | The version, start and ports of the server, read only; the preferences of the panel: confirm the actions, a sound when an instance becomes stuck |
 
 `/actions`, the address of the record before the history, leads to `/history`. The master answers `index.html`
@@ -136,7 +136,9 @@ The end-to-end tests fail on any violation the browser reports.
   searches and the filters; each action through its window, what it sends, its toast; a refused action; a
   cancelled one; the preferences; the opening of a session, by its token or by `admin-url.txt`, and its window
   once it expired; the sign-in with an account and its refusal, Discord, who is signed in and signing out, the
-  page of the accounts shown with accounts only, searched, an account banned, a refusal of the master.
+  page of the accounts shown with accounts only, searched, an account banned, a refusal of the master; a pilot
+  muted and shown muted, a game without voice; the voice of an account muted for the time chosen, a duration
+  over 30 days refused, a mute shown and lifted.
 - `e2e/panel.spec.ts`: a real `r-type_server` serving the built panel, and `rtype_panel_players`
   (`tests/helpers/panel_players.cpp`), two players in a game. The panel opened with the address of
   `admin-url.txt`, the game seen live with the latency of its players, ended with a reason, its players back in

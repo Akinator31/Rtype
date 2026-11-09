@@ -4,6 +4,7 @@
 #include "Common/Secret.hpp"
 #include "Master/AdminModel.hpp"
 #include "Master/Process.hpp"
+#include "Master/VoiceMutes.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/FramedConnection.hpp"
@@ -45,6 +46,11 @@ struct GamesSettings {
     /// A running game without GAME_STATUS for this long is stale: its instance, or its game thread, is
     /// stuck. Its instances report every second.
     std::chrono::milliseconds statusTimeout{std::chrono::seconds(3)};
+    /// What every game does with the voice: `[voice]` of the settings, given in CONFIGURE.
+    VoiceRules voice{};
+    /// Every game has a Discord lobby for the voice of its players with Discord (`[discord] social`): its
+    /// secret goes in GAME_JOINED (lobby protocol 7).
+    bool discordVoice = false;
 };
 
 /// Where a game stands, as its instance last said (GAME_STATUS).
@@ -61,6 +67,8 @@ struct GameStatus {
 struct LobbyPlayer {
     std::uint32_t id = 0;
     std::string name;
+    /// The id of its account, 0 for a guest.
+    std::uint64_t accountId = 0;
 };
 
 /// The games of the master (ADR 0013): one instance per game, started with Process, connected back on a local
@@ -79,9 +87,10 @@ struct LobbyPlayer {
 ///   for its READY: only then is the creator added and answered. No place: SERVER_FULL. No READY in time, or
 ///   an instance that cannot start: GAME_START_FAILED, and the instance is killed.
 /// - **Joining** adds a player to a game that is ready: it gets a session and its keys, given to the instance
-///   (ADD_PLAYER) before the player (GAME_JOINED). A session id is random, never 0, and unique across the
-///   whole master: it names one player of one game, and stays taken until the instance of its game exits, so
-///   that an instance never sees the same id twice.
+///   (ADD_PLAYER) before the player (GAME_JOINED), with the secret of the Discord lobby of the game when
+///   GamesSettings::discordVoice (the same for all its players). A session id is random, never 0, and unique
+///   across the whole master: it names one player of one game, and stays taken until the instance of its game
+///   exits, so that an instance never sees the same id twice.
 /// - **A game without players** is shut down (SHUTDOWN (EMPTY)).
 /// - **An instance that dies**, or closes its connection, without GAME_OVER has crashed: its players are told
 ///   (LEFT_GAME (GAME_CRASHED)). A game over is told too (LEFT_GAME (GAME_OVER)).
@@ -91,6 +100,9 @@ struct LobbyPlayer {
 /// - **Behind the relay** of the master, every game: the instance is given the relay in CONFIGURE, and the
 ///   relay is told where the instance receives (READY), each session added and released, and the instance
 ///   gone. GAME_JOINED gives the public port of the relay to every player.
+/// - **The voice** of every game follows GamesSettings::voice. An administrator mutes a player for the rest
+///   of its game, or its account for a time (VoiceMutes): the instance is told at ADD_PLAYER and at every
+///   change (MUTE_VOICE), and drops its voice until then.
 /// - **The administration** sees the running games and acts on them through AdminGames, and is told what
 ///   happens to them through its AdminObserver (docs/architecture/administration.md).
 class Games final : public AdminGames
@@ -122,6 +134,7 @@ private:
     LeftHandler _onLeft;
     GameOverHandler _onGameOver;
     AdminObserver *_observer = nullptr;
+    const VoiceMutes *_voiceMutes = nullptr;
     SessionDraw _drawSession;
     rtype::network::TcpListener _listener;
     rtype::network::Timer _supervision;
@@ -158,6 +171,8 @@ private:
     void fail(Game &game, const std::string &reason);
     void closeConnection(Game &game);
     void send(Game &game, std::uint8_t type, std::span<const std::byte> payload);
+    /// How long a player is muted now, for MUTE_VOICE and ADD_PLAYER: for the game, or as its account.
+    [[nodiscard]] std::uint32_t voiceMuted(bool forTheGame, std::uint64_t accountId) const;
     void supervise();
     void closeInstanceConnection(std::uint64_t id);
 
@@ -184,6 +199,9 @@ public:
     /// Tells the administration what happens to the games; nullptr for nobody. It must outlive the games, or
     /// be taken away first.
     void setObserver(AdminObserver *observer) { _observer = observer; }
+    /// The mutes of the voice of the accounts, read when a player joins; nullptr for none. They must outlive
+    /// the games, or be taken away first.
+    void setVoiceMutes(const VoiceMutes *mutes) { _voiceMutes = mutes; }
     /// Replaces the random generator of the system for the session ids: for the tests, to force collisions.
     void setSessionDraw(SessionDraw draw) { _drawSession = std::move(draw); }
 
@@ -217,6 +235,8 @@ public:
     [[nodiscard]] std::vector<AdminGame> adminGames() const override;
     bool kick(std::uint32_t playerId) override;
     bool end(std::uint32_t gameId) override;
+    bool muteVoice(std::uint32_t playerId, bool muted) override;
+    std::size_t accountVoiceChanged(long long accountId) override;
 };
 
 } // namespace rtype::server

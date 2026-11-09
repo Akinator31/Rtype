@@ -17,7 +17,10 @@ apps/client/src/
     FormErrors.cpp     the field of a form each error of the master is about
     SessionTokens.cpp  the session token of the account signed in on each server, kept in the settings
     KnownProfiles.cpp  the account remembered for each server, and the pictures kept on disk
-  main.cpp             gives OnlineScenes the SocialSdkAuthorizer of libs/discord, polled every frame
+  Discord/
+    DiscordPresence.cpp  the activity of the player in its Discord profile, from the scenes and the game
+  main.cpp             the discord::Session of libs/discord, polled every frame, its SocialSdkAuthorizer,
+                       its SocialSdkPresence, its SocialSdkConnection and its SocialSdkVoiceCall
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn a little in the past, between the snapshots around that time
@@ -205,9 +208,11 @@ On a server whose `WELCOME` offers Discord ([ADR 0026](../decisions/0026-discord
    application of the master, and the client opens `online_discord` over the screen: the ring of the logo, and
    the three steps (Discord opened, the answer of the player, the server checking), with **Cancel**.
 2. `discord::Authorizer::authorize()` asks the player: the Discord client if it runs, the browser otherwise.
-   `SocialSdkAuthorizer` (`libs/discord`) does it with `Client::Authorize` of the Discord Social SDK, scope
-   `identify`, and the challenge of a code verifier of PKCE it makes; the SDK receives the code on the loopback
-   of the player. Its callbacks run in `poll()`, which the game loop calls every frame, after the network.
+   `SocialSdkAuthorizer` (`libs/discord`) does it with `Client::Authorize` of the Discord Social SDK, the scopes
+   of `DISCORD_AUTHORIZE` (`identify`, or `identify openid sdk.social_layer`), and the challenge of a code
+   verifier of PKCE it makes; the SDK receives the code on the loopback
+   of the player. Its callbacks run in `Session::poll()`, which the game loop calls every frame, after the
+   network.
 3. The code, the verifier and the redirect address go in `DISCORD_CONFIRM`. `SIGNED_IN` keeps the token as any
    sign-in does; `PROFILE` leads a new Discord user to `online_choose_username`, its Discord picture, display
    name and `@username` above the username it chooses, proposed from its Discord name; `DONE` brings a player
@@ -218,6 +223,21 @@ The player who refuses in Discord, or a Discord that cannot be reached, gets a t
 SDK starts at the first sign-in with Discord only; its logs go to the logger `discord`, warnings and errors.
 Cancel, or the connection lost, gives up the authorization running (`cancel()`): what Discord answers then goes
 nowhere.
+
+**The Discord token** ([ADR 0034](../decisions/0034-discord-token-in-the-client.md)), on a master with the
+social features: `DISCORD_TOKEN` comes before the `SIGNED_IN` or `DONE` of a sign-in with Discord
+(`LobbyClient::Handlers::onDiscordToken`). The client keeps its refresh token for the server in `SessionTokens`
+(`servers.discord.<address>`, beside the session token, forgotten with it), and connects to Discord with the
+access token (`discord::Connection::connect()`, `SocialSdkConnection`: `UpdateToken` then `Connect`). Signed in
+by the token of `HELLO` at the next connection, or when Discord says the token expires, it sends
+`DISCORD_REFRESH` (`LobbyClient::discordRefresh()`); `DISCORD_TOKEN_REFUSED` forgets the refresh token. The
+connection to Discord ends when the player leaves the server. Once connected, Discord clears the activity shown
+before, and the client shows it again, as the application of the master.
+
+**The voice of a game**: connected to Discord, the client joins the Discord lobby of each game it plays with the
+secret of `GAME_JOINED` (lobby protocol 7) and the id `WELCOME` gave it, and talks there once the call is
+connected, and through the game to the players who are not on Discord; without the connection, or while a
+call that dropped is joined again, it talks through the game ([Voice](voice.md#mixed-games)).
 
 ### Profiles
 
@@ -232,20 +252,72 @@ there.
 servers met in the Online menu show who will be signed in, with the picture, before connecting. It is forgotten
 at sign-out and at the deletion of the account; the pictures stay, as another server may show them.
 
-`libs/discord` is two targets, so that the tests never load the library of Discord: `rtype::discord`, the
-interface, which the client and its tests know, and `rtype::discord_sdk`, its implementation, linked by the
-executable `r-type_client` alone. The SDK itself is kept in `libs/discord/sdk/` (its `README.md`), for Linux
+`libs/discord` is three targets, so that the tests never load the library of Discord: `rtype::discord`, the
+interfaces, one per feature, which the client and its tests know; `rtype::discord_voice`, the voice of a game
+built on one of them (`DiscordVoice`, [Voice](voice.md#the-voice-of-discord)), without the SDK; and
+`rtype::discord_sdk`, their implementations, linked by the executable `r-type_client` alone.
+
+| Interface | Feature | Implementation |
+|---|---|---|
+| `Authorizer` | the sign-in, above | `SocialSdkAuthorizer` |
+| `Presence` | the activity of the player in its Discord profile, without a token ([below](#rich-presence)) | `SocialSdkPresence` |
+| `Connection` | the connection with the token of the player, which lobbies and voice need ([above](#discord)) | `SocialSdkConnection` |
+| `VoiceCall` | the Discord lobby of a game, from the secret of `GAME_JOINED`, and its call ([Voice](voice.md#the-voice-of-discord)) | `SocialSdkVoiceCall` |
+
+The implementations share **one `discordpp::Client`**, owned by `discord::Session`: its log callback (the logger
+`discord`, warnings and errors only), and `poll()`, the `RunCallbacks()` of the SDK, called once per frame by the
+game loop. No thread of ours touches the SDK, and every answer of Discord comes from that poll. The client is made
+at the first feature that needs it: a player who never uses Discord never starts the SDK. The features are
+destroyed before the session. The tests use `tests/helpers/FakeSocialSdk.hpp`, a fake of each interface on one
+`poll()` that delivers what the test made Discord answer, never inside the call that asked. The SDK itself is kept in `libs/discord/sdk/` (its `README.md`), for Linux
 x86-64 and Windows x64; its library is copied beside the executable, in the build and in the package. On
 another platform (Linux aarch64, the image of the server for linux/arm64), `rtype::discord_sdk` does not exist:
 CMake warns and leaves `r-type_client` out, the server and the tests are built.
+
+### Rich presence
+
+The Discord profile of the player shows that it plays R-Type, and what it does in it, while the Discord client
+runs on its computer. It needs no token, nor a server that offers Discord: the SDK tells the Discord client
+through its local connection (IPC), as the activity of one application, the official one of R-Type
+(`RTYPE_DISCORD_APPLICATION_ID` at the configure, `1565673565163102250` by default: the application the official
+server signs in with, `[discord] client_id`; `discord.presence_application_id` in the [settings](settings.md) to
+change it). Without an application, nothing is shown and the SDK never starts.
+
+Every frame, once the scenes are built, `observeActivity()` (`apps/client/src/Discord/DiscordPresence.hpp`) reads
+what the player does: the game played (`GameSessionSystem`: online or not, the last wave, when it started, the
+players), else the screens open. `describeActivity()` makes the texts, in the language of the game:
+
+| Where | First line | Second line | Party | Time |
+|---|---|---|---|---|
+| The menus, the hangar, the settings | In the hangar | | | |
+| The screens of a server | Online | Choosing a game | | |
+| A solo game | Solo | Wave 7/12 | | since it started |
+| A game online | Online game | Wave 7 | 3 of 4 | since it started |
+| The results of a game online | Online game | Game over | | |
+
+The large image is the ship equipped, its key the code of the ship in lower case (`vx-03`), its code and name
+over it: the images are uploaded under those keys on the *Rich Presence* page of the application. Nothing tells
+where the player is: neither the address of the server nor the name of the game, which another player chose.
+
+`PresenceTracker` sends the changes only, at most one every 4 s, the last one once that time passed: Discord
+limits a presence to 5 updates in 20 s. **Activity on Discord** on the Settings page turns it off, which clears
+the activity at once; `SocialSdkPresence` clears it when the client closes. Discord not running, the SDK answers
+an error, logged by the logger `discord` (info), and the game goes on.
+
+Once the client connects to Discord with a token (`Connection`), `Connect()` clears the activity set before it,
+and the activity is the one of the application of the master: a later step chooses which.
 
 ## RemoteSession
 
 | Direction | What | How often |
 |---|---|---|
 | Client → instance | `INPUT`: the input of the player, stamped with a tick, with the inputs of the 7 ticks before | 60 per second, whatever the frame rate |
+| Client → instance | `VOICE_STATE`: what carries the voice of the player (`setVoiceBackend()`) | Once accepted, then at every change |
+| Client → instance | `VOICE_STATUS`: the player muted, deafened, without a microphone | Once accepted, then at every change |
+| Client → instance | `VOICE`: a frame of the voice of the player (`sendVoice()`) | 50 per second while the player talks |
+| Instance → client | `VOICE_FRAME`: the voice of the others, for `takeVoiceFrames()` or the `GameVoice`; `VOICE_ROSTER`: what carries each voice, `voiceRoster()`; `VOICE_STATUSES`: what each player tells about its voice, `voiceStatuses()` | As they come |
 | Instance → client | `SNAPSHOT` parts and `ENTITIES_DESTROYED`, into a `RemoteWorld` | 30 and as they come |
-| Instance → client | `PLAYER_JOINED`, `PLAYER_LEFT`: the names of the players | When they join and leave |
+| Instance → client | `PLAYER_JOINED`, `PLAYER_LEFT`: the names of the players and their accounts (`playerNames()`, `accountOf()`) | When they join and leave |
 | Instance → client | `GAME_OVER`, `DISCONNECT`, or nothing for 5 seconds: the end | Once |
 
 - **The tick of an input** is the one at which the game should apply it (section 9.2 of the
@@ -257,6 +329,22 @@ CMake warns and leaves `r-type_client` out, the server and the tests are built.
   `GameSessionSystem` draws it as it draws the offline world, and the entities move at the frame rate.
 - **Pausing** does nothing online: the game goes on, and the input sent under the pause menu is empty.
 - **Leaving** sends `DISCONNECT` to the game, when the session is destroyed.
+- **The voice** ([Voice](voice.md)): the session carries it. Its backend is `NONE` until
+  `setVoiceBackend()`; one set before the game accepts the player is told at the acceptance. `sendVoice()`
+  queues a `VOICE`, which leaves with the next datagram, the one of the next `INPUT`; it refuses before the
+  acceptance, after the end and on `NONE`. The frames of the others wait for `takeVoiceFrames()`, 150 at most
+  (a second of three players), the oldest dropped beyond.
+- **The voice of the game**: given `VoiceDevices` (the microphone, the voices played, the preferences of the
+  Voice page and the state of the keys), the session runs a `voice::GameVoice` ([Voice](voice.md#the-voice-of-the-game)), its
+  `VoiceTransport` being the session itself. It is on `GAME` if the voices can be played, `NONE` otherwise; the
+  `GameVoice` joins at `ACCEPTED`, unless the game carries no voice (game protocol 5), gets the players of `PLAYER_JOINED` and `PLAYER_LEFT` and the roster, is
+  polled at each update before the inputs go, after `applyVoice()` gave it the mode, the keys and the volumes
+  ([The talk modes](voice.md#the-talk-modes)), and leaves at the end. `main.cpp` gives the devices through
+  `OnlineScenes`, with the address of the server. At each update, the session also hears each other player as
+  its player chose in the pause menu (`VoicePreferences::players`, under `voiceKey()`), tells the game the
+  status of its player when it changes (`VOICE_STATUS`), keeps its microphone closed while an administrator
+  muted it (`mutedByAdmin()`, from `VOICE_STATUSES`), and gives the HUD the voice of the game
+  (`voiceView()`) ([In the HUD and the pause menu](voice.md#in-the-hud-and-the-pause-menu)).
 
 ## Input clock
 
@@ -417,6 +505,17 @@ shots.apply(snapshot, slot, drawnTick, inputTick); // then, on the world of the 
 - a client trusting no key told the key of the server instead of closed, then welcomed once it trusts it;
 - two clients playing the same game, each moving its own ship and seeing the other's, with the names of the
   players, the world drawn at every frame behind the newest one, and inputs stamped ahead of the world;
+- two clients hearing each other through the game (tag `[voice]`): a backend set before the acceptance told at
+  it, no voice sent to a player on `NONE`, the roster on both, then a frame received with its slot, by the
+  other only; and with fake devices, the microphone of one, turned on, heard from the stream of its slot on the
+  other, and closed once turned off;
+- two clients with Discord on a master with the lobbies of the games (tags `[voice][discord]`), against the fake
+  call of `tests/helpers/FakeSocialSdk.hpp`: the same lobby, each with its id, both on `DISCORD` once their
+  calls connect, the voice of one heard by the other, one back on the voice of the game when its call drops,
+  heard and hearing through the game, then on Discord again once its call is joined again; four clients, two
+  with Discord and two without, each hearing the three others, those on Discord each other through Discord
+  only, and one muted by an administrator heard by none; and a client on a master without the lobbies, which
+  joins none;
 - a game that crashes reported to its player, who can create another one, and a game that stops ending the
   session of its player.
 

@@ -8,6 +8,8 @@
 #include "Accounts/PasswordHasher.hpp"
 #include "FakeDiscord.hpp"
 #include "FakeMailer.hpp"
+#include "FakeSocialSdk.hpp"
+#include "FakeVoiceDevices.hpp"
 #include "Game/RemoteSession.hpp"
 #include "GameServers.hpp"
 #include "LobbyClient.hpp"
@@ -29,18 +31,27 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
 
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <memory>
+#include <numbers>
 #include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
 using namespace std::chrono_literals;
 using rtype::client::LobbyClient;
 using rtype::client::RemoteSession;
+using rtype::client::VoiceDevices;
 using rtype::network::Address;
 using rtype::network::EventLoop;
 using rtype::network::ServerIdentity;
@@ -49,6 +60,7 @@ using testing::waitUntil;
 
 namespace lobby = rtype::lobby;
 namespace game = rtype::game;
+namespace voice = rtype::voice;
 
 namespace
 {
@@ -58,8 +70,16 @@ struct Master {
     EventLoop loop;
     ServerIdentity identity = ServerIdentity::generate();
     rtype::server::Relay relay{Address::loopbackIpv4(0)};
-    rtype::server::Games games{loop, relay, testing::instances()};
-    rtype::server::Lobby lobby{loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games};
+    rtype::server::Games games;
+    rtype::server::Lobby lobby;
+
+    explicit Master(rtype::server::GamesSettings settings = testing::instances())
+        : games(loop, relay, std::move(settings)),
+          lobby(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games)
+    {
+    }
+    Master(const Master &) = delete;
+    Master &operator=(const Master &) = delete;
 
     ~Master()
     {
@@ -69,7 +89,7 @@ struct Master {
 };
 
 /// The last code of an ERROR (lobby protocol 3).
-constexpr std::uint16_t LastErrorCode = static_cast<std::uint16_t>(lobby::ErrorCode::DiscordUnavailable);
+constexpr std::uint16_t LastErrorCode = static_cast<std::uint16_t>(lobby::ErrorCode::DiscordTokenRefused);
 
 /// The password of the accounts of the tests.
 const std::string Password = "correct horse battery";
@@ -93,7 +113,8 @@ struct AccountsMaster {
     std::optional<rtype::server::AccountService> accounts;
     std::optional<rtype::server::Lobby> lobby;
 
-    AccountsMaster(rtype::database::Engine engine, std::string_view name, bool withDiscord = false)
+    AccountsMaster(rtype::database::Engine engine, std::string_view name, bool withDiscord = false,
+                   bool social = false)
         : test(engine, name)
     {
         test.open().migrate(rtype::server::ServerMigrations);
@@ -104,7 +125,9 @@ struct AccountsMaster {
                       .threads = 2, .maxPending = 32, .parameters = {.memory = 64, .passes = 1, .lanes = 1}});
         if (withDiscord) {
             fakeDiscord.emplace();
-            discord.emplace(fakeDiscord->settings(), post);
+            rtype::server::DiscordClientSettings settings = fakeDiscord->settings();
+            settings.discord.social = social;
+            discord.emplace(std::move(settings), post);
         }
         // Limits per address far away: every client of the tests comes from the loopback
         accounts.emplace(loop, *database, *hasher, mailer,
@@ -162,6 +185,7 @@ struct Events {
     std::optional<std::uint32_t> welcomed;
     std::vector<lobby::LeftGameMessage> left;
     std::vector<std::string> messages;
+    std::vector<lobby::DiscordTokenMessage> discordTokens;
     std::optional<std::string> closed;
 
     LobbyClient::Handlers handlers()
@@ -170,6 +194,9 @@ struct Events {
             .onWelcome = [this](std::uint32_t player) { welcomed = player; },
             .onLeftGame = [this](const lobby::LeftGameMessage &message) { left.push_back(message); },
             .onServerMessage = [this](const std::string &text) { messages.push_back(text); },
+            .onProgress = {},
+            .onDiscordToken =
+                [this](const lobby::DiscordTokenMessage &token) { discordTokens.push_back(token); },
             .onClosed = [this](const std::string &reason) { closed = reason; },
             .onUntrusted = {},
             .onSessionExpired = {},
@@ -276,7 +303,7 @@ TEST_CASE("Every error of the master has a message in English and in French", "[
         CAPTURE(language);
         rtype::localization::Localization translations(language);
         translations.load(language, locales / (std::string(language) + ".lang"));
-        for (std::uint16_t code = 1; code <= LastErrorCode + 1; ++code) {
+        for (std::uint16_t code = 1; code <= LastErrorCode; ++code) {
             const std::string_view key = rtype::client::errorKey(static_cast<lobby::ErrorCode>(code));
             CAPTURE(key);
             // A key missing from the catalog is shown as the key itself
@@ -459,6 +486,225 @@ TEST_CASE("Two clients play the same game online, each moving its own ship", "[o
     REQUIRE(play(master.loop, both, [&] { return left && bobSession.isOver(); }));
     CHECK(bobSession.endReason() == "Left the game");
     CHECK_FALSE(aliceSession.isOver());
+}
+
+TEST_CASE("Two clients online hear each other through the game once both have a voice", "[online][voice]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    Events bobEvents;
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
+                    bobEvents.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed() && bob.welcomed(); }));
+    const lobby::GameJoinedMessage aliceGame = create(master.loop, alice, "Voices");
+    const auto bobJoined = answer<LobbyClient::JoinResult>(
+        master.loop, [&](auto done) { bob.joinGame(aliceGame.gameId, std::move(done)); });
+    REQUIRE(bobJoined);
+
+    RemoteSession aliceSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), aliceGame);
+    RemoteSession bobSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort),
+                             std::get<lobby::GameJoinedMessage>(*bobJoined));
+    const std::vector<RemoteSession *> both = {&aliceSession, &bobSession};
+    // Before the game accepted it, the backend is kept and told at the acceptance
+    aliceSession.setVoiceBackend(voice::Backend::Game);
+    const game::VoiceMessage hello{1, false, {std::byte{0xF8}, std::byte{0x01}}};
+    CHECK_FALSE(aliceSession.sendVoice(hello));
+    REQUIRE(play(master.loop, both, [&] { return aliceSession.accepted() && bobSession.accepted(); }));
+
+    // Bob has no voice yet: nothing is sent to him. A few frames of time, so that the game has it before Bob
+    // says he has a voice
+    CHECK(aliceSession.sendVoice({0, false, hello.frame}));
+    CHECK_FALSE(bobSession.sendVoice(hello));
+    int frames = 0;
+    REQUIRE(play(master.loop, both, [&] { return ++frames > 12; }));
+    bobSession.setVoiceBackend(voice::Backend::Game);
+    const game::VoiceRosterMessage roster{{voice::Backend::Game, voice::Backend::Game}};
+    REQUIRE(play(master.loop, both,
+                 [&] { return aliceSession.voiceRoster() == roster && bobSession.voiceRoster() == roster; }));
+    CHECK(bobSession.takeVoiceFrames().empty());
+
+    // Now Alice talks, and Bob receives her frame, with her slot
+    CHECK(aliceSession.sendVoice(hello));
+    std::vector<game::VoiceFrameMessage> heard;
+    REQUIRE(play(master.loop, both, [&] {
+        for (game::VoiceFrameMessage &frame : bobSession.takeVoiceFrames()) {
+            heard.push_back(std::move(frame));
+        }
+        return !heard.empty();
+    }));
+    REQUIRE(heard.size() == 1);
+    CHECK(heard[0].slot == 0);
+    CHECK(heard[0].sequence == 1);
+    CHECK(heard[0].frame == hello.frame);
+    // She never hears herself
+    CHECK(aliceSession.takeVoiceFrames().empty());
+}
+
+TEST_CASE("The microphone of a client online is heard from the stream of its slot on the other",
+          "[online][voice]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    Events bobEvents;
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
+                    bobEvents.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed() && bob.welcomed(); }));
+    const lobby::GameJoinedMessage aliceGame = create(master.loop, alice, "Voices");
+    const auto bobJoined = answer<LobbyClient::JoinResult>(
+        master.loop, [&](auto done) { bob.joinGame(aliceGame.gameId, std::move(done)); });
+    REQUIRE(bobJoined);
+
+    testing::FakeMicrophone aliceMicrophone;
+    testing::FakePlayback alicePlayback;
+    VoiceDevices aliceVoice{.capture = aliceMicrophone, .playback = alicePlayback};
+    testing::FakeMicrophone bobMicrophone;
+    testing::FakePlayback bobPlayback;
+    VoiceDevices bobVoice{.capture = bobMicrophone, .playback = bobPlayback};
+    RemoteSession aliceSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), aliceGame, {},
+                               &aliceVoice);
+    RemoteSession bobSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort),
+                             std::get<lobby::GameJoinedMessage>(*bobJoined), {}, &bobVoice);
+    const std::vector<RemoteSession *> both = {&aliceSession, &bobSession};
+    // Both on the voice of the game once accepted, each knowing the other
+    const game::VoiceRosterMessage roster{{voice::Backend::Game, voice::Backend::Game}};
+    REQUIRE(play(master.loop, both, [&] {
+        return aliceSession.voiceRoster() == roster && bobSession.voiceRoster() == roster &&
+               aliceSession.voice()->participants().size() == 1 &&
+               bobSession.voice()->participants().size() == 1;
+    }));
+    CHECK(bobPlayback.streams[0]);
+    // In push-to-talk by default: the microphone is open, and nothing is sent until the key is held
+    CHECK(aliceMicrophone.isOpen);
+    CHECK(aliceSession.voice()->sentFrames() == 0);
+
+    // Alice holds the key and talks: a frame of her voice every 20 ms
+    aliceVoice.pushToTalk = true;
+    double phase = 0.0;
+    auto nextFrame = std::chrono::steady_clock::now();
+    REQUIRE(play(master.loop, both, [&] {
+        if (std::chrono::steady_clock::now() >= nextFrame) {
+            nextFrame += std::chrono::milliseconds(20);
+            std::array<std::int16_t, voice::FrameSamples> frame{};
+            for (std::int16_t &sample : frame) {
+                phase += 2.0 * std::numbers::pi * 180.0 / voice::SampleRate;
+                sample = static_cast<std::int16_t>(std::sin(phase) * 6000.0 + std::sin(3.0 * phase) * 2000.0);
+            }
+            aliceMicrophone.say(frame);
+        }
+        return bobPlayback.played[0].size() >= 10 * voice::FrameSamples;
+    }));
+    CHECK(aliceMicrophone.isOpen);
+    CHECK(bobSession.voice()->participants().at(0).speaking);
+    // Something heard, not silence
+    double sum = 0.0;
+    for (const std::int16_t sample : bobPlayback.played[0]) {
+        sum += static_cast<double>(sample) * sample;
+    }
+    CHECK(std::sqrt(sum / static_cast<double>(bobPlayback.played[0].size())) > 500.0);
+    // Bob says nothing, and Alice never hears herself
+    CHECK(alicePlayback.played[0].empty());
+    CHECK(alicePlayback.played[1].empty());
+
+    // She mutes herself with its key: closed, and Bob is told
+    aliceVoice.pushToTalk = false;
+    aliceVoice.muted = true;
+    REQUIRE(play(master.loop, both, [&] { return !aliceMicrophone.isOpen; }));
+    REQUIRE(play(master.loop, both, [&] { return bobSession.voice()->participants().at(0).status.muted; }));
+    CHECK(bobSession.voiceStatuses().statuses[0] == voice::Status{.muted = true});
+    CHECK(bobSession.voiceView()->local == rtype::client::LocalVoice{.backend = voice::Backend::Game});
+    CHECK(aliceSession.voiceView()->local.muted);
+
+    // Bob turns Alice down, then mutes her, from his pause menu: kept under her name, a guest
+    const std::optional<std::string> key = bobSession.voiceKey(0);
+    REQUIRE(key);
+    CHECK(*key == rtype::client::playerVoiceKey("", 0, "Alice"));
+    CHECK(bobSession.accountOf(0) == 0u);
+    bobVoice.preferences.players[*key] = {.volume = 0.5f, .muted = false};
+    REQUIRE(play(master.loop, both, [&] { return bobSession.voice()->participants().at(0).volume == 0.5f; }));
+    bobVoice.preferences.players[*key].muted = true;
+    REQUIRE(play(master.loop, both, [&] { return bobSession.voice()->participants().at(0).mutedByMe; }));
+    CHECK(bobPlayback.volume[0] == 0.0f);
+}
+
+TEST_CASE("A client online muted by an administrator closes its microphone and is shown muted to all",
+          "[online][voice]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    Events bobEvents;
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
+                    bobEvents.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed() && bob.welcomed(); }));
+    const lobby::GameJoinedMessage aliceGame = create(master.loop, alice, "Voices");
+    const auto bobJoined = answer<LobbyClient::JoinResult>(
+        master.loop, [&](auto done) { bob.joinGame(aliceGame.gameId, std::move(done)); });
+    REQUIRE(bobJoined);
+
+    testing::FakeMicrophone aliceMicrophone;
+    testing::FakePlayback alicePlayback;
+    VoiceDevices aliceVoice{.capture = aliceMicrophone, .playback = alicePlayback};
+    testing::FakeMicrophone bobMicrophone;
+    testing::FakePlayback bobPlayback;
+    VoiceDevices bobVoice{.capture = bobMicrophone, .playback = bobPlayback};
+    RemoteSession aliceSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), aliceGame, {},
+                               &aliceVoice);
+    RemoteSession bobSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort),
+                             std::get<lobby::GameJoinedMessage>(*bobJoined), {}, &bobVoice);
+    const std::vector<RemoteSession *> both = {&aliceSession, &bobSession};
+    REQUIRE(play(master.loop, both, [&] {
+        return aliceSession.voice()->joined() && bobSession.voice()->participants().size() == 1;
+    }));
+    REQUIRE(aliceMicrophone.isOpen);
+
+    // An administrator mutes Alice: her microphone closes, her HUD and the one of Bob show it
+    REQUIRE(master.games.muteVoice(*alice.playerId(), true));
+    REQUIRE(play(master.loop, both, [&] {
+        return aliceSession.mutedByAdmin() && bobSession.voice()->participants().at(0).status.mutedByAdmin;
+    }));
+    REQUIRE(play(master.loop, both, [&] { return !aliceMicrophone.isOpen; }));
+    CHECK(aliceSession.voiceView()->local.mutedByAdmin);
+    CHECK(rtype::client::voiceIconOf(bobSession.voiceView()->others.at(0)) ==
+          rtype::client::VoiceIcon::MutedByAdmin);
+
+    // Let talk again: her microphone opens again
+    REQUIRE(master.games.muteVoice(*alice.playerId(), false));
+    REQUIRE(play(master.loop, both, [&] { return !aliceSession.mutedByAdmin() && aliceMicrophone.isOpen; }));
+    REQUIRE(play(master.loop, both,
+                 [&] { return !bobSession.voice()->participants().at(0).status.mutedByAdmin; }));
+}
+
+TEST_CASE("A client online in a game without voice opens no microphone, shows no voice and sends none",
+          "[online][voice]")
+{
+    rtype::server::GamesSettings settings = testing::instances();
+    settings.voice.enabled = false;
+    Master master(settings);
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed(); }));
+    const lobby::GameJoinedMessage game = create(master.loop, alice, "Quiet");
+    testing::FakeMicrophone microphone;
+    testing::FakePlayback playback;
+    VoiceDevices devices{.capture = microphone, .playback = playback};
+    devices.pushToTalk = true;
+    RemoteSession session(master.loop, Address::loopbackIpv4(game.udpPort), game, {}, &devices);
+    const std::vector<RemoteSession *> one = {&session};
+    REQUIRE(play(master.loop, one, [&] { return session.accepted(); }));
+    int frames = 0;
+    REQUIRE(play(master.loop, one, [&] { return ++frames > 12; }));
+
+    CHECK_FALSE(session.voice()->joined());
+    CHECK(microphone.opens == 0);
+    CHECK_FALSE(session.voiceView());
+    CHECK_FALSE(session.sendVoice({0, false, {std::byte{0xF8}}}));
+    CHECK(session.voiceRoster() == game::VoiceRosterMessage{});
 }
 
 TEST_CASE("A client is told when its game crashes", "[online]")
@@ -800,6 +1046,73 @@ TEST_CASE("The session token of a server is kept in the settings, readable by th
     CHECK(sessions.forget(address));
     CHECK_FALSE(sessions.forget(address));
     CHECK_FALSE(sessions.token(address));
+
+    // The Discord refresh token beside it, forgotten with it
+    CHECK_FALSE(sessions.discordRefreshToken(address));
+    CHECK(sessions.keep(address, token));
+    CHECK(sessions.keepDiscord(address, "refresh_0123.abc"));
+    CHECK_FALSE(sessions.keepDiscord(address, "not a token"));
+    CHECK(sessions.discordRefreshToken(address) == "refresh_0123.abc");
+    CHECK_FALSE(sessions.discordRefreshToken(rtype::client::serverAddress("other.example.org", 4242)));
+    file.settings.setString("servers.discord.other.example.org:4242", "with a space");
+    CHECK_FALSE(sessions.discordRefreshToken(rtype::client::serverAddress("other.example.org", 4242)));
+    sessions.forgetDiscord(address);
+    CHECK_FALSE(sessions.discordRefreshToken(address));
+    CHECK(sessions.token(address) == token);
+    CHECK(sessions.keepDiscord(address, "refresh_0123.abc"));
+    CHECK(sessions.forget(address));
+    CHECK_FALSE(sessions.discordRefreshToken(address));
+}
+
+TEST_CASE(
+    "On a master with the social features, a player signed in with Discord gets its token, and renews it",
+    "[online][accounts][discord]")
+{
+    FOR_EACH_ENGINE();
+    AccountsMaster master(engine, "client_accounts_discord_social", true, true);
+    const rtype::server::DiscordUser wing{.id = "80351110224678912", .username = "wing"};
+    Events events;
+    const auto client = master.client("Pilot", events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return client->welcomed(); }));
+
+    std::optional<std::variant<lobby::DiscordAuthorizeMessage, lobby::ErrorCode>> authorize;
+    client->discordSignIn([&](const auto &result) { authorize = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return authorize.has_value(); }));
+    REQUIRE(std::holds_alternative<lobby::DiscordAuthorizeMessage>(*authorize));
+    CHECK(std::get<lobby::DiscordAuthorizeMessage>(*authorize).scopes == "identify openid sdk.social_layer");
+    const rtype::server::DiscordAuthorization accepted = master.fakeDiscord->accept(wing);
+    std::optional<LobbyClient::DiscordConfirmResult> confirmed;
+    client->discordConfirm(
+        {.code = accepted.code, .codeVerifier = accepted.codeVerifier, .redirectUri = accepted.redirectUri},
+        [&](const auto &result) { confirmed = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return confirmed.has_value(); }));
+    CHECK(events.discordTokens.empty());
+    std::optional<LobbyClient::SignInResult> created;
+    client->chooseUsername("Wing", [&](const auto &result) { created = result; });
+    REQUIRE(waitUntil(master.loop, [&] { return created.has_value(); }));
+    REQUIRE(std::holds_alternative<lobby::SignedInMessage>(*created));
+    // The token came before SIGNED_IN
+    REQUIRE(events.discordTokens.size() == 1);
+    CHECK(events.discordTokens[0].expiresIn == 604800);
+
+    std::optional<std::optional<lobby::ErrorCode>> renewed;
+    client->discordRefresh(events.discordTokens[0].refreshToken, [&](auto error) { renewed = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return renewed.has_value(); }));
+    CHECK_FALSE(*renewed);
+    REQUIRE(events.discordTokens.size() == 2);
+    CHECK(events.discordTokens[1].accessToken != events.discordTokens[0].accessToken);
+
+    // Spent, or not a token at all
+    std::optional<std::optional<lobby::ErrorCode>> spent;
+    client->discordRefresh(events.discordTokens[0].refreshToken, [&](auto error) { spent = error; });
+    REQUIRE(waitUntil(master.loop, [&] { return spent.has_value(); }));
+    CHECK(*spent == lobby::ErrorCode::DiscordTokenRefused);
+    std::optional<std::optional<lobby::ErrorCode>> malformed;
+    client->discordRefresh("not a token", [&](auto error) { malformed = error; });
+    REQUIRE(malformed);
+    CHECK(*malformed == lobby::ErrorCode::DiscordTokenRefused);
+    CHECK(events.discordTokens.size() == 2);
+    CHECK(client->welcomed());
 }
 
 TEST_CASE(
@@ -891,4 +1204,339 @@ TEST_CASE(
     CHECK_FALSE(client->welcomed());
     rtype::database::Database direct = master.test.open();
     CHECK_FALSE(rtype::server::findAccountByDiscord(direct, wing.id));
+}
+
+TEST_CASE(
+    "Two clients with Discord talk through the Discord lobby of their game, fall back to the voice of the "
+    "game when its call drops, and join it again",
+    "[online][voice][discord]")
+{
+    rtype::server::GamesSettings settings = testing::instances();
+    settings.discordVoice = true;
+    Master master(settings);
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    Events bobEvents;
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
+                    bobEvents.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed() && bob.welcomed(); }));
+    const lobby::GameJoinedMessage aliceGame = create(master.loop, alice, "Voices");
+    const auto bobJoined = answer<LobbyClient::JoinResult>(
+        master.loop, [&](auto done) { bob.joinGame(aliceGame.gameId, std::move(done)); });
+    REQUIRE(bobJoined);
+    const lobby::GameJoinedMessage &bobGame = std::get<lobby::GameJoinedMessage>(*bobJoined);
+    REQUIRE(aliceGame.voiceSecret);
+
+    testing::FakeSocialSdk aliceDiscord;
+    testing::FakeMicrophone aliceMicrophone;
+    testing::FakePlayback alicePlayback;
+    VoiceDevices aliceVoice{
+        .capture = aliceMicrophone, .playback = alicePlayback, .discordCall = &aliceDiscord.call};
+    testing::FakeSocialSdk bobDiscord;
+    testing::FakeMicrophone bobMicrophone;
+    testing::FakePlayback bobPlayback;
+    VoiceDevices bobVoice{.capture = bobMicrophone, .playback = bobPlayback, .discordCall = &bobDiscord.call};
+    RemoteSession aliceSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), aliceGame, {},
+                               &aliceVoice, {}, *alice.playerId());
+    RemoteSession bobSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), bobGame, {}, &bobVoice,
+                             {}, *bob.playerId());
+    const std::vector<RemoteSession *> both = {&aliceSession, &bobSession};
+    const auto playWithDiscord = [&](const std::function<bool()> &condition) {
+        return play(master.loop, both, [&] {
+            aliceDiscord.poll();
+            bobDiscord.poll();
+            return condition();
+        });
+    };
+
+    // Accepted, both join the same lobby, each with the id the master gave it, on the voice of the game
+    // meanwhile
+    REQUIRE(playWithDiscord([&] {
+        return aliceSession.accepted() && bobSession.accepted() && !aliceDiscord.call.secrets.empty() &&
+               !bobDiscord.call.secrets.empty();
+    }));
+    CHECK(aliceDiscord.call.secrets == bobDiscord.call.secrets);
+    CHECK(aliceDiscord.call.secrets.at(0) == rtype::discord::lobbySecret(*aliceGame.voiceSecret));
+    CHECK(aliceDiscord.call.metadata.at(0).at("player") == std::to_string(*alice.playerId()));
+    CHECK_FALSE(aliceSession.onDiscord());
+    // The microphone of the game stays closed while the call connects: Discord opens it
+    int frames = 0;
+    REQUIRE(playWithDiscord([&] { return ++frames > 10; }));
+    CHECK_FALSE(aliceMicrophone.isOpen);
+
+    // Their calls connect: both are on Discord, as the game knows
+    aliceDiscord.call.addMember(2000, *bob.playerId());
+    bobDiscord.call.addMember(1000, *alice.playerId());
+    aliceDiscord.call.connect();
+    bobDiscord.call.connect();
+    const game::VoiceRosterMessage onDiscord{{voice::Backend::Discord, voice::Backend::Discord}};
+    REQUIRE(playWithDiscord([&] {
+        return aliceSession.voiceRoster() == onDiscord && bobSession.voiceRoster() == onDiscord &&
+               bobSession.discordVoice()->participants().size() == 1;
+    }));
+    CHECK(aliceSession.onDiscord());
+    // Told in the pause menu
+    CHECK(aliceSession.voiceView()->local.backend == voice::Backend::Discord);
+    CHECK(aliceSession.voiceView()->others.at(0).backend == voice::Backend::Discord);
+    // The microphone of the game closed: Discord has it
+    CHECK_FALSE(aliceMicrophone.isOpen);
+    CHECK_FALSE(aliceDiscord.call.selfMuted);
+
+    // Alice talks on Discord: Bob hears her from the stream of her slot
+    std::vector<std::int16_t> voice(voice::FrameSamples, 3000);
+    REQUIRE(playWithDiscord([&] {
+        bobDiscord.call.talk(1000, voice);
+        return bobPlayback.played[0].size() >= 5 * voice::FrameSamples;
+    }));
+
+    // Nobody on the game: Alice sends it nothing, her microphone the one of Discord
+    CHECK(aliceSession.capturesThroughDiscord());
+    CHECK(aliceSession.voice()->selfMuted());
+
+    // Bob's call drops: he is back on the voice of the game, his microphone open again
+    bobDiscord.call.fail();
+    const game::VoiceRosterMessage mixed{{voice::Backend::Discord, voice::Backend::Game}};
+    REQUIRE(playWithDiscord([&] { return aliceSession.voiceRoster() == mixed && bobMicrophone.isOpen; }));
+    CHECK_FALSE(bobSession.onDiscord());
+    REQUIRE(bobSession.voice()->participants().size() == 1);
+    CHECK(bobSession.voice()->participants().at(0).backend == voice::Backend::Discord);
+    CHECK(bobPlayback.streams[0]);
+    // Alice hears him through the game now, and sends him what Discord captures of her as VOICE
+    REQUIRE(playWithDiscord([&] { return !aliceSession.voice()->selfMuted(); }));
+    CHECK(aliceSession.playbacks()->source(1) == voice::Backend::Game);
+    CHECK_FALSE(aliceMicrophone.isOpen);
+
+    // A little later, Bob joins the call again, his microphone open meanwhile; connected, back on Discord
+    REQUIRE(bobSession.discordVoice() != nullptr);
+    REQUIRE(playWithDiscord([&] { return bobDiscord.call.secrets.size() == 2; }));
+    CHECK(bobMicrophone.isOpen);
+    bobDiscord.call.addMember(1000, *alice.playerId());
+    bobDiscord.call.connect();
+    REQUIRE(playWithDiscord([&] {
+        return aliceSession.voiceRoster() == onDiscord && bobSession.voiceRoster() == onDiscord &&
+               bobSession.onDiscord();
+    }));
+    CHECK_FALSE(bobMicrophone.isOpen);
+    CHECK(bobSession.playbacks()->source(0) == voice::Backend::Discord);
+
+    // Leaving the game ends the call of Alice
+    alice.leaveGame([] {});
+    REQUIRE(playWithDiscord([&] { return aliceSession.isOver(); }));
+    REQUIRE(playWithDiscord([&] { return aliceDiscord.call.ends > 0; }));
+}
+
+TEST_CASE("In a game of two players on Discord and two on the game, each hears the three others once, and "
+          "one muted by an administrator is heard by none",
+          "[online][voice][discord]")
+{
+    rtype::server::GamesSettings settings = testing::instances();
+    settings.discordVoice = true;
+    Master master(settings);
+
+    /// A player of the game, with Discord or not
+    struct Player {
+        bool withDiscord = false;
+        /// Its id on Discord
+        std::uint64_t user = 0;
+        Events events;
+        std::unique_ptr<LobbyClient> lobby;
+        testing::FakeSocialSdk discord;
+        testing::FakeMicrophone microphone;
+        testing::FakePlayback playback;
+        std::unique_ptr<VoiceDevices> devices;
+        std::unique_ptr<RemoteSession> session;
+        voice::Slot slot = 0;
+    };
+    std::vector<std::unique_ptr<Player>> players;
+    for (const auto &[name, withDiscord] : std::vector<std::pair<std::string, bool>>{
+             {"Alice", true}, {"Bob", true}, {"Carol", false}, {"Dave", false}}) {
+        auto player = std::make_unique<Player>();
+        player->withDiscord = withDiscord;
+        player->user = 1000 + players.size();
+        player->lobby = std::make_unique<LobbyClient>(master.loop, master.lobby.localAddress(),
+                                                      std::vector{master.identity.fingerprint()}, name,
+                                                      player->events.handlers());
+        players.push_back(std::move(player));
+    }
+    REQUIRE(waitUntil(master.loop, [&] {
+        return std::ranges::all_of(players, [](const auto &player) { return player->lobby->welcomed(); });
+    }));
+    const auto created = answer<LobbyClient::JoinResult>(
+        master.loop, [&](auto done) { players[0]->lobby->createGame("Mixed", 4, std::move(done)); });
+    REQUIRE(created);
+    REQUIRE(std::holds_alternative<lobby::GameJoinedMessage>(*created));
+    std::vector<lobby::GameJoinedMessage> joined{std::get<lobby::GameJoinedMessage>(*created)};
+    for (std::size_t i = 1; i < players.size(); ++i) {
+        const auto result = answer<LobbyClient::JoinResult>(
+            master.loop, [&](auto done) { players[i]->lobby->joinGame(joined[0].gameId, std::move(done)); });
+        REQUIRE(result);
+        REQUIRE(std::holds_alternative<lobby::GameJoinedMessage>(*result));
+        joined.push_back(std::get<lobby::GameJoinedMessage>(*result));
+    }
+    for (std::size_t i = 0; i < players.size(); ++i) {
+        Player &player = *players[i];
+        player.devices = std::make_unique<VoiceDevices>(
+            VoiceDevices{.capture = player.microphone,
+                         .playback = player.playback,
+                         .discordCall = player.withDiscord ? &player.discord.call : nullptr});
+        player.session = std::make_unique<RemoteSession>(
+            master.loop, Address::loopbackIpv4(joined[i].udpPort), joined[i], game::GameConfig{},
+            player.devices.get(), std::string{}, *player.lobby->playerId());
+    }
+    // At 60 frames per second, as a client plays: the four on one address, faster, would pass the datagrams
+    // per second the relay of the master allows an address
+    const auto playAll = [&](const std::function<bool()> &condition) {
+        auto frame = std::chrono::steady_clock::now();
+        return waitUntil(master.loop, [&] {
+            if (std::chrono::steady_clock::now() >= frame) {
+                frame += std::chrono::microseconds(16667);
+                for (const auto &player : players) {
+                    player->session->update(1.0f / 60.0f);
+                    player->discord.poll();
+                }
+            }
+            return condition();
+        });
+    };
+    REQUIRE(playAll([&] {
+        return std::ranges::all_of(players, [](const auto &player) {
+            return player->session->accepted() && player->session->voice()->participants().size() == 3;
+        });
+    }));
+    game::VoiceRosterMessage roster;
+    for (const auto &player : players) {
+        player->slot = player->session->localSlot();
+        roster.backends[player->slot] = player->withDiscord ? voice::Backend::Discord : voice::Backend::Game;
+    }
+
+    // The calls of the two with Discord connect, each the other's member
+    for (const auto &player : players) {
+        for (const auto &other : players) {
+            if (player->withDiscord && other->withDiscord && other != player) {
+                player->discord.call.addMember(other->user, *other->lobby->playerId());
+            }
+        }
+        if (player->withDiscord) {
+            player->discord.call.connect();
+        }
+    }
+    REQUIRE(playAll([&] {
+        return std::ranges::all_of(players, [&](const auto &player) {
+            return player->session->voiceRoster() == roster &&
+                   player->session->onDiscord() == player->withDiscord;
+        });
+    }));
+    // On Discord, sending to those on the game what Discord captures
+    for (const auto &player : players) {
+        CHECK(player->session->capturesThroughDiscord() == player->withDiscord);
+    }
+
+    // Each one talks in turn: the three others hear it, the two on Discord each other through Discord only
+    std::vector<std::int16_t> said;
+    const auto talk = [&](Player &speaker, std::size_t frames) {
+        speaker.devices->pushToTalk = true;
+        said.clear();
+        double phase = 0.0;
+        std::size_t sent = 0;
+        auto next = std::chrono::steady_clock::now();
+        const bool done = playAll([&] {
+            if (sent < frames && std::chrono::steady_clock::now() >= next) {
+                next += std::chrono::milliseconds(20);
+                ++sent;
+                std::array<std::int16_t, voice::FrameSamples> frame{};
+                for (std::int16_t &sample : frame) {
+                    phase += 2.0 * std::numbers::pi * 180.0 / voice::SampleRate;
+                    sample =
+                        static_cast<std::int16_t>(std::sin(phase) * 6000.0 + std::sin(3.0 * phase) * 2000.0);
+                }
+                said.insert(said.end(), frame.begin(), frame.end());
+                if (speaker.withDiscord) {
+                    speaker.discord.call.say(frame);
+                    for (const auto &listener : players) {
+                        if (listener.get() != &speaker && listener->withDiscord) {
+                            listener->discord.call.talk(speaker.user, frame);
+                        }
+                    }
+                } else {
+                    speaker.microphone.say(frame);
+                }
+            }
+            return sent == frames;
+        });
+        speaker.devices->pushToTalk = false;
+        // The last frames played, through the jitter buffers
+        const auto settled = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+        (void)playAll([&] { return std::chrono::steady_clock::now() >= settled; });
+        return done;
+    };
+    constexpr std::size_t Frames = 25;
+    for (const auto &speaker : players) {
+        std::vector<std::size_t> before;
+        for (const auto &listener : players) {
+            before.push_back(listener->playback.played[speaker->slot].size());
+        }
+        REQUIRE(talk(*speaker, Frames));
+        for (std::size_t i = 0; i < players.size(); ++i) {
+            const Player &listener = *players[i];
+            if (&listener == speaker.get()) {
+                continue;
+            }
+            const std::vector<std::int16_t> &played = listener.playback.played[speaker->slot];
+            INFO("Player in slot " << int{listener.slot} << " hearing slot " << int{speaker->slot});
+            CHECK(played.size() >= before[i] + 10 * voice::FrameSamples);
+            if (listener.withDiscord && speaker->withDiscord) {
+                // What Discord gave, exactly: nothing of the game besides it
+                CHECK(std::vector<std::int16_t>(played.begin() + static_cast<std::ptrdiff_t>(before[i]),
+                                                played.end()) == said);
+            }
+        }
+        // Never itself
+        CHECK(speaker->playback.played[speaker->slot].empty());
+    }
+
+    // Alice muted by an administrator: none of the three hears her, even through Discord
+    Player &alice = *players[0];
+    REQUIRE(master.games.muteVoice(*alice.lobby->playerId(), true));
+    REQUIRE(playAll([&] {
+        return std::ranges::all_of(players,
+                                   [&](const auto &player) {
+                                       const game::VoiceStatusesMessage &statuses =
+                                           player->session->voiceStatuses();
+                                       return statuses.statuses[alice.slot].mutedByAdmin;
+                                   }) &&
+               alice.discord.call.selfMuted;
+    }));
+    // Not sent to the game either
+    CHECK(alice.session->voice()->selfMuted());
+    std::vector<std::size_t> before;
+    for (const auto &listener : players) {
+        before.push_back(listener->playback.played[alice.slot].size());
+    }
+    REQUIRE(talk(alice, Frames));
+    for (std::size_t i = 1; i < players.size(); ++i) {
+        INFO("Player in slot " << int{players[i]->slot});
+        CHECK(players[i]->playback.played[alice.slot].size() == before[i]);
+    }
+}
+
+TEST_CASE("A client without Discord, or on a master without its lobbies, stays on the voice of the game",
+          "[online][voice][discord]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed(); }));
+    const lobby::GameJoinedMessage game = create(master.loop, alice, "Voices");
+    CHECK_FALSE(game.voiceSecret);
+    testing::FakeSocialSdk discord;
+    testing::FakeMicrophone microphone;
+    testing::FakePlayback playback;
+    VoiceDevices devices{.capture = microphone, .playback = playback, .discordCall = &discord.call};
+    RemoteSession session(master.loop, Address::loopbackIpv4(game.udpPort), game, {}, &devices, {},
+                          *alice.playerId());
+    REQUIRE(play(master.loop, {&session}, [&] { return session.accepted(); }));
+    CHECK(session.discordVoice() == nullptr);
+    CHECK(discord.call.secrets.empty());
 }

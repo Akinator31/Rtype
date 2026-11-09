@@ -117,14 +117,17 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
 OnlineScenes::OnlineScenes(engine::Engine &engine, render::ResourceManager &resources,
                            network::EventLoop &loop, GameScenes &games, const engine::InterfaceStyle &style,
                            localization::Localization &translations, discord::Authorizer &discord,
-                           ShipSelection &ships, std::filesystem::path pictures,
-                           const game::GameConfig &config)
-    : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord), _games(games),
-      _translations(translations), _ships(ships), _config(config), _known(engine.getSettings()),
-      _sessions(engine.getSettings()), _profiles(engine.getSettings(), std::move(pictures)),
+                           discord::Connection &discordConnection, ShipSelection &ships,
+                           std::filesystem::path pictures, const game::GameConfig &config,
+                           VoiceDevices &voice)
+    : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord),
+      _discordConnection(discordConnection), _games(games), _translations(translations), _ships(ships),
+      _config(config), _voice(voice), _known(engine.getSettings()), _sessions(engine.getSettings()),
+      _profiles(engine.getSettings(), std::move(pictures)),
       _sky(resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth)),
       _discordLogo(resources.loadTexture(RTYPE_IMAGE_DISCORD, render::TextureFiltering::Smooth))
 {
+    _discordConnection.onTokenExpiring([this] { refreshDiscord(); });
     declareServerScenes(style);
     declareLobbyScene(style);
     declareAccountScenes(style);
@@ -461,6 +464,7 @@ void OnlineScenes::connect()
             .onServerMessage =
                 [this](const std::string &text) { _engine.showToast(std::format("Server: {}", text)); },
             .onProgress = [this](const lobby::ProgressMessage &progress) { showProgress(progress); },
+            .onDiscordToken = [this](const lobby::DiscordTokenMessage &token) { discordToken(token); },
             .onClosed = [this](const std::string &reason) { lobbyClosed(reason); },
             .onUntrusted = [this](const network::KeyFingerprint &presented) { untrusted(presented); },
             .onSessionExpired =
@@ -533,7 +537,10 @@ void OnlineScenes::joined(const LobbyClient::JoinResult &result)
     }
     try {
         // The game is on the IP address of the master
-        _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config),
+        // The id of the player, for the Discord lobby of the game
+        const std::uint32_t playerId = _lobby ? _lobby->playerId().value_or(0) : 0;
+        _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config,
+                                                    &_voice, _address, playerId),
                     [this] { gameEnded(); });
     } catch (const std::system_error &error) {
         _engine.showToast(std::format("Cannot join the game: {}", error.what()), engine::ToastType::Error);
@@ -612,8 +619,9 @@ void OnlineScenes::forgetLobby()
     if (!_lobby) {
         return;
     }
-    // What Discord would give goes to no connection
+    // What Discord would give goes to no connection, and the Discord of this server is left
     _discord.cancel();
+    _discordConnection.disconnect();
     // Destroyed once the loop runs again: this may be one of its handlers
     std::shared_ptr<LobbyClient> old(std::move(_lobby));
     _loop.post([old] {});

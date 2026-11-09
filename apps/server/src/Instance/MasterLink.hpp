@@ -37,6 +37,7 @@ public:
         std::function<void(const ConfigureMessage &game)> onConfigure;
         std::function<void(const AddPlayerMessage &player)> onAddPlayer;
         std::function<void(const RemovePlayerMessage &player)> onRemovePlayer;
+        std::function<void(const MuteVoiceMessage &mute)> onMuteVoice;
         std::function<void(const ShutdownMessage &shutdown)> onShutdown;
         /// Once, when the link fails: the instance cannot go on without its master.
         std::function<void(const std::string &reason)> onFailed;

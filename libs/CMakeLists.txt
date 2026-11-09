@@ -15,6 +15,10 @@ CPMAddPackage(
 )
 # raylib reads no JPEG by default, and some models (the pedestal of the hangar) have JPEG textures
 target_compile_definitions(raylib PRIVATE SUPPORT_FILEFORMAT_JPG=1)
+# The output at 48 kHz, the rate of the voice, instead of the one of the device: what it plays is the reference
+# of the echo cancellation of the microphone (docs/architecture/voice.md#the-sound-processing), sample for
+# sample. miniaudio converts to the device when it differs
+target_compile_definitions(raylib PRIVATE AUDIO_DEVICE_SAMPLE_RATE=48000)
 
 add_subdirectory(audio)
 add_subdirectory(beat)
@@ -33,3 +37,4 @@ add_subdirectory(physics)
 add_subdirectory(render)
 add_subdirectory(scripting)
 add_subdirectory(shaders)
+add_subdirectory(voice)

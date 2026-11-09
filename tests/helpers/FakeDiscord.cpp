@@ -55,6 +55,9 @@ struct FakeDiscord::Impl {
     std::mutex mutex;
     std::map<std::string, Grant> codes;
     std::map<std::string, rtype::server::DiscordUser> tokens;
+    /// The refresh tokens given, single use as Discord's: each refresh gives a new one.
+    std::map<std::string, rtype::server::DiscordUser> refreshTokens;
+    std::size_t refreshes = 0;
     /// The pictures of the users who accepted, by "id/hash.png", as the CDN names them.
     std::map<std::string, std::string> avatars;
     bool down = false;
@@ -76,6 +79,17 @@ struct FakeDiscord::Impl {
         const std::string grant = form.get("grant_type") != nullptr ? form.get("grant_type") : "";
         if (grant == "client_credentials") {
             return json(200, {{"access_token", "application-token"}, {"token_type", "Bearer"}});
+        }
+        if (grant == "refresh_token") {
+            ++refreshes;
+            const char *refresh = form.get("refresh_token");
+            const auto found = refresh != nullptr ? refreshTokens.find(refresh) : refreshTokens.end();
+            if (found == refreshTokens.end()) {
+                return json(400, {{"error", "invalid_grant"}});
+            }
+            const rtype::server::DiscordUser user = found->second;
+            refreshTokens.erase(found);
+            return grantTokens(user, "identify openid sdk.social_layer");
         }
         ++exchanges;
         const char *code = form.get("code");
@@ -106,9 +120,21 @@ struct FakeDiscord::Impl {
         if (!verified() || redirect == nullptr || std::string(redirect) != granted.redirectUri) {
             return json(400, {{"error", "invalid_grant"}});
         }
+        return grantTokens(granted.user, "identify");
+    }
+
+    /// A new access token and refresh token for a user, as Discord gives them: valid a week.
+    crow::response grantTokens(const rtype::server::DiscordUser &user, const char *scope)
+    {
         const std::string access = randomText();
-        tokens[access] = granted.user;
-        return json(200, {{"access_token", access}, {"token_type", "Bearer"}, {"scope", "identify"}});
+        const std::string refresh = randomText();
+        tokens[access] = user;
+        refreshTokens[refresh] = user;
+        return json(200, {{"access_token", access},
+                          {"token_type", "Bearer"},
+                          {"refresh_token", refresh},
+                          {"expires_in", 604800},
+                          {"scope", scope}});
     }
 
     /// The answer of /users/@me.
@@ -236,6 +262,20 @@ std::size_t FakeDiscord::exchanges() const
 {
     const std::lock_guard lock(_impl->mutex);
     return _impl->exchanges;
+}
+
+std::size_t FakeDiscord::refreshes() const
+{
+    const std::lock_guard lock(_impl->mutex);
+    return _impl->refreshes;
+}
+
+std::string FakeDiscord::refreshTokenOf(const rtype::server::DiscordUser &user)
+{
+    const std::lock_guard lock(_impl->mutex);
+    const std::string refresh = randomText();
+    _impl->refreshTokens[refresh] = user;
+    return refresh;
 }
 
 } // namespace testing

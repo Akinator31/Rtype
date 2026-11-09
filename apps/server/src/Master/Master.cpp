@@ -94,6 +94,14 @@ int runMaster(const MasterOptions &options)
         logger.error("Cannot read the bans of addresses: {}", error.what());
         return Failure;
     }
+    // The mutes of the voice of the accounts too (docs/architecture/administration.md#the-voice)
+    std::vector<VoiceMute> loadedVoiceMutes;
+    try {
+        loadedVoiceMutes = loadVoiceMutes(*database, std::chrono::system_clock::now());
+    } catch (const soci::soci_error &error) {
+        logger.error("Cannot read the mutes of the voice: {}", error.what());
+        return Failure;
+    }
 
     rtype::network::EventLoop loop;
     std::optional<rtype::network::TcpListener> listener;
@@ -183,6 +191,13 @@ int runMaster(const MasterOptions &options)
 
     logger.info("Lobby on TCP {}, games on UDP {} ({} at most)", listener->localAddress(),
                 relay->publicAddress(), options.maxGames);
+    const VoiceRules &voice = options.settings.voice;
+    if (voice.enabled) {
+        logger.info("Voice on: frames of {} bytes, {} per second at most", voice.maxFrameBytes,
+                    voice.maxFramesPerSecond);
+    } else {
+        logger.info("Voice off: the games carry no voice ([voice] enabled = false)");
+    }
     logger.info("Panel on HTTP {}", web->localAddress());
     if (!std::filesystem::is_regular_file(panelDir / "index.html")) {
         logger.info("The panel is not built: no index.html in {}", panelDir.string());
@@ -217,6 +232,8 @@ int runMaster(const MasterOptions &options)
                           .leadingArguments = {},
                           .trailingArguments = {"--log-level", levelArgument(), "--config", config.string()},
                           .maxGames = options.maxGames,
+                          .voice = options.settings.voice,
+                          .discordVoice = discordSettings && discordSettings->discord.social,
                       });
     } catch (const std::system_error &error) {
         logger.error("Cannot prepare the games: {}", error.what());
@@ -227,6 +244,11 @@ int runMaster(const MasterOptions &options)
     bans.setChangeHandler([&bans, &relay] { relay->setBans(bans.list()); });
     if (!loadedBans.empty()) {
         logger.info("{} addresses banned", loadedBans.size());
+    }
+    VoiceMutes voiceMutes(loadedVoiceMutes);
+    games->setVoiceMutes(&voiceMutes);
+    if (!loadedVoiceMutes.empty()) {
+        logger.info("{} accounts muted", loadedVoiceMutes.size());
     }
     // The accounts of the players (docs/architecture/accounts.md#in-the-lobby): declared before the lobby,
     // they outlive it
@@ -273,7 +295,9 @@ int runMaster(const MasterOptions &options)
                                       .maxGames = options.maxGames,
                                       .panelPort = web->localAddress().port(),
                                       .admins = options.settings.admin.admins,
-                                  });
+                                      .voice = options.settings.voice.enabled,
+                                  },
+                                  &voiceMutes);
     games->setObserver(&administration);
     lobby.setObserver(&administration);
     web->setAdministration(&administration);
@@ -300,6 +324,7 @@ int runMaster(const MasterOptions &options)
     web->setPanelAccounts(nullptr);
     lobby.setObserver(nullptr);
     games->setObserver(nullptr);
+    games->setVoiceMutes(nullptr);
     logger.info("Master stopped");
     return clean ? Success : Failure;
 }

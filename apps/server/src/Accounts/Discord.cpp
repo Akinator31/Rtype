@@ -11,12 +11,15 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #endif
+#include "rtype/lobby/Messages.hpp"
+
 #include <crow/json.h>
 #include <curl/curl.h>
 
 #include <algorithm>
 #include <charconv>
 #include <format>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -176,6 +179,24 @@ std::string failure(const Answer &answer)
     return error ? std::format("HTTP {}, {}", answer.status, *error) : std::format("HTTP {}", answer.status);
 }
 
+/// The tokens of an answer of /oauth2/token, if it has them as the Social SDK needs them.
+std::optional<DiscordTokens> tokensOf(const crow::json::rvalue &json)
+{
+    const std::optional<std::string> access = textField(json, "access_token");
+    const std::optional<std::string> refresh = textField(json, "refresh_token");
+    if (!access || !refresh || !json.has("expires_in") ||
+        json["expires_in"].t() != crow::json::type::Number || !rtype::lobby::isValidDiscordToken(*access) ||
+        !rtype::lobby::isValidDiscordToken(*refresh)) {
+        return std::nullopt;
+    }
+    const std::int64_t expiresIn = json["expires_in"].i();
+    if (expiresIn <= 0 || expiresIn > std::numeric_limits<std::uint32_t>::max()) {
+        return std::nullopt;
+    }
+    return DiscordTokens{
+        .accessToken = *access, .refreshToken = *refresh, .expiresIn = static_cast<std::uint32_t>(expiresIn)};
+}
+
 bool isSnowflake(std::string_view id)
 {
     return !id.empty() && id.size() <= 20 &&
@@ -251,17 +272,28 @@ std::uint64_t DiscordClient::applicationId() const
 
 bool DiscordClient::identify(DiscordAuthorization authorization, Done done)
 {
+    return queue(Job{
+        .authorization = std::move(authorization), .refreshToken = std::nullopt, .done = std::move(done)});
+}
+
+bool DiscordClient::refresh(std::string refreshToken, Done done)
+{
+    return queue(Job{.authorization = {}, .refreshToken = std::move(refreshToken), .done = std::move(done)});
+}
+
+bool DiscordClient::queue(Job job)
+{
     {
         const std::lock_guard lock(_shared->mutex);
         if (_shared->pending >= _settings.maxPending) {
-            logger().warning("{} sign-ins waiting for Discord: one more refused", _shared->pending);
+            logger().warning("{} requests waiting for Discord: one more refused", _shared->pending);
             return false;
         }
         ++_shared->pending;
     }
     {
         const std::lock_guard lock(_mutex);
-        _jobs.push_back(Job{.authorization = std::move(authorization), .done = std::move(done)});
+        _jobs.push_back(std::move(job));
     }
     _wake.notify_one();
     return true;
@@ -286,7 +318,7 @@ void DiscordClient::loop()
             job = std::move(_jobs.front());
             _jobs.pop_front();
         }
-        DiscordAnswer answer = ask(job.authorization);
+        DiscordAnswer answer = job.refreshToken ? renew(*job.refreshToken) : ask(job.authorization);
         if (_stopping) {
             return;
         }
@@ -311,26 +343,26 @@ DiscordAnswer DiscordClient::ask(const DiscordAuthorization &authorization) cons
         logger().info("Discord refused a code: {}", failure(token));
         return DiscordFailure::Refused;
     }
-    const std::optional<std::string> accessToken =
-        token.status == 200 ? textField(crow::json::load(token.body), "access_token") : std::nullopt;
+    const crow::json::rvalue tokenJson =
+        token.status == 200 ? crow::json::load(token.body) : crow::json::rvalue();
+    const std::optional<std::string> accessToken = textField(tokenJson, "access_token");
     if (!accessToken) {
         logger().error("Discord gave no token for a code: {}", failure(token));
         return DiscordFailure::Unavailable;
     }
 
-    const Answer me =
-        request(_settings, _settings.apiUrl + "/users/@me", "", false, *accessToken, &_stopping);
-    const crow::json::rvalue user = me.status == 200 ? crow::json::load(me.body) : crow::json::rvalue();
-    const std::optional<std::string> id = textField(user, "id");
-    if (!id || !isSnowflake(*id)) {
-        logger().error("Discord did not tell who signed in: {}", failure(me));
+    std::optional<DiscordUser> me = userOf(*accessToken);
+    if (!me) {
         return DiscordFailure::Unavailable;
     }
-    DiscordUser found{.id = *id,
-                      .username = textField(user, "username").value_or(""),
-                      .displayName = textField(user, "global_name").value_or(""),
-                      .avatarHash = textField(user, "avatar").value_or(""),
-                      .avatar = {}};
+    DiscordUser &found = *me;
+    if (_settings.discord.social) {
+        found.tokens = tokensOf(tokenJson);
+        if (!found.tokens) {
+            // Signed in all the same: its client will not reach the social features of Discord
+            logger().warning("Discord gave no refresh token for {}", found.id);
+        }
+    }
     if (!isAvatarHash(found.avatarHash)) {
         found.avatarHash.clear();
         return found;
@@ -347,6 +379,46 @@ DiscordAnswer DiscordClient::ask(const DiscordAuthorization &authorization) cons
                          picture.status == 200 ? std::string("not a PNG") : failure(picture));
     }
     return found;
+}
+
+std::optional<DiscordUser> DiscordClient::userOf(const std::string &accessToken) const
+{
+    const Answer me = request(_settings, _settings.apiUrl + "/users/@me", "", false, accessToken, &_stopping);
+    const crow::json::rvalue user = me.status == 200 ? crow::json::load(me.body) : crow::json::rvalue();
+    const std::optional<std::string> id = textField(user, "id");
+    if (!id || !isSnowflake(*id)) {
+        logger().error("Discord did not tell who a token is: {}", failure(me));
+        return std::nullopt;
+    }
+    return DiscordUser{.id = *id,
+                       .username = textField(user, "username").value_or(""),
+                       .displayName = textField(user, "global_name").value_or(""),
+                       .avatarHash = textField(user, "avatar").value_or(""),
+                       .avatar = {}};
+}
+
+DiscordAnswer DiscordClient::renew(const std::string &refreshToken) const
+{
+    const Answer token =
+        request(_settings, _settings.apiUrl + "/oauth2/token",
+                "grant_type=refresh_token&refresh_token=" + escape(refreshToken), true, "", &_stopping);
+    const crow::json::rvalue json = token.status == 200 ? crow::json::load(token.body) : crow::json::rvalue();
+    if (token.status == 400 && textField(crow::json::load(token.body), "error") == "invalid_grant") {
+        logger().info("Discord refused a refresh token: {}", failure(token));
+        return DiscordFailure::Refused;
+    }
+    std::optional<DiscordTokens> tokens = tokensOf(json);
+    if (!tokens) {
+        logger().error("Discord gave no token for a refresh: {}", failure(token));
+        return DiscordFailure::Unavailable;
+    }
+    std::optional<DiscordUser> user = userOf(tokens->accessToken);
+    if (!user) {
+        return DiscordFailure::Unavailable;
+    }
+    user->avatarHash.clear();
+    user->tokens = std::move(tokens);
+    return std::move(*user);
 }
 
 } // namespace rtype::server

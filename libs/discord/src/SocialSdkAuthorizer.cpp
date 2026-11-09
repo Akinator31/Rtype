@@ -1,9 +1,8 @@
 #include "rtype/discord/SocialSdkAuthorizer.hpp"
 
+#include "rtype/discord/Session.hpp"
 #include "rtype/log/Logger.hpp"
 
-// The C++ wrappers of the SDK are inline in its header, compiled once: here
-#define DISCORDPP_IMPLEMENTATION
 #include <discordpp.h>
 
 #include <utility>
@@ -23,52 +22,38 @@ const log::Logger &logger()
 } // namespace
 
 struct SocialSdkAuthorizer::State {
-    std::shared_ptr<discordpp::Client> client;
+    Session &session;
     /// The authorization running counts: what comes back for an older one is dropped.
     std::uint64_t attempt = 0;
     bool running = false;
 };
 
-SocialSdkAuthorizer::SocialSdkAuthorizer() : _state(std::make_unique<State>()) {}
+SocialSdkAuthorizer::SocialSdkAuthorizer(Session &session)
+    : _state(std::make_unique<State>(State{.session = session}))
+{
+}
 
 SocialSdkAuthorizer::~SocialSdkAuthorizer()
 {
     cancel();
-    _state->client.reset();
 }
 
-void SocialSdkAuthorizer::authorize(std::uint64_t applicationId, Done done)
+void SocialSdkAuthorizer::authorize(std::uint64_t applicationId, const std::string &scopes, Done done)
 {
     cancel();
     State &state = *_state;
-    if (!state.client) {
-        state.client = std::make_shared<discordpp::Client>();
-        state.client->AddLogCallback(
-            [](std::string message, discordpp::LoggingSeverity severity) {
-                // The SDK logs no secret at these levels: neither the code nor the verifier
-                while (!message.empty() && (message.back() == '\n' || message.back() == '\r')) {
-                    message.pop_back();
-                }
-                if (severity == discordpp::LoggingSeverity::Error) {
-                    logger().error("{}", message);
-                } else {
-                    logger().warning("{}", message);
-                }
-            },
-            discordpp::LoggingSeverity::Warning);
-    }
+    discordpp::Client &client = state.session.client();
     const std::uint64_t attempt = ++state.attempt;
     state.running = true;
-    discordpp::AuthorizationCodeVerifier verifier = state.client->CreateAuthorizationCodeVerifier();
+    discordpp::AuthorizationCodeVerifier verifier = client.CreateAuthorizationCodeVerifier();
     discordpp::AuthorizationArgs args;
     args.SetClientId(applicationId);
-    // The master needs to know who the player is, nothing more
-    args.SetScopes("identify");
+    // What the master asks: who the player is, and the social features when it gives the token
+    args.SetScopes(scopes);
     args.SetCodeChallenge(verifier.Challenge());
-    logger().info("Asking Discord for application {}", applicationId);
-    state.client->Authorize(args, [this, attempt, codeVerifier = verifier.Verifier(),
-                                   done = std::move(done)](discordpp::ClientResult result, std::string code,
-                                                           std::string redirectUri) {
+    logger().info("Asking Discord for application {}, scopes {}", applicationId, scopes);
+    client.Authorize(args, [this, attempt, codeVerifier = verifier.Verifier(), done = std::move(done)](
+                               discordpp::ClientResult result, std::string code, std::string redirectUri) {
         if (attempt != _state->attempt || !_state->running) {
             return;
         }
@@ -89,16 +74,9 @@ void SocialSdkAuthorizer::authorize(std::uint64_t applicationId, Done done)
 void SocialSdkAuthorizer::cancel()
 {
     State &state = *_state;
-    if (state.running && state.client) {
+    if (state.running) {
         state.running = false;
-        state.client->AbortAuthorize();
-    }
-}
-
-void SocialSdkAuthorizer::poll()
-{
-    if (_state->client) {
-        discordpp::RunCallbacks();
+        state.session.client().AbortAuthorize();
     }
 }
 
