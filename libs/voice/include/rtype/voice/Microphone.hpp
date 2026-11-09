@@ -22,6 +22,10 @@ namespace rtype::voice
 /// A microphone unplugged while open is followed: the next read() opens the default one of the system
 /// instead, or the one chosen if it is back.
 ///
+/// Closing never waits: the device is uninitialised on a thread of its own, which owns it until then. With a
+/// Bluetooth headset on PipeWire whose profile another program (Discord) just changed, that can take long, or
+/// never end: the game goes on, and the next open() is another device.
+///
 /// @code
 /// voice::Microphone microphone;
 /// microphone.setDevice(preferences.inputDevice);    // "" for the default of the system

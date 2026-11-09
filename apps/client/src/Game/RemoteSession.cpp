@@ -84,7 +84,7 @@ std::string reasonOf(const network::SessionEnd &end)
 
 RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &game,
                              const lobby::GameJoinedMessage &joined, const game::GameConfig &config,
-                             VoiceDevices *voiceDevices, std::string server)
+                             VoiceDevices *voiceDevices, std::string server, std::uint32_t playerId)
     : _socket(loop, game.isIpv6() ? network::Address::anyIpv6(0) : network::Address::anyIpv4(0)), _game(game),
       _server(std::move(server)),
       _session(joined.sessionId, network::DatagramKey(joined.clientKey),
@@ -97,7 +97,14 @@ RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &g
         _voice = std::make_unique<voice::GameVoice>(transport, voiceDevices->capture, voiceDevices->playback,
                                                     voiceDevices->loopback);
         // Without an output, no voice: the player neither hears nor is heard
-        setVoiceBackend(voiceDevices->playback.available() ? voice::Backend::Game : voice::Backend::None);
+        const bool output = voiceDevices->playback.available();
+        setVoiceBackend(output ? voice::Backend::Game : voice::Backend::None);
+        // A player with Discord, in a game that has its lobby: its call, once accepted
+        if (output && voiceDevices->discordCall != nullptr && joined.voiceSecret && playerId != 0) {
+            _discord =
+                std::make_unique<discord::DiscordVoice>(*voiceDevices->discordCall, voiceDevices->playback,
+                                                        discord::lobbySecret(*joined.voiceSecret), playerId);
+        }
     }
     _weapon = playerWeapon(config);
     if (_weapon) {
@@ -139,6 +146,7 @@ void RemoteSession::accept(std::span<const std::byte> payload)
         // The server turned the voice off: none sent, none shown
         logger().info("No voice in this game: the server turned it off");
         _voiceBackend = voice::Backend::None;
+        _discord.reset();
         return;
     }
     if (_voiceBackend != voice::Backend::None) {
@@ -146,6 +154,11 @@ void RemoteSession::accept(std::span<const std::byte> payload)
     }
     if (_voice) {
         _voice->join({.self = _accepted->slot});
+    }
+    // On the voice of the game until the call of Discord is connected
+    if (_discord) {
+        _discord->join({.self = _accepted->slot});
+        _discordSince = voice::TalkClock::now();
     }
 }
 
@@ -192,19 +205,6 @@ std::vector<voice::VoiceTransport::Incoming> RemoteSession::receive()
     return frames;
 }
 
-void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushToTalk)
-{
-    const VoicePreferences &preferences = devices.preferences;
-    const bool activity = preferences.mode == voice::TalkMode::VoiceActivity;
-    voice.setDeafened(devices.deafened);
-    voice.setSelfMute(preferences.mode == voice::TalkMode::Off || devices.muted || devices.deafened);
-    voice.setVoiceActivity(activity ? std::optional<float>(preferences.threshold) : std::nullopt);
-    voice.setTalking(activity || (preferences.mode == voice::TalkMode::PushToTalk && pushToTalk));
-    voice.setInputVolume(preferences.inputVolume);
-    voice.setOutputVolume(preferences.voiceVolume);
-    voice.setProcessing(preferences.processing);
-}
-
 void RemoteSession::updateVoice()
 {
     // Without the voice of the game, nothing is opened, sent nor told
@@ -212,24 +212,91 @@ void RemoteSession::updateVoice()
         return;
     }
     if (_over) {
+        _discord.reset();
+        _onDiscord = false;
         _voice->leave();
         _devices->microphoneSilent = false;
         return;
     }
     const voice::TalkClock::time_point now = voice::TalkClock::now();
     _pushToTalk.update(_devices->pushToTalk, now);
-    applyVoice(*_voice, *_devices, _pushToTalk.talking(now));
-    // Muted by an administrator: the game drops its voice, the microphone stays closed
-    if (mutedByAdmin()) {
-        _voice->setSelfMute(true);
+    const bool talking = _pushToTalk.talking(now);
+    updateDiscord(now);
+    if (_onDiscord) {
+        applyVoice(*_discord, *_devices, talking);
+        // Muted by an administrator: its microphone closed on Discord too
+        if (mutedByAdmin()) {
+            _discord->setSelfMute(true);
+        }
+        applyPlayerVoices(*_discord);
+        _discord->poll();
+        // Discord carries the voices: those of the game are not played
+        (void)takeVoiceFrames();
+        _devices->microphoneSilent = false;
+    } else {
+        applyVoice(*_voice, *_devices, talking);
+        // Muted by an administrator: the game drops its voice, the microphone stays closed. While the call of
+        // Discord connects, closed too: Discord takes it
+        if (mutedByAdmin() || _discord) {
+            _voice->setSelfMute(true);
+        }
+        applyPlayerVoices(*_voice);
+        _voice->poll(now);
+        _devices->microphoneSilent = _voice->microphoneSilent();
     }
-    applyPlayerVoices();
-    _voice->poll(now);
-    _devices->microphoneSilent = _voice->microphoneSilent();
     tellVoiceStatus();
 }
 
-void RemoteSession::applyPlayerVoices()
+void RemoteSession::updateDiscord(voice::TalkClock::time_point now)
+{
+    if (!_discord || !_discord->joined()) {
+        return;
+    }
+    if (!_onDiscord && !_discord->connected() && !_discord->failed() &&
+        now - _discordSince >= DiscordJoinTimeout) {
+        logger().info("The call of Discord does not connect: the voice of the game");
+        _discord.reset();
+        return;
+    }
+    if (_discord->failed()) {
+        const bool was = _onDiscord;
+        if (was) {
+            logger().info("The call of Discord dropped: the voice of the game takes over");
+        } else {
+            logger().info("No call of Discord: the voice of the game");
+        }
+        _discord.reset();
+        _onDiscord = false;
+        if (was) {
+            joinGameVoice();
+            setVoiceBackend(voice::Backend::Game);
+        }
+        return;
+    }
+    if (!_onDiscord && _discord->connected()) {
+        // Its microphone and streams closed before Discord takes them
+        _voice->leave();
+        _onDiscord = true;
+        setVoiceBackend(voice::Backend::Discord);
+    }
+}
+
+void RemoteSession::joinGameVoice()
+{
+    _voice->join({.self = _accepted->slot});
+    for (const auto &[slot, name] : _names) {
+        if (slot == _accepted->slot || slot >= _voiceRoster.backends.size()) {
+            continue;
+        }
+        _voice->addParticipant(slot);
+        _voice->setBackend(slot, _voiceRoster.backends[slot]);
+        if (slot < _voiceStatuses.statuses.size()) {
+            _voice->setStatus(slot, _voiceStatuses.statuses[slot]);
+        }
+    }
+}
+
+void RemoteSession::applyPlayerVoices(voice::VoiceChannel &channel)
 {
     for (const auto &[slot, name] : _names) {
         if (_accepted && slot == _accepted->slot) {
@@ -239,8 +306,8 @@ void RemoteSession::applyPlayerVoices()
         const auto &players = _devices->preferences.players;
         const auto found = key ? players.find(*key) : players.end();
         const PlayerVoice choice = found == players.end() ? PlayerVoice{} : found->second;
-        _voice->setParticipantVolume(slot, choice.volume);
-        _voice->setParticipantMute(slot, choice.muted);
+        channel.setParticipantVolume(slot, choice.volume);
+        channel.setParticipantMute(slot, choice.muted);
     }
 }
 
@@ -249,9 +316,12 @@ void RemoteSession::tellVoiceStatus()
     if (!_accepted || _over) {
         return;
     }
-    const voice::Status status{.muted = _voice->selfMuted(),
-                               .deafened = _voice->deafened(),
-                               .noMicrophone = _voice->microphoneMissing()};
+    const voice::Status status = _onDiscord ? voice::Status{.muted = _discord->selfMuted(),
+                                                            .deafened = _discord->deafened(),
+                                                            .noMicrophone = _discord->microphoneMissing()}
+                                            : voice::Status{.muted = _voice->selfMuted(),
+                                                            .deafened = _voice->deafened(),
+                                                            .noMicrophone = _voice->microphoneMissing()};
     if (status == _toldStatus) {
         return;
     }
@@ -287,13 +357,22 @@ bool RemoteSession::mutedByAdmin() const
 
 std::optional<VoiceView> RemoteSession::voiceView() const
 {
+    if (_onDiscord) {
+        return VoiceView{.local = {.transmitting = _discord->transmitting(),
+                                   .muted = _discord->selfMuted(),
+                                   .deafened = _discord->deafened(),
+                                   .mutedByAdmin = mutedByAdmin(),
+                                   .backend = _voiceBackend},
+                         .others = _discord->participants()};
+    }
     if (!_voice || !_voice->joined()) {
         return std::nullopt;
     }
     return VoiceView{.local = {.transmitting = _voice->transmitting(),
                                .muted = _voice->selfMuted(),
                                .deafened = _voice->deafened(),
-                               .mutedByAdmin = mutedByAdmin()},
+                               .mutedByAdmin = mutedByAdmin(),
+                               .backend = _voiceBackend},
                      .others = _voice->participants()};
 }
 
@@ -307,7 +386,8 @@ std::vector<game::VoiceFrameMessage> RemoteSession::takeVoiceFrames()
 
 RemoteSession::~RemoteSession()
 {
-    // The microphone and the voices closed before the goodbye
+    // The call of Discord, the microphone and the voices closed before the goodbye
+    _discord.reset();
     _voice.reset();
     if (_session.state() == network::ClientSession::State::Connected ||
         _session.state() == network::ClientSession::State::Connecting) {
@@ -368,6 +448,10 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
             if (_voice) {
                 _voice->addParticipant(joined->slot);
             }
+            if (_discord) {
+                _discord->addParticipant(joined->slot);
+                _discord->setPlayerId(joined->slot, joined->playerId);
+            }
         }
         return;
     case game::message_type::PlayerLeft:
@@ -376,6 +460,9 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
             _accounts.erase(left->slot);
             if (_voice) {
                 _voice->removeParticipant(left->slot);
+            }
+            if (_discord) {
+                _discord->removeParticipant(left->slot);
             }
         }
         return;
@@ -406,6 +493,9 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
             if (_voice) {
                 for (voice::Slot slot = 0; slot < roster->backends.size(); ++slot) {
                     _voice->setBackend(slot, roster->backends[slot]);
+                    if (_discord) {
+                        _discord->setBackend(slot, roster->backends[slot]);
+                    }
                 }
             }
         }
@@ -416,6 +506,9 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
             if (_voice) {
                 for (voice::Slot slot = 0; slot < statuses->statuses.size(); ++slot) {
                     _voice->setStatus(slot, statuses->statuses[slot]);
+                    if (_discord) {
+                        _discord->setStatus(slot, statuses->statuses[slot]);
+                    }
                 }
             }
         }

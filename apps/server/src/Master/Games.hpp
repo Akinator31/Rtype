@@ -48,6 +48,9 @@ struct GamesSettings {
     std::chrono::milliseconds statusTimeout{std::chrono::seconds(3)};
     /// What every game does with the voice: `[voice]` of the settings, given in CONFIGURE.
     VoiceRules voice{};
+    /// Every game has a Discord lobby for the voice of its players with Discord (`[discord] social`): its
+    /// secret goes in GAME_JOINED (lobby protocol 7).
+    bool discordVoice = false;
 };
 
 /// Where a game stands, as its instance last said (GAME_STATUS).
@@ -84,9 +87,10 @@ struct LobbyPlayer {
 ///   for its READY: only then is the creator added and answered. No place: SERVER_FULL. No READY in time, or
 ///   an instance that cannot start: GAME_START_FAILED, and the instance is killed.
 /// - **Joining** adds a player to a game that is ready: it gets a session and its keys, given to the instance
-///   (ADD_PLAYER) before the player (GAME_JOINED). A session id is random, never 0, and unique across the
-///   whole master: it names one player of one game, and stays taken until the instance of its game exits, so
-///   that an instance never sees the same id twice.
+///   (ADD_PLAYER) before the player (GAME_JOINED), with the secret of the Discord lobby of the game when
+///   GamesSettings::discordVoice (the same for all its players). A session id is random, never 0, and unique
+///   across the whole master: it names one player of one game, and stays taken until the instance of its game
+///   exits, so that an instance never sees the same id twice.
 /// - **A game without players** is shut down (SHUTDOWN (EMPTY)).
 /// - **An instance that dies**, or closes its connection, without GAME_OVER has crashed: its players are told
 ///   (LEFT_GAME (GAME_CRASHED)). A game over is told too (LEFT_GAME (GAME_OVER)).

@@ -832,3 +832,35 @@ TEST_CASE("A game of a master whose voice is off tells its clients so", "[games]
     CHECK_FALSE(alice.accepted->voice);
     CHECK_FALSE(master.games.adminGames().at(0).voice);
 }
+
+TEST_CASE("Every game of a master with the social features of Discord has the secret of its voice lobby, the "
+          "same for its players",
+          "[games][voice]")
+{
+    // Without them, no secret
+    {
+        MasterFixture master;
+        auto alice = master.player("Alice");
+        alice->send(message_type::CreateGame, encode(CreateGameMessage{"Bydo hunters", 2}));
+        CHECK_FALSE(master.joined(*alice, 1).voiceSecret.has_value());
+    }
+    GamesSettings settings = instances();
+    settings.discordVoice = true;
+    MasterFixture master(settings);
+    auto alice = master.player("Alice");
+    auto bob = master.player("Bob");
+    auto carol = master.player("Carol");
+    alice->send(message_type::CreateGame, encode(CreateGameMessage{"Bydo hunters", 2}));
+    const GameJoinedMessage aliceGame = master.joined(*alice, 1);
+    REQUIRE(aliceGame.voiceSecret.has_value());
+    bob->send(message_type::JoinGame, encode(JoinGameMessage{aliceGame.gameId}));
+    const GameJoinedMessage bobGame = master.joined(*bob, 1);
+    CHECK(bobGame.voiceSecret == aliceGame.voiceSecret);
+    // Another game, another lobby
+    carol->send(message_type::CreateGame, encode(CreateGameMessage{"Another", 1}));
+    const GameJoinedMessage carolGame = master.joined(*carol, 1);
+    REQUIRE(carolGame.voiceSecret.has_value());
+    CHECK(carolGame.voiceSecret != aliceGame.voiceSecret);
+    // Neither the keys of the sessions
+    CHECK(*aliceGame.voiceSecret != aliceGame.clientKey);
+}

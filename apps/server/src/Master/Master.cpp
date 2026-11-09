@@ -233,6 +233,7 @@ int runMaster(const MasterOptions &options)
                           .trailingArguments = {"--log-level", levelArgument(), "--config", config.string()},
                           .maxGames = options.maxGames,
                           .voice = options.settings.voice,
+                          .discordVoice = discordSettings && discordSettings->discord.social,
                       });
     } catch (const std::system_error &error) {
         logger.error("Cannot prepare the games: {}", error.what());

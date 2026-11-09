@@ -104,7 +104,7 @@ add_library(r-type_client_core STATIC
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
-    PUBLIC rtype::audio rtype::discord rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
+    PUBLIC rtype::audio rtype::discord rtype::discord_voice rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
            rtype::log rtype::network rtype::physics rtype::render rtype::voice_client
     PRIVATE rtype_options)
 

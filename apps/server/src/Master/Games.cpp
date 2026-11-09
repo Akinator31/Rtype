@@ -61,6 +61,8 @@ struct Games::Game {
     std::string name;
     std::uint8_t maxPlayers = 1;
     Secret secret{};
+    /// The secret of its Discord lobby, with GamesSettings::discordVoice. Never logged.
+    std::optional<Secret> voiceSecret;
     std::optional<Process> process;
     State state = State::Starting;
     /// The connection of the instance, once it presented itself.
@@ -157,6 +159,9 @@ void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMess
     game.name = request.name;
     game.maxPlayers = request.maxPlayers;
     game.secret = rtype::network::randomBytes<32>();
+    if (_settings.discordVoice) {
+        game.voiceSecret = rtype::network::randomBytes<32>();
+    }
 
     std::vector<std::string> arguments = _settings.leadingArguments;
     for (std::string argument : {std::string("--instance"), std::string("--id"), std::to_string(game.id),
@@ -225,7 +230,8 @@ rtype::lobby::GameJoinedMessage Games::addPlayer(Game &game, const LobbyPlayer &
     logger().info("{} ({}) joins {} ({}/{})", player.name, player.id, game.describe(), game.members.size(),
                   game.maxPlayers);
     changed(game);
-    return {game.id, _relay.publicAddress().port(), session, added.clientKey, added.serverKey};
+    return {game.id,         _relay.publicAddress().port(), session, added.clientKey, added.serverKey,
+            game.voiceSecret};
 }
 
 Games::JoinResult Games::join(const LobbyPlayer &player, std::uint32_t gameId)

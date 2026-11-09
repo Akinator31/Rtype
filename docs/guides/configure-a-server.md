@@ -120,7 +120,7 @@ else.
 | | `from` | | The sender of the mails, `R-Type <rtype@example.org>` or `rtype@example.org`: its address is also the sender SMTP announces. Required |
 | `[discord]` | `client_id` | | The id of the Discord application, its digits. Required |
 | | `client_secret_file` | | The file of its secret. Required |
-| | `social` | `false` | The players who sign in with Discord get their Discord token, which the Social SDK of the game needs for the voice and the friends of Discord ([ADR 0034](../decisions/0034-discord-token-in-the-client.md)): the server asks `identify openid sdk.social_layer` instead of `identify` ([Set up accounts](set-up-accounts.md#the-social-features-of-discord)) |
+| | `social` | `false` | The players who sign in with Discord get their Discord token, which the Social SDK of the game needs for the voice and the friends of Discord ([ADR 0034](../decisions/0034-discord-token-in-the-client.md)): the server asks `identify openid sdk.social_layer` instead of `identify` ([Set up accounts](set-up-accounts.md#the-social-features-of-discord)), and every game has a Discord lobby for the voice of its players connected to Discord |
 | `[voice]` | `enabled` | `true` | Whether the games carry the voice chat of their players. `false`: the clients show no voice and send none |
 | | `max_frame_bytes` | 160 | The largest frame of voice a game forwards, from 1 to 160 bytes: a voice is 40 to 80 |
 | | `max_frames_per_second` | 60 | The frames of one player a game forwards per second, from 50 to 120: a voice is 50 |
@@ -145,7 +145,10 @@ checked, and not used.
 which forwards it to the other players without decoding it ([Voice](../architecture/voice.md#the-rules-of-the-server)).
 The server keeps none of it: no recording, no log of what is said, so a voice cannot be reported, and an
 administrator cannot hear what a player said. What an administrator can do is mute a player, for the rest of
-its game or its account for a time, from the panel ([Administer a server](administer-a-server.md)).
+its game or its account for a time, from the panel ([Administer a server](administer-a-server.md)). With
+`[discord] social`, the players connected to Discord talk in the Discord lobby of their game instead: Discord
+carries their voice, not the server, whose mute closes their microphone and silences them for the others of the
+game, without removing them from the lobby.
 
 ## Result
 

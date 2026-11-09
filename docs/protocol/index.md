@@ -99,9 +99,10 @@ keys of the game. It then talks to the game directly, over encrypted datagrams.*
 
 ## 4. Versioning
 
-The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **6** (version 2 adds the
+The lobby protocol has its version, a `u16` sent by the client in `HELLO`, currently **7** (version 2 adds the
 messages of the administrators, version 3 those of the player accounts, version 4 the profiles, version 5
-`PROGRESS`, version 6 the Discord token of the player, [lobby](lobby.md)). The game protocol has its own, in the
+`PROGRESS`, version 6 the Discord token of the player, version 7 the secret of the Discord lobby of a game in
+`GAME_JOINED`, [lobby](lobby.md)). The game protocol has its own, in the
 header of every datagram (as a `u8`), currently **5** (version 2 adds the `Ack delay` of the body, and to
 `SNAPSHOT` the input lead, the weapon of the ship of the client and the age of the shots; `ENTITIES_DESTROYED`
 becomes unreliable, sent again with the snapshots; the messages of the voice, new types, came without a new

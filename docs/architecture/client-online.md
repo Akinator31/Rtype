@@ -19,8 +19,8 @@ apps/client/src/
     KnownProfiles.cpp  the account remembered for each server, and the pictures kept on disk
   Discord/
     DiscordPresence.cpp  the activity of the player in its Discord profile, from the scenes and the game
-  main.cpp             the discord::Session of libs/discord, polled every frame, its SocialSdkAuthorizer and
-                       its SocialSdkPresence
+  main.cpp             the discord::Session of libs/discord, polled every frame, its SocialSdkAuthorizer,
+                       its SocialSdkPresence, its SocialSdkConnection and its SocialSdkVoiceCall
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn a little in the past, between the snapshots around that time
@@ -234,6 +234,11 @@ by the token of `HELLO` at the next connection, or when Discord says the token e
 connection to Discord ends when the player leaves the server. Once connected, Discord clears the activity shown
 before, and the client shows it again, as the application of the master.
 
+**The voice of a game**: connected to Discord, the client joins the Discord lobby of each game it plays with the
+secret of `GAME_JOINED` (lobby protocol 7) and the id `WELCOME` gave it, and talks there once the call is
+connected; without the connection, or a call that fails, it talks through the game
+([Voice](voice.md#the-voice-of-discord)).
+
 ### Profiles
 
 Signed in, by a token or by a sign-in, the client asks `GET_PROFILE` for its account: its Discord names and the
@@ -247,15 +252,17 @@ there.
 servers met in the Online menu show who will be signed in, with the picture, before connecting. It is forgotten
 at sign-out and at the deletion of the account; the pictures stay, as another server may show them.
 
-`libs/discord` is two targets, so that the tests never load the library of Discord: `rtype::discord`, the
-interfaces, one per feature, which the client and its tests know, and `rtype::discord_sdk`, their
-implementations, linked by the executable `r-type_client` alone.
+`libs/discord` is three targets, so that the tests never load the library of Discord: `rtype::discord`, the
+interfaces, one per feature, which the client and its tests know; `rtype::discord_voice`, the voice of a game
+built on one of them (`DiscordVoice`, [Voice](voice.md#the-voice-of-discord)), without the SDK; and
+`rtype::discord_sdk`, their implementations, linked by the executable `r-type_client` alone.
 
 | Interface | Feature | Implementation |
 |---|---|---|
 | `Authorizer` | the sign-in, above | `SocialSdkAuthorizer` |
 | `Presence` | the activity of the player in its Discord profile, without a token ([below](#rich-presence)) | `SocialSdkPresence` |
 | `Connection` | the connection with the token of the player, which lobbies and voice need ([above](#discord)) | `SocialSdkConnection` |
+| `VoiceCall` | the Discord lobby of a game, from the secret of `GAME_JOINED`, and its call ([Voice](voice.md#the-voice-of-discord)) | `SocialSdkVoiceCall` |
 
 The implementations share **one `discordpp::Client`**, owned by `discord::Session`: its log callback (the logger
 `discord`, warnings and errors only), and `poll()`, the `RunCallbacks()` of the SDK, called once per frame by the
@@ -502,6 +509,10 @@ shots.apply(snapshot, slot, drawnTick, inputTick); // then, on the world of the 
   it, no voice sent to a player on `NONE`, the roster on both, then a frame received with its slot, by the
   other only; and with fake devices, the microphone of one, turned on, heard from the stream of its slot on the
   other, and closed once turned off;
+- two clients with Discord on a master with the lobbies of the games (tags `[voice][discord]`), against the fake
+  call of `tests/helpers/FakeSocialSdk.hpp`: the same lobby, each with its id, both on `DISCORD` once their
+  calls connect, the voice of one heard by the other, one back on the voice of the game when its call drops; and
+  a client on a master without the lobbies, which joins none;
 - a game that crashes reported to its player, who can create another one, and a game that stops ending the
   session of its player.
 

@@ -8,10 +8,13 @@
 #include "rtype/discord/Authorizer.hpp"
 #include "rtype/discord/Connection.hpp"
 #include "rtype/discord/Presence.hpp"
+#include "rtype/discord/VoiceCall.hpp"
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -164,12 +167,118 @@ public:
     }
 };
 
+/// The lobby of a game and its call: the test connects it, makes it fail, puts members in it and has them
+/// talk. What the game asks of the call is kept.
+class FakeVoiceCall final : public rtype::discord::VoiceCall
+{
+    FakeCallbacks &_callbacks;
+    rtype::discord::CallStatus _status = rtype::discord::CallStatus::Idle;
+    /// Each start() counts: what is answered for an older one is dropped, as with the SDK.
+    std::uint64_t _attempt = 0;
+
+    void change(rtype::discord::CallStatus status)
+    {
+        _callbacks.post([this, status, attempt = _attempt] {
+            if (attempt == _attempt && _status != rtype::discord::CallStatus::Idle) {
+                _status = status;
+            }
+        });
+    }
+
+public:
+    /// The secrets and metadata of every start(), in order.
+    std::vector<std::string> secrets;
+    std::vector<std::map<std::string, std::string>> metadata;
+    /// Where the voices received go, as the SDK keeps it until the call ends.
+    Received received;
+    int ends = 0;
+    std::vector<rtype::discord::CallMember> others;
+    bool selfSpeaking = false;
+    bool selfMuted = false;
+    bool selfDeafened = false;
+    rtype::discord::CallTalkMode mode = rtype::discord::CallTalkMode::PushToTalk;
+    float threshold = 0.0f;
+    bool pushToTalk = false;
+    float inputVolume = 1.0f;
+    bool noiseSuppression = false;
+    bool gainControl = false;
+    /// Without the connection of the token, start() fails at once, as the SDK does.
+    bool discordConnected = true;
+
+    explicit FakeVoiceCall(FakeCallbacks &callbacks) : _callbacks(callbacks) {}
+
+    void start(const std::string &secret, const std::map<std::string, std::string> &asked,
+               Received sink) override
+    {
+        end();
+        ++_attempt;
+        secrets.push_back(secret);
+        metadata.push_back(asked);
+        if (!discordConnected) {
+            _status = rtype::discord::CallStatus::Failed;
+            return;
+        }
+        _status = rtype::discord::CallStatus::Joining;
+        received = std::move(sink);
+    }
+
+    void end() override
+    {
+        if (_status == rtype::discord::CallStatus::Idle) {
+            return;
+        }
+        ++_attempt;
+        ++ends;
+        _status = rtype::discord::CallStatus::Idle;
+        received = nullptr;
+        others.clear();
+    }
+
+    [[nodiscard]] rtype::discord::CallStatus status() const override { return _status; }
+    [[nodiscard]] std::vector<rtype::discord::CallMember> members() const override { return others; }
+    [[nodiscard]] bool speaking() const override { return selfSpeaking; }
+    void setSelfMute(bool muted) override { selfMuted = muted; }
+    void setSelfDeaf(bool deafened) override { selfDeafened = deafened; }
+    void setTalkMode(rtype::discord::CallTalkMode talkMode, float level) override
+    {
+        mode = talkMode;
+        threshold = level;
+    }
+    void setPushToTalk(bool active) override { pushToTalk = active; }
+    void setInputVolume(float volume) override { inputVolume = volume; }
+    void setProcessing(bool noise, bool gain) override
+    {
+        noiseSuppression = noise;
+        gainControl = gain;
+    }
+
+    /// The lobby is joined and the call connected: Connected at the next poll().
+    void connect() { change(rtype::discord::CallStatus::Connected); }
+    /// The lobby cannot be joined, or the call drops: Failed at the next poll().
+    void fail() { change(rtype::discord::CallStatus::Failed); }
+    /// A member of the lobby, connected to the call, with the id the master gave its player.
+    void addMember(std::uint64_t userId, std::uint32_t playerId)
+    {
+        others.push_back(
+            {.userId = userId, .metadata = {{"player", std::to_string(playerId)}}, .speaking = false});
+    }
+    /// A member talks: its samples, as the audio thread of Discord gives them.
+    void talk(std::uint64_t userId, std::span<const std::int16_t> samples, std::int32_t rate = 48000,
+              std::size_t channels = 1)
+    {
+        if (received) {
+            received(userId, samples, rate, channels);
+        }
+    }
+};
+
 /// Every feature of Discord, on one poll(), as the client builds them on one rtype::discord::Session.
 struct FakeSocialSdk {
     FakeCallbacks callbacks;
     FakeAuthorizer authorizer{callbacks};
     FakePresence presence;
     FakeConnection connection{callbacks};
+    FakeVoiceCall call{callbacks};
 
     void poll() { callbacks.poll(); }
 };

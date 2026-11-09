@@ -6,6 +6,7 @@
 #include "Game/Prediction.hpp"
 #include "Game/ShotPrediction.hpp"
 #include "Voice/VoiceDevices.hpp"
+#include "rtype/discord/DiscordVoice.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/RemoteWorld.hpp"
@@ -30,11 +31,24 @@
 namespace rtype::client
 {
 
-/// Gives the voice of the game how the player talks: its mode (push-to-talk, voice activity or off), muted
-/// and deafened by its keys, and its volumes.
+/// Gives the voice of a game how the player talks: its mode (push-to-talk, voice activity or off), muted
+/// and deafened by its keys, and its volumes. The same for the voice of the game (voice::GameVoice) and the
+/// one of Discord (discord::DiscordVoice).
 /// @param pushToTalk The push-to-talk key is held, or was released less than voice::PushToTalk::ReleaseDelay
 ///   ago.
-void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushToTalk);
+template <typename Voice>
+void applyVoice(Voice &voice, const VoiceDevices &devices, bool pushToTalk)
+{
+    const VoicePreferences &preferences = devices.preferences;
+    const bool activity = preferences.mode == voice::TalkMode::VoiceActivity;
+    voice.setDeafened(devices.deafened);
+    voice.setSelfMute(preferences.mode == voice::TalkMode::Off || devices.muted || devices.deafened);
+    voice.setVoiceActivity(activity ? std::optional<float>(preferences.threshold) : std::nullopt);
+    voice.setTalking(activity || (preferences.mode == voice::TalkMode::PushToTalk && pushToTalk));
+    voice.setInputVolume(preferences.inputVolume);
+    voice.setOutputVolume(preferences.voiceVolume);
+    voice.setProcessing(preferences.processing);
+}
 
 /// A game online: the session of the player with its game instance, over encrypted UDP
 /// (docs/protocol/game.md), with what GAME_JOINED gave (ADR 0015).
@@ -64,6 +78,14 @@ void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushT
 ///   the GameVoice what the others tell (VOICE_STATUSES), and hears each other player as the player chose
 ///   in the pause menu (VoicePreferences::players, under voiceKey()). A player muted by an administrator
 ///   has its microphone closed while it lasts; a game without the voice (`ACCEPTED`) runs none.
+/// - **The voice of Discord**: given the Discord call of VoiceDevices, the secret of GAME_JOINED and the id
+///   of the player, it joins the Discord lobby of the game once accepted (discord::DiscordVoice), hearing the
+///   voice of the game meanwhile, its microphone closed: Discord opens it, and closing a microphone Discord
+///   just opened stalls on some systems (a Bluetooth headset on PipeWire). Not connected within
+///   DiscordJoinTimeout, the call is given up. Once the call is connected, the player is on Backend::Discord:
+///   the GameVoice is left, Discord carries its voice and those of the others with Discord, and the frames of
+///   the game are not played. A call that fails, or drops, gives the player back to the voice of the game,
+///   for the rest of the game.
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why. The
 ///   snapshot taken after GAME_OVER has its outcome, and the players as the latest snapshot received has
 ///   them, their final scores, not those of 100 ms before.
@@ -77,6 +99,9 @@ public:
     /// Frames of the voice of the others kept until takeVoiceFrames(): one second of three players. Beyond,
     /// the oldest go.
     static constexpr std::size_t MaxVoiceFrames = 150;
+    /// How long the call of Discord has to connect, the microphone of the game closed meanwhile; past it, the
+    /// voice of the game takes over.
+    static constexpr std::chrono::seconds DiscordJoinTimeout{10};
 
 private:
     using Clock = network::ClientSession::Clock;
@@ -135,6 +160,12 @@ private:
     VoiceDevices *_devices = nullptr;
     voice::PushToTalk _pushToTalk;
     std::unique_ptr<voice::GameVoice> _voice;
+    /// The voice of Discord, for a player with Discord in a game that has its lobby, until its call fails.
+    std::unique_ptr<discord::DiscordVoice> _discord;
+    /// The call of Discord is connected: the voice of the player goes through it, not the GameVoice.
+    bool _onDiscord = false;
+    /// When the call of Discord was started: past DiscordJoinTimeout without connecting, it is given up.
+    voice::TalkClock::time_point _discordSince;
 
     void received(std::uint8_t type, std::span<const std::byte> payload);
     /// The game accepted the player: its slot is known, the shots of its weapon can be predicted.
@@ -146,8 +177,13 @@ private:
     [[nodiscard]] std::uint32_t estimateTick() const;
     /// Runs the voice of the game, once per update.
     void updateVoice();
+    /// Moves the player to the voice of Discord once its call is connected, back to the voice of the game if
+    /// it fails.
+    void updateDiscord(voice::TalkClock::time_point now);
+    /// Joins the GameVoice again, with the players of the game, after the voice of Discord.
+    void joinGameVoice();
     /// Hears each other player as the player chose for it.
-    void applyPlayerVoices();
+    void applyPlayerVoices(voice::VoiceChannel &channel);
     /// Tells the game what the player does with its voice, if that changed (VOICE_STATUS).
     void tellVoiceStatus();
 
@@ -164,10 +200,12 @@ public:
     ///   session runs no voice.
     /// @param server The address of the server, as the player wrote it ("host:port"): what the choices for
     ///   the other players are kept under (playerVoiceKey()).
+    /// @param playerId The id the master gave the player (WELCOME): its member of the Discord lobby has it.
+    ///   0 joins no Discord lobby.
     /// @throws std::system_error if no UDP socket can be opened.
     RemoteSession(network::EventLoop &loop, const network::Address &game,
                   const lobby::GameJoinedMessage &joined, const game::GameConfig &config = {},
-                  VoiceDevices *voiceDevices = nullptr, std::string server = {});
+                  VoiceDevices *voiceDevices = nullptr, std::string server = {}, std::uint32_t playerId = 0);
     /// Says goodbye to the game (DISCONNECT) if still in it.
     ~RemoteSession() override;
 
@@ -203,6 +241,10 @@ public:
     [[nodiscard]] bool mutedByAdmin() const;
     /// The voice of the game, given VoiceDevices.
     [[nodiscard]] voice::GameVoice *voice() const { return _voice.get(); }
+    /// The voice of Discord, until its call fails.
+    [[nodiscard]] discord::DiscordVoice *discordVoice() const { return _discord.get(); }
+    /// The voice of the player goes through Discord.
+    [[nodiscard]] bool onDiscord() const { return _onDiscord; }
     /// The devices of the voice given, if any.
     [[nodiscard]] VoiceDevices *voiceDevices() const { return _devices; }
     /// What the choices for the player in a slot are kept under (playerVoiceKey()); none for a slot without a

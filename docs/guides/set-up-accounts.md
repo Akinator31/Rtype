@@ -146,6 +146,10 @@ social = true
 - **Limited access**: the communication features of the Social SDK (lobbies, voice) work, before Discord approves
   the application, for the members of its team only (*Team* on the developer portal: add the players who try
   it). To open them to every player, ask Discord for the access from the *Social SDK* page of the application.
+- **The voice of Discord**: every game gets a lobby of Discord, its secret drawn by the server and given to its
+  players when they join it (never logged). The players connected to Discord talk there, the others through the
+  game ([Voice](../architecture/voice.md#the-voice-of-discord)). A player kicked keeps the secret, and so the
+  voice of the lobby, until it leaves it.
 - Players with a password only, and guests, get nothing from it: the voice of the game works for them.
 
 ## Result
