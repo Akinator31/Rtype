@@ -170,6 +170,7 @@ struct Events {
             .onWelcome = [this](std::uint32_t player) { welcomed = player; },
             .onLeftGame = [this](const lobby::LeftGameMessage &message) { left.push_back(message); },
             .onServerMessage = [this](const std::string &text) { messages.push_back(text); },
+            .onProgress = {},
             .onClosed = [this](const std::string &reason) { closed = reason; },
             .onUntrusted = {},
             .onSessionExpired = {},
