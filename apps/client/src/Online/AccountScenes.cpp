@@ -131,6 +131,8 @@ void OnlineScenes::refreshDiscord()
     }
     const std::optional<std::string> refreshToken = _sessions.discordRefreshToken(_address);
     if (!refreshToken) {
+        // Signed in before the server gave the tokens, or with a password: no voice through Discord
+        logger().info("No Discord token kept for {}: sign in with Discord again for its voice", _address);
         return;
     }
     _lobby->discordRefresh(*refreshToken, [this](std::optional<lobby::ErrorCode> error) {
