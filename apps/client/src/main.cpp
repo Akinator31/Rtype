@@ -111,6 +111,7 @@ void run()
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions =
         rtype::client::registerClientSystems(engine, devices, audio, metrics, style);
+    sessions.setAuraColors(&auraColors);
     rtype::client::SceneAssetLoader sceneAssets(resources, audio);
     UnloadSceneAssets unloadSceneAssets{engine};
     rtype::client::AssetPreload preload(resources);

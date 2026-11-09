@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
@@ -45,6 +46,11 @@ bool isPlayerSideShip(game::EntityKind kind)
 {
     return kind == game::EntityKind::PlayerShip || kind == game::EntityKind::AllyShip;
 }
+
+/// How far the aura of a ship stands out of its model, in game units, and how much of it spreads in the
+/// glow of the frame.
+constexpr float AuraThickness = 2.5f;
+constexpr float AuraBloom = 0.35f;
 
 /// A shot appears at the nose of the ship that fired it, half a ship ahead of its centre, and has flown for a
 /// snapshot or so when it is drawn: no farther than this from its centre.
@@ -128,6 +134,11 @@ void GameSessionSystem::setShipLooks(game::EntityKind kind, std::vector<ShipLook
 void GameSessionSystem::setLocalShipLook(const ShipLook &look)
 {
     _shipLooks.setLocalLook(look);
+}
+
+void GameSessionSystem::setAuraColors(const AuraColors *colors)
+{
+    _auraColors = colors;
 }
 
 void GameSessionSystem::setBossLook(game::EntityKind kind, const BossLook &look)
@@ -389,11 +400,32 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     if (const std::optional<physics::Collider> collider = _session->findCollider(state)) {
         _ecs.addComponent<physics::Collider>(entity, *collider);
     }
+    addAura(entity, state);
     _shotSounds.addSound(_ecs, entity, state.kind, state.x);
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
     if (isPlayerShot(state.kind)) {
         recoilShooter(state);
     }
+}
+
+void GameSessionSystem::addAura(ecs::entity_t entity, const game::EntityState &state)
+{
+    if (_auraColors == nullptr || !_ecs.hasComponent<engine::Model>(entity)) {
+        return;
+    }
+    std::string_view name;
+    if (isLocalShip(state)) {
+        name = _auraColors->own;
+    } else if (isPlayerSideShip(state.kind)) {
+        name = _auraColors->allies;
+    } else if (isBydoShip(state.kind) && state.kind != game::EntityKind::BydoBoss) {
+        name = _auraColors->enemies;
+    }
+    const std::optional<render::Color> color = auraColor(name);
+    if (!color) {
+        return;
+    }
+    _ecs.getComponent<engine::Model>(entity).aura = render::Aura{*color, AuraThickness, AuraBloom};
 }
 
 void GameSessionSystem::recoilShooter(const game::EntityState &shot)
