@@ -161,6 +161,7 @@ add_library(r-type_server_core STATIC
     src/Master/Relay.cpp
     src/Master/ServerDatabase.cpp
     src/Master/ServerKey.cpp
+    src/Master/VoiceMutes.cpp
     src/Web/AdminJson.cpp
     src/Web/Health.cpp
     src/Web/LocalAccess.cpp

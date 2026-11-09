@@ -4,6 +4,7 @@
 #include "Master/AddressBans.hpp"
 #include "Master/AdminModel.hpp"
 #include "Master/AdminStore.hpp"
+#include "Master/VoiceMutes.hpp"
 #include "rtype/database/DatabaseThread.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/EventLoop.hpp"
@@ -33,6 +34,8 @@ struct AdministrationSettings {
     std::uint16_t panelPort = 0;
     /// `[admin] admins`: their accounts are locked, neither demoted, banned nor deleted.
     std::vector<std::string> admins;
+    /// `[voice] enabled`: the games carry the voice.
+    bool voice = true;
 };
 
 /// The server, as GET /api/server shows it.
@@ -48,6 +51,10 @@ struct AdminServer {
     std::size_t players = 0;
     std::size_t games = 0;
     std::size_t bans = 0;
+    /// The games carry the voice.
+    bool voice = true;
+    /// The accounts whose voice is muted now.
+    std::size_t voiceMutes = 0;
 };
 
 /// An account, as the panel shows it.
@@ -55,6 +62,8 @@ struct AdminAccount {
     AccountEntry entry;
     /// One of `[admin] admins`: neither demoted, banned nor deleted from the panel.
     bool locked = false;
+    /// Its voice muted in every game until a date; nothing if not.
+    std::optional<VoiceMute> voiceMute;
 
     friend bool operator==(const AdminAccount &, const AdminAccount &) = default;
 };
@@ -73,7 +82,8 @@ struct AccountChanged {
     Outcome outcome = Outcome::Done;
     /// The account after the change; nothing once deleted.
     std::optional<AdminAccount> account;
-    /// The players of the account removed from the lobby.
+    /// The players of the account removed from the lobby; for a mute of its voice, its players in a game it
+    /// reached.
     std::size_t removed = 0;
 };
 
@@ -139,6 +149,8 @@ using AdminEvent = std::variant<admin_event::Snapshot, admin_event::PlayerJoined
 /// - **Bans** are kept in AddressBans for the lobby, and in the database across restarts; the expired ones
 /// are
 ///   purged every minute.
+/// - **The voice**: mute a player for the rest of its game, or an account for a time in every game
+///   (VoiceMutes, kept in `voice_mutes`, purged every minute too).
 /// - **Accounts**, with a database: list and search them, ban and unban, change their role, delete them. The
 ///   accounts of `[admin] admins` are locked.
 /// - **Subscribers** get a snapshot at once, then the events.
@@ -162,6 +174,7 @@ private:
     AdminLobby &_lobby;
     AddressBans &_bans;
     rtype::database::DatabaseThread *_database;
+    VoiceMutes *_voiceMutes;
     AdministrationSettings _settings;
     std::chrono::system_clock::time_point _startedAt = std::chrono::system_clock::now();
     std::chrono::steady_clock::time_point _started = std::chrono::steady_clock::now();
@@ -187,8 +200,11 @@ private:
 
 public:
     /// @param database Where the actions are recorded and the bans kept; nullptr keeps nothing.
+    /// @param voiceMutes The mutes of the voice of the accounts, which the games read; nullptr: no account
+    ///   is muted, only players in their game.
     Administration(rtype::network::EventLoop &loop, AdminGames &games, AdminLobby &lobby, AddressBans &bans,
-                   rtype::database::DatabaseThread *database, AdministrationSettings settings);
+                   rtype::database::DatabaseThread *database, AdministrationSettings settings,
+                   VoiceMutes *voiceMutes = nullptr);
     ~Administration() override;
 
     Administration(const Administration &) = delete;
@@ -242,6 +258,19 @@ public:
     /// @return False if no ban of this address runs.
     bool unban(const rtype::network::Address &address, const std::string &reason, const std::string &actor);
 
+    /// Mutes the voice of a player for the rest of its game, or lets it talk again: the game drops its voice,
+    /// the others see it muted. A player whose account is muted stays muted until that ends.
+    /// @return False if the player is in no running game.
+    bool muteVoice(std::uint32_t playerId, bool muted, const std::string &reason, const std::string &actor);
+    /// Mutes the voice of an account for a time, at most MaxVoiceMuteDuration, in every game it plays, at
+    /// once and from its next game: kept in `voice_mutes`. A locked account is refused.
+    void muteAccountVoice(long long accountId, std::chrono::seconds duration, const std::string &reason,
+                          const std::string &actor, ChangeCallback done);
+    /// Lifts the mute of the voice of an account before it ends.
+    void unmuteAccountVoice(long long accountId, const std::string &reason, const std::string &actor,
+                            ChangeCallback done);
+    /// The accounts whose voice is muted now, the first to end first.
+    [[nodiscard]] std::vector<VoiceMute> voiceMutes() const;
     /// Calls `subscriber` at once with a snapshot, then with each event.
     /// @return What unsubscribe() takes.
     std::uint64_t subscribe(Subscriber subscriber);

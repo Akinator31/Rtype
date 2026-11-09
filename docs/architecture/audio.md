@@ -147,7 +147,7 @@ voice::GameVoice voice(session, microphone, voices);
   callback of the stream, on the audio thread of raylib, takes what is there and plays silence for the rest
   ([Threads](threads.md#the-audio-threads)). A stream 200 ms behind drops what does not fit.
 - **PCM, not Opus.** Whatever carried a voice, the game or Discord, it is played here: one mixer, one volume
-  per player, one place for the spatial voice to come, and one reference for the echo cancellation.
+  per player, and one reference for the echo cancellation.
 - **One at a time.** The callbacks of raylib take no pointer: each slot has its own function, which finds the
   streams in a variable of `VoiceStreams.cpp`. A second `VoiceStreams` throws, as a second `AudioDevice`.
 - **Without an audio output** (`AudioDevice::isAvailable()` false), it is not `available()` and plays nothing:
@@ -190,7 +190,7 @@ computer. The voice is tested with a fake `voice::Playback` and a fake `voice::L
 
 - **No spatial sound** beyond left-right panning. For VR, sounds positioned in 3D around the player would help;
   raylib does not provide it, so it would need another approach.
-- **The voices** are played here, but the voice chat itself is apart, in `libs/voice` ([Voice](voice.md)); no
-  pan per voice yet, which the spatial voice adds.
+- **The voices** are played here, but the voice chat itself is apart, in `libs/voice` ([Voice](voice.md)); each
+  is in the middle, without a pan: a voice placed from its ship was tried and left out.
 - **No fading** between two musics: `playMusic()` switches at once.
 - The effects volume does not change the sounds already playing, which are short.

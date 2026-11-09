@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common/Secret.hpp"
+#include "rtype/voice/Format.hpp"
 
 #include <array>
 #include <cstddef>
@@ -18,7 +19,7 @@ namespace rtype::server
 {
 
 /// The version of this protocol, in INSTANCE_HELLO.
-inline constexpr std::uint16_t InstanceProtocolVersion = 5;
+inline constexpr std::uint16_t InstanceProtocolVersion = 6;
 /// Longest name of a game, in bytes of UTF-8.
 inline constexpr std::size_t MaxGameNameLength = 32;
 /// Longest name of a player, in bytes of UTF-8.
@@ -39,6 +40,7 @@ inline constexpr std::uint8_t Configure = 0x81;
 inline constexpr std::uint8_t AddPlayer = 0x82;
 inline constexpr std::uint8_t RemovePlayer = 0x83;
 inline constexpr std::uint8_t Shutdown = 0x84;
+inline constexpr std::uint8_t MuteVoice = 0x85;
 } // namespace instance_message
 
 // --- Instance to master ---
@@ -131,6 +133,22 @@ struct GameStatusMessage {
 
 // --- Master to instance ---
 
+/// What the game does with the voice, from `[voice]` of the settings of the master (version 6).
+struct VoiceRules {
+    /// Whether the game carries the voice: without it, every VOICE is dropped and ACCEPTED tells the client.
+    bool enabled = true;
+    /// The largest frame forwarded, 1 to voice::MaxFrameBytes.
+    std::uint8_t maxFrameBytes = static_cast<std::uint8_t>(rtype::voice::MaxFrameBytes);
+    /// The frames of one player forwarded per second in the long run, never 0. A voice is 50.
+    std::uint8_t maxFramesPerSecond = 60;
+
+    friend bool operator==(const VoiceRules &, const VoiceRules &) = default;
+};
+
+/// How long the voice of a player is muted by an administrator, in seconds: 0 not muted, this value until
+/// the end of the game.
+inline constexpr std::uint32_t VoiceMutedForTheGame = 0xFFFFFFFF;
+
 /// `CONFIGURE`: the game to run.
 struct ConfigureMessage {
     /// 1 to MaxGameNameLength bytes.
@@ -140,6 +158,8 @@ struct ConfigureMessage {
     /// The port of the relay of the master, on 127.0.0.1 (version 4): the game takes its datagrams from it in
     /// relay frames (Common/RelayFrame.hpp). 0: no relay, the game opens its own port, `--udp-port`.
     std::uint16_t relayPort = 0;
+    /// The voice of the game (version 6).
+    VoiceRules voice{};
 
     friend bool operator==(const ConfigureMessage &, const ConfigureMessage &) = default;
 };
@@ -156,6 +176,9 @@ struct AddPlayerMessage {
     std::string name;
     /// The id of its account, 0 for a guest (version 5): told to the other players in PLAYER_JOINED.
     std::uint64_t accountId = 0;
+    /// Its account is muted by an administrator for this many seconds more (version 6), 0 if not: its voice
+    /// is dropped until then.
+    std::uint32_t voiceMuted = 0;
 
     friend bool operator==(const AddPlayerMessage &, const AddPlayerMessage &) = default;
 };
@@ -195,6 +218,15 @@ struct ShutdownMessage {
     friend bool operator==(const ShutdownMessage &, const ShutdownMessage &) = default;
 };
 
+/// `MUTE_VOICE` (version 6): an administrator mutes the voice of a player, or lets it talk again.
+struct MuteVoiceMessage {
+    std::uint32_t playerId = 0;
+    /// Seconds, from now: 0 lets it talk, VoiceMutedForTheGame until the end of the game.
+    std::uint32_t duration = 0;
+
+    friend bool operator==(const MuteVoiceMessage &, const MuteVoiceMessage &) = default;
+};
+
 /// The payloads of the messages.
 /// @throws std::invalid_argument for a value the protocol forbids (an id of 0, a name too long...).
 [[nodiscard]] std::vector<std::byte> encode(const InstanceHelloMessage &message);
@@ -207,6 +239,7 @@ struct ShutdownMessage {
 [[nodiscard]] std::vector<std::byte> encode(const AddPlayerMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const RemovePlayerMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const ShutdownMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const MuteVoiceMessage &message);
 
 /// The messages read from their payloads, strictly: master and instances come from the same build, so an
 /// unknown reason is malformed too.
@@ -221,5 +254,6 @@ decodePlayerDisconnected(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<AddPlayerMessage> decodeAddPlayer(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<RemovePlayerMessage> decodeRemovePlayer(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<ShutdownMessage> decodeShutdown(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<MuteVoiceMessage> decodeMuteVoice(std::span<const std::byte> payload);
 
 } // namespace rtype::server

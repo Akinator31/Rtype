@@ -1686,12 +1686,20 @@ TEST_CASE("The icon of a pilot says what its voice does", "[client][voice]")
     CHECK(voiceIconOf(Participant{.status = {.noMicrophone = true}}) == VoiceIcon::NoMicrophone);
     // My choice first
     CHECK(voiceIconOf(Participant{.speaking = true, .mutedByMe = true}) == VoiceIcon::MutedByMe);
+    // Before it, an administrator, as nothing else lifts it
+    CHECK(voiceIconOf(Participant{.status = {.muted = true, .mutedByAdmin = true}, .mutedByMe = true}) ==
+          VoiceIcon::MutedByAdmin);
 
     CHECK(voiceIconOf(LocalVoice{}) == VoiceIcon::None);
     CHECK(voiceIconOf(LocalVoice{.transmitting = true}) == VoiceIcon::Speaking);
     CHECK(voiceIconOf(LocalVoice{.muted = true}) == VoiceIcon::Muted);
     CHECK(voiceIconOf(LocalVoice{.muted = true, .deafened = true}) == VoiceIcon::Deafened);
+    CHECK(voiceIconOf(LocalVoice{.muted = true, .deafened = true, .mutedByAdmin = true}) ==
+          VoiceIcon::MutedByAdmin);
 
     CHECK(voiceIconColor(VoiceIcon::Speaking).r == 255);
     CHECK(voiceIconColor(VoiceIcon::Muted).r < 255);
+    // Red, as in the design
+    CHECK(voiceIconColor(VoiceIcon::MutedByAdmin).r == 232);
+    CHECK(voiceIconColor(VoiceIcon::MutedByAdmin).g == 114);
 }

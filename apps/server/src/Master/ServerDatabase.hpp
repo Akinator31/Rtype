@@ -51,6 +51,10 @@ inline const std::vector<rtype::database::Migration> ServerMigrations{
       "ALTER TABLE discord_identities ADD COLUMN avatar_hash TEXT",
       "ALTER TABLE discord_identities ADD COLUMN avatar_png TEXT",
       "ALTER TABLE discord_identities ADD COLUMN profile_at BIGINT"}},
+    {8,
+     "create the voice_mutes table: the accounts whose voice the games drop for a time",
+     {"CREATE TABLE voice_mutes (account_id BIGINT PRIMARY KEY REFERENCES accounts (id) ON DELETE CASCADE, "
+      "created_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, reason TEXT NOT NULL, actor TEXT NOT NULL)"}},
 };
 
 /// The address of the database of the master: the one of --database, or the one the file of --database-file

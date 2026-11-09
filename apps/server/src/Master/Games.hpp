@@ -4,6 +4,7 @@
 #include "Common/Secret.hpp"
 #include "Master/AdminModel.hpp"
 #include "Master/Process.hpp"
+#include "Master/VoiceMutes.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/EventLoop.hpp"
 #include "rtype/network/FramedConnection.hpp"
@@ -45,6 +46,8 @@ struct GamesSettings {
     /// A running game without GAME_STATUS for this long is stale: its instance, or its game thread, is
     /// stuck. Its instances report every second.
     std::chrono::milliseconds statusTimeout{std::chrono::seconds(3)};
+    /// What every game does with the voice: `[voice]` of the settings, given in CONFIGURE.
+    VoiceRules voice{};
 };
 
 /// Where a game stands, as its instance last said (GAME_STATUS).
@@ -93,6 +96,9 @@ struct LobbyPlayer {
 /// - **Behind the relay** of the master, every game: the instance is given the relay in CONFIGURE, and the
 ///   relay is told where the instance receives (READY), each session added and released, and the instance
 ///   gone. GAME_JOINED gives the public port of the relay to every player.
+/// - **The voice** of every game follows GamesSettings::voice. An administrator mutes a player for the rest
+///   of its game, or its account for a time (VoiceMutes): the instance is told at ADD_PLAYER and at every
+///   change (MUTE_VOICE), and drops its voice until then.
 /// - **The administration** sees the running games and acts on them through AdminGames, and is told what
 ///   happens to them through its AdminObserver (docs/architecture/administration.md).
 class Games final : public AdminGames
@@ -121,6 +127,7 @@ private:
     GamesSettings _settings;
     LeftHandler _onLeft;
     AdminObserver *_observer = nullptr;
+    const VoiceMutes *_voiceMutes = nullptr;
     SessionDraw _drawSession;
     rtype::network::TcpListener _listener;
     rtype::network::Timer _supervision;
@@ -157,6 +164,8 @@ private:
     void fail(Game &game, const std::string &reason);
     void closeConnection(Game &game);
     void send(Game &game, std::uint8_t type, std::span<const std::byte> payload);
+    /// How long a player is muted now, for MUTE_VOICE and ADD_PLAYER: for the game, or as its account.
+    [[nodiscard]] std::uint32_t voiceMuted(bool forTheGame, std::uint64_t accountId) const;
     void supervise();
     void closeInstanceConnection(std::uint64_t id);
 
@@ -181,6 +190,9 @@ public:
     /// Tells the administration what happens to the games; nullptr for nobody. It must outlive the games, or
     /// be taken away first.
     void setObserver(AdminObserver *observer) { _observer = observer; }
+    /// The mutes of the voice of the accounts, read when a player joins; nullptr for none. They must outlive
+    /// the games, or be taken away first.
+    void setVoiceMutes(const VoiceMutes *mutes) { _voiceMutes = mutes; }
     /// Replaces the random generator of the system for the session ids: for the tests, to force collisions.
     void setSessionDraw(SessionDraw draw) { _drawSession = std::move(draw); }
 
@@ -214,6 +226,8 @@ public:
     [[nodiscard]] std::vector<AdminGame> adminGames() const override;
     bool kick(std::uint32_t playerId) override;
     bool end(std::uint32_t gameId) override;
+    bool muteVoice(std::uint32_t playerId, bool muted) override;
+    std::size_t accountVoiceChanged(long long accountId) override;
 };
 
 } // namespace rtype::server

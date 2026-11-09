@@ -12,6 +12,10 @@ export interface ServerInfo {
   players: number;
   games: number;
   bans: number;
+  /** Whether the games carry the voice, `[voice] enabled`. Optional: a master before the voice does not send it. */
+  voice?: boolean;
+  /** The accounts whose voice is muted now. */
+  voiceMutes?: number;
 }
 
 export interface GamePlayer {
@@ -22,6 +26,10 @@ export interface GamePlayer {
   alive: boolean | null;
   /** In milliseconds, null until measured. */
   latency: number | null;
+  /** Its voice muted by an administrator for the rest of this game. */
+  voiceMuted?: boolean;
+  /** Its account muted until then, in every game; null if not. */
+  voiceMutedUntil?: number | null;
 }
 
 export interface Game {
@@ -34,6 +42,8 @@ export interface Game {
   wave: number | null;
   statusAge: number;
   stale: boolean;
+  /** Whether the game carries the voice. */
+  voice?: boolean;
   players: GamePlayer[];
 }
 
@@ -76,6 +86,17 @@ export interface Account {
   banReason: string;
   createdAt: number;
   lastSeenAt: number;
+  /** Its voice muted in every game until a date; null if not. */
+  voiceMute?: VoiceMute | null;
+}
+
+/** The mute of the voice of an account. */
+export interface VoiceMute {
+  accountId: number;
+  createdAt: number;
+  expiresAt: number;
+  reason: string;
+  actor: string;
 }
 
 /** The administrator signed in, null for the local token. */
@@ -107,7 +128,11 @@ export type ActionKind =
   | 'ban_account'
   | 'unban_account'
   | 'role'
-  | 'delete_account';
+  | 'delete_account'
+  | 'mute_voice'
+  | 'unmute_voice'
+  | 'mute_account_voice'
+  | 'unmute_account_voice';
 
 export interface Action {
   id: number;

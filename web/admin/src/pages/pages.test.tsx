@@ -4,7 +4,7 @@ import { HttpResponse, http } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { session } from '../api/client';
-import type { Action, LiveEvent, Player } from '../api/types';
+import type { Account, Action, GamePlayer, LiveEvent, Player } from '../api/types';
 import { setPreferences } from '../preferences';
 import * as fixtures from '../test/fixtures';
 import { FakeSocket, renderPanel } from '../test/render';
@@ -245,6 +245,69 @@ describe('the accounts of the administrators', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });
 
+  it('mutes the voice of an account for the time chosen, and lifts it', async () => {
+    const user = userEvent.setup();
+    renderPanel('/accounts', [snapshot]);
+    await user.click(await screen.findByRole('button', { name: 'Mute the voice' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Mute the voice of an account' });
+    await user.click(within(dialog).getByRole('button', { name: '7 d' }));
+    await user.type(within(dialog).getByRole('textbox'), 'spam');
+    await user.click(within(dialog).getByRole('button', { name: /^Mute / }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({
+      path: '/api/accounts/3/mute-voice',
+      csrf: fixtures.csrfToken,
+      body: { duration: 604800, reason: 'spam' },
+    });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+
+  it('shows the mute of the voice of an account, and lifts it', async () => {
+    const user = userEvent.setup();
+    const [alice] = fixtures.accounts as [Account, ...Account[]];
+    server.use(
+      http.get('*/api/accounts', () =>
+        HttpResponse.json([
+          {
+            ...alice,
+            voiceMute: {
+              accountId: 3,
+              createdAt: fixtures.now,
+              expiresAt: fixtures.now + 3600_000,
+              reason: 'spam',
+              actor: 'local',
+            },
+          },
+          ...fixtures.accounts.slice(1),
+        ]),
+      ),
+    );
+    renderPanel('/accounts', [snapshot]);
+    const button = await screen.findByRole('button', { name: 'Let it talk again' });
+    expect(screen.getByText(/^Muted until/)).toBeInTheDocument();
+    expect(screen.getByText('spam')).toBeInTheDocument();
+    await user.click(button);
+    const lift = await screen.findByRole('alertdialog', { name: 'Lift the mute of an account' });
+    await user.click(within(lift).getByRole('button', { name: 'Lift the mute' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent).toEqual([
+      { path: '/api/accounts/3/unmute-voice', csrf: fixtures.csrfToken, body: { reason: '' } },
+    ]);
+  });
+
+  it('refuses a mute longer than 30 days', async () => {
+    const user = userEvent.setup();
+    renderPanel('/accounts', [snapshot]);
+    await user.click(await screen.findByRole('button', { name: 'Mute the voice' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Mute the voice of an account' });
+    await user.click(within(dialog).getByRole('button', { name: 'Other' }));
+    const seconds = within(dialog).getByRole('textbox', { name: 'Duration in seconds' });
+    await user.clear(seconds);
+    await user.type(seconds, '2592001');
+    expect(within(dialog).getByText(/from 1 to 2592000/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /^Mute/ })).toBeDisabled();
+  });
+
   it('keeps the dialog open with the refusal of the master', async () => {
     const user = userEvent.setup();
     server.use(
@@ -357,6 +420,50 @@ describe('a game', () => {
     expect(within(bob).getByText('not connected')).toBeInTheDocument();
     expect(within(bob).getByText('Joining')).toBeInTheDocument();
     expect(within(bob).getByText('Not measured')).toBeInTheDocument();
+  });
+
+  it('mutes a pilot after its confirmation, and shows it muted once the game says so', async () => {
+    const user = userEvent.setup();
+    const [first, second] = fixtures.game.players as [GamePlayer, GamePlayer];
+    const { push } = renderPanel('/games/3', [snapshot]);
+    await user.click(screen.getByRole('button', { name: 'Mute Alice' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Mute a pilot' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Reason' }), 'insults');
+    await user.click(within(dialog).getByRole('button', { name: 'Mute' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({
+      path: '/api/players/7/mute-voice',
+      csrf: fixtures.csrfToken,
+      body: { reason: 'insults' },
+    });
+
+    push({
+      type: 'game.updated',
+      game: {
+        ...fixtures.game,
+        players: [{ ...first, voiceMuted: true }, second],
+      },
+    });
+    const alice = await screen.findByTestId('pilot-7');
+    await waitFor(() => expect(within(alice).getByText('Muted')).toBeInTheDocument());
+    expect(within(alice).getByRole('button', { name: 'Let talk Alice' })).toBeInTheDocument();
+    // Bob's account is muted until a date: shown muted, still mutable for the game
+    push({
+      type: 'game.updated',
+      game: {
+        ...fixtures.game,
+        players: [first, { ...second, voiceMutedUntil: fixtures.now + 3600_000 }],
+      },
+    });
+    const bob = await screen.findByTestId('pilot-9');
+    await waitFor(() => expect(within(bob).getByText('Muted')).toBeInTheDocument());
+    expect(within(bob).getByRole('button', { name: 'Mute Bob' })).toBeInTheDocument();
+  });
+
+  it('offers no mute in a game without voice', () => {
+    renderPanel('/games/3', [{ ...snapshot, games: [{ ...fixtures.game, voice: false }] } as LiveEvent]);
+    expect(screen.queryByRole('button', { name: 'Mute Alice' })).not.toBeInTheDocument();
+    expect(screen.getByText('No voice in this game')).toBeInTheDocument();
   });
 
   it('is ended after its confirmation, with a reason', async () => {

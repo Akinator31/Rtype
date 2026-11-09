@@ -36,9 +36,21 @@ std::vector<ecs::entity_t> InterfaceSystem::widgets()
 {
     std::vector<ecs::entity_t> result;
     for (ecs::entity_t entity = 0; entity < _focusables.size(); ++entity) {
-        if (_focusables.has(entity) && _scenes.receivesInput(entity) && !ecs::isHidden(_ecs, entity)) {
-            result.push_back(entity);
+        if (!_focusables.has(entity) || !_scenes.receivesInput(entity) || ecs::isHidden(_ecs, entity)) {
+            continue;
         }
+        // A locked slider is passed over, and loses the focus it had
+        if (_sliders.has(entity) && _sliders.get(entity).locked && _sliders.get(entity).locked()) {
+            if (_focused.has(entity)) {
+                _focused.erase(entity);
+                animateUnfocus(entity);
+            }
+            if (_tracks.has(entity)) {
+                _tracks.get(entity) = SliderTrack{.width = _tracks.get(entity).width};
+            }
+            continue;
+        }
+        result.push_back(entity);
     }
     std::ranges::stable_sort(result, {},
                              [this](ecs::entity_t entity) { return _focusables.get(entity).order; });
@@ -303,7 +315,8 @@ void InterfaceSystem::updateSliders(const std::vector<ecs::entity_t> &widgets,
         _dragged = *hovered;
         playSound(*hovered, _style.button.clickSound);
     }
-    if (_dragged && (!_ecs.isAlive(*_dragged) || !_sliders.has(*_dragged) || !_positions.has(*_dragged))) {
+    if (_dragged && (!_ecs.isAlive(*_dragged) || !_sliders.has(*_dragged) || !_positions.has(*_dragged) ||
+                     (_sliders.get(*_dragged).locked && _sliders.get(*_dragged).locked()))) {
         _dragged.reset();
     }
     if (_dragged) {

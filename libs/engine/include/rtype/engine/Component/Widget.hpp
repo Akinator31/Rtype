@@ -69,6 +69,9 @@ struct Slider {
     std::function<void()> onConfirm{};
     /// The picture after the caption, read every frame: none when it gives nothing. Optional.
     std::function<std::optional<Icon>()> icon{};
+    /// Whether it cannot be changed now, read every frame: drawn dimmed, its value in red, and skipped by
+    /// the focus and the pointer. The volume of a player muted by an administrator, for instance. Optional.
+    std::function<bool()> locked{};
 };
 
 /// Draws a Slider as a rail with a handle (InterfaceStyle::slider) instead of a text, and lets the mouse drag

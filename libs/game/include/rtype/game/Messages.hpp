@@ -110,6 +110,9 @@ struct AcceptedMessage {
     std::uint8_t tickRate = TickRate;
     /// The tick the game is at.
     std::uint32_t tick = 0;
+    /// The game carries the voice (version 4, `[voice] enabled` of the server): without it, the client hides
+    /// the voice and sends none.
+    bool voice = true;
 
     friend bool operator==(const AcceptedMessage &, const AcceptedMessage &) = default;
 };

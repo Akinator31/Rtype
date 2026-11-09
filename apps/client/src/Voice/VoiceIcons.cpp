@@ -10,11 +10,15 @@ namespace
 constexpr render::Color Lit{255, 255, 255, 255};
 constexpr render::Color Grey{138, 144, 151, 255};
 constexpr render::Color DarkGrey{107, 113, 119, 255};
+constexpr render::Color Red{232, 114, 110, 255};
 
 } // namespace
 
 VoiceIcon voiceIconOf(const voice::Participant &pilot)
 {
+    if (pilot.status.mutedByAdmin) {
+        return VoiceIcon::MutedByAdmin;
+    }
     if (pilot.mutedByMe) {
         return VoiceIcon::MutedByMe;
     }
@@ -32,6 +36,9 @@ VoiceIcon voiceIconOf(const voice::Participant &pilot)
 
 VoiceIcon voiceIconOf(const LocalVoice &local)
 {
+    if (local.mutedByAdmin) {
+        return VoiceIcon::MutedByAdmin;
+    }
     if (local.deafened) {
         return VoiceIcon::Deafened;
     }
@@ -48,6 +55,8 @@ render::Color voiceIconColor(VoiceIcon icon)
         return Lit;
     case VoiceIcon::NoMicrophone:
         return DarkGrey;
+    case VoiceIcon::MutedByAdmin:
+        return Red;
     default:
         return Grey;
     }

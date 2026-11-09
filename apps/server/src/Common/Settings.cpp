@@ -9,6 +9,7 @@
 #include <fstream>
 #include <initializer_list>
 #include <iterator>
+#include <utility>
 
 namespace rtype::server
 {
@@ -438,6 +439,32 @@ void readAdmin(const Reader &reader, const toml::table &root, ServerSettings &se
     }
 }
 
+void readVoice(const Reader &reader, const toml::table &root, ServerSettings &settings)
+{
+    const toml::table *voice =
+        reader.section(root, "voice", {"enabled", "max_frame_bytes", "max_frames_per_second"});
+    if (voice == nullptr) {
+        return;
+    }
+    settings.voice.enabled = reader.boolean(*voice, "voice", "enabled").value_or(true);
+    if (const auto bytes = reader.get<std::int64_t>(*voice, "voice", "max_frame_bytes", "a number")) {
+        if (*bytes < 1 || std::cmp_greater(*bytes, rtype::voice::MaxFrameBytes)) {
+            reader.fail(
+                Reader::at(*voice, "max_frame_bytes"),
+                std::format("[voice] max_frame_bytes must be from 1 to {}", rtype::voice::MaxFrameBytes));
+        }
+        settings.voice.maxFrameBytes = static_cast<std::uint8_t>(*bytes);
+    }
+    if (const auto rate = reader.get<std::int64_t>(*voice, "voice", "max_frames_per_second", "a number")) {
+        if (*rate < MinVoiceFramesPerSecond || *rate > MaxVoiceFramesPerSecond) {
+            reader.fail(Reader::at(*voice, "max_frames_per_second"),
+                        std::format("[voice] max_frames_per_second must be from {} to {}: a voice is 50",
+                                    MinVoiceFramesPerSecond, MaxVoiceFramesPerSecond));
+        }
+        settings.voice.maxFramesPerSecond = static_cast<std::uint8_t>(*rate);
+    }
+}
+
 /// The rules between the sections.
 void checkSections(const Reader &reader, const toml::table &root, const ServerSettings &settings)
 {
@@ -539,8 +566,8 @@ ServerSettings parseSettings(std::string_view text, const std::filesystem::path 
         reader.fail(error.source(), error.description());
     }
 
-    constexpr std::array<std::string_view, 6> Sections = {"server", "web",     "accounts",
-                                                          "mail",   "discord", "admin"};
+    constexpr std::array<std::string_view, 7> Sections = {"server",  "web",   "accounts", "mail",
+                                                          "discord", "admin", "voice"};
     for (auto &&[key, node] : root) {
         const bool known = std::ranges::find(Sections, key.str()) != Sections.end();
         if (known && !node.is_table()) {
@@ -560,6 +587,7 @@ ServerSettings parseSettings(std::string_view text, const std::filesystem::path 
     readMail(reader, root, settings);
     readDiscord(reader, root, settings);
     readAdmin(reader, root, settings);
+    readVoice(reader, root, settings);
     checkSections(reader, root, settings);
     return settings;
 }

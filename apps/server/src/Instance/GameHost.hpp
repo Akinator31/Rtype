@@ -50,7 +50,10 @@ namespace rtype::server
 ///   player also tells whether it is muted, deafened or without a microphone (`VOICE_STATUS`), and every
 ///   client knows it for all in the same way (`VOICE_STATUSES`), for its HUD. Each
 ///   `VOICE` goes as `VOICE_FRAME` to the other players, unless both are on Discord
-///   (rtype::voice::carriedByGame()), and within the rate of VoiceRate. The game never decodes the voice.
+///   (rtype::voice::carriedByGame()), and within the rules of the server (VoiceRules: the voice on, the
+///   largest frame, the rate of VoiceRate). A player muted by an administrator (`ADD_PLAYER`, `MUTE_VOICE`)
+///   has its voice dropped until its mute ends, and the others see it in `VOICE_STATUSES`. The game never
+///   decodes the voice.
 /// - Every 2 ticks, each client receives the snapshot in parts; every tick, the destroyed entities. They
 ///   leave at once, not at the next update of the sessions: no delay, no jitter.
 /// - A session that closes takes the ship away, and the others receive `PLAYER_LEFT`.
@@ -72,6 +75,8 @@ public:
         std::function<void(const GameOverReport &report)> onGameOver;
     };
 
+    using Clock = rtype::network::SessionHost::Clock;
+
     /// Snapshots are sent once every this many ticks: 30 per second (docs/protocol/game.md, section 9.3).
     static constexpr std::uint32_t SnapshotInterval = 2;
 
@@ -88,14 +93,23 @@ private:
         /// What it tells about its voice (`VOICE_STATUS`).
         rtype::voice::Status voiceStatus{};
         VoiceRate voiceRate;
-        /// Frames of its voice dropped: too many, or sent on None. Logged when it leaves.
+        /// Muted by an administrator until then: time_point::max() for the rest of the game.
+        std::optional<Clock::time_point> voiceMutedUntil;
+        /// Frames of its voice dropped: too many, too big, sent on None, muted, or the voice off. Logged
+        /// when it leaves.
         std::uint32_t voiceDropped = 0;
+
+        [[nodiscard]] bool voiceMuted(Clock::time_point now) const
+        {
+            return voiceMutedUntil && now < *voiceMutedUntil;
+        }
     };
 
     std::unique_ptr<GameTransport> _transport;
     GameThread &_game;
     std::uint8_t _maxPlayers;
     Handlers _handlers;
+    VoiceRules _voice;
     rtype::network::SessionHost _sessions;
     rtype::network::Timer _updates;
     /// By session id.
@@ -129,6 +143,8 @@ private:
     [[nodiscard]] rtype::game::VoiceStatusesMessage voiceStatuses() const;
     /// `VOICE_STATUSES` to every connected player.
     void sendVoiceStatuses();
+    /// Lets talk again the players whose mute ended, and tells the others.
+    void expireVoiceMutes(Clock::time_point now);
     void closed(std::uint32_t session, rtype::network::SessionEnd end);
     /// The player leaves: its ship goes, the others are told.
     void leave(std::uint32_t session, rtype::game::LeaveReason reason);
@@ -138,8 +154,9 @@ private:
 
 public:
     /// Starts receiving through the transport, already open: whatever cannot be opened has failed before.
+    /// @param voice What the game does with the voice (CONFIGURE).
     GameHost(rtype::network::EventLoop &loop, std::unique_ptr<GameTransport> transport,
-             std::uint8_t maxPlayers, GameThread &game, Handlers handlers);
+             std::uint8_t maxPlayers, GameThread &game, Handlers handlers, VoiceRules voice = {});
 
     GameHost(const GameHost &) = delete;
     GameHost &operator=(const GameHost &) = delete;
@@ -154,6 +171,10 @@ public:
     /// @return false if the player is unknown: its session had already closed.
     bool removePlayer(std::uint32_t playerId, RemovePlayerReason reason);
 
+    /// Mutes the voice of a player for `seconds` from now (`MUTE_VOICE`): 0 lets it talk again,
+    /// VoiceMutedForTheGame until the end of the game.
+    /// @return false if the player is unknown.
+    bool muteVoice(std::uint32_t playerId, std::uint32_t seconds);
     /// Sends the result of a tick to the clients. On the network thread.
     void publish(const TickResult &result);
 

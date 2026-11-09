@@ -1,7 +1,8 @@
 # Administer a server
 
 Open the panel of a running server, watch its games and its players live, and act on them: end a game, send a
-message, remove a player, ban an address; with accounts, ban accounts and name the administrators. The panel is
+message, remove a player, mute its voice, ban an address; with accounts, ban accounts, mute their voice and name
+the administrators. The panel is
 opened from the machine of the server, with the address the server writes at each start; with accounts, an
 administrator also signs in from anywhere ([From anywhere, with an account](#from-anywhere-with-an-account)).
 
@@ -55,7 +56,7 @@ administrator also signs in from anywhere ([From anywhere, with an account](#fro
     | Accounts | With accounts: every account, searched by username, email or Discord id; its role and whether it is banned |
     | Settings | The version and the ports of the server, and the preferences of the panel |
 
-4. **Act**. Removing a player, ending a game, banning and lifting a ban ask for a confirmation and an optional
+4. **Act**. Removing a player, ending a game, muting a voice, banning and lifting a ban ask for a confirmation and an optional
    reason, recorded with it; a toast then says what happened at the top right, and the action shows in
    **History**:
 
@@ -64,6 +65,8 @@ administrator also signs in from anywhere ([From anywhere, with an account](#fro
     | End a game | A game, **End the game**; Games, **End** | The game stops; its players are back in the lobby, told why |
     | Send a message | **Messages**, to the whole lobby or to a game; a game, **Message to the game** | Each player sees it in the game. One line, 200 bytes at most |
     | Remove a player | Players, or a game, **Remove** | The player leaves its game and the server. It may connect again |
+    | Mute a voice | A game, **Mute**, then **Let talk** | Nobody hears the pilot until the end of its game; every pilot sees it muted, in red |
+    | Mute the voice of an account | Accounts, **Mute the voice**, then **Let it talk again** | From 1 second to 30 days, in every game it plays, across restarts. Its pilots play on, silent |
     | Ban an address | Players, **Ban**; a game, **Ban the address**; Bans, **New ban** | From 1 second to 7 days, across restarts: the server refuses the address, and removes the players connected from it, whom the panel lists first |
     | Lift a ban | Bans, **Lift** | The server welcomes the address again at once |
     | Ban an account | Accounts, **Ban** | The account can no longer sign in, its sessions end, its pilots leave the server at once. Until it is unbanned |
@@ -71,8 +74,9 @@ administrator also signs in from anywhere ([From anywhere, with an account](#fro
     | Name an administrator | Accounts, **Make admin**, **Make player** | It signs in to the panel, or loses it at once |
     | Delete an account | Accounts, **Delete** | The account is deleted for good; its actions stay, anonymized |
 
-    A ban is temporary: an address is shared, by a household or a network, and changes. In **Settings**, turn
-    **Confirm the actions** off to remove and end without the window, and **Sound alert** on to hear an
+    A ban is temporary: an address is shared, by a household or a network, and changes. The server never keeps
+    a voice, so none can be reported nor heard again: a mute is all it does. In **Settings**, turn
+    **Confirm the actions** off to remove, end and mute a pilot without the window, and **Sound alert** on to hear an
     instance become stuck; both are kept in this browser only.
 
 ## From anywhere, with an account

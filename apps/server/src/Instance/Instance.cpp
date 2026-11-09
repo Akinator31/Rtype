@@ -91,7 +91,8 @@ class Instance
 
     /// Opens the UDP port of the game, or its port on the loopback behind the relay of the master on
     /// `127.0.0.1:relayPort` (0: no relay), and starts the simulation.
-    bool openGame(std::uint8_t maxPlayers, std::uint16_t relayPort, GameHost::Handlers handlers)
+    bool openGame(std::uint8_t maxPlayers, std::uint16_t relayPort, GameHost::Handlers handlers,
+                  VoiceRules voice = {})
     {
         try {
             std::unique_ptr<GameTransport> transport;
@@ -101,7 +102,7 @@ class Instance
                 transport = std::make_unique<DirectTransport>(
                     _loop, rtype::network::Address::anyIpv4(_options.udpPort));
             }
-            _host.emplace(_loop, std::move(transport), maxPlayers, _game, std::move(handlers));
+            _host.emplace(_loop, std::move(transport), maxPlayers, _game, std::move(handlers), voice);
         } catch (const std::system_error &error) {
             if (relayPort != 0) {
                 logger().error("Cannot open a UDP port on the loopback for the relay: {}",
@@ -153,7 +154,11 @@ class Instance
                                  _link->sendPlayerDisconnected(player, reason);
                              },
                          .onGameOver = [this](const GameOverReport &report) { gameOver(report); },
-                     });
+                     },
+                     game.voice);
+        if (!game.voice.enabled) {
+            logger().info("No voice in this game: the server turned it off");
+        }
         if (!opened) {
             stop(Failure, DisconnectReason::Shutdown);
             return;
@@ -231,6 +236,13 @@ public:
                                   if (!_host->removePlayer(player.playerId, player.reason)) {
                                       logger().debug("Player {} removed by the master was already gone",
                                                      player.playerId);
+                                  }
+                              },
+                          .onMuteVoice =
+                              [this](const MuteVoiceMessage &mute) {
+                                  if (!_host->muteVoice(mute.playerId, mute.duration)) {
+                                      logger().debug("Player {} muted by the master was already gone",
+                                                     mute.playerId);
                                   }
                               },
                           .onShutdown =

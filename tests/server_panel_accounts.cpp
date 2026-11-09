@@ -85,6 +85,19 @@ struct FakeGames final : AdminGames {
         return false;
     }
     bool end(std::uint32_t) override { return false; }
+    bool muteVoice(std::uint32_t playerId, bool muted) override
+    {
+        voiceMuted.emplace_back(playerId, muted);
+        return playerId == 7;
+    }
+    std::size_t accountVoiceChanged(long long accountId) override
+    {
+        accountsVoiceChanged.push_back(accountId);
+        return 1;
+    }
+
+    std::vector<std::pair<std::uint32_t, bool>> voiceMuted;
+    std::vector<long long> accountsVoiceChanged;
 };
 
 struct FakeLobby final : AdminLobby {
@@ -177,6 +190,7 @@ struct PanelServer {
     FakeGames games;
     FakeLobby lobby;
     AddressBans bans;
+    VoiceMutes voiceMutes;
     FakeDiscord fakeDiscord;
     std::optional<DatabaseThread> database;
     std::optional<PasswordHasher> hasher;
@@ -212,7 +226,8 @@ struct PanelServer {
                                                       .gamePort = 4242,
                                                       .maxGames = 57,
                                                       .panelPort = 0,
-                                                      .admins = setup.admins});
+                                                      .admins = setup.admins},
+                               &voiceMutes);
         WebServerSettings settings;
         settings.listen = Address::loopbackIpv4(0);
         settings.accessToken = token;
@@ -761,6 +776,79 @@ TEST_CASE("From the panel, an administrator searches, bans, unbans, promotes and
     for (const AdminAction &action : readActions(server.direct, 100)) {
         CHECK_THAT(action.details, !ContainsSubstring("Pilot_7"));
     }
+}
+
+TEST_CASE("From the panel, an administrator mutes the voice of an account for a time, and of a pilot in its "
+          "game",
+          "[server][panel][database][voice]")
+{
+    FOR_EACH_ENGINE();
+    PanelServer server(engine, "panel_voice");
+    const Account admin = server.seed("Chief", "chief@example.org", AccountRole::Admin);
+    const Account pilot = server.seed("Pilot_7", "pilot@example.org");
+    server.lobby.players.push_back({.id = 7,
+                                    .name = "Pilot_7",
+                                    .address = *Address::parse("203.0.113.9", 0),
+                                    .gameId = 3,
+                                    .joinedAt = std::chrono::system_clock::now(),
+                                    .accountId = pilot.id});
+    const Panel panel(server, server.signIn("Chief", Password));
+    const std::string mute = std::format("/api/accounts/{}/mute-voice", pilot.id);
+
+    // A duration of 1 s to 30 days, required
+    CHECK(panel.post(mute, R"({"reason":"spam"})").status == 400);
+    CHECK(panel.post(mute, R"({"duration":0})").status == 400);
+    CHECK(panel.post(mute, R"({"duration":2592001})").status == 400);
+    CHECK(panel.post(mute, R"({"duration":1.5})").status == 400);
+    CHECK(panel.post("/api/accounts/999/mute-voice", R"({"duration":60})").status == 404);
+
+    // Muted for an hour: its players in a game at once, kept for the next ones and the next start
+    const HttpResponse muted = panel.post(mute, R"({"duration":3600,"reason":"spam"})");
+    INFO(muted.body);
+    REQUIRE(muted.status == 200);
+    const crow::json::rvalue account = parse(muted.body)["account"];
+    CHECK(account["voiceMute"]["reason"].s() == "spam");
+    CHECK(account["voiceMute"]["actor"].s() == std::to_string(admin.id));
+    CHECK(parse(muted.body)["removed"].i() == 1);
+    CHECK(server.games.accountsVoiceChanged == std::vector<long long>{pilot.id});
+    CHECK(server.voiceMutes.find(pilot.id));
+    server.settle();
+    REQUIRE(loadVoiceMutes(server.direct, std::chrono::system_clock::now()).size() == 1);
+    CHECK(parse(panel.get(std::format("/api/accounts/{}", pilot.id)).body)["voiceMute"]["reason"].s() ==
+          "spam");
+    CHECK(parse(panel.get("/api/server").body)["voiceMutes"].i() == 1);
+    // Its players are not removed: they play on, silent
+    CHECK(server.lobby.disconnected.empty());
+
+    // Lifted: let talk again at once
+    CHECK(
+        panel.post(std::format("/api/accounts/{}/unmute-voice", pilot.id), R"({"reason":"appeal"})").status ==
+        200);
+    CHECK_FALSE(server.voiceMutes.find(pilot.id));
+    CHECK(server.games.accountsVoiceChanged.size() == 2);
+    CHECK(parse(panel.get(std::format("/api/accounts/{}", pilot.id)).body)["voiceMute"].t() ==
+          crow::json::type::Null);
+    server.settle();
+    CHECK(loadVoiceMutes(server.direct, std::chrono::system_clock::now()).empty());
+    // Lifted again: nothing ran, nothing told nor recorded
+    CHECK(panel.post(std::format("/api/accounts/{}/unmute-voice", pilot.id)).status == 200);
+    CHECK(server.games.accountsVoiceChanged.size() == 2);
+
+    // A pilot in its game, for the rest of it; one in no game is not found
+    const HttpResponse pilotMuted = panel.post("/api/players/7/mute-voice", R"({"reason":"insults"})");
+    REQUIRE(pilotMuted.status == 200);
+    CHECK(parse(pilotMuted.body)["voiceMuted"].b());
+    CHECK(panel.post("/api/players/7/unmute-voice").status == 200);
+    CHECK(server.games.voiceMuted == std::vector<std::pair<std::uint32_t, bool>>{{7, true}, {7, false}});
+    CHECK(panel.post("/api/players/8/mute-voice").status == 404);
+    CHECK(panel.post("/api/players/7/mute-voice", R"({"reason":3})").status == 400);
+
+    std::vector<std::string> kinds;
+    for (const AdminAction &action : recorded(server)) {
+        kinds.push_back(action.action);
+    }
+    CHECK(kinds == std::vector<std::string>{"unmute_voice", "mute_voice", "unmute_account_voice",
+                                            "mute_account_voice"});
 }
 
 TEST_CASE("The panel shows the Discord profile of the accounts, and serves their picture",

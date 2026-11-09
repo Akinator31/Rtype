@@ -28,10 +28,12 @@ enum class VoiceIcon : std::uint8_t {
     /// Deafened: it hears nobody. Shown for the player of this client only; another pilot deafened is muted
     /// too, and shown so.
     Deafened,
+    /// Muted by an administrator of the server: the game drops its voice. Red.
+    MutedByAdmin,
 };
 
 /// The icons that are drawn, None excluded, in the order of VoiceIcon.
-inline constexpr std::size_t VoiceIconCount = 5;
+inline constexpr std::size_t VoiceIconCount = 6;
 
 /// The texture of each icon, in the order of VoiceIcon from Speaking: white, tinted with voiceIconColor().
 using VoiceIconTextures = std::array<render::TextureId, VoiceIconCount>;
@@ -43,6 +45,8 @@ struct LocalVoice {
     /// Muted: by its key, or its voice turned off.
     bool muted = false;
     bool deafened = false;
+    /// Muted by an administrator: the game drops its voice.
+    bool mutedByAdmin = false;
 
     friend bool operator==(const LocalVoice &, const LocalVoice &) = default;
 };
@@ -53,12 +57,15 @@ struct VoiceView {
     std::vector<voice::Participant> others;
 };
 
-/// The icon of another pilot. Muted by me first, as it is my choice; then talking; then what it told.
+/// The icon of another pilot. Muted by an administrator first, as nothing else can change it; then muted by
+/// me, as it is my choice; then talking; then what it told.
 [[nodiscard]] VoiceIcon voiceIconOf(const voice::Participant &pilot);
-/// The icon of the player of this client: deafened first, then muted, then talking.
+/// The icon of the player of this client: muted by an administrator first, then deafened, then muted, then
+/// talking.
 [[nodiscard]] VoiceIcon voiceIconOf(const LocalVoice &local);
 
-/// The colour of an icon (Série 16): white while talking, grey for a choice, dark grey without a microphone.
+/// The colour of an icon (Série 16): white while talking, grey for a choice, dark grey without a microphone,
+/// red when an administrator muted it.
 [[nodiscard]] render::Color voiceIconColor(VoiceIcon icon);
 
 /// The texture of an icon among those given; none for VoiceIcon::None.

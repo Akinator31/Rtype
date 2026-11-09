@@ -3,6 +3,7 @@
 // the database, on every engine; then end to end, over HTTP and the WebSocket, with real lobby clients and
 // real instances.
 
+#include "Accounts/AccountStore.hpp"
 #include "Common/Secret.hpp"
 #include "GameServers.hpp"
 #include "Http.hpp"
@@ -13,6 +14,7 @@
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
 #include "Master/ServerDatabase.hpp"
+#include "Master/VoiceMutes.hpp"
 #include "TestDatabase.hpp"
 #include "Web/LocalAccess.hpp"
 #include "Web/WebServer.hpp"
@@ -92,6 +94,27 @@ struct FakeGames final : AdminGames {
         ended.push_back(gameId);
         return true;
     }
+    bool muteVoice(std::uint32_t playerId, bool muted) override
+    {
+        for (AdminGame &game : games) {
+            for (AdminGamePlayer &player : game.players) {
+                if (player.id == playerId) {
+                    player.voiceMuted = muted;
+                    voiceMuted.emplace_back(playerId, muted);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    std::size_t accountVoiceChanged(long long accountId) override
+    {
+        accountsVoiceChanged.push_back(accountId);
+        return 1;
+    }
+
+    std::vector<std::pair<std::uint32_t, bool>> voiceMuted;
+    std::vector<long long> accountsVoiceChanged;
 };
 
 struct FakeLobby final : AdminLobby {
@@ -149,6 +172,7 @@ struct Fixture {
     FakeGames games;
     FakeLobby lobby;
     AddressBans bans;
+    VoiceMutes voiceMutes;
     std::optional<rtype::database::DatabaseThread> database;
     std::optional<Administration> administration;
     std::vector<AdminEvent> events;
@@ -165,7 +189,8 @@ struct Fixture {
                                                       .gamePort = 4242,
                                                       .maxGames = 57,
                                                       .panelPort = 8080,
-                                                      .admins = {}});
+                                                      .admins = {}},
+                               &voiceMutes);
         administration->subscribe([this](const AdminEvent &event) { events.push_back(event); });
     }
     ~Fixture()
@@ -467,6 +492,121 @@ TEST_CASE("The bans are kept in the database, and the expired ones purged", "[se
 
     CHECK(purgeAddressBans(database, now + 1h) == 1);
     CHECK(loadAddressBans(database, now + 1h).size() == 1);
+}
+
+TEST_CASE("A pilot muted from the administration is muted in its game, and so is the record",
+          "[server][admin][database][voice]")
+{
+    const auto engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    Fixture fixture(engine, "admin_voice");
+    AdminPlayer alice = adminPlayer(1, "Alice", "203.0.113.9", 7);
+    alice.accountId = 12;
+    fixture.lobby.players = {alice, adminPlayer(2, "Bob", "198.51.100.4")};
+    fixture.games.games = {adminGame(7, "Bydo hunters", {{1, "Alice"}})};
+    Administration &administration = *fixture.administration;
+
+    CHECK(administration.muteVoice(1, true, "insults", "local"));
+    CHECK(administration.muteVoice(1, false, "", "local"));
+    CHECK(fixture.games.voiceMuted == std::vector<std::pair<std::uint32_t, bool>>{{1, true}, {1, false}});
+    // In no game, or not there: refused, not recorded
+    CHECK_FALSE(administration.muteVoice(2, true, "", "local"));
+    CHECK_FALSE(administration.muteVoice(99, true, "", "local"));
+
+    const std::vector<AdminAction> recorded = fixture.recorded(2);
+    REQUIRE(recorded.size() == 2);
+    CHECK(recorded[0].action == "mute_voice");
+    CHECK(recorded[0].target == "player:1");
+    const crow::json::rvalue muted = parse(recorded[0].details);
+    CHECK(muted["name"].s() == "Alice");
+    CHECK(muted["gameId"].i() == 7);
+    CHECK(muted["account"].i() == 12);
+    CHECK(muted["reason"].s() == "insults");
+    CHECK(recorded[1].action == "unmute_voice");
+    // Its name and address go if its account is deleted, as for a kick
+    rtype::database::Database database = fixture.test.open();
+    fixture.administration.reset();
+    CHECK(anonymizeActions(database, 12, "Alice") == 2);
+    for (const AdminAction &action : readActions(database, 10)) {
+        CHECK_THAT(action.details, !Catch::Matchers::ContainsSubstring("Alice"));
+    }
+}
+
+TEST_CASE("A mute of the voice of an account runs until it ends, and is lifted once",
+          "[server][admin][voice]")
+{
+    const Clock::time_point now = Clock::now();
+    VoiceMutes mutes({{7, now, now + 1h, "spam", "local"}, {8, now - 2h, now - 1h, "", "local"}});
+    CHECK(mutes.find(7, now));
+    CHECK_FALSE(mutes.find(7, now + 2h));
+    CHECK_FALSE(mutes.find(8, now));
+    CHECK_FALSE(mutes.find(9, now));
+    REQUIRE(mutes.list(now).size() == 1);
+
+    mutes.add({9, now, now + 10min, "", "local"});
+    const std::vector<VoiceMute> listed = mutes.list(now);
+    REQUIRE(listed.size() == 2);
+    CHECK(listed[0].accountId == 9);
+    // The same account again: replaced
+    mutes.add({7, now, now + 2h, "again", "local"});
+    CHECK(mutes.find(7, now)->reason == "again");
+    CHECK(mutes.purge(now) == 1);
+
+    const std::optional<VoiceMute> lifted = mutes.remove(7, now);
+    REQUIRE(lifted);
+    CHECK(lifted->reason == "again");
+    CHECK_FALSE(mutes.remove(7, now));
+    mutes.add({10, now - 2h, now - 1h, "", "local"});
+    CHECK_FALSE(mutes.remove(10, now));
+
+    // What the games are told: rounded up, never "until the end of the game"
+    CHECK(secondsLeft({1, now, now + 1500ms, "", ""}, now) == 2);
+    CHECK(secondsLeft({1, now, now + 1h, "", ""}, now) == 3600);
+    CHECK(secondsLeft({1, now, now - 1s, "", ""}, now) == 0);
+    CHECK(secondsLeft({1, now, now + std::chrono::hours(24 * 365 * 200), "", ""}, now) <
+          VoiceMutedForTheGame);
+}
+
+TEST_CASE("The mutes of the voice are kept in the database, purged, and go with their account",
+          "[server][admin][database][voice]")
+{
+    const auto engine = GENERATE(from_range(rtype::test::testEngines()));
+    CAPTURE(rtype::test::engineName(engine));
+    const rtype::test::TestDatabase test(engine, "admin_voice_mutes");
+    rtype::database::Database database = test.open();
+    database.migrate(ServerMigrations);
+    const Clock::time_point now = fromUnixMilliseconds(unixMilliseconds(Clock::now()));
+    const auto account = [&](const std::string &name) {
+        const auto created = createAccount(database,
+                                           {.username = name,
+                                            .email = std::nullopt,
+                                            .passwordHash = std::nullopt,
+                                            .role = AccountRole::Player},
+                                           now);
+        REQUIRE(std::holds_alternative<Account>(created));
+        return std::get<Account>(created).id;
+    };
+    const long long alice = account("Alice");
+    const long long bob = account("Bob");
+
+    saveVoiceMute(database, {alice, now, now + 1h, "spam", "local"});
+    saveVoiceMute(database, {bob, now - 2h, now - 1h, "old", "local"});
+    saveVoiceMute(database, {alice, now, now + 2h, "again", "3"});
+    const std::vector<VoiceMute> loaded = loadVoiceMutes(database, now);
+    REQUIRE(loaded.size() == 1);
+    CHECK(loaded[0] == VoiceMute{alice, now, now + 2h, "again", "3"});
+    // The expired one was purged as it was read
+    CHECK(purgeVoiceMutes(database, now + 3h) == 1);
+    CHECK(loadVoiceMutes(database, now).empty());
+
+    saveVoiceMute(database, {bob, now, now + 1h, "", "local"});
+    deleteVoiceMute(database, bob);
+    CHECK(loadVoiceMutes(database, now).empty());
+    // An account deleted takes its mute with it; one that does not exist cannot be muted
+    saveVoiceMute(database, {bob, now, now + 1h, "", "local"});
+    REQUIRE(deleteAccount(database, bob));
+    CHECK(loadVoiceMutes(database, now).empty());
+    CHECK_THROWS(saveVoiceMute(database, {999, now, now + 1h, "", "local"}));
 }
 
 // --- End to end ---

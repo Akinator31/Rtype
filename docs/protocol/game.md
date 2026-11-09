@@ -28,7 +28,7 @@ acknowledgements and the messages.*
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Magic | `u16` | `0x5254` (`"RT"`) |
-| 2 | Version | `u8` | Protocol version, 3 |
+| 2 | Version | `u8` | Protocol version, 4 |
 | 3 | Reserved | `u8` | 0 |
 | 4 | Session id | `u32` | Session given by the master, never 0, unique across the master |
 | 8 | Packet number | `u64` | Number of this datagram in its direction, from 1 |
@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-03                        version 3
+04                        version 4
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -237,9 +237,11 @@ valid tag.
 | 0 | Player slot | `u8` | 0 to 3: the player's place in the game, which sets the colour of its ship |
 | 1 | Tick rate | `u8` | Ticks per second of the simulation, 60 |
 | 2 | Tick | `u32` | Current tick of the game |
+| 6 | Flags | `u8` | Bit 0: the game carries the voice (version 4, `[voice] enabled` of the server). Other bits: 0 |
 
 **Receiver behaviour:** the client moves to the connected state. A slot above 3 or a tick rate of 0 makes the
-message malformed.
+message malformed; the reserved bits are ignored. Without the voice, the client sends no voice message and
+shows no voice: the game would drop them.
 
 ### DISCONNECT (`0x03`)
 
@@ -497,14 +499,20 @@ a valid Opus packet of 20 ms. It never stores nor logs the voice.
 **Status.** Each player tells the others what it does with its voice, for their HUD: muted by itself, deafened,
 or without a microphone. A client sends it with [`VOICE_STATUS`](#voice_status-0x43), and the game tells every
 client the status of each player with [`VOICE_STATUSES`](#voice_statuses-0x86). It only informs: the game
-forwards the frames of a player whatever its status says. The flags:
+forwards the frames of a player whatever its status says, unless an administrator muted it. The flags:
 
 | Bit | Flag | Set while |
 |---|---|---|
 | 0 | Muted | The player muted itself: nobody hears it |
 | 1 | Deafened | The player hears nobody |
 | 2 | No microphone | The player has no microphone it can open: it listens only |
-| 3–7 | Reserved | Senders set them to 0, receivers ignore them |
+| 3 | Muted by an administrator | Version 4, in `VOICE_STATUSES` only: the game drops the voice of the player until its mute ends. A client sets it to 0 in `VOICE_STATUS`, and the game ignores it there |
+| 4–7 | Reserved | Senders set them to 0, receivers ignore them |
+
+**The rules of the server.** The game forwards a `VOICE` only if the server carries the voice (`ACCEPTED`), the
+player is not muted by an administrator, the frame is at most `[voice] max_frame_bytes` (160 by default), and
+the player sends at most `[voice] max_frames_per_second` (60 by default, with bursts of 10). Otherwise it drops
+it, without a word ([Voice](../architecture/voice.md#the-rules-of-the-server)).
 
 **Choices of each player.** A client may turn down or mute another player for its own player only. It keeps
 that choice under the account of that player (`PLAYER_JOINED`), and the address of the server, or under its
@@ -742,7 +750,7 @@ An unknown backend is treated as `NONE`.
 |---|---|
 | **Direction** | Game → Client |
 | **Reliability** | Reliable |
-| **Sent when** | To a client that connects, after `VOICE_ROSTER`; to every client when a player changes its status (`VOICE_STATUS`), or leaves with flags set. |
+| **Sent when** | To a client that connects, after `VOICE_ROSTER` (to every client when it is muted by an administrator already); to every client when a player changes its status (`VOICE_STATUS`), leaves with flags set, or is muted by an administrator or let talk again. |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|

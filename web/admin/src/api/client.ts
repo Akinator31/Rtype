@@ -121,6 +121,14 @@ export const api = {
     request<{ recipients: number }>('POST', '/api/messages', { text, gameId }),
   ban: (address: string, duration: number, reason: string) =>
     request<{ ban: Ban; removed: number }>('POST', '/api/bans', { address, duration, reason }),
+  muteVoice: (playerId: number, reason: string) =>
+    request<{ playerId: number; voiceMuted: boolean }>('POST', `/api/players/${playerId}/mute-voice`, {
+      reason,
+    }),
+  unmuteVoice: (playerId: number, reason: string) =>
+    request<{ playerId: number; voiceMuted: boolean }>('POST', `/api/players/${playerId}/unmute-voice`, {
+      reason,
+    }),
   unban: (address: string, reason: string) =>
     request<{ address: string }>('POST', '/api/bans/lift', { address, reason }),
 
@@ -138,6 +146,13 @@ export const api = {
     request<{ account: Account }>('POST', `/api/accounts/${id}/unban`, { reason }),
   setRole: (id: number, role: Role) =>
     request<{ account: Account }>('POST', `/api/accounts/${id}/role`, { role }),
+  muteAccountVoice: (id: number, duration: number, reason: string) =>
+    request<{ account: Account; removed: number }>('POST', `/api/accounts/${id}/mute-voice`, {
+      duration,
+      reason,
+    }),
+  unmuteAccountVoice: (id: number, reason: string) =>
+    request<{ account: Account; removed: number }>('POST', `/api/accounts/${id}/unmute-voice`, { reason }),
   deleteAccount: (id: number, reason: string) =>
     request<{ removed: number }>('POST', `/api/accounts/${id}/delete`, { reason }),
 };

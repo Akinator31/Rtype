@@ -5,6 +5,7 @@
 #include "rtype/network/Address.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -34,6 +35,10 @@ struct AdminPlayer {
 struct AdminGamePlayer {
     std::uint32_t id = 0;
     std::string name;
+    /// Its voice muted by an administrator for the rest of this game (AdminGames::muteVoice()).
+    bool voiceMuted = false;
+    /// Its account muted until then, in every game (VoiceMutes); nothing if not.
+    std::optional<std::chrono::system_clock::time_point> voiceMutedUntil;
 
     friend bool operator==(const AdminGamePlayer &, const AdminGamePlayer &) = default;
 };
@@ -54,6 +59,8 @@ struct AdminGame {
     std::chrono::milliseconds statusAge{0};
     /// No status for too long: its instance is stuck.
     bool stale = false;
+    /// The game carries the voice (`[voice] enabled`).
+    bool voice = true;
 
     friend bool operator==(const AdminGame &, const AdminGame &) = default;
 };
@@ -93,6 +100,13 @@ public:
     /// (ENDED_BY_ADMIN).
     /// @return False if no running game has this id.
     virtual bool end(std::uint32_t gameId) = 0;
+    /// Mutes the voice of a player for the rest of its game, or lets it talk again: its instance gets
+    /// MUTE_VOICE. A player whose account is muted stays muted until that ends.
+    /// @return False if it is in no running game.
+    virtual bool muteVoice(std::uint32_t playerId, bool muted) = 0;
+    /// The mute of an account changed (VoiceMutes): its players in a game are muted, or let talk, as it says.
+    /// @return How many players it reached.
+    virtual std::size_t accountVoiceChanged(long long accountId) = 0;
 };
 
 /// The lobby, for the administration. On the thread of the loop.

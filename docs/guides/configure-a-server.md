@@ -50,6 +50,11 @@ else.
 
     [admin]
     admins = ["pavel@example.org", "discord:123456789012345678"]   # always admins
+
+    [voice]
+    enabled = true                                # false: no voice chat in the games
+    max_frame_bytes = 160
+    max_frames_per_second = 60
     ```
 
     Relative paths are relative to the folder of the settings file, not to the current directory: `key =
@@ -114,6 +119,9 @@ else.
 | | `from` | | The sender of the mails, `R-Type <rtype@example.org>` or `rtype@example.org`: its address is also the sender SMTP announces. Required |
 | `[discord]` | `client_id` | | The id of the Discord application, its digits. Required |
 | | `client_secret_file` | | The file of its secret. Required |
+| `[voice]` | `enabled` | `true` | Whether the games carry the voice chat of their players. `false`: the clients show no voice and send none |
+| | `max_frame_bytes` | 160 | The largest frame of voice a game forwards, from 1 to 160 bytes: a voice is 40 to 80 |
+| | `max_frames_per_second` | 60 | The frames of one player a game forwards per second, from 50 to 120: a voice is 50 |
 | `[admin]` | `admins` | `[]` | The administrators, each an email or `discord:<id>`. Never a username, which anyone could take by registering it first. Administrators of the panel whatever their role, once their account exists, its email verified; given the role `admin` at every start. The panel can neither demote, ban nor delete them |
 
 The sections go together:
@@ -130,6 +138,12 @@ it checks its Discord application the same way, and the players sign in with Dis
 panel with their account, those of `[admin]` first, and the panel may listen beyond the loopback, behind a proxy
 ([Administer a server](administer-a-server.md#from-anywhere-with-an-account)). Without accounts, `[admin]` is
 checked, and not used.
+
+**The voice** of the players goes through the games of the server, encrypted between each client and its game,
+which forwards it to the other players without decoding it ([Voice](../architecture/voice.md#the-rules-of-the-server)).
+The server keeps none of it: no recording, no log of what is said, so a voice cannot be reported, and an
+administrator cannot hear what a player said. What an administrator can do is mute a player, for the rest of
+its game or its account for a time, from the panel ([Administer a server](administer-a-server.md)).
 
 ## Result
 
@@ -149,5 +163,6 @@ The server reads its settings at start, `--check` included, and stops with code 
 | `Cannot serve the panel on 127.0.0.1:8080: Address already in use` | Another program, or another server, uses that port: choose another `listen` |
 | `The folder of the panel /opt/r-type/admin does not exist` | Give the folder of the built panel in `panel_dir`, or remove the key |
 | `[admin] admins: "pavel" is neither an email nor discord:<id>` | Name the administrator by their email or their Discord id |
+| `[voice] max_frames_per_second must be from 50 to 120: a voice is 50` | Give a rate a voice fits in, or leave the key out |
 
 Every option of the command line is in [Server](../architecture/server.md#master).
