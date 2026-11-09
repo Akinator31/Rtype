@@ -311,6 +311,7 @@ campaign.channel=CANAL SÉCURISÉ · QG DES FORCES SPATIALES
 campaign.over=FIN DE TRANSMISSION
 campaign.skip=[ESPACE] Passer
 campaign.continue=[ESPACE] Continuer
+campaign.completed=Mission accomplie
 quest.completed=QUÊTE ACCOMPLIE
 quest.first_flight=PREMIER VOL
 quest.veteran_pilot=PILOTE VÉTÉRAN · 25 PARTIES

@@ -115,8 +115,8 @@ constexpr int PromptOrder = 20;
 /// How hard the camera shakes when the blade of the shogun goes through a ship, and when the shogun falls.
 constexpr float StrikeShake = 0.75f;
 constexpr float FallShake = 1.0f;
-/// How loud the voice of the rescue is.
-constexpr float RescueVoiceVolume = 1.0f;
+/// How loud the voices are: that of the rescue, and that of the start of a game.
+constexpr float VoiceVolume = 1.0f;
 /// Time the banner of the combined attack stays fully shown, in seconds.
 constexpr float CombinedBannerDuration = 1.2f;
 
@@ -472,6 +472,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     });
     sessions.setRescueHandler([this](game::RescueStage stage) { showRescue(stage); });
     sessions.setOutcomeHandler([this](game::GameOutcome outcome) {
+        _outcome = outcome;
         _recorder.recordOutcome(outcome);
         recordResults();
     });
@@ -497,10 +498,12 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                        });
 }
 
-void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd)
+void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd, std::string voice)
 {
     _next = std::move(session);
     _nextEnd = std::move(onEnd);
+    _nextVoice = std::move(voice);
+    _outcome.reset();
     _results.reset();
     _xpAfter.reset();
     _engine.switchScene(GameScene);
@@ -690,7 +693,7 @@ void GameScenes::showRescue(game::RescueStage stage)
     }
     switch (stage) {
     case game::RescueStage::Voice:
-        playRescueVoice();
+        playVoice(RTYPE_SOUND_RESCUE_VOICE);
         break;
     case game::RescueStage::Arrival:
         _engine.showBanner(_translations.text("rescue.title"), _translations.text("rescue.detail"),
@@ -721,12 +724,12 @@ void GameScenes::shakeGameCamera(float strength)
     }
 }
 
-void GameScenes::playRescueVoice()
+void GameScenes::playVoice(const std::string &path)
 {
     try {
-        _audio.play(_audio.loadSound(RTYPE_SOUND_RESCUE_VOICE), {.volume = RescueVoiceVolume});
+        _audio.play(_audio.loadSound(path), {.volume = VoiceVolume});
     } catch (const std::runtime_error &error) {
-        log::Logger("game").warning("Voice of the rescue not played: {}", error.what());
+        log::Logger("game").warning("Voice {} not played: {}", path, error.what());
     }
 }
 
@@ -793,6 +796,9 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
     _recorder.recordStart();
+    if (const std::string voice = std::exchange(_nextVoice, {}); !voice.empty()) {
+        playVoice(voice);
+    }
 }
 
 } // namespace rtype::client

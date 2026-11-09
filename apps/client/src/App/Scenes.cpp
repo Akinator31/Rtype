@@ -1,5 +1,6 @@
 #include "App/Scenes.hpp"
 
+#include "Campaign/CampaignMission.hpp"
 #include "Campaign/CampaignScene.hpp"
 #include "Console/ConsoleScene.hpp"
 #include "Game/LocalSession.hpp"
@@ -50,7 +51,9 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
     // After its briefing, the campaign flies the ship equipped straight into space, without the hangar
-    createCampaignScene(engine, resources, targets.audio, metrics, translations, playOffline);
+    createCampaignScene(
+        engine, resources, targets.audio, metrics, translations,
+        [&engine, &games, &config, &translations] { playFirstMission(engine, games, config, translations); });
 }
 
 } // namespace rtype::client

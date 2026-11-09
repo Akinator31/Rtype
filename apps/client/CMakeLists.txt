@@ -1,6 +1,6 @@
 # The code of the client is a library of its own, so that the tests can use it, like the server's:
 #   App/                 what the program puts together: its configuration, its systems and its scenes
-#   Campaign/            the campaign: its briefing, received as a radio transmission
+#   Campaign/            the campaign: its briefing, received as a radio transmission, and its missions
 #   Commands/, Console/  the console and its commands
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
 #   Loading/             the loading screen at startup, and the loading of the assets of the scenes
@@ -14,6 +14,7 @@ add_library(r-type_client_core STATIC
     src/App/Configuration.cpp
     src/App/Scenes.cpp
     src/App/Systems.cpp
+    src/Campaign/CampaignMission.cpp
     src/Campaign/CampaignScene.cpp
     src/Campaign/TransmissionSystem.cpp
     src/Commands/BossCommand.cpp

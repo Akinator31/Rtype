@@ -69,6 +69,9 @@
 /// The voice played when the allies are called to the rescue against the final boss, offline: its length is
 /// game::Rules::rescueVoiceTicks. Not in the assets yet: the rescue goes on silently without it.
 #define RTYPE_SOUND_RESCUE_VOICE "sounds/rescue_voice.wav"
+/// The voice of the start of the first mission of the campaign, once in space: its length is
+/// FirstMissionVoiceTicks.
+#define RTYPE_SOUND_CAMPAIGN_START "cooper_jude_start.mp3"
 /// The music of the lore scene, played once while the story scrolls: about as long as the crawl.
 #define RTYPE_MUSIC_LORE "sounds/lore.mp3"
 /// The results of a game online (ResultsScreen): the game over as the screen opens, a figure that lands, the

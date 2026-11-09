@@ -16,6 +16,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace rtype::client
 {
@@ -77,6 +78,10 @@ class GameScenes
     /// The session of the next game scene opened, and what to do when it ends.
     std::unique_ptr<GameSession> _next;
     std::function<void()> _nextEnd;
+    /// The voice played as the next game scene opens: a path of the assets, none if empty.
+    std::string _nextVoice;
+    /// How the game played ended, once its session told it.
+    std::optional<game::GameOutcome> _outcome;
     /// What to do when the game played ends.
     std::function<void()> _onEnd;
     /// Online, what the local player did in the game played, once it went to its end.
@@ -120,8 +125,8 @@ class GameScenes
     void showStrike();
     /// Shakes the camera of the game scene open by a blow of a strength from 0 to 1 (shakeCamera()).
     void shakeGameCamera(float strength);
-    /// Plays the voice of the rescue, if its file is in the assets.
-    void playRescueVoice();
+    /// Plays a voice of the assets once, if its file is there.
+    void playVoice(const std::string &path);
     /// The prompt of the combined attack, blinking under the middle of the screen until the player presses
     /// Fire.
     void openPrompt();
@@ -140,7 +145,11 @@ public:
     /// Starts a game with this session: the game scene replaces every scene at the next update of the engine.
     /// @param onEnd Called once when the player leaves the game or its session is over. Empty: back to the
     /// main menu.
-    void play(std::unique_ptr<GameSession> session, std::function<void()> onEnd = {});
+    /// @param voice A voice played once as the game opens, a path of the assets: none if empty.
+    void play(std::unique_ptr<GameSession> session, std::function<void()> onEnd = {}, std::string voice = {});
+
+    /// How the game played ended, once its session told it: none before, or if the player left it.
+    [[nodiscard]] const std::optional<game::GameOutcome> &outcome() const { return _outcome; }
 
     /// Online, what the local player did in the game played, if it went to its end; none before, offline,
     /// or once the player left it.
