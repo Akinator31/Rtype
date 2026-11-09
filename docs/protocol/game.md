@@ -28,7 +28,7 @@ acknowledgements and the messages.*
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Magic | `u16` | `0x5254` (`"RT"`) |
-| 2 | Version | `u8` | Protocol version, 3 |
+| 2 | Version | `u8` | Protocol version, 4 |
 | 3 | Reserved | `u8` | 0 |
 | 4 | Session id | `u32` | Session given by the master, never 0, unique across the master |
 | 8 | Packet number | `u64` | Number of this datagram in its direction, from 1 |
@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-03                        version 3
+04                        version 4
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -74,7 +74,7 @@ The body is encrypted with **AEAD_CHACHA20_POLY1305** as defined in
 A receiver processes a datagram in this order, and drops it silently at the first failed step:
 
 1. The size is between 32 and 1200 bytes.
-2. The magic is `0x5254`, the version is 3, the reserved byte is 0.
+2. The magic is `0x5254`, the version is 4, the reserved byte is 0.
 3. The session id is a known session.
 4. The source address has not sent more than 200 datagrams in the last second.
 5. The packet number is accepted by the replay window ([section 4](#4-replay-window)).
@@ -422,7 +422,7 @@ predicted one. A predicted shot the game never sends is a wrong guess: the clien
 **Sending.** Every **2** ticks (30 times per second), after simulating the tick, the game sends each connected
 client a snapshot: the players' scores and lives, and the state of every entity. When the entities do not fit
 in one datagram, the snapshot is split in **parts** (at most 16), each in its own datagram, each with the tick
-and the players. With four players, a part holds up to 65 entities.
+and the players. With four players, a part holds up to 61 entities.
 
 **Receiving.** The client keeps the tick `L` of the latest snapshot it applied, and for each part received:
 
@@ -497,7 +497,7 @@ Each player, 20 bytes:
 | 14 | Best streak | `u16` | The longest streak of the game |
 | 16 | Experience | `u32` | Experience earned in this game; always 0 offline. Online, the waves follow each other without end and earn experience ([progression](../architecture/accounts.md#progression)) |
 
-Each entity, 16 bytes:
+Each entity, 17 bytes:
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
@@ -510,6 +510,7 @@ Each entity, 16 bytes:
 | 12 | Velocity Y | `i16` | |
 | 14 | Health, or age | `u8` | Hit points left, for health bars; 0 for kinds without. For a shot, its age in ticks, at most 255 ([section 9.1](#91-the-world)) |
 | 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bit 3: aiming up. Bit 4: aiming down (a ship of a player turned by 30°, [section 9.2](#92-inputs)). Bit 5: guarding, bit 6: slashing, bit 7: shooting (the stance of a Bydo, at most one, drawn with its animation) |
+| 16 | Ship | `u8` | For a Bydo, its ship: the index of its id among the ids of the ships of the configuration (`config/ships/`), in alphabetical order, so that the client draws its model at the size of its collider (version 4). `0xFF` for none: the ships of the players, the shots, a Bydo beyond 254 ships |
 
 **Receiver behaviour:** the client applies the part as [section 9.3](#93-snapshots) says. A part number not below
 the number of parts, a number of parts of 0 or above 16, more than 4 players, a slot above 3 or given twice, an
@@ -616,7 +617,7 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 ```
 80                        type: SNAPSHOT
 00                        flags: unreliable
-00 37                     size: 55 bytes
+00 38                     size: 56 bytes
 00 00 03 E8                 tick: 1000
 00 00 03 E6                 last input applied: tick 998
 02                          input lead: 2 ticks
@@ -640,4 +641,5 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 F6 A0                         velocity y: −2400 / 8 = −300 units per second
 03                            health: 3
 01                            flags: invulnerable
+FF                            ship: none
 ```

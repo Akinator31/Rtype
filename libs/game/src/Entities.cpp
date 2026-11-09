@@ -32,6 +32,13 @@ EntityKind findProjectileKind(std::uint8_t owner, ProjectileCategory category)
     return category == ProjectileCategory::Plasma ? EntityKind::BydoPlasmaShot : EntityKind::BydoShot;
 }
 
+/// The index the snapshots send for a ship: NoShip beyond what a byte holds.
+std::uint8_t findShipIndex(const ShipRegistry &ships, const std::string &ship)
+{
+    const std::size_t index = ships.getIndex(ship);
+    return index < NoShip ? static_cast<std::uint8_t>(index) : NoShip;
+}
+
 ecs::entity_t spawnVisible(ecs::Ecs &ecs, GameContext &context, EntityKind kind, std::uint8_t owner, float x,
                            float y)
 {
@@ -78,6 +85,7 @@ ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string 
     const EntityKind kind = enemy.boss ? EntityKind::BydoBoss : EntityKind::BydoFlyer;
     const ecs::entity_t entity = spawnVisible(ecs, context, kind, NoOwner, x, y);
     ecs.addComponent<Enemy>(entity, enemyId);
+    ecs.addComponent<ShipIndex>(entity, findShipIndex(context.ships, enemy.ship));
     ecs.addComponent<Health>(entity, enemy.health);
     ecs.addComponent<Damage>(entity, enemy.collisionDamage);
     ecs.addComponent<physics::Velocity>(entity);

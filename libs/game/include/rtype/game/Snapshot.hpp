@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rtype/game/Constants.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -120,6 +122,9 @@ struct EntityState {
     /// For a shot (isShot()): ticks since it was fired, at most 255, so that a client knows the tick it was
     /// fired at. Written in the byte of the health, which a shot does not have.
     std::uint8_t age = 0;
+    /// For a Bydo: the index of its ship among those of the configuration (ShipRegistry::getIndex()), so that
+    /// the client draws its model at the size of its collider. NoShip otherwise.
+    std::uint8_t ship = NoShip;
 
     friend bool operator==(const EntityState &, const EntityState &) = default;
 };

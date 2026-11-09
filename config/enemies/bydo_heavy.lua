@@ -2,7 +2,7 @@
 return {
     id = "bydo_heavy",
     ship = "bydo_heavy",
-    health = 160,
+    health = 67,
     speed = 380,
     acceleration = 640,
     weapon = "heavy_missile_launcher",

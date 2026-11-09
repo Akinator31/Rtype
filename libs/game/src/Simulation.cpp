@@ -197,6 +197,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<PlayerShip> &ships = _ecs.cache<PlayerShip>();
     ecs::ComponentCache<EnemyOrders> &orders = _ecs.cache<EnemyOrders>();
     ecs::ComponentCache<Projectile> &projectiles = _ecs.cache<Projectile>();
+    ecs::ComponentCache<ShipIndex> &shipIndexes = _ecs.cache<ShipIndex>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -212,6 +213,7 @@ void Simulation::buildSnapshot()
             state.velocityY = velocities.get(entity).y;
         }
         state.health = healths.has(entity) ? healths.get(entity).points : 0;
+        state.ship = shipIndexes.has(entity) ? shipIndexes.get(entity).value : NoShip;
         if (projectiles.has(entity)) {
             state.age = static_cast<std::uint8_t>(std::min<std::uint32_t>(projectiles.get(entity).age, 255));
         }

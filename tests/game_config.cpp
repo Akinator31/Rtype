@@ -151,7 +151,7 @@ TEST_CASE("The new Bydo behaviors issue their first orders", "[game]")
 
     const rtype::ecs::entity_t wounded =
         spawnEnemy(ecs, simulation.context(), "bydo_berserker", 1600.0f, 216.0f);
-    ecs.getComponent<Health>(wounded).points = 40;
+    ecs.getComponent<Health>(wounded).points = 17;
     simulation.step();
     CHECK(ecs.getComponent<rtype::physics::Velocity>(wounded).x < -250.0f);
     CHECK(ecs.getComponent<EnemyOrders>(wounded).target.has_value());
