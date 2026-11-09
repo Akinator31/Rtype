@@ -166,14 +166,23 @@ bool isShot(EntityKind kind)
 
 // --- ACCEPTED, PLAYER_JOINED, PLAYER_LEFT ---
 
+namespace
+{
+
+/// The flags of ACCEPTED: bit 0, the game carries the voice; the others reserved.
+constexpr std::uint8_t AcceptedVoice = 0x01;
+
+} // namespace
+
 std::vector<std::byte> encode(const AcceptedMessage &message)
 {
     require(isSlot(message.slot), "A player slot is 0 to 3");
     require(message.tickRate != 0, "The tick rate is never 0");
-    Writer writer(6);
+    Writer writer(7);
     writer.writeU8(message.slot);
     writer.writeU8(message.tickRate);
     writer.writeU32(message.tick);
+    writer.writeU8(message.voice ? AcceptedVoice : 0);
     return writer.take();
 }
 
@@ -184,6 +193,8 @@ std::optional<AcceptedMessage> decodeAccepted(std::span<const std::byte> payload
     message.slot = reader.readU8();
     message.tickRate = reader.readU8();
     message.tick = reader.readU32();
+    // The other bits reserved
+    message.voice = (reader.readU8() & AcceptedVoice) != 0;
     if (!isSlot(message.slot) || message.tickRate == 0) {
         reader.fail();
     }
@@ -504,18 +515,22 @@ constexpr std::uint8_t LastFrame = 0x01;
 constexpr std::uint8_t MutedFlag = 0x01;
 constexpr std::uint8_t DeafenedFlag = 0x02;
 constexpr std::uint8_t NoMicrophoneFlag = 0x04;
+/// In VOICE_STATUSES only, set by the game (version 4); dropped from a VOICE_STATUS.
+constexpr std::uint8_t MutedByAdminFlag = 0x08;
 
 std::uint8_t toFlags(const voice::Status &status)
 {
     return static_cast<std::uint8_t>((status.muted ? MutedFlag : 0) | (status.deafened ? DeafenedFlag : 0) |
-                                     (status.noMicrophone ? NoMicrophoneFlag : 0));
+                                     (status.noMicrophone ? NoMicrophoneFlag : 0) |
+                                     (status.mutedByAdmin ? MutedByAdminFlag : 0));
 }
 
 voice::Status toStatus(std::uint8_t flags)
 {
     return {.muted = (flags & MutedFlag) != 0,
             .deafened = (flags & DeafenedFlag) != 0,
-            .noMicrophone = (flags & NoMicrophoneFlag) != 0};
+            .noMicrophone = (flags & NoMicrophoneFlag) != 0,
+            .mutedByAdmin = (flags & MutedByAdminFlag) != 0};
 }
 
 voice::Backend toBackend(std::uint8_t value)
@@ -645,8 +660,11 @@ std::optional<VoiceRosterMessage> decodeVoiceRoster(std::span<const std::byte> p
 
 std::vector<std::byte> encode(const VoiceStatusMessage &message)
 {
+    // What the game sets is not the player's to tell
+    voice::Status told = message.status;
+    told.mutedByAdmin = false;
     Writer writer(1);
-    writer.writeU8(toFlags(message.status));
+    writer.writeU8(toFlags(told));
     return writer.take();
 }
 
@@ -657,7 +675,8 @@ std::optional<VoiceStatusMessage> decodeVoiceStatus(std::span<const std::byte> p
     if (!reader.finish()) {
         return std::nullopt;
     }
-    return VoiceStatusMessage{toStatus(flags)};
+    // Muted by an administrator is the game's to say: dropped as a reserved bit
+    return VoiceStatusMessage{toStatus(flags & static_cast<std::uint8_t>(~MutedByAdminFlag))};
 }
 
 std::vector<std::byte> encode(const VoiceStatusesMessage &message)

@@ -112,7 +112,12 @@ TEST_CASE("An input is the one of the example of the specification", "[game][mes
 
 TEST_CASE("The small messages are written field by field", "[game][messages]")
 {
-    CHECK(encode(AcceptedMessage{2, 60, 1000}) == bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8}));
+    // The voice carried, then not (version 4); its other bits reserved
+    CHECK(decodeAccepted(bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8, 0xFE}))->voice == false);
+    CHECK(decodeAccepted(bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8, 0x01}))->voice);
+    CHECK_FALSE(decodeAccepted(bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8})));
+    CHECK(encode(AcceptedMessage{2, 60, 1000}) == bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8, 0x01}));
+    CHECK(encode(AcceptedMessage{2, 60, 1000, false}) == bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8, 0x00}));
     // A guest, account 0; then the account 7 (version 3)
     CHECK(encode(PlayerJoinedMessage{1, 42, "Pavel"}) ==
           bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l', 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -185,6 +190,18 @@ TEST_CASE("What each player tells about its voice is one byte of flags", "[game]
     CHECK(decodeVoiceStatuses(encode(statuses)) == statuses);
     CHECK_FALSE(decodeVoiceStatuses(bytes({0x00, 0x00, 0x00})));
     CHECK_FALSE(decodeVoiceStatuses(bytes({0x00, 0x00, 0x00, 0x00, 0x00})));
+
+    // Muted by an administrator (version 4): bit 3, the game's to say in VOICE_STATUSES only
+    CHECK(encode(VoiceStatusesMessage{{Status{.mutedByAdmin = true}, Status{}, Status{}, Status{}}}) ==
+          bytes({0x08, 0x00, 0x00, 0x00}));
+    const VoiceStatusesMessage muted{
+        {Status{.muted = true, .mutedByAdmin = true}, Status{}, Status{}, Status{}}};
+    CHECK(decodeVoiceStatuses(encode(muted)) == muted);
+    CHECK(decodeVoiceStatuses(bytes({0xF9, 0x00, 0x00, 0x00}))->statuses[0] ==
+          Status{.muted = true, .mutedByAdmin = true});
+    // A player cannot tell it: neither written nor read in VOICE_STATUS
+    CHECK(encode(VoiceStatusMessage{{.mutedByAdmin = true}}) == bytes({0x00}));
+    CHECK(decodeVoiceStatus(bytes({0x08})) == VoiceStatusMessage{});
 }
 
 TEST_CASE("PLAYER_JOINED carries the account of the player", "[game][messages]")
