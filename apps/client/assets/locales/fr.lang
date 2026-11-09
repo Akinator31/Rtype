@@ -246,6 +246,7 @@ error.already_signed_in=Déjà connecté
 error.discord_taken=Ce compte Discord appartient à un autre compte
 error.discord_unavailable=Le serveur ne peut pas joindre Discord pour le moment : réessayez dans un instant
 error.not_found=Introuvable
+error.discord_token_refused=Discord a refusé le jeton : reconnectez-vous avec Discord
 error.unknown=Le serveur a refusé
 online.server_hint=Port 4242 par défaut · IPv6 entre crochets : [::1]:4242
 online.known=Serveurs connus

@@ -129,6 +129,8 @@ std::string describe(ErrorCode code)
         return "The server cannot reach Discord now: try again in a moment";
     case ErrorCode::NotFound:
         return "Nothing was found";
+    case ErrorCode::DiscordTokenRefused:
+        return "Discord refused the token: sign in with Discord again";
     }
     return std::format("The server refused (error {})", static_cast<int>(code));
 }
@@ -204,6 +206,8 @@ std::string_view errorKey(ErrorCode code)
         return "error.discord_unavailable";
     case ErrorCode::NotFound:
         return "error.not_found";
+    case ErrorCode::DiscordTokenRefused:
+        return "error.discord_token_refused";
     }
     return "error.unknown";
 }
@@ -336,6 +340,21 @@ void LobbyClient::received(std::uint8_t type, std::span<const std::byte> payload
             _handlers.onProgress(*progress);
         }
         return;
+    }
+    // The Discord token: the reply of DISCORD_REFRESH, or given before the reply of a sign-in with Discord
+    if (type == message_type::DiscordToken) {
+        const std::optional<lobby::DiscordTokenMessage> token = lobby::decodeDiscordToken(payload);
+        if (!token) {
+            fail("The server sent a malformed DISCORD_TOKEN");
+            return;
+        }
+        logger().info("The server gave the Discord token of the player");
+        if (_handlers.onDiscordToken) {
+            _handlers.onDiscordToken(*token);
+        }
+        if (_pending.empty() || _pending.front().request != message_type::DiscordRefresh) {
+            return;
+        }
     }
     // An error after which the master closes the connection: KICKED and BANNED without a request, BANNED
     // after a SIGN_IN. The one of HELLO goes to it, for SESSION_EXPIRED
@@ -622,6 +641,27 @@ void LobbyClient::discordSignIn(DiscordAuthorizeCallback done)
                 }
                 const auto error = type == message_type::Error ? lobby::decodeError(payload) : std::nullopt;
                 done(error ? error->code : ErrorCode::Malformed);
+            });
+}
+
+void LobbyClient::discordRefresh(const std::string &refreshToken, DoneCallback done)
+{
+    if (!lobby::isValidDiscordToken(refreshToken)) {
+        done(ErrorCode::DiscordTokenRefused);
+        return;
+    }
+    request(message_type::DiscordRefresh, lobby::encode(lobby::DiscordRefreshMessage{refreshToken}),
+            [done = std::move(done)](std::uint8_t type, std::span<const std::byte> payload) {
+                std::optional<ErrorCode> error;
+                if (type == message_type::Error) {
+                    const auto message = lobby::decodeError(payload);
+                    error = message ? message->code : ErrorCode::Malformed;
+                } else if (type != message_type::DiscordToken) {
+                    error = ErrorCode::Malformed;
+                }
+                if (done) {
+                    done(error);
+                }
             });
 }
 

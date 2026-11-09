@@ -102,6 +102,9 @@ public:
     void update(const PlayerActivity &activity, Clock::time_point now);
     /// Shows the activity again from the next update, or clears it.
     void setEnabled(bool enabled);
+    /// Sends the activity again at the next update, within the limit of Discord: once connected with a token,
+    /// Discord cleared the one shown before.
+    void resend() { _sent.reset(); }
     [[nodiscard]] bool isEnabled() const { return _enabled; }
 
 private:

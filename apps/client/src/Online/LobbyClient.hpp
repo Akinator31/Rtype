@@ -96,6 +96,9 @@ public:
         std::function<void(const std::string &text)> onServerMessage;
         /// The progression of the account signed in: once signed in, then after each game (PROGRESS).
         std::function<void(const lobby::ProgressMessage &progress)> onProgress;
+        /// The Discord token of the player (DISCORD_TOKEN, lobby protocol 6): before the SIGNED_IN or DONE of
+        /// a sign-in with Discord on a master with the social features, and for a DISCORD_REFRESH. Secret.
+        std::function<void(const lobby::DiscordTokenMessage &token)> onDiscordToken;
         /// The connection ended, or could not be opened, with the reason for the player. Called once; nothing
         /// is called after.
         std::function<void(const std::string &reason)> onClosed;
@@ -214,6 +217,10 @@ public:
     void discordConfirm(const lobby::DiscordConfirmMessage &confirmation, DiscordConfirmCallback done);
     /// CHOOSE_USERNAME: the username of the account of the new Discord user just confirmed.
     void chooseUsername(const std::string &username, SignInCallback done);
+    /// DISCORD_REFRESH: a new Discord token from the refresh token of the last one, which goes to
+    /// onDiscordToken; `done` gets nothing then, or the error (DISCORD_TOKEN_REFUSED: forget the refresh
+    /// token). A token that cannot be one gets DISCORD_TOKEN_REFUSED at once.
+    void discordRefresh(const std::string &refreshToken, DoneCallback done);
     /// GET_PROFILE: the Discord profile of an account (version 4).
     void profile(std::uint64_t accountId, ProfileCallback done);
     /// GET_AVATAR, as many times as its parts: the picture of an account, whole, or NOT_FOUND if it has none,

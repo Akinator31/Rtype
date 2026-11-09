@@ -9,6 +9,7 @@
 #include "Online/SessionTokens.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/discord/Authorizer.hpp"
+#include "rtype/discord/Connection.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
@@ -104,6 +105,8 @@ class OnlineScenes
     render::ResourceManager &_resources;
     network::EventLoop &_loop;
     discord::Authorizer &_discord;
+    /// The connection to Discord with the token of the player, on a master with the social features.
+    discord::Connection &_discordConnection;
     GameScenes &_games;
     localization::Localization &_translations;
     ShipSelection &_ships;
@@ -195,6 +198,11 @@ class OnlineScenes
     void discordConfirmed(DiscordPurpose purpose, const LobbyClient::DiscordConfirmResult &result);
     /// The scene a Discord confirmation goes back to when it fails.
     [[nodiscard]] static const char *discordOrigin(DiscordPurpose purpose);
+    /// DISCORD_TOKEN: keeps its refresh token for this server, and connects to Discord with it.
+    void discordToken(const lobby::DiscordTokenMessage &token);
+    /// DISCORD_REFRESH with the refresh token kept for this server, signed in: at the connection, and when
+    /// the token expires. A refresh token refused is forgotten.
+    void refreshDiscord();
 
 public:
     /// Declares the Online menu and the lobby. Everything given must outlive the engine.
@@ -202,13 +210,16 @@ public:
     /// @param resources Loads the sky, the logo of Discord and the pictures of the accounts.
     /// @param pictures The folder the pictures of the accounts are kept in.
     /// @param discord Asks the player to accept the Discord application of a server; polled by the game loop.
+    /// @param discordConnection Connects to Discord with the token a server gives (DISCORD_TOKEN), and
+    ///   disconnects when the player leaves the server.
     /// @param ships The ship the player picks in the hangar, before creating or joining a game.
     /// @param config The definitions of the client (loadGameConfig()): the weapon of the player, whose shots
     ///   its games online predict.
     OnlineScenes(engine::Engine &engine, render::ResourceManager &resources, network::EventLoop &loop,
                  GameScenes &games, const engine::InterfaceStyle &style,
-                 localization::Localization &translations, discord::Authorizer &discord, ShipSelection &ships,
-                 std::filesystem::path pictures, const game::GameConfig &config);
+                 localization::Localization &translations, discord::Authorizer &discord,
+                 discord::Connection &discordConnection, ShipSelection &ships, std::filesystem::path pictures,
+                 const game::GameConfig &config);
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;
