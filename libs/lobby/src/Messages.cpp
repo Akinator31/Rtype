@@ -126,7 +126,7 @@ constexpr std::uint8_t All = Guests | PasswordAccounts | Discord;
 
 bool isAccountRequest(std::uint8_t type)
 {
-    return type >= message_type::Register && type <= message_type::GetAvatar;
+    return type >= message_type::Register && type <= message_type::DiscordRefresh;
 }
 
 bool isValidPlayerName(std::string_view name)
@@ -181,6 +181,35 @@ bool isValidCodeVerifier(std::string_view verifier)
         const bool unreserved = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
                                 c == '-' || c == '.' || c == '_' || c == '~';
         if (!unreserved) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isValidDiscordScopes(std::string_view scopes)
+{
+    if (scopes.empty() || scopes.size() > MaxDiscordScopesLength || scopes.front() == ' ' ||
+        scopes.back() == ' ' || scopes.find("  ") != std::string_view::npos) {
+        return false;
+    }
+    for (const char c : scopes) {
+        const bool allowed = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                             c == '.' || c == '_' || c == ' ';
+        if (!allowed) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isValidDiscordToken(std::string_view token)
+{
+    if (token.empty() || token.size() > MaxDiscordTokenLength) {
+        return false;
+    }
+    for (const char c : token) {
+        if (c <= ' ' || c > '~') {
             return false;
         }
     }
@@ -616,8 +645,11 @@ std::optional<SignedInMessage> decodeSignedIn(std::span<const std::byte> payload
 std::vector<std::byte> encode(const DiscordAuthorizeMessage &message)
 {
     require(message.applicationId != 0, "A Discord application id is never 0");
-    Writer writer(8);
+    require(isValidDiscordScopes(message.scopes),
+            "Discord scopes are 1 to 255 of A-Z a-z 0-9 . _ and spaces");
+    Writer writer;
     writer.writeU64(message.applicationId);
+    writer.writeString(message.scopes);
     return writer.take();
 }
 
@@ -626,9 +658,64 @@ std::optional<DiscordAuthorizeMessage> decodeDiscordAuthorize(std::span<const st
     Reader reader(payload);
     DiscordAuthorizeMessage message;
     message.applicationId = reader.readU64();
-    if (reader.ok() && message.applicationId == 0) {
+    message.scopes = reader.readString(1, MaxDiscordScopesLength);
+    if (reader.ok() && (message.applicationId == 0 || !isValidDiscordScopes(message.scopes))) {
         reader.fail();
     }
+    return finished(reader, std::move(message));
+}
+
+namespace
+{
+
+void writeDiscordToken(Writer &writer, std::string_view token)
+{
+    require(isValidDiscordToken(token), "A Discord token is 1 to 1024 printable ASCII characters");
+    writer.writeString16(token);
+}
+
+std::string readDiscordToken(Reader &reader)
+{
+    std::string token = reader.readString16(1, MaxDiscordTokenLength);
+    if (reader.ok() && !isValidDiscordToken(token)) {
+        reader.fail();
+    }
+    return token;
+}
+
+} // namespace
+
+std::vector<std::byte> encode(const DiscordTokenMessage &message)
+{
+    Writer writer;
+    writeDiscordToken(writer, message.accessToken);
+    writeDiscordToken(writer, message.refreshToken);
+    writer.writeU32(message.expiresIn);
+    return writer.take();
+}
+
+std::optional<DiscordTokenMessage> decodeDiscordToken(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    DiscordTokenMessage message;
+    message.accessToken = readDiscordToken(reader);
+    message.refreshToken = readDiscordToken(reader);
+    message.expiresIn = reader.readU32();
+    return finished(reader, std::move(message));
+}
+
+std::vector<std::byte> encode(const DiscordRefreshMessage &message)
+{
+    Writer writer;
+    writeDiscordToken(writer, message.refreshToken);
+    return writer.take();
+}
+
+std::optional<DiscordRefreshMessage> decodeDiscordRefresh(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    DiscordRefreshMessage message;
+    message.refreshToken = readDiscordToken(reader);
     return finished(reader, std::move(message));
 }
 
