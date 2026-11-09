@@ -806,7 +806,8 @@ TEST_CASE("From the panel, an administrator mutes the voice of an account for a 
     const HttpResponse muted = panel.post(mute, R"({"duration":3600,"reason":"spam"})");
     INFO(muted.body);
     REQUIRE(muted.status == 200);
-    // The values in a crow::json::rvalue point into the text of the one load returned: it lives while they are read
+    // The values in a crow::json::rvalue point into the text of the one load returned: it lives while they
+    // are read
     const crow::json::rvalue answer = parse(muted.body);
     const crow::json::rvalue &account = answer["account"];
     CHECK(account["voiceMute"]["reason"].s() == "spam");
