@@ -156,6 +156,16 @@ struct Registered {
     std::string code;
 };
 
+/// Keeps the tokens of a Discord user for the lobby, which sends them in DISCORD_TOKEN before the reply.
+void keepToken(DiscordProgress &progress, const DiscordUser &user)
+{
+    if (user.tokens) {
+        progress.token = rtype::lobby::DiscordTokenMessage{.accessToken = user.tokens->accessToken,
+                                                           .refreshToken = user.tokens->refreshToken,
+                                                           .expiresIn = user.tokens->expiresIn};
+    }
+}
+
 } // namespace
 
 AccountService::AccountService(rtype::network::EventLoop &loop, rtype::database::DatabaseThread &database,
@@ -430,6 +440,7 @@ void AccountService::handle(std::uint8_t type, std::span<const std::byte> payloa
     case message_type::DiscordSignIn:
     case message_type::DiscordConfirm:
     case message_type::ChooseUsername:
+    case message_type::DiscordRefresh:
         if (_discord == nullptr) {
             // Not offered by this master: the payload is not read
             later(done, ErrorCode::AccountsDisabled);
@@ -486,6 +497,9 @@ void AccountService::handle(std::uint8_t type, std::span<const std::byte> payloa
         return;
     case message_type::ChooseUsername:
         chooseUsername(connection, payload, std::move(done));
+        return;
+    case message_type::DiscordRefresh:
+        discordRefresh(connection, payload, std::move(done));
         return;
     default:
         later(done, ErrorCode::UnknownMessage);
@@ -966,7 +980,10 @@ void AccountService::discordSignIn(const AccountConnection &connection, std::spa
     progress.startedAt = SteadyClock::now();
     progress.refused = 0;
     progress.newUser.reset();
-    later(done, rtype::lobby::DiscordAuthorizeMessage{.applicationId = _discord->applicationId()});
+    // The social features of the Social SDK need the token of the player, which these scopes give
+    later(done, rtype::lobby::DiscordAuthorizeMessage{
+                    .applicationId = _discord->applicationId(),
+                    .scopes = _discord->social() ? "identify openid sdk.social_layer" : "identify"});
 }
 
 void AccountService::discordConfirm(const AccountConnection &connection, std::span<const std::byte> payload,
@@ -1035,13 +1052,14 @@ void AccountService::discordUser(const AccountConnection &connection, const Disc
                 return link;
             },
             done,
-            [done, connection, id](DiscordLink link) {
+            [done, connection, id, user](DiscordLink link) {
                 switch (link) {
                 case DiscordLink::Linked:
                 case DiscordLink::AlreadyLinked:
                     logger().info("Account {} {} its Discord identity", id,
                                   link == DiscordLink::Linked ? "linked" : "confirmed");
                     connection.discord->confirmedAt = SteadyClock::now();
+                    keepToken(*connection.discord, user);
                     done(AccountDone{.closes = false});
                     return;
                 case DiscordLink::Taken:
@@ -1084,8 +1102,69 @@ void AccountService::discordUser(const AccountConnection &connection, const Disc
                 return;
             }
             logger().info("Account {} signed in with Discord", account->id);
+            keepToken(*connection.discord, user);
             done(SignedInAccount{.account = accountInfo(*account), .token = *token});
         });
+}
+
+void AccountService::discordRefresh(const AccountConnection &connection, std::span<const std::byte> payload,
+                                    Done done)
+{
+    std::optional<rtype::lobby::DiscordRefreshMessage> request = rtype::lobby::decodeDiscordRefresh(payload);
+    if (!request) {
+        later(done, ErrorCode::Malformed);
+        return;
+    }
+    if (!connection.signedIn) {
+        later(done, ErrorCode::NotSignedIn);
+        return;
+    }
+    if (!_discord->social()) {
+        // This master gives no token: there is none to renew
+        later(done, ErrorCode::DiscordTokenRefused);
+        return;
+    }
+    DiscordProgress &progress = *connection.discord;
+    if (progress.refreshes >= _settings.limits.discordAttempts) {
+        later(done, ErrorCode::TooManyAttempts);
+        return;
+    }
+    ++progress.refreshes;
+    const auto accountId = static_cast<long long>(connection.signedIn->account.id);
+    const bool queued =
+        _discord->refresh(std::move(request->refreshToken), [this, alive = std::weak_ptr<bool>(_alive), done,
+                                                             accountId](const DiscordAnswer &answer) {
+            if (alive.expired()) {
+                return;
+            }
+            if (const auto *failure = std::get_if<DiscordFailure>(&answer)) {
+                done(*failure == DiscordFailure::Refused ? ErrorCode::DiscordTokenRefused
+                                                         : ErrorCode::DiscordUnavailable);
+                return;
+            }
+            const DiscordUser &user = std::get<DiscordUser>(answer);
+            // Only the token of the identity of the account: another one is not this player's to renew here
+            onDatabase(
+                "check the Discord identity of a refresh",
+                [accountId](rtype::database::Database &database) {
+                    return discordIdentity(database, accountId);
+                },
+                done,
+                [done, accountId, user](const std::optional<std::string> &identity) {
+                    if (identity != user.id) {
+                        logger().info("Account {} refreshed a Discord token not its own", accountId);
+                        done(ErrorCode::DiscordTokenRefused);
+                        return;
+                    }
+                    logger().info("Account {} renewed its Discord token", accountId);
+                    done(rtype::lobby::DiscordTokenMessage{.accessToken = user.tokens->accessToken,
+                                                           .refreshToken = user.tokens->refreshToken,
+                                                           .expiresIn = user.tokens->expiresIn});
+                });
+        });
+    if (!queued) {
+        later(done, ErrorCode::Busy);
+    }
 }
 
 void AccountService::chooseUsername(const AccountConnection &connection, std::span<const std::byte> payload,
@@ -1131,6 +1210,10 @@ void AccountService::chooseUsername(const AccountConnection &connection, std::sp
                 return;
             }
             const Account &account = std::get<Account>(created.first);
+            // Its account made, the new user gets its token
+            if (connection.discord->newUser) {
+                keepToken(*connection.discord, *connection.discord->newUser);
+            }
             connection.discord->newUser.reset();
             logger().info("Account {} created with Discord, and signed in", account.id);
             done(SignedInAccount{.account = accountInfo(account), .token = *created.second});

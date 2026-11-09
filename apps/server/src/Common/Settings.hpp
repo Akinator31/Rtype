@@ -83,6 +83,9 @@ struct DiscordSettings {
     std::string clientId;
     /// Read from `client_secret_file`. Never logged.
     std::string clientSecret;
+    /// `social`: the players who sign in with Discord get their token, for the voice and the friends of the
+    /// Social SDK in their client (lobby protocol 6). Off by default: the master asks `identify` only.
+    bool social = false;
 };
 
 /// [admin]: the administrators the panel can neither demote nor ban.
