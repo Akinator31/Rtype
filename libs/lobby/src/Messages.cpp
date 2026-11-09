@@ -547,12 +547,16 @@ std::optional<GameListMessage> decodeGameList(std::span<const std::byte> payload
 std::vector<std::byte> encode(const GameJoinedMessage &message)
 {
     require(message.sessionId != 0, "A session id is never 0");
-    Writer writer(74);
+    Writer writer(107);
     writer.writeU32(message.gameId);
     writer.writeU16(message.udpPort);
     writer.writeU32(message.sessionId);
     writer.writeBytes(message.clientKey);
     writer.writeBytes(message.serverKey);
+    writer.writeU8(message.voiceSecret ? static_cast<std::uint8_t>(message.voiceSecret->size()) : 0);
+    if (message.voiceSecret) {
+        writer.writeBytes(*message.voiceSecret);
+    }
     return writer.take();
 }
 
@@ -565,6 +569,13 @@ std::optional<GameJoinedMessage> decodeGameJoined(std::span<const std::byte> pay
     message.sessionId = reader.readU32();
     message.clientKey = reader.readBytes<32>();
     message.serverKey = reader.readBytes<32>();
+    // Version 7: none, or 32 bytes
+    const std::uint8_t secret = reader.readU8();
+    if (secret == 32) {
+        message.voiceSecret = reader.readBytes<32>();
+    } else if (secret != 0) {
+        reader.fail();
+    }
     if (message.sessionId == 0) {
         reader.fail();
     }

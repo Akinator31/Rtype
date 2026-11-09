@@ -38,9 +38,9 @@
 namespace rtype::lobby
 {
 
-/// The version of the lobby protocol, in HELLO: 6 gives the Discord token of the player to its client
-/// (DISCORD_AUTHORIZE with the scopes, DISCORD_TOKEN, DISCORD_REFRESH).
-inline constexpr std::uint16_t ProtocolVersion = 6;
+/// The version of the lobby protocol, in HELLO: 7 gives the players with Discord the secret of the voice
+/// lobby of their game (GAME_JOINED).
+inline constexpr std::uint16_t ProtocolVersion = 7;
 /// Longest name of a player, in bytes of UTF-8.
 inline constexpr std::size_t MaxPlayerNameLength = 16;
 /// Longest name of a game, in bytes of UTF-8.
@@ -379,6 +379,10 @@ struct GameJoinedMessage {
     /// The keys of the datagrams. Secret: never logged.
     std::array<std::byte, 32> clientKey{};
     std::array<std::byte, 32> serverKey{};
+    /// The secret of the Discord lobby of the game, the same for all its players (version 7): those with
+    /// Discord join it for the voice. None when the master gave the player no Discord token. Secret: never
+    /// logged.
+    std::optional<std::array<std::byte, 32>> voiceSecret;
 
     friend bool operator==(const GameJoinedMessage &, const GameJoinedMessage &) = default;
 };

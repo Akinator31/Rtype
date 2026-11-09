@@ -122,12 +122,12 @@ std::vector<std::pair<Bytes, std::function<bool(std::span<const std::byte>)>>> a
 
 TEST_CASE("HELLO is the frame of the example of the specification", "[lobby]")
 {
-    const HelloMessage hello{.version = 6, .name = "Pavel", .locale = "fr", .token = std::nullopt};
+    const HelloMessage hello{.version = 7, .name = "Pavel", .locale = "fr", .token = std::nullopt};
     const Bytes payload = encode(hello);
 
-    CHECK(payload == bytes({0x00, 0x06, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
+    CHECK(payload == bytes({0x00, 0x07, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
     CHECK(rtype::network::makeFrame(message_type::Hello, payload) ==
-          bytes({0x00, 0x0D, 0x01, 0x00, 0x06, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
+          bytes({0x00, 0x0D, 0x01, 0x00, 0x07, 0x05, 'P', 'a', 'v', 'e', 'l', 0x02, 'f', 'r', 0x00}));
     CHECK(decodeHello(payload) == hello);
 }
 
@@ -137,12 +137,12 @@ TEST_CASE("A HELLO with a session token has no name, and the token after the loc
 
     REQUIRE(payload.size() == 2 + 1 + 6 + 1 + 32);
     CHECK(Bytes(payload.begin(), payload.begin() + 10) ==
-          bytes({0x00, 0x06, 0x00, 0x05, 'f', 'r', '-', 'F', 'R', 0x01}));
+          bytes({0x00, 0x07, 0x00, 0x05, 'f', 'r', '-', 'F', 'R', 0x01}));
     CHECK(payload[10] == std::byte{7});
     CHECK(decodeHello(payload) == resuming());
 
     // A name beside a token is malformed: the token signs in an account, whose name the master knows
-    Bytes named = bytes({0x00, 0x06, 0x01, 'A', 0x02, 'e', 'n', 0x01});
+    Bytes named = bytes({0x00, 0x07, 0x01, 'A', 0x02, 'e', 'n', 0x01});
     named.resize(named.size() + 32);
     CHECK_FALSE(decodeHello(named));
     HelloMessage both = resuming();
@@ -158,7 +158,7 @@ TEST_CASE("A HELLO of another version is read as its version alone, for UNSUPPOR
     CHECK(older->version == 2);
     CHECK(older->name.empty());
     CHECK_FALSE(older->token);
-    CHECK(decodeHello(bytes({0x00, 0x07}))->version == 7);
+    CHECK(decodeHello(bytes({0x00, 0x08}))->version == 8);
     CHECK(decodeHello(bytes({0x00, 0x01, 0xFF, 0xFF, 0xFF}))->version == 1);
     CHECK_FALSE(decodeHello(bytes({0x00})));
 }
@@ -183,11 +183,18 @@ TEST_CASE("The lobby messages are written field by field", "[lobby]")
     CHECK(encode(ErrorMessage{message_type::SignIn, ErrorCode::InvalidCredentials}) ==
           bytes({0x0A, 0x00, 0x12}));
 
-    const Bytes joined = encode(GameJoinedMessage{7, 4251, 9, key(1), key(2)});
-    REQUIRE(joined.size() == 74);
+    const Bytes joined = encode(GameJoinedMessage{7, 4251, 9, key(1), key(2), std::nullopt});
+    REQUIRE(joined.size() == 75);
     CHECK(Bytes(joined.begin(), joined.begin() + 10) == bytes({0, 0, 0, 7, 0x10, 0x9B, 0, 0, 0, 9}));
     CHECK(joined[10] == std::byte{1});
     CHECK(joined[42] == std::byte{2});
+    // No voice secret: its length 0
+    CHECK(joined[74] == std::byte{0});
+    // Version 7: the secret of the voice lobby, 32 bytes after its length
+    const Bytes withSecret = encode(GameJoinedMessage{7, 4251, 9, key(1), key(2), key(3)});
+    REQUIRE(withSecret.size() == 107);
+    CHECK(withSecret[74] == std::byte{32});
+    CHECK(withSecret[75] == std::byte{3});
 }
 
 TEST_CASE("Every lobby message survives a round trip", "[lobby]")
@@ -209,8 +216,10 @@ TEST_CASE("Every lobby message survives a round trip", "[lobby]")
         2, {}, AccountInfo{1, std::string(MaxUsernameLength, 'u'), AccountRole::Player}};
     CHECK(decodeWelcome(encode(player)) == player);
     CHECK(decodeGameList(encode(twoGames())) == twoGames());
-    const GameJoinedMessage joined{7, 4251, 9, key(1), key(2)};
+    const GameJoinedMessage joined{7, 4251, 9, key(1), key(2), std::nullopt};
     CHECK(decodeGameJoined(encode(joined)) == joined);
+    const GameJoinedMessage withSecret{7, 4251, 9, key(1), key(2), key(3)};
+    CHECK(decodeGameJoined(encode(withSecret)) == withSecret);
     for (const LeftGameReason reason :
          {LeftGameReason::Requested, LeftGameReason::GameOver, LeftGameReason::GameCrashed,
           LeftGameReason::TimedOut, LeftGameReason::Kicked, LeftGameReason::EndedByAdmin}) {
@@ -250,9 +259,9 @@ TEST_CASE("Names are checked apart from the decoding, for INVALID_NAME", "[lobby
     CHECK_FALSE(isValidGameName(std::string(33, 'g')));
 
     // Decoded as they come: the master answers INVALID_NAME, not MALFORMED
-    CHECK(decodeHello(bytes({0, 6, 0, 2, 'e', 'n', 0}))->name.empty());
-    CHECK(decodeHello(bytes({0, 6, 2, 0xFF, 0xFE, 2, 'e', 'n', 0}))->name == "\xFF\xFE");
-    CHECK(decodeHello(bytes({0,   6,   17,  'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
+    CHECK(decodeHello(bytes({0, 7, 0, 2, 'e', 'n', 0}))->name.empty());
+    CHECK(decodeHello(bytes({0, 7, 2, 0xFF, 0xFE, 2, 'e', 'n', 0}))->name == "\xFF\xFE");
+    CHECK(decodeHello(bytes({0,   7,   17,  'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
                              'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 2,   'e', 'n', 0}))
               ->name.size() == 17);
     CHECK(decodeCreateGame(bytes({0, 2}))->name.empty());
@@ -275,9 +284,18 @@ TEST_CASE("The lobby messages refuse what the protocol forbids", "[lobby]")
     CHECK_FALSE(decodeGameList(bytes({0, 1, 0, 0, 0, 1, 0, 0, 1})));
     CHECK_FALSE(decodeGameList(bytes({0, 1, 0, 0, 0, 1, 1, 'A', 0, 0})));
     CHECK_FALSE(decodeGameList(bytes({0, 1, 0, 0, 0, 1, 1, 'A', 0, 5})));
-    Bytes joined = encode(GameJoinedMessage{7, 4251, 9, {}, {}});
+    Bytes joined = encode(GameJoinedMessage{7, 4251, 9, {}, {}, std::nullopt});
     joined[9] = std::byte{0};
     CHECK_FALSE(decodeGameJoined(joined)); // session 0
+    // A voice secret is none or 32 bytes
+    Bytes shortSecret = encode(GameJoinedMessage{7, 4251, 9, {}, {}, std::nullopt});
+    shortSecret.back() = std::byte{16};
+    shortSecret.resize(shortSecret.size() + 16);
+    CHECK_FALSE(decodeGameJoined(shortSecret));
+    // Version 6, without the length of the secret
+    Bytes version6 = encode(GameJoinedMessage{7, 4251, 9, {}, {}, std::nullopt});
+    version6.pop_back();
+    CHECK_FALSE(decodeGameJoined(version6));
     // A server message is 1 to 200 bytes of text
     CHECK_FALSE(decodeServerMessage(bytes({0})));
     CHECK_FALSE(decodeServerMessage(bytes({1, '\n'})));
@@ -291,7 +309,7 @@ TEST_CASE("The lobby messages refuse what the protocol forbids", "[lobby]")
 
     CHECK_THROWS_AS(encode(welcome(0)), std::invalid_argument);
     CHECK_THROWS_AS(encode(CreateGameMessage{"Game", 0}), std::invalid_argument);
-    CHECK_THROWS_AS(encode(GameJoinedMessage{7, 4251, 0, {}, {}}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(GameJoinedMessage{7, 4251, 0, {}, {}, std::nullopt}), std::invalid_argument);
     CHECK_THROWS_AS(encode(GameListMessage{{{9, "B", 0, 1}, {3, "A", 0, 1}}}), std::invalid_argument);
     CHECK_THROWS_AS(encode(GameListMessage{{{0, "A", 0, 1}}}), std::invalid_argument);
     CHECK_THROWS_AS(encode(GameListMessage{{{1, "A", 0, 5}}}), std::invalid_argument);
@@ -322,7 +340,8 @@ TEST_CASE("A lobby message is refused if it is cut or longer than its fields", "
         {encode(welcome(1)), [](auto p) { return decodeWelcome(p).has_value(); }},
         {encode(welcome(1, {}, pavel())), [](auto p) { return decodeWelcome(p).has_value(); }},
         {encode(twoGames()), [](auto p) { return decodeGameList(p).has_value(); }},
-        {encode(GameJoinedMessage{1, 2, 3, {}, {}}), [](auto p) { return decodeGameJoined(p).has_value(); }},
+        {encode(GameJoinedMessage{1, 2, 3, {}, {}, std::nullopt}),
+         [](auto p) { return decodeGameJoined(p).has_value(); }},
         {encode(LeftGameMessage{1, {}}), [](auto p) { return decodeLeftGame(p).has_value(); }},
         {encode(ErrorMessage{1, ErrorCode::GameFull}), [](auto p) { return decodeError(p).has_value(); }},
         {encode(ServerMessageMessage{"Hi"}), [](auto p) { return decodeServerMessage(p).has_value(); }},
@@ -660,11 +679,11 @@ TEST_CASE("A HELLO refuses a locale that is not one, and a token flag that is no
     CHECK_FALSE(isValidLocale("fr.UTF-8"));
     CHECK_FALSE(isValidLocale("é1"));
 
-    CHECK_FALSE(decodeHello(bytes({0, 6, 1, 'A', 1, 'e', 0})));           // locale of 1 byte
-    CHECK_FALSE(decodeHello(bytes({0, 6, 1, 'A', 3, 'e', ' ', 'n', 0}))); // a space
-    CHECK_FALSE(decodeHello(bytes({0, 6, 1, 'A', 2, 'e', 'n', 2})));      // token flag 2
-    CHECK_FALSE(decodeHello(bytes({0, 6, 1, 'A', 2, 'e', 'n'})));         // no token flag
-    CHECK_FALSE(decodeHello(bytes({0, 6, 0, 2, 'e', 'n', 1, 1, 2, 3})));  // a token cut
+    CHECK_FALSE(decodeHello(bytes({0, 7, 1, 'A', 1, 'e', 0})));           // locale of 1 byte
+    CHECK_FALSE(decodeHello(bytes({0, 7, 1, 'A', 3, 'e', ' ', 'n', 0}))); // a space
+    CHECK_FALSE(decodeHello(bytes({0, 7, 1, 'A', 2, 'e', 'n', 2})));      // token flag 2
+    CHECK_FALSE(decodeHello(bytes({0, 7, 1, 'A', 2, 'e', 'n'})));         // no token flag
+    CHECK_FALSE(decodeHello(bytes({0, 7, 0, 2, 'e', 'n', 1, 1, 2, 3})));  // a token cut
     CHECK_THROWS_AS(encode(guest("Ann", "e")), std::invalid_argument);
     CHECK_THROWS_AS(encode(guest("Ann", "fr FR")), std::invalid_argument);
 }

@@ -4,7 +4,7 @@ The connection between a client and the master: TLS, framing, the messages to li
 games, and those of the player accounts. Conventions and types are defined in the
 [overview](index.md#2-conventions).
 
-This page describes **version 6**. The client and the master ship together: a master refuses a `HELLO` of
+This page describes **version 7**. The client and the master ship together: a master refuses a `HELLO` of
 another version with `UNSUPPORTED_VERSION`, and the client tells the player to update.
 
 | Version | Change |
@@ -15,6 +15,7 @@ another version with `UNSUPPORTED_VERSION`, and the client tells the player to u
 | 5 | The progression of the accounts ([section 6.7](#67-progression)): `PROGRESS`, sent once signed in and after each game online |
 | 4 | The profiles ([section 6.6](#66-profiles)): an account carries its email, whether it has a password, and its date; `GET_PROFILE` and `PROFILE`, the Discord profile of an account; `GET_AVATAR` and `AVATAR`, its picture in parts; `DISCORD_CONFIRM` answers `PROFILE` for a new Discord user; the error `NOT_FOUND` |
 | 6 | The Discord token of the player ([section 6.8](#68-the-discord-token), [ADR 0034](../decisions/0034-discord-token-in-the-client.md)): `DISCORD_AUTHORIZE` carries the scopes; `DISCORD_TOKEN`, before the reply of a sign-in with Discord on a master with the social features; `DISCORD_REFRESH`; the error `DISCORD_TOKEN_REFUSED` |
+| 7 | The voice of Discord ([Voice](../architecture/voice.md#the-voice-of-discord)): `GAME_JOINED` carries the secret of the Discord lobby of the game, on a master with the social features |
 
 The version is the first field of `HELLO` in every version, so that a master reads it from a client of any
 version and answers `UNSUPPORTED_VERSION`, never `MALFORMED`.
@@ -101,12 +102,12 @@ TCP carries a stream of bytes with no boundaries. Inside TLS, each message is a 
   a size of 0 or above 16382, without reading the rest.
 - Types `0x01`–`0x7F` are sent by the client, types `0x80`–`0xFF` by the master.
 
-Example: `HELLO` with version 6, the name `"Pavel"`, the locale `"fr"` and no session token:
+Example: `HELLO` with version 7, the name `"Pavel"`, the locale `"fr"` and no session token:
 
 ```
 00 0D   size: 13 bytes follow
 01      type: HELLO
-00 06   version: 6
+00 07   version: 7
 05 50 61 76 65 6C   name: "Pavel"
 02 66 72            locale: "fr"
 00                  no session token
@@ -522,9 +523,14 @@ malformed otherwise.
 | 6 | Session id | `u32` | Identifies the player's session in the game, never 0. Random: the client assumes nothing about its value |
 | 10 | Client key | `bytes[32]` | Key of the datagrams sent by the client |
 | 42 | Server key | `bytes[32]` | Key of the datagrams sent by the game |
+| 74 | Secret length | `u8` | Version 7: 0, or 32 on a master with the social features of Discord (`[discord] social`). Any other length is `MALFORMED` |
+| 75 | Voice secret | `bytes[Secret length]` | The secret of the Discord lobby of the game, the same for all its players |
 
-**Receiver behaviour:** the client opens the UDP session described in [Game (UDP)](game.md). The keys are
-secret: a client MUST NOT write them to its logs.
+**Receiver behaviour:** the client opens the UDP session described in [Game (UDP)](game.md). A client
+connected to Discord joins the lobby whose secret is the lowercase hexadecimal of the voice secret, with the
+player id of `WELCOME` as its member metadata `player`, and talks there once its call is connected
+([Voice](../architecture/voice.md#the-voice-of-discord)). The keys and the voice secret are secret: a client
+MUST NOT write them to its logs.
 
 #### LEFT_GAME (`0x84`)
 
