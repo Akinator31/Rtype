@@ -17,7 +17,7 @@ apps/client/src/
     FormErrors.cpp     the field of a form each error of the master is about
     SessionTokens.cpp  the session token of the account signed in on each server, kept in the settings
     KnownProfiles.cpp  the account remembered for each server, and the pictures kept on disk
-  main.cpp             gives OnlineScenes the SocialSdkAuthorizer of libs/discord, polled every frame
+  main.cpp             the discord::Session of libs/discord, polled every frame, and its SocialSdkAuthorizer
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn a little in the past, between the snapshots around that time
@@ -207,7 +207,8 @@ On a server whose `WELCOME` offers Discord ([ADR 0026](../decisions/0026-discord
 2. `discord::Authorizer::authorize()` asks the player: the Discord client if it runs, the browser otherwise.
    `SocialSdkAuthorizer` (`libs/discord`) does it with `Client::Authorize` of the Discord Social SDK, scope
    `identify`, and the challenge of a code verifier of PKCE it makes; the SDK receives the code on the loopback
-   of the player. Its callbacks run in `poll()`, which the game loop calls every frame, after the network.
+   of the player. Its callbacks run in `Session::poll()`, which the game loop calls every frame, after the
+   network.
 3. The code, the verifier and the redirect address go in `DISCORD_CONFIRM`. `SIGNED_IN` keeps the token as any
    sign-in does; `PROFILE` leads a new Discord user to `online_choose_username`, its Discord picture, display
    name and `@username` above the username it chooses, proposed from its Discord name; `DONE` brings a player
@@ -233,8 +234,21 @@ servers met in the Online menu show who will be signed in, with the picture, bef
 at sign-out and at the deletion of the account; the pictures stay, as another server may show them.
 
 `libs/discord` is two targets, so that the tests never load the library of Discord: `rtype::discord`, the
-interface, which the client and its tests know, and `rtype::discord_sdk`, its implementation, linked by the
-executable `r-type_client` alone. The SDK itself is kept in `libs/discord/sdk/` (its `README.md`), for Linux
+interfaces, one per feature, which the client and its tests know, and `rtype::discord_sdk`, their
+implementations, linked by the executable `r-type_client` alone.
+
+| Interface | Feature | Implementation |
+|---|---|---|
+| `Authorizer` | the sign-in, above | `SocialSdkAuthorizer` |
+| `Presence` | the activity of the player in its Discord profile, without a token | to come |
+| `Connection` | the connection with the token of the player, which lobbies and voice need | to come |
+
+The implementations share **one `discordpp::Client`**, owned by `discord::Session`: its log callback (the logger
+`discord`, warnings and errors only), and `poll()`, the `RunCallbacks()` of the SDK, called once per frame by the
+game loop. No thread of ours touches the SDK, and every answer of Discord comes from that poll. The client is made
+at the first feature that needs it: a player who never uses Discord never starts the SDK. The features are
+destroyed before the session. The tests use `tests/helpers/FakeSocialSdk.hpp`, a fake of each interface on one
+`poll()` that delivers what the test made Discord answer, never inside the call that asked. The SDK itself is kept in `libs/discord/sdk/` (its `README.md`), for Linux
 x86-64 and Windows x64; its library is copied beside the executable, in the build and in the package. On
 another platform (Linux aarch64, the image of the server for linux/arm64), `rtype::discord_sdk` does not exist:
 CMake warns and leaves `r-type_client` out, the server and the tests are built.
