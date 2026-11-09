@@ -70,6 +70,8 @@ crow::json::wvalue toJson(const AdminServer &server)
     json["players"] = static_cast<std::uint64_t>(server.players);
     json["games"] = static_cast<std::uint64_t>(server.games);
     json["bans"] = static_cast<std::uint64_t>(server.bans);
+    json["voice"] = server.voice;
+    json["voiceMutes"] = static_cast<std::uint64_t>(server.voiceMutes);
     return json;
 }
 
@@ -85,11 +87,16 @@ crow::json::wvalue toJson(const AdminGame &game)
     json["wave"] = game.status ? crow::json::wvalue(game.status->wave) : crow::json::wvalue(nullptr);
     json["statusAge"] = milliseconds(game.statusAge);
     json["stale"] = game.stale;
+    json["voice"] = game.voice;
     std::vector<crow::json::wvalue> players;
     for (const AdminGamePlayer &member : game.players) {
         crow::json::wvalue player;
         player["id"] = member.id;
         player["name"] = member.name;
+        player["voiceMuted"] = member.voiceMuted;
+        player["voiceMutedUntil"] = member.voiceMutedUntil
+                                        ? crow::json::wvalue(milliseconds(*member.voiceMutedUntil))
+                                        : crow::json::wvalue(nullptr);
         // Until its client connects, its instance does not report it
         const PlayerStatus *status = nullptr;
         if (game.status) {
@@ -155,6 +162,8 @@ crow::json::wvalue toJson(const AdminAccount &adminAccount)
     json["banReason"] = account.banReason;
     json["createdAt"] = milliseconds(account.createdAt);
     json["lastSeenAt"] = milliseconds(account.lastSeenAt);
+    json["voiceMute"] =
+        adminAccount.voiceMute ? toJson(*adminAccount.voiceMute) : crow::json::wvalue(nullptr);
     return json;
 }
 
@@ -178,6 +187,17 @@ crow::json::wvalue toJson(const AddressBan &ban)
     json["expiresAt"] = milliseconds(ban.expiresAt);
     json["reason"] = ban.reason;
     json["actor"] = ban.actor;
+    return json;
+}
+
+crow::json::wvalue toJson(const VoiceMute &mute)
+{
+    crow::json::wvalue json;
+    json["accountId"] = static_cast<std::int64_t>(mute.accountId);
+    json["createdAt"] = milliseconds(mute.createdAt);
+    json["expiresAt"] = milliseconds(mute.expiresAt);
+    json["reason"] = mute.reason;
+    json["actor"] = mute.actor;
     return json;
 }
 
