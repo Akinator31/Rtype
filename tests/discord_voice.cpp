@@ -10,6 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -249,4 +250,38 @@ TEST_CASE("A call of Discord that fails, or drops, says so, and closes the strea
     CHECK(game.voice.failed());
     game.voice.poll();
     CHECK_FALSE(game.playback.streams[1]);
+}
+
+TEST_CASE(
+    "The microphone Discord captures is given at 48 kHz mono to the voice of the game while it reads it",
+    "[discord][voice]")
+{
+    Game game;
+    rtype::voice::Capture &microphone = game.voice.capture();
+    std::array<std::int16_t, 4096> read{};
+    const std::vector<std::int16_t> voice = tone(960, 440.0, 48000);
+
+    // Closed: counted, not kept
+    game.sdk.call.say(voice);
+    CHECK(game.voice.capturedSamples() == voice.size());
+    CHECK(microphone.read(read) == 0);
+
+    // Open: what Discord captures from then on
+    CHECK(microphone.open());
+    game.sdk.call.say(voice);
+    REQUIRE(microphone.read(read) == voice.size());
+    CHECK(std::equal(voice.begin(), voice.end(), read.begin()));
+
+    // In stereo at 24 kHz: mixed down, twice the samples
+    game.sdk.call.say(tone(480, 440.0, 24000, 2), 24000, 2);
+    CHECK(microphone.read(read) == 960);
+    // What Discord cannot give is dropped
+    game.sdk.call.say(voice, 1000, 1);
+    CHECK(microphone.read(read) == 0);
+
+    // Closed again: forgotten
+    game.sdk.call.say(voice);
+    microphone.close();
+    CHECK(microphone.read(read) == 0);
+    CHECK(game.voice.capturedSamples() == 3 * voice.size() + 480);
 }

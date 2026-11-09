@@ -1,5 +1,6 @@
 #include "helpers/FakeVoiceDevices.hpp"
 #include "rtype/voice/GameVoice.hpp"
+#include "rtype/voice/SharedPlayback.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -457,4 +458,90 @@ TEST_CASE("The echo of what the speakers play is not sent, the loopback open wit
     };
     CHECK(sentAtTheEnd(false) == 2 * rtype::voice::FramesPerSecond);
     CHECK(sentAtTheEnd(true) == 0);
+}
+
+TEST_CASE("The voice of a player can come from another capture, the one before closed", "[voice]")
+{
+    Player alice(0, 1);
+    Voice voice;
+    alice.talk();
+    for (int i = 0; i < 3; ++i) {
+        alice.microphone.say(voice.next());
+        alice.voice.poll(Start);
+    }
+    REQUIRE(alice.transport.sent.size() == 3);
+
+    // Another capture, as the microphone of Discord in a mixed game: the microphone closed, it opened
+    FakeMicrophone discord;
+    alice.voice.setCapture(discord);
+    CHECK_FALSE(alice.microphone.isOpen);
+    CHECK(discord.isOpen);
+    CHECK(alice.voice.microphoneOpen());
+    alice.microphone.say(voice.next());
+    discord.say(voice.next());
+    discord.say(voice.next());
+    alice.voice.poll(Start);
+    CHECK(alice.transport.sent.size() == 5);
+
+    // Muted, then given back the microphone: nothing opened until it talks again
+    alice.voice.setSelfMute(true);
+    CHECK_FALSE(discord.isOpen);
+    alice.voice.setCapture(alice.microphone);
+    CHECK_FALSE(alice.microphone.isOpen);
+    alice.voice.setSelfMute(false);
+    CHECK(alice.microphone.isOpen);
+    CHECK_FALSE(discord.isOpen);
+
+    // One that cannot open: the player listens only
+    FakeMicrophone missing;
+    missing.present = false;
+    alice.voice.setCapture(missing);
+    CHECK_FALSE(alice.microphone.isOpen);
+    CHECK(alice.voice.microphoneMissing());
+}
+
+TEST_CASE("Two voices share one playback, each slot heard from the one source the roster gives it", "[voice]")
+{
+    FakePlayback streams;
+    rtype::voice::SharedPlayback playbacks(streams);
+    rtype::voice::Playback &game = playbacks.game();
+    rtype::voice::Playback &discord = playbacks.discord();
+    const std::vector<std::int16_t> samples(FrameSamples, 1000);
+
+    // From the game by default: what Discord writes is dropped
+    CHECK(playbacks.source(1) == Backend::Game);
+    game.open(1);
+    discord.open(1);
+    CHECK(streams.streams[1]);
+    CHECK(game.write(1, samples));
+    CHECK(discord.write(1, samples));
+    CHECK(streams.played[1].size() == FrameSamples);
+
+    // Each source gives its volume; the stream has the one of its source
+    game.setVolume(1, 0.5f);
+    discord.setVolume(1, 1.5f);
+    CHECK(streams.volume[1] == 0.5f);
+    playbacks.setSource(1, Backend::Discord);
+    CHECK(streams.volume[1] == 1.5f);
+    CHECK(game.write(1, samples));
+    CHECK(discord.write(1, samples));
+    CHECK(streams.played[1].size() == 2 * FrameSamples);
+    // None is the game: a player without a voice is heard from nothing anyway
+    playbacks.setSource(1, Backend::None);
+    CHECK(playbacks.source(1) == Backend::Game);
+    CHECK(streams.volume[1] == 0.5f);
+
+    // Open while either has it open
+    discord.close(1);
+    CHECK(streams.streams[1]);
+    game.close(1);
+    CHECK_FALSE(streams.streams[1]);
+    discord.open(1);
+    CHECK(streams.streams[1]);
+    game.close(1);
+    CHECK(streams.streams[1]);
+
+    // A slot out of range is nothing
+    CHECK(discord.write(9, samples));
+    discord.open(9);
 }

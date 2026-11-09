@@ -55,6 +55,8 @@ enum class CallTalkMode {
 /// call.start(secret, {{"player", "42"}}, [inbox](std::uint64_t user, std::span<const std::int16_t> samples,
 ///                                                std::int32_t rate, std::size_t channels) {
 ///     // On a thread of Discord: the voice of a member, for the mixer of the game
+/// }, [inbox](std::span<const std::int16_t> samples, std::int32_t rate, std::size_t channels) {
+///     // On a thread of Discord: the microphone of the player, for the voice of the game
 /// });
 /// // In the game loop
 /// if (call.status() == rtype::discord::CallStatus::Connected) {
@@ -64,8 +66,8 @@ enum class CallTalkMode {
 /// @endcode
 ///
 /// Every call is made on the thread that polls Discord, which runs its answers: in the client, the game loop.
-/// Only the voices received come on another thread, the one of the audio of Discord. Without Discord
-/// connected, start() fails: the player is on the voice of the game.
+/// Only the voices received and the microphone come on another thread, the one of the audio of Discord.
+/// Without Discord connected, start() fails: the player is on the voice of the game.
 class VoiceCall
 {
 public:
@@ -75,13 +77,18 @@ public:
     /// the call, by being shared with it.
     using Received = std::function<void(std::uint64_t userId, std::span<const std::int16_t> samples,
                                         std::int32_t sampleRate, std::size_t channels)>;
+    /// The microphone of the player as Discord captures it, before its own processing, `samples` interleaved,
+    /// `channels` per frame, at `sampleRate`: what the game sends in a mixed game, for the players on its
+    /// voice (docs/architecture/voice.md#mixed-games). On the audio thread of Discord, as Received.
+    using Captured = std::function<void(std::span<const std::int16_t> samples, std::int32_t sampleRate,
+                                        std::size_t channels)>;
 
     virtual ~VoiceCall() = default;
 
     /// Joins the lobby of `secret` (never logged) with `metadata`, then starts its call, the voices received
-    /// given to `received`. Another start() ends the call before.
+    /// given to `received`, the microphone to `captured`. Another start() ends the call before.
     virtual void start(const std::string &secret, const std::map<std::string, std::string> &metadata,
-                       Received received) = 0;
+                       Received received, Captured captured) = 0;
     /// Ends the call and leaves the lobby. Nothing if Idle.
     virtual void end() = 0;
     [[nodiscard]] virtual CallStatus status() const = 0;

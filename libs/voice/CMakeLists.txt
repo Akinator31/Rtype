@@ -11,7 +11,8 @@
 #                        control of WebRTC (cmake/WebRtcAudioProcessing.cmake), a private dependency. For the
 #                        client
 #   rtype::voice_client  the voice of the game for the client: the jitter buffer (rtype/voice/JitterBuffer.hpp),
-#                        the channel of the game (rtype/voice/GameVoice.hpp), the talk modes
+#                        the channel of the game (rtype/voice/GameVoice.hpp), the playback the voices of a mixed
+#                        game share (rtype/voice/SharedPlayback.hpp), the talk modes
 #                        (rtype/voice/Talk.hpp) and the microphone (rtype/voice/Microphone.hpp), through the
 #                        miniaudio raylib compiles
 add_library(rtype_voice INTERFACE)
@@ -58,6 +59,7 @@ add_library(rtype_voice_client STATIC
     src/GameVoice.cpp
     src/JitterBuffer.cpp
     src/Microphone.cpp
+    src/SharedPlayback.cpp
     src/Talk.cpp
 )
 add_library(rtype::voice_client ALIAS rtype_voice_client)
