@@ -79,11 +79,13 @@ void applyVoice(Voice &voice, const VoiceDevices &devices, bool pushToTalk)
 ///   in the pause menu (VoicePreferences::players, under voiceKey()). A player muted by an administrator
 ///   has its microphone closed while it lasts; a game without the voice (`ACCEPTED`) runs none.
 /// - **The voice of Discord**: given the Discord call of VoiceDevices, the secret of GAME_JOINED and the id
-///   of the player, it joins the Discord lobby of the game once accepted (discord::DiscordVoice), on the
-///   voice of the game meanwhile. Once the call is connected, the player is on Backend::Discord: the
-///   GameVoice is left, Discord carries its voice and those of the others with Discord, and the frames of the
-///   game are not played. A call that fails, or drops, gives the player back to the voice of the game, for
-///   the rest of the game.
+///   of the player, it joins the Discord lobby of the game once accepted (discord::DiscordVoice), hearing the
+///   voice of the game meanwhile, its microphone closed: Discord opens it, and closing a microphone Discord
+///   just opened stalls on some systems (a Bluetooth headset on PipeWire). Not connected within
+///   DiscordJoinTimeout, the call is given up. Once the call is connected, the player is on Backend::Discord:
+///   the GameVoice is left, Discord carries its voice and those of the others with Discord, and the frames of
+///   the game are not played. A call that fails, or drops, gives the player back to the voice of the game,
+///   for the rest of the game.
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why. The
 ///   snapshot taken after GAME_OVER has its outcome, and the players as the latest snapshot received has
 ///   them, their final scores, not those of 100 ms before.
@@ -97,6 +99,9 @@ public:
     /// Frames of the voice of the others kept until takeVoiceFrames(): one second of three players. Beyond,
     /// the oldest go.
     static constexpr std::size_t MaxVoiceFrames = 150;
+    /// How long the call of Discord has to connect, the microphone of the game closed meanwhile; past it, the
+    /// voice of the game takes over.
+    static constexpr std::chrono::seconds DiscordJoinTimeout{10};
 
 private:
     using Clock = network::ClientSession::Clock;
@@ -159,6 +164,8 @@ private:
     std::unique_ptr<discord::DiscordVoice> _discord;
     /// The call of Discord is connected: the voice of the player goes through it, not the GameVoice.
     bool _onDiscord = false;
+    /// When the call of Discord was started: past DiscordJoinTimeout without connecting, it is given up.
+    voice::TalkClock::time_point _discordSince;
 
     void received(std::uint8_t type, std::span<const std::byte> payload);
     /// The game accepted the player: its slot is known, the shots of its weapon can be predicted.
@@ -172,7 +179,7 @@ private:
     void updateVoice();
     /// Moves the player to the voice of Discord once its call is connected, back to the voice of the game if
     /// it fails.
-    void updateDiscord();
+    void updateDiscord(voice::TalkClock::time_point now);
     /// Joins the GameVoice again, with the players of the game, after the voice of Discord.
     void joinGameVoice();
     /// Hears each other player as the player chose for it.

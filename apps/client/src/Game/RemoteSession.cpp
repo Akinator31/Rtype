@@ -158,6 +158,7 @@ void RemoteSession::accept(std::span<const std::byte> payload)
     // On the voice of the game until the call of Discord is connected
     if (_discord) {
         _discord->join({.self = _accepted->slot});
+        _discordSince = voice::TalkClock::now();
     }
 }
 
@@ -220,7 +221,7 @@ void RemoteSession::updateVoice()
     const voice::TalkClock::time_point now = voice::TalkClock::now();
     _pushToTalk.update(_devices->pushToTalk, now);
     const bool talking = _pushToTalk.talking(now);
-    updateDiscord();
+    updateDiscord(now);
     if (_onDiscord) {
         applyVoice(*_discord, *_devices, talking);
         // Muted by an administrator: its microphone closed on Discord too
@@ -234,8 +235,9 @@ void RemoteSession::updateVoice()
         _devices->microphoneSilent = false;
     } else {
         applyVoice(*_voice, *_devices, talking);
-        // Muted by an administrator: the game drops its voice, the microphone stays closed
-        if (mutedByAdmin()) {
+        // Muted by an administrator: the game drops its voice, the microphone stays closed. While the call of
+        // Discord connects, closed too: Discord takes it
+        if (mutedByAdmin() || _discord) {
             _voice->setSelfMute(true);
         }
         applyPlayerVoices(*_voice);
@@ -245,9 +247,15 @@ void RemoteSession::updateVoice()
     tellVoiceStatus();
 }
 
-void RemoteSession::updateDiscord()
+void RemoteSession::updateDiscord(voice::TalkClock::time_point now)
 {
     if (!_discord || !_discord->joined()) {
+        return;
+    }
+    if (!_onDiscord && !_discord->connected() && !_discord->failed() &&
+        now - _discordSince >= DiscordJoinTimeout) {
+        logger().info("The call of Discord does not connect: the voice of the game");
+        _discord.reset();
         return;
     }
     if (_discord->failed()) {

@@ -1257,6 +1257,10 @@ TEST_CASE(
     CHECK(aliceDiscord.call.secrets.at(0) == rtype::discord::lobbySecret(*aliceGame.voiceSecret));
     CHECK(aliceDiscord.call.metadata.at(0).at("player") == std::to_string(*alice.playerId()));
     CHECK_FALSE(aliceSession.onDiscord());
+    // The microphone of the game stays closed while the call connects: Discord opens it
+    int frames = 0;
+    REQUIRE(playWithDiscord([&] { return ++frames > 10; }));
+    CHECK_FALSE(aliceMicrophone.isOpen);
 
     // Their calls connect: both are on Discord, as the game knows
     aliceDiscord.call.addMember(2000, *bob.playerId());
