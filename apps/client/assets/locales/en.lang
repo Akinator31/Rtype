@@ -136,6 +136,7 @@ game.leave=Leave the game
 game.group.game=GAME
 game.group.voices=PLAYER VOICES
 game.voices.muted=MUTED
+game.voices.muted_by_admin=MUTED BY AN ADMIN
 game.voices.note=Kept for each player’s account, or their name for a guest.
 game.keys=Escape · resume    Up Down · select    Left Right · volume    Enter · mute
 event.bydo_down=shot down by

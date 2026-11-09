@@ -136,6 +136,7 @@ game.leave=Quitter la partie
 game.group.game=PARTIE
 game.group.voices=VOIX DES JOUEURS
 game.voices.muted=COUPÉ
+game.voices.muted_by_admin=COUPÉ PAR UN ADMIN
 game.voices.note=Gardés pour le compte de chaque joueur, ou son nom pour un invité.
 game.keys=Échap · reprendre    Haut Bas · choisir    Gauche Droite · volume    Entrée · couper
 event.bydo_down=abattu par

@@ -32,6 +32,7 @@
 #define RTYPE_IMAGE_VOICE_MUTED_BY_ME "images/hud/voice/muted_by_me.png"
 #define RTYPE_IMAGE_VOICE_NO_MICROPHONE "images/hud/voice/no_microphone.png"
 #define RTYPE_IMAGE_VOICE_DEAFENED "images/hud/voice/deafened.png"
+#define RTYPE_IMAGE_VOICE_MUTED_BY_ADMIN "images/hud/voice/muted_by_admin.png"
 #define RTYPE_IMAGE_VOICE_BADGE "images/hud/voice/badge.png"
 
 // Texts

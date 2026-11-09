@@ -52,6 +52,7 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_MUTED_BY_ME},
     {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_NO_MICROPHONE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_DEAFENED},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_MUTED_BY_ADMIN},
     {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_BADGE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_DEEP},
     {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_NEBULA},
@@ -159,8 +160,8 @@ constexpr HealthBarLook AllyHealthBar{110.0f, 62.0f, 0.3f};
 /// The icons of the voice, in the order of VoiceIcon from Speaking, and the badge above the ship of another
 /// player who talks: right of its health bar, on its line (Figma, Série 16, 22 px scaled by 4/3).
 constexpr std::array<const char *, VoiceIconCount> VoiceIconPaths{
-    RTYPE_IMAGE_VOICE_SPEAKING, RTYPE_IMAGE_VOICE_MUTED, RTYPE_IMAGE_VOICE_MUTED_BY_ME,
-    RTYPE_IMAGE_VOICE_NO_MICROPHONE, RTYPE_IMAGE_VOICE_DEAFENED};
+    RTYPE_IMAGE_VOICE_SPEAKING,      RTYPE_IMAGE_VOICE_MUTED,    RTYPE_IMAGE_VOICE_MUTED_BY_ME,
+    RTYPE_IMAGE_VOICE_NO_MICROPHONE, RTYPE_IMAGE_VOICE_DEAFENED, RTYPE_IMAGE_VOICE_MUTED_BY_ADMIN};
 constexpr render::Rectangle VoiceIconSource{0.0f, 0.0f, 64.0f, 64.0f};
 constexpr float VoiceBadgeSize = 29.3f;
 constexpr float VoiceBadgeGap = 12.0f;
@@ -574,7 +575,21 @@ bool GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left
             [choice](float volume) { choice().volume = volume; }, PlayerVolumeStep,
             {engine::AnchorPoint::TopLeft, left, top});
         engine::Slider &row = ecs.getComponent<engine::Slider>(slider);
-        row.label = [choice, &translations] {
+        // Muted by an administrator: what the player chose cannot change it, the row is locked
+        const auto byAdmin = [this, slot = pilot.slot] {
+            const RemoteSession *online = onlineSession();
+            const std::optional<VoiceView> voice = online != nullptr ? online->voiceView() : std::nullopt;
+            if (!voice) {
+                return false;
+            }
+            const auto found = std::ranges::find(voice->others, slot, &voice::Participant::slot);
+            return found != voice->others.end() && found->status.mutedByAdmin;
+        };
+        row.locked = byAdmin;
+        row.label = [choice, byAdmin, &translations] {
+            if (byAdmin()) {
+                return translations.text("game.voices.muted_by_admin");
+            }
             return choice().muted ? translations.text("game.voices.muted") : std::string();
         };
         row.onConfirm = [choice] { choice().muted = !choice().muted; };

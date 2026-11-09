@@ -62,7 +62,8 @@ void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushT
 ///   talks as VoiceDevices says: in its mode, with its keys and volumes (applyVoice()). It tells the game
 ///   whether the player is muted, deafened or without a microphone (VOICE_STATUS, at every change), gives
 ///   the GameVoice what the others tell (VOICE_STATUSES), and hears each other player as the player chose
-///   in the pause menu (VoicePreferences::players, under voiceKey()).
+///   in the pause menu (VoicePreferences::players, under voiceKey()). A player muted by an administrator
+///   has its microphone closed while it lasts; a game without the voice (`ACCEPTED`) runs none.
 /// - **The end**: DISCONNECT from the game, a timeout, or GAME_OVER; endReason() tells the player why.
 ///
 /// The loop must be polled, by the game loop of the client.
@@ -192,6 +193,8 @@ public:
     [[nodiscard]] const game::VoiceRosterMessage &voiceRoster() const { return _voiceRoster; }
     /// What each player tells about its voice, from the latest VOICE_STATUSES.
     [[nodiscard]] const game::VoiceStatusesMessage &voiceStatuses() const { return _voiceStatuses; }
+    /// The game told that an administrator muted the voice of the player (VOICE_STATUSES).
+    [[nodiscard]] bool mutedByAdmin() const;
     /// The voice of the game, given VoiceDevices.
     [[nodiscard]] voice::GameVoice *voice() const { return _voice.get(); }
     /// The devices of the voice given, if any.

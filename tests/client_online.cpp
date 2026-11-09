@@ -65,8 +65,16 @@ struct Master {
     EventLoop loop;
     ServerIdentity identity = ServerIdentity::generate();
     rtype::server::Relay relay{Address::loopbackIpv4(0)};
-    rtype::server::Games games{loop, relay, testing::instances()};
-    rtype::server::Lobby lobby{loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games};
+    rtype::server::Games games;
+    rtype::server::Lobby lobby;
+
+    explicit Master(rtype::server::GamesSettings settings = testing::instances())
+        : games(loop, relay, std::move(settings)),
+          lobby(loop, TcpListener(loop, Address::loopbackIpv4(0)), identity, games)
+    {
+    }
+    Master(const Master &) = delete;
+    Master &operator=(const Master &) = delete;
 
     ~Master()
     {
@@ -608,6 +616,83 @@ TEST_CASE("The microphone of a client online is heard from the stream of its slo
     bobVoice.preferences.players[*key].muted = true;
     REQUIRE(play(master.loop, both, [&] { return bobSession.voice()->participants().at(0).mutedByMe; }));
     CHECK(bobPlayback.volume[0] == 0.0f);
+}
+
+TEST_CASE("A client online muted by an administrator closes its microphone and is shown muted to all",
+          "[online][voice]")
+{
+    Master master;
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    Events bobEvents;
+    LobbyClient bob(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Bob",
+                    bobEvents.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed() && bob.welcomed(); }));
+    const lobby::GameJoinedMessage aliceGame = create(master.loop, alice, "Voices");
+    const auto bobJoined = answer<LobbyClient::JoinResult>(
+        master.loop, [&](auto done) { bob.joinGame(aliceGame.gameId, std::move(done)); });
+    REQUIRE(bobJoined);
+
+    testing::FakeMicrophone aliceMicrophone;
+    testing::FakePlayback alicePlayback;
+    VoiceDevices aliceVoice{.capture = aliceMicrophone, .playback = alicePlayback};
+    testing::FakeMicrophone bobMicrophone;
+    testing::FakePlayback bobPlayback;
+    VoiceDevices bobVoice{.capture = bobMicrophone, .playback = bobPlayback};
+    RemoteSession aliceSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort), aliceGame, {},
+                               &aliceVoice);
+    RemoteSession bobSession(master.loop, Address::loopbackIpv4(aliceGame.udpPort),
+                             std::get<lobby::GameJoinedMessage>(*bobJoined), {}, &bobVoice);
+    const std::vector<RemoteSession *> both = {&aliceSession, &bobSession};
+    REQUIRE(play(master.loop, both, [&] {
+        return aliceSession.voice()->joined() && bobSession.voice()->participants().size() == 1;
+    }));
+    REQUIRE(aliceMicrophone.isOpen);
+
+    // An administrator mutes Alice: her microphone closes, her HUD and the one of Bob show it
+    REQUIRE(master.games.muteVoice(*alice.playerId(), true));
+    REQUIRE(play(master.loop, both, [&] {
+        return aliceSession.mutedByAdmin() && bobSession.voice()->participants().at(0).status.mutedByAdmin;
+    }));
+    REQUIRE(play(master.loop, both, [&] { return !aliceMicrophone.isOpen; }));
+    CHECK(aliceSession.voiceView()->local.mutedByAdmin);
+    CHECK(rtype::client::voiceIconOf(bobSession.voiceView()->others.at(0)) ==
+          rtype::client::VoiceIcon::MutedByAdmin);
+
+    // Let talk again: her microphone opens again
+    REQUIRE(master.games.muteVoice(*alice.playerId(), false));
+    REQUIRE(play(master.loop, both, [&] { return !aliceSession.mutedByAdmin() && aliceMicrophone.isOpen; }));
+    REQUIRE(play(master.loop, both,
+                 [&] { return !bobSession.voice()->participants().at(0).status.mutedByAdmin; }));
+}
+
+TEST_CASE("A client online in a game without voice opens no microphone, shows no voice and sends none",
+          "[online][voice]")
+{
+    rtype::server::GamesSettings settings = testing::instances();
+    settings.voice.enabled = false;
+    Master master(settings);
+    Events events;
+    LobbyClient alice(master.loop, master.lobby.localAddress(), {master.identity.fingerprint()}, "Alice",
+                      events.handlers());
+    REQUIRE(waitUntil(master.loop, [&] { return alice.welcomed(); }));
+    const lobby::GameJoinedMessage game = create(master.loop, alice, "Quiet");
+    testing::FakeMicrophone microphone;
+    testing::FakePlayback playback;
+    VoiceDevices devices{.capture = microphone, .playback = playback};
+    devices.pushToTalk = true;
+    RemoteSession session(master.loop, Address::loopbackIpv4(game.udpPort), game, {}, &devices);
+    const std::vector<RemoteSession *> one = {&session};
+    REQUIRE(play(master.loop, one, [&] { return session.accepted(); }));
+    int frames = 0;
+    REQUIRE(play(master.loop, one, [&] { return ++frames > 12; }));
+
+    CHECK_FALSE(session.voice()->joined());
+    CHECK(microphone.opens == 0);
+    CHECK_FALSE(session.voiceView());
+    CHECK_FALSE(session.sendVoice({0, false, {std::byte{0xF8}}}));
+    CHECK(session.voiceRoster() == game::VoiceRosterMessage{});
 }
 
 TEST_CASE("A client is told when its game crashes", "[online]")

@@ -135,6 +135,12 @@ void RemoteSession::accept(std::span<const std::byte> payload)
         _prediction.arm(*_weapon, _projectileHalfWidth, _accepted->slot);
         _shots.arm(_weapon->mechanic, game::Rules{});
     }
+    if (!_accepted->voice) {
+        // The server turned the voice off: none sent, none shown
+        logger().info("No voice in this game: the server turned it off");
+        _voiceBackend = voice::Backend::None;
+        return;
+    }
     if (_voiceBackend != voice::Backend::None) {
         sendVoiceState();
     }
@@ -201,7 +207,8 @@ void applyVoice(voice::GameVoice &voice, const VoiceDevices &devices, bool pushT
 
 void RemoteSession::updateVoice()
 {
-    if (!_voice) {
+    // Without the voice of the game, nothing is opened, sent nor told
+    if (!_voice || (_accepted && !_accepted->voice)) {
         return;
     }
     if (_over) {
@@ -212,6 +219,10 @@ void RemoteSession::updateVoice()
     const voice::TalkClock::time_point now = voice::TalkClock::now();
     _pushToTalk.update(_devices->pushToTalk, now);
     applyVoice(*_voice, *_devices, _pushToTalk.talking(now));
+    // Muted by an administrator: the game drops its voice, the microphone stays closed
+    if (mutedByAdmin()) {
+        _voice->setSelfMute(true);
+    }
     applyPlayerVoices();
     _voice->poll(now);
     _devices->microphoneSilent = _voice->microphoneSilent();
@@ -268,6 +279,12 @@ std::optional<std::uint64_t> RemoteSession::accountOf(std::uint8_t slot) const
     return account->second;
 }
 
+bool RemoteSession::mutedByAdmin() const
+{
+    return _accepted && _accepted->slot < _voiceStatuses.statuses.size() &&
+           _voiceStatuses.statuses[_accepted->slot].mutedByAdmin;
+}
+
 std::optional<VoiceView> RemoteSession::voiceView() const
 {
     if (!_voice || !_voice->joined()) {
@@ -275,7 +292,8 @@ std::optional<VoiceView> RemoteSession::voiceView() const
     }
     return VoiceView{.local = {.transmitting = _voice->transmitting(),
                                .muted = _voice->selfMuted(),
-                               .deafened = _voice->deafened()},
+                               .deafened = _voice->deafened(),
+                               .mutedByAdmin = mutedByAdmin()},
                      .others = _voice->participants()};
 }
 

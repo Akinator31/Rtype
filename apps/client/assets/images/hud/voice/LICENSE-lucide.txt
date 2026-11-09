@@ -1,5 +1,5 @@
-The icons of this directory are drawn from Lucide (https://lucide.dev): mic, mic-off, volume-x, ear and
-headphone-off, drawn in white. The badge puts the mic icon on a dark disc.
+The icons of this directory are drawn from Lucide (https://lucide.dev): mic, mic-off, volume-x, shield-off, ear
+and headphone-off, drawn in white. The badge puts the mic icon on a dark disc.
 
 ISC License
 
