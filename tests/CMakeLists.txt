@@ -48,6 +48,7 @@ add_executable(rtype_tests
     log.cpp
     localization.cpp
     network.cpp
+    orbit_breaker.cpp
     paths.cpp
     platform_assumptions.cpp
     player_settings.cpp
@@ -111,7 +112,8 @@ if(MSVC)
 endif()
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::beat rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
-    rtype::scripting rtype::shaders rtype::voice rtype::voice_codec rtype::voice_client rtype::voice_processing r-type_client_core r-type_server_core
+    rtype::scripting rtype::shaders rtype::voice rtype::voice_codec rtype::voice_client rtype::voice_processing r-type_client_core
+    r-type_server_core orbit_breaker_core
     CURL::libcurl Crow::Crow Catch2::Catch2WithMain)
 # The fake mail server of the tests speaks TLS with OpenSSL, there where libcurl uses it: not on Windows, whose
 # libcurl uses Schannel

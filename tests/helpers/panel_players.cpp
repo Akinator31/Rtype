@@ -82,26 +82,19 @@ struct Player {
     std::unique_ptr<GameClient> game;
 };
 
-/// The next reply of a player from `index`, which must be of this type, `index` moved past it. PROGRESS,
-/// which the master sends on its own once signed in, whenever its database answers, is no reply: it is
-/// skipped.
+/// The next reply of a player from `index`, which must be of this type, and moves `index` past it. The
+/// progression of a signed-in account (Progress) is skipped: the lobby sends it whenever it has read it.
 std::optional<testing::LobbyClient::Bytes> expect(EventLoop &loop, testing::LobbyClient &client,
                                                   std::size_t &index, std::uint8_t type)
 {
-    while (true) {
-        const auto answer = client.reply(loop, index);
-        if (!answer) {
-            return std::nullopt;
-        }
-        ++index;
-        if (answer->first == lobby::message_type::Progress) {
-            continue;
-        }
-        if (answer->first != type) {
-            return std::nullopt;
-        }
-        return answer->second;
+    auto answer = client.reply(loop, index++);
+    while (answer && answer->first == lobby::message_type::Progress) {
+        answer = client.reply(loop, index++);
     }
+    if (!answer || answer->first != type) {
+        return std::nullopt;
+    }
+    return answer->second;
 }
 
 int run(std::uint16_t port, const std::string &keyFile, const std::string &gameName,
