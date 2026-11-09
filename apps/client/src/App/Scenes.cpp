@@ -39,18 +39,18 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     localization::Localization &translations = targets.translations;
     createMainMenuScene(engine, resources, style, metrics, translations,
                         [&window = targets.window] { window.requestClose(); });
-    const auto playSolo = [&engine, &ships, &games, &config] {
-        openShipSelector(engine, ships, [&games, &config] {
-            games.play(std::make_unique<LocalSession>(game::Rules{}, config));
-        });
+    const auto playOffline = [&games, &config] {
+        games.play(std::make_unique<LocalSession>(game::Rules{}, config));
     };
+    const auto playSolo = [&engine, &ships, playOffline] { openShipSelector(engine, ships, playOffline); };
     createSubmenuScenes(engine, style, translations, playSolo,
                         [&engine, &ships] { openShipSelector(engine, ships); });
     createSettingsScene(engine, style, targets);
     createControlsScenes(engine, style, translations);
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
-    createCampaignScene(engine, resources, targets.audio, metrics, translations, playSolo);
+    // After its briefing, the campaign flies the ship equipped straight into space, without the hangar
+    createCampaignScene(engine, resources, targets.audio, metrics, translations, playOffline);
 }
 
 } // namespace rtype::client

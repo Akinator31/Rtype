@@ -18,7 +18,8 @@ inline constexpr const char *CampaignScene = "campaign";
 /// the player is received as a radio transmission (see Transmission), over the hum of the open channel. Its
 /// first line, "# " in the file, is the name of the mission; the lines before the first empty line are the
 /// facts of the mission, those after it the message, cut into lines as wide as the column. Space, Enter or a
-/// click skips to its end, then goes on: the scene closes and the campaign starts. Escape closes it.
+/// click skips to its end, then goes on: the scene closes and the campaign starts with the ship
+/// equipped, without the hangar. Escape closes it.
 /// @param resources, audio, metrics, translations They must outlive the engine.
 /// @param start Starts the campaign, once the scene has closed.
 void createCampaignScene(engine::Engine &engine, render::ResourceManager &resources,
