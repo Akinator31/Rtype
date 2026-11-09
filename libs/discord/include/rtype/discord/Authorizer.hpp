@@ -42,11 +42,10 @@ using AuthorizationResult = std::variant<Authorization, AuthorizationError>;
 ///         lobby.discordConfirm({accepted->code, accepted->codeVerifier, accepted->redirectUri}, ...);
 ///     }
 /// });
-/// // In the game loop, every frame
-/// authorizer.poll();
 /// @endcode
 ///
-/// Everything runs on the thread that calls poll(): in the client, the game loop.
+/// Everything runs on the thread that polls Discord (Session::poll(), the fake in the tests): in the client,
+/// the game loop.
 class Authorizer
 {
 public:
@@ -55,12 +54,10 @@ public:
     virtual ~Authorizer() = default;
 
     /// Asks the player to accept the application, with the scope `identify` only. `done` is called once,
-    /// from poll(). Another authorize() gives up the one running, whose `done` is never called.
+    /// when Discord is polled. Another authorize() gives up the one running, whose `done` is never called.
     virtual void authorize(std::uint64_t applicationId, Done done) = 0;
     /// Gives up the authorization running, if any: its `done` is never called.
     virtual void cancel() = 0;
-    /// Runs what came back from Discord: the `done` of an authorization.
-    virtual void poll() = 0;
 };
 
 } // namespace rtype::discord
