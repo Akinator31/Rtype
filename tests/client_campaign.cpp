@@ -227,40 +227,53 @@ TEST_CASE("Holding the mouse does not skip the transmission", "[client]")
     CHECK(test.state().phase == TransmissionPhase::Silence);
 }
 
-TEST_CASE("The first mission is a single easy wave, won once its Bydos are gone", "[client]")
+TEST_CASE("Each mission of the campaign is a single wave, won once its Bydos are gone", "[client]")
 {
     const rtype::game::LoadedGameConfig loaded = rtype::game::loadGameConfig(RTYPE_TEST_CONFIG);
     REQUIRE(loaded.isValid());
-    const rtype::game::GameConfig config = firstMissionConfig(loaded.config);
-    REQUIRE(config.waves.size() == 1);
-    CHECK(config.waves.front().name == FirstMissionWave);
-    CHECK(config.waves.front().quantity == config.waves.front().spawns.size());
-    CHECK(firstMissionRules().firstWaveDelay == FirstMissionVoiceTicks);
+    REQUIRE(campaignMissions().size() == 2);
+    for (const CampaignMission &mission : campaignMissions()) {
+        INFO(mission.id);
+        const rtype::game::GameConfig config = missionConfig(mission, loaded.config);
+        REQUIRE(config.waves.size() == 1);
+        CHECK(config.waves.front().name == mission.wave);
+        CHECK(config.waves.front().quantity == mission.spawns.size());
+        CHECK(missionRules(mission).firstWaveDelay == mission.firstWaveDelay);
 
-    LocalSession session(firstMissionRules(), config);
-    // The ship fires all along: the Bydos fall or fly by, and the mission is won
-    session.setInput(rtype::game::PlayerInput{rtype::game::PlayerInput::Fire});
-    // Two minutes at most, one tick at a time: a frame too long only steps a few ticks
-    for (int tick = 0; tick < 120 * 60 && !session.isOver(); ++tick) {
-        session.update(1.0f / 60.0f);
-        static_cast<void>(session.takeSnapshots());
+        LocalSession session(missionRules(mission), config);
+        // The ship fires all along: the Bydos fall or fly by, and the mission is won. Two minutes at most,
+        // one tick at a time: a frame too long only steps a few ticks
+        session.setInput(rtype::game::PlayerInput{rtype::game::PlayerInput::Fire});
+        for (int tick = 0; tick < 120 * 60 && !session.isOver(); ++tick) {
+            session.update(1.0f / 60.0f);
+            static_cast<void>(session.takeSnapshots());
+        }
+        REQUIRE(session.isOver());
+        CHECK(session.simulation().snapshot().gameOver == rtype::game::GameOutcome::Victory);
     }
-    REQUIRE(session.isOver());
-    CHECK(session.simulation().snapshot().gameOver == rtype::game::GameOutcome::Victory);
 }
 
-TEST_CASE("The first mission is kept as completed in the settings", "[client]")
+TEST_CASE("The missions completed are kept in the settings, the next one is played", "[client]")
 {
     const std::filesystem::path path = std::filesystem::temp_directory_path() / "rtype_tests_campaign.txt";
     std::filesystem::remove(path);
     rtype::engine::Settings settings(path);
-    CHECK_FALSE(isFirstMissionCompleted(settings));
+    const std::vector<CampaignMission> &missions = campaignMissions();
+    CHECK(missionSettingsKey(missions[0]) == "campaign.shogun.completed");
+    CHECK_FALSE(isMissionCompleted(settings, missions[0]));
+    CHECK(firstMissionToPlay(settings) == 0);
 
-    CHECK(completeFirstMission(settings));
-    CHECK(isFirstMissionCompleted(settings));
+    CHECK(completeMission(settings, missions[0]));
+    CHECK(isMissionCompleted(settings, missions[0]));
+    CHECK(firstMissionToPlay(settings) == 1);
 
     rtype::engine::Settings read(path);
     read.readFile();
-    CHECK(isFirstMissionCompleted(read));
+    CHECK(isMissionCompleted(read, missions[0]));
+    CHECK_FALSE(isMissionCompleted(read, missions[1]));
+
+    // Once they are all completed, the campaign starts over
+    CHECK(completeMission(settings, missions[1]));
+    CHECK(firstMissionToPlay(settings) == 0);
     std::filesystem::remove(path);
 }

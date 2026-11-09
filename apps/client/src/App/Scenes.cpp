@@ -1,6 +1,5 @@
 #include "App/Scenes.hpp"
 
-#include "Campaign/CampaignMission.hpp"
 #include "Campaign/CampaignScene.hpp"
 #include "Console/ConsoleScene.hpp"
 #include "Game/LocalSession.hpp"
@@ -35,7 +34,7 @@ void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resour
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
                       const engine::InterfaceStyle &style, const engine::RendererMetrics &metrics,
                       GameScenes &games, const game::GameConfig &config, const SettingsTargets &targets,
-                      ShipSelection &ships)
+                      ShipSelection &ships, Campaign &campaign)
 {
     localization::Localization &translations = targets.translations;
     createMainMenuScene(engine, resources, style, metrics, translations,
@@ -50,10 +49,8 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     createControlsScenes(engine, style, translations);
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
-    // After its briefing, the campaign flies the ship equipped straight into space, without the hangar
-    createCampaignScene(
-        engine, resources, targets.audio, metrics, translations,
-        [&engine, &games, &config, &translations] { playFirstMission(engine, games, config, translations); });
+    // After its briefing, each mission flies the ship equipped straight into space, without the hangar
+    createCampaignScene(engine, resources, targets.audio, metrics, translations, campaign);
 }
 
 } // namespace rtype::client

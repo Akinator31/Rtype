@@ -92,10 +92,10 @@ constexpr int textOrder = 1;
             .hint = {.font = text, .size = 26.0f, .spacing = 2.0f, .color = hintColor}};
 }
 
-[[nodiscard]] std::vector<LoreLine> readBriefing(const localization::Localization &translations)
+[[nodiscard]] std::vector<LoreLine> readBriefing(const CampaignMission &mission,
+                                                 const localization::Localization &translations)
 {
-    const char *file =
-        translations.language() == "fr" ? RTYPE_CAMPAIGN_BRIEFING_FRENCH : RTYPE_CAMPAIGN_BRIEFING_ENGLISH;
+    const char *file = translations.language() == "fr" ? mission.briefingFrench : mission.briefingEnglish;
     const std::filesystem::path path = render::applicationDirectory() / "assets" / file;
     std::vector<LoreLine> lines = readLoreFile(path);
     if (lines.empty()) {
@@ -195,15 +195,17 @@ void playHum(audio::AudioPlayer &audio)
 
 void buildCampaignScene(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
                         audio::AudioPlayer &audio, const engine::Metrics &metrics,
-                        const localization::Localization &translations, const std::function<void()> &start)
+                        const localization::Localization &translations, Campaign &campaign)
 {
+    const CampaignMission &mission = campaign.brief();
     ecs::Ecs &ecs = engine.getEcs();
     createVeil(ecs, scene, metrics);
     const TransmissionLooks looks = createLooks(resources);
     const render::Rectangle area = metrics.visibleArea();
     const float width = std::min(columnWidth, area.width - (2.0f * screenMargin));
     const float left = (area.width - width) / 2.0f;
-    const std::vector<PlannedLine> planned = planBriefing(readBriefing(translations), looks, metrics, width);
+    const std::vector<PlannedLine> planned =
+        planBriefing(readBriefing(mission, translations), looks, metrics, width);
 
     // The whole transmission is centred on the screen
     float height =
@@ -237,12 +239,8 @@ void buildCampaignScene(engine::Engine &engine, engine::SceneId scene, render::R
     transmission.skipHint = translations.text("campaign.skip");
     transmission.continueHint = translations.text("campaign.continue");
     transmission.sounds = loadSounds(audio);
-    transmission.onEnd = [&engine, start] {
-        engine.popScene();
-        if (start) {
-            start();
-        }
-    };
+    // The game of the mission replaces every scene
+    transmission.onEnd = [&campaign] { campaign.play(); };
 
     const ecs::entity_t entity = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(entity, scene);
@@ -254,12 +252,13 @@ void buildCampaignScene(engine::Engine &engine, engine::SceneId scene, render::R
 
 void createCampaignScene(engine::Engine &engine, render::ResourceManager &resources,
                          audio::AudioPlayer &audio, const engine::Metrics &metrics,
-                         const localization::Localization &translations, std::function<void()> start)
+                         const localization::Localization &translations, Campaign &campaign)
 {
-    engine.createScene(CampaignScene, {.assets = CampaignAssets},
-                       [&resources, &audio, &metrics, &translations,
-                        start = std::move(start)](engine::Engine &target, engine::SceneId scene) {
-                           buildCampaignScene(target, scene, resources, audio, metrics, translations, start);
+    engine.createScene(CampaignScene, {.onBack = [&campaign] { campaign.leave(); }, .assets = CampaignAssets},
+                       [&resources, &audio, &metrics, &translations, &campaign](engine::Engine &target,
+                                                                                engine::SceneId scene) {
+                           buildCampaignScene(target, scene, resources, audio, metrics, translations,
+                                              campaign);
                        });
 }
 

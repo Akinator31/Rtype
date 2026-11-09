@@ -31,9 +31,12 @@
 // The story of the game, in each language, laid out for the crawl of the lore scene (see LoreLineKind)
 #define RTYPE_LORE_FRENCH "lore/fr.txt"
 #define RTYPE_LORE_ENGLISH "lore/en.txt"
-// The briefing of the campaign, received as a transmission, in each language (a "# " title, then lines)
+// The briefings of the missions of the campaign, received as a transmission, in each language (a "# "
+// title, then lines): the first one, then the road to Saturn
 #define RTYPE_CAMPAIGN_BRIEFING_FRENCH "campaign/fr.txt"
 #define RTYPE_CAMPAIGN_BRIEFING_ENGLISH "campaign/en.txt"
+#define RTYPE_CAMPAIGN_SATURN_FRENCH "campaign/saturn_fr.txt"
+#define RTYPE_CAMPAIGN_SATURN_ENGLISH "campaign/saturn_en.txt"
 
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
@@ -69,8 +72,8 @@
 /// The voice played when the allies are called to the rescue against the final boss, offline: its length is
 /// game::Rules::rescueVoiceTicks. Not in the assets yet: the rescue goes on silently without it.
 #define RTYPE_SOUND_RESCUE_VOICE "sounds/rescue_voice.wav"
-/// The voice of the start of the first mission of the campaign, once in space: its length is
-/// FirstMissionVoiceTicks.
+/// The voice of the start of the first mission of the campaign, once in space: its first wave comes as it
+/// ends (CampaignMission::firstWaveDelay).
 #define RTYPE_SOUND_CAMPAIGN_START "cooper_jude_start.mp3"
 /// The music of the lore scene, played once while the story scrolls: about as long as the crawl.
 #define RTYPE_MUSIC_LORE "sounds/lore.mp3"
