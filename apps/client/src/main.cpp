@@ -97,7 +97,8 @@ void run()
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
-    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer, window};
+    rtype::client::AuraColors auraColors;
+    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer, window, auraColors};
     // The choices of the player at the last run
     rtype::client::applySavedSettings(engine, settingsTargets);
 

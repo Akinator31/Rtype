@@ -83,6 +83,7 @@ add_library(r-type_client_core STATIC
     src/Online/OnlineScenes.cpp
     src/Online/OnlineScreen.cpp
     src/Online/SessionTokens.cpp
+    src/Settings/AuraSettings.cpp
     src/Settings/ControlSettings.cpp
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp

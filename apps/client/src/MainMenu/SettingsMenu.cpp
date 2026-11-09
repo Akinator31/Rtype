@@ -3,6 +3,7 @@
 #include "MainMenu/ControlsMenu.hpp"
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/SettingsPage.hpp"
+#include "Settings/AuraSettings.hpp"
 #include "Settings/DisplaySettings.hpp"
 #include "Settings/NextValue.hpp"
 #include "Settings/PlayerSettings.hpp"
@@ -111,6 +112,36 @@ float addColorFilterRow(Page &page, float left, float top)
     return addRow(page, "settings.color_filter", value, change, "settings.hint.color_filter", left, top);
 }
 
+/// The names of the AuraColorChoices, in their order: what the rows of the auras go through.
+std::vector<std::string_view> auraColorNames()
+{
+    std::vector<std::string_view> names;
+    for (const AuraColorChoice &choice : AuraColorChoices) {
+        names.push_back(choice.name);
+    }
+    return names;
+}
+
+/// "Your ship: Green": goes through the AuraColorChoices of the aura of a side, off included.
+float addAuraRow(Page &page, const std::string &captionKey, std::string_view &color, float left, float top)
+{
+    const localization::Localization &translations = page.targets.translations;
+    const auto value = [&translations, &color] {
+        return translations.text("settings.aura_color." + std::string(color));
+    };
+    const auto change = [&color](int direction) { color = stepValue(auraColorNames(), color, direction); };
+    return addRow(page, captionKey, value, change, "settings.hint.aura", left, top);
+}
+
+/// The auras around the ships in the game: that of the ship of the player, of its allies, of its enemies.
+float addAuraRows(Page &page, float left, float top)
+{
+    AuraColors &auras = page.targets.auras;
+    top = addAuraRow(page, "settings.aura.own", auras.own, left, top);
+    top = addAuraRow(page, "settings.aura.allies", auras.allies, left, top);
+    return addAuraRow(page, "settings.aura.enemies", auras.enemies, left, top);
+}
+
 /// "Screen: 2 · DELL U2720Q": moves the game to another screen.
 float addMonitorRow(Page &page, float left, float top)
 {
@@ -182,7 +213,7 @@ void addControlsRow(Page &page, float left, float top)
     page.hints->emplace_back(row, "settings.hint.controls");
 }
 
-/// On the left, the language, the volumes and the colour filter; on the right, the display and the controls.
+/// On the left, the language, the volumes, the colour filter and the auras of the ships; on the right, the display and the controls.
 /// The widgets get the focus in the order they are made: down the left column, then down the right one.
 void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
                        const SettingsTargets &targets, const std::function<void()> &close)
@@ -210,7 +241,8 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     *sliders = addVolumeSliders(page, left, top);
     top += 2.0f * style.slider.getHeight() + groupGap;
     top = addGroup(interface, ecs, style, translations, "settings.group.accessibility", left, top, width);
-    addColorFilterRow(page, left, top);
+    top = addColorFilterRow(page, left, top);
+    addAuraRows(page, left, top);
 
     top = addGroup(interface, ecs, style, translations, "settings.group.display", right, settings_page::top,
                    width);
@@ -237,6 +269,7 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
         engine::Settings &settings = engine.getSettings();
         keepPlayerSettings(settings, targets.translations, targets.audio, targets.renderer.colorFilter());
         keepDisplaySettings(settings, targets.window);
+        keepAuraColors(settings, targets.auras);
         writeSettings(settings);
         engine.popScene();
     };

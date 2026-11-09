@@ -1,5 +1,6 @@
 #include "App/Configuration.hpp"
 
+#include "Settings/AuraSettings.hpp"
 #include "Settings/ControlSettings.hpp"
 #include "Settings/DisplaySettings.hpp"
 #include "Settings/PlayerSettings.hpp"
@@ -47,6 +48,7 @@ void applySavedSettings(engine::Engine &engine, const SettingsTargets &targets)
     applyDisplaySettings(settings, targets.window);
     applyPlayerSettings(settings, targets.translations, targets.audio);
     targets.renderer.setColorFilter(readColorFilter(settings));
+    targets.auras = readAuraColors(settings);
 }
 
 } // namespace rtype::client
