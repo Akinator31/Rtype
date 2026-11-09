@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # The smoke test of the Docker image (docs/guides/deploy-with-docker.md), run by the CI before it publishes one:
 # the server starts with a test settings file, as a user that is not root, says it is healthy with --health,
-# welcomes two real players who play a game over the published UDP ports, then stops on SIGTERM with code 0.
+# welcomes two real players who play a game over the published UDP port, then stops on SIGTERM with code 0.
 #
 #   docker/smoke-test.sh <image of the server> <image of the players>
 #
-# The images: `docker build .` and `docker build --target smoke .`. The game ports, published with the same
-# numbers inside and outside, are RTYPE_SMOKE_GAME_PORTS (default 47243-47245): change them if they are taken.
+# The images: `docker build .` and `docker build --target smoke .`. The UDP port of the games, published once with
+# the same number inside and outside, is RTYPE_SMOKE_GAME_PORT (default 47243): change it if it is taken.
 set -euo pipefail
 
 server_image=${1:?usage: smoke-test.sh <server image> <players image>}
 players_image=${2:?usage: smoke-test.sh <server image> <players image>}
-game_ports=${RTYPE_SMOKE_GAME_PORTS:-47243-47245}
+game_port=${RTYPE_SMOKE_GAME_PORT:-47243}
 name="rtype-smoke-$$-$RANDOM"
 work=$(mktemp -d)
 
@@ -28,14 +28,15 @@ fail() {
     exit 1
 }
 
-# The settings of the image, with the game ports of the test
-sed "s/^game_ports = .*/game_ports = \"$game_ports\"/" "$(dirname "$0")/server.toml" > "$work/server.toml"
+# The settings of the image, with the game port of the test
+sed "s/^game_port = .*/game_port = $game_port/" "$(dirname "$0")/server.toml" > "$work/server.toml"
+grep -qx "game_port = $game_port" "$work/server.toml" || fail "docker/server.toml has no longer a game_port"
 
 # Copied in rather than mounted: the daemon may not see the files of this machine (Docker Desktop, a remote
 # daemon)
 echo "Starting $server_image"
 docker create --name "$name" \
-    -p 127.0.0.1::4242/tcp -p "127.0.0.1:$game_ports:$game_ports/udp" \
+    -p 127.0.0.1::4242/tcp -p "127.0.0.1:$game_port:$game_port/udp" \
     "$server_image" >/dev/null
 docker cp "$work/server.toml" "$name:/config/server.toml" >/dev/null
 docker start "$name" >/dev/null

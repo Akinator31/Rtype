@@ -13,9 +13,9 @@ end
 
 return {
     id = "bydo_raider",
-    ship = "bydo_interceptor",
+    ship = "bydo_raider",
     health = 65,
-    speed = 420,
+    speed = 800,
     weapon = "close_range_cannon",
     score = 275,
     collisionDamage = 30,

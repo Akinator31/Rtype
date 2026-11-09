@@ -19,7 +19,9 @@ using Shape = decltype(physics::Collider::shape);
 /// In the order of the values of ProjectileCategory.
 constexpr std::array<std::string_view, 4> CategoryNames{"bullet", "missile", "laser", "plasma"};
 /// In the order of the values of WavePlacement.
-constexpr std::array<std::string_view, 2> PlacementNames{"manual", "random"};
+constexpr std::array<std::string_view, 3> PlacementNames{"manual", "random", "music"};
+/// In the order of WaveDefinition::beats.
+constexpr std::array<std::string, 3> BeatNames{"bass", "mid", "high"};
 /// In the order of ShapeReaders.
 constexpr std::array<std::string_view, 2> ShapeNames{"box", "sphere"};
 
@@ -90,6 +92,39 @@ WaveArea readWaveArea(TableReader table)
     return area;
 }
 
+/// `{ enemies = { "bydo_scout" }, minGap = 0.25 }`.
+WaveBeatRule readWaveBeatRule(TableReader table)
+{
+    WaveBeatRule rule;
+    rule.enemies = table.readStrings("enemies");
+    rule.minGap = table.readNumber("minGap", NumberRange::ZeroOrMore, rule.minGap);
+    table.checkAllFieldsRead();
+    return rule;
+}
+
+/// `{ bass = {...}, mid = {...}, high = {...} }`, each band optional.
+std::array<WaveBeatRule, 3> readWaveBeats(TableReader table)
+{
+    std::array<WaveBeatRule, 3> beats;
+    for (std::size_t band = 0; band < beats.size(); ++band) {
+        if (table.hasField(BeatNames[band])) {
+            beats[band] = readWaveBeatRule(table.readTable(BeatNames[band]));
+        }
+    }
+    table.checkAllFieldsRead();
+    return beats;
+}
+
+/// The fields only a Music wave has. Its quantity is the number of beats found in the music, not a field.
+void readMusicWave(TableReader &table, WaveDefinition &definition)
+{
+    definition.beats = readWaveBeats(table.readTable("beats"));
+    definition.lead = table.readNumber("lead", NumberRange::ZeroOrMore, definition.lead);
+    if (definition.music.empty()) {
+        throw ConfigError("music: missing");
+    }
+}
+
 } // namespace
 
 ProjectileDefinition readProjectileDefinition(TableReader &table)
@@ -151,6 +186,7 @@ EnemyDefinition readEnemyDefinition(TableReader &table)
         table.readNumber("acceleration", NumberRange::ZeroOrMore, definition.acceleration);
     definition.weapon = table.readString("weapon");
     definition.score = static_cast<std::uint32_t>(table.readInteger("score", 0, MaxU32, definition.score));
+    definition.xp = static_cast<std::uint32_t>(table.readInteger("xp", 0, MaxU32, definition.score / 10));
     definition.collisionDamage =
         static_cast<std::uint8_t>(table.readInteger("collisionDamage", 0, MaxU8, definition.collisionDamage));
     if (table.readFunction("update")) {
@@ -180,6 +216,11 @@ WaveDefinition readWaveDefinition(TableReader &table)
     if (table.hasField("area")) {
         definition.area = readWaveArea(table.readTable("area"));
     }
+    if (definition.placement == WavePlacement::Music) {
+        readMusicWave(table, definition);
+        table.checkAllFieldsRead();
+        return definition;
+    }
     // A manual wave has as many enemies as it lists: its quantity can be left out
     const bool listed = definition.placement == WavePlacement::Manual && !definition.spawns.empty();
     definition.quantity =
@@ -198,6 +239,19 @@ PlayerDefinition readPlayerDefinition(TableReader &table)
     definition.health = static_cast<std::uint8_t>(table.readInteger("health", 1, MaxU8, definition.health));
     table.checkAllFieldsRead();
     return definition;
+}
+
+Progression readProgression(TableReader &table)
+{
+    Progression progression;
+    progression.xpPerWave =
+        static_cast<std::uint32_t>(table.readInteger("xpPerWave", 0, MaxU32, progression.xpPerWave));
+    progression.streakBonus =
+        static_cast<std::uint32_t>(table.readInteger("streakBonus", 0, MaxU16, progression.streakBonus));
+    progression.streakCap =
+        static_cast<std::uint32_t>(table.readInteger("streakCap", 100, MaxU16, progression.streakCap));
+    table.checkAllFieldsRead();
+    return progression;
 }
 
 } // namespace rtype::game

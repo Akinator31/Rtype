@@ -175,7 +175,7 @@ Lobby
 
 Session id
 :   The number that identifies a player inside a game, written in the header of each datagram so that the game
-    knows which keys to use.
+    knows which keys to use. Drawn at random by the master, unique across all its games.
 
 Standalone mode
 :   An instance started without a master, with a fixed test key, in debug builds only. Used by the tests and
@@ -193,8 +193,8 @@ Port forwarding
     if the server is hosted behind a home router.
 
 Firewall
-:   Filters traffic by port and protocol. The server's host must let in TCP 4242 and the UDP range of the
-    games.
+:   Filters traffic by port and protocol. The server's host must let in 4242 over TCP, for the lobby, and over UDP,
+    for every game.
 
 ## Security
 

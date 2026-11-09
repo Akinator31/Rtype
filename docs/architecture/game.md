@@ -297,6 +297,11 @@ equipWeapon(ecs, context, ship, "blaster"); // gives the ship an Armed component
   own when the magazine is empty (no shot meanwhile) and fires through `spawnWeaponShot()` (deferred), from
   the nose of the ship (the edge of its collider). A player fires while Fire is held, a Bydo as soon as it is
   in the game area.
+- How a weapon steps, where the shot of a player starts and how a shot moves are in `WeaponFiring.hpp`
+  (`stepWeapon()`, `playerShot()`, `moveShot()`), as the movement of the ship is in `ShipMovement.hpp`: the
+  client predicts the shots of its player online with them, and a test checks, for every weapon of
+  `config/weapons/`, that they give the ticks, the positions and the state of the weapon of the game, to the
+  bit.
 - A ship **without** `Armed` does not fire. The ships of the players get the weapon of the
   [players](#players), the Bydos that of their definition.
 - The range is checked by `ProjectileSystem` on the distance flown (`Projectile::travelled`); a projectile past
@@ -517,6 +522,20 @@ stateDiagram-v2
 - Nothing happens without a wave in the registry (the tests made by hand), nor while no player is in. Once
   the game is over (`GameContext::over`), won or lost, the waves stop.
 
+### An endless game
+
+Online, the instance sets `Rules::endless` ([ADR 0032](../decisions/0032-endless-waves-and-progression.md)):
+each wave is drawn at random among all of them (`WaveRegistry::listAllWaves()`, in alphabetical order for the
+same draw everywhere), their number grows without end, and the game ends only once every player is out of
+lives (`GameOutcome::Defeat`). The waves of the final boss are left out by the server.
+
+As a wave ends, the `WaveSystem` counts it for each player whose ship is alive (`PlayerSlot::isAlive()`: lives
+left, not waiting for its next ship): `wavesCleared`, `streak`, `bestStreak`; the streak of the others goes
+back to 0. A Bydo shot down counts in `kills` (`GameContext::rewardKill()`). In an endless game they earn
+experience, `PlayerSlot::xp`, with the multiplier of the streak (`Progression.hpp`, from
+`config/progression.lua`). The snapshots carry all of it in their `PlayerState`, and the instance reports it to
+the master at the end ([progression](accounts.md#progression)).
+
 ### The rescue against the final boss
 
 Offline, in the story mode of the client, the fight against the shogun cannot be lost: `Rules::rescue` (set by
@@ -644,14 +663,14 @@ one implementation.
 | `PLAYER_JOINED` | `0x04` | Game → Client | `PlayerJoinedMessage`: slot, player id, name |
 | `PLAYER_LEFT` | `0x05` | Game → Client | `PlayerLeftMessage`: slot, reason |
 | `INPUT` | `0x40` | Client → Game | `InputMessage`: tick, inputs newest first |
-| `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, part, players, entities |
+| `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, input lead, weapon of the ship of the client, part, players, entities (the age of the shots in the byte of the health) |
 | `ENTITIES_DESTROYED` | `0x81` | Game → Client | `EntitiesDestroyedMessage`: tick, ids and causes |
 | `WAVE_STARTED` | `0x82` | Game → Client | `WaveStartedMessage` |
 | `GAME_OVER` | `0x83` | Game → Client | `GameOverMessage` |
 
 ```cpp
 // Game, once per client, every 2 ticks
-for (const rtype::game::SnapshotPart &part : rtype::game::splitSnapshot(simulation.snapshot(), lastInput)) {
+for (const rtype::game::SnapshotPart &part : rtype::game::splitSnapshot(simulation.snapshot(), lastInput, lead)) {
     host.send(session, rtype::game::message_type::Snapshot, rtype::game::encode(part),
               rtype::network::Delivery::Unreliable);
 }
@@ -701,10 +720,11 @@ for (const auto &[id, entity] : world.entities()) { /* draw it */ }
 | A part older than the latest applied | Ignored (`apply()` gives false); the other parts of the latest tick still apply |
 | An entity in a part | Created, or updated |
 | An entity missing from a part | Kept: its part may have been lost |
-| `ENTITIES_DESTROYED` | The entities are removed and given back with their last state; their ids are remembered until the snapshots reach the tick of their destruction, so that an older part cannot bring them back |
+| An entity missing from every part for 60 ticks | Removed by `forgetStale()`, without an effect: every copy of its destruction was lost |
+| `ENTITIES_DESTROYED` | The entities are removed and given back with their last state; their ids are remembered until the snapshots reach the tick of their destruction, so that an older part cannot bring them back. Received again, it removes nothing more |
 | A kind it does not know | Skipped |
 
-It keeps the latest state only; drawing 100 ms in the past and interpolating between snapshots come on top of
+It keeps the latest state only; drawing a little in the past and interpolating between snapshots come on top of
 it, in the client. Like the Simulation, it has no clock and no network.
 
 ## Tests

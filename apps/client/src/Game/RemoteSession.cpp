@@ -1,6 +1,7 @@
 #include "Game/RemoteSession.hpp"
 
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Hitbox.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Datagram.hpp"
 
@@ -22,11 +23,35 @@ constexpr int MaxInputsPerUpdate = 5;
 constexpr std::chrono::milliseconds DefaultRtt{100};
 /// Ticks of margin, so that an input arrives before its tick (docs/protocol/game.md, 9.2).
 constexpr std::uint32_t InputMargin = 2;
+/// The time between two snapshots, in seconds: what a jump of the stamps takes to show, on top of the RTT.
+constexpr double SnapshotDelay = 2.0 / game::TickRate;
 
 const log::Logger &logger()
 {
     static const log::Logger instance("game");
     return instance;
+}
+
+/// The weapon the players start with, if the definitions have it.
+std::optional<game::WeaponDefinition> playerWeapon(const game::GameConfig &config)
+{
+    const auto weapon = std::ranges::find(config.weapons, config.player.weapon, &game::WeaponDefinition::id);
+    if (config.player.weapon.empty() || weapon == config.weapons.end()) {
+        return std::nullopt;
+    }
+    if (std::ranges::find(config.projectiles, weapon->projectile, &game::ProjectileDefinition::id) ==
+        config.projectiles.end()) {
+        return std::nullopt;
+    }
+    return *weapon;
+}
+
+/// Half the width of the projectile of a weapon, where its shots start.
+float projectileHalfWidth(const game::GameConfig &config, const game::WeaponDefinition &weapon)
+{
+    const auto projectile =
+        std::ranges::find(config.projectiles, weapon.projectile, &game::ProjectileDefinition::id);
+    return game::halfSizeOf(projectile->collider).x;
 }
 
 std::string reasonOf(const network::SessionEnd &end)
@@ -57,38 +82,48 @@ std::string reasonOf(const network::SessionEnd &end)
 } // namespace
 
 RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &game,
-                             const lobby::GameJoinedMessage &joined)
+                             const lobby::GameJoinedMessage &joined, const game::GameConfig &config)
     : _socket(loop, game.isIpv6() ? network::Address::anyIpv6(0) : network::Address::anyIpv4(0)), _game(game),
       _session(joined.sessionId, network::DatagramKey(joined.clientKey),
                network::DatagramKey(joined.serverKey),
                [this](std::span<const std::byte> datagram) { _socket.send(_game, datagram); })
 {
+    _weapon = playerWeapon(config);
+    if (_weapon) {
+        _projectileHalfWidth = projectileHalfWidth(config, *_weapon);
+    }
     _socket.startReceiving([this](const network::Address &from, std::span<const std::byte> datagram) {
         if (from == _game) {
             _session.receive(datagram, Clock::now());
         }
     });
     logger().info("Joining game {} on {}", joined.gameId, game);
-    _session.start(
-        [this](std::span<const std::byte> payload) {
-            _accepted = game::decodeAccepted(payload);
-            if (!_accepted) {
-                _over = true;
-                _endReason = "The game and the client disagree";
-                return;
-            }
-            _snapshotReceived = Clock::now();
-            logger().info("In the game, slot {}", _accepted->slot);
-        },
-        [this](std::uint8_t type, std::span<const std::byte> payload) { received(type, payload); },
-        [this](network::SessionEnd end) {
-            if (!_over) {
-                _over = true;
-                _endReason = reasonOf(end);
-            }
-            logger().info("{}", _endReason);
-        },
-        Clock::now());
+    _session.start([this](std::span<const std::byte> payload) { accept(payload); },
+                   [this](std::uint8_t type, std::span<const std::byte> payload) { received(type, payload); },
+                   [this](network::SessionEnd end) {
+                       if (!_over) {
+                           _over = true;
+                           _endReason = reasonOf(end);
+                       }
+                       logger().info("{}", _endReason);
+                   },
+                   Clock::now());
+}
+
+void RemoteSession::accept(std::span<const std::byte> payload)
+{
+    _accepted = game::decodeAccepted(payload);
+    if (!_accepted) {
+        _over = true;
+        _endReason = "The game and the client disagree";
+        return;
+    }
+    _snapshotReceived = Clock::now();
+    logger().info("In the game, slot {}", _accepted->slot);
+    if (_weapon) {
+        _prediction.arm(*_weapon, _projectileHalfWidth, _accepted->slot);
+        _shots.arm(_weapon->mechanic, game::Rules{});
+    }
 }
 
 RemoteSession::~RemoteSession()
@@ -104,9 +139,25 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
     switch (type) {
     case game::message_type::Snapshot:
         if (const auto part = game::decodeSnapshotPart(payload); part && _world.apply(*part)) {
+            // Every copy of their destruction lost: gone all the same
+            (void)_world.forgetStale();
             _interpolation.receive(_world.tick(), _world.entities(), _world.players());
             _snapshotReceived = Clock::now();
             reconcile(*part);
+            if (_accepted) {
+                // Each shot of the player takes the place of the one predicted at the tick it was fired at
+                for (const game::EntityState &entity : part->entities) {
+                    if (ShotPrediction::isShotOf(entity, _accepted->slot)) {
+                        _shots.received(entity, part->tick);
+                    }
+                }
+            }
+            if (part->inputLead != game::NoInputLead && part->tick > _leadTick) {
+                // Once per snapshot: every part has the same
+                _leadTick = part->tick;
+                const double rtt = std::chrono::duration<double>(_session.rtt().value_or(DefaultRtt)).count();
+                _inputClock.receive(part->inputLead, rtt + SnapshotDelay);
+            }
         }
         return;
     case game::message_type::EntitiesDestroyed:
@@ -114,6 +165,10 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
             // Drawn until the drawn tick reaches its destruction, 100 ms after the message arrives
             for (const game::DestroyedEntity &entity : destroyed->entities) {
                 _interpolation.destroyed(entity.id, destroyed->tick);
+                if (const game::EntityState *known = _world.find(entity.id);
+                    known != nullptr && _accepted && ShotPrediction::isShotOf(*known, _accepted->slot)) {
+                    _shots.destroyed(entity.id, destroyed->tick);
+                }
                 if (entity.id == _shipId) {
                     // The ship of the player is no more: nothing to predict until it comes back
                     _prediction.reconcile(std::nullopt, destroyed->tick);
@@ -138,6 +193,7 @@ void RemoteSession::received(std::uint8_t type, std::span<const std::byte> paylo
     case game::message_type::GameOver:
         if (const auto over = game::decodeGameOver(payload)) {
             _over = true;
+            _outcome = over->outcome;
             _endReason = over->outcome == game::GameOutcome::Victory ? "Victory!" : "Game over";
         }
         return;
@@ -161,7 +217,7 @@ void RemoteSession::reconcile(const game::SnapshotPart &part)
     for (const game::EntityState &entity : part.entities) {
         if (entity.kind == game::EntityKind::PlayerShip && entity.owner == _accepted->slot) {
             _shipId = entity.id;
-            _prediction.reconcile(ecs::Position{entity.x, entity.y}, part.tick);
+            _prediction.reconcile(ecs::Position{entity.x, entity.y}, part.tick, part.weapon);
             return;
         }
     }
@@ -184,8 +240,21 @@ std::uint32_t RemoteSession::estimateTick() const
 
 void RemoteSession::sendInput()
 {
-    // Never back in time: the game ignores an input older than the last one
-    _inputTick = std::max(_inputTick + 1, estimateTick());
+    std::uint32_t stamp = _inputTick + 1;
+    if (!_inputClock.synced()) {
+        // Never back in time: the game ignores an input older than the last one
+        stamp = std::max(stamp, estimateTick());
+    }
+    if (const std::uint32_t jump = _inputClock.takeJump(); jump > 0) {
+        logger().debug("Inputs too late for the game: stamped {} ticks further", jump);
+        stamp += jump;
+    }
+    // The ticks skipped repeat the previous input, as the game and the prediction do
+    for (std::uint32_t skipped = _inputTick + 1;
+         skipped < stamp && !_history.empty() && skipped - _inputTick <= InputHistory; ++skipped) {
+        _history.push_front(_history.front());
+    }
+    _inputTick = stamp;
     // The ship of the player moves at once, as the game will move it at that tick
     _prediction.apply(_inputTick, _input);
     _history.push_front(_input);
@@ -201,11 +270,12 @@ void RemoteSession::update(float elapsed)
     _session.update(Clock::now());
     _interpolation.advance(elapsed);
     _prediction.advance(elapsed);
+    _inputClock.advance(elapsed);
     if (!_accepted || _over) {
         return;
     }
-    // One INPUT per tick, whatever the frame rate
-    _pending += std::max(0.0f, elapsed);
+    // One INPUT per tick, whatever the frame rate, a little faster or slower to arrive just in time
+    _pending += std::max(0.0, static_cast<double>(elapsed) * _inputClock.rate());
     int sent = 0;
     while (_pending >= Tick && sent < MaxInputsPerUpdate) {
         sendInput();
@@ -235,7 +305,9 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
     game::Snapshot snapshot = _interpolation.view();
     // The ship of the player where it is predicted, aiming as its input says, the rest where the
     // interpolation draws it
-    const std::optional<ecs::Position> predicted = _prediction.position();
+    // Between two inputs sent, at the frame rate: the fraction of the time to the next one
+    const double fraction = std::clamp(_pending / Tick, 0.0, 1.0);
+    const std::optional<ecs::Position> predicted = _prediction.position(fraction, _input);
     for (game::EntityState &entity : snapshot.entities) {
         if (entity.kind != game::EntityKind::PlayerShip || entity.owner != localSlot()) {
             continue;
@@ -253,9 +325,22 @@ std::vector<game::Snapshot> RemoteSession::takeSnapshots()
             entity.flags |= game::EntityState::AimingDown;
         }
     }
+    // The shots of the player from the moment it fires, in the time of its ship, not in the past with the
+    // rest
+    _shots.predict(_prediction.shots(), _world.tick());
+    _shots.apply(snapshot, localSlot(), *_interpolation.drawnTick(),
+                 static_cast<double>(_inputTick) + fraction);
     snapshot.destroyed = std::exchange(_destroyed, {});
+    for (game::DestroyedEntity &entity : snapshot.destroyed) {
+        // Drawn under the id of the shot predicted, if it took its place
+        entity.id = _shots.idOf(entity.id);
+    }
     snapshot.waveStarted = std::exchange(_waveStarted, std::nullopt);
     snapshot.waveMusic = std::exchange(_waveMusic, {});
+    snapshot.gameOver = std::exchange(_outcome, std::nullopt);
+    if (snapshot.gameOver) {
+        snapshot.players = _world.players();
+    }
     return {std::move(snapshot)};
 }
 

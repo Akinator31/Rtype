@@ -5,7 +5,10 @@ export interface ServerInfo {
   version: string;
   startedAt: number;
   uptime: number;
-  ports: { lobby: number; games: { first: number; last: number }; panel: number };
+  /** `game`: the one UDP port of every game, the one of the relay. */
+  ports: { lobby: number; game: number; panel: number };
+  /** The most games at once. */
+  maxGames: number;
   players: number;
   games: number;
   bans: number;

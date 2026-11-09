@@ -147,12 +147,12 @@ inline std::vector<HttpResponse> httpSequence(const std::vector<std::string> &ur
     return responses;
 }
 
-/// Writes a settings file that gives the panel of a master a free port, and returns its path: the masters of
-/// the tests run side by side, and must not all take 8080.
-inline std::filesystem::path webOnAnyPort(const std::filesystem::path &file)
+/// Writes a settings file that gives the games and the panel of a master free ports, and returns its path:
+/// the masters of the tests run side by side, and must not all take UDP 4242 and TCP 8080.
+inline std::filesystem::path onAnyPorts(const std::filesystem::path &file)
 {
     std::filesystem::create_directories(file.parent_path());
-    std::ofstream(file) << "[web]\nlisten = \"127.0.0.1:0\"\n";
+    std::ofstream(file) << "[server]\ngame_port = 0\n[web]\nlisten = \"127.0.0.1:0\"\n";
     return file;
 }
 

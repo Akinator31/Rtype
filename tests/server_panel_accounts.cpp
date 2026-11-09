@@ -209,8 +209,8 @@ struct PanelServer {
         administration.emplace(loop, games, lobby, bans, &*database,
                                AdministrationSettings{.version = "test",
                                                       .lobbyPort = 4242,
-                                                      .firstGamePort = 4243,
-                                                      .lastGamePort = 4299,
+                                                      .gamePort = 4242,
+                                                      .maxGames = 57,
                                                       .panelPort = 0,
                                                       .admins = setup.admins});
         WebServerSettings settings;

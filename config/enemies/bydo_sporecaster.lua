@@ -1,7 +1,7 @@
 -- Approaches the players, fires six spores, then leaves.
 return {
     id = "bydo_sporecaster",
-    ship = "bydo_scout",
+    ship = "bydo_sporecaster",
     health = 55,
     speed = 170,
     acceleration = 340,

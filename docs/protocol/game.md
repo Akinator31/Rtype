@@ -28,9 +28,9 @@ acknowledgements and the messages.*
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Magic | `u16` | `0x5254` (`"RT"`) |
-| 2 | Version | `u8` | Protocol version, 1 |
+| 2 | Version | `u8` | Protocol version, 3 |
 | 3 | Reserved | `u8` | 0 |
-| 4 | Session id | `u32` | Session given by the master, never 0 |
+| 4 | Session id | `u32` | Session given by the master, never 0, unique across the master |
 | 8 | Packet number | `u64` | Number of this datagram in its direction, from 1 |
 | 16 | Ciphertext | | The encrypted body, n bytes |
 | 16 + n | Tag | `bytes[16]` | Authentication tag |
@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-01                        version 1
+03                        version 3
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -74,7 +74,7 @@ The body is encrypted with **AEAD_CHACHA20_POLY1305** as defined in
 A receiver processes a datagram in this order, and drops it silently at the first failed step:
 
 1. The size is between 32 and 1200 bytes.
-2. The magic is `0x5254`, the version is 1, the reserved byte is 0.
+2. The magic is `0x5254`, the version is 3, the reserved byte is 0.
 3. The session id is a known session.
 4. The source address has not sent more than 200 datagrams in the last second.
 5. The packet number is accepted by the replay window ([section 4](#4-replay-window)).
@@ -109,8 +109,9 @@ Otherwise the datagram is a duplicate, a replay or too old, and is dropped. Afte
 |---|---|---|---|
 | 0 | Ack | `u64` | Highest packet number received from the peer, 0 if none |
 | 8 | Ack bits | `u32` | Bit i (bit 0 is the least significant) set: packet `Ack − 1 − i` was received |
-| 12 | Count | `u8` | Number of messages that follow |
-| 13 | Messages | | Count messages, one after the other |
+| 12 | Ack delay | `u16` | Time since packet `Ack` was received, in tenths of a millisecond, at most `0xFFFF` ([round-trip time](#round-trip-time)); 0 if none was |
+| 14 | Count | `u8` | Number of messages that follow |
+| 15 | Messages | | Count messages, one after the other |
 
 Each message:
 
@@ -169,9 +170,12 @@ order they were sent.
 
 ### Round-trip time
 
-The sender records when it sent each packet. When a packet is acknowledged for the first time, the elapsed
-time is a sample of the round-trip time. The RTT SHOULD be smoothed (`rtt = 0.9 × rtt + 0.1 × sample`); it is
-used for the resend delay and shown to the player as the ping.
+The sender records when it sent each packet. When the packet `Ack` of a datagram is acknowledged for the first
+time, the elapsed time minus the `Ack delay` of that datagram is a sample of the round-trip time: the delay is
+how long the peer kept the packet before acknowledging it (the game acknowledges an `INPUT` with its next
+snapshot, up to 2 ticks later), not the network. The packets acknowledged by the `Ack bits` only, whose delay
+is not known, and an `Ack delay` of `0xFFFF` give no sample. The RTT SHOULD be smoothed
+(`rtt = 0.9 × rtt + 0.1 × sample`); it is used for the resend delay and shown to the player as the ping.
 
 ## 7. Session
 
@@ -335,21 +339,24 @@ units per second as `−2400` (`F6 A0`).
 so that a late message about a destroyed entity cannot be mistaken for a new one. Its **kind** says what it is,
 hence what the client draws:
 
-| Kind | Value | Owner | Health |
+| Kind | Value | Owner | Health, or age |
 |---|---|---|---|
 | `PLAYER_SHIP` | `0x01` | Its player slot | Hit points left |
-| `PLAYER_SHOT` | `0x02` | Slot of the player who fired | 0 |
-| `PLAYER_CHARGED_SHOT` | `0x03` | Slot of the player who fired | 0 |
+| `PLAYER_SHOT` | `0x02` | Slot of the player who fired | Age |
+| `PLAYER_CHARGED_SHOT` | `0x03` | Slot of the player who fired | Age |
 | `BYDO_FLYER` | `0x10` | None | Hit points left |
 | `BYDO_SHOOTER` | `0x11` | None | Hit points left |
 | `BYDO_TANK` | `0x12` | None | Hit points left |
 | `BYDO_BOSS` | `0x1F` | None | Hit points left |
-| `BYDO_SHOT` | `0x40` | None | 0 |
-| `BYDO_PLASMA_SHOT` | `0x41` | None | 0 |
+| `BYDO_SHOT` | `0x40` | None | Age |
+| `BYDO_PLASMA_SHOT` | `0x41` | None | Age |
 
 - Ranges: `0x01`–`0x0F` players and their shots, `0x10`–`0x3F` Bydos, `0x40`–`0x5F` Bydo shots, `0x60`–`0xFF`
   reserved for later kinds (power-ups, the Force, obstacles). Kind `0x00` is invalid.
 - The **owner** is a player slot (0 to 3), or `0xFF` for none.
+- A **shot** (`0x02`, `0x03`, `0x40`–`0x5F`) has no hit points: in their place, its **age**, the ticks since it
+  was fired, at most 255. A snapshot of tick `T` with a shot of age `a` says it was fired at tick `T − a`: the
+  client matches it with the shot it predicted at that tick ([section 9.2](#92-inputs)).
 - A client MUST skip the entities of a kind it does not know: adding a kind does not change the protocol
   version ([versioning](index.md#4-versioning)).
 
@@ -372,7 +379,7 @@ Up and down together, left and right together, or aim up and aim down together, 
 
 **Client.** Once per tick, the client samples its controls and sends `INPUT` with the inputs of the last
 **8** ticks, newest first: a lost datagram loses no input, since the next ones carry it again. It stamps each
-input with the tick at which it expects the game to receive it, which it SHOULD estimate as:
+input with the tick at which it expects the game to receive it. For its first inputs, it SHOULD estimate it as:
 
 ```
 tick of the latest snapshot received
@@ -386,12 +393,36 @@ input of that tick, or, if it has none, the last input it applied: a lost input 
 movement. After **30** ticks without any input from a player, it applies an empty input (nothing pressed), so
 that a ship whose player lost the connection stops.
 
+**Lead.** For each `INPUT` received, ignored or not, the game measures its **lead**: its `Tick` minus the last
+tick simulated. 1 means just in time (applied at the next tick), 0 or less too late, above 60 too early. Each
+`SNAPSHOT` tells the client the smallest lead of its `INPUT` messages since the previous snapshot.
+
+**Keeping the stamps in time.** An estimate drifts: the clocks of the client and the game do not run at
+exactly the same speed, the RTT changes, the game may skip ticks when it falls behind. Once it receives a lead,
+the client SHOULD stamp each input with the tick after the previous one, and follow the leads instead:
+
+- it keeps the smallest lead of the last 0.5 s between **2** and **3**, by sending its inputs a little faster
+  (lead 1) or slower (above 3) than once per tick: at most 10% faster, at least half as fast. The stamps stay
+  consecutive, so no input is lost, and stamps too far ahead come back down;
+- a lead of 0 or less means its inputs are lost: it adds to the next stamp what is missing to reach 2, at once.
+  The ticks skipped carry the previous input again, as the game does. It ignores the leads of the next
+  RTT + 2 ticks, which are those of the inputs sent before.
+
+Without this, a client whose stamps only go up ends more than 60 ticks ahead after some time, and every input
+is ignored.
+
+**Predicting the shots.** A client MAY draw the shots of its player before the game sends them, as it predicts
+its ship: each `SNAPSHOT` gives the state of the weapon of its ship at its tick (cooldown, ammo, reload), from
+which it replays the inputs not applied yet, with the rules of the game, to know at which ticks the weapon
+fires and from where. The shot of the game fired at the same tick, told by its age, then takes the place of the
+predicted one. A predicted shot the game never sends is a wrong guess: the client stops drawing it.
+
 ### 9.3 Snapshots
 
 **Sending.** Every **2** ticks (30 times per second), after simulating the tick, the game sends each connected
 client a snapshot: the players' scores and lives, and the state of every entity. When the entities do not fit
 in one datagram, the snapshot is split in **parts** (at most 16), each in its own datagram, each with the tick
-and the players. With four players, a part holds up to 69 entities.
+and the players. With four players, a part holds up to 65 entities.
 
 **Receiving.** The client keeps the tick `L` of the latest snapshot it applied, and for each part received:
 
@@ -399,14 +430,19 @@ and the players. With four players, a part holds up to 69 entities.
 2. The players replace the scores and lives shown.
 3. Each entity of a known kind is created if its id is unknown, or updated otherwise. An entity missing from
    a snapshot is **not** destroyed: its part may have been lost.
-4. An entity is destroyed only by [`ENTITIES_DESTROYED`](#entities_destroyed-0x81). The client remembers the
-   ids it destroyed, with the tick of their destruction, and ignores their states in snapshots older than that
-   tick (a reliable message can arrive before an older unreliable one). It can forget an id once `L` reaches
-   that tick.
+4. An entity is destroyed by [`ENTITIES_DESTROYED`](#entities_destroyed-0x81), received once or again. The
+   client remembers the ids it destroyed, with the tick of their destruction, and ignores their states in
+   snapshots older than that tick (the destruction can arrive before an older snapshot). It can forget an id
+   once `L` reaches that tick.
+5. An entity that no snapshot had for **60** ticks is removed all the same, without an effect: every copy of its
+   destruction was lost.
 
-**Drawing.** The client SHOULD draw the world **100 ms** in the past, interpolating each entity between the two
+**Drawing.** The client SHOULD draw the world a little in the past, interpolating each entity between the two
 snapshots around that time: the movement stays smooth when a snapshot is lost. The velocity lets it
-extrapolate when no newer snapshot is there.
+extrapolate when no newer snapshot is there. How far in the past is a trade: further hides more jitter and
+losses, closer shows a more recent world. A fixed **100 ms** is safe; the client of this repository measures it
+instead: for each snapshot that arrives, the ticks since the previous one plus how much later than the
+earliest of the last 3 s it arrived, plus a tick, the largest over those 3 s, from 50 to 250 ms.
 
 ### INPUT (`0x40`)
 
@@ -437,20 +473,29 @@ or more inputs than `Tick + 1`, makes the message malformed.
 |---|---|---|---|
 | 0 | Tick | `u32` | Tick of the world described |
 | 4 | Last input | `u32` | Tick of the last input of this client that the game applied, 0 if none |
-| 8 | Part | `u8` | Number of this part, from 0 |
-| 9 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
-| 10 | Player count | `u8` | 0 to 4 |
-| 11 | Players | | Player count times the fields below |
-| 11 + 6p | Entity count | `u8` | Number of entities in this part |
-| 12 + 6p | Entities | | Entity count times the fields below |
+| 8 | Input lead | `i8` | Smallest lead of the `INPUT` messages of this client since the previous snapshot, −127 to 127 ([section 9.2](#92-inputs)); −128 if none came |
+| 9 | Weapon cooldown | `u16` | Ticks before the weapon of the ship of this client can fire again; 0 without a ship |
+| 11 | Weapon ammo | `u16` | Shots left in its magazine |
+| 13 | Weapon reload | `u16` | Ticks before its magazine is full again, 0 when it is not reloading |
+| 15 | Part | `u8` | Number of this part, from 0 |
+| 16 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
+| 17 | Player count | `u8` | 0 to 4 |
+| 18 | Players | | Player count times the fields below |
+| 18 + 20p | Entity count | `u8` | Number of entities in this part |
+| 19 + 20p | Entities | | Entity count times the fields below |
 
-Each player:
+Each player, 20 bytes:
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Slot | `u8` | 0 to 3 |
 | 1 | Lives | `u8` | Lives left, 0 once out of the game |
 | 2 | Score | `u32` | |
+| 6 | Kills | `u32` | Bydos it shot down in this game (version 3) |
+| 10 | Waves cleared | `u16` | Waves that ended while its ship was alive |
+| 12 | Streak | `u16` | Waves cleared in a row up to the last one, 0 after a wave it did not clear |
+| 14 | Best streak | `u16` | The longest streak of the game |
+| 16 | Experience | `u32` | Experience earned in this game; always 0 offline. Online, the waves follow each other without end and earn experience ([progression](../architecture/accounts.md#progression)) |
 
 Each entity, 16 bytes:
 
@@ -463,7 +508,7 @@ Each entity, 16 bytes:
 | 8 | Y | `i16` | |
 | 10 | Velocity X | `i16` | Eighths of a unit per second |
 | 12 | Velocity Y | `i16` | |
-| 14 | Health | `u8` | Hit points left, for health bars; 0 for kinds without |
+| 14 | Health, or age | `u8` | Hit points left, for health bars; 0 for kinds without. For a shot, its age in ticks, at most 255 ([section 9.1](#91-the-world)) |
 | 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bit 3: aiming up. Bit 4: aiming down (a ship of a player turned by 30°, [section 9.2](#92-inputs)). Bit 5: guarding, bit 6: slashing, bit 7: shooting (the stance of a Bydo, at most one, drawn with its animation) |
 
 **Receiver behaviour:** the client applies the part as [section 9.3](#93-snapshots) says. A part number not below
@@ -475,8 +520,8 @@ entity id or kind of 0, or a size that does not match the counts makes the messa
 | | |
 |---|---|
 | **Direction** | Game → Client |
-| **Reliability** | Reliable |
-| **Sent when** | After a tick in which entities were destroyed: one message for all the entities of that tick, or several with the same tick when they do not fit in one datagram (228 entities at most per message). |
+| **Reliability** | Unreliable, sent again with the snapshots |
+| **Sent when** | After a tick in which entities were destroyed: one message for all the entities of that tick, or several with the same tick when they do not fit in one datagram (228 entities at most per message). Sent again with each snapshot of the next **30** ticks: a lost one costs a snapshot interval, and holds back no message behind it, as a reliable one would. |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
@@ -498,6 +543,7 @@ Each entity:
 
 **Receiver behaviour:** the client removes the entities and remembers their ids
 ([section 9.3](#93-snapshots)). Unknown ids are remembered too: their first snapshot may still be on its way.
+The same destruction received again, with a later snapshot, changes nothing: no second explosion.
 Unknown causes are treated as `REMOVED`. A count of 0, an id of 0, or a size that does not match the count
 makes the message malformed.
 
@@ -549,6 +595,7 @@ received the game's packets up to number 41, all of them. The decrypted body:
 ```
 00 00 00 00 00 00 00 29   ack: packet 41
 FF FF FF FF               ack bits: the 32 packets before were received
+00 64                     ack delay: packet 41 came 10 ms ago
 01                        count: 1 message
 40                        type: INPUT
 00                        flags: unreliable
@@ -560,21 +607,29 @@ FF FF FF FF               ack bits: the 32 packets before were received
 01                          tick 998: up
 ```
 
-The body is 25 bytes; once sealed ([section 3](#3-encryption)), the datagram is 57 bytes.
+The body is 27 bytes; once sealed ([section 3](#3-encryption)), the datagram is 59 bytes.
 
-The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives and 1500 points, and its ship
+The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives and 1500 points, shot down
+12 Bydos, cleared 2 waves in a row and earned 350 experience, and its ship
 (entity 7) is at (200, 540.5), going up at 300 units per second, invulnerable:
 
 ```
 80                        type: SNAPSHOT
 00                        flags: unreliable
-00 22                     size: 34 bytes
+00 37                     size: 55 bytes
 00 00 03 E8                 tick: 1000
 00 00 03 E6                 last input applied: tick 998
+02                          input lead: 2 ticks
+00 04                       weapon: cooldown 4 ticks,
+00 07                         7 shots left,
+00 00                         not reloading
 00                          part 0
 01                          of 1 part
 01                          1 player
 00 03 00 00 05 DC             slot 0, 3 lives, score 1500
+00 00 00 0C                   12 Bydos shot down
+00 02 00 02 00 02             2 waves cleared, streak 2, best streak 2
+00 00 01 5E                   350 experience
 01                          1 entity
 00 00 00 07                   id 7
 01                            kind: PLAYER_SHIP

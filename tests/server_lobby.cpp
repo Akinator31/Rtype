@@ -4,6 +4,7 @@
 #include "LobbyClient.hpp"
 #include "Master/Games.hpp"
 #include "Master/Lobby.hpp"
+#include "Master/Relay.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Address.hpp"
@@ -125,8 +126,10 @@ struct LobbyFixture {
     EventLoop loop;
     ServerIdentity identity = ServerIdentity::generate();
     /// No game is created here: tests/server_games.cpp creates them
+    Relay relay{Address::loopbackIpv4(0)};
     Games games{
-        loop, GamesSettings{.executable = RTYPE_TEST_CHILD, .leadingArguments = {}, .trailingArguments = {}}};
+        loop, relay,
+        GamesSettings{.executable = RTYPE_TEST_CHILD, .leadingArguments = {}, .trailingArguments = {}}};
     Lobby lobby;
 
     explicit LobbyFixture(LobbyLimits limits = {})

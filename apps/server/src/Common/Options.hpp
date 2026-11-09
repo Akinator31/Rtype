@@ -30,9 +30,12 @@ enum ExitCode : int {
 struct MasterOptions {
     /// Where the master listens for the clients (TCP).
     rtype::network::Address listen = rtype::network::Address::anyIpv4(4242);
-    /// The UDP ports given to the games, one per game: their number is the most games at once.
-    std::uint16_t firstGamePort = 4243;
-    std::uint16_t lastGamePort = 4299;
+    /// The one UDP port of every game, on the address of `listen`, served by the relay of the master
+    /// (docs/architecture/server.md#the-relay); 0 lets the system choose. The same number as the lobby is
+    /// fine: one is TCP, the other UDP.
+    std::uint16_t gamePort = 4242;
+    /// The most games at once: past it, SERVER_FULL.
+    std::uint32_t maxGames = 57;
     /// The private key the master proves its identity with, generated there at its first start
     /// (docs/guides/generate-the-server-keys.md).
     std::filesystem::path key = "server.key";
@@ -57,7 +60,8 @@ struct MasterOptions {
 struct InstanceOptions {
     /// Id of the game, never 0.
     std::uint32_t id = 0;
-    /// The UDP port of the game.
+    /// The UDP port of the game when it opens its own (`--udp-port`, standalone mode, or CONFIGURE without a
+    /// relay); 0 lets the system choose. An instance started by a master receives through its relay instead.
     std::uint16_t udpPort = 0;
     /// The port where the master listens for its instances, on 127.0.0.1.
     std::uint16_t masterPort = 0;

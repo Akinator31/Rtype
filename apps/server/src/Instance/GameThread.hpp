@@ -2,6 +2,7 @@
 
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Messages.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Snapshot.hpp"
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <variant>
 #include <vector>
@@ -26,6 +28,13 @@ struct TickResult {
     /// For each slot, the tick the client stamped on the last input applied, 0 if none: the "last input" of
     /// the snapshots sent to it.
     std::array<std::uint32_t, rtype::game::MaxPlayers> lastInputs{};
+    /// For each slot, the smallest lead of the INPUT messages received before this tick
+    /// (InputBuffer::takeLead()), nothing if none came: gathered over the ticks between two snapshots, the
+    /// "input lead" sent to its client.
+    std::array<std::optional<std::int64_t>, rtype::game::MaxPlayers> inputLeads{};
+    /// For each slot, the weapon of its ship after the tick, all 0 without one: what the prediction of its
+    /// client starts again from.
+    std::array<rtype::game::WeaponState, rtype::game::MaxPlayers> weapons{};
 };
 
 /// The simulation thread of an instance (ADR 0013): it owns the Simulation and steps it at a fixed rate, 60

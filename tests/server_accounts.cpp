@@ -9,6 +9,7 @@
 #include "Accounts/Discord.hpp"
 #include "Accounts/MailMessages.hpp"
 #include "Accounts/PasswordHasher.hpp"
+#include "Accounts/ProgressStore.hpp"
 #include "Common/Secret.hpp"
 #include "FakeDiscord.hpp"
 #include "FakeMailer.hpp"
@@ -95,10 +96,12 @@ struct Server {
     Database direct;
     Setup setup;
     ServerIdentity identity = ServerIdentity::generate();
-    Games games{loop, setup.games ? testing::instances()
-                                  : GamesSettings{.executable = RTYPE_TEST_CHILD,
-                                                  .leadingArguments = {},
-                                                  .trailingArguments = {}}};
+    Relay relay{Address::loopbackIpv4(0)};
+    Games games{
+        loop, relay,
+        setup.games
+            ? testing::instances()
+            : GamesSettings{.executable = RTYPE_TEST_CHILD, .leadingArguments = {}, .trailingArguments = {}}};
     FakeMailer mailer;
     std::optional<FakeDiscord> fakeDiscord;
     std::optional<DatabaseThread> database;
@@ -178,13 +181,18 @@ struct Player {
             waitUntil(loop, [&] { return client->connection.has_value() || client->closed.has_value(); }));
     }
 
-    /// The next reply, once received.
+    /// The next reply, once received. PROGRESS, which the master sends on its own once signed in, is no
+    /// reply: it is skipped.
     std::pair<std::uint8_t, Bytes> next()
     {
-        const auto reply = client->reply(loop, answered);
-        REQUIRE(reply);
-        ++answered;
-        return *reply;
+        while (true) {
+            const auto reply = client->reply(loop, answered);
+            REQUIRE(reply);
+            ++answered;
+            if (reply->first != message_type::Progress) {
+                return *reply;
+            }
+        }
     }
 
     std::pair<std::uint8_t, Bytes> ask(std::uint8_t type, std::span<const std::byte> payload = {})
@@ -464,6 +472,31 @@ TEST_CASE("A player signs in by username or email; a wrong password and an unkno
     CHECK(second.account == signedIn.account);
     CHECK(second.token != signedIn.token);
     CHECK(server.mailer.mails.empty());
+}
+
+TEST_CASE("A player signed in receives the progression of its account, a guest nothing",
+          "[server][accounts][database]")
+{
+    FOR_EACH_ENGINE();
+    Server server(engine, "lobby_accounts_progress");
+    const Account account = server.seed("Pilot_7", "pilot@example.org");
+    addGame(server.direct, account.id, {.xp = 640, .kills = 30, .wavesCleared = 6, .bestStreak = 5});
+    server.start();
+
+    Player player(server);
+    player.welcome("Someone");
+    // A request answered: a PROGRESS sent to the guest would have come before
+    CHECK(errorOf(player.ask(message_type::SignIn, signingIn("Nobody")), message_type::SignIn) ==
+          ErrorCode::InvalidCredentials);
+    CHECK(player.client->count(message_type::Progress) == 0);
+
+    player.signIn("Pilot_7");
+    REQUIRE(waitUntil(server.loop, [&] { return player.client->count(message_type::Progress) == 1; }));
+    const auto progress = rtype::lobby::decodeProgress(*player.client->last(message_type::Progress));
+    REQUIRE(progress);
+    CHECK(*progress ==
+          rtype::lobby::ProgressMessage{
+              .xp = 640, .gained = 0, .gamesPlayed = 1, .totalKills = 30, .bestWaves = 6, .bestStreak = 5});
 }
 
 TEST_CASE("An account not verified gets a new code, only after its right password",

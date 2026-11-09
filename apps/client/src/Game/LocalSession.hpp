@@ -21,6 +21,11 @@ namespace rtype::client
 /// the frame times add up, and each full tick is one step, like the PhysicsStep. After a frame too long (a
 /// loading, a debugger), it steps at most MaxStepsPerUpdate times and forgets the rest: the game slows down
 /// for a moment instead of freezing to catch up.
+///
+/// Between two steps, the screen draws more frames (144 per second): between() gives the world on the way to
+/// the next tick, by the fraction of the time to it. The ship of the player moves with the input held, as the
+/// next step will move it (game::moveShip()), so that a key pressed shows at once; the rest goes on with its
+/// velocity.
 class LocalSession final : public GameSession
 {
 public:
@@ -35,6 +40,8 @@ private:
     bool _paused = false;
     bool _over = false;
     std::vector<game::Snapshot> _snapshots;
+    /// The world at the last step, for between().
+    std::optional<game::Snapshot> _last;
 
 public:
     /// @param config The definitions of the game, loaded once by the client (loadGameConfig()).
@@ -44,6 +51,7 @@ public:
     void setInput(game::PlayerInput input) override { _input = input; }
     void update(float elapsed) override;
     [[nodiscard]] std::vector<game::Snapshot> takeSnapshots() override;
+    [[nodiscard]] std::optional<game::Snapshot> between() const override;
     void setPaused(bool paused) override { _paused = paused; }
     [[nodiscard]] bool isOver() const override { return _over; }
     /// None: the game runs in the client.

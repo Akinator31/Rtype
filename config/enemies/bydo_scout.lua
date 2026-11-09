@@ -6,9 +6,9 @@ return {
     -- Hit points, 1 to 255
     health = 30,
     -- Top speed, in game units per second (default 300)
-    speed = 240,
+    speed = 650,
     -- Speed gained per second until the top speed (default 600)
-    acceleration = 720,
+    acceleration = 1950,
     -- The id of a weapon of config/weapons/
     weapon = "blaster",
     -- Points for the player who destroys it (default 100)

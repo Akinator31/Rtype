@@ -175,7 +175,7 @@ clang-format -i path/to/file.cpp
 | *Build* | Every push and pull request, Linux and Windows | First the *Panel* job: lint, format, types, Vitest and build of `web/admin`, its `dist/` kept as an artifact. Then compilation, all CTest tests, packaging with the panel in the server archive. On Linux, the tests of the database also run on a PostgreSQL in Docker, and Playwright runs the panel against the server just built ([Contributing to the panel](panel.md)) |
 | *Sanitizers* | Every pull request, and pushes to `main` | All CTest tests under ASan and UBSan, on SQLite and PostgreSQL (Linux) |
 | *Thread sanitizer* | Every night on `main`, and on demand | All CTest tests under TSan. A failed run blocks the next release until a run on `main` passes again, see [Releasing](releasing.md) |
-| *Docker* | Every pull request, pushes to `main` and the tags `v*` | Builds the image of the server and the one of its smoke tests, then runs `docker/smoke-test.sh`: `--health`, two players in a game, the stop on `SIGTERM`; then `docker/smoke-test-accounts.sh`: the settings of the official server with a fake Discord and a fake mail server, a player signed in to its account in a game, an administrator signed in to the panel. From `main`, publishes the image on GHCR as `main`; from a tag, as its version and `latest` ([Deploy with Docker](../guides/deploy-with-docker.md)) |
+| *Docker* | Every pull request, pushes to `main` and the tags `v*` | Builds the image of the server and the one of its smoke tests, then runs `docker/smoke-test.sh`: `--health`, two players in a game, the stop on `SIGTERM`; then `docker/smoke-test-accounts.sh`: the settings of the official server with a fake Discord and a fake mail server, a player signed in to its account in a game, an administrator signed in to the panel. From `main`, publishes the image on GHCR as `main`; from a tag, as its version and `latest`. It publishes it for linux/amd64 and linux/arm64, the second built under QEMU by `docker buildx`: the smoke tests run on amd64 only ([Deploy with Docker](../guides/deploy-with-docker.md)) |
 | *Format* | Every pull request, and pushes to `main` that change C++ files | Formats tracked C++ files; on pull requests the bot commits the fixes, elsewhere unformatted code fails the job |
 
 ### Runners
@@ -187,6 +187,9 @@ The workflows run on the team's self-hosted runners. The Linux runner needs:
   Without Docker, *Build*, *Sanitizers* and *Docker* fail on Linux instead of testing on SQLite only. The
   smoke tests publish the UDP ports 47243 to 47245, then 47253 to 47255, on the loopback of the runner; the
   build keeps its downloads and its build folder in the cache of BuildKit, `docker builder prune` empties it.
+  To publish, the user of the runner must be allowed `docker run --privileged`: *Docker* installs the QEMU
+  of arm64 with `tonistiigi/binfmt`, then builds in the buildx builder `rtype-multi-arch`, a container kept
+  from one publication to the next with its own cache (`docker buildx prune --builder rtype-multi-arch`).
 - **curl** and GNU **tar**: the smoke test with accounts asks the panel with curl, and gives the image its
   secret with tar.
 - `sudo` without a password for `apt-get`, which installs the system libraries (X11, OpenGL, OpenSSL, libpq,

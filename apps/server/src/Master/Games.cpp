@@ -1,5 +1,6 @@
 #include "Master/Games.hpp"
 
+#include "Master/Relay.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Address.hpp"
 #include "rtype/network/Crypto.hpp"
@@ -7,6 +8,7 @@
 #include "rtype/network/TcpConnection.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <format>
 #include <stdexcept>
 #include <system_error>
@@ -54,7 +56,6 @@ struct Games::Game {
     std::uint32_t id = 0;
     std::string name;
     std::uint8_t maxPlayers = 1;
-    std::uint16_t port = 0;
     Secret secret{};
     std::optional<Process> process;
     State state = State::Starting;
@@ -63,7 +64,8 @@ struct Games::Game {
     rtype::network::Timer startTimeout;
     Clock::time_point endingSince;
     std::map<std::uint32_t, Member> members;
-    std::uint32_t lastSession = 0;
+    /// Every session id given in this game, players gone included: taken until the instance exits.
+    std::vector<std::uint32_t> sessions;
     std::optional<Creator> creator;
     /// The last GAME_STATUS, and when it came, or when the game got ready before the first.
     std::optional<GameStatusMessage> status;
@@ -88,15 +90,12 @@ struct Games::InstanceConnection {
     }
 };
 
-Games::Games(rtype::network::EventLoop &loop, GamesSettings settings)
-    : _loop(loop), _settings(std::move(settings)), _listener(loop, rtype::network::Address::loopbackIpv4(0)),
-      _supervision(loop)
+Games::Games(rtype::network::EventLoop &loop, Relay &relay, GamesSettings settings)
+    : _loop(loop), _relay(relay), _settings(std::move(settings)),
+      _listener(loop, rtype::network::Address::loopbackIpv4(0)), _supervision(loop)
 {
-    if (_settings.firstPort > _settings.lastPort) {
-        throw std::invalid_argument("The range of the game ports is empty");
-    }
-    for (std::uint32_t port = _settings.firstPort; port <= _settings.lastPort; ++port) {
-        _freePorts.insert(static_cast<std::uint16_t>(port));
+    if (_settings.maxGames == 0) {
+        throw std::invalid_argument("A master needs room for one game at least");
     }
     _listener.startAccepting(
         [this](rtype::network::TcpConnection connection) { acceptInstance(std::move(connection)); });
@@ -142,8 +141,9 @@ std::vector<rtype::lobby::GameInfo> Games::list() const
 void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMessage &request,
                    JoinCallback done)
 {
-    if (_stopping || _freePorts.empty()) {
-        logger().info("{} cannot create \"{}\": no game port left", player.name, request.name);
+    // The games ending count until their process exits: their instance still runs
+    if (_stopping || _games.size() >= _settings.maxGames) {
+        logger().info("{} cannot create \"{}\": {} games already", player.name, request.name, _games.size());
         done(ErrorCode::ServerFull);
         return;
     }
@@ -152,13 +152,11 @@ void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMess
     game.id = ++_lastGameId;
     game.name = request.name;
     game.maxPlayers = request.maxPlayers;
-    game.port = *_freePorts.begin();
     game.secret = rtype::network::randomBytes<32>();
 
     std::vector<std::string> arguments = _settings.leadingArguments;
-    for (std::string argument :
-         {std::string("--instance"), std::string("--id"), std::to_string(game.id), std::string("--udp-port"),
-          std::to_string(game.port), std::string("--master-port"), std::to_string(instancePort())}) {
+    for (std::string argument : {std::string("--instance"), std::string("--id"), std::to_string(game.id),
+                                 std::string("--master-port"), std::to_string(instancePort())}) {
         arguments.push_back(std::move(argument));
     }
     arguments.insert(arguments.end(), _settings.trailingArguments.begin(), _settings.trailingArguments.end());
@@ -172,7 +170,6 @@ void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMess
         return;
     }
 
-    _freePorts.erase(game.port);
     game.creator = Game::Creator{player, std::move(done)};
     _playerGames[player.id] = game.id;
     const std::uint32_t id = game.id;
@@ -181,15 +178,34 @@ void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMess
             fail(*starting, "no READY in time");
         }
     });
-    logger().info("{} creates {} for {} players: instance {} on UDP {}", player.name, game.describe(),
-                  game.maxPlayers, game.process->pid(), game.port);
+    logger().info("{} creates {} for {} players: instance {}", player.name, game.describe(), game.maxPlayers,
+                  game.process->pid());
     _games.emplace(id, std::move(created));
+}
+
+std::uint32_t Games::takeSession()
+{
+    // 2^32 ids for a few hundred players at most: a collision is rare, and drawn again
+    while (true) {
+        std::uint32_t session = 0;
+        if (_drawSession) {
+            session = _drawSession();
+        } else {
+            const auto bytes = rtype::network::randomBytes<sizeof(std::uint32_t)>();
+            std::memcpy(&session, bytes.data(), sizeof(session));
+        }
+        if (session != 0 && _sessions.insert(session).second) {
+            return session;
+        }
+    }
 }
 
 rtype::lobby::GameJoinedMessage Games::addPlayer(Game &game, const LobbyPlayer &player)
 {
-    // Never 0, never reused in this instance
-    const std::uint32_t session = ++game.lastSession;
+    const std::uint32_t session = takeSession();
+    game.sessions.push_back(session);
+    // Before the player knows its session: its first datagram finds its game
+    _relay.addSession(session, game.id);
     const AddPlayerMessage added{player.id, session, rtype::network::randomBytes<32>(),
                                  rtype::network::randomBytes<32>(), player.name};
     // To the instance first: it expects the session before the client connects
@@ -199,7 +215,7 @@ rtype::lobby::GameJoinedMessage Games::addPlayer(Game &game, const LobbyPlayer &
     logger().info("{} ({}) joins {} ({}/{})", player.name, player.id, game.describe(), game.members.size(),
                   game.maxPlayers);
     changed(game);
-    return {game.id, game.port, session, added.clientKey, added.serverKey};
+    return {game.id, _relay.publicAddress().port(), session, added.clientKey, added.serverKey};
 }
 
 Games::JoinResult Games::join(const LobbyPlayer &player, std::uint32_t gameId)
@@ -216,6 +232,11 @@ Games::JoinResult Games::join(const LobbyPlayer &player, std::uint32_t gameId)
 
 void Games::removed(Game &game, std::uint32_t playerId)
 {
+    const auto member = game.members.find(playerId);
+    if (member != game.members.end()) {
+        // Still routed for a while: the DISCONNECT of its instance goes out
+        _relay.releaseSession(member->second.sessionId);
+    }
     game.members.erase(playerId);
     _playerGames.erase(playerId);
     if (game.members.empty() && game.state == Game::State::Running) {
@@ -285,7 +306,7 @@ std::vector<AdminGame> Games::adminGames() const
             .id = id,
             .name = game->name,
             .maxPlayers = game->maxPlayers,
-            .port = game->port,
+            .port = _relay.publicAddress().port(),
             .players = {},
             .createdAt = game->createdAt,
             .status = game->status,
@@ -444,20 +465,26 @@ void Games::presented(std::uint64_t connection, std::span<const std::byte> paylo
     instance.gameId = game->id;
     instance.helloTimeout.cancel();
     game->connection = connection;
-    send(*game, instance_message::Configure, encode(ConfigureMessage{game->name, game->maxPlayers}));
+    send(*game, instance_message::Configure,
+         encode(ConfigureMessage{
+             .name = game->name, .maxPlayers = game->maxPlayers, .relayPort = _relay.loopbackPort()}));
 }
 
 void Games::ready(Game &game, std::span<const std::byte> payload)
 {
     const std::optional<ReadyMessage> ready = decodeReady(payload);
-    if (!ready || game.state != Game::State::Starting || ready->udpPort != game.port) {
+    // The port it receives the frames of the relay on, on the loopback
+    const bool valid = ready && game.state == Game::State::Starting && ready->udpPort != 0;
+    if (!valid) {
         fail(game, "invalid READY from its instance");
         return;
     }
     game.state = Game::State::Running;
     game.statusAt = Clock::now();
     game.startTimeout.cancel();
-    logger().info("{} ready on UDP {}", game.describe(), game.port);
+    _relay.addInstance(game.id, ready->udpPort);
+    logger().info("{} ready", game.describe());
+    logger().debug("{} receives from the relay on 127.0.0.1:{}", game.describe(), ready->udpPort);
     if (_observer != nullptr) {
         _observer->gameStarted(game.id);
     }
@@ -506,6 +533,9 @@ void Games::gameOver(Game &game, std::span<const std::byte> payload)
     game.endingSince = Clock::now();
     if (running) {
         ended(game, GameEnd::Over);
+    }
+    if (_onGameOver) {
+        _onGameOver(*report);
     }
     for (const auto &[playerId, member] : members) {
         _playerGames.erase(playerId);
@@ -693,8 +723,12 @@ void Games::supervise()
     for (const std::uint32_t id : exited) {
         Game &game = *_games.at(id);
         closeConnection(game);
-        _freePorts.insert(game.port);
-        logger().debug("{} ended: UDP {} free again", game.describe(), game.port);
+        for (const std::uint32_t session : game.sessions) {
+            _sessions.erase(session);
+        }
+        // Its sessions with it: their ids may be drawn again from now on
+        _relay.removeInstance(game.id);
+        logger().debug("{} ended: its place is free again", game.describe());
         _games.erase(id);
     }
 }

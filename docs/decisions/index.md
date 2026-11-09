@@ -18,7 +18,7 @@ technical and comparative study of the project.
 | [0010](0010-physics-engine.md)                          | A custom kinematic physics engine                           | Accepted                                                                               |
 | [0011](0011-networking-library.md)                      | Asio as the networking library                              | Accepted                                                                               |
 | [0012](0012-tcp-lobby-udp-game.md)                      | TCP for the lobby, UDP for the game                         | Accepted                                                                               |
-| [0013](0013-one-process-per-game.md)                    | One process per game                                        | Accepted                                                                               |
+| [0013](0013-one-process-per-game.md)                    | One process per game                                        | Accepted, its ports amended by [0027](0027-one-udp-port-relay.md)                      |
 | [0014](0014-encryption.md)                              | Encryption of the client/server traffic                     | Accepted, partly superseded by [0021](0021-server-generated-key-trust-on-first-use.md) |
 | [0015](0015-one-game-scene-local-or-remote-session.md)  | One game scene, fed by a local or a remote session          | Accepted                                                                               |
 | [0016](0016-replication.md)                             | Full snapshots, explicit destructions and redundant inputs  | Proposed                                                                               |
@@ -32,6 +32,12 @@ technical and comparative study of the project.
 | [0024](0024-player-accounts.md)                         | Player accounts, per server, all or nothing                 | Accepted; its Discord sign-in superseded by [0026](0026-discord-social-sdk.md)         |
 | [0025](0025-server-administration.md)                   | Administration through a web panel served by the master     | Accepted                                                                               |
 | [0026](0026-discord-social-sdk.md)                      | Discord sign-in through the Discord Social SDK in the client | Accepted                                                                               |
+| [0027](0027-one-udp-port-relay.md)                      | One UDP port for every game, through a relay in the master  | Accepted                                                                               |
+| [0028](0028-input-stamps-follow-the-lead.md)            | The stamps of the inputs follow the lead the game reports   | Accepted                                                                               |
+| [0029](0029-predicted-shots.md)                         | The shots of the player are predicted, then matched by their age | Accepted                                                                          |
+| [0030](0030-measured-delays.md)                         | A round-trip time without the delay of the acknowledgements, an interpolation delay measured | Accepted                                                              |
+| [0031](0031-destructions-sent-again.md)                 | The destructions, unreliable, sent again with the snapshots | Accepted                                                                               |
+| [0032](0032-endless-waves-and-progression.md)           | Endless waves online, and the experience of the accounts    | Accepted                                                                               |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

@@ -8,6 +8,7 @@
 #include "ShipSelector/ShipSelector.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Widget.hpp"
+#include "rtype/game/Progression.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Tls.hpp"
 
@@ -116,9 +117,10 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
 OnlineScenes::OnlineScenes(engine::Engine &engine, render::ResourceManager &resources,
                            network::EventLoop &loop, GameScenes &games, const engine::InterfaceStyle &style,
                            localization::Localization &translations, discord::Authorizer &discord,
-                           ShipSelection &ships, std::filesystem::path pictures)
+                           ShipSelection &ships, std::filesystem::path pictures,
+                           const game::GameConfig &config)
     : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord), _games(games),
-      _translations(translations), _ships(ships), _known(engine.getSettings()),
+      _translations(translations), _ships(ships), _config(config), _known(engine.getSettings()),
       _sessions(engine.getSettings()), _profiles(engine.getSettings(), std::move(pictures)),
       _sky(resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth)),
       _discordLogo(resources.loadTexture(RTYPE_IMAGE_DISCORD, render::TextureFiltering::Smooth))
@@ -397,6 +399,10 @@ void OnlineScenes::declareLobbyScene(const engine::InterfaceStyle &style)
             if (!signedIn && canSignIn) {
                 under += " · " + toCapitals(_translations.text("account.sign_in"));
             }
+            if (signedIn && _lobby->progress()) {
+                under += std::format(" · {} {}", _translations.text("progress.level"),
+                                     game::levelOf(_lobby->progress()->xp).level);
+            }
             page.note(under, {engine::AnchorPoint::TopRight, nameRight - 12.0f, screenMargin + 40.0f},
                       Tone::Hint, 20.0f);
             page.keys(_translations.text("online.keys_lobby"));
@@ -442,6 +448,10 @@ void OnlineScenes::connect()
             .onWelcome = [this](std::uint32_t) { welcomed(); },
             .onLeftGame =
                 [this](const lobby::LeftGameMessage &left) {
+                    // The results of the game tell it already
+                    if (left.reason == lobby::LeftGameReason::GameOver && _games.results()) {
+                        return;
+                    }
                     _engine.showToast(leftReason(left.reason),
                                       left.reason == lobby::LeftGameReason::GameCrashed ||
                                               left.reason == lobby::LeftGameReason::Kicked
@@ -450,6 +460,7 @@ void OnlineScenes::connect()
                 },
             .onServerMessage =
                 [this](const std::string &text) { _engine.showToast(std::format("Server: {}", text)); },
+            .onProgress = [this](const lobby::ProgressMessage &progress) { showProgress(progress); },
             .onClosed = [this](const std::string &reason) { lobbyClosed(reason); },
             .onUntrusted = [this](const network::KeyFingerprint &presented) { untrusted(presented); },
             .onSessionExpired =
@@ -515,9 +526,14 @@ void OnlineScenes::joined(const LobbyClient::JoinResult &result)
         return;
     }
     const auto &game = std::get<lobby::GameJoinedMessage>(result);
+    // The experience before the game, from which its results fill the bar of the level
+    _xpBefore.reset();
+    if (_lobby && _lobby->account()) {
+        _xpBefore = _lobby->progress() ? _lobby->progress()->xp : 0;
+    }
     try {
         // The game is on the IP address of the master
-        _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game),
+        _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config),
                     [this] { gameEnded(); });
     } catch (const std::system_error &error) {
         _engine.showToast(std::format("Cannot join the game: {}", error.what()), engine::ToastType::Error);
@@ -531,6 +547,19 @@ void OnlineScenes::gameEnded()
         _engine.switchScene(MainMenuScene);
         return;
     }
+    if (_games.results()) {
+        // The game went to its end: its results, then back to the list once the player continues
+        _lobby->leaveGame();
+        _games.showResults(_xpBefore, _lobby->features().passwordAccounts || _lobby->features().discord,
+                           [this] {
+                               if (_lobby) {
+                                   refresh();
+                               } else {
+                                   _engine.switchScene(MainMenuScene);
+                               }
+                           });
+        return;
+    }
     // Answered NOT_IN_GAME if the game already let the player go: back to the list all the same
     _lobby->leaveGame([this] { refresh(); });
 }
@@ -542,6 +571,31 @@ void OnlineScenes::disconnect()
     }
     forgetLobby();
     _engine.switchScene(MainMenuScene);
+}
+
+void OnlineScenes::showProgress(const lobby::ProgressMessage &progress)
+{
+    refreshIfShown(LobbyScene);
+    // At the sign-in, the level shows in the menu: only a game is announced
+    if (progress.gained == 0) {
+        return;
+    }
+    // The game just played, or its results, show it; in a toast otherwise
+    _games.setAccountXp(progress.xp);
+    if (_engine.isSceneOpen(GameScene) || _engine.isSceneOpen(ResultsScene)) {
+        return;
+    }
+    const game::Level level = game::levelOf(progress.xp);
+    const game::Level before =
+        game::levelOf(progress.xp - std::min<std::uint64_t>(progress.gained, progress.xp));
+    const std::string title = std::format("{} {}", _translations.text("progress.level"), level.level);
+    const std::string detail =
+        std::format("+{} {} - {} / {} XP", progress.gained, _translations.text("progress.gained"),
+                    level.xpIntoLevel, level.xpForNext);
+    if (level.level > before.level) {
+        _engine.showToast(_translations.text("progress.level_up"), title, "", engine::ToastType::Success);
+    }
+    _engine.showToast(title, detail, "", engine::ToastType::Info);
 }
 
 void OnlineScenes::lobbyClosed(const std::string &reason)

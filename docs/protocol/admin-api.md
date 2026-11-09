@@ -91,14 +91,17 @@ account is banned, demoted or deleted.
   "version": "0.4.0",
   "startedAt": 1798000000123,
   "uptime": 3600000,
-  "ports": {"lobby": 4242, "games": {"first": 4243, "last": 4299}, "panel": 8080},
+  "ports": {"lobby": 4242, "game": 4242, "panel": 8080},
+  "maxGames": 57,
   "players": 3,
   "games": 1,
   "bans": 0
 }
 ```
 
-`players` counts the players of the lobby, in a game or not; `games` the running games; `bans` the addresses
+`ports.lobby` is TCP, `ports.game` the one UDP port of every game, the one of the relay
+([Server](../architecture/server.md#the-relay)); `maxGames` the most games at once. `players` counts the players
+of the lobby, in a game or not; `games` the running games; `bans` the addresses
 banned now.
 
 ### `GET /api/games`
@@ -112,7 +115,7 @@ shown until it is ready (10 seconds at most).
     "id": 3,
     "name": "Bydo hunters",
     "maxPlayers": 4,
-    "port": 4243,
+    "port": 4242,
     "createdAt": 1798000000123,
     "tick": 5400,
     "wave": 2,
@@ -128,6 +131,7 @@ shown until it is ready (10 seconds at most).
 
 | Field | Meaning |
 |---|---|
+| `port` | The UDP port its players send to: the one of the relay, the same for every game ([Server](../architecture/server.md#the-relay)) |
 | `tick`, `wave` | From the last `GAME_STATUS` of the instance ([instances, 4.1](instances.md#game_status-0x06)); `null` before the first |
 | `statusAge` | Since that status, or since the game got ready |
 | `stale` | No status for 3 seconds: the instance, or its game thread, is stuck |

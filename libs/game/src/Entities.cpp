@@ -123,20 +123,17 @@ ecs::entity_t spawnAimedShot(ecs::Ecs &ecs, GameContext &context, const std::str
                              std::uint8_t owner, float x, float y, float targetX, float targetY)
 {
     const WeaponDefinition &weapon = context.weapons.getDefinition(weaponId);
-    float directionX = targetX - x;
-    float directionY = targetY - y;
-    const float distance = std::hypot(directionX, directionY);
-    if (distance > 0.0f) {
-        directionX /= distance;
-        directionY /= distance;
-    } else {
-        directionX = owner < MaxPlayers ? 1.0f : -1.0f;
-        directionY = 0.0f;
-    }
     const float halfWidth = halfSizeOf(context.projectiles.getDefinition(weapon.projectile).collider).x;
-    const ecs::entity_t shot = spawnProjectile(
-        ecs, context, weapon.projectile, owner, x + (directionX * halfWidth), y + (directionY * halfWidth),
-        directionX * weapon.projectileSpeed, directionY * weapon.projectileSpeed);
+    return spawnShot(ecs, context, weaponId, owner,
+                     aimShot(weapon, halfWidth, owner, {x, y}, {targetX, targetY}));
+}
+
+ecs::entity_t spawnShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId, std::uint8_t owner,
+                        const ShotLaunch &launch)
+{
+    const WeaponDefinition &weapon = context.weapons.getDefinition(weaponId);
+    const ecs::entity_t shot = spawnProjectile(ecs, context, weapon.projectile, owner, launch.position.x,
+                                               launch.position.y, launch.velocity.x, launch.velocity.y);
     Projectile &projectile = ecs.getComponent<Projectile>(shot);
     projectile.category = weapon.mechanic;
     projectile.range = weapon.range;

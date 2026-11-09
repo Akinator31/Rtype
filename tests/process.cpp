@@ -244,7 +244,10 @@ TEST_CASE("An instance started with its secret runs until asked to stop, then ex
     secret[0] = std::byte{0x2a};
     // A master that never answers: the instance connects, presents itself, and waits for CONFIGURE
     rtype::network::EventLoop loop;
-    const rtype::network::TcpListener master(loop, rtype::network::Address::loopbackIpv4(0));
+    rtype::network::TcpListener master(loop, rtype::network::Address::loopbackIpv4(0));
+    std::optional<rtype::network::TcpConnection> connected;
+    master.startAccepting(
+        [&connected](rtype::network::TcpConnection accepted) { connected.emplace(std::move(accepted)); });
     const std::vector<std::string> arguments = {"--instance",
                                                 "--id",
                                                 "7",
@@ -256,8 +259,14 @@ TEST_CASE("An instance started with its secret runs until asked to stop, then ex
                                                 "warning"};
     Process instance(Server, arguments, {.input = formatSecret(secret) + "\n", .stopGrace = Patience});
 
-    // Still running: it waits for its game. Its stop signals are set by then
-    REQUIRE_FALSE(instance.wait(1s));
+    // It has loaded its configuration and connected, so its stop signals are set; it waits for its game
+    const auto deadline = std::chrono::steady_clock::now() + Patience;
+    while (!connected && std::chrono::steady_clock::now() < deadline) {
+        loop.poll();
+        std::this_thread::sleep_for(1ms);
+    }
+    REQUIRE(connected);
+    REQUIRE_FALSE(instance.wait(100ms));
 
     CHECK(instance.stop() == Success);
 }

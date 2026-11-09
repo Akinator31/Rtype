@@ -38,8 +38,8 @@
 namespace rtype::lobby
 {
 
-/// The version of the lobby protocol, in HELLO.
-inline constexpr std::uint16_t ProtocolVersion = 4;
+/// The version of the lobby protocol, in HELLO: 5 adds PROGRESS, with the endless games online.
+inline constexpr std::uint16_t ProtocolVersion = 5;
 /// Longest name of a player, in bytes of UTF-8.
 inline constexpr std::size_t MaxPlayerNameLength = 16;
 /// Longest name of a game, in bytes of UTF-8.
@@ -116,6 +116,7 @@ inline constexpr std::uint8_t DiscordAuthorize = 0x8A;
 inline constexpr std::uint8_t Done = 0x8B;
 inline constexpr std::uint8_t Profile = 0x8C;
 inline constexpr std::uint8_t Avatar = 0x8D;
+inline constexpr std::uint8_t Progress = 0x8E;
 } // namespace message_type
 
 /// Tells whether a request is one of the accounts (version 3): REGISTER to DELETE_ACCOUNT, and GET_PROFILE
@@ -532,6 +533,22 @@ struct AvatarMessage {
     friend bool operator==(const AvatarMessage &, const AvatarMessage &) = default;
 };
 
+/// `PROGRESS`: the progression of the account signed in, once signed in and after each game online that
+/// counted for it. Guests never receive it.
+struct ProgressMessage {
+    /// The experience of the account, all its games: its level is rtype::game::levelOf(xp).
+    std::uint64_t xp = 0;
+    /// The experience the game that just ended gave, 0 when sent at the sign-in.
+    std::uint32_t gained = 0;
+    std::uint32_t gamesPlayed = 0;
+    std::uint32_t totalKills = 0;
+    /// The most waves cleared in a game, and the longest streak.
+    std::uint16_t bestWaves = 0;
+    std::uint16_t bestStreak = 0;
+
+    friend bool operator==(const ProgressMessage &, const ProgressMessage &) = default;
+};
+
 /// `DISCORD_AUTHORIZE`: the answer to DISCORD_SIGN_IN, the Discord application of the master, for the client
 /// to ask the player through the Discord Social SDK (version 3).
 struct DiscordAuthorizeMessage {
@@ -568,6 +585,7 @@ struct DiscordAuthorizeMessage {
 [[nodiscard]] std::vector<std::byte> encode(const DiscordAuthorizeMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const ProfileMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const AvatarMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const ProgressMessage &message);
 
 [[nodiscard]] std::optional<HelloMessage> decodeHello(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<CreateGameMessage> decodeCreateGame(std::span<const std::byte> payload);
@@ -594,6 +612,7 @@ struct DiscordAuthorizeMessage {
 decodeDiscordAuthorize(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<ProfileMessage> decodeProfile(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<AvatarMessage> decodeAvatar(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<ProgressMessage> decodeProgress(std::span<const std::byte> payload);
 /// For the messages without payload: true if it is empty.
 [[nodiscard]] bool decodeEmpty(std::span<const std::byte> payload);
 

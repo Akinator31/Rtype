@@ -4,9 +4,12 @@
 #include "Common/InstanceMessages.hpp"
 #include "Common/Lifecycle.hpp"
 #include "Common/Secret.hpp"
+#include "Instance/DirectTransport.hpp"
 #include "Instance/GameHost.hpp"
 #include "Instance/GameThread.hpp"
+#include "Instance/GameTransport.hpp"
 #include "Instance/MasterLink.hpp"
+#include "Instance/RelayedTransport.hpp"
 #include "rtype/game/Standalone.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
@@ -15,6 +18,7 @@
 
 #include <chrono>
 #include <format>
+#include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -42,6 +46,14 @@ const rtype::log::Logger &logger()
 {
     static const rtype::log::Logger instance("instance");
     return instance;
+}
+
+/// Online, the waves follow each other until every player is out of lives, and earn experience.
+rtype::game::Rules onlineRules()
+{
+    rtype::game::Rules rules;
+    rules.endless = true;
+    return rules;
 }
 
 /// Why the master shuts the game down, for the logs.
@@ -85,19 +97,36 @@ class Instance
     int _exitCode = Success;
     bool _stopping = false;
 
-    /// Opens the UDP port and starts the simulation.
-    bool openGame(std::uint8_t maxPlayers, GameHost::Handlers handlers)
+    /// Opens the UDP port of the game, or its port on the loopback behind the relay of the master on
+    /// `127.0.0.1:relayPort` (0: no relay), and starts the simulation.
+    bool openGame(std::uint8_t maxPlayers, std::uint16_t relayPort, GameHost::Handlers handlers)
     {
         try {
-            _host.emplace(_loop, rtype::network::Address::anyIpv4(_options.udpPort), maxPlayers, _game,
-                          std::move(handlers));
+            std::unique_ptr<GameTransport> transport;
+            if (relayPort != 0) {
+                transport = std::make_unique<RelayedTransport>(_loop, relayPort);
+            } else {
+                transport = std::make_unique<DirectTransport>(
+                    _loop, rtype::network::Address::anyIpv4(_options.udpPort));
+            }
+            _host.emplace(_loop, std::move(transport), maxPlayers, _game, std::move(handlers));
         } catch (const std::system_error &error) {
-            logger().error("Cannot open UDP port {}: {}", _options.udpPort, error.code().message());
+            if (relayPort != 0) {
+                logger().error("Cannot open a UDP port on the loopback for the relay: {}",
+                               error.code().message());
+            } else {
+                logger().error("Cannot open UDP port {}: {}", _options.udpPort, error.code().message());
+            }
             return false;
         }
         _game.start();
-        logger().info("Game {} on UDP {}, {} players at most", _options.id, _host->localAddress(),
-                      maxPlayers);
+        if (relayPort != 0) {
+            logger().info("Game {} behind the relay on 127.0.0.1:{}, receiving on {}, {} players at most",
+                          _options.id, relayPort, _host->localAddress(), maxPlayers);
+        } else {
+            logger().info("Game {} on UDP {}, {} players at most", _options.id, _host->localAddress(),
+                          maxPlayers);
+        }
         return true;
     }
 
@@ -124,7 +153,7 @@ class Instance
     {
         logger().info("Configured as \"{}\"", game.name);
         const bool opened =
-            openGame(game.maxPlayers,
+            openGame(game.maxPlayers, game.relayPort,
                      {
                          .onConnected = [this](std::uint32_t player) { _link->sendPlayerConnected(player); },
                          .onDisconnected =
@@ -137,6 +166,7 @@ class Instance
             stop(Failure, DisconnectReason::Shutdown);
             return;
         }
+        // The public port, or the one on the loopback where the relay sends its frames
         _link->sendReady(_host->localAddress().port());
         _status.startRepeating(StatusInterval, [this] { _link->sendGameStatus(_host->status()); });
     }
@@ -145,7 +175,7 @@ public:
     Instance(const InstanceOptions &options, rtype::game::GameConfig config, rtype::network::EventLoop &loop)
         : _options(options), _loop(loop),
           _game(
-              {}, std::move(config),
+              onlineRules(), std::move(config),
               // Each tick, from the game thread to the network thread
               [this](TickResult result) {
                   _loop.post([this, result = std::move(result)] {
@@ -170,7 +200,7 @@ public:
     bool startStandalone()
     {
         const bool opened = openGame(
-            MaxInstancePlayers,
+            MaxInstancePlayers, 0,
             {
                 .onConnected = {},
                 .onDisconnected =

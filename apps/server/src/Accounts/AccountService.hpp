@@ -4,6 +4,7 @@
 #include "Accounts/Discord.hpp"
 #include "Accounts/Mailer.hpp"
 #include "Accounts/PasswordHasher.hpp"
+#include "Accounts/ProgressStore.hpp"
 #include "rtype/database/DatabaseThread.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/network/Address.hpp"
@@ -88,7 +89,8 @@ struct AccountConnection {
 };
 
 /// The reply CODE_SENT.
-struct CodeSent {};
+struct CodeSent {
+};
 /// The reply DONE. After SIGN_OUT and DELETE_ACCOUNT, the connection is signed out and closed.
 struct AccountDone {
     bool closes = false;
@@ -128,6 +130,7 @@ class AccountService
 {
 public:
     using Done = std::function<void(AccountReply)>;
+    using ProgressDone = std::function<void(std::optional<AccountProgress>)>;
 
 private:
     using SteadyClock = std::chrono::steady_clock;
@@ -157,6 +160,10 @@ private:
 
     /// Calls `done` later, on the loop.
     void later(const Done &done, AccountReply reply);
+    /// Runs `task` on the database thread, then `done` on the loop with the progression it gives; nothing
+    /// if the database thread is full or the task failed.
+    template <typename Task>
+    void onProgress(std::string description, Task task, ProgressDone done);
     /// Runs `task` on the database thread, then `then` on the loop with its result; BUSY if the database
     /// thread is full or the task failed.
     template <typename Task, typename Then>
@@ -221,6 +228,13 @@ public:
     /// account, ignoring case, BUSY if the database cannot answer.
     void checkGuestName(const std::string &name,
                         std::function<void(std::optional<rtype::lobby::ErrorCode>)> done);
+
+    /// Reads the progression of an account, for PROGRESS: nothing if the database cannot answer.
+    void progress(long long accountId, ProgressDone done);
+
+    /// Adds a game online to the progression of an account, then gives the progression with it: nothing if
+    /// the database cannot answer, and the game is lost.
+    void recordGame(long long accountId, GameResult game, ProgressDone done);
 
     /// Answers a request of the accounts (rtype::lobby::isAccountRequest()), its state already checked by the
     /// lobby. MALFORMED for a payload that cannot be read.

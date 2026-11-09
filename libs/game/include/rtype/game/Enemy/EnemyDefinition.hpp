@@ -28,6 +28,9 @@ struct EnemyDefinition {
     std::string weapon;
     /// Points given to the player who destroys it.
     std::uint32_t score = 100;
+    /// Experience given to the player who destroys it, in an endless game (Progression). Read from its file,
+    /// a tenth of its score by default.
+    std::uint32_t xp = 10;
     /// Hit points a player ship loses when it runs into it; the enemy keeps going.
     std::uint8_t collisionDamage = 20;
     /// What moves it and makes it fire; without one, it speeds up to the left and fires as soon as it is in

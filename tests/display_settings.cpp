@@ -11,9 +11,11 @@
 using rtype::client::Fullscreen;
 using rtype::client::nextValue;
 using rtype::client::parseResolution;
+using rtype::client::previousValue;
 using rtype::client::Resolution;
 using rtype::client::resolutionSettingName;
 using rtype::client::resolutionsFor;
+using rtype::client::stepValue;
 
 TEST_CASE("A screen offers fullscreen, then the window sizes smaller than it", "[settings]")
 {
@@ -32,6 +34,17 @@ TEST_CASE("The resolution button goes through the resolutions of the screen and 
     CHECK(nextValue(offered, Resolution{1600, 900}) == Fullscreen);
     // A window resized by hand, or too large for a new screen, starts again from fullscreen
     CHECK(nextValue(offered, Resolution{1234, 567}) == Fullscreen);
+}
+
+TEST_CASE("Left goes back through the resolutions, and around from the first", "[settings]")
+{
+    const std::vector<Resolution> offered = resolutionsFor({"", 1920, 1080});
+
+    CHECK(previousValue(offered, Resolution{1600, 900}) == Resolution{1280, 720});
+    CHECK(previousValue(offered, Fullscreen) == Resolution{1600, 900});
+    CHECK(previousValue(offered, Resolution{1234, 567}) == Fullscreen);
+    CHECK(stepValue(offered, Fullscreen, -1) == Resolution{1600, 900});
+    CHECK(stepValue(offered, Fullscreen, 1) == Resolution{1280, 720});
 }
 
 TEST_CASE("A resolution is kept as text and read back", "[settings]")

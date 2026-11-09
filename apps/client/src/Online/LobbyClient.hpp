@@ -94,6 +94,8 @@ public:
         std::function<void(const lobby::LeftGameMessage &left)> onLeftGame;
         /// The administrators of the server sent a message (SERVER_MESSAGE).
         std::function<void(const std::string &text)> onServerMessage;
+        /// The progression of the account signed in: once signed in, then after each game (PROGRESS).
+        std::function<void(const lobby::ProgressMessage &progress)> onProgress;
         /// The connection ended, or could not be opened, with the reason for the player. Called once; nothing
         /// is called after.
         std::function<void(const std::string &reason)> onClosed;
@@ -125,6 +127,7 @@ private:
     std::optional<std::uint32_t> _playerId;
     lobby::ServerFeatures _features;
     std::optional<lobby::AccountInfo> _account;
+    std::optional<lobby::ProgressMessage> _progress;
     bool _closed = false;
     /// The key the server presented, if it was refused.
     std::optional<network::KeyFingerprint> _untrusted;
@@ -173,6 +176,8 @@ public:
     [[nodiscard]] const lobby::ServerFeatures &features() const { return _features; }
     /// The account signed in on this connection, if any: by the token of HELLO, or by SIGNED_IN.
     [[nodiscard]] const std::optional<lobby::AccountInfo> &account() const { return _account; }
+    /// The last PROGRESS of the account signed in, nothing for a guest or before it came.
+    [[nodiscard]] const std::optional<lobby::ProgressMessage> &progress() const { return _progress; }
 
     void listGames(ListCallback done);
     void createGame(const std::string &name, std::uint8_t maxPlayers, JoinCallback done);

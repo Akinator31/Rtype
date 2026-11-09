@@ -108,6 +108,7 @@ void GameSessionSystem::stop()
     _entities.clear();
     _killed.clear();
     _players.clear();
+    _localHealth = 0;
     _tick = 0;
     _rescue = game::RescueStage::None;
     _outcomeTold = false;
@@ -229,6 +230,9 @@ void GameSessionSystem::update(float elapsed)
     for (const game::Snapshot &snapshot : _session->takeSnapshots()) {
         apply(snapshot);
     }
+    if (const std::optional<game::Snapshot> drawn = _session->between()) {
+        place(*drawn);
+    }
     placeShipModels(elapsed);
     if (_session->isOver() && _onOver) {
         // Once: it usually switches scenes, at the next update
@@ -241,11 +245,15 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
 {
     _tick = snapshot.tick;
     _players = snapshot.players;
+    _localHealth = 0;
 
     std::unordered_set<std::uint32_t> present;
     present.reserve(snapshot.entities.size());
     for (const game::EntityState &state : snapshot.entities) {
         present.insert(state.id);
+        if (isLocalShip(state)) {
+            _localHealth = state.health;
+        }
         const auto found = _entities.find(state.id);
         if (found == _entities.end() || !_ecs.isAlive(found->second)) {
             createEntity(state);
@@ -274,6 +282,15 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         removeEntity(entry->first, entry->second);
         entry = _entities.erase(entry);
+    }
+}
+
+void GameSessionSystem::place(const game::Snapshot &drawn)
+{
+    for (const game::EntityState &state : drawn.entities) {
+        if (const std::optional<ecs::entity_t> entity = entityOf(state.id)) {
+            moveEntity(*entity, state);
+        }
     }
 }
 

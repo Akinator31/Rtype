@@ -15,6 +15,9 @@ namespace
 using rtype::network::Reader;
 using rtype::network::Writer;
 
+/// One entry of GAME_OVER: player id, score, kills, waves cleared, best streak, experience.
+constexpr std::size_t PlayerScoreSize = 20;
+
 void require(bool condition, const char *problem)
 {
     if (!condition) {
@@ -113,11 +116,15 @@ std::optional<PlayerDisconnectedMessage> decodePlayerDisconnected(std::span<cons
 std::vector<std::byte> encode(const GameOverReport &message)
 {
     require(message.scores.size() <= MaxInstancePlayers, "A GAME_OVER has at most 4 scores");
-    Writer writer(1 + (8 * message.scores.size()));
+    Writer writer(1 + (PlayerScoreSize * message.scores.size()));
     writer.writeU8(static_cast<std::uint8_t>(message.scores.size()));
     for (const PlayerScore &score : message.scores) {
         writer.writeU32(score.playerId);
         writer.writeU32(score.score);
+        writer.writeU32(score.kills);
+        writer.writeU16(score.wavesCleared);
+        writer.writeU16(score.bestStreak);
+        writer.writeU32(score.xp);
     }
     return writer.take();
 }
@@ -134,6 +141,10 @@ std::optional<GameOverReport> decodeGameOverReport(std::span<const std::byte> pa
         PlayerScore score;
         score.playerId = reader.readU32();
         score.score = reader.readU32();
+        score.kills = reader.readU32();
+        score.wavesCleared = reader.readU16();
+        score.bestStreak = reader.readU16();
+        score.xp = reader.readU32();
         message.scores.push_back(score);
     }
     return finished(reader, message);
@@ -199,9 +210,10 @@ std::vector<std::byte> encode(const ConfigureMessage &message)
     require(!message.name.empty() && message.name.size() <= MaxGameNameLength,
             "A game name is 1 to 32 bytes");
     require(message.maxPlayers >= 1 && message.maxPlayers <= MaxInstancePlayers, "A game has 1 to 4 players");
-    Writer writer(2 + message.name.size());
+    Writer writer(4 + message.name.size());
     writer.writeString(message.name);
     writer.writeU8(message.maxPlayers);
+    writer.writeU16(message.relayPort);
     return writer.take();
 }
 
@@ -211,6 +223,7 @@ std::optional<ConfigureMessage> decodeConfigure(std::span<const std::byte> paylo
     ConfigureMessage message;
     message.name = reader.readString(1, MaxGameNameLength);
     message.maxPlayers = reader.readU8();
+    message.relayPort = reader.readU16();
     if (message.maxPlayers == 0 || message.maxPlayers > MaxInstancePlayers) {
         reader.fail();
     }

@@ -15,7 +15,8 @@ docs
 web/admin/dist
 web/admin/playwright-report
 web/admin/test-results
-apps/client/assets
+apps/client/assets/*
+!apps/client/assets/sounds
 keys
 /server.toml
 *.key

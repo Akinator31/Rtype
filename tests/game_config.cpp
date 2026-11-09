@@ -93,15 +93,14 @@ TEST_CASE("The configuration of the repository loads, and a Simulation registers
     CHECK(context.weapons.hasDefinition("blaster"));
     CHECK(context.ships.hasDefinition("bydo_scout"));
     CHECK(context.enemies.hasDefinition("bydo_scout"));
-    CHECK(context.waves.hasDefinition("scouts_line"));
+    CHECK(context.waves.hasDefinition("space_voyager"));
     CHECK(context.weapons.hasDefinition(context.player.weapon));
     CHECK(context.ships.hasDefinition(context.player.ship));
-    // Four choices per level; the game draws one of each, and ends with the final boss
+    // At least one music wave per level, up to the one before the final boss (retired for now)
     for (std::uint8_t difficulty = MinWaveDifficulty; difficulty < MaxWaveDifficulty; ++difficulty) {
         INFO("difficulty " << int{difficulty});
-        CHECK(context.waves.listWavesOfDifficulty(difficulty).size() >= 4);
+        CHECK_FALSE(context.waves.listWavesOfDifficulty(difficulty).empty());
     }
-    CHECK(context.waves.listWavesOfDifficulty(MaxWaveDifficulty) == std::vector<std::string>{"shogun_duel"});
 }
 
 TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest player, then leaves", "[game]")
@@ -117,14 +116,14 @@ TEST_CASE("The gunner of the repository stops, fires three orbs at the nearest p
                                   &EntityState::kind);
     };
 
-    // 500 units at 150 per second, then a second to aim: no orb before
-    for (int tick = 0; tick < 255; ++tick) {
+    // 500 units at 450 per second, then a second to aim: no orb before
+    for (int tick = 0; tick < 120; ++tick) {
         simulation.step();
     }
     CHECK(ecs.getComponent<rtype::ecs::Position>(gunner).x == Approx(1500.0f));
     CHECK(countOrbs() == 0);
     // An orb every half second, then it flies away
-    for (int tick = 0; tick < 75; ++tick) {
+    for (int tick = 0; tick < 85; ++tick) {
         simulation.step();
     }
     CHECK(countOrbs() == 3);
@@ -359,6 +358,40 @@ TEST_CASE("The files are read from sub-folders too, in the order of their paths,
     CHECK(loaded.config.projectiles[3].id == "pulse");
 }
 
+TEST_CASE("The experience is read from progression.lua, with its defaults without it", "[game]")
+{
+    const ConfigDirectory directory("progression");
+    directory.writeValid();
+    const LoadedGameConfig defaults = loadGameConfig(directory.path);
+    INFO(listErrors(defaults));
+    REQUIRE(defaults.isValid());
+    CHECK(defaults.config.progression.xpPerWave == Progression{}.xpPerWave);
+    // An enemy without xp gives a tenth of its score
+    CHECK(defaults.config.enemies.front().xp == defaults.config.enemies.front().score / 10);
+
+    directory.write("progression.lua", "return { xpPerWave = 80, streakBonus = 10, streakCap = 200 }");
+    const LoadedGameConfig loaded = loadGameConfig(directory.path);
+    INFO(listErrors(loaded));
+    REQUIRE(loaded.isValid());
+    CHECK(loaded.config.progression.xpPerWave == 80);
+    CHECK(loaded.config.progression.streakBonus == 10);
+    CHECK(loaded.config.progression.streakCap == 200);
+
+    CHECK(errorWith("progression_cap", "progression.lua", "return { streakCap = 50 }") ==
+          "progression.lua: streakCap: expected an integer from 100 to 65535");
+    CHECK_THAT(errorWith("progression_unknown", "progression.lua", "return { bonus = 2 }"),
+               ContainsSubstring("bonus"));
+}
+
+TEST_CASE("The progression of the repository loads", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    CHECK(loaded.config.progression.xpPerWave == 100);
+    CHECK(loaded.config.progression.streakBonus == 25);
+    CHECK(loaded.config.progression.streakCap == 300);
+}
+
 TEST_CASE("A directory without player.lua is an error, as a missing one", "[game]")
 {
     const ConfigDirectory directory("empty");
@@ -528,4 +561,116 @@ TEST_CASE("Every error is reported, and a configuration with errors is empty", "
     CHECK(hasError(loaded, "enemies/broken.lua: expected the file to return a table, `return { ... }`"));
     CHECK(loaded.config.projectiles.empty());
     CHECK(loaded.config.enemies.empty());
+}
+
+// --- The waves that follow a music ---
+
+namespace
+{
+
+constexpr const char *MusicWave = R"(return {
+    name = "drums", difficulty = 1, placement = "music", music = "sounds/drums_style.mp3", lead = 1.0,
+    beats = {
+        bass = { enemies = { "scout" }, minGap = 1.0 },
+        mid = { enemies = { "scout" }, minGap = 0.5 },
+    },
+    area = { minX = 1980, maxX = 2020, minY = 100, maxY = 980 },
+})";
+
+LoadedGameConfig loadMusic(const ConfigDirectory &directory, const std::string &wave)
+{
+    directory.write("waves/music.lua", wave);
+    return loadGameConfig(directory.path, std::filesystem::path(RTYPE_TEST_SOUNDS).parent_path());
+}
+
+std::string replaced(std::string text, const std::string &from, const std::string &to)
+{
+    text.replace(text.find(from), from.size(), to);
+    return text;
+}
+
+} // namespace
+
+TEST_CASE("A music wave is analysed into a timeline of enemies", "[game][config]")
+{
+    ConfigDirectory directory("music");
+    directory.writeValid();
+    directory.write("waves/line.lua",
+                    "return { name = 'line', difficulty = 1, quantity = 1, placement = 'random',"
+                    " enemy = 'scout' }");
+
+    const LoadedGameConfig loaded = loadMusic(directory, MusicWave);
+
+    REQUIRE(loaded.isValid());
+    const WaveDefinition &wave = *std::ranges::find(loaded.config.waves, "drums", &WaveDefinition::name);
+    CHECK(wave.placement == WavePlacement::Music);
+    CHECK(wave.music == "sounds/drums_style.mp3");
+    CHECK(wave.quantity > 50);
+    CHECK(wave.quantity == wave.timeline.size());
+    CHECK(std::ranges::is_sorted(wave.timeline, {}, &WaveTimedSpawn::tick));
+    for (const WaveTimedSpawn &spawn : wave.timeline) {
+        CHECK(spawn.spawn.enemy == "scout");
+        CHECK(spawn.spawn.x >= 1980.0f);
+        CHECK(spawn.spawn.x <= 2020.0f);
+        CHECK(spawn.spawn.y >= 100.0f);
+        CHECK(spawn.spawn.y <= 980.0f);
+    }
+}
+
+TEST_CASE("The positions of a music wave change from one beat to the next, and are the same on every load",
+          "[game][config]")
+{
+    ConfigDirectory directory("music_positions");
+    directory.writeValid();
+
+    const LoadedGameConfig first = loadMusic(directory, MusicWave);
+    const LoadedGameConfig second = loadMusic(directory, MusicWave);
+
+    REQUIRE(first.isValid());
+    const std::vector<WaveTimedSpawn> &timeline = first.config.waves.back().timeline;
+    // Never the same height three times in a row, and the whole height is used
+    std::size_t rows = 0;
+    float lowest = 1e9f;
+    float highest = 0.0f;
+    for (std::size_t i = 0; i < timeline.size(); ++i) {
+        lowest = std::min(lowest, timeline[i].spawn.y);
+        highest = std::max(highest, timeline[i].spawn.y);
+        if (i >= 2 && std::abs(timeline[i].spawn.y - timeline[i - 1].spawn.y) < 100.0f &&
+            std::abs(timeline[i].spawn.y - timeline[i - 2].spawn.y) < 100.0f) {
+            ++rows;
+        }
+    }
+    CHECK(rows == 0);
+    CHECK(lowest < 300.0f);
+    CHECK(highest > 780.0f);
+    const std::vector<WaveTimedSpawn> &again = second.config.waves.back().timeline;
+    REQUIRE(again.size() == timeline.size());
+    for (std::size_t i = 0; i < timeline.size(); ++i) {
+        CHECK(again[i].tick == timeline[i].tick);
+        CHECK(again[i].spawn.y == timeline[i].spawn.y);
+    }
+}
+
+TEST_CASE("A music wave with a mistake is an error of its file", "[game][config]")
+{
+    ConfigDirectory directory("music_errors");
+    directory.writeValid();
+
+    CHECK_THAT(
+        loadMusic(directory, replaced(MusicWave, "sounds/drums_style.mp3", "sounds/nope.mp3")).errors.at(0),
+        ContainsSubstring("waves/music.lua: music:"));
+    CHECK_THAT(
+        loadMusic(directory, replaced(MusicWave, ", music = \"sounds/drums_style.mp3\"", "")).errors.at(0),
+        ContainsSubstring("music: missing"));
+    CHECK(loadMusic(directory, replaced(MusicWave, "beats = {", "beats = { low = {}, ")).errors.at(0) ==
+          "waves/music.lua: beats.low: unknown field");
+    CHECK(loadMusic(directory, replaced(MusicWave, "enemies = { \"scout\" }, minGap = 1.0",
+                                        "enemies = { \"nope\" }, minGap = 1.0"))
+              .errors.at(0) == "waves/music.lua: the wave 'drums' uses the unknown enemy 'nope'");
+    CHECK(
+        loadMusic(directory, replaced(MusicWave, "enemies = { \"scout\" }, minGap = 1.0", "enemies = { 3 }"))
+            .errors.at(0) == "waves/music.lua: beats.bass.enemies[1]: expected a string");
+    CHECK(loadMusic(directory,
+                    replaced(MusicWave, "placement = \"music\",", "placement = \"music\", quantity = 3,"))
+              .errors.at(0) == "waves/music.lua: quantity: unknown field");
 }

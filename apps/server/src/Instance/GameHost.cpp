@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <utility>
 
 namespace rtype::server
 {
@@ -24,15 +25,24 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
+/// The input lead of a SNAPSHOT: within what an i8 holds, the lowest value meaning none.
+std::int8_t toInputLead(std::optional<std::int64_t> lead)
+{
+    if (!lead) {
+        return rtype::game::NoInputLead;
+    }
+    return static_cast<std::int8_t>(std::clamp<std::int64_t>(*lead, rtype::game::NoInputLead + 1, 127));
+}
+
 } // namespace
 
-GameHost::GameHost(rtype::network::EventLoop &loop, const rtype::network::Address &local,
+GameHost::GameHost(rtype::network::EventLoop &loop, std::unique_ptr<GameTransport> transport,
                    std::uint8_t maxPlayers, GameThread &game, Handlers handlers)
-    : _socket(loop, local), _game(game), _maxPlayers(std::min(maxPlayers, MaxInstancePlayers)),
+    : _transport(std::move(transport)), _game(game), _maxPlayers(std::min(maxPlayers, MaxInstancePlayers)),
       _handlers(std::move(handlers)),
       _sessions(
           [this](const rtype::network::Address &to, std::span<const std::byte> datagram) {
-              _socket.send(to, datagram);
+              _transport->send(to, datagram);
           },
           {
               .onConnected = [this](std::uint32_t session,
@@ -43,7 +53,7 @@ GameHost::GameHost(rtype::network::EventLoop &loop, const rtype::network::Addres
           }),
       _updates(loop)
 {
-    _socket.startReceiving([this](const rtype::network::Address &from, std::span<const std::byte> datagram) {
+    _transport->start([this](const rtype::network::Address &from, std::span<const std::byte> datagram) {
         _sessions.receive(from, datagram, Clock::now());
     });
     // Sends, resends, acknowledgements, heartbeats and timeouts, at the pace of the ticks, but on its own:
@@ -201,10 +211,20 @@ void GameHost::publish(const TickResult &result)
     _tick = snapshot.tick;
     _wave = snapshot.waveStarted.value_or(_wave);
     _states = snapshot.players;
-    for (const rtype::game::EntitiesDestroyedMessage &message : rtype::game::destroyedMessages(snapshot)) {
-        sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
-                        Delivery::Reliable);
+    for (std::size_t slot = 0; slot < _inputLeads.size(); ++slot) {
+        if (const std::optional<std::int64_t> lead = result.inputLeads[slot]) {
+            _inputLeads[slot] = _inputLeads[slot] ? std::min(*_inputLeads[slot], *lead) : *lead;
+        }
     }
+    // Unreliable, as soon as they happen, then again with the snapshots: a lost one costs a snapshot
+    // interval, and holds back nothing behind it
+    const std::vector<rtype::game::EntitiesDestroyedMessage> destroyed =
+        rtype::game::destroyedMessages(snapshot);
+    for (const rtype::game::EntitiesDestroyedMessage &message : destroyed) {
+        sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
+                        Delivery::Unreliable);
+    }
+    _destructions.add(snapshot.tick, destroyed);
     if (snapshot.waveStarted) {
         sendToConnected(
             rtype::game::message_type::WaveStarted,
@@ -217,11 +237,17 @@ void GameHost::publish(const TickResult &result)
             if (!player.connected) {
                 continue;
             }
-            for (const rtype::game::SnapshotPart &part :
-                 rtype::game::splitSnapshot(snapshot, result.lastInputs[player.slot])) {
+            for (const rtype::game::SnapshotPart &part : rtype::game::splitSnapshot(
+                     snapshot, result.lastInputs[player.slot], toInputLead(_inputLeads[player.slot]),
+                     result.weapons[player.slot])) {
                 _sessions.send(session, rtype::game::message_type::Snapshot, rtype::game::encode(part),
                                Delivery::Unreliable);
             }
+        }
+        _inputLeads.fill(std::nullopt);
+        for (const rtype::game::EntitiesDestroyedMessage &message : _destructions.again(snapshot.tick)) {
+            sendToConnected(rtype::game::message_type::EntitiesDestroyed, rtype::game::encode(message),
+                            Delivery::Unreliable);
         }
     }
     if (snapshot.gameOver) {
@@ -244,7 +270,12 @@ void GameHost::gameOver(const TickResult &result)
         const auto state =
             std::ranges::find(result.snapshot.players, player.slot, &rtype::game::PlayerState::slot);
         if (player.connected && state != result.snapshot.players.end()) {
-            report.scores.push_back({player.playerId, state->score});
+            report.scores.push_back({.playerId = player.playerId,
+                                     .score = state->score,
+                                     .kills = state->kills,
+                                     .wavesCleared = state->wavesCleared,
+                                     .bestStreak = state->bestStreak,
+                                     .xp = state->xp});
         }
     }
     if (_handlers.onGameOver) {
@@ -286,7 +317,7 @@ void GameHost::closeAll(DisconnectReason reason)
     _updates.cancel();
     _sessions.closeAll(reason);
     _players.clear();
-    _socket.close();
+    _transport->close();
 }
 
 } // namespace rtype::server

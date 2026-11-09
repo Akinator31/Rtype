@@ -1,7 +1,7 @@
 -- Picks one random waypoint, fires four plasma shards, then leaves.
 return {
     id = "bydo_wanderer",
-    ship = "bydo_scout",
+    ship = "bydo_wanderer",
     health = 65,
     speed = 180,
     acceleration = 360,

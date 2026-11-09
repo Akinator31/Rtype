@@ -237,28 +237,27 @@ public:
 
 void readServer(const Reader &reader, const toml::table &root, ServerSettings &settings)
 {
-    const toml::table *server =
-        reader.section(root, "server", {"port", "game_ports", "key", "database", "database_file"});
+    // Before the check of the keys: a file of before the relay is told what replaces its key
+    if (const toml::table *table = root.get_as<toml::table>("server");
+        table != nullptr && table->contains("game_ports")) {
+        reader.fail(Reader::at(*table, "game_ports"),
+                    "[server] game_ports is gone: every game is on one UDP port, game_port (default 4242), "
+                    "and max_games gives the most games at once (default 57)");
+    }
+    const toml::table *server = reader.section(
+        root, "server", {"port", "game_port", "max_games", "key", "database", "database_file"});
     if (server == nullptr) {
         return;
     }
-    // 0 lets the system choose, as --port 0
+    // 0 lets the system choose, as --port 0 and --game-port 0
     settings.port = reader.port(*server, "server", "port", 0);
-    if (const auto range = reader.string(*server, "server", "game_ports")) {
-        const std::size_t dash = range->find('-');
-        const auto first = parseNumber(std::string_view(*range).substr(0, dash), 1, 65535);
-        const auto last = dash == std::string::npos
-                              ? std::nullopt
-                              : parseNumber(std::string_view(*range).substr(dash + 1), 1, 65535);
-        if (!first || !last || *first > *last) {
-            reader.fail(
-                Reader::at(*server, "game_ports"),
-                std::format("[server] game_ports must be \"<first>-<last>\", two ports from 1 to 65535 "
-                            "in order, not \"{}\"",
-                            *range));
+    settings.gamePort = reader.port(*server, "server", "game_port", 0);
+    if (const auto games = reader.get<std::int64_t>(*server, "server", "max_games", "a number")) {
+        if (*games < 1 || *games > MaxGames) {
+            reader.fail(Reader::at(*server, "max_games"),
+                        std::format("[server] max_games must be from 1 to {}", MaxGames));
         }
-        settings.firstGamePort = static_cast<std::uint16_t>(*first);
-        settings.lastGamePort = static_cast<std::uint16_t>(*last);
+        settings.maxGames = static_cast<std::uint32_t>(*games);
     }
     if (const auto key = reader.string(*server, "server", "key")) {
         settings.key = reader.resolve(*key);

@@ -64,6 +64,21 @@ inline constexpr std::size_t MaxInputsPerMessage = 32;
 inline constexpr std::size_t InputRedundancy = 8;
 /// Most parts of one snapshot.
 inline constexpr std::size_t MaxSnapshotParts = 16;
+/// The weapon of the ship of a client, in its snapshots (docs/protocol/game.md, section 9.3): what its
+/// prediction of the shots starts again from. All 0 without a ship.
+struct WeaponState {
+    /// Ticks before it can fire again.
+    std::uint16_t cooldown = 0;
+    /// Shots left in the magazine.
+    std::uint16_t ammo = 0;
+    /// Ticks before the magazine is full again, 0 when it is not reloading.
+    std::uint16_t reloadLeft = 0;
+
+    friend bool operator==(const WeaponState &, const WeaponState &) = default;
+};
+
+/// The input lead of a SNAPSHOT when the game received no INPUT from this client since the previous snapshot.
+inline constexpr std::int8_t NoInputLead = -128;
 /// Most entities in one ENTITIES_DESTROYED that still fits in a datagram (checked against libs/network).
 inline constexpr std::size_t MaxDestroyedPerMessage = 228;
 /// Longest name of a player, in bytes of UTF-8.
@@ -139,6 +154,13 @@ struct SnapshotPart {
     std::vector<PlayerState> players;
     /// The entities of this part. Decoded, they may have kinds this client does not know (isKnown()).
     std::vector<EntityState> entities;
+    /// How early the inputs of this client arrive (docs/protocol/game.md, section 9.2), written after the
+    /// last input: the smallest, over the INPUT messages received since the previous snapshot, of the tick of
+    /// their newest input minus the last tick simulated when it arrived, within -127 to 127. 1 is just in
+    /// time, 0 or less too late. NoInputLead if none arrived.
+    std::int8_t inputLead = NoInputLead;
+    /// The weapon of the ship of this client at `tick`, written after the input lead.
+    WeaponState weapon;
 
     friend bool operator==(const SnapshotPart &, const SnapshotPart &) = default;
 };
@@ -175,6 +197,10 @@ struct GameOverMessage {
 /// section 9.1).
 [[nodiscard]] bool isKnown(EntityKind kind);
 
+/// Tells whether a kind is a shot, whose entity states give their age instead of their health: the shots of
+/// the players (`0x02`, `0x03`) and those of the Bydos (`0x40`–`0x5F`).
+[[nodiscard]] bool isShot(EntityKind kind);
+
 /// The payloads of the messages. Positions and velocities are written in eighths of a unit, rounded and kept
 /// within what an i16 holds; the reserved bits of inputs and flags are written as 0.
 /// @throws std::invalid_argument for a value the protocol forbids (a slot above 3, no input, an id of 0...).
@@ -209,7 +235,11 @@ decodeEntitiesDestroyed(std::span<const std::byte> payload);
 /// A snapshot without entities is one part. Beyond MaxSnapshotParts full parts (1104 entities with four
 /// players), the last entities are left out: the rules must never have that many.
 /// @param lastInput The tick of the last input of this client that the game applied, 0 if none.
-[[nodiscard]] std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t lastInput);
+/// @param inputLead How early the inputs of this client arrive (SnapshotPart::inputLead).
+/// @param weapon The weapon of the ship of this client.
+[[nodiscard]] std::vector<SnapshotPart> splitSnapshot(const Snapshot &snapshot, std::uint32_t lastInput,
+                                                      std::int8_t inputLead = NoInputLead,
+                                                      WeaponState weapon = {});
 
 /// The ENTITIES_DESTROYED messages of a snapshot: none if nothing was destroyed, several with the same tick
 /// if they do not fit in one datagram.

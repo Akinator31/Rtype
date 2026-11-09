@@ -32,7 +32,8 @@ std::optional<rtype::game::GameConfig> readGameConfig(const std::filesystem::pat
         return std::nullopt;
     }
     // The final boss, the waves of the last difficulty, is played offline only, in the story mode of the
-    // client, with its rescue (Rules::rescue): online, the game is won once the waves before it are beaten
+    // client, with its rescue (Rules::rescue): online, the others are drawn one after the other without end
+    // (Rules::endless)
     std::erase_if(loaded.config.waves, [](const rtype::game::WaveDefinition &wave) {
         return wave.difficulty == rtype::game::MaxWaveDifficulty;
     });

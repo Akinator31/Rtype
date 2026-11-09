@@ -3,7 +3,8 @@
 # depends on the ECS, the physics and the log only: no raylib, no network. The messages of the game protocol
 # (Messages.hpp, RemoteWorld.hpp) are written with the serialization of libs/network, a private dependency.
 # The configuration files are read, and the behaviors of the enemies run, with libs/scripting (Lua, ADR 0019),
-# private too: no public header of the game includes Lua.
+# private too: no public header of the game includes Lua. The beats of the music of a wave are found with
+# libs/beat, private as well.
 add_library(rtype_game
     src/Config/DefinitionReaders.cpp
     src/Config/GameConfigLoader.cpp
@@ -14,6 +15,7 @@ add_library(rtype_game
     src/Hitbox.cpp
     src/Messages.cpp
     src/PlayerInput.cpp
+    src/Progression.cpp
     src/Projectile/ProjectileBehavior.cpp
     src/Projectile/ProjectileRegistry.cpp
     src/RemoteWorld.cpp
@@ -28,11 +30,13 @@ add_library(rtype_game
     src/System/RescueSystem.cpp
     src/System/WaveSystem.cpp
     src/System/WeaponSystem.cpp
+    src/Wave/MusicTimeline.cpp
     src/Wave/WaveRegistry.cpp
+    src/Weapon/WeaponFiring.cpp
     src/Weapon/WeaponRegistry.cpp
 )
 add_library(rtype::game ALIAS rtype_game)
 target_include_directories(rtype_game PUBLIC include PRIVATE src)
 target_link_libraries(rtype_game
     PUBLIC rtype::ecs rtype::physics
-    PRIVATE rtype_options rtype::log rtype::network rtype::scripting)
+    PRIVATE rtype_options rtype::beat rtype::log rtype::network rtype::scripting)

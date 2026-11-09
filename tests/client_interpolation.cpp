@@ -127,14 +127,17 @@ TEST_CASE("Nothing is drawn before the first world", "[interpolation]")
     CHECK(interpolation.view().entities.empty());
 }
 
-TEST_CASE("The world is drawn 100 ms behind the newest snapshot", "[interpolation]")
+TEST_CASE("On a steady network, the world is drawn as recent as the snapshots allow", "[interpolation]")
 {
     Network network;
     network.run(2.0);
 
+    // A snapshot every 2 ticks, a tick of margin: 50 ms, not the 100 ms of before the measures
+    // Within a frame: the worlds are timed at the frame they arrive
+    CHECK(network.interpolation.delay() == Approx(Interpolation::MinDelay).margin(Frame));
     const double behind =
         static_cast<double>(network.interpolation.newestTick()) - *network.interpolation.drawnTick();
-    CHECK(behind == Approx(Interpolation::Delay * 60.0).margin(2.0));
+    CHECK(behind == Approx(network.interpolation.delay() * 60.0).margin(2.0));
     // The entity is where the server had it at the drawn tick
     CHECK(*network.x() == Approx(*network.interpolation.drawnTick() * Step).margin(Step * 0.5));
 }
@@ -271,7 +274,7 @@ TEST_CASE("A server clock that runs a little faster is followed without a jump",
     network.run(10.0, [&] {
         const double behind =
             static_cast<double>(network.interpolation.newestTick()) - *network.interpolation.drawnTick();
-        worst = std::max(worst, std::abs(behind - (Interpolation::Delay * 60.0)));
+        worst = std::max(worst, std::abs(behind - (network.interpolation.delay() * 60.0)));
     });
 
     // Within a few ticks of the delay all along: the drawn tick speeds up a little instead of drifting away
@@ -283,7 +286,7 @@ TEST_CASE("After a pause, the drawn tick jumps to the newest snapshots", "[inter
     Interpolation interpolation;
     interpolation.receive(10, moving(10), {});
     interpolation.advance(Frame);
-    REQUIRE(*interpolation.drawnTick() == Approx(10.0 - (Interpolation::Delay * 60.0)));
+    REQUIRE(*interpolation.drawnTick() == Approx(10.0 - (Interpolation::DefaultDelay * 60.0)));
 
     // Two seconds without a frame (a window dragged, a debugger), the snapshots kept coming
     for (std::uint32_t tick = 12; tick <= 130; tick += 2) {
@@ -291,7 +294,7 @@ TEST_CASE("After a pause, the drawn tick jumps to the newest snapshots", "[inter
     }
     interpolation.advance(2.0);
 
-    CHECK(*interpolation.drawnTick() == Approx(130.0 - (Interpolation::Delay * 60.0)));
+    CHECK(*interpolation.drawnTick() == Approx(130.0 - (interpolation.delay() * 60.0)));
     CHECK(interpolation.size() <= Interpolation::MaxWorlds);
 }
 
@@ -311,4 +314,84 @@ TEST_CASE("An older world is ignored, the same tick again replaces it", "[interp
     CHECK(interpolation.size() == 1);
     CHECK(interpolation.view().entities.size() == 2);
     CHECK(interpolation.view().players == std::vector<rtype::game::PlayerState>{{0, 2, 50}});
+}
+
+namespace
+{
+
+/// Frames, after `warmup` seconds, where the drawn tick went past the newest world: drawn from a velocity,
+/// not from snapshots.
+int extrapolated(Network &network, double warmup, double seconds)
+{
+    network.run(warmup);
+    int frames = 0;
+    network.run(seconds, [&] {
+        if (*network.interpolation.drawnTick() > static_cast<double>(network.interpolation.newestTick())) {
+            ++frames;
+        }
+    });
+    return frames;
+}
+
+} // namespace
+
+TEST_CASE("A network that jitters is drawn further in the past, enough never to wait for a snapshot",
+          "[interpolation]")
+{
+    Network network;
+    std::mt19937 random(11);
+    std::uniform_real_distribution<double> jitter(0.02, 0.07);
+    network.latency = [&](std::uint32_t) { return jitter(random); };
+
+    CHECK(extrapolated(network, 4.0, 10.0) == 0);
+    // About the snapshot interval, the 50 ms of jitter and the margin
+    CHECK(network.interpolation.delay() > 0.08);
+    CHECK(network.interpolation.delay() < 0.12);
+}
+
+TEST_CASE("Lost snapshots lengthen the delay by the ticks they leave without a world", "[interpolation]")
+{
+    Network network;
+    // One in five lost: 4 ticks between two worlds now and then
+    network.lost = [](std::uint32_t tick) { return tick % 10 == 0; };
+
+    CHECK(extrapolated(network, 4.0, 10.0) == 0);
+    CHECK(network.interpolation.delay() == Approx(5.0 / 60.0).margin(Frame));
+}
+
+TEST_CASE("The delay comes back down once the network is steady again", "[interpolation]")
+{
+    Network network;
+    std::mt19937 random(5);
+    std::uniform_real_distribution<double> jitter(0.02, 0.12);
+    bool steady = false;
+    network.latency = [&](std::uint32_t) { return steady ? 0.04 : jitter(random); };
+    network.run(4.0);
+    const double jittery = network.interpolation.delay();
+    CHECK(jittery > 0.1);
+
+    // Changed without a jump: the drawn tick never goes back, nor ahead by more than a few frames
+    steady = true;
+    double previous = *network.interpolation.drawnTick();
+    double fastest = 0.0;
+    network.run(Interpolation::Window + 1.0, [&] {
+        const double drawn = *network.interpolation.drawnTick();
+        REQUIRE(drawn >= previous);
+        fastest = std::max(fastest, drawn - previous);
+        previous = drawn;
+    });
+    // Within a frame: the worlds are timed at the frame they arrive
+    CHECK(network.interpolation.delay() == Approx(Interpolation::MinDelay).margin(Frame));
+    // A frame is 60 / 144 of a tick: catching up is a little faster, never a leap
+    CHECK(fastest < 2.0 * 60.0 * Frame);
+}
+
+TEST_CASE("The delay never goes past its bounds", "[interpolation]")
+{
+    Network network;
+    std::mt19937 random(3);
+    std::uniform_real_distribution<double> jitter(0.0, 0.6);
+    network.latency = [&](std::uint32_t) { return jitter(random); };
+    network.run(5.0);
+    CHECK(network.interpolation.delay() == Approx(Interpolation::MaxDelay));
 }

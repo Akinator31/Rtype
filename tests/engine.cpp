@@ -283,23 +283,24 @@ TEST_CASE("A slider with a rail follows the pointer while it is dragged", "[engi
     world.update();
 
     const rtype::ecs::Position rail = world.ecs.getComponent<rtype::ecs::Position>(slider);
-    const float left = rail.x - (world.style.slider.width / 2.0f);
+    const float left = world.style.slider.getRailLeft(rail.x);
+    const float width = world.style.slider.getRailWidth();
     const SliderTrack &track = world.ecs.getComponent<SliderTrack>(slider);
 
     // Pressed a quarter along the rail: the value goes there, and follows the pointer until it is released
-    world.input.mouse = {left + (0.25f * world.style.slider.width), rail.y};
+    world.input.mouse = {left + (0.25f * width), world.style.slider.getRailY(rail.y)};
     world.input.mouseButtons = {MouseButton::Left};
     world.update();
     world.update(world.style.slider.fadeDuration);
     CHECK(std::abs(volume - 0.25f) < 0.01f);
     CHECK(track.grab > 0.99f);
 
-    world.input.mouse = {left + (0.8f * world.style.slider.width), rail.y};
+    world.input.mouse = {left + (0.8f * width), rail.y};
     world.update();
     CHECK(std::abs(volume - 0.8f) < 0.01f);
 
     // Past the end of the rail, the value stops at 1; once released, the pointer does not move it any more
-    world.input.mouse = {left + (2.0f * world.style.slider.width), rail.y};
+    world.input.mouse = {left + (2.0f * width), rail.y};
     world.update();
     CHECK(volume == 1.0f);
     world.input.mouseButtons.clear();
@@ -327,7 +328,7 @@ TEST_CASE("The keys and the wheel step a slider with a rail", "[engine][interfac
     CHECK(std::abs(volume - 0.25f) < 1e-6f);
 }
 
-TEST_CASE("A slider with a rail is as big as its rail and handle", "[engine][interface][slider]")
+TEST_CASE("A slider with a rail is as big as its row", "[engine][interface][slider]")
 {
     World world;
     InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
@@ -338,6 +339,104 @@ TEST_CASE("A slider with a rail is as big as its rail and handle", "[engine][int
     const Hitbox &box = world.ecs.getComponent<Hitbox>(slider);
     CHECK(box.width == world.style.slider.getAreaWidth());
     CHECK(box.height == world.style.slider.getHeight());
+}
+
+TEST_CASE("A narrower slider keeps its rail under its own row", "[engine][interface][slider]")
+{
+    World world;
+    float volume = 0.5f;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t slider = ui.slider(
+        "Volume", [&] { return volume; }, [&](float value) { volume = value; }, 0.1f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f}, 500.0f);
+    world.update();
+
+    const SliderStyle &style = world.style.slider;
+    CHECK(world.ecs.getComponent<Hitbox>(slider).width == 500.0f);
+    // Dragged at the end of its own rail, not of the rail of the style
+    const rtype::ecs::Position row = world.ecs.getComponent<rtype::ecs::Position>(slider);
+    const float right = style.getRailLeft(row.x, 500.0f) + style.getRailWidth(500.0f);
+    world.input.mouse = {right, style.getRailY(row.y)};
+    world.input.mouseButtons = {MouseButton::Left};
+    world.update();
+    world.update();
+    CHECK(volume == 1.0f);
+}
+
+TEST_CASE("A row of settings goes through its values with the keys, the wheel and a click",
+          "[engine][interface]")
+{
+    World world;
+    int value = 0;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t row = ui.settingRow(
+        "Resolution", [&] { return std::to_string(value); }, [&](int direction) { value += direction; },
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+
+    const Hitbox &box = world.ecs.getComponent<Hitbox>(row);
+    CHECK(box.width == world.style.setting.width);
+    CHECK(box.height == world.style.setting.height);
+    CHECK(world.isFocused(row));
+
+    world.press({Key::Right});
+    CHECK(value == 1);
+    world.press({Key::Left});
+    world.press({Key::Left});
+    CHECK(value == -1);
+    world.press({Key::Enter});
+    CHECK(value == 0);
+
+    const rtype::ecs::Position centre = world.ecs.getComponent<rtype::ecs::Position>(row);
+    world.clickAt(centre.x, centre.y);
+    CHECK(value == 1);
+    world.input.wheel = -1.0f;
+    world.update();
+    world.input.wheel = 0.0f;
+    CHECK(value == 0);
+    // Its caption stays its caption: the value is drawn apart
+    CHECK(world.textOf(row) == "Resolution");
+}
+
+TEST_CASE("A row that opens something is pressed as a button", "[engine][interface]")
+{
+    World world;
+    bool opened = false;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t row =
+        ui.linkRow("Controls", [&] { opened = true; }, {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+
+    // It has no values to go through
+    world.press({Key::Right});
+    world.update(world.style.flare.pressDelay);
+    CHECK_FALSE(opened);
+    world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
+    CHECK(opened);
+    CHECK(world.ecs.getComponent<Hitbox>(row).height == world.style.setting.height);
+}
+
+TEST_CASE("A row of the controls is as wide as its table and pressed as a button", "[engine][interface]")
+{
+    World world;
+    bool chosen = false;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t row = ui.keyRow("Fire",
+                                   KeyRow{.keys = [] { return std::vector<KeyCap>{{"Space"}}; },
+                                          .buttons = [] { return std::vector<std::string>{"A"}; },
+                                          .width = 1200.0f,
+                                          .keysColumn = 500.0f,
+                                          .buttonsColumn = 900.0f},
+                                   [&] { chosen = true; }, {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.update();
+
+    const Hitbox &box = world.ecs.getComponent<Hitbox>(row);
+    CHECK(box.width == 1200.0f);
+    CHECK(box.height == world.style.keys.rowHeight);
+    world.press({Key::Enter});
+    world.update(world.style.flare.pressDelay);
+    CHECK(chosen);
 }
 
 TEST_CASE("A title is a text drawn in chrome, and follows its function", "[engine][interface]")
@@ -1582,7 +1681,7 @@ TEST_CASE("The handle of a slider lights up only while the pointer is over it", 
     const SliderStyle &style = world.style.slider;
     const rtype::ecs::Position rail = world.ecs.getComponent<rtype::ecs::Position>(slider);
     const SliderTrack &track = world.ecs.getComponent<SliderTrack>(slider);
-    const float handleX = rail.x - (style.width / 2.0f) + (0.5f * style.width);
+    const float handleX = style.getRailLeft(rail.x) + (0.5f * style.getRailWidth());
     const float railY = style.getRailY(rail.y);
 
     // On the slider, but far from the handle: the caption lights up, the handle does not

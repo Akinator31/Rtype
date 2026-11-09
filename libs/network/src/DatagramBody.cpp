@@ -36,6 +36,7 @@ std::vector<std::byte> encodeBody(const DatagramBody &body)
     Writer writer(size);
     writer.writeU64(body.ack);
     writer.writeU32(body.ackBits);
+    writer.writeU16(body.ackDelay);
     writer.writeU8(static_cast<std::uint8_t>(body.messages.size()));
     for (const BodyMessage &message : body.messages) {
         writer.writeU8(message.type);
@@ -56,6 +57,7 @@ std::optional<DatagramBody> decodeBody(std::span<const std::byte> bytes)
     DatagramBody body;
     body.ack = reader.readU64();
     body.ackBits = reader.readU32();
+    body.ackDelay = reader.readU16();
     const std::uint8_t count = reader.readU8();
     body.messages.reserve(count);
     for (std::uint8_t i = 0; i < count && reader.ok(); ++i) {

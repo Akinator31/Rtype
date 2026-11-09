@@ -18,7 +18,7 @@ namespace rtype::server
 {
 
 /// The version of this protocol, in INSTANCE_HELLO.
-inline constexpr std::uint16_t InstanceProtocolVersion = 3;
+inline constexpr std::uint16_t InstanceProtocolVersion = 5;
 /// Longest name of a game, in bytes of UTF-8.
 inline constexpr std::size_t MaxGameNameLength = 32;
 /// Longest name of a player, in bytes of UTF-8.
@@ -56,6 +56,8 @@ struct InstanceHelloMessage {
 
 /// `READY`: the UDP port is open.
 struct ReadyMessage {
+    /// Where the game receives: its public port without a relay, its port on the loopback behind one, where
+    /// the relay sends its frames (version 4).
     std::uint16_t udpPort = 0;
 
     friend bool operator==(const ReadyMessage &, const ReadyMessage &) = default;
@@ -84,10 +86,15 @@ struct PlayerDisconnectedMessage {
     friend bool operator==(const PlayerDisconnectedMessage &, const PlayerDisconnectedMessage &) = default;
 };
 
-/// The score of a player at the end of a game.
+/// The score of a player at the end of a game, and what it earned (version 5).
 struct PlayerScore {
     std::uint32_t playerId = 0;
     std::uint32_t score = 0;
+    std::uint32_t kills = 0;
+    std::uint16_t wavesCleared = 0;
+    std::uint16_t bestStreak = 0;
+    /// The experience earned in the game.
+    std::uint32_t xp = 0;
 
     friend bool operator==(const PlayerScore &, const PlayerScore &) = default;
 };
@@ -135,6 +142,9 @@ struct ConfigureMessage {
     std::string name;
     /// 1 to 4.
     std::uint8_t maxPlayers = MaxInstancePlayers;
+    /// The port of the relay of the master, on 127.0.0.1 (version 4): the game takes its datagrams from it in
+    /// relay frames (Common/RelayFrame.hpp). 0: no relay, the game opens its own port, `--udp-port`.
+    std::uint16_t relayPort = 0;
 
     friend bool operator==(const ConfigureMessage &, const ConfigureMessage &) = default;
 };

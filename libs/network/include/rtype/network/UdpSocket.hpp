@@ -18,7 +18,7 @@ class EventLoop;
 /// The socket is bound to a local address when it is created, and closed when it is destroyed:
 /// @code
 /// rtype::network::EventLoop loop;
-/// rtype::network::UdpSocket socket(loop, rtype::network::Address::anyIpv4(4243));
+/// rtype::network::UdpSocket socket(loop, rtype::network::Address::anyIpv4(4242));
 ///
 /// socket.startReceiving([&](const Address &from, std::span<const std::byte> datagram) {
 ///     socket.send(from, datagram); // echo

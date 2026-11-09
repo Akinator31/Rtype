@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted; its "Ports" amended by [0027](0027-one-udp-port-relay.md) |
 | **Date** | 2026-10-15 |
 
 ## Context
@@ -109,9 +109,13 @@ and reports the result before exiting.*
 
 - The master listens on one public TCP port (4242 by default) for the clients, and on one local port for its
   instances.
-- Each instance gets a UDP port from a range set in the configuration (for example 4243–4299). The size of the
-  range is the maximum number of games. The host opens the public TCP port and the whole UDP range.
-- The client talks to its game directly, without going through the master: no extra hop, no extra latency.
+- Each instance got a UDP port from a range set in the configuration, whose size was the maximum number of
+  games, and the host opened the whole range. **Amended by [ADR 0027](0027-one-udp-port-relay.md)**: every game
+  is now served on one UDP port, 4242 by default, through a relay in the master that forwards each datagram to
+  its instance over the loopback. The host opens 4242/tcp and 4242/udp, and the maximum number of games is a
+  setting.
+- The client talked to its game directly, without going through the master. Since ADR 0027 its datagrams go
+  through the relay: one hop on the loopback, still encrypted end to end.
 
 ### Threads
 
@@ -145,7 +149,8 @@ of the game's decoder.
 - The master/instance protocol is a protocol of its own, binary like the others, documented in the
   [protocol specification](../protocol/index.md).
 - One more dependency (reproc), hidden behind `Process`.
-- The host opens a range of UDP ports instead of one. Docker publishes the same range.
+- The host opened a range of UDP ports instead of one, and Docker published the same range, until
+  [ADR 0027](0027-one-udp-port-relay.md) put every game on one port.
 - Debugging a game means attaching to its process, or running it in standalone mode.
 - The engine's events and scenes live in `libs/engine`, which depends on raylib: neither mode can use them.
   If the server needs them, the parts without raylib move to a library the server can link, in a separate

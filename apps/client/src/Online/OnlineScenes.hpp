@@ -12,6 +12,7 @@
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
+#include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/lobby/Messages.hpp"
 #include "rtype/localization/Localization.hpp"
 #include "rtype/network/Address.hpp"
@@ -73,7 +74,8 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 ///   (**Forget the server key**).
 /// - **The lobby** lists the games: Create a game, Join one, Refresh, Disconnect. Creating or joining one
 ///   first opens the hangar, where the player picks its ship. Joining plays a RemoteSession in the game
-///   scene; when the game ends, the player is back in the lobby.
+///   scene; when the game ends, the player is back in the lobby, after its results if it went to its end
+///   (GameScenes::showResults()).
 /// - **The accounts**: on a server that offers them, WELCOME leads to a choice (sign in, create an account,
 ///   play as a guest). The session token of SIGNED_IN is kept for the server (SessionTokens) and sent in the
 ///   next HELLO: the player comes back signed in. It is forgotten at sign-out, at the deletion of the
@@ -105,6 +107,8 @@ class OnlineScenes
     GameScenes &_games;
     localization::Localization &_translations;
     ShipSelection &_ships;
+    /// The definitions of the client: the weapon of the player, whose shots its games predict.
+    const game::GameConfig &_config;
     KnownServers _known;
     SessionTokens _sessions;
     KnownProfiles _profiles;
@@ -131,6 +135,8 @@ class OnlineScenes
     /// The new Discord user confirmed, who chooses its username, and its picture.
     std::optional<lobby::ProfileMessage> _newUser;
     std::optional<render::TextureId> _newUserPicture;
+    /// The experience of the account as the player joined the game played: none for a guest.
+    std::optional<std::uint64_t> _xpBefore;
     /// Where a Discord confirmation stands, for DiscordScene: 0 Discord opened, 1 waiting for the player,
     /// 2 the server checking.
     int _discordStep = 0;
@@ -147,6 +153,9 @@ class OnlineScenes
     /// The game played ends: leaves it, then back to the list.
     void gameEnded();
     void lobbyClosed(const std::string &reason);
+    /// A game online counted for the account: its results show the experience it gave; in a toast with the
+    /// level, LEVEL UP if it went up, if they are not shown.
+    void showProgress(const lobby::ProgressMessage &progress);
     /// Forgets the lobby later: this may run in one of its handlers.
     void forgetLobby();
 
@@ -194,10 +203,12 @@ public:
     /// @param pictures The folder the pictures of the accounts are kept in.
     /// @param discord Asks the player to accept the Discord application of a server; polled by the game loop.
     /// @param ships The ship the player picks in the hangar, before creating or joining a game.
+    /// @param config The definitions of the client (loadGameConfig()): the weapon of the player, whose shots
+    ///   its games online predict.
     OnlineScenes(engine::Engine &engine, render::ResourceManager &resources, network::EventLoop &loop,
                  GameScenes &games, const engine::InterfaceStyle &style,
                  localization::Localization &translations, discord::Authorizer &discord, ShipSelection &ships,
-                 std::filesystem::path pictures);
+                 std::filesystem::path pictures, const game::GameConfig &config);
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;

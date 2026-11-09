@@ -10,18 +10,19 @@ Discord configured, their secrets as files, and the panel on its domain over HTT
 ## Prerequisites
 
 - A Linux machine with Docker 25 or newer, and Dokploy on it if you deploy with Dokploy.
-- Its firewall open for **4242/tcp** (the lobby) and **4243–4299/udp** (the games), as for a server without
+- Its firewall open for **4242/tcp** (the lobby) and **4242/udp** (every game), as for a server without
   Docker ([Run a server](run-a-server.md), step 2).
 - The image: `ghcr.io/akinator31/rtype`, built and published by the CI, tagged `latest` and with its version
-  for each release, `main` for the last commit of `main`. To build it yourself, from the root of the
-  repository: `docker build -t rtype-server .`.
+  for each release, `main` for the last commit of `main`. It exists for **linux/amd64** and **linux/arm64**
+  (an ARM server, a Raspberry Pi 4 or 5 with a 64-bit system): Docker pulls the one of the machine. To build
+  it yourself, from the root of the repository: `docker build -t rtype-server .`.
 
 ## What the image holds
 
 | Where | What |
 |---|---|
 | `/opt/rtype/` | `r-type_server`, its `config/` (the game) and `admin/` (the panel) |
-| `/config/server.toml` | The [settings file](configure-a-server.md) of the image ([docker/server.toml](https://github.com/Akinator31/Rtype/blob/main/docker/server.toml)): lobby on 4242, games on 4243–4299, panel on `127.0.0.1:8080`, everything kept in `/data`, guests only. Part two mounts another one over it |
+| `/config/server.toml` | The [settings file](configure-a-server.md) of the image ([docker/server.toml](https://github.com/Akinator31/Rtype/blob/main/docker/server.toml)): lobby on 4242/tcp, games on 4242/udp, panel on `127.0.0.1:8080`, everything kept in `/data`, guests only. Part two mounts another one over it |
 | `/data` | A volume: `server.key`, the key the players trust; `rtype.db`, the SQLite database; `admin-url.txt`, the address of the panel |
 
 The server runs as the user `rtype` (uid 10001), not root. Its health check runs `r-type_server --health`, which
@@ -32,7 +33,8 @@ with 0, as without Docker.
 ## Steps
 
 1. **Turn off the userland proxy of Docker on the host.** Each published port otherwise costs a
-   `docker-proxy` process, 58 of them here. In `/etc/docker/daemon.json`:
+   `docker-proxy` process, which copies its traffic in user space, two of them here. In
+   `/etc/docker/daemon.json`:
 
     ```json
     { "userland-proxy": false }
@@ -57,7 +59,7 @@ with 0, as without Docker.
         init: true
         ports:
           - "4242:4242/tcp"
-          - "4243-4299:4243-4299/udp"
+          - "4242:4242/udp"
         volumes:
           - data:/data
         stop_grace_period: 30s
@@ -66,8 +68,9 @@ with 0, as without Docker.
       data:
     ```
 
-    The file publishes 4242/tcp and 4243–4299/udp **with the same numbers** on the host: the lobby gives each
-    player the port of their game, which must be the same outside the container. It keeps `/data` in the named
+    The file publishes 4242/tcp and 4242/udp **with the same numbers** on the host: the lobby gives each
+    player the UDP port of the games, which must be the same outside the container. Every game is on that one
+    port: the master forwards each datagram to its game ([The relay](../architecture/server.md#the-relay)). It keeps `/data` in the named
     volume `data`, and starts a small init as PID 1 (`init: true`), which hands `SIGTERM` to the master. Give
     no domain to the service in Dokploy: there is no web page to publish without accounts.
 
@@ -85,7 +88,7 @@ with 0, as without Docker.
     ```
 
     ```
-    INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
+    INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 0.0.0.0:4242 (57 at most)
     INFO  master   Panel on HTTP 127.0.0.1:8080
     INFO  master   Server key 5b61c7a9ce1a44bfc64fec2013a4a09b6b4d5a8db4129eff890a1462c7ea1f1c
     INFO  master   Master started: Ctrl+C to stop
@@ -202,7 +205,7 @@ volume, the image.
     ```
     INFO  master   Mail server mail.example.org:587, mails from R-Type <rtype@example.org>
     INFO  master   Discord application 123456789012345678
-    INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 4243-4299 (57 at most)
+    INFO  master   Lobby on TCP 0.0.0.0:4242, games on UDP 0.0.0.0:4242 (57 at most)
     INFO  master   Panel on HTTP 0.0.0.0:8080
     INFO  master   Accounts on, guests allowed, Discord sign-in
     INFO  master   Master started: Ctrl+C to stop
@@ -259,4 +262,5 @@ start, `docker compose logs server` says why, as in [Run a server](run-a-server.
 | `Bad Gateway` or `404 page not found` at the domain of the panel | Traefik does not reach the panel: the domain names the service `server` and the port `8080`, and the settings `listen = "0.0.0.0:8080"` |
 | *This account is not an administrator*, in the panel | Name it in `[admin] admins`, its email verified, then *Redeploy*; or make it one from an administrator ([Administer a server](administer-a-server.md#result)) |
 | *unhealthy*, `Not healthy: the master did not answer within 5s` | The event loop of the master is stuck: its logs before say on what; `docker compose restart server` |
-| Players reach the lobby, then no game | The UDP range is not open in the firewall of the host, or not published with the same numbers |
+| Players reach the lobby, then no game | 4242/udp is not open in the firewall of the host, or not published with the same number (`- "4242:4242/udp"`) |
+| `game_ports is gone`, the service *Restarting* | A settings file of an older server: replace `game_ports` with `game_port = 4242` and `max_games = 57`, and publish `4242:4242/udp` instead of the range |

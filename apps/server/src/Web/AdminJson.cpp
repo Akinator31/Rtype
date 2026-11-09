@@ -64,9 +64,9 @@ crow::json::wvalue toJson(const AdminServer &server)
     json["startedAt"] = milliseconds(server.startedAt);
     json["uptime"] = milliseconds(server.uptime);
     json["ports"]["lobby"] = server.lobbyPort;
-    json["ports"]["games"]["first"] = server.firstGamePort;
-    json["ports"]["games"]["last"] = server.lastGamePort;
+    json["ports"]["game"] = server.gamePort;
     json["ports"]["panel"] = server.panelPort;
+    json["maxGames"] = server.maxGames;
     json["players"] = static_cast<std::uint64_t>(server.players);
     json["games"] = static_cast<std::uint64_t>(server.games);
     json["bans"] = static_cast<std::uint64_t>(server.bans);
