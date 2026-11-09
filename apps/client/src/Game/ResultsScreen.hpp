@@ -103,9 +103,10 @@ struct ResultsScreen {
 };
 
 /// Opens the results screen of a game online in a scene (docs/architecture/client-game.md, "Results
-/// screen"): the fall of the R-Type section in chrome, then the waves cleared, the Bydos shot down, the best streak and the score,
-/// landing one after the other, then the experience earned counting up while the bar of the level of the
-/// account fills, LEVEL UP each time it goes up. A guest sees what it earned, and that it keeps nothing.
+/// screen"): the fall of the R-Type section in chrome, then the waves cleared, the Bydos shot down, the best
+/// streak and the score, landing one after the other, then the experience earned counting up while the bar of
+/// the level of the account fills, LEVEL UP each time it goes up. A guest sees what it earned, and that it
+/// keeps nothing.
 /// @param accountXp The experience of the account before the game; none for a guest.
 /// @return The entity of the ResultsScreen.
 ecs::entity_t openResultsScreen(ecs::Ecs &ecs, engine::SceneId scene, const engine::Metrics &metrics,
