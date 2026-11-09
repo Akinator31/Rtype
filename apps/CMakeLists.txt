@@ -1,5 +1,6 @@
 # Executables: each subdirectory builds one program
 add_subdirectory(client)
+add_subdirectory(minigame)
 add_subdirectory(server)
 
 # The configuration of the game (enemies, weapons..., ADR 0018), read by the client and the server from a config/
