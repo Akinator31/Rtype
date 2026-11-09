@@ -562,6 +562,11 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
             renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
                                model.rotationAngle, model.scale, model.tint, model.spinAngle,
                                model.hiddenMeshes);
+            // Right after the model, in its pose: the entities of a model share it, each posing it in turn
+            if (model.aura) {
+                renderer.drawAura(model.model, camera->view, *model.aura, model.position, model.rotationAxis,
+                                  model.rotationAngle, model.scale, model.spinAngle, model.hiddenMeshes);
+            }
         }
     }
     // The light of the energy models spreads over the world, under the 2D entities and the interface
