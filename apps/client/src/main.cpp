@@ -18,6 +18,7 @@
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
+#include "rtype/discord/Session.hpp"
 #include "rtype/discord/SocialSdkAuthorizer.hpp"
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
@@ -105,8 +106,9 @@ void run()
     const rtype::game::GameConfig config = rtype::client::readGameConfig(console);
     // The network of the client, polled by the game loop: it outlives everything that uses it
     rtype::network::EventLoop network;
-    // Signing in with Discord, polled by the game loop too
-    rtype::discord::SocialSdkAuthorizer discord;
+    // The one client of the Discord Social SDK, polled by the game loop too, and signing in with it
+    rtype::discord::Session discordSession;
+    rtype::discord::SocialSdkAuthorizer discord(discordSession);
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions =
         rtype::client::registerClientSystems(engine, devices, audio, metrics, style);
@@ -134,7 +136,7 @@ void run()
         sceneLoadStatus.update();
         window.update();
         network.poll();
-        discord.poll();
+        discordSession.poll();
         engine.update(window.frameTime());
         if (assetsLoaded) {
             resources.finishPendingLoads();
