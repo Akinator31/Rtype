@@ -61,6 +61,6 @@ game a board outside its canopy.**
 - Every frame, the headset waits for its own refresh (`xrWaitFrame`): while it shows the game, the window
   neither synchronises with the screen nor limits its frames per second (`Window::setPacedElsewhere()`).
 - The renderer has to draw into the images of the eyes with the matrices of the headset, the interface into
-  images placed in the cockpit, and the controllers become an input source: the
-  [next steps](../architecture/vr.md#next-steps) of VR.
+  images placed in the cockpit, and the controllers become an input source: done in the steps that followed,
+  see [VR](../architecture/vr.md).
 - The standalone Quest (Android, OpenGL ES) is not covered: it would need another binding and another build.

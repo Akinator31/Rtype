@@ -4,13 +4,13 @@ The game can be played in a VR headset ([ADR 0037](../decisions/0037-vr-through-
 in a cockpit, and the game is a board floating in space outside its canopy: the gameplay keeps its plane, and
 the server, the protocol and the replays do not know whether a player is in a headset.
 
-!!! warning "In progress"
-
-    The player sits in the cockpit, the sky of the scene around them, and the game is on a board in relief
-    outside the canopy, the ships, the shots and the bosses coming out of it; the HUD is on the screens of the
-    cockpit and the menus on a holographic panel; the window shows the left eye. The game is played with the
-    controllers, a keyboard or a gamepad; the controllers point at the panel and vibrate. The VR page of the
-    settings comes next: see [Next steps](#next-steps).
+The player sits in the cockpit, the sky of the scene around them, and the game is on a board in relief outside
+the canopy, the ships, the shots and the bosses coming out of it; the HUD is on the screens of the cockpit and
+the menus on a holographic panel. The game is played with the controllers, a keyboard or a gamepad; the
+controllers point at the panel and vibrate. The cockpit reacts to the game without ever moving, the voices of
+the other players come from the side of their ship, and the VR page of the settings chooses where the board is,
+how high the seat is and what the window shows. The whole game is played in the headset, from the start of the
+client to the end of a game, menus included.
 
 How to start the game in a headset: [Play in VR](../guides/play-in-vr.md).
 
@@ -132,13 +132,23 @@ The runtime can recentre too, from its own menu: it then sends `XR_TYPE_EVENT_DA
 for `LOCAL`, whose origin is already at the head. The space drawn in goes back to `LOCAL` itself, instead of
 keeping a move that the runtime has made obsolete.
 
+### Turning
+
+`Headset::turn(degrees)` turns the space drawn in around its vertical, at once, positive to the right: the snap
+turn of a player who cannot turn their chair ([The VR page](#the-vr-page)). The session keeps the origin of the
+space in `LOCAL` (where the last recentre put it), turns it at its own position (`turned()`, a turn around +y
+applied after its orientation), and creates the space again: the player stays in the seat, the cockpit, the
+board and the controllers turn around them together. A recentre, by the game or by the runtime, puts the cockpit
+back ahead.
+
 ## In the client
 
 `VrMode` (`apps/client/src/Vr/`) drives the headset. It is created after the window and before the loading
 screen, and opens the headset when VR is asked:
 
 - `--xr` on the command line, or
-- `vr.enabled=true` in the [settings](settings.md) file.
+- *VR* on the [VR page](#the-vr-page) (`vr.enabled=true` in the [settings](settings.md) file), which also
+  opens the headset, or closes it, at once (`VrMode::start()`, `VrMode::close()`).
 
 Once per frame, after the frame of the window, `VrMode::update()` reads the events of the runtime and, while
 the headset shows the game, gives it a frame:
@@ -178,8 +188,11 @@ While the headset shows the game (`VrMode::isShowing()`), a frame of the client 
    ([The cockpit](#the-cockpit)), the World layer laid on the board in relief for this eye
    ([The board in relief](#the-board-in-relief)), and ends the eye (`endEye()`), which copies it into the image
    of the headset through the colour filter;
-3. into the **window**: the left eye, cropped to the shape of the window (`Renderer::showMirror()`), so that the
-   people around see what the player sees. `F11`, the size of the window and its screen still work.
+3. into the **window**, as the VR page says (`VrMirror`): by default the left eye, cropped to the shape of the
+   window (`Renderer::showMirror()`), so that the people around see what the player sees; or the game flat,
+   the World layer and the Board surface drawn once more into a frame of the window, without the cockpit nor
+   the HUD, which is on its screens; or nothing but a line, "The game is in the VR headset", the cheapest.
+   `F11`, the size of the window and its screen still work.
 
 The images have mipmaps, remade after each frame, so that it stays smooth though an eye shows it
 smaller than it is.
@@ -255,8 +268,8 @@ The World layer of the game is drawn for each eye, in 3D, on the board, instead 
 ships, the shots and the bosses have a real depth, as a hologram on a table. `VrView` lays it there
 (`VrScene::relief`) when two things are true:
 
-- the player did not choose the **flat board** (`vr.flatBoard=true` in the [settings](settings.md) file, written
-  by hand until the VR page of the settings: `wantsReliefBoard()`), for a weaker computer or by taste;
+- the player did not choose the **flat board** on the [VR page](#the-vr-page) (`vr.flat_board=true` in the
+  [settings](settings.md) file, `VrPreferences::flatBoard`), for a weaker computer or by taste;
 - the world of the scene has a plane to lay on the board (`canDrawInRelief(SceneRenderer::camera())`): the game,
   seen through an orthographic camera (`computeGameView()`), or a scene without a camera. The planet of the
   main menu and the hangar are seen through a perspective camera: their world stays flat, in the image of the
@@ -317,8 +330,8 @@ screen, nothing changes: everything is drawn as before, whatever its surface.
 | ------- | ----- | ---------------- | ------------- | ----- |
 | `Panel` (the default) | The holographic panel, 1.6 × 0.9 m, 1.1 m ahead | 1920 × 1080 | 1920 × 1080 | The menus, the dialogs, the console, the loading; the toasts while it is open. |
 | `Board` | The board, outside the canopy | 1920 × 1080 | 2560 × 1440 | The world, and what belongs to the game: the curtain of the main menu, the prompt of the rescue; the toasts while the panel is folded. |
-| `HudShip` | `CP_ScreenShip`, on the right | 480 × 360 | 640 × 480 | The pilot, its lives, its score ([HUD](client-game.md#in-the-cockpit)). |
-| `HudNav` | `CP_ScreenNav`, in the middle | 480 × 310 | 640 × 412 | The wave, the boss, the kind of game, the ping. |
+| `HudShip` | `CP_ScreenShip`, on the right | 317 × 360, the middle 66 % of the screen | 640 × 480 | The pilot, its lives, its score ([HUD](client-game.md#in-the-cockpit)). |
+| `HudNav` | `CP_ScreenNav`, in the middle | 230 × 310, the middle 48 % of the screen | 640 × 412 | The wave, the boss, the kind of game, the ping. |
 | `HudAux` | `CP_ScreenAux`, the four small screens of the sides | 420 × 300 | 560 × 400 | The other pilots and who talks. |
 | `Holo` | `CP_Holo`, the hologram over the dashboard | 480 × 330 | 640 × 440 | A radar of the board. |
 
@@ -327,11 +340,16 @@ the update of the engine, so that the `AnchorSystem` places each entity in the a
 `HudSystem` lays the HUD out for the screens of the cockpit; once it stops, `separateSurfaces(std::nullopt)`
 puts everything back on the screen.
 
-- **The screens.** Their sizes are in `CockpitScreens` (`Vr/CockpitLook.hpp`), of the shape of each screen of
-  the model, so that nothing is stretched. Once the cockpit is loaded, `Renderer::setModelMaterialImage()` puts
-  the image of each surface on the material of its screen in place of its emission map: the screens of the
-  artist keep their texture coordinates, which cover their whole map, their frame and their glow. They are drawn
-  during a game only, in black before the HUD.
+- **The screens.** Their sizes are in `CockpitScreens` (`Vr/CockpitLook.hpp`). Once the cockpit is loaded,
+  `Renderer::setModelMaterialImage()` puts the image of each surface on the material of its screen in place of
+  its emission map: the screens of the artist keep their texture coordinates, which cover their whole map, their
+  frame and their glow. But from the eye point, the panel of the dashboard hides the sides of two of them: 17 % on
+  each side of the screen of the ship, 26 % of the navigation (`CockpitScreen::shown`, measured by rendering the
+  view of the pilot in Blender, with bands every 5 % of the image). The area of a surface has the shape of what is
+  seen, and its frame shows a wider area (`screenFrameArea()`), so that the surface lands on that part: the image
+  keeps the shape of the whole screen, nothing is stretched. The flight stick hides the bottom right of the screen
+  of the ship, and the console cuts the two slanted screens of the sides in two; the two upright ones show the
+  pilots whole. The screens are drawn during a game only, in black before the HUD.
 - **The panel.** A curved holographic pane between the dashboard and the board (`VrLayout::panelWidth`,
   `panelDistance`, `panelBend`), read without moving the head, about 72° wide. It opens while something is shown
   on it (`SceneRenderer::hasContent(Surface::Panel)`, toasts apart): in the menus, always; during a game, when
@@ -378,7 +396,7 @@ one pushed the farthest.
 | Left, right grip | LeftBumper, RightBumper | Aim up, aim down | — |
 | Left trigger | LeftTrigger (LT), during a game only | Push to talk | Clicks where the ray points |
 | Menu | Start | The pause menu | Back |
-| Right thumbstick | Right stick | — | Scrolls (the wheel) |
+| Right thumbstick | Right stick | Flicked to a side: the snap turn, if chosen | Scrolls (the wheel); flicked to a side: the snap turn |
 | Thumbsticks pushed in | LeftThumb, RightThumb | — | — |
 
 **The pointer.** While the panel is open (`VrView::panelSurface()`, once it is unfolded and no fade hides it),
@@ -422,10 +440,75 @@ Held, the fire repeats, and so do the ticks: the rhythm of the fire. The game ha
 has one, its charge will get a rhythm of its own. A game that starts, or a ship that comes back, does not
 vibrate. `VrMode::vibrate()` does nothing while the headset does not show the game.
 
-### Recentring in the client
+### Recentring and turning in the client
 
-`F9` (`RecenterKey`), or the right thumbstick held in for a second (`RecenterHold`), calls `VrMode::recenter()`,
-which asks the headset to recentre: the cockpit is around the player again, the board ahead.
+`F9` (`RecenterKey`), the right thumbstick held in for a second (`RecenterHold`), or *Recentre* on the VR page,
+calls `VrMode::recenter()`, which asks the headset to recentre: the cockpit is around the player again, the board
+ahead.
+
+With a snap turn chosen on the VR page, the right thumbstick flicked to a side, past `TurnPush` (0.7), turns the
+player by its step (`VrControllers::turnAsked()`, then `VrMode::turn()`); it turns again once the thumbstick came
+back near the middle (`TurnRelease`, 0.3). Held, it turns once. Only the player turns the cockpit: the camera
+still never moves on its own.
+
+## The VR page
+
+The VR page (`apps/client/src/MainMenu/VrMenu.cpp`), opened from the *VR* group of the Settings page, is drawn
+on the panel in the headset as every page, and on the screen otherwise. Each choice applies at once, read by the
+client every frame from `VrPreferences` (`Settings/VrSettings.hpp`); they are written to the
+[settings](settings.md) when the page closes (`keepVrSettings()`), and read at the start (`readVrSettings()`): a
+length or a step that is not offered becomes the nearest one offered.
+
+| Group | Row | Values | What it changes |
+| ----- | --- | ------ | --------------- |
+| Headset | VR | On, off | Starts the client in the headset, and opens it (`VrMode::start()`), or closes it (`VrMode::close()`), at once. Without a headset, a toast says so; the choice is kept for the next start. Closed, the game goes on on the screen, as after a lost session but without its toast. |
+| Headset | Recentre | Pressed | `VrMode::recenter()`. |
+| Headset | Snap turn | Off, 30°, 45°, 90° (`SnapTurns`) | The step of the right thumbstick flicked to a side. |
+| Headset | Window | Left eye, flat game, nothing (`VrMirrors`) | What the window shows while the headset shows the game ([In the headset](#in-the-headset)). |
+| Board | Board | In relief, flat | `VrScene::relief` ([The board in relief](#the-board-in-relief)). |
+| Board | Distance | 1.8, 2.0, 2.3, 2.6, 3.0 m (`BoardDistances`) | `VrLayout::boardDistance`: how far ahead of the eyes its centre is. The nearest keeps the frame of the board in relief, at 85 % of its distance, behind the nose of the canopy, 1.5 m ahead. |
+| Board | Size | 2.2, 2.45, 2.7, 3.0, 3.3 m (`BoardWidths`) | `VrLayout::boardWidth`. Wider or nearer than by default, the player turns the head to see its edges. |
+| Seat | Height | -10 to +10 cm, by 5 (`SeatHeights`) | `VrLayout::seatHeight`: the eye point of the cockpit raised (`seatedEyePoint()`), so the cockpit is drawn lower around the head of the player; the board and the panel stay where they are for the eyes. |
+
+`layoutOf()` makes the `VrLayout` of the choices, given to `VrView::setLayout()` each frame.
+
+## The cockpit alive
+
+During a game, the lights of the cockpit react to it (`CockpitLife`, `Vr/CockpitLife.hpp`, pure, without a
+renderer), and the cockpit never moves: no shake, no roll. Each frame, `CockpitLife::update()` reads what the
+game shows of the ship of the player (`CockpitFeel`: its hit points and the most it had since it appeared,
+`GameSessionSystem::localHealth()` and `localMaxHealth()`, whether a boss is there, `bossIsThere()`, and the
+colour of the player); `VrView` puts the lights it gives (`CockpitLights`) on the materials of the cockpit
+(`Renderer::setModelMaterialGlow()`): the emission maps of the artist multiplied by a colour, white as they are.
+
+| When | The lights | The sound |
+| ---- | ---------- | --------- |
+| A game starts | The cockpit fades in from black in 0.8 s (`CockpitBootFade`, the tint of the model and its glows); its screens light up one after the other, the ship, the navigation, the side screens, the hologram, from 0.6 s, 0.25 s apart; the canopy glows at the colour of the player, 35 % of it, and fades out in 3 s. | — |
+| The ship is hit | The orange glows turn red (`AlertRed`), the cyan ones dim to a quarter, back in 0.5 s (`HitFlash`). | The alarm, once. |
+| Low on life (a third of its hit points or less) | The orange glows pulse red once per second, the cyan ones at half. | The alarm again every 1.5 s. |
+| A boss is there | The orange glows pulse slowly, every 2 s, from 35 % to full; the cyan ones at 70 %. | — |
+| The ship is destroyed | The screens flicker for 1.5 s, each its own way, then stay at 15 % (`DeadScreens`), the glows at 30 %, until the ship comes back. | — |
+
+The red of a hit is over the pulse of a low life, which is over the pulse of a boss. The canopy has no emission
+map: its material emits the colour of the player all over, which makes the glass a little more opaque. The alarm
+(`RTYPE_SOUND_COCKPIT_ALARM`, two tones made for the game) is played by the client when `CockpitLife::takeAlarm()`
+says so. Out of a game, the lights are those of the artist.
+
+## The arrival
+
+Each time the headset starts showing the game, at the start of the client, after the menu of the runtime or
+once the VR page opened it, `VrView::arrive()` starts the arrival (`Arrival`, `Vr/Arrival.hpp`): space and the
+board come in from black in 1.5 s, eased, and the panel waits until 1.2 s to unfold with the menu it shows. In
+the menus, the player is in space before the panel opens; when a game starts, the cockpit starts as the table
+above says.
+
+## The sound
+
+The sounds of the game are already heard from the side of the game their entity is on, on the screen too
+(`soundPan()`, `Game/EntitySounds.hpp`: from -0.6 on the left edge to 0.6 on the right one). In the headset,
+the voices of the other players are heard the same way, from the side of the board their ship is on
+(`GameSessionSystem::ships()`, `VoiceStreams::setPan()`), the voices of Discord included; out of the headset
+or of a game, they are in the middle, as before.
 
 ### Without a headset
 
@@ -445,8 +528,7 @@ headset that does not open, the pacing given and taken back, the frames always e
 between two frames or during one, and each eye drawn between its begin and its end; it also checks where the
 board is (ahead, over the eyes, facing them), that it is seen whole with the field of view of a Quest 2,
 over the dashboard and just outside the canopy, where the cockpit is placed, the order of its transparent meshes, a recentre asked of the
-headset, and what an eye gives to the renderer; the area of each surface and the shape of the images of the
-screens, the open panel between the dashboard and the board, seen whole and curved, its unfolding from the
+headset, and what an eye gives to the renderer; the area of each surface and the shape of the images of the screens, the surface of a screen drawn into the part the pilot sees, the open panel between the dashboard and the board, seen whole and curved, its unfolding from the
 hologram, the board dimmed behind it, and the fade between two scenes. `tests/engine.cpp` checks the anchors in
 the area of a surface, the content of a surface, the toasts that do not open the panel, `Scenes::bottom()`, and
 the camera of the scenes shown (`SceneRenderer::camera()`);
@@ -465,9 +547,16 @@ would be, the models lifted, a camera that zooms moving the models and not the b
 on the lines of sight of its edges), and `tests/viewport.cpp` the crop of the mirror. `tests/client_vr.cpp` also
 checks the flat board setting, which worlds are laid in relief, the board in relief showing the game where the
 flat board does, and the heights of the ships, of the damage and of the frame, between the board and the canopy.
+`tests/client_vr_experience.cpp` checks the VR page: its defaults, its choices kept and read back, the nearest
+value offered, the names of the mirrors, the layout of the choices, the boards offered all outside the canopy, the
+cockpit lower for a higher seat, and how it writes metres and centimetres; a turn and a close of the headset, the
+snap turn of a flick, once while held, and none without a step; the arrival; the cockpit alive (the lights of the
+artist out of a game, the start, the canopy at the colour of the player, a hit, a low life and its alarms, a boss,
+a death and the ship back); and the pan of a sound. `tests/client_game.cpp` checks the full health, the ships and
+the boss the session tells, and `tests/xr_math.cpp` the turn of a pose.
 
-## Next steps
+## Out of scope
 
-| Step | What it brings |
-| ---- | -------------- |
-| Experience and settings | A VR page in the settings, a cockpit that reacts to the game, an arrival sequence. |
+To decide later: hand tracking (the simple profile already gives a pinch that clicks), passthrough on the Quest 3
+(mixed reality), a standalone build for the Quest (Android), and the other players seen in their cockpits. The
+game has no charged shot yet: when it has one, its charge will get a rhythm of vibrations of its own.

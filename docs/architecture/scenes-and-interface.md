@@ -304,7 +304,7 @@ it is open, the board otherwise.
 | ----- | ---- |
 | `OnSurface` | The surface of an entity of the interface. On the screen, it changes nothing: everything is drawn as before. |
 | `Metrics::surfacesApart()`, `surfaceArea(surface)` | Whether the surfaces are drawn apart, and the area of each, in game units. `RendererMetrics::separateSurfaces()` sets them, or none to come back to the screen; apart, `visibleArea()` is the area of the panel. |
-| `AnchorSystem` | Places an entity with an `OnSurface` in the area of its surface, from its own origin: a screen of 480 × 360 game units. |
+| `AnchorSystem` | Places an entity with an `OnSurface` in the area of its surface, from its own origin: a screen of 317 × 360 game units. |
 | `SceneRenderer::draw(renderer, surface)` | Draws the entities of the interface on one surface, into the image of the frame started. |
 | `SceneRenderer::hasContent(surface)` | Whether something is shown on a surface, toasts and fully transparent entities apart: the panel opens for a menu. |
 | `Scenes::bottom()` | The scene at the bottom of those open: it changes when the scenes are switched, which the headset fades. |

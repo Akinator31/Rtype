@@ -42,8 +42,12 @@ Name keys by domain with dots, so that the file stays readable:
 | `voice.player.<server>/<account>.volume`, `.muted` | The pause menu of a game online (`keepVoiceSettings()`): how the player hears another player, its volume from 0 to 1 and muted or not; `<server>/guest/<name>` for a guest. Only the players not heard as by default ([Voice](voice.md#in-the-hud-and-the-pause-menu)) |
 | `voice.noise_suppression` | The Voice page: whether the noise of the room is taken out of the microphone, `true` by default ([Voice](voice.md#the-sound-processing)) |
 | `voice.gain_control` | The Voice page: whether the automatic gain brings the voice to the same level, `true` by default |
-| `vr.enabled` | Nobody: written by hand. `true` starts the client in a VR headset, as `--xr` does; `false` by default ([VR](vr.md#in-the-client)) |
-| `vr.flatBoard` | Nobody: written by hand, read at the start. `true` shows the game on a flat board in the headset, drawn once per frame, instead of in relief for each eye; `false` by default ([VR](vr.md#the-board-in-relief)) |
+| `vr.enabled` | The VR page (`keepVrSettings()`): `true` starts the client in a VR headset, as `--xr` does; `false` by default ([VR](vr.md#the-vr-page)) |
+| `vr.flat_board` | The VR page: `true` shows the game on a flat board in the headset, drawn once per frame, instead of in relief for each eye; `false` by default ([VR](vr.md#the-board-in-relief)) |
+| `vr.board_distance`, `vr.board_width` | The VR page: how far ahead of the eyes the board floats, from 1.8 to 3 m (2 m by default), and how wide it is, from 2.2 to 3.3 m (2.7 m by default); a value not offered becomes the nearest one |
+| `vr.seat_height` | The VR page: how much higher than the eye point of the cockpit the player sits, from -0.1 to 0.1 m, 0 by default |
+| `vr.mirror` | The VR page: what the window shows while the headset shows the game, `left_eye` (by default), `flat_game` or `nothing` |
+| `vr.snap_turn` | The VR page: how far a flick of the right thumbstick turns the player, in degrees, `0` (no snap turn, by default), `30`, `45` or `90` |
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
 | `servers.discord.<host>:<port>` | `SessionTokens`: the Discord refresh token the server gave with `DISCORD_TOKEN`, renewed by `DISCORD_REFRESH` at the next connection ([Discord](client-online.md#discord)); forgotten with the session token. A secret: never logged |
 | `servers.session.<host>:<port>` | `SessionTokens`: the session token of the account signed in on that server, 64 hexadecimal digits, sent in the next `HELLO` ([Accounts](client-online.md#accounts)). A secret: never logged |
@@ -72,7 +76,7 @@ flowchart LR
 page closes.*
 
 The page is two columns of named groups ([Pages of settings](scenes-and-interface.md#pages-of-settings)): on the
-left *General*, *Audio*, *Accessibility* and *Discord*, on the right *Display*, *Controls* and *Voice*. Each row shows its caption on
+left *General*, *Audio*, *Accessibility*, *Discord* and *VR*, on the right *Display*, *Controls* and *Voice*. Each row shows its caption on
 the left and its value on the right, on a column shared by every row; Right, the wheel, Enter and a click go to
 the next value, Left to the previous one (`stepValue()`, `apps/client/src/Settings/NextValue.hpp`). Under the
 right column, a note explains the row that has the focus (`settings.hint.*` in the translations).
@@ -89,6 +93,7 @@ right column, a note explains the row that has the focus (`settings.hint.*` in t
 | Display | VSync | Choice: on, off | `Window::setVsync()` |
 | Controls | Keyboard and gamepad | Opens the Controls page, to choose the key of each action ([Input](input.md#choosing-the-keys)) | `assignKey()` |
 | Voice | Voice chat | Opens the Voice page: the talk mode, the microphone and its processing, the volumes of the voice and its keys ([Voice](voice.md#the-voice-page)) | `VoiceDevices`, `assignKey()` |
+| VR | VR headset | Opens the VR page: the headset, the board, the seat and the window ([VR](vr.md#the-vr-page)) | `VrPreferences`, `VrMode` |
 
 - **At start**, right after the settings are read, `applyDisplaySettings()` moves the window to the kept
   screen and gives it the kept resolution; then, once the translations are loaded, `applyPlayerSettings()`
