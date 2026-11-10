@@ -170,6 +170,13 @@ public:
     void draw(render::Renderer &renderer, Layer layer);
     /// Draws the world, then the interface on top of it.
     void draw(render::Renderer &renderer);
+
+    /// The light of the scenes shown, which lights their 3D models: the first shown Light that is not on a
+    /// Model, or the default light. In VR, it lights the cockpit around the board too.
+    [[nodiscard]] render::Light light();
+    /// The picture at the back of the sky of the scenes shown: the Backdrop of the lowest order in the scene
+    /// of the first shown Backdrop, or nothing without one. In VR, the sky drawn around the cockpit.
+    [[nodiscard]] std::optional<Backdrop> sky();
 };
 
 } // namespace rtype::engine
