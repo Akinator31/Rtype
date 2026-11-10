@@ -45,6 +45,9 @@ public:
     void close(voice::Slot slot) override;
     bool write(voice::Slot slot, std::span<const std::int16_t> samples) override;
     void setVolume(voice::Slot slot, float volume) override;
+    /// Where the voice of a player is heard, from -1 (fully left) to 1 (fully right), 0 in the middle by
+    /// default: in a VR headset, from the side of the board their ship is on. Kept for a stream not open yet.
+    void setPan(voice::Slot slot, float pan);
 };
 
 } // namespace rtype::audio

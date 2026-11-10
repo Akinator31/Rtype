@@ -204,6 +204,13 @@ public:
     /// of the artist. The texture coordinates of the meshes of the material must cover the whole image.
     /// @throws std::out_of_range if the model has no material by this name.
     void setModelMaterialImage(ModelId model, std::string_view material, ImageId image);
+    /// Sets the light a material of a model emits, found by its name in the file: its emission map (or the
+    /// image of setModelMaterialImage()) multiplied by the colour, or the colour all over for a material
+    /// without one. White shows the map as it is, a darker colour dims it, black (one step over it) puts it
+    /// out: the lights of a cockpit that react to the game. Every draw of the model shows it, until it is set
+    /// again.
+    /// @throws std::out_of_range if the model has no material by this name.
+    void setModelMaterialGlow(ModelId model, std::string_view material, Color color);
 
     /// Draws the sky around the eye (beginEye()), at infinity: a picture of space wrapped on a sphere centred
     /// on the eye, so that it never comes nearer when the head moves. Draw it first: it hides nothing and

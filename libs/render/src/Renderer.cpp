@@ -1160,6 +1160,13 @@ void Renderer::setModelMaterialImage(ModelId model, std::string_view material, I
     }
 }
 
+void Renderer::setModelMaterialGlow(ModelId model, std::string_view material, Color color)
+{
+    if (!_impl->models.get(model).glowOnMaterial(material, toRaylib(color))) {
+        throw std::out_of_range("No material " + std::string(material) + " in this model");
+    }
+}
+
 void Renderer::drawSky(TextureId texture, Color tint)
 {
     _impl->passes.requireEye();
