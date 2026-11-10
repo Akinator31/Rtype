@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <initializer_list>
@@ -78,11 +79,12 @@ const std::vector<std::byte> ExampleSnapshot = bytes({
     0x06, 0x40, 0x10, 0xE4,             //   x 200, y 540.5
     0x00, 0x00, 0xF6, 0xA0,             //   velocity 0, -300
     0x03, 0x01,                         //   health 3, invulnerable
+    0xFF,                               //   no ship
 });
 
 EntityState entity(std::uint32_t id, float x = 100.0f, float y = 100.0f)
 {
-    return {id, EntityKind::BydoFlyer, NoOwner, x, y, -120.0f, 0.0f, 2, 0};
+    return {id, EntityKind::BydoFlyer, NoOwner, x, y, -120.0f, 0.0f, 2, 0, 0, 4};
 }
 
 /// Every prefix of a valid payload, and the payload with one more byte, are refused.
@@ -121,15 +123,137 @@ TEST_CASE("An input is the one of the example of the specification", "[game][mes
 
 TEST_CASE("The small messages are written field by field", "[game][messages]")
 {
-    CHECK(encode(AcceptedMessage{2, 60, 1000}) == bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8}));
+    // The voice carried, then not (version 4); its other bits reserved
+    CHECK(decodeAccepted(bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8, 0xFE}))->voice == false);
+    CHECK(decodeAccepted(bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8, 0x01}))->voice);
+    CHECK_FALSE(decodeAccepted(bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8})));
+    CHECK(encode(AcceptedMessage{2, 60, 1000}) == bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8, 0x01}));
+    CHECK(encode(AcceptedMessage{2, 60, 1000, false}) == bytes({0x02, 0x3C, 0x00, 0x00, 0x03, 0xE8, 0x00}));
+    // A guest, account 0; then the account 7 (version 3)
     CHECK(encode(PlayerJoinedMessage{1, 42, "Pavel"}) ==
-          bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l'}));
+          bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l', 0x00, 0x00, 0x00, 0x00, 0x00,
+                 0x00, 0x00, 0x00}));
+    CHECK(encode(PlayerJoinedMessage{1, 42, "Pavel", 7}) ==
+          bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l', 0x00, 0x00, 0x00, 0x00, 0x00,
+                 0x00, 0x00, 0x07}));
     CHECK(encode(PlayerLeftMessage{3, LeaveReason::TimedOut}) == bytes({0x03, 0x01}));
     CHECK(encode(EntitiesDestroyedMessage{1000, {{7, DestroyCause::Killed}, {9, DestroyCause::Removed}}}) ==
           bytes({0x00, 0x00, 0x03, 0xE8, 0x02, 0x00, 0x00, 0x00, 0x07, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00}));
     CHECK(encode(WaveStartedMessage{3, ""}) == bytes({0x00, 0x03, 0x00}));
     CHECK(encode(WaveStartedMessage{3, "a.mp3"}) == bytes({0x00, 0x03, 0x05, 'a', '.', 'm', 'p', '3'}));
     CHECK(encode(GameOverMessage{GameOutcome::Victory}) == bytes({0x01}));
+}
+
+// --- The voice ---
+
+TEST_CASE("The messages of the voice are written field by field", "[game][messages][voice]")
+{
+    CHECK(encode(VoiceMessage{0x1234, true, bytes({0xAA, 0xBB, 0xCC})}) ==
+          bytes({0x12, 0x34, 0x01, 0x03, 0xAA, 0xBB, 0xCC}));
+    CHECK(encode(VoiceFrameMessage{2, 7, false, bytes({0xF8})}) ==
+          bytes({0x02, 0x00, 0x07, 0x00, 0x01, 0xF8}));
+    CHECK(encode(VoiceStateMessage{rtype::voice::Backend::Discord}) == bytes({0x02}));
+    CHECK(encode(VoiceRosterMessage{{rtype::voice::Backend::Game, rtype::voice::Backend::None,
+                                     rtype::voice::Backend::Discord, rtype::voice::Backend::Game}}) ==
+          bytes({0x01, 0x00, 0x02, 0x01}));
+}
+
+TEST_CASE("The messages of the voice survive a round trip, with frames of 1 to 160 bytes",
+          "[game][messages][voice]")
+{
+    for (const std::size_t size : {std::size_t{1}, std::size_t{60}, rtype::voice::MaxFrameBytes}) {
+        std::vector<std::byte> frame(size);
+        for (std::size_t i = 0; i < size; ++i) {
+            frame[i] = static_cast<std::byte>(i * 13);
+        }
+        const VoiceMessage voice{65535, size == 1, frame};
+        CHECK(decodeVoice(encode(voice)) == voice);
+        const VoiceFrameMessage forwarded{3, 0, size != 1, frame};
+        CHECK(decodeVoiceFrame(encode(forwarded)) == forwarded);
+    }
+    for (const auto backend :
+         {rtype::voice::Backend::None, rtype::voice::Backend::Game, rtype::voice::Backend::Discord}) {
+        CHECK(decodeVoiceState(encode(VoiceStateMessage{backend})) == VoiceStateMessage{backend});
+    }
+    const VoiceRosterMessage roster{{rtype::voice::Backend::Discord, rtype::voice::Backend::Game,
+                                     rtype::voice::Backend::None, rtype::voice::Backend::Discord}};
+    CHECK(decodeVoiceRoster(encode(roster)) == roster);
+}
+
+TEST_CASE("What each player tells about its voice is one byte of flags", "[game][messages][voice]")
+{
+    using rtype::voice::Status;
+    CHECK(encode(VoiceStatusMessage{}) == bytes({0x00}));
+    CHECK(encode(VoiceStatusMessage{{.muted = true}}) == bytes({0x01}));
+    CHECK(encode(VoiceStatusMessage{{.deafened = true}}) == bytes({0x02}));
+    CHECK(encode(VoiceStatusMessage{{.noMicrophone = true}}) == bytes({0x04}));
+    CHECK(encode(VoiceStatusesMessage{{Status{.muted = true, .deafened = true}, Status{}, Status{},
+                                       Status{.noMicrophone = true}}}) == bytes({0x03, 0x00, 0x00, 0x04}));
+
+    const VoiceStatusMessage all{{.muted = true, .deafened = true, .noMicrophone = true}};
+    CHECK(decodeVoiceStatus(encode(all)) == all);
+    // The reserved bits are dropped
+    CHECK(decodeVoiceStatus(bytes({0xF9})) == VoiceStatusMessage{{.muted = true}});
+    CHECK_FALSE(decodeVoiceStatus(bytes({})));
+    CHECK_FALSE(decodeVoiceStatus(bytes({0x01, 0x00})));
+    const VoiceStatusesMessage statuses{
+        {Status{}, Status{.muted = true}, Status{.deafened = true}, Status{}}};
+    CHECK(decodeVoiceStatuses(encode(statuses)) == statuses);
+    CHECK_FALSE(decodeVoiceStatuses(bytes({0x00, 0x00, 0x00})));
+    CHECK_FALSE(decodeVoiceStatuses(bytes({0x00, 0x00, 0x00, 0x00, 0x00})));
+
+    // Muted by an administrator (version 4): bit 3, the game's to say in VOICE_STATUSES only
+    CHECK(encode(VoiceStatusesMessage{{Status{.mutedByAdmin = true}, Status{}, Status{}, Status{}}}) ==
+          bytes({0x08, 0x00, 0x00, 0x00}));
+    const VoiceStatusesMessage muted{
+        {Status{.muted = true, .mutedByAdmin = true}, Status{}, Status{}, Status{}}};
+    CHECK(decodeVoiceStatuses(encode(muted)) == muted);
+    CHECK(decodeVoiceStatuses(bytes({0xF9, 0x00, 0x00, 0x00}))->statuses[0] ==
+          Status{.muted = true, .mutedByAdmin = true});
+    // A player cannot tell it: neither written nor read in VOICE_STATUS
+    CHECK(encode(VoiceStatusMessage{{.mutedByAdmin = true}}) == bytes({0x00}));
+    CHECK(decodeVoiceStatus(bytes({0x08})) == VoiceStatusMessage{});
+}
+
+TEST_CASE("PLAYER_JOINED carries the account of the player", "[game][messages]")
+{
+    const PlayerJoinedMessage signedIn{2, 9, "Nova", 0xFFFFFFFFFFFFFFFF};
+    CHECK(decodePlayerJoined(encode(signedIn)) == signedIn);
+    // Version 2, without the account: too short
+    CHECK_FALSE(decodePlayerJoined(bytes({0x01, 0x00, 0x00, 0x00, 0x2A, 0x05, 'P', 'a', 'v', 'e', 'l'})));
+}
+
+TEST_CASE("The voice refuses an empty frame, one over 160 bytes, a slot above 3, or bytes left over",
+          "[game][messages][voice]")
+{
+    CHECK_FALSE(decodeVoice(bytes({0, 1, 0, 0})));                  // no frame
+    CHECK_FALSE(decodeVoice(bytes({0, 1, 0, 2, 0xAA})));            // fewer bytes than said
+    CHECK_FALSE(decodeVoiceFrame(bytes({0x04, 0, 1, 0, 1, 0xF8}))); // slot 4
+    std::vector<std::byte> tooBig = bytes({0, 1, 0, 161});
+    tooBig.resize(tooBig.size() + 161, std::byte{0xF8});
+    CHECK_FALSE(decodeVoice(tooBig));
+
+    checkSizeIsExact(encode(VoiceMessage{1, false, bytes({1, 2})}), decodeVoice);
+    checkSizeIsExact(encode(VoiceFrameMessage{1, 1, false, bytes({1, 2})}), decodeVoiceFrame);
+    checkSizeIsExact(encode(VoiceStateMessage{}), decodeVoiceState);
+    checkSizeIsExact(encode(VoiceRosterMessage{}), decodeVoiceRoster);
+
+    CHECK_THROWS_AS(encode(VoiceMessage{1, false, {}}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(VoiceMessage{1, false, std::vector<std::byte>(161)}), std::invalid_argument);
+    CHECK_THROWS_AS(encode(VoiceFrameMessage{4, 1, false, bytes({1})}), std::invalid_argument);
+}
+
+TEST_CASE("An unknown backend is read as no voice, and the reserved bits of the voice are dropped",
+          "[game][messages][voice]")
+{
+    CHECK(decodeVoiceState(bytes({0x07}))->backend == rtype::voice::Backend::None);
+    CHECK(decodeVoiceRoster(bytes({0x01, 0xFF, 0x02, 0x03}))->backends ==
+          std::array{rtype::voice::Backend::Game, rtype::voice::Backend::None, rtype::voice::Backend::Discord,
+                     rtype::voice::Backend::None});
+    const auto voice = decodeVoice(bytes({0, 1, 0xFE, 1, 0xF8}));
+    REQUIRE(voice);
+    CHECK_FALSE(voice->last);
+    CHECK(decodeVoice(bytes({0, 1, 0xFF, 1, 0xF8}))->last);
 }
 
 // --- Positions and velocities ---
@@ -208,14 +332,27 @@ TEST_CASE("The reserved bits of inputs are dropped; every bit of the flags is de
     CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0x7F);
     CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0x7F});
 
-    // The stances of the Bydos take the last three bits
+    // The stances of the Bydos take the last three bits of the flags, the byte before the ship
     std::vector<std::byte> payload = ExampleSnapshot;
-    payload.back() = std::byte{0xFF};
+    payload[payload.size() - 2] = std::byte{0xFF};
     CHECK(decodeSnapshotPart(payload)->entities[0].flags == 0xFF);
 
     SnapshotPart part = examplePart();
     part.entities[0].flags = EntityState::Guarding | EntityState::Slashing | EntityState::Shooting;
-    CHECK(encode(part).back() == std::byte{0xE0});
+    const std::vector<std::byte> encoded = encode(part);
+    CHECK(encoded[encoded.size() - 2] == std::byte{0xE0});
+}
+
+TEST_CASE("The ship of a Bydo travels with its state, a ship of a player has none", "[game][messages]")
+{
+    CHECK(decodeSnapshotPart(ExampleSnapshot)->entities[0].ship == NoShip);
+
+    SnapshotPart part = examplePart();
+    part.entities.push_back(entity(8));
+    part.entities.back().ship = 12;
+    const std::vector<std::byte> encoded = encode(part);
+    CHECK(encoded.back() == std::byte{12});
+    CHECK(decodeSnapshotPart(encoded)->entities[1].ship == 12);
 }
 
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")
@@ -357,17 +494,21 @@ TEST_CASE("Random bytes never crash a decoder", "[game][messages]")
         (void)decodeEntitiesDestroyed(payload);
         (void)decodeWaveStarted(payload);
         (void)decodeGameOver(payload);
+        (void)decodeVoice(payload);
+        (void)decodeVoiceFrame(payload);
+        (void)decodeVoiceState(payload);
+        (void)decodeVoiceRoster(payload);
     }
     SUCCEED();
 }
 
 // --- Splitting ---
 
-TEST_CASE("A part of a snapshot holds 69 entities with four players, and always fits in a datagram",
+TEST_CASE("A part of a snapshot holds 61 entities with four players, and always fits in a datagram",
           "[game][messages]")
 {
-    CHECK(maxEntitiesPerPart(4) == 65);
-    CHECK(maxEntitiesPerPart(0) == 70);
+    CHECK(maxEntitiesPerPart(4) == 61);
+    CHECK(maxEntitiesPerPart(0) == 66);
     CHECK_THROWS_AS(maxEntitiesPerPart(5), std::invalid_argument);
 
     for (std::size_t players = 0; players <= MaxPlayers; ++players) {
@@ -387,7 +528,7 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
     Snapshot snapshot;
     snapshot.tick = 500;
     snapshot.players = {{0, 3, 10}, {1, 2, 20}, {2, 1, 30}, {3, 0, 40}};
-    for (std::uint32_t id = 1; id <= 190; ++id) {
+    for (std::uint32_t id = 1; id <= 170; ++id) {
         // Positions in eighths of a unit: exact once written
         snapshot.entities.push_back(entity(id, static_cast<float>(id) * 0.125f, static_cast<float>(id)));
     }
@@ -409,8 +550,8 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
         CHECK(part->players == snapshot.players);
         entities.insert(entities.end(), part->entities.begin(), part->entities.end());
     }
-    CHECK(parts[0].entities.size() == 65);
-    CHECK(parts[2].entities.size() == 60);
+    CHECK(parts[0].entities.size() == 61);
+    CHECK(parts[2].entities.size() == 48);
     CHECK(entities == snapshot.entities);
 }
 
@@ -430,7 +571,7 @@ TEST_CASE("A snapshot without entities is one part, one with too many is cut at 
     }
     const std::vector<SnapshotPart> parts = splitSnapshot(crowded, 0);
     REQUIRE(parts.size() == MaxSnapshotParts);
-    CHECK(parts.back().entities.back().id == 16 * 65);
+    CHECK(parts.back().entities.back().id == 16 * 61);
 }
 
 TEST_CASE("The destroyed entities of a tick go in as many messages as needed", "[game][messages]")

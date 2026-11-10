@@ -2,7 +2,7 @@
 return {
     id = "bydo_wanderer",
     ship = "bydo_wanderer",
-    health = 65,
+    health = 28,
     speed = 180,
     acceleration = 360,
     weapon = "plasma_shard_cannon",

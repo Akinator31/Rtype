@@ -26,6 +26,14 @@
 #define RTYPE_IMAGE_GLOW_CORE "images/fx/glow_core.png"
 #define RTYPE_IMAGE_LIFE "images/hud/life.png"
 #define RTYPE_IMAGE_LIFE_LOST "images/hud/life_lost.png"
+// The voice of the players in the HUD (Voice/VoiceIcons.hpp), white, tinted when drawn
+#define RTYPE_IMAGE_VOICE_SPEAKING "images/hud/voice/speaking.png"
+#define RTYPE_IMAGE_VOICE_MUTED "images/hud/voice/muted.png"
+#define RTYPE_IMAGE_VOICE_MUTED_BY_ME "images/hud/voice/muted_by_me.png"
+#define RTYPE_IMAGE_VOICE_NO_MICROPHONE "images/hud/voice/no_microphone.png"
+#define RTYPE_IMAGE_VOICE_DEAFENED "images/hud/voice/deafened.png"
+#define RTYPE_IMAGE_VOICE_MUTED_BY_ADMIN "images/hud/voice/muted_by_admin.png"
+#define RTYPE_IMAGE_VOICE_BADGE "images/hud/voice/badge.png"
 
 // Texts
 // The story of the game, in each language, laid out for the crawl of the lore scene (see LoreLineKind)

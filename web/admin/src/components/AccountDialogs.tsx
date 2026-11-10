@@ -1,17 +1,20 @@
 // The actions on an account (docs/protocol/admin-api.md, 5), each behind its window: ban it with a reason, lift
-// its ban, change its role, delete it. The server records each one; a toast tells the host.
+// its ban, change its role, delete it, mute its voice for a time or lift that mute. The server records each one;
+// a toast tells the host.
 
 import { useState } from 'react';
 
 import { api } from '../api/client';
 import type { Account, Role } from '../api/types';
+import { dayTime, shortDuration } from '../format';
 import { strings } from '../strings';
-import { byteLength, MaxTextBytes } from '../validation';
-import { ReasonField } from './ActionDialogs';
+import { useNow } from '../useNow';
+import { byteLength, isValidVoiceMuteDuration, MaxTextBytes } from '../validation';
+import { DurationField, ReasonField } from './ActionDialogs';
 import { ConfirmDialog } from './ConfirmDialog';
 import { notify } from './notify';
 
-export type AccountAction = 'ban' | 'unban' | 'promote' | 'demote' | 'delete';
+export type AccountAction = 'ban' | 'unban' | 'promote' | 'demote' | 'delete' | 'mute_voice' | 'unmute_voice';
 
 const fits = (reason: string) => byteLength(reason) <= MaxTextBytes;
 
@@ -28,6 +31,9 @@ export function AccountDialog({
   onDone: () => void;
 }) {
   const [reason, setReason] = useState('');
+  const [seconds, setSeconds] = useState(86400);
+  const [other, setOther] = useState(false);
+  const now = useNow();
   const t = strings.dialog;
   const name = `${account.username} #${account.id}`;
   const done = async (work: Promise<unknown>, title: string, detail: string) => {
@@ -100,6 +106,55 @@ export function AccountDialog({
           onClose={onClose}
           onConfirm={() => role('player')}
         />
+      );
+    case 'mute_voice': {
+      const valid = isValidVoiceMuteDuration(seconds);
+      return (
+        <ConfirmDialog
+          title={t.muteAccountTitle}
+          body={t.muteAccountBody(name)}
+          confirmLabel={t.muteAccountConfirm(valid ? shortDuration(seconds) : '')}
+          ready={valid && fits(reason)}
+          note={valid ? t.muteAccountEnds(dayTime(now + seconds * 1000)) : undefined}
+          onClose={onClose}
+          onConfirm={async () => {
+            const muted = await api.muteAccountVoice(account.id, seconds, reason.trim());
+            notify(
+              'bonus',
+              strings.notify.accountVoiceMuted,
+              strings.notify.accountVoiceMutedDetail(name, shortDuration(seconds), muted.removed),
+            );
+            onDone();
+          }}
+        >
+          <DurationField
+            seconds={seconds}
+            onChange={setSeconds}
+            other={other}
+            onOther={setOther}
+            choices={t.voiceDurations}
+            isValid={isValidVoiceMuteDuration}
+            invalidText={t.voiceSecondsInvalid}
+          />
+          <ReasonField value={reason} onChange={setReason} />
+        </ConfirmDialog>
+      );
+    }
+    case 'unmute_voice':
+      return (
+        <ConfirmDialog
+          title={t.unmuteAccountTitle}
+          body={t.unmuteAccountBody(name)}
+          confirmLabel={t.unmuteAccountConfirm}
+          tone="info"
+          ready={fits(reason)}
+          onClose={onClose}
+          onConfirm={() =>
+            done(api.unmuteAccountVoice(account.id, reason.trim()), strings.notify.accountVoiceUnmuted, name)
+          }
+        >
+          <ReasonField value={reason} onChange={setReason} />
+        </ConfirmDialog>
       );
     case 'delete':
       return (

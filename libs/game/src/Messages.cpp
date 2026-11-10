@@ -25,7 +25,7 @@ constexpr std::size_t SnapshotHeaderSize = 18;
 /// One player in SNAPSHOT: slot, lives, score, kills, waves cleared, streak, best streak, experience.
 constexpr std::size_t PlayerStateSize = 20;
 /// One entity in SNAPSHOT.
-constexpr std::size_t EntityStateSize = 16;
+constexpr std::size_t EntityStateSize = 17;
 /// The fields before the entities in ENTITIES_DESTROYED: tick, count.
 constexpr std::size_t DestroyedHeaderSize = 5;
 /// One entity in ENTITIES_DESTROYED: id, cause.
@@ -110,6 +110,7 @@ void writeEntity(Writer &writer, const EntityState &entity)
     writer.writeI16(toFixed(entity.velocityY));
     writer.writeU8(isShot(entity.kind) ? entity.age : entity.health);
     writer.writeU8(static_cast<std::uint8_t>(entity.flags & KnownFlags));
+    writer.writeU8(entity.ship);
 }
 
 EntityState readEntity(Reader &reader)
@@ -130,6 +131,7 @@ EntityState readEntity(Reader &reader)
         entity.health = healthOrAge;
     }
     entity.flags = static_cast<std::uint8_t>(reader.readU8() & KnownFlags);
+    entity.ship = reader.readU8();
     if (entity.id == 0 || kind == 0) {
         reader.fail();
     }
@@ -171,14 +173,23 @@ bool isShot(EntityKind kind)
 
 // --- ACCEPTED, PLAYER_JOINED, PLAYER_LEFT ---
 
+namespace
+{
+
+/// The flags of ACCEPTED: bit 0, the game carries the voice; the others reserved.
+constexpr std::uint8_t AcceptedVoice = 0x01;
+
+} // namespace
+
 std::vector<std::byte> encode(const AcceptedMessage &message)
 {
     require(isSlot(message.slot), "A player slot is 0 to 3");
     require(message.tickRate != 0, "The tick rate is never 0");
-    Writer writer(6);
+    Writer writer(7);
     writer.writeU8(message.slot);
     writer.writeU8(message.tickRate);
     writer.writeU32(message.tick);
+    writer.writeU8(message.voice ? AcceptedVoice : 0);
     return writer.take();
 }
 
@@ -189,6 +200,8 @@ std::optional<AcceptedMessage> decodeAccepted(std::span<const std::byte> payload
     message.slot = reader.readU8();
     message.tickRate = reader.readU8();
     message.tick = reader.readU32();
+    // The other bits reserved
+    message.voice = (reader.readU8() & AcceptedVoice) != 0;
     if (!isSlot(message.slot) || message.tickRate == 0) {
         reader.fail();
     }
@@ -203,10 +216,11 @@ std::vector<std::byte> encode(const PlayerJoinedMessage &message)
     require(isSlot(message.slot), "A player slot is 0 to 3");
     require(!message.name.empty() && message.name.size() <= MaxPlayerNameLength,
             "A player name is 1 to 16 bytes");
-    Writer writer(6 + message.name.size());
+    Writer writer(14 + message.name.size());
     writer.writeU8(message.slot);
     writer.writeU32(message.playerId);
     writer.writeString(message.name);
+    writer.writeU64(message.accountId);
     return writer.take();
 }
 
@@ -217,6 +231,7 @@ std::optional<PlayerJoinedMessage> decodePlayerJoined(std::span<const std::byte>
     message.slot = reader.readU8();
     message.playerId = reader.readU32();
     message.name = reader.readString(1, MaxPlayerNameLength);
+    message.accountId = reader.readU64();
     if (!isSlot(message.slot)) {
         reader.fail();
     }
@@ -498,6 +513,204 @@ std::optional<GameOverMessage> decodeGameOver(std::span<const std::byte> payload
     }
     return GameOverMessage{outcome == static_cast<std::uint8_t>(GameOutcome::Victory) ? GameOutcome::Victory
                                                                                       : GameOutcome::Defeat};
+}
+
+// --- The voice ---
+
+namespace
+{
+
+/// The flags of VOICE and VOICE_FRAME: bit 0, the last frame of a talk spurt; the others reserved.
+constexpr std::uint8_t LastFrame = 0x01;
+
+/// The flags of a status, in VOICE_STATUS and VOICE_STATUSES; the other bits reserved.
+constexpr std::uint8_t MutedFlag = 0x01;
+constexpr std::uint8_t DeafenedFlag = 0x02;
+constexpr std::uint8_t NoMicrophoneFlag = 0x04;
+/// In VOICE_STATUSES only, set by the game (version 5); dropped from a VOICE_STATUS.
+constexpr std::uint8_t MutedByAdminFlag = 0x08;
+
+std::uint8_t toFlags(const voice::Status &status)
+{
+    return static_cast<std::uint8_t>((status.muted ? MutedFlag : 0) | (status.deafened ? DeafenedFlag : 0) |
+                                     (status.noMicrophone ? NoMicrophoneFlag : 0) |
+                                     (status.mutedByAdmin ? MutedByAdminFlag : 0));
+}
+
+voice::Status toStatus(std::uint8_t flags)
+{
+    return {.muted = (flags & MutedFlag) != 0,
+            .deafened = (flags & DeafenedFlag) != 0,
+            .noMicrophone = (flags & NoMicrophoneFlag) != 0,
+            .mutedByAdmin = (flags & MutedByAdminFlag) != 0};
+}
+
+voice::Backend toBackend(std::uint8_t value)
+{
+    switch (value) {
+    case static_cast<std::uint8_t>(voice::Backend::Game):
+        return voice::Backend::Game;
+    case static_cast<std::uint8_t>(voice::Backend::Discord):
+        return voice::Backend::Discord;
+    default:
+        return voice::Backend::None;
+    }
+}
+
+void requireFrame(const std::vector<std::byte> &frame)
+{
+    require(!frame.empty() && frame.size() <= voice::MaxFrameBytes, "A frame of the voice is 1 to 160 bytes");
+}
+
+/// The sequence, the flags and the frame, the end of VOICE and VOICE_FRAME.
+void writeVoice(Writer &writer, std::uint16_t sequence, bool last, const std::vector<std::byte> &frame)
+{
+    writer.writeU16(sequence);
+    writer.writeU8(last ? LastFrame : 0);
+    writer.writeU8(static_cast<std::uint8_t>(frame.size()));
+    writer.writeBytes(frame);
+}
+
+/// Reads them, failing the reader for a frame of 0 or more than MaxFrameBytes bytes.
+void readVoice(Reader &reader, std::uint16_t &sequence, bool &last, std::vector<std::byte> &frame)
+{
+    sequence = reader.readU16();
+    last = (reader.readU8() & LastFrame) != 0;
+    const std::uint8_t size = reader.readU8();
+    if (size == 0 || size > voice::MaxFrameBytes) {
+        reader.fail();
+        return;
+    }
+    const std::span<const std::byte> bytes = reader.readBytes(size);
+    frame.assign(bytes.begin(), bytes.end());
+}
+
+} // namespace
+
+std::vector<std::byte> encode(const VoiceMessage &message)
+{
+    requireFrame(message.frame);
+    Writer writer(4 + message.frame.size());
+    writeVoice(writer, message.sequence, message.last, message.frame);
+    return writer.take();
+}
+
+std::optional<VoiceMessage> decodeVoice(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    VoiceMessage message;
+    readVoice(reader, message.sequence, message.last, message.frame);
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return message;
+}
+
+std::vector<std::byte> encode(const VoiceFrameMessage &message)
+{
+    require(isSlot(message.slot), "A player slot is 0 to 3");
+    requireFrame(message.frame);
+    Writer writer(5 + message.frame.size());
+    writer.writeU8(message.slot);
+    writeVoice(writer, message.sequence, message.last, message.frame);
+    return writer.take();
+}
+
+std::optional<VoiceFrameMessage> decodeVoiceFrame(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    VoiceFrameMessage message;
+    message.slot = reader.readU8();
+    if (!isSlot(message.slot)) {
+        reader.fail();
+    }
+    readVoice(reader, message.sequence, message.last, message.frame);
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return message;
+}
+
+std::vector<std::byte> encode(const VoiceStateMessage &message)
+{
+    Writer writer(1);
+    writer.writeU8(static_cast<std::uint8_t>(message.backend));
+    return writer.take();
+}
+
+std::optional<VoiceStateMessage> decodeVoiceState(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    const std::uint8_t backend = reader.readU8();
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return VoiceStateMessage{toBackend(backend)};
+}
+
+std::vector<std::byte> encode(const VoiceRosterMessage &message)
+{
+    Writer writer(MaxPlayers);
+    for (const voice::Backend backend : message.backends) {
+        writer.writeU8(static_cast<std::uint8_t>(backend));
+    }
+    return writer.take();
+}
+
+std::optional<VoiceRosterMessage> decodeVoiceRoster(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    VoiceRosterMessage message;
+    for (voice::Backend &backend : message.backends) {
+        backend = toBackend(reader.readU8());
+    }
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return message;
+}
+
+std::vector<std::byte> encode(const VoiceStatusMessage &message)
+{
+    // What the game sets is not the player's to tell
+    voice::Status told = message.status;
+    told.mutedByAdmin = false;
+    Writer writer(1);
+    writer.writeU8(toFlags(told));
+    return writer.take();
+}
+
+std::optional<VoiceStatusMessage> decodeVoiceStatus(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    const std::uint8_t flags = reader.readU8();
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    // Muted by an administrator is the game's to say: dropped as a reserved bit
+    return VoiceStatusMessage{toStatus(flags & static_cast<std::uint8_t>(~MutedByAdminFlag))};
+}
+
+std::vector<std::byte> encode(const VoiceStatusesMessage &message)
+{
+    Writer writer(MaxPlayers);
+    for (const voice::Status &status : message.statuses) {
+        writer.writeU8(toFlags(status));
+    }
+    return writer.take();
+}
+
+std::optional<VoiceStatusesMessage> decodeVoiceStatuses(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    VoiceStatusesMessage message;
+    for (voice::Status &status : message.statuses) {
+        status = toStatus(reader.readU8());
+    }
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return message;
 }
 
 } // namespace rtype::game

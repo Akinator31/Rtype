@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Master/AddressBans.hpp"
+#include "Master/VoiceMutes.hpp"
 #include "rtype/database/Database.hpp"
 
 #include <chrono>
@@ -11,7 +12,8 @@
 #include <vector>
 
 /// What the administration keeps in the database of the master (docs/architecture/administration.md): the
-/// record of the actions (`admin_actions`) and the bans of addresses (`address_bans`). Plain functions on a
+/// record of the actions (`admin_actions`), the bans of addresses (`address_bans`) and the mutes of the voice
+/// of the accounts (`voice_mutes`). Plain functions on a
 /// Database: the master runs them on its database thread, the tests anywhere.
 namespace rtype::server
 {
@@ -29,8 +31,8 @@ struct AdminAction {
     std::chrono::system_clock::time_point at;
     /// `local`, an account id, or `deleted`.
     std::string actor;
-    /// `kick`, `end_game`, `message`, `ban`, `unban`, `ban_account`, `unban_account`, `role` or
-    /// `delete_account`.
+    /// `kick`, `end_game`, `message`, `ban`, `unban`, `ban_account`, `unban_account`, `role`,
+    /// `delete_account`, `mute_voice`, `unmute_voice`, `mute_account_voice` or `unmute_account_voice`.
     std::string action;
     /// What it was done to: `player:7`, `game:3`, `everyone`, `address:203.0.113.9`.
     std::string target;
@@ -82,5 +84,20 @@ std::size_t purgeAddressBans(rtype::database::Database &database, std::chrono::s
 /// @throws soci::soci_error if the database cannot be read.
 [[nodiscard]] std::vector<AddressBan> loadAddressBans(rtype::database::Database &database,
                                                       std::chrono::system_clock::time_point now);
+
+/// Keeps a mute of the voice of an account, replacing the one before.
+/// @throws soci::soci_error if the database refuses it, an account that does not exist included.
+void saveVoiceMute(rtype::database::Database &database, const VoiceMute &mute);
+/// Removes the mute of an account, lifted before it expires.
+/// @throws soci::soci_error if the database refuses it.
+void deleteVoiceMute(rtype::database::Database &database, long long accountId);
+/// Removes the mutes expired at `now`.
+/// @return How many.
+/// @throws soci::soci_error if the database refuses it.
+std::size_t purgeVoiceMutes(rtype::database::Database &database, std::chrono::system_clock::time_point now);
+/// The mutes that still run at `now`, the expired ones purged first: what the master reads at start.
+/// @throws soci::soci_error if the database cannot be read.
+[[nodiscard]] std::vector<VoiceMute> loadVoiceMutes(rtype::database::Database &database,
+                                                    std::chrono::system_clock::time_point now);
 
 } // namespace rtype::server

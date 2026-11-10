@@ -4,6 +4,7 @@
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/SettingsPage.hpp"
 #include "Settings/AuraSettings.hpp"
+#include "MainMenu/VoiceMenu.hpp"
 #include "Settings/DisplaySettings.hpp"
 #include "Settings/NextValue.hpp"
 #include "Settings/PlayerSettings.hpp"
@@ -142,6 +143,19 @@ float addAuraRows(Page &page, float left, float top)
     return addAuraRow(page, "settings.aura.enemies", auras.enemies, left, top);
 }
 
+/// "Activity on Discord: On": whether the profile of the player in Discord shows what it plays.
+float addDiscordActivityRow(Page &page, float left, float top)
+{
+    const localization::Localization &translations = page.targets.translations;
+    PresenceTracker &presence = page.targets.presence;
+    const auto value = [&translations, &presence] {
+        return translations.text(presence.isEnabled() ? "settings.on" : "settings.off");
+    };
+    const auto change = [&presence](int /*direction*/) { presence.setEnabled(!presence.isEnabled()); };
+    return addRow(page, "settings.discord_activity", value, change, "settings.hint.discord_activity", left,
+                  top);
+}
+
 /// "Screen: 2 · DELL U2720Q": moves the game to another screen.
 float addMonitorRow(Page &page, float left, float top)
 {
@@ -213,9 +227,21 @@ void addControlsRow(Page &page, float left, float top)
     page.hints->emplace_back(row, "settings.hint.controls");
 }
 
-/// On the left, the language, the volumes, the colour filter and the auras of the ships; on the right, the
-/// display and the controls. The widgets get the focus in the order they are made: down the left column, then
-/// down the right one.
+/// "Voice chat": opens the Voice page.
+void addVoiceRow(Page &page, float left, float top)
+{
+    const localization::Localization &translations = page.targets.translations;
+    engine::Engine &engine = page.engine;
+    const ecs::entity_t row = page.interface.linkRow(translations.text("settings.voice_chat"),
+                                                     [&engine] { engine.pushScene(VoiceMenuScene); },
+                                                     {engine::AnchorPoint::TopLeft, left, top});
+    settings_page::bindText(page.ecs, row, translations, "settings.voice_chat");
+    page.hints->emplace_back(row, "settings.hint.voice_chat");
+}
+
+/// On the left, the language, the volumes, the colour filter, the auras of the ships and the activity on
+/// Discord; on the right, the display, the controls and the voice. The widgets get the focus in the order they are made: down the left
+/// column, then down the right one.
 void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
                        const SettingsTargets &targets, const std::function<void()> &close)
 {
@@ -243,7 +269,9 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     top += 2.0f * style.slider.getHeight() + groupGap;
     top = addGroup(interface, ecs, style, translations, "settings.group.accessibility", left, top, width);
     top = addColorFilterRow(page, left, top);
-    addAuraRows(page, left, top);
+    top = addAuraRows(page, left, top) + groupGap;
+    top = addGroup(interface, ecs, style, translations, "settings.group.discord", left, top, width);
+    addDiscordActivityRow(page, left, top);
 
     top = addGroup(interface, ecs, style, translations, "settings.group.display", right, settings_page::top,
                    width);
@@ -253,6 +281,9 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     top = addVsyncRow(page, right, top) + groupGap;
     top = addGroup(interface, ecs, style, translations, "settings.group.controls", right, top, width);
     addControlsRow(page, right, top);
+    top += style.setting.height + groupGap;
+    top = addGroup(interface, ecs, style, translations, "settings.group.voice", right, top, width);
+    addVoiceRow(page, right, top);
 
     // The hint of the focused row, under the right column
     top += style.setting.height + groupGap;
@@ -271,6 +302,7 @@ void createSettingsScene(engine::Engine &engine, const engine::InterfaceStyle &s
         keepPlayerSettings(settings, targets.translations, targets.audio, targets.renderer.colorFilter());
         keepDisplaySettings(settings, targets.window);
         keepAuraColors(settings, targets.auras);
+        settings.setBool(DiscordActivitySettingsKey, targets.presence.isEnabled());
         writeSettings(settings);
         engine.popScene();
     };

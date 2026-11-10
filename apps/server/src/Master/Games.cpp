@@ -46,6 +46,10 @@ struct Games::Game {
     struct Member {
         std::uint32_t sessionId = 0;
         std::string name;
+        /// 0 for a guest.
+        std::uint64_t accountId = 0;
+        /// Muted by an administrator for the rest of this game.
+        bool voiceMuted = false;
     };
 
     struct Creator {
@@ -57,6 +61,8 @@ struct Games::Game {
     std::string name;
     std::uint8_t maxPlayers = 1;
     Secret secret{};
+    /// The secret of its Discord lobby, with GamesSettings::discordVoice. Never logged.
+    std::optional<Secret> voiceSecret;
     std::optional<Process> process;
     State state = State::Starting;
     /// The connection of the instance, once it presented itself.
@@ -153,6 +159,9 @@ void Games::create(const LobbyPlayer &player, const rtype::lobby::CreateGameMess
     game.name = request.name;
     game.maxPlayers = request.maxPlayers;
     game.secret = rtype::network::randomBytes<32>();
+    if (_settings.discordVoice) {
+        game.voiceSecret = rtype::network::randomBytes<32>();
+    }
 
     std::vector<std::string> arguments = _settings.leadingArguments;
     for (std::string argument : {std::string("--instance"), std::string("--id"), std::to_string(game.id),
@@ -206,16 +215,23 @@ rtype::lobby::GameJoinedMessage Games::addPlayer(Game &game, const LobbyPlayer &
     game.sessions.push_back(session);
     // Before the player knows its session: its first datagram finds its game
     _relay.addSession(session, game.id);
-    const AddPlayerMessage added{player.id, session, rtype::network::randomBytes<32>(),
-                                 rtype::network::randomBytes<32>(), player.name};
+    const AddPlayerMessage added{.playerId = player.id,
+                                 .sessionId = session,
+                                 .clientKey = rtype::network::randomBytes<32>(),
+                                 .serverKey = rtype::network::randomBytes<32>(),
+                                 .name = player.name,
+                                 .accountId = player.accountId,
+                                 .voiceMuted = voiceMuted(false, player.accountId)};
     // To the instance first: it expects the session before the client connects
     send(game, instance_message::AddPlayer, encode(added));
-    game.members[player.id] = Game::Member{session, player.name};
+    game.members[player.id] = Game::Member{
+        .sessionId = session, .name = player.name, .accountId = player.accountId, .voiceMuted = false};
     _playerGames[player.id] = game.id;
     logger().info("{} ({}) joins {} ({}/{})", player.name, player.id, game.describe(), game.members.size(),
                   game.maxPlayers);
     changed(game);
-    return {game.id, _relay.publicAddress().port(), session, added.clientKey, added.serverKey};
+    return {game.id,         _relay.publicAddress().port(), session, added.clientKey, added.serverKey,
+            game.voiceSecret};
 }
 
 Games::JoinResult Games::join(const LobbyPlayer &player, std::uint32_t gameId)
@@ -283,6 +299,59 @@ bool Games::kick(std::uint32_t playerId)
     return true;
 }
 
+std::uint32_t Games::voiceMuted(bool forTheGame, std::uint64_t accountId) const
+{
+    if (forTheGame) {
+        return VoiceMutedForTheGame;
+    }
+    if (accountId == 0 || _voiceMutes == nullptr) {
+        return 0;
+    }
+    const auto now = std::chrono::system_clock::now();
+    const std::optional<VoiceMute> mute = _voiceMutes->find(static_cast<long long>(accountId), now);
+    return mute ? secondsLeft(*mute, now) : 0;
+}
+
+bool Games::muteVoice(std::uint32_t playerId, bool muted)
+{
+    const auto found = _playerGames.find(playerId);
+    Game *game = found == _playerGames.end() ? nullptr : find(found->second);
+    if (game == nullptr || game->state != Game::State::Running || !game->members.contains(playerId)) {
+        return false;
+    }
+    Game::Member &member = game->members.at(playerId);
+    member.voiceMuted = muted;
+    send(*game, instance_message::MuteVoice,
+         encode(MuteVoiceMessage{playerId, voiceMuted(muted, member.accountId)}));
+    logger().info("{} ({}) {} in {} by an administrator", member.name, playerId,
+                  muted ? "muted" : "let talk again", game->describe());
+    changed(*game);
+    return true;
+}
+
+std::size_t Games::accountVoiceChanged(long long accountId)
+{
+    std::size_t reached = 0;
+    for (auto &[id, game] : _games) {
+        if (game->state != Game::State::Running) {
+            continue;
+        }
+        bool any = false;
+        for (const auto &[playerId, member] : game->members) {
+            if (std::cmp_equal(member.accountId, accountId) && accountId > 0) {
+                send(*game, instance_message::MuteVoice,
+                     encode(MuteVoiceMessage{playerId, voiceMuted(member.voiceMuted, member.accountId)}));
+                any = true;
+                ++reached;
+            }
+        }
+        if (any) {
+            changed(*game);
+        }
+    }
+    return reached;
+}
+
 bool Games::end(std::uint32_t gameId)
 {
     Game *game = find(gameId);
@@ -312,9 +381,21 @@ std::vector<AdminGame> Games::adminGames() const
             .status = game->status,
             .statusAge = std::chrono::duration_cast<std::chrono::milliseconds>(now - game->statusAt),
             .stale = now - game->statusAt > _settings.statusTimeout,
+            .voice = _settings.voice.enabled,
         };
+        const auto wallNow = std::chrono::system_clock::now();
         for (const auto &[playerId, member] : game->members) {
-            shown.players.push_back({playerId, member.name});
+            std::optional<std::chrono::system_clock::time_point> until;
+            if (member.accountId != 0 && _voiceMutes != nullptr) {
+                if (const std::optional<VoiceMute> mute =
+                        _voiceMutes->find(static_cast<long long>(member.accountId), wallNow)) {
+                    until = mute->expiresAt;
+                }
+            }
+            shown.players.push_back({.id = playerId,
+                                     .name = member.name,
+                                     .voiceMuted = member.voiceMuted,
+                                     .voiceMutedUntil = until});
         }
         games.push_back(std::move(shown));
     }
@@ -466,8 +547,10 @@ void Games::presented(std::uint64_t connection, std::span<const std::byte> paylo
     instance.helloTimeout.cancel();
     game->connection = connection;
     send(*game, instance_message::Configure,
-         encode(ConfigureMessage{
-             .name = game->name, .maxPlayers = game->maxPlayers, .relayPort = _relay.loopbackPort()}));
+         encode(ConfigureMessage{.name = game->name,
+                                 .maxPlayers = game->maxPlayers,
+                                 .relayPort = _relay.loopbackPort(),
+                                 .voice = _settings.voice}));
 }
 
 void Games::ready(Game &game, std::span<const std::byte> payload)

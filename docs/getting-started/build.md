@@ -115,6 +115,15 @@ Without it, the server runs, and its panel says it is not built.
 cmake -S . -B build -DRTYPE_ADMIN_PANEL_DIR=$PWD/web/admin/dist
 ```
 
+The client shows the activity of the player in its Discord profile as the one of an application of Discord, given
+at the configure by its id (from the [developer portal](https://discord.com/developers/applications)): the official
+application of R-Type by default, `1565673565163102250`. Another one, or none with an empty id (unless the
+settings of the client give one, [Rich presence](../architecture/client-online.md#rich-presence)):
+
+```sh
+cmake -S . -B build -DRTYPE_DISCORD_APPLICATION_ID=<id of the application>
+```
+
 ## Troubleshooting
 
 ??? question "CMake reports a dependency path that no longer exists"

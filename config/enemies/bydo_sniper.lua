@@ -22,7 +22,7 @@ end
 return {
     id = "bydo_sniper",
     ship = "bydo_wasp",
-    health = 55,
+    health = 23,
     speed = 420,
     acceleration = 840,
     weapon = "charge_beam",

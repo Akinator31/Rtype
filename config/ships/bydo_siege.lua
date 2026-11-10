@@ -2,5 +2,5 @@
 return {
     id = "bydo_siege",
     model = "models/battlestar_galactica_ship.glb",
-    collider = { shape = "box", halfWidth = 105, halfHeight = 42 },
+    collider = { shape = "box", halfWidth = 84, halfHeight = 49 },
 }

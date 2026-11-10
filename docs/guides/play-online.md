@@ -49,6 +49,17 @@ Run a server and play the same game from several machines, or from several clien
    second client, on this machine or another, joins the same game: each player has a ship of its colour.
    Escape opens the pause menu, where **Leave the game** goes back to the list.
 
+7. **Talk.** In a game, the players hear each other through the game. Hold ++v++ (LT on a gamepad) to talk:
+   the others hear you while it is held. ++m++ (Y) mutes and unmutes you, ++n++ (View) cuts the voices of the
+   others, and your microphone with them. **Settings → Voice chat** chooses the mode (push-to-talk, voice
+   activity, off), the threshold of the voice activity over the level of your microphone, the microphone, the
+   volumes and these keys. A headset keeps the sound of the game out of the microphone. Without a microphone
+   you only listen; without an audio output, you have no voice ([Voice](../architecture/voice.md)).
+   In the HUD, the name of a player who talks lights up, and a microphone shows above its ship; an icon beside
+   each name says when it is muted, muted by you, or without a microphone. In the pause menu, **Player voices**
+   sets the volume of each player for you (Left, Right), and Enter mutes or unmutes it: the choice is kept for
+   its account, and found again in the next game.
+
 ## Result
 
 The players see each other's ships move. The server shows them in its logs:

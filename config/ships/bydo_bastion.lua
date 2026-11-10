@@ -1,6 +1,6 @@
--- A huge hull for a Bydo that holds its ground.
+-- The hull of a Bydo that holds its ground.
 return {
     id = "bydo_bastion",
     model = "models/battlestar_galactica_ship.glb",
-    collider = { shape = "box", halfWidth = 125, halfHeight = 50 },
+    collider = { shape = "box", halfWidth = 84, halfHeight = 49 },
 }

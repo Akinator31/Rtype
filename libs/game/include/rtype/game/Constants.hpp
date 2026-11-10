@@ -23,6 +23,9 @@ inline constexpr std::size_t MaxPlayers = 4;
 /// The owner of an entity that belongs to no player (a Bydo, its shots).
 inline constexpr std::uint8_t NoOwner = 0xFF;
 
+/// The ship of an entity drawn without one of the configuration (a ship of a player, a shot).
+inline constexpr std::uint8_t NoShip = 0xFF;
+
 /// Positions the protocol can encode, in game units: entities must stay strictly inside, so the game removes
 /// them well before (see LeavesArea).
 inline constexpr float PositionLimit = 4096.0f;

@@ -579,7 +579,7 @@ sequenceDiagram
     Note over G: add(session, keys): waits 10 s for its client
     C->>G: CONNECT (reliable, sent again until acknowledged)
     Note over G: onConnected(session, address)
-    G->>C: ACCEPTED (made by the game: slot, tick rate, tick)
+    G->>C: ACCEPTED (made by the game: slot, tick rate, tick, the voice)
     Note over C: onAccepted(payload): State::Connected
     C-->>G: game messages, at least one datagram per second
     G-->>C: game messages, at least one datagram per second

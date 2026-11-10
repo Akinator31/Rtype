@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Common/InstanceMessages.hpp"
 #include "rtype/database/Address.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/Address.hpp"
@@ -83,6 +84,9 @@ struct DiscordSettings {
     std::string clientId;
     /// Read from `client_secret_file`. Never logged.
     std::string clientSecret;
+    /// `social`: the players who sign in with Discord get their token, for the voice and the friends of the
+    /// Social SDK in their client (lobby protocol 6). Off by default: the master asks `identify` only.
+    bool social = false;
 };
 
 /// [admin]: the administrators the panel can neither demote nor ban.
@@ -90,6 +94,11 @@ struct AdminSettings {
     /// Each one an email, or `discord:<id>`; never a username, which anyone can take.
     std::vector<std::string> admins;
 };
+
+/// The rates `[voice] max_frames_per_second` takes: a voice is 50 frames per second, and twice that lets a
+/// late burst pass.
+inline constexpr std::uint8_t MinVoiceFramesPerSecond = 50;
+inline constexpr std::uint8_t MaxVoiceFramesPerSecond = 120;
 
 /// The settings file of the master, given with --settings (docs/guides/configure-a-server.md). Its [server]
 /// section holds what the command line also gives, and the command line wins over it; the other sections are
@@ -108,6 +117,8 @@ struct ServerSettings {
     std::optional<MailSettings> mail;
     std::optional<DiscordSettings> discord;
     AdminSettings admin;
+    /// [voice]: what the games do with the voice of the players, for every game.
+    VoiceRules voice;
 
     /// Whether the players can have accounts: [accounts] there and enabled.
     [[nodiscard]] bool accountsEnabled() const { return accounts && accounts->enabled; }

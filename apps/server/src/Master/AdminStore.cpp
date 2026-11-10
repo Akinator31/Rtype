@@ -208,4 +208,51 @@ std::vector<AddressBan> loadAddressBans(rtype::database::Database &database,
     return bans;
 }
 
+void saveVoiceMute(rtype::database::Database &database, const VoiceMute &mute)
+{
+    const long long createdAt = unixMilliseconds(mute.createdAt);
+    const long long expiresAt = unixMilliseconds(mute.expiresAt);
+    database.session()
+        << "INSERT INTO voice_mutes (account_id, created_at, expires_at, reason, actor) VALUES "
+           "(:account, :created, :expires, :reason, :actor) ON CONFLICT (account_id) DO UPDATE SET "
+           "created_at = excluded.created_at, expires_at = excluded.expires_at, "
+           "reason = excluded.reason, actor = excluded.actor",
+        soci::use(mute.accountId), soci::use(createdAt), soci::use(expiresAt), soci::use(mute.reason),
+        soci::use(mute.actor);
+}
+
+void deleteVoiceMute(rtype::database::Database &database, long long accountId)
+{
+    database.session() << "DELETE FROM voice_mutes WHERE account_id = :account", soci::use(accountId);
+}
+
+std::size_t purgeVoiceMutes(rtype::database::Database &database, std::chrono::system_clock::time_point now)
+{
+    const long long at = unixMilliseconds(now);
+    soci::statement statement =
+        (database.session().prepare << "DELETE FROM voice_mutes WHERE expires_at <= :now", soci::use(at));
+    statement.execute(true);
+    return static_cast<std::size_t>(statement.get_affected_rows());
+}
+
+std::vector<VoiceMute> loadVoiceMutes(rtype::database::Database &database,
+                                      std::chrono::system_clock::time_point now)
+{
+    purgeVoiceMutes(database, now);
+    const soci::rowset<soci::row> rows =
+        (database.session().prepare
+         << "SELECT account_id, created_at, expires_at, reason, actor FROM voice_mutes ORDER BY account_id");
+    std::vector<VoiceMute> mutes;
+    for (const soci::row &row : rows) {
+        mutes.push_back({
+            .accountId = row.get<long long>(0),
+            .createdAt = fromUnixMilliseconds(row.get<long long>(1)),
+            .expiresAt = fromUnixMilliseconds(row.get<long long>(2)),
+            .reason = row.get<std::string>(3),
+            .actor = row.get<std::string>(4),
+        });
+    }
+    return mutes;
+}
+
 } // namespace rtype::server

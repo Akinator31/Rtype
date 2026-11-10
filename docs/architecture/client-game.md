@@ -78,7 +78,7 @@ the input. When the game scene closes, the engine destroys its entities and the 
 | Scene | What it holds |
 |---|---|
 | `game` | The [scrolling sky](#the-sky), the world of the session, and the [HUD](#hud). Escape opens the pause menu. |
-| `pause` | Over the game, dimmed: **Resume**, or **Leave the game**. Offline, the game stops while it is open. |
+| `pause` | Over the game, a veil on its left, as the pages of settings: **Resume**, or **Leave the game**; online with other players, the voice of each ([Voice](voice.md#in-the-hud-and-the-pause-menu)). Offline, the game stops while it is open. |
 
 `GameScenes::play(session, onEnd)` starts a game with a session: the game scene replaces every scene. "Solo"
 plays a `LocalSession`, and goes back to the main menu when it ends; the lobby plays a `RemoteSession`, and
@@ -88,14 +88,14 @@ pause menu, or when its session is over (`isOver()`): game over, or the game los
 ## What it looks like
 
 Each entity has the size of its collider in the game. The snapshots carry the kind of an entity, not its
-size: a ship has the size of the [rules](game.md), the other kinds that of the configuration of the
-repository.
+size: a ship has the size of the [rules](game.md), a Bydo that of the collider of its ship (the snapshots
+carry its index, `EntityState::ship`), the other kinds that of the configuration of the repository.
 
 | Entity | Look |
 |---|---|
 | Ship | 168 × 98: the 3D model `spaceship_ezno.glb`, tinted with the colour of its player (blue, red, green, yellow for the slots 0 to 3) |
 | Shot | 68 × 18.8: the model of energy `projectiles/player/shot_basic.glb` (a charged shot: a 48 × 16 box in the colour of the player) |
-| Bydo (`BydoFlyer`) | 140 × 54: the 3D model `drop_ship_v2.glb`, facing left |
+| Bydo (`BydoFlyer`) | The size of the collider of its ship, and the model of its ship (`config/ships/`), facing left, when it is a model of the hangar (`ShipCatalog`, which gives its hull and trails); otherwise `drop_ship_v2.glb`. Every ship of `config/ships/` but the boss has the box of the ships of the players, 168 × 98 |
 | Bydo shot (`pulse`) | 68 × 22: the model of energy `projectiles/enemy/shot_spiral.glb`, facing left |
 | Bydo plasma orb (`BydoPlasmaShot`) | 44 × 44: the model of energy `projectiles/enemy/orb_plasma.glb` |
 | Any other kind | A grey square |
@@ -148,9 +148,9 @@ where its box would be, with the same size anywhere on the screen: what is drawn
   The Bydos are also turned by a half turn around their vertical axis, to face left.
 - **Size**: `ShipLook::hull` is the box around the hull of the model seen through this camera, flames and
   trails excluded, in model units, measured on the model in its `Move` pose. The model is scaled to make the
-  width of this box that of the collider, and moved to put its centre on the entity. The colliders have the
-  proportions of these hulls: `Rules::shipHalfWidth/Height` 84 × 49 for the players, `halfWidth = 70,
-  halfHeight = 27` in `config/ships/bydo_scout.lua`. A new model means measuring its hull again.
+  width of this box that of the collider, and moved to put its centre on the entity. Every ship but the
+  boss has the box of `Rules::shipHalfWidth/Height`, 84 × 49: the players, and the Bydos of `config/ships/`
+  (`halfWidth = 84, halfHeight = 49`), all as wide on the screen. A new model means measuring its hull again.
 - **Roll**: a ship rolls around its length while it climbs (its belly towards the camera, up to 40°) or
   dives (its top, up to 25°), at full vertical speed (`ShipAttitude`, from the vertical velocity of the snapshots). The
   roll eases towards its target every frame and adds to the tilt, around the same x axis; the hull stays
@@ -175,8 +175,12 @@ where its box would be, with the same size anywhere on the screen: what is drawn
   again only when its pose changes: ten Bydos cost one pose per frame. A ship recoiling has a pose of its
   own for 0.3 s.
 
-The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
-an entity flies.
+The ships of the players, the allies and the Bydos of an unknown ship have their models chosen by the client
+(`Assets.hpp`). A Bydo flies the model of its ship: the snapshots carry the index of the ship
+(`EntityState::ship`, its rank among the ids of `config/ships/` in alphabetical order, `ShipRegistry::getIndex()`),
+and the client, which reads the same configuration, gives each ship whose model is one of the hangar a
+`ShipLook` (`GameSessionSystem::setShipLook(ship, look, size)`, from `GameScenes`), before the looks of the
+kinds. Client and game must read the same `config/ships/`: another configuration gives other indexes.
 
 **The boss** (`EntityKind::BydoBoss`, the shogun) is a standing figure, not a ship: a `BossLook`
 (`Game/BossLooks.hpp`), without roll nor tilt. Its model is turned by the same half turn around x, then by
@@ -306,21 +310,27 @@ The HUD is the one of the Figma design (file `RrrH0ic4ttdyDoc3nRnWBr`, "Rangée 
 - a shadow along the top of the screen (black at 60 % fading out) and one along the bottom (fading in to 65 %),
   under the HUD and the toasts: `engine::Box` with a `bottom` colour, a vertical gradient;
 - bottom left, the local player: one picture per life of the start (`images/hud/life.png`, `life_lost.png`, as
-  on the death screen), lit for the lives left; its slot, `1P`; its score on seven digits, in large;
-- bottom right, the other players, one line each from the top in the order of their slots, `P2` then its
-  score; under them, online, the ping (`28 MS`) with four signal bars, lit under 25, 60 and 120 ms
+  on the death screen), lit for the lives left; its slot, `1P`, and online its name (`1P · KAZE`) and the icon
+  of its voice; its score on seven digits, in large;
+- bottom right, the other players, one line each from the top in the order of their slots: online, the icon of
+  its voice, then `P2`, its name and its score, its name turned white while it talks; offline, `P2` and its
+  score. Under them, online, the ping (`28 MS`) with four signal bars, lit under 25, 60 and 120 ms
   (`HudSystem::FourBars`…), one at least. Offline, there is no ping: nothing is shown;
 - top right, the events, which stay the toasts of the engine ([Events](#events)).
 
 `openHud()` creates its entities in the game scene, in the Interface layer under the death screen, and a `Hud`
 that lists them. The `HudSystem` writes them each frame from the players of the latest snapshot
-(`GameSessionSystem::players()`) and the ping of the session (`GameSession::ping()`: the round-trip time of the
-`network::ClientSession` online, none offline), and places them through their `Anchor`: the lines of the other
-players pile up from the ping, and their names follow the width of their score. Before the first snapshot, the
-local player has all its lives and a score of 0.
+(`GameSessionSystem::players()`), the ping of the session (`GameSession::ping()`: the round-trip time of the
+`network::ClientSession` online, none offline), the names of the players (`GameSession::playerNames()`, none
+offline) and its voice (`GameSession::voiceView()`, none offline), and places them through their `Anchor`: the
+lines of the other players pile up from the ping, and their parts follow the width of the one on their right.
+Before the first snapshot, the local player has all its lives and a score of 0.
 
-The design also has a record (`HI`), a Beam gauge and the names of the pilots: the game keeps no record, has no
-charged shot yet, and the HUD names the players by slot, as the events do.
+The voice in the HUD is the one of Série 16 of the design (`Voix en jeu`, node 210:1483): the icons, and the
+badge above the ship of a pilot who talks, are described in [Voice](voice.md#in-the-hud-and-the-pause-menu).
+
+The design also has a record (`HI`) and a Beam gauge: the game keeps no record and has no charged shot yet.
+The events name the players by slot.
 
 ### Events
 
@@ -536,7 +546,8 @@ added with a line in one of the tables and its name in `en.lang` and `fr.lang`.
   just lost goes out after the veil and the rest have faded in;
 - the HUD: the lives left of the local player lit, its slot and its score on seven digits, all its lives before
   the first snapshot; the scores of the other players, the first on top, a player gone leaving its line; the
-  ping with its signal bars when the session has one, nothing offline.
+  ping with its signal bars when the session has one, nothing offline; online, the names of the pilots and the
+  icons of their voice, and the badge above the ship of a pilot who talks (tag `[voice]`).
 
 ```sh
 ./build/bin/rtype_tests "[client]"
