@@ -12,12 +12,15 @@
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
+#include "rtype/game/Item/ItemDefinition.hpp"
+#include "rtype/game/Ship/ShipDefinition.hpp"
 #include "rtype/localization/Localization.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace rtype::client
 {
@@ -60,7 +63,7 @@ class RemoteSession;
 ///
 /// @code
 /// auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
-/// GameScenes games(engine, resources, audio, metrics, style, sessions, translations);
+/// GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships, config.ships);
 /// games.play(std::make_unique<LocalSession>()); // "Play" > "Solo"
 /// @endcode
 class GameScenes
@@ -72,6 +75,9 @@ class GameScenes
     GameSessionSystem &_sessions;
     localization::Localization &_translations;
     const ShipSelection &_ships;
+    /// The ships of the configuration, whose models the Bydos fly.
+    const std::vector<game::ShipDefinition> &_shipDefinitions;
+    const std::vector<game::ItemDefinition> &_itemDefinitions;
     GameRecorder _recorder;
     /// The game scene open, and the look of its death screen.
     std::optional<engine::SceneId> _scene;
@@ -151,7 +157,8 @@ public:
     GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                GameSessionSystem &sessions, localization::Localization &translations,
-               const ShipSelection &ships);
+               const ShipSelection &ships, const std::vector<game::ShipDefinition> &shipDefinitions,
+               const std::vector<game::ItemDefinition> &itemDefinitions);
 
     GameScenes(const GameScenes &) = delete;
     GameScenes &operator=(const GameScenes &) = delete;

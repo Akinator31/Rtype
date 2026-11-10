@@ -4,6 +4,7 @@
 #include "Config/TableReader.hpp"
 #include "Wave/MusicTimeline.hpp"
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
+#include "rtype/game/Item/ItemRegistry.hpp"
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Wave/WaveRegistry.hpp"
@@ -41,6 +42,8 @@ using DefinitionReader = Definition (*)(TableReader &);
 constexpr std::string_view PlayerFile = "player.lua";
 /// The file of the experience of the endless games, at the root of the directory, optional.
 constexpr std::string_view ProgressionFile = "progression.lua";
+/// The file of the levels the ships of the hangar need, at the root of the directory, optional.
+constexpr std::string_view HangarFile = "hangar.lua";
 
 /// The `.lua` files under `folder`, by path, so that every machine reads them in the same order.
 std::vector<std::filesystem::path> listScripts(const std::filesystem::path &folder,
@@ -161,8 +164,10 @@ struct ReadFiles {
     std::vector<FromFile<ShipDefinition>> ships;
     std::vector<FromFile<EnemyDefinition>> enemies;
     std::vector<FromFile<WaveDefinition>> waves;
+    std::vector<FromFile<ItemDefinition>> items;
     std::optional<FromFile<PlayerDefinition>> player;
     Progression progression;
+    std::vector<ShipUnlock> shipUnlocks;
 };
 
 /// The assets of the programs, next to the configuration: `assets/` beside `config/` once built or installed,
@@ -234,6 +239,18 @@ Progression readProgressionFile(const std::filesystem::path &directory, std::vec
     return readScript(directory / name, name, readProgression, errors).value_or(Progression{});
 }
 
+/// The file of the hangar, at the root of the directory: no ship needs a level without it.
+std::vector<ShipUnlock> readHangarFile(const std::filesystem::path &directory,
+                                       std::vector<std::string> &errors)
+{
+    const std::string name(HangarFile);
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(directory / name, error)) {
+        return {};
+    }
+    return readScript(directory / name, name, readShipUnlocks, errors).value_or(std::vector<ShipUnlock>{});
+}
+
 ReadFiles readFiles(const std::filesystem::path &directory, const std::filesystem::path &assets,
                     std::vector<std::string> &errors)
 {
@@ -245,11 +262,13 @@ ReadFiles readFiles(const std::filesystem::path &directory, const std::filesyste
     files.enemies = readFolder<EnemyDefinition>(directory, "enemies", readEnemyDefinition, errors);
     readBehaviors(directory, files.enemies, errors);
     files.waves = readFolder<WaveDefinition>(directory, "waves", readWaveDefinition, errors);
+    files.items = readFolder<ItemDefinition>(directory, "items", readItemDefinition, errors);
     if (errors.empty()) {
         analyseMusics(assets, files.waves, errors);
     }
     files.player = readPlayerFile(directory, errors);
     files.progression = readProgressionFile(directory, errors);
+    files.shipUnlocks = readHangarFile(directory, errors);
     return files;
 }
 
@@ -262,6 +281,7 @@ void checkDefinitions(const ReadFiles &files, std::vector<std::string> &errors)
     ShipRegistry ships;
     EnemyRegistry enemies;
     WaveRegistry waves;
+    ItemRegistry items;
     registerAll(
         files.projectiles, [&](const auto &definition) { projectiles.addDefinition(definition); }, errors);
     registerAll(files.weapons, [&](const auto &definition) { weapons.addDefinition(definition); }, errors);
@@ -269,6 +289,7 @@ void checkDefinitions(const ReadFiles &files, std::vector<std::string> &errors)
     registerAll(files.enemies, [&](const auto &definition) { enemies.addDefinition(definition); }, errors);
     registerAll(
         files.waves, [&](const auto &definition) { waves.addDefinition(definition, enemies); }, errors);
+    registerAll(files.items, [&](const auto &definition) { items.addDefinition(definition); }, errors);
 
     for (const auto &[file, weapon] : files.weapons) {
         checkReference(projectiles.hasDefinition(weapon.projectile), file, "projectile", "projectile",
@@ -277,6 +298,11 @@ void checkDefinitions(const ReadFiles &files, std::vector<std::string> &errors)
     for (const auto &[file, enemy] : files.enemies) {
         checkReference(ships.hasDefinition(enemy.ship), file, "ship", "ship", enemy.ship, errors);
         checkReference(weapons.hasDefinition(enemy.weapon), file, "weapon", "weapon", enemy.weapon, errors);
+    }
+    for (const auto &[file, wave] : files.waves) {
+        for (const WaveItem &item : wave.items) {
+            checkReference(items.hasDefinition(item.item), file, "items", "item", item.item, errors);
+        }
     }
     const auto &[file, player] = *files.player;
     checkReference(ships.hasDefinition(player.ship), file, "ship", "ship", player.ship, errors);
@@ -291,7 +317,9 @@ GameConfig takeConfig(ReadFiles &files)
             takeDefinitions(files.enemies),
             takeDefinitions(files.waves),
             std::move(files.player->definition),
-            files.progression};
+            files.progression,
+            std::move(files.shipUnlocks),
+            takeDefinitions(files.items)};
 }
 
 } // namespace

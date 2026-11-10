@@ -4,7 +4,7 @@ return {
     -- The id of a ship of config/ships/
     ship = "bydo_scout",
     -- Hit points, 1 to 255
-    health = 30,
+    health = 13,
     -- Top speed, in game units per second (default 300)
     speed = 650,
     -- Speed gained per second until the top speed (default 600)

@@ -7,6 +7,7 @@
 #include "rtype/physics/Component/Collider.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace rtype::game
@@ -30,6 +31,13 @@ EntityKind findProjectileKind(std::uint8_t owner, ProjectileCategory category)
         return EntityKind::PlayerShot;
     }
     return category == ProjectileCategory::Plasma ? EntityKind::BydoPlasmaShot : EntityKind::BydoShot;
+}
+
+/// The index the snapshots send for a ship: NoShip beyond what a byte holds.
+std::uint8_t findShipIndex(const ShipRegistry &ships, const std::string &ship)
+{
+    const std::size_t index = ships.getIndex(ship);
+    return index < NoShip ? static_cast<std::uint8_t>(index) : NoShip;
 }
 
 ecs::entity_t spawnVisible(ecs::Ecs &ecs, GameContext &context, EntityKind kind, std::uint8_t owner, float x,
@@ -78,6 +86,7 @@ ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string 
     const EntityKind kind = enemy.boss ? EntityKind::BydoBoss : EntityKind::BydoFlyer;
     const ecs::entity_t entity = spawnVisible(ecs, context, kind, NoOwner, x, y);
     ecs.addComponent<Enemy>(entity, enemyId);
+    ecs.addComponent<ShipIndex>(entity, findShipIndex(context.ships, enemy.ship));
     ecs.addComponent<Health>(entity, enemy.health);
     ecs.addComponent<Damage>(entity, enemy.collisionDamage);
     ecs.addComponent<physics::Velocity>(entity);
@@ -104,6 +113,22 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
     const physics::Vec3 half = halfSizeOf(definition.collider);
     ecs.addComponent<LeavesArea>(projectile, half.x, half.y);
     return projectile;
+}
+
+ecs::entity_t spawnItem(ecs::Ecs &ecs, GameContext &context, const std::string &itemId, float x, float y)
+{
+    const ItemDefinition &item = context.items.getDefinition(itemId);
+    const std::size_t index = context.items.getIndex(itemId);
+    const ecs::entity_t entity = spawnVisible(ecs, context, EntityKind::Item, NoOwner, x, y);
+    const auto lifetime =
+        static_cast<std::uint32_t>(std::lround(item.lifetime * static_cast<float>(TickRate)));
+    ecs.addComponent<Item>(entity, itemId, 0U, std::max<std::uint32_t>(1, lifetime));
+    ecs.addComponent<ItemIndex>(entity, index < NoShip ? static_cast<std::uint8_t>(index) : NoShip);
+    ecs.addComponent<physics::Velocity>(entity, -item.speed, 0.0f);
+    ecs.addComponent<physics::Collider>(entity, item.collider);
+    const physics::Vec3 half = halfSizeOf(item.collider);
+    ecs.addComponent<LeavesArea>(entity, half.x, half.y);
+    return entity;
 }
 
 void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const std::string &weaponId)

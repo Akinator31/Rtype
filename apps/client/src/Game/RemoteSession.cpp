@@ -86,10 +86,10 @@ RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &g
                              const lobby::GameJoinedMessage &joined, const game::GameConfig &config,
                              VoiceDevices *voiceDevices, std::string server, std::uint32_t playerId)
     : _socket(loop, game.isIpv6() ? network::Address::anyIpv6(0) : network::Address::anyIpv4(0)), _game(game),
-      _server(std::move(server)),
       _session(joined.sessionId, network::DatagramKey(joined.clientKey),
                network::DatagramKey(joined.serverKey),
-               [this](std::span<const std::byte> datagram) { _socket.send(_game, datagram); })
+               [this](std::span<const std::byte> datagram) { _socket.send(_game, datagram); }),
+      _server(std::move(server))
 {
     if (voiceDevices != nullptr) {
         _devices = voiceDevices;

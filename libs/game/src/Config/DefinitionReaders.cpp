@@ -1,7 +1,9 @@
 #include "Config/DefinitionReaders.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <format>
 #include <limits>
 
 namespace rtype::game
@@ -22,6 +24,8 @@ constexpr std::array<std::string_view, 4> CategoryNames{"bullet", "missile", "la
 constexpr std::array<std::string_view, 3> PlacementNames{"manual", "random", "music"};
 /// In the order of WaveDefinition::beats.
 constexpr std::array<std::string, 3> BeatNames{"bass", "mid", "high"};
+/// In the order of the values of ItemEffectType.
+constexpr std::array<std::string_view, 5> EffectNames{"heal", "extra_life", "damage", "rapid_fire", "shield"};
 /// In the order of ShapeReaders.
 constexpr std::array<std::string_view, 2> ShapeNames{"box", "sphere"};
 
@@ -79,6 +83,44 @@ WaveSpawn readWaveSpawn(TableReader table)
     spawn.y = table.readNumber("y", NumberRange::Any);
     table.checkAllFieldsRead();
     return spawn;
+}
+
+/// `{ item = "repair_kit", quantity = 2 }`, or with a `maxQuantity` for a number drawn at random.
+WaveItem readWaveItem(TableReader table)
+{
+    WaveItem item;
+    item.item = table.readString("item");
+    item.quantity = static_cast<std::uint16_t>(table.readInteger("quantity", 1, MaxU16, item.quantity));
+    item.maxQuantity = static_cast<std::uint16_t>(table.readInteger("maxQuantity", item.quantity, MaxU16, 0));
+    table.checkAllFieldsRead();
+    return item;
+}
+
+/// `{ type = "heal", amount = 30 }`, `{ type = "shield", duration = 5 }`,
+/// `{ type = "rapid_fire", factor = 2, duration = 8 }`: only the fields of its type.
+ItemEffect readItemEffect(TableReader table)
+{
+    ItemEffect effect;
+    effect.type = static_cast<ItemEffectType>(table.readChoice("type", EffectNames));
+    switch (effect.type) {
+    case ItemEffectType::Heal:
+    case ItemEffectType::Damage:
+        effect.amount = static_cast<std::uint8_t>(table.readInteger("amount", 1, MaxU8));
+        break;
+    case ItemEffectType::ExtraLife:
+        effect.amount = static_cast<std::uint8_t>(table.readInteger("amount", 1, MaxU8, 1));
+        break;
+    case ItemEffectType::RapidFire:
+        // Above 1: checked by the ItemRegistry
+        effect.factor = table.readNumber("factor", NumberRange::AboveZero);
+        effect.duration = table.readNumber("duration", NumberRange::AboveZero);
+        break;
+    case ItemEffectType::Shield:
+        effect.duration = table.readNumber("duration", NumberRange::AboveZero);
+        break;
+    }
+    table.checkAllFieldsRead();
+    return effect;
 }
 
 WaveArea readWaveArea(TableReader table)
@@ -216,6 +258,9 @@ WaveDefinition readWaveDefinition(TableReader &table)
     if (table.hasField("area")) {
         definition.area = readWaveArea(table.readTable("area"));
     }
+    for (TableReader &item : table.readList("items")) {
+        definition.items.push_back(readWaveItem(item));
+    }
     if (definition.placement == WavePlacement::Music) {
         readMusicWave(table, definition);
         table.checkAllFieldsRead();
@@ -227,6 +272,24 @@ WaveDefinition readWaveDefinition(TableReader &table)
         listed
             ? static_cast<std::uint16_t>(table.readInteger("quantity", 1, MaxU16, definition.spawns.size()))
             : static_cast<std::uint16_t>(table.readInteger("quantity", 1, MaxU16));
+    table.checkAllFieldsRead();
+    return definition;
+}
+
+ItemDefinition readItemDefinition(TableReader &table)
+{
+    ItemDefinition definition;
+    definition.id = table.readString("id");
+    definition.model = table.readString("model");
+    definition.collider = readCollider(table.readTable("collider"));
+    for (TableReader &effect : table.readList("effects")) {
+        definition.effects.push_back(readItemEffect(effect));
+    }
+    if (definition.effects.empty()) {
+        throw ConfigError("effects: expected at least one effect");
+    }
+    definition.lifetime = table.readNumber("lifetime", NumberRange::AboveZero, definition.lifetime);
+    definition.speed = table.readNumber("speed", NumberRange::ZeroOrMore, definition.speed);
     table.checkAllFieldsRead();
     return definition;
 }
@@ -252,6 +315,23 @@ Progression readProgression(TableReader &table)
         static_cast<std::uint32_t>(table.readInteger("streakCap", 100, MaxU16, progression.streakCap));
     table.checkAllFieldsRead();
     return progression;
+}
+
+std::vector<ShipUnlock> readShipUnlocks(TableReader &table)
+{
+    std::vector<ShipUnlock> unlocks;
+    for (TableReader &item : table.readList("ships")) {
+        ShipUnlock unlock;
+        unlock.ship = item.readString("ship");
+        unlock.level = static_cast<std::uint32_t>(item.readInteger("level", 1, MaxU32));
+        item.checkAllFieldsRead();
+        if (std::ranges::find(unlocks, unlock.ship, &ShipUnlock::ship) != unlocks.end()) {
+            throw ConfigError(std::format("ships: '{}' listed twice", unlock.ship));
+        }
+        unlocks.push_back(std::move(unlock));
+    }
+    table.checkAllFieldsRead();
+    return unlocks;
 }
 
 } // namespace rtype::game

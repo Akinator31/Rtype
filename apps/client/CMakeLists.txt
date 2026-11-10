@@ -57,6 +57,7 @@ add_library(r-type_client_core STATIC
     src/Game/ShipLooks.cpp
     src/Game/ShotPrediction.cpp
     src/Game/ShotLooks.cpp
+    src/Game/ItemLooks.cpp
     src/Loading/AssetPreload.cpp
     src/Loading/LoadingScene.cpp
     src/Loading/LoadingSystem.cpp
@@ -89,6 +90,7 @@ add_library(r-type_client_core STATIC
     src/Online/OnlineScenes.cpp
     src/Online/OnlineScreen.cpp
     src/Online/SessionTokens.cpp
+    src/Settings/AuraSettings.cpp
     src/Settings/ControlSettings.cpp
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
@@ -96,6 +98,7 @@ add_library(r-type_client_core STATIC
     src/Settings/VrSettings.cpp
     src/Quests/EventQuest.cpp
     src/Quests/Quests.cpp
+    src/Quests/QuestsMenu.cpp
     src/Quests/StatQuest.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp

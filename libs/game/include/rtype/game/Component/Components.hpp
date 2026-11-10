@@ -56,6 +56,10 @@ struct Armed {
     std::uint32_t ammo = 0;
     /// Ticks before the magazine is full again, 0 when it is not reloading.
     std::uint32_t reloadLeft = 0;
+    /// Ticks left of a faster fire (an item, ItemEffectType::RapidFire), 0 without: meanwhile the weapon
+    /// fires every `boostInterval` ticks instead of its fire interval.
+    std::uint32_t boostTicks = 0;
+    std::uint32_t boostInterval = 0;
 };
 
 /// Hit points left.
@@ -66,6 +70,12 @@ struct Health {
 /// The ship of a player, controlled by its input.
 struct PlayerShip {
     std::uint8_t slot = 0;
+};
+
+/// The ship of the configuration the entity flies, sent to the clients so that they draw its model: its index
+/// in the ShipRegistry (EntityState::ship).
+struct ShipIndex {
+    std::uint8_t value = NoShip;
 };
 
 /// A Bydo, made from its EnemyDefinition (spawnEnemy()).
@@ -113,6 +123,23 @@ struct Damage {
 /// Cannot be hit for some ticks: a ship that just appeared.
 struct Invulnerable {
     std::uint32_t ticks = 0;
+};
+
+/// An item lying in the game area, made from its ItemDefinition (spawnItem()): the ships of the players pick
+/// it up (ItemSystem).
+struct Item {
+    /// Id of the ItemDefinition.
+    std::string id;
+    /// Ticks since it appeared.
+    std::uint32_t age = 0;
+    /// Ticks after which it vanishes, if nobody picked it up.
+    std::uint32_t lifetime = 0;
+};
+
+/// The index of the ItemDefinition of an item in the ItemRegistry, sent to the clients so that they draw its
+/// model (EntityState::ship).
+struct ItemIndex {
+    std::uint8_t value = NoShip;
 };
 
 /// An ally that comes to the rescue against the final boss (RescueSystem): flown and fired by the rescue,

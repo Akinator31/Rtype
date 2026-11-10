@@ -16,6 +16,7 @@ const game::Rules DefaultRules{};
 
 /// Drawn above the background, the shots under the ships.
 constexpr int ShotOrder = 10;
+constexpr int ItemOrder = 15;
 constexpr int ShipOrder = 20;
 
 /// How a kind of entity is drawn. The snapshots do not carry the sizes of the shots and of the Bydos: those
@@ -31,7 +32,7 @@ struct KindLook {
     int order;
 };
 
-const std::array<KindLook, 8> KindLooks{{
+const std::array<KindLook, 9> KindLooks{{
     {game::EntityKind::PlayerShip,
      DefaultRules.shipHalfWidth * 2.0f,
      DefaultRules.shipHalfHeight * 2.0f,
@@ -47,10 +48,18 @@ const std::array<KindLook, 8> KindLooks{{
      false,
      {200, 210, 225, 255},
      ShipOrder},
-    {game::EntityKind::BydoFlyer, 140.0f, 54.0f, false, {171, 71, 188, 255}, ShipOrder},
+    // A Bydo of an unknown ship: the size of a ship of a player, as those of config/ships/
+    {game::EntityKind::BydoFlyer,
+     DefaultRules.shipHalfWidth * 2.0f,
+     DefaultRules.shipHalfHeight * 2.0f,
+     false,
+     {171, 71, 188, 255},
+     ShipOrder},
     {game::EntityKind::BydoBoss, 160.0f, 316.0f, false, {171, 71, 188, 255}, ShipOrder},
     {game::EntityKind::BydoShot, 68.0f, 22.0f, false, {255, 112, 67, 255}, ShotOrder},
     {game::EntityKind::BydoPlasmaShot, 44.0f, 44.0f, false, {236, 64, 122, 255}, ShotOrder},
+    // An item without a model: a golden box
+    {game::EntityKind::Item, 56.0f, 56.0f, false, {255, 213, 79, 255}, ItemOrder},
 }};
 
 /// The other kinds come with the gameplay: a grey box until they have a look.

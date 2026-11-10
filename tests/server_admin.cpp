@@ -150,7 +150,7 @@ Address ip(const std::string &text)
 AdminPlayer adminPlayer(std::uint32_t id, const std::string &name, const std::string &address,
                         std::optional<std::uint32_t> gameId = std::nullopt)
 {
-    return {id, name, ip(address), gameId, Clock::now()};
+    return {id, name, ip(address), gameId, Clock::now(), std::nullopt};
 }
 
 AdminGame adminGame(std::uint32_t id, const std::string &name, std::vector<AdminGamePlayer> players)
@@ -246,7 +246,7 @@ TEST_CASE("A subscriber gets a snapshot of the server, then its events in order"
 {
     Fixture fixture(rtype::database::Engine::Sqlite, "admin_events");
     fixture.lobby.players = {adminPlayer(1, "Alice", "203.0.113.9", 7)};
-    fixture.games.games = {adminGame(7, "Bydo hunters", {{1, "Alice"}})};
+    fixture.games.games = {adminGame(7, "Bydo hunters", {{1, "Alice", false, std::nullopt}})};
 
     std::vector<AdminEvent> events;
     const std::uint64_t subscription =
@@ -267,7 +267,7 @@ TEST_CASE("A subscriber gets a snapshot of the server, then its events in order"
     fixture.lobby.players.push_back(adminPlayer(2, "Bob", "198.51.100.4"));
     fixture.administration->playerJoined(2);
     fixture.lobby.players[1].gameId = 7;
-    fixture.games.games[0].players.push_back({2, "Bob"});
+    fixture.games.games[0].players.push_back({2, "Bob", false, std::nullopt});
     fixture.administration->playerChanged(2);
     fixture.administration->gameChanged(7);
     fixture.games.games.push_back(adminGame(8, "Solo", {}));
@@ -302,8 +302,9 @@ TEST_CASE("Each action goes through the games and the lobby, and is recorded", "
     fixture.lobby.players = {adminPlayer(1, "Alice", "203.0.113.9", 7),
                              adminPlayer(2, "Bob", "198.51.100.4", 7),
                              adminPlayer(3, "Carol", "198.51.100.4"), adminPlayer(4, "Dave", "192.0.2.1")};
-    fixture.games.games = {adminGame(7, "Bydo hunters", {{1, "Alice"}, {2, "Bob"}}),
-                           adminGame(8, "Solo", {})};
+    fixture.games.games = {
+        adminGame(7, "Bydo hunters", {{1, "Alice", false, std::nullopt}, {2, "Bob", false, std::nullopt}}),
+        adminGame(8, "Solo", {})};
     Administration &administration = *fixture.administration;
 
     // Removed: from its game, then from the lobby with KICKED
@@ -503,7 +504,7 @@ TEST_CASE("A pilot muted from the administration is muted in its game, and so is
     AdminPlayer alice = adminPlayer(1, "Alice", "203.0.113.9", 7);
     alice.accountId = 12;
     fixture.lobby.players = {alice, adminPlayer(2, "Bob", "198.51.100.4")};
-    fixture.games.games = {adminGame(7, "Bydo hunters", {{1, "Alice"}})};
+    fixture.games.games = {adminGame(7, "Bydo hunters", {{1, "Alice", false, std::nullopt}})};
     Administration &administration = *fixture.administration;
 
     CHECK(administration.muteVoice(1, true, "insults", "local"));

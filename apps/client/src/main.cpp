@@ -141,6 +141,7 @@ void run(const std::vector<std::string_view> &arguments)
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
+    rtype::client::AuraColors auraColors;
     // The one client of the Discord Social SDK, polled by the game loop, and the activity of the player shown
     // in its Discord profile
     rtype::discord::Session discordSession;
@@ -148,8 +149,8 @@ void run(const std::vector<std::string_view> &arguments)
         discordSession, rtype::client::readDiscordApplication(engine.getSettings()));
     rtype::client::PresenceTracker presence(discordPresence, translations,
                                             rtype::client::readDiscordActivity(engine.getSettings()));
-    const rtype::client::SettingsTargets settingsTargets{translations, audio,      renderer, window,
-                                                         voice,        microphone, presence};
+    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer,   window,
+                                                         auraColors,   voice, microphone, presence};
     // The choices of the player at the last run
     rtype::client::applySavedSettings(engine, settingsTargets);
 
@@ -173,6 +174,7 @@ void run(const std::vector<std::string_view> &arguments)
     const rtype::client::ClientSystems systems =
         rtype::client::registerClientSystems(engine, input, audio, metrics, style);
     rtype::client::GameSessionSystem &sessions = systems.sessions;
+    sessions.setAuraColors(&auraColors);
     StopSessions stopSessions{sessions};
     rtype::client::SceneAssetLoader sceneAssets(resources, audio);
     UnloadSceneAssets unloadSceneAssets{engine};
@@ -392,10 +394,13 @@ void run(const std::vector<std::string_view> &arguments)
 
     assetsLoaded = true;
     // The scenes of the game are built from the loaded assets, which they find in the cache
-    // The ship equipped at the last run
+    // The ships the level of the last account opens, and the ship equipped at the last run
     rtype::client::ShipSelection ships;
+    rtype::client::readRequiredLevels(ships, config.shipUnlocks);
+    rtype::client::readPlayerLevel(ships, engine.getSettings());
     rtype::client::readEquippedShip(ships, engine.getSettings());
-    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
+    rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships,
+                                    config.ships, config.items);
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord,
                                        discordConnection, ships,
                                        rtype::render::userDataDirectory() / "pictures", config, voice);

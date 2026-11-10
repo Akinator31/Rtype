@@ -11,6 +11,7 @@ add_executable(rtype_tests
     action_map.cpp
     async_resources.cpp
     audio.cpp
+    aura_settings.cpp
     beat.cpp
     client_game.cpp
     client_input_clock.cpp
@@ -43,6 +44,7 @@ add_executable(rtype_tests
     font_characters.cpp
     framing.cpp
     game_config.cpp
+    game_items.cpp
     game_messages.cpp
     game_rescue.cpp
     game_simulation.cpp

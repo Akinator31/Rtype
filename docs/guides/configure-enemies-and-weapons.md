@@ -22,9 +22,11 @@ config/
   weapons/       how it fires, grouped by bullet/, missile/, laser/ and plasma/
   ships/         what a ship looks and sounds like, whoever flies it
   enemies/       a kind of Bydo: its ship, its health, its speed, its weapon
-  waves/         a group of enemies that appear one after the other
+  waves/         a group of enemies that appear one after the other, and the items they bring
+  items/         what the ships of the players pick up: its model, its hitbox, its effects
   player.lua     what every player starts with: its ship, its weapon, its health
   progression.lua  the experience the players earn online, optional
+  hangar.lua     the level of the account each ship of the hangar needs, optional
 ```
 
 - **One file per definition.** The file returns the table of one projectile, one weapon... Its name is free
@@ -198,6 +200,8 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `beats` | `{ bass = {...}, mid = {...}, high = {...} }` | | Music only, *required*: what comes at the beats of each band, each band optional (see below) |
 | `lead` | number, 0 or more | `1.5` | Music only: seconds an enemy needs to cross the screen. It appears this long before its beat, so that it is in sight on it |
 
+| `items` | list of `{ item = "...", quantity = ..., maxQuantity = ... }` | none | The items that appear during the wave, whatever its placement (see [Items](#items-configitems)) |
+
 A manual wave sets no `enemy` and a random wave no `spawns`: a wave does not mix the modes.
 
 #### Music waves
@@ -240,6 +244,61 @@ per level, and the final boss in `wave6/`: the shogun (`config/enemies/bydo_shog
 phases. The loader also accepts Lua files elsewhere under `config/waves/`.
 A difficulty without a wave is skipped, and the game is won once the last wave is over.
 
+### Items (`config/items/`)
+
+An item appears at a random place of the screen and drifts to the left; the ship of a player that touches it
+picks it up and gets its **effects**, in order. The behaviors are written in C++
+(`libs/game/src/Item/ItemEffects.cpp`): a file only chooses them and sets their numbers.
+
+| Field | Type | Default | What it is |
+|---|---|---|---|
+| `id` | string | *required* | Unique among the items; what the waves name |
+| `model` | string | *required* | The 3D model the client draws, a path in its assets (`"models/items/pu_immunity.glb"`), facing the camera, fitted to the hitbox. Its animation `Idle`, if any, loops while the item lies in the game; its animation `Collect`, if any, plays once where it is picked up (a golden flash otherwise) |
+| `collider` | table | *required* | Its hitbox, like that of a projectile: `{ shape = "sphere", radius = 28 }` or `{ shape = "box", halfWidth = 22, halfHeight = 32 }` |
+| `effects` | list of tables | *required*, at least one | What it does, below |
+| `lifetime` | number above 0 | `10` | Seconds before it vanishes, if nobody picks it up |
+| `speed` | number, 0 or more | `60` | Units per second it drifts to the left at |
+
+Each effect is a table with a `type` and only the fields of its type:
+
+| `type` | Fields | What it does |
+|---|---|---|
+| `"heal"` | `amount`, 1 to 255, *required* | Gives back that many hit points, up to the `health` of the player |
+| `"extra_life"` | `amount`, 1 to 255, default `1` | Gives that many lives more |
+| `"damage"` | `amount`, 1 to 255, *required* | Takes that many hit points: a trap. A ship left with none is lost, as when it is shot; a ship that cannot be hit takes nothing |
+| `"rapid_fire"` | `factor` above 1, `duration` in seconds, both *required* | The weapon fires `factor` times faster (its `fireInterval` divided, at least 1 tick) for `duration` seconds |
+| `"shield"` | `duration` in seconds, *required* | The ship cannot be hit for `duration` seconds; it blinks |
+
+```lua
+-- config/items/shield.lua
+return {
+    id = "shield",
+    model = "models/items/pu_immunity.glb",
+    collider = { shape = "sphere", radius = 30 },
+    effects = { { type = "shield", duration = 6 } },
+}
+```
+
+A wave makes items appear with its `items` field: `quantity` of each, or, with a `maxQuantity` above it, a
+number drawn at random from `quantity` to `maxQuantity` each time the wave is played. Each one appears at a
+random tick while the enemies of the wave come, at a random place of the screen (right of x = 640, 120 units
+from the edges), popping up in half a second, during which it cannot be picked up. Those still to come when the
+wave ends appear then.
+
+```lua
+items = {
+    { item = "repair_kit", quantity = 1, maxQuantity = 3 },
+    { item = "bydo_mine", quantity = 2 },
+},
+```
+
+The items of the repository fly the orbs of `apps/client/assets/models/items/` (`pu_heal.glb`,
+`pu_extra_life.glb`, `pu_damage.glb`, `pu_fire_rate.glb`, `pu_immunity.glb`), each with its `Idle` and
+`Collect` animations.
+
+Online, the client predicts the shots of its ship from the `fireInterval` of its weapon: during a rapid fire,
+its predicted shots are corrected by the game, which fires them faster.
+
 ### The players (`config/player.lua`)
 
 One file, at the root of `config/`, **required**: without it, the configuration is not valid.
@@ -262,6 +321,30 @@ alive as the wave ends; its **streak** counts the waves it cleared in a row.
 | `xpPerWave` | whole number, 0 or more | `100` | Experience for a wave cleared, times the multiplier of the streak |
 | `streakBonus` | whole number from 0 to 65535 | `25` | Percent added to the multiplier for each wave of the streak after the first: `25` gives x1, x1.25, x1.5... It counts for the Bydos shot down too |
 | `streakCap` | whole number from 100 to 65535 | `300` | Highest multiplier, in percent |
+
+### The ships of the hangar (`config/hangar.lua`)
+
+One file, at the root of `config/`, optional: without it, every ship of the hangar is open. A ship needs a
+**level** of the account before the player can equip it; a locked one can still be looked at, and its button
+says the level it needs. The level is that of the account signed in, or, offline and as a guest, of the last
+account signed in on this machine (`account.level` in the [settings](../architecture/settings.md)). A level
+up that opens a ship shows a toast. The ships of the hangar are those of the client, named by their code:
+only the client uses this file.
+
+```lua
+return {
+    ships = {
+        { ship = "VX-01", level = 1 },
+        { ship = "VX-02", level = 3 },
+    },
+}
+```
+
+| Field | Type | Default | What it is |
+|---|---|---|---|
+| `ships` | list of tables | empty | The ships that need a level; a ship of the hangar left out is open from level 1 |
+| `ships[i].ship` | string | *required* | The code of a ship of the hangar, such as `VX-03`, listed once; an unknown code is logged by the client |
+| `ships[i].level` | whole number, 1 or more | *required* | The level of the account from which the ship can be equipped |
 
 ## Computing values
 

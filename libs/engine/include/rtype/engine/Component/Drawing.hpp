@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/render/Aura.hpp"
 #include "rtype/render/Energy.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
@@ -155,6 +156,9 @@ struct Model {
     /// Set for a model of energy (a shot, a beam): it glows over what is behind it instead of being lit by
     /// the light (render::Renderer::drawEnergyModel()).
     std::optional<render::Energy> energy;
+    /// Set for a light of one colour cast around the model, along its silhouette, after it is drawn
+    /// (render::Renderer::drawAura()): the side of a ship. Ignored for a model of energy.
+    std::optional<render::Aura> aura;
 };
 
 /// The camera that the 3D models are seen through. The first visible entity with a Camera is used; without

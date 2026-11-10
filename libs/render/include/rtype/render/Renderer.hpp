@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/render/Aura.hpp"
 #include "rtype/render/Board.hpp"
 #include "rtype/render/ColorFilter.hpp"
 #include "rtype/render/Energy.hpp"
@@ -329,6 +330,15 @@ public:
     void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
                          Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
                          float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
+    /// Draws the aura of a 3D model placed as by drawModel(): a light of its colour on a shell a little
+    /// larger than the model, bright along its silhouette, added over the model and what is behind it. Draw
+    /// it after the model, in its pose. Its light also spreads around it when drawGlow() is called, as much
+    /// as its bloom. The other parameters are those of drawModel(), on a board too (beginBoard()): laid on it
+    /// with its model, and its glow made for the eye.
+    /// @throws std::logic_error if no frame nor board is started.
+    void drawAura(ModelId model, const Camera &camera, const Aura &aura, Vector3 position,
+                  Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
+                  float spinAngle = 0.0f, const std::vector<int> &hiddenMeshes = {});
     /// Draws a 3D model in an eye (beginEye()), seen by the eye and lit by the light: the drawModel() of a
     /// frame, without its camera. It does not glow: the glow belongs to the frames.
     /// @throws std::logic_error if no eye is started.

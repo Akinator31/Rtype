@@ -315,11 +315,11 @@ decodeEntitiesDestroyed(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceStatusMessage> decodeVoiceStatus(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceStatusesMessage> decodeVoiceStatuses(std::span<const std::byte> payload);
 
-/// Most entities in one part of a snapshot with this many players: 69 with four players.
+/// Most entities in one part of a snapshot with this many players: 61 with four players.
 [[nodiscard]] std::size_t maxEntitiesPerPart(std::size_t playerCount);
 
 /// Splits a snapshot in the parts that fit in datagrams, each with the tick and the players, for one client.
-/// A snapshot without entities is one part. Beyond MaxSnapshotParts full parts (1104 entities with four
+/// A snapshot without entities is one part. Beyond MaxSnapshotParts full parts (976 entities with four
 /// players), the last entities are left out: the rules must never have that many.
 /// @param lastInput The tick of the last input of this client that the game applied, 0 if none.
 /// @param inputLead How early the inputs of this client arrive (SnapshotPart::inputLead).

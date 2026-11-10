@@ -18,7 +18,10 @@
 #include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Hitbox.hpp"
+#include "rtype/game/Item/ItemRegistry.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/log/Logger.hpp"
 
@@ -27,6 +30,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <format>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -252,6 +256,10 @@ render::Energy shine(render::Energy energy, render::TextureId light, render::Rec
     return energy;
 }
 
+/// The flash of an item picked up.
+constexpr float ItemPickupScale = 24.0f;
+constexpr render::Color ItemPickupTint{255, 213, 79, 255};
+
 /// The impact played by the model at a path, its animation played once.
 ImpactLook loadImpactLook(render::ResourceManager &resources, const char *path, float scale,
                           render::Color tint, const render::Energy &energy)
@@ -284,6 +292,9 @@ void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resour
     sessions.setImpactLook(game::EntityKind::PlayerShip,
                            loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, ShipExplosionScale,
                                           ExplosionTint, explosion));
+    // An item picked up whose model has no Collect animation: a golden flash where it was
+    sessions.setImpactLook(game::EntityKind::Item, loadImpactLook(resources, RTYPE_MODEL_IMPACT_BURST,
+                                                                  ItemPickupScale, ItemPickupTint, energy));
 }
 
 /// Gives the ships of the formation of the rescue the cut the blade of the shogun leaves on them, and its
@@ -328,6 +339,87 @@ void setCollisionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
     for (const game::EntityKind kind :
          {game::EntityKind::PlayerShot, game::EntityKind::BydoShot, game::EntityKind::BydoPlasmaShot}) {
         sessions.setDestructionSound(kind, {collision, CollisionVolume});
+    }
+}
+
+/// The ship of the hangar with this model, if any.
+const ShipEntry *findCatalogEntry(const std::string &model)
+{
+    const auto &catalog = getShipCatalog();
+    const auto found = std::ranges::find(catalog, std::string_view(model), [](const ShipEntry &entry) {
+        return std::string_view(entry.modelPath);
+    });
+    return found != catalog.end() ? &*found : nullptr;
+}
+
+/// Gives each ship of the configuration that flies a model of the hangar its look, facing left, at the size
+/// of its collider: each Bydo is drawn with the model of its ship (game::EntityState::ship), whose index is
+/// the one of the ShipRegistry of the game.
+void setConfiguredShipLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                            const std::vector<game::ShipDefinition> &definitions)
+{
+    game::ShipRegistry ships;
+    for (const game::ShipDefinition &definition : definitions) {
+        ships.addDefinition(definition);
+    }
+    const std::size_t count = std::min<std::size_t>(ships.getDefinitionCount(), game::NoShip);
+    for (std::size_t index = 0; index < count; ++index) {
+        const game::ShipDefinition &ship = ships.getDefinitionAt(index);
+        const ShipEntry *entry = findCatalogEntry(ship.model);
+        if (entry == nullptr) {
+            continue;
+        }
+        const physics::Vec3 half = game::halfSizeOf(ship.collider);
+        sessions.setShipLook(
+            static_cast<std::uint8_t>(index),
+            {loadShipModel(resources, entry->modelPath), entry->hull, true, entry->trailMeshes},
+            {half.x * 2.0f, half.y * 2.0f});
+    }
+}
+
+/// The animations of the models of the items, by name: looped while an item lies in the game, and played once
+/// where it is picked up.
+constexpr const char *ItemIdleAnimation = "Idle";
+constexpr const char *ItemCollectAnimation = "Collect";
+
+/// An animation of the model of an item, if it has one by this name.
+std::optional<ItemAnimation> findItemAnimation(render::ResourceManager &resources, render::ModelId model,
+                                               const char *name)
+{
+    try {
+        const int animation = resources.getModelAnimation(model, name);
+        return ItemAnimation{animation, resources.getModelAnimationDuration(model, animation)};
+    } catch (const std::out_of_range &) {
+        return std::nullopt;
+    }
+}
+
+/// Gives each item of the configuration its model, the asset its file names, at the size of its collider:
+/// each item is drawn with the model of its index (game::EntityState::ship), the one of the ItemRegistry of
+/// the game. An item whose model cannot be loaded is drawn as a box.
+void setConfiguredItemLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                            const std::vector<game::ItemDefinition> &definitions)
+{
+    game::ItemRegistry items;
+    for (const game::ItemDefinition &definition : definitions) {
+        items.addDefinition(definition);
+    }
+    const std::size_t count = std::min<std::size_t>(items.getDefinitionCount(), game::NoShip);
+    for (std::size_t index = 0; index < count; ++index) {
+        const game::ItemDefinition &item = items.getDefinitionAt(index);
+        try {
+            const render::ModelId model = resources.loadModel(item.model);
+            const physics::Vec3 half = game::halfSizeOf(item.collider);
+            sessions.setItemLook(static_cast<std::uint8_t>(index),
+                                 {model,
+                                  resources.getModelBounds(model),
+                                  {half.x * 2.0f, half.y * 2.0f},
+                                  findItemAnimation(resources, model, ItemIdleAnimation),
+                                  findItemAnimation(resources, model, ItemCollectAnimation)});
+        } catch (const std::runtime_error &error) {
+            log::Logger("game").warning("The model of the item '{}' cannot be loaded: {}", item.id,
+                                        error.what());
+        }
     }
 }
 
@@ -496,9 +588,11 @@ bool isAssetPath(const std::string &path)
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations,
-                       const ShipSelection &ships)
+                       const ShipSelection &ships, const std::vector<game::ShipDefinition> &shipDefinitions,
+                       const std::vector<game::ItemDefinition> &itemDefinitions)
     : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
-      _translations(translations), _ships(ships), _recorder(engine)
+      _translations(translations), _ships(ships), _shipDefinitions(shipDefinitions),
+      _itemDefinitions(itemDefinitions), _recorder(engine)
 {
     sessions.setKillHandler([this](const Kill &kill) {
         recordKill(kill);
@@ -945,6 +1039,8 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     configureGameLooks(_sessions, resources, audio, getShipCatalog()[_ships.equipped]);
+    setConfiguredShipLooks(_sessions, resources, _shipDefinitions);
+    setConfiguredItemLooks(_sessions, resources, _itemDefinitions);
     _scene = scene;
     _prompt.reset();
     _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),

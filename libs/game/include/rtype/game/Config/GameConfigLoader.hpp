@@ -22,11 +22,11 @@ struct LoadedGameConfig {
 
 /// Reads the configuration of the game from `directory` (ADR 0018,
 /// docs/guides/configure-enemies-and-weapons.md): every `.lua` file under its folders projectiles/, weapons/,
-/// ships/, enemies/ and waves/, sub-folders included, in alphabetical order, and the file player.lua at its
-/// root (required). Each file runs in a sandboxed state of its own and returns the table of one definition.
-/// The tables are checked (types, required fields, ranges, unknown fields); once every file is read, the
-/// definitions are checked as their registries do, then the ids they name: a weapon its projectile, an enemy
-/// its ship and its weapon, a wave its enemies, the player its ship and its weapon.
+/// ships/, enemies/, waves/ and items/, sub-folders included, in alphabetical order, and the file player.lua
+/// at its root (required). Each file runs in a sandboxed state of its own and returns the table of one
+/// definition. The tables are checked (types, required fields, ranges, unknown fields); once every file is
+/// read, the definitions are checked as their registries do, then the ids they name: a weapon its projectile,
+/// an enemy its ship and its weapon, a wave its enemies and its items, the player its ship and its weapon.
 ///
 /// The music of a wave that follows it (placement "music") is read from `assets`, at the path `music` of the
 /// wave: the loader analyses it to find when the enemies come.

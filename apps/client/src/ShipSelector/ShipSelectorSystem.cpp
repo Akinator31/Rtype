@@ -105,7 +105,7 @@ void ShipSelectorSystem::placeShips(const ShipCarousel &carousel)
         model.position.x = getShipOffset(index, slide) * shipSpacing;
         model.scale = catalog[index].modelScale * mix(sideScale, 1.0f, weight);
         model.spinAngle = carousel.yaws[index];
-        const render::Color base = catalog[index].locked ? lockedTint : render::colors::White;
+        const render::Color base = carousel.selection->isLocked(index) ? lockedTint : render::colors::White;
         model.tint = shade(base, mix(sideBrightness, 1.0f, weight));
     }
 }

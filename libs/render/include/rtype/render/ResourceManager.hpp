@@ -136,6 +136,10 @@ public:
     /// @throws std::out_of_range if the model has no such animation, or if the handle does not come from this
     /// manager.
     [[nodiscard]] float getModelAnimationDuration(ModelId model, int animation) const;
+    /// Returns the box around the meshes of a loaded model, in model units, in its rest pose: what fits a
+    /// model of any size to the size it is drawn at.
+    /// @throws std::out_of_range if the handle does not come from this manager.
+    [[nodiscard]] Box3 getModelBounds(ModelId model) const;
     /// Returns the meshes of a loaded model, by their index: to find the index of a part by its name, to
     /// hide it or to draw it alone, and where it is.
     /// @throws std::out_of_range if the handle does not come from this manager.

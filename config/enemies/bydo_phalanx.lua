@@ -18,7 +18,7 @@ end
 return {
     id = "bydo_phalanx",
     ship = "bydo_bastion",
-    health = 220,
+    health = 92,
     speed = 110,
     acceleration = 220,
     weapon = "trail_pod",

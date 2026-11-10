@@ -9,9 +9,13 @@
 #
 # The panel is built by Node, the server by CMake, then both go into a small runtime, run as a user that is not
 # root. The downloads of CPM and the build folder are kept in cache mounts: a change of the code rebuilds what
-# it changed only. The CI publishes it for linux/amd64 and linux/arm64 (.github/workflows/docker.yml).
+# it changed only. The build folder is one per BUILD_CACHE, the branch on the CI: the copied sources keep the
+# time of their checkout, so a folder built since from the sources of another branch would look up to date to
+# Ninja, and the image would mix the code of both. The CI publishes it for linux/amd64 and linux/arm64
+# (.github/workflows/docker.yml).
 
 ARG DEBIAN=trixie
+ARG BUILD_CACHE=default
 
 # --- The panel (web/admin): its lock file, then its sources. HTML and JavaScript, the same for every platform:
 # built on the one of the builder, never under QEMU ---
@@ -27,6 +31,7 @@ RUN npm run build
 FROM debian:${DEBIAN} AS build
 # The build folder is one per architecture: an image for linux/amd64 and linux/arm64 builds both
 ARG TARGETARCH
+ARG BUILD_CACHE
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates cmake g++ git ninja-build patch python3 libpq-dev libssl-dev \
@@ -37,7 +42,7 @@ COPY . .
 COPY --from=panel /src/web/admin/dist web/admin/dist
 ENV CPM_SOURCE_CACHE=/cache/cpm
 RUN --mount=type=cache,target=/cache/cpm,sharing=locked \
-    --mount=type=cache,id=rtype-build-${TARGETARCH},target=/src/build,sharing=locked \
+    --mount=type=cache,id=rtype-build-${BUILD_CACHE}-${TARGETARCH},target=/src/build,sharing=locked \
     cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRTYPE_BUILD_TESTS=OFF \
         -DRTYPE_WITH_POSTGRESQL=ON -DRTYPE_ADMIN_PANEL_DIR=/src/web/admin/dist \
     && cmake --build build --target r-type_server \
@@ -48,8 +53,9 @@ RUN --mount=type=cache,target=/cache/cpm,sharing=locked \
 # (fake_services.cpp) ---
 FROM build AS players
 ARG TARGETARCH
+ARG BUILD_CACHE
 RUN --mount=type=cache,target=/cache/cpm,sharing=locked \
-    --mount=type=cache,id=rtype-build-${TARGETARCH},target=/src/build,sharing=locked \
+    --mount=type=cache,id=rtype-build-${BUILD_CACHE}-${TARGETARCH},target=/src/build,sharing=locked \
     cmake -S . -B build -DRTYPE_BUILD_TESTS=ON \
     && cmake --build build --target rtype_panel_players rtype_panel_accounts rtype_fake_services \
     && install -D -t /opt/smoke build/bin/rtype_panel_players build/bin/rtype_panel_accounts \

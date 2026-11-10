@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
@@ -45,6 +46,11 @@ bool isPlayerSideShip(game::EntityKind kind)
 {
     return kind == game::EntityKind::PlayerShip || kind == game::EntityKind::AllyShip;
 }
+
+/// How far the aura of a ship stands out of its model, in game units, and how much of it spreads in the
+/// glow of the frame.
+constexpr float AuraThickness = 2.5f;
+constexpr float AuraBloom = 0.35f;
 
 /// A shot appears at the nose of the ship that fired it, half a ship ahead of its centre, and has flown for a
 /// snapshot or so when it is drawn: no farther than this from its centre.
@@ -81,6 +87,7 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::ModelAnimation>(caches);
     use<ShipAttitude>(caches);
     use<BossModel>(caches);
+    use<ItemModel>(caches);
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
     use<Impact>(caches);
@@ -131,6 +138,11 @@ void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
     _shipLooks.setLook(kind, look);
 }
 
+void GameSessionSystem::setShipLook(std::uint8_t ship, const ShipLook &look, render::Vector2 size)
+{
+    _shipLooks.setShipLook(ship, look, size);
+}
+
 void GameSessionSystem::setShipLooks(game::EntityKind kind, std::vector<ShipLook> looks)
 {
     _shipLooks.setLooks(kind, std::move(looks));
@@ -141,6 +153,11 @@ void GameSessionSystem::setLocalShipLook(const ShipLook &look)
     _shipLooks.setLocalLook(look);
 }
 
+void GameSessionSystem::setAuraColors(const AuraColors *colors)
+{
+    _auraColors = colors;
+}
+
 void GameSessionSystem::setBossLook(game::EntityKind kind, const BossLook &look)
 {
     _bossLooks.setLook(kind, look);
@@ -149,6 +166,11 @@ void GameSessionSystem::setBossLook(game::EntityKind kind, const BossLook &look)
 void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
 {
     _shotLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setItemLook(std::uint8_t item, const ItemLook &look)
+{
+    _itemLooks.setLook(item, look);
 }
 
 void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &look)
@@ -396,13 +418,15 @@ std::optional<std::uint8_t> GameSessionSystem::findKiller(ecs::entity_t bydo,
 
 void GameSessionSystem::createEntity(const game::EntityState &state)
 {
-    const EntityLook look = lookOf(state);
+    const EntityLook look = _shipLooks.resizeToShip(state, lookOf(state));
     const ecs::entity_t entity = _ecs.createEntity();
     _ecs.addComponent<engine::SceneMember>(entity, *_scene);
     _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.owner, state.health, state.health);
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
-    if (_shipLooks.hasLook(state.kind)) {
+    if (state.kind == game::EntityKind::Item && _itemLooks.hasLook(state.ship)) {
+        _itemLooks.addModel(_ecs, entity, state);
+    } else if (_shipLooks.hasLook(state.kind)) {
         _shipLooks.addModel(_ecs, entity, state, look, _clock, isLocalShip(state));
     } else if (_bossLooks.hasLook(state.kind)) {
         _bossLooks.addModel(_ecs, entity, state, look);
@@ -414,6 +438,7 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     if (const std::optional<physics::Collider> collider = _session->findCollider(state)) {
         _ecs.addComponent<physics::Collider>(entity, *collider);
     }
+    addAura(entity, state);
     _shotSounds.addSound(_ecs, entity, state.kind, state.x);
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
     if (isPlayerShot(state.kind)) {
@@ -422,6 +447,26 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
             ++_localShots;
         }
     }
+}
+
+void GameSessionSystem::addAura(ecs::entity_t entity, const game::EntityState &state)
+{
+    if (_auraColors == nullptr || !_ecs.hasComponent<engine::Model>(entity)) {
+        return;
+    }
+    std::string_view name;
+    if (isLocalShip(state)) {
+        name = _auraColors->own;
+    } else if (isPlayerSideShip(state.kind)) {
+        name = _auraColors->allies;
+    } else if (isBydoShip(state.kind) && state.kind != game::EntityKind::BydoBoss) {
+        name = _auraColors->enemies;
+    }
+    const std::optional<render::Color> color = auraColor(name);
+    if (!color) {
+        return;
+    }
+    _ecs.getComponent<engine::Model>(entity).aura = render::Aura{*color, AuraThickness, AuraBloom};
 }
 
 void GameSessionSystem::recoilShooter(const game::EntityState &shot)
@@ -460,6 +505,12 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
     if (killed) {
         showDamage(entity.id, _ecs.getComponent<Replicated>(entity.id).health);
     }
+    // An item picked up plays its Collect animation where it was, instead of an impact
+    if (killed && _ecs.hasComponent<ItemModel>(entity.id) &&
+        _itemLooks.createCollect(_ecs, *_scene, entity.id)) {
+        _ecs.destroyEntity(entity.id);
+        return;
+    }
     if (killed && _impactLooks.hasLook(kind)) {
         const ecs::Position position = _ecs.getComponent<ecs::Position>(entity.id);
         const ecs::entity_t impact = _impactLooks.createImpact(_ecs, *_scene, kind, position);
@@ -484,6 +535,8 @@ void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState
         _shipLooks.moveModel(_ecs, entity, state, _clock);
     } else if (_ecs.hasComponent<BossModel>(entity)) {
         _bossLooks.moveModel(_ecs, entity, state);
+    } else if (_ecs.hasComponent<ItemModel>(entity)) {
+        ItemLooks::moveModel(_ecs, entity, state);
     } else if (_ecs.hasComponent<engine::Model>(entity)) {
         _shotLooks.placeModel(_ecs, entity, state);
     }
@@ -570,6 +623,8 @@ void GameSessionSystem::placeShipModels(float elapsed)
             ShipLooks::placeModel(_ecs, entity.id, elapsed);
         } else if (_ecs.hasComponent<BossModel>(entity.id)) {
             BossLooks::placeModel(_ecs, entity.id);
+        } else if (_ecs.hasComponent<ItemModel>(entity.id)) {
+            ItemLooks::placeModel(_ecs, entity.id, elapsed);
         }
     }
 }

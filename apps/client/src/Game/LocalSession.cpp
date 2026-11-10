@@ -5,6 +5,7 @@
 #include "rtype/game/ShipMovement.hpp"
 
 #include <algorithm>
+#include <random>
 #include <utility>
 
 namespace rtype::client
@@ -15,10 +16,12 @@ namespace
 
 constexpr double Tick = 1.0 / game::TickRate;
 
-/// The rules of a game offline: the story mode, where allies come to the rescue against the final boss.
+/// The rules of a game offline: the story mode, where allies come to the rescue against the final boss. Each
+/// game draws its own seed, so the waves are not the same every time.
 game::Rules storyRules(game::Rules rules)
 {
     rules.rescue = true;
+    rules.seed = std::random_device{}();
     return rules;
 }
 

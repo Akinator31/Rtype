@@ -22,7 +22,8 @@ struct ShotLaunch {
 };
 
 /// One tick of a weapon: counts down its cooldown and its reload, then fires if it is ready and asked to,
-/// spending a round and starting to reload on the last one.
+/// spending a round and starting to reload on the last one. While it is boosted (Armed::boostTicks), it waits
+/// Armed::boostInterval ticks between two shots instead of the fire interval of the weapon.
 /// @return Whether it fires this tick.
 [[nodiscard]] bool stepWeapon(Armed &armed, const WeaponDefinition &weapon, bool wantsToFire);
 

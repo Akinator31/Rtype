@@ -303,6 +303,8 @@ know:
   depth test. The frame is nearer than anything that comes out of the board, and farther than the nose of the
   canopy, the farthest part of the cockpit, which is drawn over it. The halos of the shots are drawn over
   everything: only while their centre is over the board.
+- **The auras of the ships** (`drawAura()`) are laid on the board with their model, and glow for the eye as
+  it does.
 - **The glow per eye.** `drawGlow()` on a board makes the glow of the energy models and of the emission maps
   for the eye, at a quarter of its resolution (about 500 × 525 on a Quest 3), with the frame around the board in
   its depth too, and adds it over the eye. The edges of the models are not smoothed (no FXAA): the eye is

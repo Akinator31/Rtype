@@ -1428,6 +1428,8 @@ namespace
 {
 
 const ResultsLook ResultsCaptions{
+    .captionFont = {},
+    .valueFont = {},
     .sounds = {.gameOver = {1}, .stat = {2}, .tick = {3}, .counted = {4}, .levelUp = {5}},
     .title = "THE R-TYPE SECTION HAS FALLEN",
     .waves = "waves cleared",
@@ -1953,7 +1955,7 @@ TEST_CASE("The ship of another player shows a badge while that player talks", "[
     const VoiceBadgeLook look{
         .texture = {20}, .source = {0.0f, 0.0f, 64.0f, 64.0f}, .size = 30.0f, .x = 80.0f, .y = -60.0f};
     client.sessions.setVoiceBadgeLook(look);
-    client.session->voice = VoiceView{.others = {rtype::voice::Participant{.slot = 1}}};
+    client.session->voice = VoiceView{.local = {}, .others = {rtype::voice::Participant{.slot = 1}}};
     const rtype::game::EntityState mine{1, rtype::game::EntityKind::PlayerShip, 0};
     const rtype::game::EntityState theirs{2, rtype::game::EntityKind::PlayerShip, 1};
     client.receive(snapshotOf(1, {mine, theirs}));

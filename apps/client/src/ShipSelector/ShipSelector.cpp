@@ -9,6 +9,7 @@
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 
 #include <cstddef>
+#include <format>
 #include <string>
 #include <utility>
 #include <vector>
@@ -144,24 +145,26 @@ ecs::entity_t createShipName(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
     return name;
 }
 
-/// What the button under the name says: equip the ship, or that it is equipped or locked; launch the game
-/// with it before a game.
+/// What the button under the name says: equip the ship, or that it is equipped, or locked and the level it
+/// needs; launch the game with it before a game.
 std::string getEquipText(localization::Localization &translations, const ShipSelection &selection)
 {
-    if (selection.getShown().locked) {
-        return translations.text("ship.locked");
+    const std::size_t shown = selection.getShownIndex();
+    if (selection.isLocked(shown)) {
+        return std::format("{} - {} {}", translations.text("ship.locked"),
+                           translations.text("progress.level"), selection.requiredLevels[shown]);
     }
     if (selection.launch) {
         return translations.text("ship.launch");
     }
-    const bool equipped = selection.getShownIndex() == selection.equipped;
+    const bool equipped = shown == selection.equipped;
     return translations.text(equipped ? "ship.equipped" : "ship.equip");
 }
 
 /// Equips the ship looked at and keeps it in the settings; before a game, closes the hangar and launches it.
 void equip(engine::Engine &target, ShipSelection &selection)
 {
-    if (selection.getFocused().locked) {
+    if (selection.isLocked(selection.focused)) {
         return;
     }
     selection.equipFocused();

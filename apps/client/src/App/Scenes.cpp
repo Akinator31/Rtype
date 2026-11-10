@@ -10,6 +10,7 @@
 #include "MainMenu/Submenus.hpp"
 #include "MainMenu/VoiceMenu.hpp"
 #include "MainMenu/VrMenu.hpp"
+#include "Quests/QuestsMenu.hpp"
 #include "ShipSelector/ShipSelector.hpp"
 
 #include <memory>
@@ -54,6 +55,7 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     createVrScene(engine, style, translations, vr);
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
+    createQuestsMenuScene(engine, style, translations);
 }
 
 } // namespace rtype::client

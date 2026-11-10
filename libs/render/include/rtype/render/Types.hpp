@@ -72,6 +72,12 @@ struct Rectangle {
     float height = 0.0f;
 };
 
+/// An axis-aligned box in 3D: its smallest and largest corners.
+struct Box3 {
+    Vector3 min;
+    Vector3 max;
+};
+
 /// A colour, with an alpha channel for transparency (0 is invisible, 255 is opaque).
 struct Color {
     std::uint8_t r = 0;
