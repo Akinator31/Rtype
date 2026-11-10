@@ -1054,9 +1054,12 @@ void SceneRenderer::drawSectionLabel(render::Renderer &renderer, const SectionLa
 }
 
 void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider, const SliderTrack &track,
-                               const Text &text, render::Vector2 centre, float opacity) const
+                               const Text &text, render::Vector2 centre, float rowOpacity) const
 {
     const SliderStyle &style = _style.slider;
+    // Locked, the row is dimmed and its value red
+    const bool locked = slider.locked && slider.locked();
+    const float opacity = locked ? rowOpacity * style.lockedOpacity : rowOpacity;
     const float value = std::clamp(slider.get ? slider.get() : 0.0f, 0.0f, 1.0f);
     // The looks ease in and out, instead of changing at a constant speed
     const float lit = smooth(track.hover);
@@ -1074,13 +1077,27 @@ void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider,
     const float captionTop = area.y + style.paddingTop;
     renderer.drawText(text.font, slider.caption, {area.x + style.inset, captionTop}, style.captionSize,
                       faded(mix(style.caption, style.litCaption, shown), opacity), style.letterSpacing);
-    const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + " %";
+    if (const std::optional<Slider::Icon> icon = slider.icon ? slider.icon() : std::nullopt) {
+        const float captionWidth =
+            renderer.measureText(text.font, slider.caption, style.captionSize, style.letterSpacing).x;
+        const float size = style.iconSize;
+        renderer.drawTexture(icon->texture, icon->source,
+                             {area.x + style.inset + captionWidth + style.iconGap,
+                              captionTop + ((style.captionSize - size) / 2.0f), size, size},
+                             0.0f, faded(icon->tint, opacity));
+    }
+    std::string percentage = slider.label ? slider.label() : std::string();
+    if (percentage.empty()) {
+        percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + " %";
+    }
     const render::Vector2 measured =
         renderer.measureText(style.valueFont, percentage, style.valueSize, style.valueSpacing);
     renderer.drawText(style.valueFont, percentage,
                       {area.x + rowWidth - style.valueInset - measured.x,
                        captionTop + ((style.captionSize - measured.y) / 2.0f)},
-                      style.valueSize, faded(mix(style.value, style.litCaption, shown), opacity),
+                      style.valueSize,
+                      locked ? faded(style.lockedValue, rowOpacity)
+                             : faded(mix(style.value, style.litCaption, shown), opacity),
                       style.valueSpacing);
 
     // The rail, from the caption to the percentage, and its part up to the value in light

@@ -14,7 +14,10 @@
 #include "rtype/engine/Scene/Scenes.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/render/ResourceManager.hpp"
+#include "rtype/render/Types.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -40,6 +43,20 @@ struct Replicated {
     std::uint8_t maxHealth = 0;
     /// Its health bar, once it was hit, if its kind shows one.
     std::optional<ecs::entity_t> healthBar;
+    /// The badge of the voice of the ship of another player, once the voice of the game is known.
+    std::optional<ecs::entity_t> voiceBadge;
+};
+
+/// The badge above the ship of another player while it talks (Figma, Série 16, `Jeu · Badge de vaisseau`): a
+/// microphone in a dark disc, right of its health bar.
+struct VoiceBadgeLook {
+    render::TextureId texture;
+    /// Part of the texture, in texture pixels.
+    render::Rectangle source;
+    /// Its size, and where its centre is from the centre of the ship, in game units: y points down.
+    float size = 30.0f;
+    float x = 0.0f;
+    float y = 0.0f;
 };
 
 /// A ship killed in the game while drawn, a Bydo or the ship of a player: for the events of the HUD.
@@ -117,10 +134,15 @@ class GameSessionSystem : public ecs::System
     EntitySounds _strikeSounds;
     /// The entities drawn that the game killed: they leave an impact when they go.
     std::unordered_set<std::uint32_t> _killed;
+    std::optional<VoiceBadgeLook> _voiceBadgeLook;
     std::vector<game::PlayerState> _players;
     /// Hit points of the ship of the local player in the latest snapshot, 0 while it is not there.
     std::uint8_t _localHealth = 0;
     std::uint32_t _tick = 0;
+    /// The last wave started in the session, 0 before the first.
+    std::uint16_t _wave = 0;
+    /// When the session started, for the time Discord counts since.
+    std::chrono::system_clock::time_point _startedAt;
     /// Seconds the session has been played: the time of the animations of the ships.
     float _clock = 0.0f;
 
@@ -158,6 +180,8 @@ class GameSessionSystem : public ecs::System
     /// The ship of the local player: its health bar would hide it.
     [[nodiscard]] bool isLocalShip(const game::EntityState &state) const;
     void placeShipModels(float elapsed);
+    /// Shows the badge of the voice above the ship of each other player who talks.
+    void showVoiceBadges(float elapsed);
 
 public:
     GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, engine::Scenes &scenes,
@@ -189,6 +213,8 @@ public:
     void setDamageLook(game::EntityKind kind, const DamageLook &look);
     /// Shows the health bar of the entities of this kind above them when they are hit from now on.
     void setHealthBarLook(game::EntityKind kind, const HealthBarLook &look);
+    /// Shows this badge above the ship of each other player while it talks, from now on.
+    void setVoiceBadgeLook(const VoiceBadgeLook &look) { _voiceBadgeLook = look; }
     /// Plays a sound when a shot of this kind appears from now on.
     void setShotSound(game::EntityKind kind, const EntitySound &sound);
     /// Plays a sound where the game kills an entity of this kind from now on, with its impact: a kind without
@@ -218,12 +244,18 @@ public:
     [[nodiscard]] bool running() const { return _session != nullptr; }
     /// The session played, if any.
     [[nodiscard]] GameSession *session() const { return _session.get(); }
+    /// The scene the session is played in, if any.
+    [[nodiscard]] std::optional<engine::SceneId> scene() const { return _scene; }
     /// The players of the latest snapshot, by slot: for the HUD.
     [[nodiscard]] const std::vector<game::PlayerState> &players() const { return _players; }
     /// Hit points of the ship of the local player in the latest snapshot: for the HUD.
     [[nodiscard]] std::uint8_t localHealth() const { return _localHealth; }
     /// The tick of the latest snapshot.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }
+    /// The last wave started in the session played, from 1; 0 before the first.
+    [[nodiscard]] std::uint16_t wave() const { return _wave; }
+    /// When the session played started.
+    [[nodiscard]] std::chrono::system_clock::time_point startedAt() const { return _startedAt; }
     /// The stage of the rescue against the final boss in the latest snapshot.
     [[nodiscard]] game::RescueStage rescue() const { return _rescue; }
     /// The entity of the scene that draws an entity of the game, if it is drawn.

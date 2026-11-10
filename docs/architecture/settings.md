@@ -25,14 +25,25 @@ Name keys by domain with dots, so that the file stays readable:
 |---|---|
 | `audio.effects_volume` | The Settings page (`keepPlayerSettings()`): the volume of the sound effects, from 0 to 1 |
 | `audio.music_volume` | The Settings page: the volume of the music, from 0 to 1 |
+| `discord.presence_application_id` | Nobody: written by hand. The Discord application whose activity the client shows, its id in decimal, in place of the one of the build (`RTYPE_DISCORD_APPLICATION_ID`); `0` for none ([Rich presence](client-online.md#rich-presence)) |
+| `discord.show_activity` | The Settings page: whether the Discord profile of the player shows what it plays, `true` (by default) or `false` |
 | `display.color_filter` | The Settings page: the colour filter of the image, `none`, `protanopia`, `deuteranopia`, `tritanopia` or `high_contrast` |
-| `controls.<action>` | The Controls page (`keepControlSettings()`): the keyboard keys of an action of `GameActions`, by name, such as `controls.move_up=Up,W` or `controls.fire=Space`; empty for no key |
+| `controls.<action>` | The Controls and Voice pages (`keepControlSettings()`): the keyboard keys of an action of `BoundActions`, by name, such as `controls.move_up=Up,W`, `controls.fire=Space` or `controls.push_to_talk=V`; empty for no key |
 | `display.fps_limit` | The Settings page: the limit of frames per second, `0` for none (60 by default) |
 | `display.monitor` | The Settings page (`keepDisplaySettings()`): the screen of the game, by its index, from 0 for the primary screen |
 | `display.resolution` | The Settings page: `fullscreen`, or the size of the window, such as `1600x900` |
 | `display.vsync` | The Settings page: the vertical synchronisation, `true` (by default) or `false` |
 | `interface.language` | The Settings page: the language of the interface, `en` or `fr` |
+| `voice.mode` | The Voice page (`keepVoiceSettings()`): when the player is heard, `push_to_talk` (by default), `voice_activity` or `off` ([Voice](voice.md#the-talk-modes)) |
+| `voice.threshold` | The Voice page: the threshold of the voice activity, in dBFS, from -70 to -10 (-40 by default) |
+| `voice.input_device` | The Voice page: the name of the microphone, empty for the default of the system |
+| `voice.input_volume` | The Voice page: the volume of the microphone, from 0 to 1 |
+| `voice.volume` | The Voice page: the volume of the voices of the others, from 0 to 1, apart from the music and the effects |
+| `voice.player.<server>/<account>.volume`, `.muted` | The pause menu of a game online (`keepVoiceSettings()`): how the player hears another player, its volume from 0 to 1 and muted or not; `<server>/guest/<name>` for a guest. Only the players not heard as by default ([Voice](voice.md#in-the-hud-and-the-pause-menu)) |
+| `voice.noise_suppression` | The Voice page: whether the noise of the room is taken out of the microphone, `true` by default ([Voice](voice.md#the-sound-processing)) |
+| `voice.gain_control` | The Voice page: whether the automatic gain brings the voice to the same level, `true` by default |
 | `servers.known.<host>:<port>` | `KnownServers`: the fingerprint of the key the player trusted for that server |
+| `servers.discord.<host>:<port>` | `SessionTokens`: the Discord refresh token the server gave with `DISCORD_TOKEN`, renewed by `DISCORD_REFRESH` at the next connection ([Discord](client-online.md#discord)); forgotten with the session token. A secret: never logged |
 | `servers.session.<host>:<port>` | `SessionTokens`: the session token of the account signed in on that server, 64 hexadecimal digits, sent in the next `HELLO` ([Accounts](client-online.md#accounts)). A secret: never logged |
 | `servers.profile.<host>:<port>` | `KnownProfiles`: the account signed in on that server, shown in the Online menu: `<1 if Discord, else 0>:<version of its picture>:<username>`; the picture itself in `pictures/<version>.png` beside the settings ([Profiles](client-online.md#profiles)) |
 | `ship.equipped` | The hangar (`writeEquippedShip()`): the code of the ship the player equipped last, such as `VX-03`, on which the hangar opens at the next run |
@@ -41,15 +52,16 @@ Name keys by domain with dots, so that the file stays readable:
 
 The Settings page of the main menu (`apps/client/src/MainMenu/SettingsMenu.cpp`) sets the language, the
 volumes of the music and of the sound effects, the colour filter of the image
-([Rendering](rendering.md#colour-filters)), the screen the game is on and its resolution. Two files of
+([Rendering](rendering.md#colour-filters)), the activity shown on Discord, the screen the game is on and its resolution. Two files of
 `apps/client/src/Settings/` keep them: `PlayerSettings.hpp` the language, the volumes and the filter,
-`DisplaySettings.hpp` the screen and the resolution.
+`DisplaySettings.hpp` the screen and the resolution; `apps/client/src/Discord/DiscordPresence.hpp` the activity on
+Discord.
 
 ```mermaid
 flowchart LR
     File["settings.txt"] -- "readSettings()" --> Settings["engine::Settings"]
     Settings -- "applyDisplaySettings()<br/>applyPlayerSettings()<br/>at start" --> Apply["Window · Localization<br/>AudioPlayer · Renderer"]
-    Page["Settings page<br/>six choices, two sliders"] -- "each change, at once" --> Apply
+    Page["Settings page<br/>seven choices, two sliders"] -- "each change, at once" --> Apply
     Page -- "closes: keep...Settings()" --> Settings
     Settings -- "writeSettings()" --> File
 ```
@@ -58,7 +70,7 @@ flowchart LR
 page closes.*
 
 The page is two columns of named groups ([Pages of settings](scenes-and-interface.md#pages-of-settings)): on the
-left *General*, *Audio* and *Accessibility*, on the right *Display* and *Controls*. Each row shows its caption on
+left *General*, *Audio*, *Accessibility* and *Discord*, on the right *Display*, *Controls* and *Voice*. Each row shows its caption on
 the left and its value on the right, on a column shared by every row; Right, the wheel, Enter and a click go to
 the next value, Left to the previous one (`stepValue()`, `apps/client/src/Settings/NextValue.hpp`). Under the
 right column, a note explains the row that has the focus (`settings.hint.*` in the translations).
@@ -68,11 +80,13 @@ right column, a note explains the row that has the focus (`settings.hint.*` in t
 | General | Language | Choice: English, French | `Localization::setLanguage()`, and the captions of the sliders |
 | Audio | Music, Sound effects | Sliders, by steps of 5% | `AudioPlayer::setMusicVolume()`, `setEffectsVolume()` |
 | Accessibility | Colour filter | Choice: none, protanopia, deuteranopia, tritanopia, high contrast (`PlayerColorFilters`) | `Renderer::setColorFilter()` |
+| Discord | Activity on Discord | Choice: on, off | `PresenceTracker::setEnabled()`: off, the activity is cleared at once |
 | Display | Screen | Choice: "2 · DELL U2720Q", the connected screens (`moveToMonitor()`) | `Window::moveToMonitor()` |
 | Display | Resolution | Choice: fullscreen, then the window sizes smaller than the screen (`resolutionsFor()`) | `Window::setFullscreen()`, `setSize()` |
 | Display | Frame rate | Choice: 60, 120, 144, 165, 240, unlimited (`FpsLimits`) | `Window::setTargetFps()` |
 | Display | VSync | Choice: on, off | `Window::setVsync()` |
 | Controls | Keyboard and gamepad | Opens the Controls page, to choose the key of each action ([Input](input.md#choosing-the-keys)) | `assignKey()` |
+| Voice | Voice chat | Opens the Voice page: the talk mode, the microphone and its processing, the volumes of the voice and its keys ([Voice](voice.md#the-voice-page)) | `VoiceDevices`, `assignKey()` |
 
 - **At start**, right after the settings are read, `applyDisplaySettings()` moves the window to the kept
   screen and gives it the kept resolution; then, once the translations are loaded, `applyPlayerSettings()`
@@ -92,7 +106,8 @@ right column, a note explains the row that has the focus (`settings.hint.*` in t
   the values, and `writeSettings()` writes the file, once, rather than at every step of a slider. A file that
   cannot be written is logged: the choices then last until the client closes.
 
-The tests are in `tests/player_settings.cpp` and `tests/display_settings.cpp` (tag `[settings]`). Moving the
+The tests are in `tests/player_settings.cpp`, `tests/display_settings.cpp` and, for the voice,
+`tests/client_voice.cpp` (tag `[settings]`). Moving the
 window needs a screen, and is not tested there.
 
 ## Not the data of the server

@@ -25,6 +25,8 @@ add_library(r-type_client_core STATIC
     src/Console/ConsoleScene.cpp
     src/Console/ConsoleSystem.cpp
     src/Controls/KeyCaptureSystem.cpp
+    src/Controls/KeyChoice.cpp
+    src/Discord/DiscordPresence.cpp
     src/Game/BossLooks.cpp
     src/Game/DamageLooks.cpp
     src/Game/DamageNumberSystem.cpp
@@ -75,6 +77,7 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Station.cpp
     src/MainMenu/Submenus.cpp
     src/MainMenu/UiShowcase.cpp
+    src/MainMenu/VoiceMenu.cpp
     src/Online/AccountScenes.cpp
     src/Online/FormErrors.cpp
     src/Online/KnownProfiles.cpp
@@ -86,6 +89,7 @@ add_library(r-type_client_core STATIC
     src/Settings/ControlSettings.cpp
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
+    src/Settings/VoiceSettings.cpp
     src/Quests/EventQuest.cpp
     src/Quests/Quests.cpp
     src/Quests/StatQuest.cpp
@@ -94,12 +98,23 @@ add_library(r-type_client_core STATIC
     src/ShipSelector/ShipSelection.cpp
     src/ShipSelector/ShipSelector.cpp
     src/ShipSelector/ShipSelectorSystem.cpp
+    src/Voice/VoiceDevices.cpp
+    src/Voice/VoiceIcons.cpp
+    src/Voice/VoiceKeysSystem.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
-    PUBLIC rtype::audio rtype::discord rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
-           rtype::log rtype::network rtype::physics rtype::render
+    PUBLIC rtype::audio rtype::discord rtype::discord_voice rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
+           rtype::log rtype::network rtype::physics rtype::render rtype::voice_client
     PRIVATE rtype_options)
+
+# The Discord application whose activity the client shows in the profile of the player (its rich presence), by
+# default: the official one of R-Type, its id from the developer portal, the one the official server signs in
+# with too. Empty, no activity unless the settings give one (discord.presence_application_id)
+set(RTYPE_DISCORD_APPLICATION_ID "1565673565163102250" CACHE STRING
+    "The id of the Discord application of the rich presence")
+set_source_files_properties(src/Discord/DiscordPresence.cpp PROPERTIES
+    COMPILE_DEFINITIONS RTYPE_DISCORD_APPLICATION_ID="${RTYPE_DISCORD_APPLICATION_ID}")
 
 # Without the Discord Social SDK for this platform (libs/discord), the core above only, for the tests
 if(NOT TARGET rtype::discord_sdk)

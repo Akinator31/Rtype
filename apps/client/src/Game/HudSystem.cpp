@@ -26,8 +26,14 @@ constexpr float XpGap = 21.3f;
 /// The line of the other player nearest to the ping, and the distance between two lines.
 constexpr float AllyCentre = 92.7f;
 constexpr float AllyStep = 21.3f;
-/// Between the name of another player and its score.
+/// Between the parts of the line of another player: its icon, its slot, its name and its score.
 constexpr float AllyGap = 13.3f;
+/// Between the slot of the local player and the icon of its voice.
+constexpr float PilotVoiceGap = 10.7f;
+
+/// The name of another pilot, lit while it talks.
+constexpr render::Color AllyName{138, 144, 151, 255};
+constexpr render::Color SpeakingName = render::colors::White;
 
 constexpr float PingCentre = 56.7f;
 /// Between the signal bars and the ping, and between two bars.
@@ -80,15 +86,18 @@ void HudSystem::update(float /*elapsed*/)
     const GameSession *session = _sessions.session();
     const std::uint8_t local = session != nullptr ? session->localSlot() : 0;
     const std::optional<std::chrono::milliseconds> ping = session != nullptr ? session->ping() : std::nullopt;
+    const std::map<std::uint8_t, std::string> names =
+        session != nullptr ? session->playerNames() : std::map<std::uint8_t, std::string>{};
+    const std::optional<VoiceView> voice = session != nullptr ? session->voiceView() : std::nullopt;
     for (ecs::entity_t entity = 0; entity < _huds.size(); ++entity) {
         if (!_huds.has(entity)) {
             continue;
         }
         const Hud &hud = _huds.get(entity);
         stretchShadows(hud);
-        showPilot(hud, local);
+        showPilot(hud, local, names, voice);
         showHealth(hud);
-        showAllies(hud, local);
+        showAllies(hud, local, names, voice);
         showPing(hud, ping);
     }
 }
@@ -100,7 +109,8 @@ void HudSystem::stretchShadows(const Hud &hud)
     _boxes.get(hud.bottomShadow).width = width;
 }
 
-void HudSystem::showPilot(const Hud &hud, std::uint8_t slot)
+void HudSystem::showPilot(const Hud &hud, std::uint8_t slot, const std::map<std::uint8_t, std::string> &names,
+                          const std::optional<VoiceView> &voice)
 {
     const std::vector<game::PlayerState> &players = _sessions.players();
     const auto player = std::ranges::find(players, slot, &game::PlayerState::slot);
@@ -114,8 +124,13 @@ void HudSystem::showPilot(const Hud &hud, std::uint8_t slot)
     }
 
     engine::Text &pilot = _texts.get(hud.pilot);
-    pilot.text = std::format("{}P", slot + 1);
+    const auto name = names.find(slot);
+    pilot.text =
+        name == names.end() ? std::format("{}P", slot + 1) : std::format("{}P · {}", slot + 1, name->second);
     placeAbove(hud.pilot, Margin, PilotCentre, pilot.size);
+    showVoiceIcon(hud, hud.pilotVoice, voice ? voiceIconOf(voice->local) : VoiceIcon::None);
+    const engine::Sprite &icon = _sprites.get(hud.pilotVoice);
+    placeAbove(hud.pilotVoice, Margin + measureWidth(hud.pilot) + PilotVoiceGap, PilotCentre, icon.height);
     engine::Text &score = _texts.get(hud.score);
     score.text = formatScore(player == players.end() ? 0 : player->score);
     placeAbove(hud.score, Margin, ScoreCentre, score.size);
@@ -131,7 +146,9 @@ void HudSystem::showHealth(const Hud &hud)
     placeAbove(hud.health, Margin, HealthCentre, health.size);
 }
 
-void HudSystem::showAllies(const Hud &hud, std::uint8_t local)
+void HudSystem::showAllies(const Hud &hud, std::uint8_t local,
+                           const std::map<std::uint8_t, std::string> &names,
+                           const std::optional<VoiceView> &voice)
 {
     std::vector<game::PlayerState> others;
     std::ranges::copy_if(_sessions.players(), std::back_inserter(others),
@@ -139,19 +156,54 @@ void HudSystem::showAllies(const Hud &hud, std::uint8_t local)
     const std::size_t shown = std::min(others.size(), hud.allies.size());
     for (std::size_t row = 0; row < hud.allies.size(); ++row) {
         const HudAlly &ally = hud.allies[row];
+        engine::Text &slot = _texts.get(ally.slot);
         engine::Text &name = _texts.get(ally.name);
         engine::Text &score = _texts.get(ally.score);
         if (row >= shown) {
+            slot.text.clear();
             name.text.clear();
             score.text.clear();
+            showVoiceIcon(hud, ally.voice, VoiceIcon::None);
             continue;
         }
-        name.text = std::format("P{}", others[row].slot + 1);
+        const std::uint8_t player = others[row].slot;
+        slot.text = std::format("P{}", player + 1);
+        const auto known = names.find(player);
+        name.text = known == names.end() ? std::string() : known->second;
         score.text = formatScore(others[row].score);
-        // The first line on top, the last one just above the ping
+
+        VoiceIcon icon = VoiceIcon::None;
+        if (voice) {
+            const auto pilot = std::ranges::find(voice->others, player, &voice::Participant::slot);
+            icon = pilot == voice->others.end() ? VoiceIcon::None : voiceIconOf(*pilot);
+        }
+        name.color = icon == VoiceIcon::Speaking ? SpeakingName : AllyName;
+        showVoiceIcon(hud, ally.voice, icon);
+
+        // The first line on top, the last one just above the ping; from the right: the score, the name, the
+        // slot, the icon
         const float centre = AllyCentre + (static_cast<float>(shown - 1 - row) * AllyStep);
-        placeAbove(ally.score, -Margin, centre, score.size);
-        placeAbove(ally.name, -(Margin + measureWidth(ally.score) + AllyGap), centre, name.size);
+        float right = Margin;
+        placeAbove(ally.score, -right, centre, score.size);
+        right += measureWidth(ally.score) + AllyGap;
+        if (!name.text.empty()) {
+            placeAbove(ally.name, -right, centre, name.size);
+            right += measureWidth(ally.name) + AllyGap;
+        }
+        placeAbove(ally.slot, -right, centre, slot.size);
+        right += measureWidth(ally.slot) + AllyGap;
+        placeAbove(ally.voice, -right, centre, _sprites.get(ally.voice).height);
+    }
+}
+
+void HudSystem::showVoiceIcon(const Hud &hud, ecs::entity_t entity, VoiceIcon icon)
+{
+    const render::TextureId *texture = voiceIconTexture(hud.look.voice, icon);
+    _opacities.get(entity).value = texture != nullptr ? 1.0f : 0.0f;
+    if (texture != nullptr) {
+        engine::Sprite &sprite = _sprites.get(entity);
+        sprite.texture = *texture;
+        sprite.tint = voiceIconColor(icon);
     }
 }
 

@@ -26,7 +26,7 @@ main thread.
 
 | Thread     | Owns (only this thread touches it)                                                                                                               | Work                                                                                     |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| **Main**   | window, raylib (graphics, input, audio), `Renderer`, `ResourceManager`, `AudioPlayer`, `Ecs`, scenes, events, game systems, `network::EventLoop` | the frame loop: input, `network.poll()`, `engine.update()`, finishing the loads, drawing |
+| **Main**   | window, raylib (graphics, input, audio), `Renderer`, `ResourceManager`, `AudioPlayer`, `Ecs`, scenes, events, game systems, `network::EventLoop`, `discord::Session` | the frame loop: input, `network.poll()`, `discordSession.poll()`, `engine.update()`, finishing the loads, drawing |
 | **Assets** | nothing persistent                                                                                                                               | reads asset files and decodes them in CPU memory, one request at a time                  |
 
 Why nothing else gets a thread:
@@ -35,7 +35,8 @@ Why nothing else gets a thread:
   Splitting it from the rendering would mean copying every frame for the renderer, a mailbox for the input,
   cross-thread text measurements and one more frame of latency, for almost no gain. The `SceneRenderer`
   keeps reading the ECS directly.
-- **Audio**: raylib (miniaudio) already mixes on its own internal thread.
+- **Audio**: raylib (miniaudio) already mixes on its own internal thread, and captures the microphone of the
+  voice on another ([The audio threads](#the-audio-threads)).
 - **Network**: the sockets never block, `EventLoop::poll()` handles what is ready and returns at once, and the
   sessions are written to run on the game's thread without locks ([Client online](client-online.md)). A
   network thread would only copy each message into a queue that Main reads at the start of the frame, which
@@ -130,6 +131,41 @@ sequenceDiagram
     M->>M: finishPendingLoads() (render and audio)
     M->>M: SceneRenderer draws World then Interface, endFrame (vsync)
 ```
+
+## The audio threads
+
+miniaudio, compiled into raylib, runs threads of its own, which call back into the client. The voice of the
+games online ([Voice](voice.md#the-devices)) uses two of them:
+
+| Thread | Calls | Shares with Main |
+|---|---|---|
+| **Output** of raylib | the callback of each `AudioStream` of `audio::VoiceStreams`, while it mixes | a `RingBuffer` of 200 ms per player: Main writes the voice decoded, the callback reads it, silence when it is empty |
+| **Output** of raylib, while the microphone is open | the processor of `audio::OutputLoopback`, once the mix is done | a `RingBuffer` of one second: the callback writes what is played, in mono, Main reads it as the reference of the echo cancellation |
+| **Capture** of `voice::Microphone`, while it is open | its data callback, every 10 ms | a `RingBuffer` of one second: the callback writes the samples, Main reads them by frames of 20 ms |
+| The audio thread of **Discord**, while its call is connected | the received callback of `StartCallWithAudioCallbacks`, with the voice of a member | a `RingBuffer` of 500 ms per slot in the `Inbox` of `discord::DiscordVoice`, and the id of the member of each slot, an `atomic<uint64_t>` that Main writes: the callback finds the slot of the member, mixes down and resamples to 48 kHz mono, writes; Main reads in `poll()` and writes to the `VoiceStreams`. The `Inbox` is shared with the callback (`shared_ptr`), which may run a little after the call ends |
+| The same thread of **Discord** | the captured callback of `StartCallWithAudioCallbacks`, with the microphone of the player | in the same `Inbox`: an `atomic<bool>` that Main sets while the `GameVoice` reads it, in a mixed game (`DiscordVoice::capture()`), a `RingBuffer` of 500 ms, and an `atomic<uint64_t>` that counts every sample captured, read by Main to tell whether Discord gives the microphone at all. The callback mixes down and resamples to 48 kHz mono, and writes only while open; Main reads it as the microphone of the `GameVoice` |
+| A thread of ours, detached, each time a microphone closes | `ma_device_uninit()` of the device closed, which it owns | nothing: the device, its ring buffer and its flags are its own, the context of miniaudio shared (`shared_ptr`) and uninitialised after the last device. Main never waits for it: with a Bluetooth headset on PipeWire whose profile Discord just changed, `ma_device_uninit()` can block for ever, which froze the game loop |
+| A thread of miniaudio, while the microphone is open | its notification callback, when the device stops | an `atomic<bool>`: the device was lost (unplugged), and Main opens a microphone again at its next `read()`. A stop asked by Main sets another flag first, so that it is not taken for a loss |
+
+- **Without a lock.** Each `RingBuffer` (`libs/voice`) has one producer and one consumer, and two counters
+  that only grow, atomic: neither thread ever waits on the other. An audio callback that waited on Main would
+  be heard as a click; Main that waited on a callback would drop a frame.
+- **What does not fit is dropped**: the producer writes what fits, never waits for room. A stream full is a
+  stream 200 ms behind; a microphone not read for a second loses its oldest samples.
+- **Nothing else crosses.** The callbacks touch their ring buffer only, and the notification its flag: the decoding, the encoding and the
+  jitter buffer run on Main, in `GameVoice::poll()`. They find their buffer without a lock: the user pointer of
+  the device for the capture; for the streams, whose callbacks of raylib take no pointer, one function per slot
+  and a variable of `VoiceStreams.cpp`, set before the first stream opens and cleared after the last closes; for
+  the loopback, a variable of `OutputLoopback.cpp`, set before `AttachAudioMixedProcessor()` and cleared after
+  `DetachAudioMixedProcessor()`. The sound processing of the microphone (the echo cancellation, the noise
+  suppression and the gain control of WebRTC) runs on Main too, in `GameVoice::poll()`, never in a callback
+  ([Voice](voice.md#the-sound-processing)).
+- **They stop before their buffer goes.** `UnloadAudioStream()` and `DetachAudioMixedProcessor()` take the
+  lock of the output thread, and
+  `ma_device_uninit()` waits for the capture callback: no callback runs after either, so the ring buffers can
+  be freed. In `main.cpp`, the game played stops before the devices of the voice (`StopSessions`).
+
+Its tests carry 200,000 items from one thread to another, every one in order (`tests/voice_jitter.cpp`).
 
 ## Scene loading (dynamic)
 

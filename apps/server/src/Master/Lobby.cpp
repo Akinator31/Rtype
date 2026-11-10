@@ -77,6 +77,12 @@ struct Lobby::Client {
     {
         return state == State::Welcomed ? std::format("{} ({})", name, playerId) : address.toString();
     }
+
+    /// The player as its game knows it: its name, and its account if signed in.
+    [[nodiscard]] LobbyPlayer lobbyPlayer() const
+    {
+        return {.id = playerId, .name = name, .accountId = account ? account->account.id : 0};
+    }
 };
 
 Lobby::Lobby(rtype::network::EventLoop &loop, rtype::network::TcpListener listener,
@@ -277,7 +283,7 @@ void Lobby::handle(Client &client, std::uint8_t type, std::span<const std::byte>
         } else if (const auto join = rtype::lobby::decodeJoinGame(payload); !join) {
             malformed();
         } else {
-            joined(client, type, _games.join({client.playerId, client.name}, join->gameId));
+            joined(client, type, _games.join(client.lobbyPlayer(), join->gameId));
         }
         return;
     case message_type::LeaveGame:
@@ -330,7 +336,7 @@ void Lobby::createGame(Client &client, std::span<const std::byte> payload)
     client.busy = true;
     const std::uint64_t id = client.id;
     const std::uint32_t playerId = client.playerId;
-    _games.create({playerId, client.name}, *game,
+    _games.create(client.lobbyPlayer(), *game,
                   [this, id, playerId, alive = std::weak_ptr<bool>(_alive)](const Games::JoinResult &result) {
                       if (alive.expired()) {
                           return;
@@ -573,8 +579,17 @@ void Lobby::accountRequest(Client &client, std::uint8_t type, std::span<const st
                           .discord = client.discord},
         [this, resume = waitFor(client), type](const AccountReply &answer) {
             resume([&](Client &asking) {
+                // The Discord token of the player, before the reply that signs in or links: never kept here
+                if (std::optional<rtype::lobby::DiscordTokenMessage> token =
+                        std::exchange(asking.discord->token, std::nullopt);
+                    token && !std::holds_alternative<ErrorCode>(answer)) {
+                    reply(asking, message_type::DiscordToken, rtype::lobby::encode(*token));
+                }
                 if (const auto *code = std::get_if<ErrorCode>(&answer)) {
                     fail(asking, type, *code);
+                } else if (const auto *discordToken =
+                               std::get_if<rtype::lobby::DiscordTokenMessage>(&answer)) {
+                    reply(asking, message_type::DiscordToken, rtype::lobby::encode(*discordToken));
                 } else if (const auto *signedIn = std::get_if<SignedInAccount>(&answer)) {
                     asking.account = *signedIn;
                     asking.name = signedIn->account.username;

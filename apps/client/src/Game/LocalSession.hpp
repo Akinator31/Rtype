@@ -42,12 +42,15 @@ private:
     std::vector<game::Snapshot> _snapshots;
     /// The world at the last step, for between().
     std::optional<game::Snapshot> _last;
+    /// The waves of the game config, played one after the other.
+    std::uint16_t _waveCount = 0;
 
 public:
     /// @param config The definitions of the game, loaded once by the client (loadGameConfig()).
     explicit LocalSession(game::Rules rules = {}, const game::GameConfig &config = {});
 
     [[nodiscard]] std::uint8_t localSlot() const override { return 0; }
+    [[nodiscard]] std::optional<std::uint16_t> waveCount() const override { return _waveCount; }
     void setInput(game::PlayerInput input) override { _input = input; }
     void update(float elapsed) override;
     [[nodiscard]] std::vector<game::Snapshot> takeSnapshots() override;

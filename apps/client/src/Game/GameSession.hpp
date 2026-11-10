@@ -1,13 +1,16 @@
 #pragma once
 
 #include "Game/EntityLook.hpp"
+#include "Voice/VoiceIcons.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/physics/Component/Collider.hpp"
 
 #include <chrono>
 #include <cstdint>
+#include <map>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rtype::client
@@ -56,8 +59,21 @@ public:
     /// boss, no victory.
     [[nodiscard]] virtual bool isEndless() const { return false; }
 
+    /// The game is played on a server (RemoteSession), not in the client.
+    [[nodiscard]] virtual bool isOnline() const { return false; }
+
+    /// The waves of the game, when it has an end: none online, where they follow each other without end.
+    [[nodiscard]] virtual std::optional<std::uint16_t> waveCount() const { return std::nullopt; }
+
     /// The round-trip time to the game, once measured; none offline, where there is no network.
     [[nodiscard]] virtual std::optional<std::chrono::milliseconds> ping() const = 0;
+
+    /// The names of the players, by slot, for the HUD; none offline, where the players have no name.
+    [[nodiscard]] virtual std::map<std::uint8_t, std::string> playerNames() const { return {}; }
+
+    /// The voice of the game, for the HUD: who talks, who is muted. None without a voice: offline, or
+    /// online without the devices of the voice.
+    [[nodiscard]] virtual std::optional<VoiceView> voiceView() const { return std::nullopt; }
 
     /// The hitbox of an entity of the game, for the debug overlay (F3, the "hitboxes" command), none if it
     /// has none. By default the box it is drawn as (lookOf()): the snapshots do not carry the hitboxes.
