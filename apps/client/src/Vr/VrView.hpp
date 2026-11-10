@@ -1,57 +1,84 @@
 #pragma once
 
+#include "Vr/VrLayout.hpp"
+#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/render/Renderer.hpp"
+#include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 #include "rtype/xr/Headset.hpp"
 
+#include <future>
 #include <optional>
+#include <vector>
 
 namespace rtype::client
 {
 
-/// Where the board, the frame of the game, floats in the headset: flat, ahead of the player, in the space of
-/// the headset (its origin at the head of the player when the session started, in metres, y up, -z ahead). A
-/// first placement, for playing in the headset before the cockpit around it (docs/plan/vr.md, X3).
-struct BoardPlacement {
-    /// Its width, in metres; its height follows the shape of the game.
-    float width = 4.0f;
-    /// How far ahead of the eyes it is, in metres.
-    float distance = 3.0f;
-    /// How far its centre is under the eyes, in metres: the player looks a little down at it, as at a screen.
-    float drop = 0.25f;
-};
-
-/// The resolution of the image of the board: about 38 pixels per degree for 4 m at 3 m, more than a headset
-/// shows (20 to 25), so that the board stays sharp.
-inline constexpr render::Vector2 BoardResolution{2560.0f, 1440.0f};
-
-/// The transform of the board, for Renderer::drawImageQuad(): the square of side 1 around the origin scaled
-/// to the board and moved ahead of the eyes, facing them.
-/// @param gameSize Size of the game, in game units: the shape of the board.
-[[nodiscard]] render::Matrix boardTransform(const BoardPlacement &placement, render::Vector2 gameSize);
-
 /// What an eye sees, as the headset gives it, in the types of the renderer.
 [[nodiscard]] render::EyeView toRenderEye(const xr::EyeView &eye);
 
-/// What the player sees in the headset (docs/architecture/vr.md): the frame of the game drawn into the image
-/// of the board, the board drawn in each eye. The image is created the first time it is asked for, so that a
-/// game out of the headset never holds it.
+/// What the scenes shown give to the headset each frame (engine::SceneRenderer::light() and sky()).
+struct VrScene {
+    /// The light of the scene, which lights the cockpit.
+    render::Light light;
+    /// The picture at the back of its sky, drawn around the cockpit; none leaves space plain.
+    std::optional<engine::Backdrop> sky;
+    /// A game is played: the player sits in the cockpit. In the menus, the board floats alone in the sky.
+    bool playing = false;
+};
+
+/// What the player sees in the headset (docs/architecture/vr.md): seated in the cockpit, the sky of the scene
+/// around them, the board outside the canopy with the frame of the game drawn into it. The cockpit is there
+/// only during a game: in the menus, the board floats alone in the sky. The image of the board is created and
+/// the cockpit loaded the first time the headset shows the game, so that a game out of the headset never
+/// holds them, and the cockpit is ready when a game starts; until it is loaded, the board floats alone.
 ///
 /// Destroy it before the window, with the renderer.
+/// @code
+/// vrView.update(elapsed, {sceneRenderer.light(), sceneRenderer.sky(), sessions.running()}); // each frame
+/// vrView.drawEye(eye, view);                                                                // each eye
+/// @endcode
 class VrView
 {
+    /// The cockpit once loaded: its model, the meshes drawn opaque and the transparent ones in their order.
+    struct Cockpit {
+        render::ModelId model;
+        /// The transparent meshes, by index, from the farthest to the nearest.
+        std::vector<int> transparent;
+        /// Every mesh but one, for each transparent mesh: drawn alone.
+        std::vector<std::vector<int>> allBut;
+        /// The animation of the screens, -1 without one.
+        int screens = -1;
+    };
+
     render::Renderer &_renderer;
-    BoardPlacement _placement;
+    render::ResourceManager &_resources;
+    VrLayout _layout;
     std::optional<render::ImageId> _board;
+    std::optional<std::shared_future<render::ModelId>> _loading;
+    std::optional<Cockpit> _cockpit;
+    VrScene _scene;
+    float _screensTime = 0.0f;
+
+    /// Takes the cockpit once loaded, and finds its parts.
+    void findCockpit();
+    /// Poses the screens of the cockpit, a few times per second.
+    void animateCockpit(float elapsed);
 
 public:
-    explicit VrView(render::Renderer &renderer, BoardPlacement placement = {});
+    VrView(render::Renderer &renderer, render::ResourceManager &resources, VrLayout layout = {});
 
     /// The image the frames of the game are drawn into while the game is in the headset
     /// (Renderer::beginFrame(ImageId)).
     [[nodiscard]] render::ImageId board();
-    /// Draws what an eye sees into the image the headset bound for it: the board, once a frame was drawn into
-    /// it, on the background of space.
+    /// Once per frame while the headset shows the game, before its eyes: starts loading the cockpit, keeps
+    /// what the scene gives, and during a game moves the screens of the cockpit, which are posed once for
+    /// both eyes.
+    /// @param elapsed Time since the previous frame, in seconds.
+    void update(float elapsed, VrScene scene);
+    /// Draws what an eye sees into the image the headset bound for it: the sky, the board once a frame was
+    /// drawn into it, and during a game the cockpit, then its canopy and its hologram, which the board is
+    /// seen through.
     void drawEye(int eye, const xr::EyeView &view);
 };
 

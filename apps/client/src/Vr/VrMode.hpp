@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/engine/Settings/Settings.hpp"
+#include "rtype/input/Keys.hpp"
 #include "rtype/xr/Headset.hpp"
 
 #include <functional>
@@ -11,6 +12,10 @@
 
 namespace rtype::client
 {
+
+/// The key that puts the cockpit back around the player (VrMode::recenter()), until the controllers can
+/// (docs/plan/vr.md, X5).
+inline constexpr input::Key RecenterKey = input::Key::F9;
 
 /// Where the choice of starting in the headset is kept in the settings. Not on the Settings page yet
 /// (docs/architecture/vr.md#next-steps): written by hand in the settings file.
@@ -78,6 +83,10 @@ public:
     /// Once per frame, after the frame of the game: reads what the runtime says, and draws the eyes while the
     /// headset shows the game, which waits for the next refresh of the headset.
     void update();
+
+    /// Puts the cockpit back around the player: the origin of the headset at their head, facing where they
+    /// look (xr::Headset::recenter()). Nothing without a headset.
+    void recenter();
 
     /// A headset is open: shown or waiting for the runtime.
     [[nodiscard]] bool isActive() const { return _headset != nullptr; }
