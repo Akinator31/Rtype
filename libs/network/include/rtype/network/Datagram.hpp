@@ -49,8 +49,9 @@ inline constexpr std::uint16_t DatagramMagic = 0x5254;
 /// 4): 2 adds the ack delay of the body, and to SNAPSHOT the input lead, the weapon of the ship of the client
 /// and the age of the shots; 3 adds to the players of SNAPSHOT their kills, waves cleared, streak and
 /// experience; 4, the account id of each player in PLAYER_JOINED; 5, whether the game carries the voice in
-/// ACCEPTED, and a player muted by an administrator in VOICE_STATUSES.
-inline constexpr std::uint8_t DatagramVersion = 5;
+/// ACCEPTED, and a player muted by an administrator in VOICE_STATUSES; 6 adds to the entities of SNAPSHOT their
+/// ship.
+inline constexpr std::uint8_t DatagramVersion = 6;
 
 struct DatagramHeader;
 

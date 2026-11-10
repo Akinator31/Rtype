@@ -16,7 +16,7 @@ end
 return {
     id = "bydo_drone",
     ship = "bydo_drone",
-    health = 15,
+    health = 7,
     speed = 520,
     acceleration = 1500,
     weapon = "wriggler_gun",

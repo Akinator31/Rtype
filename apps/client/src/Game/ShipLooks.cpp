@@ -106,16 +106,43 @@ void ShipLooks::setLocalLook(const ShipLook &look)
     _localLook = look;
 }
 
+void ShipLooks::setShipLook(std::uint8_t ship, const ShipLook &look, render::Vector2 size)
+{
+    _shipLooks.insert_or_assign(ship, SizedLook{look, size});
+}
+
 bool ShipLooks::hasLook(game::EntityKind kind) const
 {
     return _looks.contains(kind);
 }
 
+EntityLook ShipLooks::resizeToShip(const game::EntityState &state, EntityLook look) const
+{
+    const auto found = _shipLooks.find(state.ship);
+    if (found != _shipLooks.end()) {
+        look.box.width = found->second.size.x;
+        look.box.height = found->second.size.y;
+    }
+    return look;
+}
+
+const ShipLook &ShipLooks::findLook(const game::EntityState &state, bool local) const
+{
+    if (local && _localLook) {
+        return *_localLook;
+    }
+    const auto found = _shipLooks.find(state.ship);
+    if (found != _shipLooks.end()) {
+        return found->second.look;
+    }
+    const std::vector<ShipLook> &looks = _looks.at(state.kind);
+    return looks[state.id % looks.size()];
+}
+
 void ShipLooks::addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state,
                          const EntityLook &look, float clock, bool local) const
 {
-    const std::vector<ShipLook> &looks = _looks.at(state.kind);
-    const ShipLook &ship = local && _localLook ? *_localLook : looks[state.id % looks.size()];
+    const ShipLook &ship = findLook(state, local);
     const bool isPlayerShip = state.kind == game::EntityKind::PlayerShip;
     const render::Rectangle &hull = ship.hull;
     ecs.addComponent<engine::Model>(entity, ship.model.model, render::Vector3{}, LengthAxis,

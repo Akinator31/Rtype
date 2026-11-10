@@ -68,6 +68,12 @@ struct PlayerShip {
     std::uint8_t slot = 0;
 };
 
+/// The ship of the configuration the entity flies, sent to the clients so that they draw its model: its index
+/// in the ShipRegistry (EntityState::ship).
+struct ShipIndex {
+    std::uint8_t value = NoShip;
+};
+
 /// A Bydo, made from its EnemyDefinition (spawnEnemy()).
 struct Enemy {
     /// Id of the EnemyDefinition.

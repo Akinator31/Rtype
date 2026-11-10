@@ -79,11 +79,12 @@ const std::vector<std::byte> ExampleSnapshot = bytes({
     0x06, 0x40, 0x10, 0xE4,             //   x 200, y 540.5
     0x00, 0x00, 0xF6, 0xA0,             //   velocity 0, -300
     0x03, 0x01,                         //   health 3, invulnerable
+    0xFF,                               //   no ship
 });
 
 EntityState entity(std::uint32_t id, float x = 100.0f, float y = 100.0f)
 {
-    return {id, EntityKind::BydoFlyer, NoOwner, x, y, -120.0f, 0.0f, 2, 0};
+    return {id, EntityKind::BydoFlyer, NoOwner, x, y, -120.0f, 0.0f, 2, 0, 0, 4};
 }
 
 /// Every prefix of a valid payload, and the payload with one more byte, are refused.
@@ -331,14 +332,27 @@ TEST_CASE("The reserved bits of inputs are dropped; every bit of the flags is de
     CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0x7F);
     CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0x7F});
 
-    // The stances of the Bydos take the last three bits
+    // The stances of the Bydos take the last three bits of the flags, the byte before the ship
     std::vector<std::byte> payload = ExampleSnapshot;
-    payload.back() = std::byte{0xFF};
+    payload[payload.size() - 2] = std::byte{0xFF};
     CHECK(decodeSnapshotPart(payload)->entities[0].flags == 0xFF);
 
     SnapshotPart part = examplePart();
     part.entities[0].flags = EntityState::Guarding | EntityState::Slashing | EntityState::Shooting;
-    CHECK(encode(part).back() == std::byte{0xE0});
+    const std::vector<std::byte> encoded = encode(part);
+    CHECK(encoded[encoded.size() - 2] == std::byte{0xE0});
+}
+
+TEST_CASE("The ship of a Bydo travels with its state, a ship of a player has none", "[game][messages]")
+{
+    CHECK(decodeSnapshotPart(ExampleSnapshot)->entities[0].ship == NoShip);
+
+    SnapshotPart part = examplePart();
+    part.entities.push_back(entity(8));
+    part.entities.back().ship = 12;
+    const std::vector<std::byte> encoded = encode(part);
+    CHECK(encoded.back() == std::byte{12});
+    CHECK(decodeSnapshotPart(encoded)->entities[1].ship == 12);
 }
 
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")
@@ -490,11 +504,11 @@ TEST_CASE("Random bytes never crash a decoder", "[game][messages]")
 
 // --- Splitting ---
 
-TEST_CASE("A part of a snapshot holds 69 entities with four players, and always fits in a datagram",
+TEST_CASE("A part of a snapshot holds 61 entities with four players, and always fits in a datagram",
           "[game][messages]")
 {
-    CHECK(maxEntitiesPerPart(4) == 65);
-    CHECK(maxEntitiesPerPart(0) == 70);
+    CHECK(maxEntitiesPerPart(4) == 61);
+    CHECK(maxEntitiesPerPart(0) == 66);
     CHECK_THROWS_AS(maxEntitiesPerPart(5), std::invalid_argument);
 
     for (std::size_t players = 0; players <= MaxPlayers; ++players) {
@@ -514,7 +528,7 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
     Snapshot snapshot;
     snapshot.tick = 500;
     snapshot.players = {{0, 3, 10}, {1, 2, 20}, {2, 1, 30}, {3, 0, 40}};
-    for (std::uint32_t id = 1; id <= 190; ++id) {
+    for (std::uint32_t id = 1; id <= 170; ++id) {
         // Positions in eighths of a unit: exact once written
         snapshot.entities.push_back(entity(id, static_cast<float>(id) * 0.125f, static_cast<float>(id)));
     }
@@ -536,8 +550,8 @@ TEST_CASE("A snapshot is split in parts that give back all its entities", "[game
         CHECK(part->players == snapshot.players);
         entities.insert(entities.end(), part->entities.begin(), part->entities.end());
     }
-    CHECK(parts[0].entities.size() == 65);
-    CHECK(parts[2].entities.size() == 60);
+    CHECK(parts[0].entities.size() == 61);
+    CHECK(parts[2].entities.size() == 48);
     CHECK(entities == snapshot.entities);
 }
 
@@ -557,7 +571,7 @@ TEST_CASE("A snapshot without entities is one part, one with too many is cut at 
     }
     const std::vector<SnapshotPart> parts = splitSnapshot(crowded, 0);
     REQUIRE(parts.size() == MaxSnapshotParts);
-    CHECK(parts.back().entities.back().id == 16 * 65);
+    CHECK(parts.back().entities.back().id == 16 * 61);
 }
 
 TEST_CASE("The destroyed entities of a tick go in as many messages as needed", "[game][messages]")

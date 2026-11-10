@@ -18,7 +18,9 @@
 #include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Hitbox.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/log/Logger.hpp"
 
@@ -331,6 +333,41 @@ void setCollisionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
     }
 }
 
+/// The ship of the hangar with this model, if any.
+const ShipEntry *findCatalogEntry(const std::string &model)
+{
+    const auto &catalog = getShipCatalog();
+    const auto found = std::ranges::find(catalog, std::string_view(model), [](const ShipEntry &entry) {
+        return std::string_view(entry.modelPath);
+    });
+    return found != catalog.end() ? &*found : nullptr;
+}
+
+/// Gives each ship of the configuration that flies a model of the hangar its look, facing left, at the size
+/// of its collider: each Bydo is drawn with the model of its ship (game::EntityState::ship), whose index is
+/// the one of the ShipRegistry of the game.
+void setConfiguredShipLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                            const std::vector<game::ShipDefinition> &definitions)
+{
+    game::ShipRegistry ships;
+    for (const game::ShipDefinition &definition : definitions) {
+        ships.addDefinition(definition);
+    }
+    const std::size_t count = std::min<std::size_t>(ships.getDefinitionCount(), game::NoShip);
+    for (std::size_t index = 0; index < count; ++index) {
+        const game::ShipDefinition &ship = ships.getDefinitionAt(index);
+        const ShipEntry *entry = findCatalogEntry(ship.model);
+        if (entry == nullptr) {
+            continue;
+        }
+        const physics::Vec3 half = game::halfSizeOf(ship.collider);
+        sessions.setShipLook(
+            static_cast<std::uint8_t>(index),
+            {loadShipModel(resources, entry->modelPath), entry->hull, true, entry->trailMeshes},
+            {half.x * 2.0f, half.y * 2.0f});
+    }
+}
+
 /// Gives each kind of entity of the game its look and its sounds, from the GameAssets, loaded by then, and
 /// the ship of the local player the look of the ship equipped.
 void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
@@ -496,9 +533,9 @@ bool isAssetPath(const std::string &path)
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations,
-                       const ShipSelection &ships)
+                       const ShipSelection &ships, const std::vector<game::ShipDefinition> &shipDefinitions)
     : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
-      _translations(translations), _ships(ships), _recorder(engine)
+      _translations(translations), _ships(ships), _shipDefinitions(shipDefinitions), _recorder(engine)
 {
     sessions.setKillHandler([this](const Kill &kill) {
         recordKill(kill);
@@ -943,6 +980,7 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     configureGameLooks(_sessions, resources, audio, getShipCatalog()[_ships.equipped]);
+    setConfiguredShipLooks(_sessions, resources, _shipDefinitions);
     _scene = scene;
     _prompt.reset();
     _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),

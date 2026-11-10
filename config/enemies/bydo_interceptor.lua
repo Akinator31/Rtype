@@ -2,7 +2,7 @@
 return {
     id = "bydo_interceptor",
     ship = "bydo_interceptor",
-    health = 25,
+    health = 11,
     speed = 390,
     acceleration = 780,
     weapon = "rapid_rifle",

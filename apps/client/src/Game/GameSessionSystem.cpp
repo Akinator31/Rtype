@@ -127,6 +127,11 @@ void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
     _shipLooks.setLook(kind, look);
 }
 
+void GameSessionSystem::setShipLook(std::uint8_t ship, const ShipLook &look, render::Vector2 size)
+{
+    _shipLooks.setShipLook(ship, look, size);
+}
+
 void GameSessionSystem::setShipLooks(game::EntityKind kind, std::vector<ShipLook> looks)
 {
     _shipLooks.setLooks(kind, std::move(looks));
@@ -382,7 +387,7 @@ std::optional<std::uint8_t> GameSessionSystem::findKiller(ecs::entity_t bydo,
 
 void GameSessionSystem::createEntity(const game::EntityState &state)
 {
-    const EntityLook look = lookOf(state);
+    const EntityLook look = _shipLooks.resizeToShip(state, lookOf(state));
     const ecs::entity_t entity = _ecs.createEntity();
     _ecs.addComponent<engine::SceneMember>(entity, *_scene);
     _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.owner, state.health, state.health);

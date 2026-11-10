@@ -975,6 +975,23 @@ TEST_CASE("A ship registry refuses a ship without id or model, and accepts one w
     CHECK(registry.getDefinition("silent").sounds.move.empty());
 }
 
+TEST_CASE("A ship registry numbers its ships in the order of their ids, whatever the order they came in",
+          "[game]")
+{
+    ShipRegistry registry;
+    registry.addDefinition({"wasp", "models/wasp.glb", {}});
+    registry.addDefinition({"drone", "models/drone.glb", {}});
+    registry.addDefinition({"heavy", "models/heavy.glb", {}});
+
+    CHECK(registry.getDefinitionCount() == 3);
+    CHECK(registry.getIndex("drone") == 0);
+    CHECK(registry.getIndex("heavy") == 1);
+    CHECK(registry.getIndex("wasp") == 2);
+    CHECK(registry.getDefinitionAt(2).model == "models/wasp.glb");
+    CHECK_THROWS_AS(registry.getIndex("nope"), std::out_of_range);
+    CHECK_THROWS_AS(registry.getDefinitionAt(3), std::out_of_range);
+}
+
 namespace
 {
 
@@ -1227,6 +1244,7 @@ TEST_CASE("spawnEnemy() makes a Bydo of its definition, and refuses an unknown o
     CHECK(ecs.getComponent<Damage>(enemy).points == 20);
     CHECK(ecs.getComponent<Armed>(enemy).weapon == "blaster");
     CHECK(halfSizeOf(ecs.getComponent<rtype::physics::Collider>(enemy)).x == Approx(48.0f));
+    CHECK(ecs.getComponent<ShipIndex>(enemy).value == simulation.context().ships.getIndex("bydo_scout"));
     CHECK_THROWS_AS(spawnEnemy(ecs, simulation.context(), "nope", 0.0f, 0.0f), std::out_of_range);
 }
 

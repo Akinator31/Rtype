@@ -25,7 +25,7 @@ constexpr std::size_t SnapshotHeaderSize = 18;
 /// One player in SNAPSHOT: slot, lives, score, kills, waves cleared, streak, best streak, experience.
 constexpr std::size_t PlayerStateSize = 20;
 /// One entity in SNAPSHOT.
-constexpr std::size_t EntityStateSize = 16;
+constexpr std::size_t EntityStateSize = 17;
 /// The fields before the entities in ENTITIES_DESTROYED: tick, count.
 constexpr std::size_t DestroyedHeaderSize = 5;
 /// One entity in ENTITIES_DESTROYED: id, cause.
@@ -110,6 +110,7 @@ void writeEntity(Writer &writer, const EntityState &entity)
     writer.writeI16(toFixed(entity.velocityY));
     writer.writeU8(isShot(entity.kind) ? entity.age : entity.health);
     writer.writeU8(static_cast<std::uint8_t>(entity.flags & KnownFlags));
+    writer.writeU8(entity.ship);
 }
 
 EntityState readEntity(Reader &reader)
@@ -130,6 +131,7 @@ EntityState readEntity(Reader &reader)
         entity.health = healthOrAge;
     }
     entity.flags = static_cast<std::uint8_t>(reader.readU8() & KnownFlags);
+    entity.ship = reader.readU8();
     if (entity.id == 0 || kind == 0) {
         reader.fail();
     }

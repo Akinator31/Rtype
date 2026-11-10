@@ -80,7 +80,7 @@ return {
     id = "bydo_shogun",
     ship = "bydo_shogun",
     boss = true,
-    health = 255,
+    health = 179,
     phases = 4,
     speed = 700,
     weapon = "shogun_gun_sword",

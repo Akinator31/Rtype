@@ -18,7 +18,7 @@ end
 return {
     id = "bydo_orbiter",
     ship = "bydo_orbiter",
-    health = 90,
+    health = 38,
     speed = 460,
     acceleration = 1200,
     weapon = "wriggler_gun",

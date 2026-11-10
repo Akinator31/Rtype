@@ -2,7 +2,7 @@
 return {
     id = "bydo_sporecaster",
     ship = "bydo_sporecaster",
-    health = 55,
+    health = 23,
     speed = 170,
     acceleration = 340,
     weapon = "spore_sprayer",
