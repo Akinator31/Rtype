@@ -68,6 +68,7 @@ Most settings can be changed while the game runs, for instance from an options m
 | `setCursorVisible(bool)`, `isCursorVisible()` | Shows or hides the mouse pointer over the window.                                               |
 | `setVsync(bool)`                              | Turns vertical synchronisation on or off.                                                       |
 | `setTargetFps(fps)`                           | Sets the maximum number of frames per second, 0 for no limit.                                   |
+| `setPacedElsewhere(bool)`                     | While a VR headset paces the frames: no vertical synchronisation nor limit, the values asked kept ([VR](vr.md#who-paces-the-frames)). |
 | `requestClose()`                              | Asks the window to close, for instance from a _Quit_ button: `shouldClose()` then returns true. |
 
 **Fullscreen** covers the screen the window is on, at the resolution of that screen: the screen keeps its

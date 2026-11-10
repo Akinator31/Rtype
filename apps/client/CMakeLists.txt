@@ -9,6 +9,7 @@
 #   Quests/              the quests of the player, woken by the events of the game
 #   ShipSelector/        the hangar: the catalog of ships and the scene where the player picks one
 #   ShipModel            the ship models and their animations, flown by the menu and by the game
+#   Vr/                  the game in a VR headset (docs/architecture/vr.md)
 add_library(r-type_client_core STATIC
     src/App/Configuration.cpp
     src/App/Scenes.cpp
@@ -101,11 +102,12 @@ add_library(r-type_client_core STATIC
     src/Voice/VoiceDevices.cpp
     src/Voice/VoiceIcons.cpp
     src/Voice/VoiceKeysSystem.cpp
+    src/Vr/VrMode.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
     PUBLIC rtype::audio rtype::discord rtype::discord_voice rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
-           rtype::log rtype::network rtype::physics rtype::render rtype::voice_client
+           rtype::log rtype::network rtype::physics rtype::render rtype::voice_client rtype::xr
     PRIVATE rtype_options)
 
 # The Discord application whose activity the client shows in the profile of the player (its rich presence), by

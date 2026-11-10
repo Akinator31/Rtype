@@ -18,6 +18,7 @@
 #include "Quests/Quests.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "Voice/VoiceKeysSystem.hpp"
+#include "Vr/VrMode.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/audio/OutputLoopback.hpp"
@@ -38,11 +39,13 @@
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Window.hpp"
 #include "rtype/voice/Microphone.hpp"
+#include "rtype/xr/Headset.hpp"
 
 #include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <string_view>
+#include <vector>
 
 namespace
 {
@@ -72,7 +75,7 @@ struct UnloadSceneAssets {
     ~UnloadSceneAssets() { engine.unloadSceneAssets(); }
 };
 
-void run()
+void run(const std::vector<std::string_view> &arguments)
 {
     using namespace rtype::render;
 
@@ -166,6 +169,19 @@ void run()
     bool debugKeyWasDown = false;
     rtype::client::SceneLoadStatus sceneLoadStatus(engine, devices);
     bool assetsLoaded = false;
+    // The game in a VR headset, with --xr or the VR setting: opened on the OpenGL context of the window, and
+    // closed before it. Without a headset, the game stays on the screen and says so once in the main menu
+    rtype::client::VrMode vr({.open = [] { return rtype::xr::openHeadset(); },
+                              .pace = [&window](bool paced) { window.setPacedElsewhere(paced); },
+                              .lost =
+                                  [&engine, &translations] {
+                                      engine.showToast(translations.text("vr.toast.lost"),
+                                                       rtype::engine::ToastType::Warning);
+                                  }});
+    const bool vrWanted = rtype::client::wantsVr(arguments, engine.getSettings());
+    if (vrWanted) {
+        vr.start();
+    }
 
     const auto playFrame = [&] {
         const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
@@ -194,6 +210,7 @@ void run()
         }
         sceneLoadStatus.draw(renderer);
         renderer.endFrame();
+        vr.update();
     };
 
     rtype::client::createLoadingScenes(engine, resources, style, console, metrics, translations);
@@ -220,6 +237,9 @@ void run()
     rtype::client::registerQuests(engine, translations);
     engine.getEcs().registerSystem<rtype::client::VoiceKeysSystem>(engine, sessions, voice, translations);
     engine.switchScene(rtype::client::MainMenuScene);
+    if (vrWanted && !vr.isActive()) {
+        engine.showToast(translations.text("vr.toast.no_headset"), rtype::engine::ToastType::Warning);
+    }
     while (!window.shouldClose()) {
         playFrame();
         presence.update(rtype::client::observeActivity(engine, sessions, ships),
@@ -229,7 +249,7 @@ void run()
 
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
     const rtype::log::Logger logger("client");
 
@@ -237,7 +257,7 @@ int main()
         logger.warning("{}", *problem);
     }
     try {
-        run();
+        run(std::vector<std::string_view>(argv + 1, argv + argc));
     } catch (const std::exception &error) {
         logger.error("{}", error.what());
         return 84;
