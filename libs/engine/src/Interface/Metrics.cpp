@@ -18,7 +18,18 @@ render::Vector2 RendererMetrics::gameSize() const
 
 render::Rectangle RendererMetrics::visibleArea() const
 {
+    if (_surfaces) {
+        return (*_surfaces)[static_cast<std::size_t>(Surface::Panel)];
+    }
     return _renderer.visibleArea();
+}
+
+render::Rectangle RendererMetrics::surfaceArea(Surface surface) const
+{
+    if (_surfaces) {
+        return (*_surfaces)[static_cast<std::size_t>(surface)];
+    }
+    return visibleArea();
 }
 
 render::Vector2 RendererMetrics::windowToGame(render::Vector2 position) const

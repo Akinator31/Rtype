@@ -290,6 +290,23 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 
 A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
 
+### Surfaces, in a VR headset
+
+In a VR headset the interface is not drawn on one screen but on several surfaces of the cockpit
+([VR](vr.md#the-interface-in-the-cockpit)), each into an image of its own: `engine::Surface` names them
+(`Panel`, `Board`, `HudShip`, `HudNav`, `HudAux`, `Holo`). An entity of the interface is on the panel, unless
+it has an `OnSurface`. A toast without one goes where `SceneRenderer::setToastSurface()` says: the panel while
+it is open, the board otherwise.
+
+| Piece | Role |
+| ----- | ---- |
+| `OnSurface` | The surface of an entity of the interface. On the screen, it changes nothing: everything is drawn as before. |
+| `Metrics::surfacesApart()`, `surfaceArea(surface)` | Whether the surfaces are drawn apart, and the area of each, in game units. `RendererMetrics::separateSurfaces()` sets them, or none to come back to the screen; apart, `visibleArea()` is the area of the panel. |
+| `AnchorSystem` | Places an entity with an `OnSurface` in the area of its surface, from its own origin: a screen of 480 × 360 game units. |
+| `SceneRenderer::draw(renderer, surface)` | Draws the entities of the interface on one surface, into the image of the frame started. |
+| `SceneRenderer::hasContent(surface)` | Whether something is shown on a surface, toasts and fully transparent entities apart: the panel opens for a menu. |
+| `Scenes::bottom()` | The scene at the bottom of those open: it changes when the scenes are switched, which the headset fades. |
+
 ### Toasts
 
 A toast is a short message shown in a corner of the screen for a few seconds, over every scene and across

@@ -221,15 +221,18 @@ The visible area is computed by `computeVisibleArea()` (`Viewport.hpp`), a pure 
 
 ### Frames into an image, and the eyes of a headset
 
-In a VR headset ([VR](vr.md#in-the-headset)), the frame is not shown in the window: it is drawn into an image,
-the board, which each eye of the headset then shows in 3D.
+In a VR headset ([VR](vr.md#in-the-headset)), the frame is not shown in the window: it is drawn into images,
+the board, the panel of the menus and the screens of the cockpit, which each eye of the headset then shows in
+3D.
 
 | Function                              | Does                                                                                                         |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `createImage(resolution)`             | Creates an image to draw frames into, filled with black. It lives as long as the renderer.                  |
 | `beginFrame(image, background)`       | Starts a frame into the image instead of the window. `endFrame()` leaves it there and makes its mipmaps.     |
+| `beginFrame(image, area, background)` | Starts a frame into the image showing an area of the game of its own, stretched to the image: a surface of the interface, a screen of the cockpit of 480 × 360 game units for instance. |
 | `beginEye(eye, view, background)`     | Starts a 3D pass for an eye, into an image of the renderer of the size of the eye, with the view and the projection of the headset (`EyeView`). |
-| `drawImageQuad(image, transform)`     | Draws an image as a rectangle in 3D: the square of side 1 around the origin, facing +z, moved by `transform`. |
+| `drawImageQuad(image, transform, look)` | Draws an image as a rectangle in 3D: the square of side 1 around the origin, facing +z, moved by `transform`. `ImageQuadLook` gives its tint, how far its sides bend towards the eye (a curved panel, drawn in 32 strips), and whether it is drawn over everything, whatever its depth. |
+| `setModelMaterialImage(model, material, image)` | Shows an image as the emission map of a material of a model, found by its name in the glTF file: the screens of the cockpit show the HUD in the frame and with the glow of the artist. |
 | `drawSky(texture, tint)`              | Wraps a picture on a sphere around the eye, at infinity (it follows the eye, so it never comes nearer), repeated twice around and twice from top to bottom. Drawn first: it writes no depth. |
 | `drawModel(model, light, ...)`, `drawEnergyModel(model, energy, ...)` | The models of a frame, seen by the eye instead of a camera. They do not glow.                 |
 | `drawTransparentModel(model, light, ..., hiddenMeshes)` | The transparent meshes of a model (a canopy, a hologram), seen from both sides and without writing their depth, so that what is behind them stays sharp. Drawn after the opaque ones, from the farthest to the nearest. |
@@ -250,8 +253,13 @@ one into the window._
 The frame of an image is the frame of the window, glow and smoothing included, without the vignette, which
 belongs to a screen: in the headset the eye looks around the board. The colour filter is not applied to the
 image either, but where the eyes are copied to the headset and to the window: it is for the whole view, not
-only for the board. While the last frame was drawn into an image, `visibleArea()` is the visible area of that
-image.
+only for the board. While the last frame was drawn into an image, `visibleArea()` is the area that frame showed:
+the client draws the board last, so that it is the visible area of the game.
+
+`setModelMaterialImage()` replaces the emission map of the material, and turns the texture coordinates of its
+meshes upside down once: an image drawn into is stored from its bottom row, a texture of a glTF file from its
+top row. The model keeps its own map aside and gives it back before it is unloaded, as raylib frees the maps
+of the materials of a model with it.
 
 An eye is drawn in an image of its own rather than directly in the image of the headset so that it can go
 through the colour filter, as the frame of the window does. Its world is in metres, y up, -z ahead, the space of

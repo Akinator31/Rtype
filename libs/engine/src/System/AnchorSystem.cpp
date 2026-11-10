@@ -6,7 +6,7 @@ namespace rtype::engine
 AnchorSystem::AnchorSystem(ecs::ComponentCaches &caches, const Metrics &metrics)
     : _metrics(metrics), _anchors(use<Anchor>(caches)), _positions(use<ecs::Position>(caches)),
       _hitboxes(use<Hitbox>(caches)), _texts(use<Text>(caches)), _sprites(use<Sprite>(caches)),
-      _boxes(use<Box>(caches)), _extents(use<Extent>(caches))
+      _boxes(use<Box>(caches)), _extents(use<Extent>(caches)), _surfaces(use<OnSurface>(caches))
 {
 }
 
@@ -40,7 +40,9 @@ void AnchorSystem::update(float /*elapsed*/)
             continue;
         }
         const render::Vector2 size = sizeOf(entity).value_or(render::Vector2{0.0f, 0.0f});
-        const render::Vector2 position = computeAnchoredPosition(screen, _anchors.get(entity), size);
+        const render::Rectangle area =
+            _surfaces.has(entity) ? _metrics.surfaceArea(_surfaces.get(entity).surface) : screen;
+        const render::Vector2 position = computeAnchoredPosition(area, _anchors.get(entity), size);
         _positions.emplace(entity, position.x, position.y);
     }
 }

@@ -1,4 +1,5 @@
 #include "Vr/CockpitLook.hpp"
+#include "Vr/SceneFade.hpp"
 #include "Vr/VrLayout.hpp"
 #include "Vr/VrMode.hpp"
 #include "Vr/VrView.hpp"
@@ -322,6 +323,112 @@ TEST_CASE("The transparent meshes are drawn from the farthest to the nearest", "
     REQUIRE(rtype::client::farToNear(meshes, rtype::client::CockpitTransparentMeshes, {1.5f, 0.0f, 0.0f}) ==
             std::vector<int>{1, 2});
     REQUIRE(rtype::client::farToNear(meshes, {}, rtype::client::CockpitEyePoint).empty());
+}
+
+TEST_CASE(
+    "Each surface of the interface has the area of its screen, the panel and the board that of the game",
+    "[client][vr]")
+{
+    using rtype::engine::Surface;
+    const rtype::engine::SurfaceAreas areas = rtype::client::surfaceAreas({1920.0f, 1080.0f});
+    const auto areaOf = [&](Surface surface) { return areas[static_cast<std::size_t>(surface)]; };
+
+    REQUIRE(close(areaOf(Surface::Panel).width, 1920.0f));
+    REQUIRE(close(areaOf(Surface::Board).height, 1080.0f));
+    REQUIRE(close(areaOf(Surface::HudShip).width, 480.0f));
+    REQUIRE(close(areaOf(Surface::Holo).height, 330.0f));
+    for (const rtype::client::CockpitScreen &screen : rtype::client::CockpitScreens) {
+        const rtype::render::Rectangle area = areaOf(screen.surface);
+        REQUIRE(close(area.x, 0.0f));
+        REQUIRE(close(area.y, 0.0f));
+        // The image has the shape of the area: nothing is stretched
+        REQUIRE(std::abs((screen.resolution.x / screen.resolution.y) - (area.width / area.height)) < 0.01f);
+        REQUIRE_FALSE(screen.material.empty());
+    }
+}
+
+TEST_CASE("The open panel is between the dashboard and the board, seen whole, curved around the player",
+          "[client][vr]")
+{
+    const rtype::client::VrLayout layout;
+    const rtype::render::Vector2 game{1920.0f, 1080.0f};
+    const rtype::xr::FieldOfView quest2{.left = -0.942f, .right = 0.698f, .up = 0.768f, .down = -0.890f};
+    const auto corners = rtype::client::panelCorners(layout, game);
+    const auto board = rtype::client::boardCorners(layout, game);
+
+    for (const rtype::render::Vector3 corner : corners) {
+        REQUIRE(rtype::client::isSeen(corner, quest2));
+        // Nearer than the board
+        REQUIRE(corner.z > board[3].z);
+    }
+    // 1.6 m wide, of the shape of the game, 1.1 m ahead
+    REQUIRE(close(corners[1].x - corners[0].x, 1.6f));
+    REQUIRE(close(distance(corners[0], corners[3]), 0.9f));
+    // About 72 degrees wide: read without turning the head
+    const float width = 2.0f * std::atan2(corners[1].x, -corners[1].z) * 180.0f / std::numbers::pi_v<float>;
+    REQUIRE(width > 65.0f);
+    REQUIRE(width < 80.0f);
+    // Curved once open, over everything
+    const rtype::render::ImageQuadLook open = rtype::client::panelLook(layout, 1.0f, 1.0f);
+    REQUIRE(close(open.bend, layout.panelBend));
+    REQUIRE(open.onTop);
+    REQUIRE(open.tint.r == 255);
+}
+
+TEST_CASE("The panel unfolds from the hologram", "[client][vr]")
+{
+    const rtype::client::VrLayout layout;
+    const rtype::render::Vector2 game{1920.0f, 1080.0f};
+    // The origin of the unfolding is the hologram of the cockpit
+    REQUIRE(samePoint(layout.panelOrigin, rtype::client::cockpitToHeadset(rtype::client::CockpitHoloCentre,
+                                                                          rtype::client::CockpitEyePoint)));
+
+    const rtype::render::Matrix folded = rtype::client::panelTransform(layout, game, 0.0f);
+    REQUIRE(samePoint({folded.values[12], folded.values[13], folded.values[14]}, layout.panelOrigin));
+    // A line of light: thin, flat
+    REQUIRE(folded.values[0] < 0.2f * layout.panelWidth);
+    REQUIRE(std::hypot(folded.values[5], folded.values[6]) < 0.02f);
+    REQUIRE(close(rtype::client::panelLook(layout, 0.0f, 1.0f).bend, 0.0f));
+
+    // Halfway, risen, still a line; open, of its full size
+    const rtype::render::Matrix risen = rtype::client::panelTransform(layout, game, 0.4f);
+    REQUIRE(close(risen.values[13], layout.panelRise));
+    REQUIRE(std::hypot(risen.values[5], risen.values[6]) < 0.02f);
+    const rtype::render::Matrix open = rtype::client::panelTransform(layout, game, 1.0f);
+    REQUIRE(close(open.values[0], layout.panelWidth));
+    REQUIRE(close(open.values[14], -layout.panelDistance));
+}
+
+TEST_CASE("The board dims behind the panel and with the fade between two scenes", "[client][vr]")
+{
+    REQUIRE(close(rtype::client::boardBrightness(0.0f, 1.0f), 1.0f));
+    REQUIRE(close(rtype::client::boardBrightness(1.0f, 1.0f), rtype::client::BoardBehindPanel));
+    REQUIRE(close(rtype::client::boardBrightness(0.0f, 0.0f), 0.0f));
+    REQUIRE(rtype::client::boardBrightness(0.5f, 1.0f) < 1.0f);
+    REQUIRE(rtype::client::boardBrightness(0.5f, 1.0f) > rtype::client::BoardBehindPanel);
+}
+
+TEST_CASE("A switch of scenes fades out, keeping the images, then in", "[client][vr]")
+{
+    rtype::client::SceneFade fade;
+    REQUIRE(close(fade.brightness(), 1.0f));
+    REQUIRE_FALSE(fade.holding());
+
+    fade.start();
+    REQUIRE(close(fade.brightness(), 1.0f));
+    REQUIRE(fade.holding());
+    fade.update(0.05f);
+    REQUIRE(close(fade.brightness(), 0.5f));
+    REQUIRE(fade.holding());
+    // Black between the two scenes, then the new one is drawn
+    fade.update(0.05f);
+    REQUIRE(close(fade.brightness(), 0.0f));
+    REQUIRE_FALSE(fade.holding());
+    fade.update(0.05f);
+    REQUIRE(close(fade.brightness(), 0.5f));
+    fade.update(1.0f);
+    REQUIRE(close(fade.brightness(), 1.0f));
+    REQUIRE_FALSE(fade.holding());
 }
 
 TEST_CASE("Recentring is asked of the open headset only", "[client][vr]")

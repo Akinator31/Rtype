@@ -22,6 +22,8 @@
 #include <numbers>
 #include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace rtype::render
@@ -440,7 +442,7 @@ struct Renderer::Impl {
     [[nodiscard]] Rectangle getVisibleArea() const
     {
         if (frameImage) {
-            return computeVisibleArea(getImage(*frameImage).resolution(), gameSize);
+            return frameArea;
         }
         return computeVisibleArea(getWindowSize(), gameSize);
     }
@@ -621,6 +623,16 @@ void Renderer::beginFrame(ImageId image, Color background)
     _impl->frameImage = image;
 }
 
+void Renderer::beginFrame(ImageId image, Rectangle area, Color background)
+{
+    if (area.width <= 0.0f || area.height <= 0.0f) {
+        throw std::invalid_argument("The area of a frame must be strictly positive");
+    }
+    RenderTarget &into = _impl->getImage(image);
+    _impl->beginFrameInto(into, area, background);
+    _impl->frameImage = image;
+}
+
 void Renderer::endFrame()
 {
     _impl->passes.endFrame();
@@ -751,32 +763,53 @@ void Renderer::showMirror()
     EndDrawing();
 }
 
-void Renderer::drawImageQuad(ImageId image, const Matrix &transform, Color tint)
+void Renderer::drawImageQuad(ImageId image, const Matrix &transform, const ImageQuadLook &look)
 {
     _impl->passes.requireEye();
     const Texture2D &texture = _impl->getImage(image).get().texture;
+    // A flat image is one strip; a curved one, strips thin enough for the curve to look round
+    const int strips = look.bend == 0.0f ? 1 : 32;
     rlDrawRenderBatchActive();
     rlDisableBackfaceCulling();
+    if (look.onTop) {
+        rlDisableDepthTest();
+    }
     rlPushMatrix();
     rlMultMatrixf(transform.values.data());
     rlSetTexture(texture.id);
     rlBegin(RL_QUADS);
-    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+    rlColor4ub(look.tint.r, look.tint.g, look.tint.b, look.tint.a);
     rlNormal3f(0.0f, 0.0f, 1.0f);
-    // The image is stored from its bottom row: its top is at v = 1
-    rlTexCoord2f(0.0f, 1.0f);
-    rlVertex3f(-0.5f, 0.5f, 0.0f);
-    rlTexCoord2f(0.0f, 0.0f);
-    rlVertex3f(-0.5f, -0.5f, 0.0f);
-    rlTexCoord2f(1.0f, 0.0f);
-    rlVertex3f(0.5f, -0.5f, 0.0f);
-    rlTexCoord2f(1.0f, 1.0f);
-    rlVertex3f(0.5f, 0.5f, 0.0f);
+    const auto vertex = [&](float u, float v) {
+        const float across = (2.0f * u) - 1.0f;
+        // The image is stored from its bottom row: its top is at v = 1
+        rlTexCoord2f(u, v);
+        rlVertex3f(u - 0.5f, v - 0.5f, look.bend * across * across);
+    };
+    for (int strip = 0; strip < strips; ++strip) {
+        const float left = static_cast<float>(strip) / static_cast<float>(strips);
+        const float right = static_cast<float>(strip + 1) / static_cast<float>(strips);
+        vertex(left, 1.0f);
+        vertex(left, 0.0f);
+        vertex(right, 0.0f);
+        vertex(right, 1.0f);
+    }
     rlEnd();
     rlSetTexture(0);
     rlPopMatrix();
     rlDrawRenderBatchActive();
+    if (look.onTop) {
+        rlEnableDepthTest();
+    }
     rlEnableBackfaceCulling();
+}
+
+void Renderer::setModelMaterialImage(ModelId model, std::string_view material, ImageId image)
+{
+    const Texture2D &texture = _impl->getImage(image).get().texture;
+    if (!_impl->models.get(model).showOnMaterial(material, texture)) {
+        throw std::out_of_range("No material " + std::string(material) + " in this model");
+    }
 }
 
 void Renderer::drawSky(TextureId texture, Color tint)

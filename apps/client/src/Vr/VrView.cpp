@@ -4,6 +4,7 @@
 #include "Vr/CockpitLook.hpp"
 #include "rtype/log/Logger.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <exception>
@@ -30,12 +31,40 @@ VrView::VrView(render::Renderer &renderer, render::ResourceManager &resources, V
 {
 }
 
+namespace
+{
+
+render::Color grey(float brightness)
+{
+    const auto channel = static_cast<unsigned char>(std::lround(std::clamp(brightness, 0.0f, 1.0f) * 255.0f));
+    return {channel, channel, channel, 255};
+}
+
+} // namespace
+
 render::ImageId VrView::board()
 {
     if (!_board) {
         _board = _renderer.createImage(BoardResolution);
     }
     return *_board;
+}
+
+render::ImageId VrView::panel()
+{
+    if (!_panel) {
+        _panel = _renderer.createImage(PanelResolution);
+    }
+    return *_panel;
+}
+
+render::ImageId VrView::screen(std::size_t index)
+{
+    std::optional<render::ImageId> &image = _screenImages.at(index);
+    if (!image) {
+        image = _renderer.createImage(CockpitScreens.at(index).resolution);
+    }
+    return *image;
 }
 
 void VrView::findCockpit()
@@ -69,6 +98,14 @@ void VrView::findCockpit()
     } catch (const std::out_of_range &) {
         cockpit.screens = -1;
     }
+    // The screens of the artist show the HUD, in their frame and with their glow
+    for (std::size_t index = 0; index < CockpitScreens.size(); ++index) {
+        try {
+            _renderer.setModelMaterialImage(model, CockpitScreens[index].material, screen(index));
+        } catch (const std::out_of_range &error) {
+            log::Logger("vr").warning("a screen of the cockpit shows nothing: {}", error.what());
+        }
+    }
     _cockpit = std::move(cockpit);
 }
 
@@ -93,19 +130,64 @@ void VrView::update(float elapsed, VrScene scene)
         _loading = _resources.loadModelAsync(RTYPE_MODEL_COCKPIT);
     }
     findCockpit();
+    if (scene.scenes != _scene.scenes) {
+        _fade.start();
+    }
+    _fade.update(elapsed);
+    const float step = elapsed / PanelUnfoldTime;
+    _openness = std::clamp(scene.panel ? _openness + step : _openness - step, 0.0f, 1.0f);
     _scene = std::move(scene);
     animateCockpit(elapsed);
+}
+
+void VrView::drawFrames(const std::function<void(engine::Surface)> &draw)
+{
+    // The HUD only during a game: its screens are seen only in the cockpit
+    if (_cockpit && _scene.playing) {
+        for (std::size_t index = 0; index < CockpitScreens.size(); ++index) {
+            const CockpitScreen &shown = CockpitScreens[index];
+            _renderer.beginFrame(screen(index), {0.0f, 0.0f, shown.size.x, shown.size.y},
+                                 render::colors::Black);
+            draw(shown.surface);
+            _renderer.endFrame();
+        }
+    }
+    if (_fade.holding()) {
+        return;
+    }
+    if (_openness > 0.0f) {
+        const render::Vector2 gameSize = _renderer.gameSize();
+        const render::Rectangle area{0.0f, 0.0f, gameSize.x, gameSize.y};
+        _renderer.beginFrame(panel(), area, PanelBackground);
+        draw(engine::Surface::Panel);
+        _renderer.drawRectangleOutline(area, 4.0f, PanelEdge);
+        _renderer.endFrame();
+    }
+    _renderer.beginFrame(board());
+    draw(engine::Surface::Board);
+    _renderer.endFrame();
+}
+
+engine::Surface VrView::toastSurface() const
+{
+    return _openness > 0.5f ? engine::Surface::Panel : engine::Surface::Board;
 }
 
 void VrView::drawEye(int eye, const xr::EyeView &view)
 {
     _renderer.beginEye(eye, toRenderEye(view));
     // Space first, at infinity: everything else is in front of it
+    const float brightness = _fade.brightness();
     if (_scene.sky) {
-        _renderer.drawSky(_scene.sky->texture, _scene.sky->tint);
+        const render::Color tint = _scene.sky->tint;
+        const render::Color fade = grey(brightness);
+        _renderer.drawSky(_scene.sky->texture, {static_cast<unsigned char>(tint.r * fade.r / 255),
+                                                static_cast<unsigned char>(tint.g * fade.g / 255),
+                                                static_cast<unsigned char>(tint.b * fade.b / 255), tint.a});
     }
     if (_board) {
-        _renderer.drawImageQuad(*_board, boardTransform(_layout, _renderer.gameSize()));
+        _renderer.drawImageQuad(*_board, boardTransform(_layout, _renderer.gameSize()),
+                                {.tint = grey(boardBrightness(_openness, brightness))});
     }
     // In the menus, the board floats alone in the sky: the player sits in the cockpit for a game
     if (_cockpit && _scene.playing) {
@@ -120,6 +202,11 @@ void VrView::drawEye(int eye, const xr::EyeView &view)
             _renderer.drawTransparentModel(_cockpit->model, _scene.light, placement.position,
                                            placement.rotationAxis, placement.rotationAngle, 1.0f, hidden);
         }
+    }
+    // Last, over the cockpit: nothing hides the menus
+    if (_panel && _openness > 0.0f) {
+        _renderer.drawImageQuad(*_panel, panelTransform(_layout, _renderer.gameSize(), _openness),
+                                panelLook(_layout, _openness, brightness));
     }
     _renderer.endEye();
 }
