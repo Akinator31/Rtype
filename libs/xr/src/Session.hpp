@@ -28,6 +28,8 @@ class Session
     XrSpace _local = XR_NULL_HANDLE;
     XrSpace _head = XR_NULL_HANDLE;
     bool _recenterAsked = false;
+    /// Where the origin of the space drawn in is, in LOCAL: moved by a recentre and by a turn.
+    Pose _origin;
     XrEnvironmentBlendMode _blendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     std::string _runtimeName;
     bool _touchControllerPlus = false;
@@ -43,7 +45,7 @@ class Session
     void release();
     void createSession();
     /// Creates the space everything is drawn in again: LOCAL, its origin at `origin`, given in LOCAL.
-    void placeOrigin(const XrPosef &origin);
+    void placeOrigin(const Pose &origin);
     /// Moves the origin to the head of the player, level, as it is when the frame will be shown.
     void recenterOnHead();
     void changeState(XrSessionState state);
@@ -73,6 +75,8 @@ public:
     void pollEvents();
     /// Asks for the origin to be moved to the head of the player at the next frame (Headset::recenter()).
     void recenter() { _recenterAsked = true; }
+    /// Turns the origin around its vertical, at once (Headset::turn()).
+    void turn(float degrees);
     [[nodiscard]] HeadsetState state() const { return _state; }
 
     /// Waits for the next frame and begins it. True when its views were located and must be drawn.

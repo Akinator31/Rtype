@@ -161,3 +161,31 @@ TEST_CASE("A recentre looking straight up keeps a heading", "[xr]")
     const Matrix axes = rtype::xr::toMatrix(level);
     REQUIRE(samePoint(rtype::xr::transformPoint(axes, {0.0f, 0.0f, -1.0f}), {0.0f, 0.0f, -1.0f}));
 }
+
+TEST_CASE("A turn moves the origin around its vertical, to the left for a positive angle", "[xr]")
+{
+    const Pose origin{.position = {0.1f, 1.2f, -0.3f}, .orientation = {}};
+
+    const Pose quarter = rtype::xr::turned(origin, std::numbers::pi_v<float> / 2.0f);
+
+    REQUIRE(samePoint(quarter.position, origin.position));
+    const Matrix axes = rtype::xr::toMatrix(quarter);
+    // Ahead (-z) of the origin is now on the left (-x), its up still up
+    REQUIRE(samePoint(rtype::xr::transformPoint(axes, {0.0f, 0.0f, -1.0f}), {-0.9f, 1.2f, -0.3f}));
+    REQUIRE(samePoint(rtype::xr::transformPoint(axes, {0.0f, 1.0f, 0.0f}), {0.1f, 2.2f, -0.3f}));
+}
+
+TEST_CASE("Two turns add up, and keep the origin level", "[xr]")
+{
+    const Pose origin =
+        rtype::xr::levelled({.position = {}, .orientation = {0.0f, 0.38268343f, 0.0f, 0.9238795f}});
+    const float eighth = std::numbers::pi_v<float> / 4.0f;
+
+    const Pose twice = rtype::xr::turned(rtype::xr::turned(origin, eighth), -3.0f * eighth);
+
+    // A turn of 45 degrees, then of -135: -90 from the origin, which was already at 45, so -45 in all
+    const Matrix axes = rtype::xr::toMatrix(twice);
+    const float half = std::sqrt(0.5f);
+    REQUIRE(samePoint(rtype::xr::transformPoint(axes, {0.0f, 0.0f, -1.0f}), {half, 0.0f, -half}));
+    REQUIRE(samePoint(rtype::xr::transformPoint(axes, {0.0f, 1.0f, 0.0f}), {0.0f, 1.0f, 0.0f}));
+}

@@ -46,6 +46,7 @@ public:
     void endEye(int eye) override { _eyes.end(eye); }
     void endFrame() override { _session.endFrame(_eyes.layerViews()); }
     void recenter() override { _session.recenter(); }
+    void turn(float degrees) override { _session.turn(degrees); }
     [[nodiscard]] HandState hand(Hand hand) const override
     {
         return _controllers.state(static_cast<int>(hand));
