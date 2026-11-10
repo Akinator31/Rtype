@@ -457,6 +457,21 @@ struct Renderer::Impl {
         return *images[image.index];
     }
 
+    /// How what is drawn blends into the target of the frame. Into the window, as usual. Into an image, its
+    /// alpha is how much of it is covered (the colour blends as usual, the alpha adds up), and its colour is
+    /// premultiplied by it, from a background cleared to transparent black: drawImageQuad() lays it over what
+    /// is behind it as it is, a panel transparent where nothing is drawn on it. The additive passes (the
+    /// glow, the energy models) set the usual blending back when they end: called again after them.
+    void blendFrame() const
+    {
+        if (!frameImage) {
+            return;
+        }
+        rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA, RL_ONE, RL_ONE_MINUS_SRC_ALPHA,
+                                  RL_FUNC_ADD, RL_FUNC_ADD);
+        rlSetBlendMode(RL_BLEND_CUSTOM_SEPARATE);
+    }
+
     /// Starts a frame into a target, the visible area `area` covering it
     void beginFrameInto(RenderTarget &into, Rectangle area, Color background)
     {
@@ -616,11 +631,27 @@ void Renderer::beginFrame(Color background)
     _impl->frameImage.reset();
 }
 
+namespace
+{
+
+/// A colour multiplied by its alpha: the background of an image, whose colours are premultiplied.
+Color premultiplied(Color color)
+{
+    const auto scale = [&](std::uint8_t channel) {
+        return static_cast<std::uint8_t>((static_cast<unsigned>(channel) * color.a + 127u) / 255u);
+    };
+    return {scale(color.r), scale(color.g), scale(color.b), color.a};
+}
+
+} // namespace
+
 void Renderer::beginFrame(ImageId image, Color background)
 {
     RenderTarget &into = _impl->getImage(image);
-    _impl->beginFrameInto(into, computeVisibleArea(into.resolution(), _impl->gameSize), background);
+    _impl->beginFrameInto(into, computeVisibleArea(into.resolution(), _impl->gameSize),
+                          premultiplied(background));
     _impl->frameImage = image;
+    _impl->blendFrame();
 }
 
 void Renderer::beginFrame(ImageId image, Rectangle area, Color background)
@@ -629,14 +660,17 @@ void Renderer::beginFrame(ImageId image, Rectangle area, Color background)
         throw std::invalid_argument("The area of a frame must be strictly positive");
     }
     RenderTarget &into = _impl->getImage(image);
-    _impl->beginFrameInto(into, area, background);
+    _impl->beginFrameInto(into, area, premultiplied(background));
     _impl->frameImage = image;
+    _impl->blendFrame();
 }
 
 void Renderer::endFrame()
 {
     _impl->passes.endFrame();
     EndMode2D();
+    // What the batch holds is drawn with the blending of the frame, then the usual one comes back
+    rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     if (_impl->frameImage) {
         _impl->frame->generateMipmaps();
@@ -776,9 +810,12 @@ void Renderer::drawImageQuad(ImageId image, const Matrix &transform, const Image
     }
     rlPushMatrix();
     rlMultMatrixf(transform.values.data());
+    // Its colours are premultiplied by its alpha (Impl::blendFrame()): laid over what is behind as they are
+    rlSetBlendMode(RL_BLEND_ALPHA_PREMULTIPLY);
     rlSetTexture(texture.id);
     rlBegin(RL_QUADS);
-    rlColor4ub(look.tint.r, look.tint.g, look.tint.b, look.tint.a);
+    const Color tint = premultiplied(look.tint);
+    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
     rlNormal3f(0.0f, 0.0f, 1.0f);
     const auto vertex = [&](float u, float v) {
         const float across = (2.0f * u) - 1.0f;
@@ -798,10 +835,116 @@ void Renderer::drawImageQuad(ImageId image, const Matrix &transform, const Image
     rlSetTexture(0);
     rlPopMatrix();
     rlDrawRenderBatchActive();
+    rlSetBlendMode(RL_BLEND_ALPHA);
     if (look.onTop) {
         rlEnableDepthTest();
     }
     rlEnableBackfaceCulling();
+}
+
+namespace
+{
+
+/// Draws light over everything drawn before, added to it, writing no depth: the rays of the controllers.
+class GlowingOnTop
+{
+public:
+    GlowingOnTop()
+    {
+        rlDrawRenderBatchActive();
+        rlDisableBackfaceCulling();
+        rlDisableDepthTest();
+        rlDisableDepthMask();
+        rlSetBlendMode(RL_BLEND_ADDITIVE);
+    }
+    ~GlowingOnTop()
+    {
+        rlDrawRenderBatchActive();
+        rlSetBlendMode(RL_BLEND_ALPHA);
+        rlEnableDepthMask();
+        rlEnableDepthTest();
+        rlEnableBackfaceCulling();
+    }
+
+    GlowingOnTop(const GlowingOnTop &) = delete;
+    GlowingOnTop &operator=(const GlowingOnTop &) = delete;
+    GlowingOnTop(GlowingOnTop &&) = delete;
+    GlowingOnTop &operator=(GlowingOnTop &&) = delete;
+};
+
+} // namespace
+
+void Renderer::drawBeam(Vector3 from, Vector3 to, float width, Color color)
+{
+    _impl->passes.requireEye();
+    const ::Vector3 start = toRaylib(from);
+    const ::Vector3 end = toRaylib(to);
+    const ::Vector3 eye = toRaylib(_impl->eye->view.position);
+    const ::Vector3 along = Vector3Subtract(end, start);
+    // Across the beam and across the line of sight: the ribbon is seen flat from the eye
+    ::Vector3 across = Vector3CrossProduct(along, Vector3Subtract(Vector3Lerp(start, end, 0.5f), eye));
+    if (Vector3Length(across) <= 0.0f) {
+        return;
+    }
+    across = Vector3Scale(Vector3Normalize(across), width / 2.0f);
+    const GlowingOnTop glowing;
+    rlBegin(RL_QUADS);
+    rlColor4ub(color.r, color.g, color.b, color.a);
+    rlVertex3f(start.x - across.x, start.y - across.y, start.z - across.z);
+    rlVertex3f(start.x + across.x, start.y + across.y, start.z + across.z);
+    // Fading towards its end: the light of the controller goes out in the distance
+    rlColor4ub(color.r / 4, color.g / 4, color.b / 4, color.a);
+    rlVertex3f(end.x + across.x, end.y + across.y, end.z + across.z);
+    rlVertex3f(end.x - across.x, end.y - across.y, end.z - across.z);
+    rlEnd();
+}
+
+void Renderer::drawDot(Vector3 centre, float radius, Color color)
+{
+    _impl->passes.requireEye();
+    const ::Vector3 middle = toRaylib(centre);
+    const ::Vector3 facing = Vector3Subtract(toRaylib(_impl->eye->view.position), middle);
+    if (Vector3Length(facing) <= 0.0f) {
+        return;
+    }
+    // Two axes of the plane facing the eye
+    const ::Vector3 normal = Vector3Normalize(facing);
+    const ::Vector3 helper =
+        std::abs(normal.y) < 0.9f ? ::Vector3{0.0f, 1.0f, 0.0f} : ::Vector3{1.0f, 0.0f, 0.0f};
+    const ::Vector3 first = Vector3Normalize(Vector3CrossProduct(normal, helper));
+    const ::Vector3 second = Vector3CrossProduct(normal, first);
+    constexpr int Sides = 24;
+    const GlowingOnTop glowing;
+    rlBegin(RL_TRIANGLES);
+    for (int side = 0; side < Sides; ++side) {
+        const float angle = 2.0f * std::numbers::pi_v<float> * static_cast<float>(side) / Sides;
+        const float next = 2.0f * std::numbers::pi_v<float> * static_cast<float>(side + 1) / Sides;
+        const auto rim = [&](float at) {
+            return Vector3Add(middle, Vector3Add(Vector3Scale(first, std::cos(at) * radius),
+                                                 Vector3Scale(second, std::sin(at) * radius)));
+        };
+        const ::Vector3 a = rim(angle);
+        const ::Vector3 b = rim(next);
+        // Bright in its middle, fading to its edge
+        rlColor4ub(color.r, color.g, color.b, color.a);
+        rlVertex3f(middle.x, middle.y, middle.z);
+        rlColor4ub(color.r / 6, color.g / 6, color.b / 6, color.a);
+        rlVertex3f(a.x, a.y, a.z);
+        rlVertex3f(b.x, b.y, b.z);
+    }
+    rlEnd();
+}
+
+void Renderer::drawBox(const Matrix &transform, Color color, Color edge)
+{
+    _impl->passes.requireEye();
+    rlDrawRenderBatchActive();
+    rlPushMatrix();
+    rlMultMatrixf(transform.values.data());
+    DrawCube({0.0f, 0.0f, 0.0f}, 1.0f, 1.0f, 1.0f, toRaylib(color));
+    DrawCubeWires({0.0f, 0.0f, 0.0f}, 1.0f, 1.0f, 1.0f, toRaylib(edge));
+    rlPopMatrix();
+    rlDrawRenderBatchActive();
 }
 
 void Renderer::setModelMaterialImage(ModelId model, std::string_view material, ImageId image)
@@ -1033,6 +1176,7 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
     BeginMode3D(view);
     _impl->drawEnergy(model, view, energy, origin, axis, rotationAngle, scale, tint, spinAngle);
     EndMode3D();
+    _impl->blendFrame();
     _impl->beginGameView();
     if (energy.bloom > 0.0f) {
         _impl->glowQueue.push_back({model,
@@ -1121,6 +1265,7 @@ void Renderer::drawGlow()
     if (!_impl->frameImage) {
         _impl->vignette.draw(resolution, _impl->vignetteStrength);
     }
+    _impl->blendFrame();
     _impl->beginGameView();
 }
 

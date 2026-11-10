@@ -43,7 +43,9 @@ struct VrLayout {
 
 /// How long the panel takes to unfold, or to fold back, in seconds.
 inline constexpr float PanelUnfoldTime = 0.25f;
-/// How bright the board stays behind the open panel, from 0 to 1.
+/// How bright the board stays behind the open panel during a game, from 0 to 1: the pause, the death screen
+/// and the results are read over the battle. In the menus, the board is not dimmed: the menus are over the
+/// world of their scene (the planet of the main menu, the hangar), as on the screen.
 inline constexpr float BoardBehindPanel = 0.35f;
 /// The resolution of the image of the panel, of the shape of the game.
 inline constexpr render::Vector2 PanelResolution{1920.0f, 1080.0f};
@@ -63,8 +65,9 @@ inline constexpr render::Vector2 PanelResolution{1920.0f, 1080.0f};
 /// @param brightness From 0 (black) to 1, the fade between two scenes.
 [[nodiscard]] render::ImageQuadLook panelLook(const VrLayout &layout, float openness, float brightness);
 
-/// How bright the board is: dimmed behind the panel as it opens, and by the fade between two scenes.
-[[nodiscard]] float boardBrightness(float openness, float brightness);
+/// How bright the board is: dimmed behind the panel as it opens during a game (`playing`), and by the fade
+/// between two scenes.
+[[nodiscard]] float boardBrightness(float openness, float brightness, bool playing);
 
 /// The resolution of the image of the board: about 38 pixels per degree across its 67 degrees, more than a
 /// headset shows (20 to 25), so that the board stays sharp.
