@@ -116,6 +116,8 @@ struct Gauge {
     /// At or below this value, the light turns red (GaugeStyle::lowLight): a life about to run out. 0 for a
     /// light that stays white.
     float low = 0.0f;
+    /// Whether the value is written as a percentage on the right of the caption.
+    bool showsPercentage = true;
 };
 
 /// One option among several, shown as "Caption: Option". Left, Right, the mouse wheel and a click go through

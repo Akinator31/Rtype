@@ -12,6 +12,7 @@
 
 #include <array>
 #include <string>
+#include <vector>
 
 namespace rtype::client
 {
@@ -76,6 +77,22 @@ void addQuest(engine::Engine &engine, const localization::Localization &translat
 }
 
 } // namespace
+
+std::vector<QuestProgress> getQuestProgress(const engine::Settings &settings)
+{
+    std::vector<QuestProgress> quests;
+    for (const StatQuestDefinition &quest : StatQuests) {
+        quests.push_back({.id = quest.id,
+                          .current = getStat(settings, quest.stat),
+                          .target = quest.target,
+                          .completed = settings.getBool(std::string("quest.") + quest.id).value_or(false)});
+    }
+    for (const SceneQuestDefinition &quest : SceneQuests) {
+        const bool completed = settings.getBool(std::string("quest.") + quest.id).value_or(false);
+        quests.push_back({.id = quest.id, .current = completed ? 1 : 0, .target = 1, .completed = completed});
+    }
+    return quests;
+}
 
 void registerQuests(engine::Engine &engine, const localization::Localization &translations)
 {
