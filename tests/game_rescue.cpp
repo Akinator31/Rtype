@@ -6,9 +6,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 using namespace rtype::game;
@@ -25,7 +27,14 @@ GameConfig bossOnly()
     std::erase_if(config.waves,
                   [](const WaveDefinition &wave) { return wave.difficulty != MaxWaveDifficulty; });
     if (config.waves.empty()) {
-        SKIP("The final boss wave is retired from config/waves (see config/waves_disabled)");
+        // Retired from config/waves (see config/waves_disabled): the shogun alone, as in the campaign
+        WaveDefinition wave;
+        wave.name = "shogun";
+        wave.difficulty = MaxWaveDifficulty;
+        wave.placement = WavePlacement::Manual;
+        wave.spawns = {{"bydo_shogun", 2050.0f, 540.0f}};
+        wave.quantity = 1;
+        config.waves = {std::move(wave)};
     }
     return config;
 }
@@ -42,9 +51,8 @@ std::optional<EntityState> bossOf(const Snapshot &snapshot)
 }
 
 /// A game against the shogun with one life, which the player loses by flying into it.
-std::unique_ptr<Simulation> loseAgainstTheBoss(bool rescue)
+std::unique_ptr<Simulation> loseAgainstTheBoss(bool rescue, Rules rules = {})
 {
-    Rules rules;
     rules.rescue = rescue;
     rules.lives = 1;
     rules.firstWaveDelay = 1;
@@ -180,4 +188,57 @@ TEST_CASE("Offline, the last life lost against the final boss calls the allies, 
         outcome = game.snapshot().gameOver;
     }
     CHECK(outcome == GameOutcome::Victory);
+}
+
+TEST_CASE("During the voice of the rescue, the ship of the player may come back, then an escort next to it",
+          "[game]")
+{
+    Rules rules;
+    rules.rescueVoiceTicks = 600;
+    rules.rescueShipTicks = 100;
+    rules.rescueEscortTicks = 250;
+    const std::unique_ptr<Simulation> simulation = loseAgainstTheBoss(true, rules);
+    Simulation &game = *simulation;
+    REQUIRE(game.snapshot().rescue == RescueStage::Voice);
+
+    // Nothing before its tick: no ship, no ally
+    for (std::uint32_t tick = 0; tick + 2 < rules.rescueShipTicks; ++tick) {
+        game.step();
+    }
+    CHECK(countOf(game.snapshot(), EntityKind::PlayerShip) == 0);
+    CHECK(game.snapshot().players.at(0).lives == 0);
+
+    // The ship back, a life with it, at the tip of the formation, alone
+    for (int tick = 0; tick < 3; ++tick) {
+        game.step();
+    }
+    REQUIRE(countOf(game.snapshot(), EntityKind::PlayerShip) == 1);
+    CHECK(game.snapshot().players.at(0).lives == 1);
+    CHECK(countOf(game.snapshot(), EntityKind::AllyShip) == 0);
+    const auto ship = std::ranges::find(game.snapshot().entities, EntityKind::PlayerShip, &EntityState::kind);
+    const float shipX = ship->x;
+    const float shipY = ship->y;
+
+    // Then the escort alone, which flies in from the left to its side
+    for (std::uint32_t tick = rules.rescueShipTicks; tick < rules.rescueEscortTicks + 2; ++tick) {
+        game.step();
+    }
+    REQUIRE(countOf(game.snapshot(), EntityKind::AllyShip) == 1);
+    const auto arriving = std::ranges::find(game.snapshot().entities, EntityKind::AllyShip, &EntityState::kind);
+    CHECK(arriving->x < 0.0f);
+    for (int tick = 0; tick < 3 * TickRate; ++tick) {
+        game.step();
+    }
+    const auto escort = std::ranges::find(game.snapshot().entities, EntityKind::AllyShip, &EntityState::kind);
+    CHECK(escort->x > shipX - 200.0f);
+    CHECK(escort->x < shipX);
+    CHECK(std::abs(escort->y - shipY) < 200.0f);
+    CHECK(game.snapshot().rescue == RescueStage::Voice);
+
+    // The others come at the end of the voice, the escort kept
+    CHECK_FALSE(runUntil(game, RescueStage::Arrival, static_cast<int>(rules.rescueVoiceTicks)));
+    REQUIRE(game.snapshot().rescue == RescueStage::Arrival);
+    game.step();
+    CHECK(countOf(game.snapshot(), EntityKind::AllyShip) == 5);
+    CHECK(countOf(game.snapshot(), EntityKind::PlayerShip) == 1);
 }

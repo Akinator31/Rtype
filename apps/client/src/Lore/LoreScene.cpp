@@ -5,6 +5,7 @@
 #include "Lore/LoreLayout.hpp"
 #include "Lore/LoreText.hpp"
 #include "MainMenu/Layout.hpp"
+#include "MainMenu/MainMenu.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
@@ -14,6 +15,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <stdexcept>
 #include <vector>
 
@@ -39,15 +41,26 @@ constexpr int loreOrder = 1;
 /// The music, loaded before the scene opens and unloaded once it has closed, which stops it.
 const std::vector<engine::SceneAsset> LoreAssets{{engine::AssetType::Music, RTYPE_MUSIC_LORE}};
 
-[[nodiscard]] std::filesystem::path getLorePath(const localization::Localization &translations)
+/// A text of the crawl, in each language: a path of the assets.
+struct LoreFiles {
+    const char *french;
+    const char *english;
+};
+
+constexpr LoreFiles StoryFiles{RTYPE_LORE_FRENCH, RTYPE_LORE_ENGLISH};
+constexpr LoreFiles EndingFiles{RTYPE_CAMPAIGN_ENDING_FRENCH, RTYPE_CAMPAIGN_ENDING_ENGLISH};
+
+[[nodiscard]] std::filesystem::path getLorePath(const LoreFiles &files,
+                                                const localization::Localization &translations)
 {
-    const char *file = translations.language() == "fr" ? RTYPE_LORE_FRENCH : RTYPE_LORE_ENGLISH;
+    const char *file = translations.language() == "fr" ? files.french : files.english;
     return render::applicationDirectory() / "assets" / file;
 }
 
-[[nodiscard]] std::vector<LoreLine> readLore(const localization::Localization &translations)
+[[nodiscard]] std::vector<LoreLine> readLore(const LoreFiles &files,
+                                             const localization::Localization &translations)
 {
-    const std::filesystem::path path = getLorePath(translations);
+    const std::filesystem::path path = getLorePath(files, translations);
     std::vector<LoreLine> lines = readLoreFile(path);
     if (lines.empty()) {
         const log::Logger logger("client");
@@ -82,7 +95,7 @@ void createLoreSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager
 }
 
 ecs::entity_t createCrawl(engine::Engine &engine, engine::SceneId scene, const engine::Metrics &metrics,
-                          float length)
+                          float length, const std::function<void()> &close)
 {
     ecs::Ecs &ecs = engine.getEcs();
     const render::Rectangle screen = metrics.visibleArea();
@@ -94,7 +107,7 @@ ecs::entity_t createCrawl(engine::Engine &engine, engine::SceneId scene, const e
                                          .speed = crawlSpeed,
                                          .scrolled = -crawlLead,
                                          .length = length,
-                                         .onEnd = [&engine] { engine.popScene(); }});
+                                         .onEnd = close});
     return crawl;
 }
 
@@ -124,21 +137,23 @@ void playLoreMusic(audio::AudioPlayer &audio)
     }
 }
 
+/// The crawl of a text on the stars, with the music of the lore. `close` leaves it: at its end, with its
+/// back button.
 void buildLoreScene(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
                     audio::AudioPlayer &audio, const engine::InterfaceStyle &style,
-                    const engine::Metrics &metrics, const localization::Localization &translations)
+                    const engine::Metrics &metrics, std::vector<LoreLine> lines,
+                    const std::function<void()> &close)
 {
     ecs::Ecs &ecs = engine.getEcs();
     createLoreSky(ecs, scene, resources);
     const LoreStyle loreStyle = createLoreStyle(resources, style);
-    const LoreLayout layout = layOutLore(readLore(translations), loreStyle, metrics);
-    const ecs::entity_t crawl = createCrawl(engine, scene, metrics, layout.length);
+    const LoreLayout layout = layOutLore(lines, loreStyle, metrics);
+    const ecs::entity_t crawl = createCrawl(engine, scene, metrics, layout.length, close);
     for (const LorePiece &piece : layout.pieces) {
         createLorePiece(ecs, scene, piece, loreStyle, crawl);
     }
     engine::InterfaceBuilder interface(ecs, scene, style);
-    interface.backButton([&engine] { engine.popScene(); },
-                         {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
+    interface.backButton(close, {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
     playLoreMusic(audio);
 }
 
@@ -151,7 +166,23 @@ void createLoreScene(engine::Engine &engine, render::ResourceManager &resources,
     engine.createScene(
         LoreScene, {.assets = LoreAssets},
         [&resources, &audio, &style, &metrics, &translations](engine::Engine &target, engine::SceneId scene) {
-            buildLoreScene(target, scene, resources, audio, style, metrics, translations);
+            buildLoreScene(target, scene, resources, audio, style, metrics,
+                           readLore(StoryFiles, translations),
+                           [&target] { target.popScene(); });
+        });
+}
+
+void createCampaignEndingScene(engine::Engine &engine, render::ResourceManager &resources,
+                               audio::AudioPlayer &audio, const engine::InterfaceStyle &style,
+                               const engine::Metrics &metrics, const localization::Localization &translations)
+{
+    engine.createScene(
+        CampaignEndingScene,
+        {.onBack = [&engine] { engine.switchScene(MainMenuScene); }, .assets = LoreAssets},
+        [&resources, &audio, &style, &metrics, &translations](engine::Engine &target, engine::SceneId scene) {
+            buildLoreScene(target, scene, resources, audio, style, metrics,
+                           readLore(EndingFiles, translations),
+                           [&target] { target.switchScene(MainMenuScene); });
         });
 }
 

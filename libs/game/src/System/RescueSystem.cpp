@@ -33,6 +33,11 @@ constexpr float AllyStartGap = 70.0f;
 /// Speed of the allies flying to their place, in game units per second.
 constexpr float AllySpeed = 700.0f;
 
+/// Where the escort waits next to the ship of the player during the voice, before the formation, and its
+/// speed there: slower than the allies, to be seen arriving.
+constexpr Spot EscortSpot{540.0f, 450.0f};
+constexpr float EscortSpeed = 450.0f;
+
 /// Where the boss waits, as in config/enemies/bydo_shogun.lua, and its speed back there.
 constexpr Spot BossSpot{1600.0f, 540.0f};
 constexpr float BossSpeed = 900.0f;
@@ -94,6 +99,13 @@ void RescueSystem::update(float elapsed)
     case RescueStage::Voice:
         order(*boss, EnemyStance::Guard);
         steer(*boss, BossSpot.x, BossSpot.y, BossSpeed, elapsed);
+        if (rules.rescueShipTicks > 0 && rescue.ticks == rules.rescueShipTicks) {
+            giveShipBack(true);
+        }
+        if (rules.rescueEscortTicks > 0 && rescue.ticks == rules.rescueEscortTicks) {
+            callEscort();
+        }
+        holdEscort(elapsed);
         if (rescue.ticks >= rules.rescueVoiceTicks) {
             callAllies();
             enter(RescueStage::Arrival);
@@ -264,21 +276,55 @@ void RescueSystem::fireAt(ecs::entity_t boss, std::uint32_t interval, bool withP
     }
 }
 
-void RescueSystem::callAllies()
+void RescueSystem::giveShipBack(bool atTip)
 {
     const std::optional<std::uint8_t> slot = findRescuedSlot();
-    if (slot) {
-        PlayerSlot &player = _context.players[*slot];
-        player.lives = std::max<std::uint8_t>(player.lives, 1);
-        player.respawnIn = 0;
+    if (!slot) {
+        return;
     }
-    _ecs.defer([this, slot] {
-        if (slot && !findPlayerShip(_ecs, *slot)) {
-            spawnPlayerShip(_ecs, _context, *slot);
+    PlayerSlot &player = _context.players[*slot];
+    player.lives = std::max<std::uint8_t>(player.lives, 1);
+    player.respawnIn = 0;
+    _ecs.defer([this, slot = *slot, atTip] {
+        if (findPlayerShip(_ecs, slot)) {
+            return;
         }
+        const ecs::entity_t ship = spawnPlayerShip(_ecs, _context, slot);
+        if (atTip) {
+            _positions.get(ship) = {Formation[0].x, Formation[0].y};
+        }
+    });
+}
+
+void RescueSystem::callEscort()
+{
+    _ecs.defer([this] {
+        if (!findShip(1)) {
+            spawnAlly(_ecs, _context, 0, AllyStartX - AllyStartGap, EscortSpot.y);
+        }
+    });
+}
+
+void RescueSystem::holdEscort(float elapsed)
+{
+    if (const std::optional<ecs::entity_t> ship = findShip(0); ship && _velocities.has(*ship)) {
+        steer(*ship, Formation[0].x, Formation[0].y, _context.rules.shipSpeed, elapsed);
+    }
+    if (const std::optional<ecs::entity_t> escort = findShip(1); escort && _velocities.has(*escort)) {
+        steer(*escort, EscortSpot.x, EscortSpot.y, EscortSpeed, elapsed);
+    }
+}
+
+void RescueSystem::callAllies()
+{
+    giveShipBack(false);
+    _ecs.defer([this] {
         for (std::size_t index = 1; index < FormationSize; ++index) {
-            spawnAlly(_ecs, _context, static_cast<std::uint8_t>(index - 1),
-                      AllyStartX - (AllyStartGap * static_cast<float>(index)), Formation[index].y);
+            // The escort may already be there
+            if (!findShip(index)) {
+                spawnAlly(_ecs, _context, static_cast<std::uint8_t>(index - 1),
+                          AllyStartX - (AllyStartGap * static_cast<float>(index)), Formation[index].y);
+            }
         }
     });
 }

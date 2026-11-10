@@ -231,8 +231,11 @@ TEST_CASE("Each mission of the campaign is a single wave, won once its Bydos are
 {
     const rtype::game::LoadedGameConfig loaded = rtype::game::loadGameConfig(RTYPE_TEST_CONFIG);
     REQUIRE(loaded.isValid());
-    REQUIRE(campaignMissions().size() == 2);
+    REQUIRE(campaignMissions().size() == 3);
     for (const CampaignMission &mission : campaignMissions()) {
+        if (mission.difficulty == rtype::game::MaxWaveDifficulty) {
+            continue;
+        }
         INFO(mission.id);
         const rtype::game::GameConfig config = missionConfig(mission, loaded.config);
         REQUIRE(config.waves.size() == 1);
@@ -251,6 +254,55 @@ TEST_CASE("Each mission of the campaign is a single wave, won once its Bydos are
         REQUIRE(session.isOver());
         CHECK(session.simulation().snapshot().gameOver == rtype::game::GameOutcome::Victory);
     }
+}
+
+TEST_CASE("The last mission is the duel against the shogun, won with the rescue after its voices", "[client]")
+{
+    const rtype::game::LoadedGameConfig loaded = rtype::game::loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    const CampaignMission &mission = campaignMissions().back();
+    CHECK(mission.difficulty == rtype::game::MaxWaveDifficulty);
+    const rtype::game::GameConfig config = missionConfig(mission, loaded.config);
+    REQUIRE(config.waves.size() == 1);
+    CHECK(config.waves.front().difficulty == rtype::game::MaxWaveDifficulty);
+    CHECK_FALSE(config.waves.front().music.empty());
+
+    // The allies wait for the end of both voices of the rescue and the silence between them, the victory for
+    // the end of the last voice
+    const rtype::game::Rules rules = missionRules(mission);
+    REQUIRE(mission.rescueVoices.size() == 3);
+    CHECK(mission.rescueVoices[1].path.empty());
+    CHECK(rules.rescueVoiceTicks ==
+          mission.rescueVoices[0].ticks + mission.rescueVoices[1].ticks + mission.rescueVoices[2].ticks);
+    CHECK(rules.rescueVictoryDelay >= mission.victoryVoice.ticks);
+    // The ship comes back as the voice of Jude starts, the escort a few seconds later, as a cutscene
+    CHECK(rules.rescueShipTicks == mission.rescueVoices[0].ticks + mission.rescueVoices[1].ticks);
+    CHECK(rules.rescueEscortTicks > rules.rescueShipTicks);
+    CHECK(rules.rescueEscortTicks < rules.rescueVoiceTicks);
+    const GameVoices voices = missionVoices(mission);
+    CHECK(voices.start.ticks == mission.firstWaveDelay);
+    CHECK(voices.rescue.size() == 3);
+    CHECK(voices.rescueCutscene == rules.rescueShipTicks);
+    CHECK_FALSE(voices.victory.empty());
+
+    // The shogun cannot be beaten alone: the ship is lost, the allies come, and it falls once Fire is pressed
+    // again at the prompt. Ten minutes at most
+    LocalSession session(rules, config);
+    const rtype::game::PlayerInput fire{rtype::game::PlayerInput::Fire};
+    bool rescued = false;
+    rtype::game::RescueStage stage = rtype::game::RescueStage::None;
+    for (int tick = 0; tick < 600 * 60 && !session.isOver(); ++tick) {
+        const bool released = stage == rtype::game::RescueStage::Prompt && tick % 2 == 0;
+        session.setInput(released ? rtype::game::PlayerInput{} : fire);
+        session.update(1.0f / 60.0f);
+        for (const rtype::game::Snapshot &snapshot : session.takeSnapshots()) {
+            stage = snapshot.rescue;
+            rescued = rescued || stage != rtype::game::RescueStage::None;
+        }
+    }
+    REQUIRE(session.isOver());
+    CHECK(rescued);
+    CHECK(session.simulation().snapshot().gameOver == rtype::game::GameOutcome::Victory);
 }
 
 TEST_CASE("The missions completed are kept in the settings, the next one is played", "[client]")
@@ -274,6 +326,8 @@ TEST_CASE("The missions completed are kept in the settings, the next one is play
 
     // Once they are all completed, the campaign starts over
     CHECK(completeMission(settings, missions[1]));
+    CHECK(firstMissionToPlay(settings) == 2);
+    CHECK(completeMission(settings, missions[2]));
     CHECK(firstMissionToPlay(settings) == 0);
     std::filesystem::remove(path);
 }

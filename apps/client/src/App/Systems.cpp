@@ -10,6 +10,7 @@
 #include "Game/ImpactSystem.hpp"
 #include "Game/RescueCameraSystem.hpp"
 #include "Game/ResultsSystem.hpp"
+#include "Game/VoiceSystem.hpp"
 #include "Lore/CrawlSystem.hpp"
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
@@ -33,6 +34,8 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
     // After the session, which moves the shogun it follows
     ecs.registerSystem<RescueCameraSystem>(sessions);
+    // After the session, which gives the tick the voices wait for
+    ecs.registerSystem<VoiceSystem>(sessions, audio);
     ecs.registerSystem<ImpactSystem>(ecs);
     ecs.registerSystem<DamageNumberSystem>(ecs);
     // After the session, which opens the death screens and gives the tick they count down to

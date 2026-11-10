@@ -25,9 +25,9 @@ namespace rtype::client
 ///   tilted, rumbling under the fire; the fall of the shogun shakes it hard.
 /// - Once the shogun has fallen (Finished), it pulls back slowly from its explosion to the whole game.
 ///
-/// While the voice of the start of a game plays (cutsceneEnd), it shows the ship of the local player as a
-/// cutscene instead: in perspective, from behind it and above, close, it turns slowly around it towards its
-/// side, then flies back to the view of the game as the voice ends.
+/// During a cutscene (cutsceneStart to cutsceneEnd: the voice of the start of a game, Jude coming back during
+/// the rescue), it shows the ship of the local player instead: in perspective, from behind it and above,
+/// close, it turns slowly around it towards its side, then flies back to the view of the game as it ends.
 struct RescueCamera {
     /// The part of the game the camera sees at rest.
     render::Rectangle area;
@@ -43,11 +43,11 @@ struct RescueCamera {
     float shake = 0.0f;
     /// Seconds it has been moved: the time of its shake.
     float time = 0.0f;
-    /// The tick of the session at which the voice of the start of the game ends, and the cutscene with it:
-    /// none if 0.
+    /// The ticks of the session at which the cutscene ends, none if 0, and at which it starts.
     std::uint32_t cutsceneEnd = 0;
+    std::uint32_t cutsceneStart = 0;
     /// The point the cutscene frames: the ship of the local player, followed a little late, from the first
-    /// time it is drawn.
+    /// time it is drawn. Reset for a new cutscene.
     std::optional<render::Vector2> cutsceneFocus;
 };
 

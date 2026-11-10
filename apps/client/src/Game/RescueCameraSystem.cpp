@@ -211,16 +211,18 @@ render::Camera toPerspective(render::Camera view)
 }
 
 /// The view of a camera during the cutscene at a tick: the cutscene, then a flight from it to the view of
-/// the game in the last ticks of the voice; the view of the game once it is over.
+/// the game in its last ticks; the view of the game once it is over.
 render::Camera blendCutscene(const RescueCamera &camera, const render::Camera &game, std::uint32_t tick)
 {
-    if (!camera.cutsceneFocus || tick >= camera.cutsceneEnd) {
+    if (!camera.cutsceneFocus || tick >= camera.cutsceneEnd || tick < camera.cutsceneStart) {
         return game;
     }
+    const std::uint32_t length = camera.cutsceneEnd - camera.cutsceneStart;
     const std::uint32_t returnStart =
-        camera.cutsceneEnd > CutsceneReturnTicks ? camera.cutsceneEnd - CutsceneReturnTicks : 0;
-    const float progress =
-        std::min(static_cast<float>(tick) / static_cast<float>(std::max(returnStart, 1U)), 1.0f);
+        camera.cutsceneStart + (length > CutsceneReturnTicks ? length - CutsceneReturnTicks : 0);
+    const float progress = std::min(static_cast<float>(tick - camera.cutsceneStart) /
+                                        static_cast<float>(std::max(returnStart - camera.cutsceneStart, 1U)),
+                                    1.0f);
     const render::Camera cutscene = computeCutsceneView(*camera.cutsceneFocus, progress);
     if (tick < returnStart) {
         return cutscene;
@@ -287,7 +289,7 @@ void RescueCameraSystem::update(float elapsed)
             continue;
         }
         RescueCamera &camera = _rescueCameras.get(entity);
-        const bool cutscene = tick < camera.cutsceneEnd && _sessions.rescue() == game::RescueStage::None;
+        const bool cutscene = tick >= camera.cutsceneStart && tick < camera.cutsceneEnd;
         camera.time += elapsed;
         camera.zoom = approach(camera.zoom, shot.zoom, shot.rate, elapsed);
         camera.tilt = approach(camera.tilt, shot.tilt, shot.rate, elapsed);

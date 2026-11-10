@@ -172,7 +172,7 @@ void run()
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships);
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord, ships,
                                        rtype::render::userDataDirectory() / "pictures", config);
-    rtype::client::Campaign campaign(engine, games, config, translations);
+    rtype::client::Campaign campaign(engine, games, config);
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships,
                                     campaign);
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);

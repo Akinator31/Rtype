@@ -32,11 +32,16 @@
 #define RTYPE_LORE_FRENCH "lore/fr.txt"
 #define RTYPE_LORE_ENGLISH "lore/en.txt"
 // The briefings of the missions of the campaign, received as a transmission, in each language (a "# "
-// title, then lines): the first one, then the road to Saturn
+// title, then lines): the first one, the road to Saturn, then the duel against the shogun
 #define RTYPE_CAMPAIGN_BRIEFING_FRENCH "campaign/fr.txt"
 #define RTYPE_CAMPAIGN_BRIEFING_ENGLISH "campaign/en.txt"
 #define RTYPE_CAMPAIGN_SATURN_FRENCH "campaign/saturn_fr.txt"
 #define RTYPE_CAMPAIGN_SATURN_ENGLISH "campaign/saturn_en.txt"
+#define RTYPE_CAMPAIGN_SHOGUN_FRENCH "campaign/shogun_fr.txt"
+#define RTYPE_CAMPAIGN_SHOGUN_ENGLISH "campaign/shogun_en.txt"
+// The epilogue of the campaign, laid out as the lore, which scrolls away once the shogun has fallen
+#define RTYPE_CAMPAIGN_ENDING_FRENCH "campaign/ending_fr.txt"
+#define RTYPE_CAMPAIGN_ENDING_ENGLISH "campaign/ending_en.txt"
 
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
@@ -75,6 +80,13 @@
 /// The voice of the start of the first mission of the campaign, once in space: its first wave comes as it
 /// ends (CampaignMission::firstWaveDelay).
 #define RTYPE_SOUND_CAMPAIGN_START "cooper_jude_start.mp3"
+/// The voices of the duel against the shogun, the last mission of the campaign: Brown to Cooper once in
+/// space, Cooper as his last ship is lost, then Jude coming back to the rescue with the allies, and Cooper
+/// once the shogun has fallen. Their lengths are in CampaignMission.cpp.
+#define RTYPE_SOUND_CAMPAIGN_SHOGUN_START "brown_to_cooper.mp3"
+#define RTYPE_SOUND_CAMPAIGN_SHOGUN_FAIL "fail_cooper.mp3"
+#define RTYPE_SOUND_CAMPAIGN_SHOGUN_RESCUE "jude_rescue_back.mp3"
+#define RTYPE_SOUND_CAMPAIGN_SHOGUN_WIN "cooper_win.mp3"
 /// The music of the lore scene, played once while the story scrolls: about as long as the crawl.
 #define RTYPE_MUSIC_LORE "sounds/lore.mp3"
 /// The results of a game online (ResultsScreen): the game over as the screen opens, a figure that lands, the

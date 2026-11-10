@@ -49,6 +49,7 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     createControlsScenes(engine, style, translations);
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
+    createCampaignEndingScene(engine, resources, targets.audio, style, metrics, translations);
     // After its briefing, each mission flies the ship equipped straight into space, without the hangar
     createCampaignScene(engine, resources, targets.audio, metrics, translations, campaign);
 }
