@@ -8,6 +8,7 @@
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <cstdint>
 #include <optional>
 
 namespace rtype::client
@@ -23,6 +24,10 @@ namespace rtype::client
 /// - During the combined attack (Combined), it pushes in slowly on the shogun, closer than for the dashes,
 ///   tilted, rumbling under the fire; the fall of the shogun shakes it hard.
 /// - Once the shogun has fallen (Finished), it pulls back slowly from its explosion to the whole game.
+///
+/// While the voice of the start of a game plays (cutsceneEnd), it shows the ship of the local player as a
+/// cutscene instead: in perspective, from behind it and above, close, it turns slowly around it towards its
+/// side, then flies back to the view of the game as the voice ends.
 struct RescueCamera {
     /// The part of the game the camera sees at rest.
     render::Rectangle area;
@@ -38,6 +43,12 @@ struct RescueCamera {
     float shake = 0.0f;
     /// Seconds it has been moved: the time of its shake.
     float time = 0.0f;
+    /// The tick of the session at which the voice of the start of the game ends, and the cutscene with it:
+    /// none if 0.
+    std::uint32_t cutsceneEnd = 0;
+    /// The point the cutscene frames: the ship of the local player, followed a little late, from the first
+    /// time it is drawn.
+    std::optional<render::Vector2> cutsceneFocus;
 };
 
 /// Shakes a camera by a blow of a strength from 0 to 1: the blade of the shogun through a ship, its fall.

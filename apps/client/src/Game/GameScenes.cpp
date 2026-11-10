@@ -498,11 +498,13 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                        });
 }
 
-void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd, std::string voice)
+void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd, std::string voice,
+                      std::uint32_t voiceTicks)
 {
     _next = std::move(session);
     _nextEnd = std::move(onEnd);
     _nextVoice = std::move(voice);
+    _nextVoiceTicks = _nextVoice.empty() ? 0 : voiceTicks;
     _outcome.reset();
     _results.reset();
     _xpAfter.reset();
@@ -787,7 +789,8 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
     const render::Rectangle area = metrics.visibleArea();
     const render::Vector2 centre{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)};
-    ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre);
+    const std::uint32_t cutsceneEnd = std::exchange(_nextVoiceTicks, 0);
+    ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre).cutsceneEnd = cutsceneEnd;
     _camera = ecs.ref(sky);
     ecs.addComponent<engine::Light>(sky, GameLight);
 
@@ -795,6 +798,8 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
 
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
+    // The ship is left alone during the cutscene of the voice
+    _sessions.lockInputUntil(cutsceneEnd);
     _recorder.recordStart();
     if (const std::string voice = std::exchange(_nextVoice, {}); !voice.empty()) {
         playVoice(voice);

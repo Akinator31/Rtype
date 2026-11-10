@@ -68,6 +68,26 @@ constexpr float ShakeDistance = 24.0f;
 constexpr float ShakeRoll = 1.5f;
 constexpr float ShakePunch = 0.06f;
 
+/// The cutscene of the voice of the start of a game: the camera, in perspective, starts behind the ship and
+/// above it, CutsceneStart, and turns slowly around it towards its side, CutsceneEnd, getting closer and
+/// lower. It looks a little ahead of the ship, tilted.
+struct CutsceneShot {
+    /// How far it turns around the ship from its side, in degrees: towards its back if positive.
+    float azimuth;
+    /// How far from the ship, and how high above it, in game units.
+    float distance;
+    float height;
+    /// How much it is turned around its axis, in degrees.
+    float tilt;
+};
+constexpr CutsceneShot CutsceneStart{.azimuth = 60.0f, .distance = 430.0f, .height = 130.0f, .tilt = 4.0f};
+constexpr CutsceneShot CutsceneEnd{.azimuth = 18.0f, .distance = 330.0f, .height = 55.0f, .tilt = -2.0f};
+/// How far ahead of the ship the cutscene looks, in game units, and its vertical field of view, in degrees.
+constexpr float CutsceneLookAhead = 70.0f;
+constexpr float CutsceneFieldOfView = 40.0f;
+/// The ticks at the end of the voice during which the camera flies back to the view of the game.
+constexpr std::uint32_t CutsceneReturnTicks = 100;
+
 float approach(float value, float target, float rate, float elapsed)
 {
     return value + ((target - value) * (1.0f - std::exp(-rate * elapsed)));
@@ -136,6 +156,86 @@ render::Camera computeView(const RescueCamera &camera, const std::optional<rende
     return view;
 }
 
+float mix(float from, float to, float weight)
+{
+    return from + ((to - from) * weight);
+}
+
+render::Vector3 mix(render::Vector3 from, render::Vector3 to, float weight)
+{
+    return {mix(from.x, to.x, weight), mix(from.y, to.y, weight), mix(from.z, to.z, weight)};
+}
+
+float smoothstep(float value)
+{
+    const float clamped = std::clamp(value, 0.0f, 1.0f);
+    return clamped * clamped * (3.0f - (2.0f * clamped));
+}
+
+float toRadians(float degrees)
+{
+    return degrees * std::numbers::pi_v<float> / 180.0f;
+}
+
+/// The view of the cutscene around a point of the game, `progress` from 0 to 1 through it.
+render::Camera computeCutsceneView(render::Vector2 focus, float progress)
+{
+    const float weight = smoothstep(progress);
+    const float azimuth = toRadians(mix(CutsceneStart.azimuth, CutsceneEnd.azimuth, weight));
+    const float distance = mix(CutsceneStart.distance, CutsceneEnd.distance, weight);
+    const float height = mix(CutsceneStart.height, CutsceneEnd.height, weight);
+    const float tilt = toRadians(mix(CutsceneStart.tilt, CutsceneEnd.tilt, weight));
+    // The game is seen from -z, y pointing down: behind the ship is -x, above it -y
+    render::Camera view;
+    view.position = {focus.x - (distance * std::sin(azimuth)), focus.y - height,
+                     -distance * std::cos(azimuth)};
+    view.target = {focus.x + CutsceneLookAhead, focus.y, 0.0f};
+    view.up = {std::sin(tilt), -std::cos(tilt), 0.0f};
+    view.fieldOfView = CutsceneFieldOfView;
+    view.projection = render::Projection::Perspective;
+    return view;
+}
+
+/// A view of the game seen in perspective as it is seen through its orthographic camera, on the plane of the
+/// game: to fly between the cutscene and the view of the game.
+render::Camera toPerspective(render::Camera view)
+{
+    const float dx = view.target.x - view.position.x;
+    const float dy = view.target.y - view.position.y;
+    const float dz = view.target.z - view.position.z;
+    const float distance = std::sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    view.fieldOfView =
+        2.0f * std::atan(view.fieldOfView / (2.0f * distance)) * 180.0f / std::numbers::pi_v<float>;
+    view.projection = render::Projection::Perspective;
+    return view;
+}
+
+/// The view of a camera during the cutscene at a tick: the cutscene, then a flight from it to the view of
+/// the game in the last ticks of the voice; the view of the game once it is over.
+render::Camera blendCutscene(const RescueCamera &camera, const render::Camera &game, std::uint32_t tick)
+{
+    if (!camera.cutsceneFocus || tick >= camera.cutsceneEnd) {
+        return game;
+    }
+    const std::uint32_t returnStart =
+        camera.cutsceneEnd > CutsceneReturnTicks ? camera.cutsceneEnd - CutsceneReturnTicks : 0;
+    const float progress =
+        std::min(static_cast<float>(tick) / static_cast<float>(std::max(returnStart, 1U)), 1.0f);
+    const render::Camera cutscene = computeCutsceneView(*camera.cutsceneFocus, progress);
+    if (tick < returnStart) {
+        return cutscene;
+    }
+    const float back = smoothstep(static_cast<float>(tick - returnStart) /
+                                  static_cast<float>(camera.cutsceneEnd - returnStart));
+    const render::Camera perspective = toPerspective(game);
+    render::Camera view = cutscene;
+    view.position = mix(cutscene.position, perspective.position, back);
+    view.target = mix(cutscene.target, perspective.target, back);
+    view.up = mix(cutscene.up, perspective.up, back);
+    view.fieldOfView = mix(cutscene.fieldOfView, perspective.fieldOfView, back);
+    return view;
+}
+
 } // namespace
 
 void shakeCamera(RescueCamera &camera, float strength)
@@ -181,11 +281,13 @@ void RescueCameraSystem::update(float elapsed)
     const std::optional<ecs::Position> boss = findBoss();
     const std::optional<ecs::Position> ship = findLocalShip();
     const Shot shot = shotOf(_sessions.rescue(), boss.has_value());
+    const std::uint32_t tick = _sessions.tick();
     for (ecs::entity_t entity = 0; entity < _rescueCameras.size(); ++entity) {
         if (!_rescueCameras.has(entity) || !_cameras.has(entity)) {
             continue;
         }
         RescueCamera &camera = _rescueCameras.get(entity);
+        const bool cutscene = tick < camera.cutsceneEnd && _sessions.rescue() == game::RescueStage::None;
         camera.time += elapsed;
         camera.zoom = approach(camera.zoom, shot.zoom, shot.rate, elapsed);
         camera.tilt = approach(camera.tilt, shot.tilt, shot.rate, elapsed);
@@ -198,7 +300,14 @@ void RescueCameraSystem::update(float elapsed)
                             approach(camera.focus.y, subject->y, FollowRate, elapsed)};
         }
         camera.shake = std::max(camera.shake - (ShakeDecay * elapsed), shot.rumble);
-        _cameras.get(entity).view = computeView(camera, subject);
+        const render::Camera view = computeView(camera, subject);
+        if (cutscene && ship) {
+            const render::Vector2 seen{ship->x, ship->y};
+            const render::Vector2 focus = camera.cutsceneFocus.value_or(seen);
+            camera.cutsceneFocus = render::Vector2{approach(focus.x, seen.x, FollowRate, elapsed),
+                                                   approach(focus.y, seen.y, FollowRate, elapsed)};
+        }
+        _cameras.get(entity).view = cutscene ? blendCutscene(camera, view, tick) : view;
     }
 }
 

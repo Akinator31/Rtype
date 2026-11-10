@@ -110,6 +110,7 @@ void GameSessionSystem::stop()
     _players.clear();
     _localHealth = 0;
     _tick = 0;
+    _inputLockedUntil = 0;
     _rescue = game::RescueStage::None;
     _outcomeTold = false;
     _clock = 0.0f;
@@ -224,7 +225,8 @@ void GameSessionSystem::update(float elapsed)
     }
     const bool playing = _scenes.receivesInput(*_scene);
     _session->setPaused(!playing);
-    _session->setInput(playing ? inputFrom(_controls) : game::PlayerInput{});
+    const bool locked = _tick < _inputLockedUntil;
+    _session->setInput(playing && !locked ? inputFrom(_controls) : game::PlayerInput{});
     _session->update(elapsed);
     _clock += elapsed;
     for (const game::Snapshot &snapshot : _session->takeSnapshots()) {

@@ -148,7 +148,7 @@ void Campaign::play()
     const CampaignMission &mission = current();
     _games.play(
         std::make_unique<LocalSession>(missionRules(mission), missionConfig(mission, _config)),
-        [this] { end(); }, std::string(mission.voice));
+        [this] { end(); }, std::string(mission.voice), mission.firstWaveDelay);
 }
 
 void Campaign::leave()

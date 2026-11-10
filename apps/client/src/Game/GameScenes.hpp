@@ -13,6 +13,7 @@
 #include "rtype/localization/Localization.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -78,8 +79,10 @@ class GameScenes
     /// The session of the next game scene opened, and what to do when it ends.
     std::unique_ptr<GameSession> _next;
     std::function<void()> _nextEnd;
-    /// The voice played as the next game scene opens: a path of the assets, none if empty.
+    /// The voice played as the next game scene opens: a path of the assets, none if empty, and its length in
+    /// ticks, during which the camera shows the ship as a cutscene.
     std::string _nextVoice;
+    std::uint32_t _nextVoiceTicks = 0;
     /// How the game played ended, once its session told it.
     std::optional<game::GameOutcome> _outcome;
     /// What to do when the game played ends.
@@ -146,7 +149,10 @@ public:
     /// @param onEnd Called once when the player leaves the game or its session is over. Empty: back to the
     /// main menu.
     /// @param voice A voice played once as the game opens, a path of the assets: none if empty.
-    void play(std::unique_ptr<GameSession> session, std::function<void()> onEnd = {}, std::string voice = {});
+    /// @param voiceTicks The length of the voice, in ticks: while it plays, the camera shows the ship of the
+    /// local player from another angle, as a cutscene (RescueCamera::cutsceneEnd). None if 0.
+    void play(std::unique_ptr<GameSession> session, std::function<void()> onEnd = {}, std::string voice = {},
+              std::uint32_t voiceTicks = 0);
 
     /// How the game played ended, once its session told it: none before, or if the player left it.
     [[nodiscard]] const std::optional<game::GameOutcome> &outcome() const { return _outcome; }
