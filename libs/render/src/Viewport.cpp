@@ -36,4 +36,15 @@ Vector2 windowToGame(Vector2 position, Vector2 windowSize, Vector2 gameSize)
             area.y + (position.y * area.height / windowSize.y)};
 }
 
+Rectangle computeMirrorCrop(Vector2 imageSize, Vector2 windowSize)
+{
+    if (isEmpty(imageSize) || isEmpty(windowSize)) {
+        return {0.0f, 0.0f, imageSize.x, imageSize.y};
+    }
+    const float scale = std::min(imageSize.x / windowSize.x, imageSize.y / windowSize.y);
+    const float width = windowSize.x * scale;
+    const float height = windowSize.y * scale;
+    return {(imageSize.x - width) / 2.0f, (imageSize.y - height) / 2.0f, width, height};
+}
+
 } // namespace rtype::render

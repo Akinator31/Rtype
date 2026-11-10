@@ -6,8 +6,9 @@ the server, the protocol and the replays do not know whether a player is in a he
 
 !!! warning "In progress"
 
-    The client opens the headset, runs its session and gives it its frames, which show a plain colour for now.
-    The cockpit, the board, the interface and the controllers come next: see [Next steps](#next-steps).
+    The headset shows the game on a flat board ahead of the player, and the window shows the left eye. The
+    game is played with the keyboard or a gamepad. The cockpit, the interface on its screens and the
+    controllers come next: see [Next steps](#next-steps).
 
 How to start the game in a headset: [Play in VR](../guides/play-in-vr.md).
 
@@ -130,6 +131,27 @@ limit of frames per second, or the headset would miss its frames. `VrMode` calls
 vertical synchronisation and the limit the player chose are kept, still shown on the Settings page, and applied
 again.
 
+### In the headset
+
+While the headset shows the game (`VrMode::isShowing()`), a frame of the client goes:
+
+1. into the **board**, an image of 2560 × 1440 (`Renderer::beginFrame(ImageId)`): the frame of the screen, World
+   and Interface layers, glow and smoothing, without the vignette;
+2. into **each eye**, through `VrHooks::drawEye`: `VrView::drawEye()` starts the eye in the renderer with the view
+   and the projection of the headset (`Renderer::beginEye()`), draws the board (`drawImageQuad()`), 4 m wide,
+   3 m ahead, its centre 25 cm under the eyes, and ends the eye (`endEye()`), which copies it into the image of
+   the headset through the colour filter;
+3. into the **window**: the left eye, cropped to the shape of the window (`Renderer::showMirror()`), so that the
+   people around see what the player sees. `F11`, the size of the window and its screen still work.
+
+The board is placed by `BoardPlacement` and `boardTransform()` (`Vr/VrView.hpp`). It is a first placement: the
+cockpit around the player, and the board outside its canopy, come with the next step. Its image has mipmaps,
+remade after each frame, so that it stays smooth though an eye shows it smaller than it is.
+
+The frame is drawn before the headset waits for its next refresh, and the eyes after: the board shows the game
+of the frame being drawn. When the headset gives no frame to draw (its menu in front, the tracking lost for a
+moment), the window keeps the last left eye.
+
 ### Without a headset
 
 VR never stops the game. Without a runtime, without a headset, or with a build without OpenXR, `VrMode::start()`
@@ -145,14 +167,15 @@ look when the headset does not start.
 The tests never open a runtime. `testing::FakeHeadset` (`tests/helpers/FakeHeadset.hpp`) counts what it is
 asked and changes state when a test says so: `tests/client_vr.cpp` checks the option and the setting, a
 headset that does not open, the pacing given and taken back, the frames always ended, and a session lost
-between two frames or during one. `tests/xr_math.cpp` checks the matrices of the poses and the projections of
-asymmetric fields of view.
+between two frames or during one, and each eye drawn between its begin and its end; it also checks where the
+board is and what an eye gives to the renderer. `tests/xr_math.cpp` checks the matrices of the poses and the
+projections of asymmetric fields of view. In `libs/render`, `tests/render_passes.cpp` checks the order of the
+frames and the eyes, and `tests/viewport.cpp` the crop of the mirror.
 
 ## Next steps
 
 | Step | What it brings |
 | ---- | -------------- |
-| Rendering in the eyes | The renderer draws the frame of the game into an image, and 3D passes into the eyes with the matrices of the headset; the colour filter in the headset; the window shows the left eye. |
 | Cockpit and board | `cockpit.glb` around the player, at the headrest of its seat; the board outside the canopy; the sky of the scene all around; a recenter action. |
 | Interface in the cockpit | The HUD on the screens of the cockpit, the menus on a holographic panel, fades between the scenes. |
 | Controllers | The controllers as a virtual gamepad, a pointer for the menus, haptics. |

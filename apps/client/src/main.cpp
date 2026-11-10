@@ -19,6 +19,7 @@
 #include "ShipSelector/ShipSelection.hpp"
 #include "Voice/VoiceKeysSystem.hpp"
 #include "Vr/VrMode.hpp"
+#include "Vr/VrView.hpp"
 #include "rtype/audio/AudioDevice.hpp"
 #include "rtype/audio/AudioPlayer.hpp"
 #include "rtype/audio/OutputLoopback.hpp"
@@ -170,14 +171,18 @@ void run(const std::vector<std::string_view> &arguments)
     rtype::client::SceneLoadStatus sceneLoadStatus(engine, devices);
     bool assetsLoaded = false;
     // The game in a VR headset, with --xr or the VR setting: opened on the OpenGL context of the window, and
-    // closed before it. Without a headset, the game stays on the screen and says so once in the main menu
-    rtype::client::VrMode vr({.open = [] { return rtype::xr::openHeadset(); },
-                              .pace = [&window](bool paced) { window.setPacedElsewhere(paced); },
-                              .lost =
-                                  [&engine, &translations] {
-                                      engine.showToast(translations.text("vr.toast.lost"),
-                                                       rtype::engine::ToastType::Warning);
-                                  }});
+    // closed before it. Without a headset, the game stays on the screen and says so once in the main menu.
+    // While the headset shows the game, the frame is drawn into the board, which each eye shows, and the
+    // window shows the left eye
+    rtype::client::VrView vrView(renderer);
+    rtype::client::VrMode vr(
+        {.open = [] { return rtype::xr::openHeadset(); },
+         .pace = [&window](bool paced) { window.setPacedElsewhere(paced); },
+         .lost =
+             [&engine, &translations] {
+                 engine.showToast(translations.text("vr.toast.lost"), rtype::engine::ToastType::Warning);
+             },
+         .drawEye = [&vrView](int eye, const rtype::xr::EyeView &view) { vrView.drawEye(eye, view); }});
     const bool vrWanted = rtype::client::wantsVr(arguments, engine.getSettings());
     if (vrWanted) {
         vr.start();
@@ -199,7 +204,12 @@ void run(const std::vector<std::string_view> &arguments)
         }
         audio.finishPendingLoads();
         audio.update();
-        renderer.beginFrame();
+        const bool inHeadset = vr.isShowing();
+        if (inHeadset) {
+            renderer.beginFrame(vrView.board());
+        } else {
+            renderer.beginFrame();
+        }
         sceneRenderer.draw(renderer, rtype::engine::Layer::World);
         if (debugViews.hitboxes) {
             colliderDebugRenderer.draw(renderer);
@@ -211,6 +221,9 @@ void run(const std::vector<std::string_view> &arguments)
         sceneLoadStatus.draw(renderer);
         renderer.endFrame();
         vr.update();
+        if (inHeadset) {
+            renderer.showMirror();
+        }
     };
 
     rtype::client::createLoadingScenes(engine, resources, style, console, metrics, translations);

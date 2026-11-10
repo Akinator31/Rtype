@@ -103,6 +103,7 @@ add_library(r-type_client_core STATIC
     src/Voice/VoiceIcons.cpp
     src/Voice/VoiceKeysSystem.cpp
     src/Vr/VrMode.cpp
+    src/Vr/VrView.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core

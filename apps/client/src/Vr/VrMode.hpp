@@ -30,20 +30,25 @@ struct VrHooks {
     std::function<void(bool paced)> pace;
     /// The session of the headset is over: the client goes on on the screen, and says so.
     std::function<void()> lost;
+    /// Draws what an eye sees, its image bound by the headset: VrView::drawEye() in the game. None leaves the
+    /// eyes to the background colour of the headset.
+    std::function<void(int eye, const xr::EyeView &view)> drawEye;
 };
 
 /// The game in a VR headset (docs/architecture/vr.md). It opens the headset, gives it a frame after each
-/// frame of the window, and lets it pace the game while it shows it. Without a headset, or once its session
-/// is lost, the client goes on on the screen as if VR had never been asked: nothing here is ever an error.
+/// frame of the game, its eyes drawn by VrHooks::drawEye, and lets it pace the game while it shows it.
+/// Without a headset, or once its session is lost, the client goes on on the screen as if VR had never been
+/// asked: nothing here is ever an error.
 ///
 /// Destroy it before the window: the images of the eyes live in its OpenGL context.
 /// @code
 /// VrMode vr({.open = [] { return xr::openHeadset(); },
 ///            .pace = [&](bool paced) { window.setPacedElsewhere(paced); },
-///            .lost = [&] { engine.showToast("...", engine::ToastType::Warning); }});
+///            .lost = [&] { engine.showToast("...", engine::ToastType::Warning); },
+///            .drawEye = [&](int eye, const xr::EyeView &view) { vrView.drawEye(eye, view); }});
 /// vr.start();
 /// while (...) {
-///     // ... the frame of the window
+///     // ... the frame of the game, into the board while vr.isShowing()
 ///     vr.update();
 /// }
 /// @endcode
@@ -70,8 +75,8 @@ public:
     /// Opens the headset, if not open yet. False when there is none: error() says why, and the client stays
     /// on the screen.
     bool start();
-    /// Once per frame, after the frame of the window: reads what the runtime says, and draws the eyes while
-    /// the headset shows the game, which waits for the next refresh of the headset.
+    /// Once per frame, after the frame of the game: reads what the runtime says, and draws the eyes while the
+    /// headset shows the game, which waits for the next refresh of the headset.
     void update();
 
     /// A headset is open: shown or waiting for the runtime.
