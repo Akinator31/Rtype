@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Vr/Arrival.hpp"
+#include "Vr/CockpitLife.hpp"
 #include "Vr/CockpitLook.hpp"
 #include "Vr/SceneFade.hpp"
 #include "Vr/VrControllers.hpp"
@@ -43,6 +45,8 @@ struct VrScene {
     /// (wantsReliefBoard()), and the world of the scene can be laid on it (canDrawInRelief()). Otherwise it
     /// is drawn once into the image of the board.
     bool relief = false;
+    /// The lights of the cockpit during a game (CockpitLife), which react to it.
+    CockpitLights cockpit;
 };
 
 /// What the player sees in the headset (docs/architecture/vr.md): seated in the cockpit, the sky of the scene
@@ -64,6 +68,7 @@ struct VrScene {
 ///                         canDrawInRelief(sceneRenderer.camera())});                      // each frame
 /// vrView.drawFrames([&](engine::Surface surface) { /* draw the surface */ });          // each frame
 /// vrView.drawEye(eye, view);                                                            // each eye
+/// vrView.arrive();                                         // when the headset starts showing the game
 /// @endcode
 class VrView
 {
@@ -76,6 +81,8 @@ class VrView
         std::vector<std::vector<int>> allBut;
         /// The animation of the screens, -1 without one.
         int screens = -1;
+        /// The materials whose light changes with the game (CockpitLife) that the model has.
+        std::vector<std::string_view> glows;
     };
 
     render::Renderer &_renderer;
@@ -99,6 +106,7 @@ class VrView
     /// How far the panel is unfolded, from 0 (folded) to 1 (open).
     float _openness = 0.0f;
     SceneFade _fade;
+    Arrival _arrival;
 
     /// The image of the board, created the first time.
     [[nodiscard]] render::ImageId board();
@@ -110,6 +118,8 @@ class VrView
     void findCockpit();
     /// Poses the screens of the cockpit, a few times per second.
     void animateCockpit(float elapsed);
+    /// Puts the lights of the scene (VrScene::cockpit) on the materials of the cockpit.
+    void lightCockpit();
     /// Draws the controllers, their rays and their dots.
     void drawHands(std::span<const HandLook> hands);
     /// How wide a ray is, and the dot where it meets the panel, in metres.
@@ -135,6 +145,14 @@ public:
     /// @param drawWorld Draws the World layer of the scenes shown, in a frame or on the board.
     VrView(render::Renderer &renderer, render::ResourceManager &resources, std::function<void()> drawWorld,
            VrLayout layout = {});
+
+    /// Where the board and the panel float, and how high the player sits (the VR page): used from the next
+    /// frame.
+    void setLayout(const VrLayout &layout) { _layout = layout; }
+    [[nodiscard]] const VrLayout &layout() const { return _layout; }
+    /// The headset starts showing the game: space and the board fade in from black, then the panel unfolds
+    /// (Arrival).
+    void arrive() { _arrival.start(); }
 
     /// Once per frame while the headset shows the game, before its frames: starts loading the cockpit, keeps
     /// what the scene gives (during a game, the stars of the main menu as its sky), unfolds or folds the

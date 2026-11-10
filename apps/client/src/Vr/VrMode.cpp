@@ -64,6 +64,23 @@ void VrMode::stop()
     _hooks.lost();
 }
 
+void VrMode::close()
+{
+    if (_headset == nullptr) {
+        return;
+    }
+    pace(false);
+    _headset.reset();
+    logger().info("VR headset closed, the game goes on on the screen");
+}
+
+void VrMode::turn(float degrees)
+{
+    if (_headset != nullptr) {
+        _headset->turn(degrees);
+    }
+}
+
 void VrMode::recenter()
 {
     if (_headset != nullptr) {

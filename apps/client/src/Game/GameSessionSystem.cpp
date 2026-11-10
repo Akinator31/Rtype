@@ -115,6 +115,9 @@ void GameSessionSystem::stop()
     _killed.clear();
     _players.clear();
     _localHealth = 0;
+    _localMaxHealth = 0;
+    _boss = false;
+    _ships.clear();
     _localShots = 0;
     _tick = 0;
     _wave = 0;
@@ -255,6 +258,9 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     _tick = snapshot.tick;
     _players = snapshot.players;
     _localHealth = 0;
+    bool localShip = false;
+    _boss = false;
+    _ships.clear();
 
     std::unordered_set<std::uint32_t> present;
     present.reserve(snapshot.entities.size());
@@ -262,7 +268,12 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         present.insert(state.id);
         if (isLocalShip(state)) {
             _localHealth = state.health;
+            localShip = true;
         }
+        if (state.kind == game::EntityKind::PlayerShip) {
+            _ships.emplace_back(state.owner, state.x);
+        }
+        _boss = _boss || state.kind == game::EntityKind::BydoBoss;
         const auto found = _entities.find(state.id);
         if (found == _entities.end() || !_ecs.isAlive(found->second)) {
             createEntity(state);
@@ -270,6 +281,8 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         moveEntity(found->second.id, state);
     }
+    // A ship destroyed comes back with all its hit points: counted again from them
+    _localMaxHealth = localShip ? std::max(_localMaxHealth, _localHealth) : std::uint8_t{0};
     showStrikes(snapshot.struck);
     rememberKilled(snapshot.destroyed);
     reportKills(snapshot.destroyed);

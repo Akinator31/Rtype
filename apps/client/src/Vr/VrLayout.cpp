@@ -149,6 +149,11 @@ float elevation(render::Vector3 point)
     return std::atan2(point.y, flat) * 180.0f / std::numbers::pi_v<float>;
 }
 
+render::Vector3 seatedEyePoint(const VrLayout &layout)
+{
+    return {CockpitEyePoint.x, CockpitEyePoint.y + layout.seatHeight, CockpitEyePoint.z};
+}
+
 CockpitPlacement placeCockpit(render::Vector3 eyePoint)
 {
     // Turned by a quarter around y, the nose (+x) goes ahead (-z) and the right of the pilot (+z) to the

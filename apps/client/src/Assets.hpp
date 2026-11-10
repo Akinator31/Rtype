@@ -88,3 +88,6 @@
 #define RTYPE_SOUND_RESULTS_LEVEL_UP "sounds/fx/results/level_up.wav"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"
+/// The alarm of the cockpit in a VR headset (CockpitLife): when the ship of the player is hit, and again
+/// while it is low on life. Two tones, made for the game.
+#define RTYPE_SOUND_COCKPIT_ALARM "sounds/fx/cockpit/alarm.wav"

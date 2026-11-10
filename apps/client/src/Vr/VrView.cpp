@@ -82,7 +82,7 @@ void VrView::findCockpit()
         _loading.reset();
         return;
     }
-    Cockpit cockpit{.model = model, .transparent = {}, .allBut = {}, .screens = -1};
+    Cockpit cockpit{.model = model, .transparent = {}, .allBut = {}, .screens = -1, .glows = {}};
     const std::vector<render::ModelMesh> meshes = _resources.getModelMeshes(model);
     cockpit.transparent = farToNear(meshes, CockpitTransparentMeshes, CockpitEyePoint);
     for (const int shown : cockpit.transparent) {
@@ -107,7 +107,43 @@ void VrView::findCockpit()
             log::Logger("vr").warning("a screen of the cockpit shows nothing: {}", error.what());
         }
     }
+    // The lights that react to the game, those the model has
+    std::vector<std::string_view> glowing{CockpitCyanGlow, CockpitOrangeGlow, CockpitCanopy};
+    for (const CockpitScreen &shown : CockpitScreens) {
+        glowing.push_back(shown.material);
+    }
+    for (const std::string_view material : glowing) {
+        try {
+            _renderer.setModelMaterialGlow(
+                model, material, material == CockpitCanopy ? render::colors::Black : render::colors::White);
+            cockpit.glows.push_back(material);
+        } catch (const std::out_of_range &error) {
+            log::Logger("vr").warning("a light of the cockpit does not react to the game: {}", error.what());
+        }
+    }
     _cockpit = std::move(cockpit);
+}
+
+void VrView::lightCockpit()
+{
+    if (!_cockpit || !_scene.playing) {
+        return;
+    }
+    const CockpitLights &lights = _scene.cockpit;
+    for (const std::string_view material : _cockpit->glows) {
+        render::Color color = render::colors::White;
+        if (material == CockpitCyanGlow) {
+            color = lights.cyan;
+        } else if (material == CockpitOrangeGlow) {
+            color = lights.orange;
+        } else if (material == CockpitCanopy) {
+            color = lights.canopy;
+        } else {
+            const auto screen = std::ranges::find(CockpitScreens, material, &CockpitScreen::material);
+            color = lights.screens.at(static_cast<std::size_t>(screen - CockpitScreens.begin()));
+        }
+        _renderer.setModelMaterialGlow(_cockpit->model, material, color);
+    }
 }
 
 void VrView::animateCockpit(float elapsed)
@@ -142,10 +178,14 @@ void VrView::update(float elapsed, VrScene scene)
         _fade.start();
     }
     _fade.update(elapsed);
+    _arrival.update(elapsed);
     const float step = elapsed / PanelUnfoldTime;
-    _openness = std::clamp(scene.panel ? _openness + step : _openness - step, 0.0f, 1.0f);
+    // At the arrival, the panel waits for the board to be there
+    const bool unfolded = scene.panel && !_arrival.holdsPanel();
+    _openness = std::clamp(unfolded ? _openness + step : _openness - step, 0.0f, 1.0f);
     _scene = std::move(scene);
     animateCockpit(elapsed);
+    lightCockpit();
 }
 
 void VrView::drawFrames(const std::function<void(engine::Surface)> &draw)
@@ -154,8 +194,7 @@ void VrView::drawFrames(const std::function<void(engine::Surface)> &draw)
     if (_cockpit && _scene.playing) {
         for (std::size_t index = 0; index < CockpitScreens.size(); ++index) {
             const CockpitScreen &shown = CockpitScreens[index];
-            _renderer.beginFrame(screen(index), {0.0f, 0.0f, shown.size.x, shown.size.y},
-                                 render::colors::Black);
+            _renderer.beginFrame(screen(index), screenFrameArea(shown), render::colors::Black);
             draw(shown.surface);
             _renderer.endFrame();
         }
@@ -230,7 +269,7 @@ void VrView::drawEye(int eye, const xr::EyeView &view, std::span<const HandLook>
 {
     _renderer.beginEye(eye, toRenderEye(view));
     // Space first, at infinity: everything else is in front of it
-    const float brightness = _fade.brightness();
+    const float brightness = _fade.brightness() * _arrival.brightness();
     if (_scene.sky) {
         const render::Color tint = _scene.sky->tint;
         const render::Color fade = grey(brightness);
@@ -256,11 +295,11 @@ void VrView::drawEye(int eye, const xr::EyeView &view, std::span<const HandLook>
     }
     // In the menus, the board floats alone in the sky: the player sits in the cockpit for a game
     if (_cockpit && _scene.playing) {
-        const CockpitPlacement placement = placeCockpit(CockpitEyePoint);
+        const CockpitPlacement placement = placeCockpit(seatedEyePoint(_layout));
         // The opaque meshes hide what they cover, the board included; the emissive ones glow with the light
         // they emit, whatever the light of the scene
         _renderer.drawModel(_cockpit->model, _scene.light, placement.position, placement.rotationAxis,
-                            placement.rotationAngle, 1.0f, render::colors::White, 0.0f,
+                            placement.rotationAngle, 1.0f, grey(_scene.cockpit.brightness), 0.0f,
                             _cockpit->transparent);
         // Then the transparent ones, from the farthest: the hologram, then the canopy
         for (const std::vector<int> &hidden : _cockpit->allBut) {

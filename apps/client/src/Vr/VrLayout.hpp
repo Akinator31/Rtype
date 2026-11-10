@@ -46,7 +46,16 @@ struct VrLayout {
     /// Where it unfolds from, in the space of the headset: the hologram over the dashboard
     /// (CockpitHoloCentre).
     render::Vector3 panelOrigin{0.0f, -0.15f, -0.83f};
+
+    /// How much higher than the eye point of the cockpit the player sits, in metres (the VR page): the
+    /// cockpit is drawn this much lower around their head, a negative height higher. The board and the panel
+    /// stay where they are for the eyes.
+    float seatHeight = 0.0f;
 };
+
+/// Where the eyes are in the cockpit, in its space, for a seat this high: the eye point of the model
+/// (CockpitEyePoint) raised by VrLayout::seatHeight. The origin of the space of the headset is put there.
+[[nodiscard]] render::Vector3 seatedEyePoint(const VrLayout &layout);
 
 /// How long the panel takes to unfold, or to fold back, in seconds.
 inline constexpr float PanelUnfoldTime = 0.25f;

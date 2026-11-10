@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Settings/VrSettings.hpp"
 #include "rtype/engine/Settings/Settings.hpp"
 #include "rtype/input/Keys.hpp"
 #include "rtype/xr/Headset.hpp"
@@ -18,19 +19,12 @@ namespace rtype::client
 /// does it too (VrControllers).
 inline constexpr input::Key RecenterKey = input::Key::F9;
 
-/// Where the choice of starting in the headset is kept in the settings. Not on the Settings page yet
-/// (docs/architecture/vr.md#next-steps): written by hand in the settings file.
-inline constexpr std::string_view VrSettingsKey = "vr.enabled";
-/// Where the choice of the flat board is kept in the settings: the world drawn once into an image, shown on
-/// the board, instead of in relief for each eye, for a weaker computer or a player who prefers it. Off by
-/// default; written by hand in the settings file until the VR page of the settings.
-inline constexpr std::string_view VrFlatBoardKey = "vr.flatBoard";
 /// The option of the command line that starts the client in the headset.
 inline constexpr std::string_view VrOption = "--xr";
 
 /// Whether the client starts in VR: --xr among the arguments of the command line, or the VR setting on.
 [[nodiscard]] bool wantsVr(std::span<const std::string_view> arguments, const engine::Settings &settings);
-/// Whether the board shows the world in relief: unless the flat board is chosen in the settings.
+/// Whether the board shows the world in relief: unless the flat board is chosen on the VR page.
 [[nodiscard]] bool wantsReliefBoard(const engine::Settings &settings);
 
 /// What VrMode asks of the rest of the client.
@@ -94,9 +88,16 @@ public:
     /// headset shows the game, which waits for the next refresh of the headset.
     void update();
 
+    /// Closes the headset, if open, as the player asked (the VR page): the window paces the frames again, and
+    /// VrHooks::lost is not called, the session was not lost.
+    void close();
+
     /// Puts the cockpit back around the player: the origin of the headset at their head, facing where they
     /// look (xr::Headset::recenter()). Nothing without a headset.
     void recenter();
+    /// Turns the player in the cockpit, a snap turn (xr::Headset::turn()): positive to the right. Nothing
+    /// without a headset.
+    void turn(float degrees);
 
     /// What the controllers gave at the last frame of the headset: released and not tracked without one.
     [[nodiscard]] std::array<xr::HandState, xr::HandCount> hands() const;

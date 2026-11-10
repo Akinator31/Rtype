@@ -44,6 +44,9 @@ struct ControllerFrame {
     std::optional<std::uint32_t> hovered;
     /// A real gamepad was used this frame: the controllers are put down, and no longer drawn.
     bool gamepadUsed = false;
+    /// How far a flick of the right thumbstick to a side turns the player, in degrees (the VR page); 0 for
+    /// no snap turn.
+    int snapTurn = 0;
 };
 
 /// The controllers of the headset as a gamepad and a pointer (docs/architecture/vr.md#the-controllers):
@@ -59,6 +62,7 @@ struct ControllerFrame {
 ///   open, the triggers only click: pulled off the panel, they do nothing, instead of confirming a widget
 ///   the player does not look at.
 /// - **Recentring**: the right thumbstick held in for a second.
+/// - **The snap turn**, if chosen: the right thumbstick flicked to a side turns the player by a step.
 ///
 /// Each frame, update() before the engine reads the input, then place() once the headset located the
 /// controllers for the frame drawn.
@@ -80,6 +84,9 @@ class VrControllers
     float _wheelDirection = 0.0f;
     float _recenterHeld = 0.0f;
     bool _recenter = false;
+    /// The right thumbstick came back to the middle since the last snap turn: it can turn again.
+    bool _turnArmed = true;
+    float _turn = 0.0f;
     std::optional<std::uint32_t> _hovered;
     bool _onWidget = false;
     /// The player plays with a real gamepad: the controllers are hidden until one of their buttons is used.
@@ -111,6 +118,9 @@ public:
     [[nodiscard]] const std::optional<input::PointerState> &pointer() const { return _pointer; }
     /// The player asked for a recentre at the last update().
     [[nodiscard]] bool recenterAsked() const { return _recenter; }
+    /// How far the player asked to turn at the last update(), in degrees, positive to the right: 0 but on
+    /// the frame of a flick.
+    [[nodiscard]] float turnAsked() const { return _turn; }
     /// What is drawn of each hand.
     [[nodiscard]] const std::array<HandLook, xr::HandCount> &looks() const { return _looks; }
     /// The hand that points at the panel.
@@ -133,6 +143,10 @@ inline constexpr float TriggerPull = 0.5f;
 /// How far the right thumbstick is pushed to scroll, and how often it scrolls again while held, in seconds.
 inline constexpr float WheelPush = 0.6f;
 inline constexpr float WheelRepeat = 0.15f;
+/// How far the right thumbstick is pushed to a side to snap turn, and how near the middle it comes back to
+/// turn again.
+inline constexpr float TurnPush = 0.7f;
+inline constexpr float TurnRelease = 0.3f;
 /// How long the right thumbstick is held in to recentre, in seconds.
 inline constexpr float RecenterHold = 1.0f;
 /// The tick of a widget reached by the pointer.
