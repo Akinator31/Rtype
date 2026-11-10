@@ -311,6 +311,25 @@ badge above the ship of a pilot who talks, are described in [Voice](voice.md#in-
 The design also has a record (`HI`) and a Beam gauge: the game keeps no record and has no charged shot yet.
 The events name the players by slot.
 
+#### In the cockpit
+
+In a VR headset, the HUD is on the screens of the cockpit (Figma, Série 17, `Cockpit VR`, section 221:1772),
+each part given the surface of its screen (`engine::OnSurface`, [VR](vr.md#the-interface-in-the-cockpit)).
+While the surfaces are apart (`Metrics::surfacesApart()`), the `HudSystem` gives the parts the sizes of
+`CockpitHud`, larger than those of the screen (`ScreenHud`) to be read at arm's length, and places them from the
+top of their screen as the design measures them:
+
+| Screen | Size, game units | Shows |
+| ------ | ---------------- | ----- |
+| Ship (`HudShip`, on the right) | 480 × 360 | The slot and the name of the pilot, the icon of its voice, its lives, its score, its experience, its hit points. |
+| Navigation (`HudNav`, in the middle) | 480 × 310 | `WAVE` over the wave (`03 / 08`, or `WAVE · ENDLESS` over `07`), `BOSS APPROACHING` in red while a boss is in the game, the kind of game (`SOLO`, `ONLINE` after a cyan light), the ping and its bars. |
+| Sides (`HudAux`, the four small screens) | 420 × 300 | `PILOTS` over a line per other pilot: the icon of its voice, its slot, its name, its score; `FLYING SOLO` alone. |
+| Hologram (`Holo`) | 480 × 330 | The radar: the frame of the board and its grid, a square per ship and Bydo (`radarBlip()`, `Game/Radar.hpp`): the pilot in white, the other players and the allies in cyan, the Bydos in red, the boss framed in orange. The shots are not shown. |
+
+The wave, the boss, the kind of game, the title of the pilots and the radar are on the screens of the cockpit
+only: on the screen their texts are empty and the radar transparent. The shadows, which belong to the screen,
+are hidden in the cockpit. The words come from the locales (`hud.*`).
+
 ### Events
 
 The corner of the toasts (top right) tells the deaths of the game, as event lines (`engine::Engine::showToast()`
@@ -526,7 +545,11 @@ added with a line in one of the tables and its name in `en.lang` and `fr.lang`.
 - the HUD: the lives left of the local player lit, its slot and its score on seven digits, all its lives before
   the first snapshot; the scores of the other players, the first on top, a player gone leaving its line; the
   ping with its signal bars when the session has one, nothing offline; online, the names of the pilots and the
-  icons of their voice, and the badge above the ship of a pilot who talks (tag `[voice]`).
+  icons of their voice, and the badge above the ship of a pilot who talks (tag `[voice]`);
+- the HUD in the cockpit (tag `[vr]`): each part on the surface of its screen; on the screen, its look kept and
+  nothing of the cockpit shown; in the cockpit, larger, placed from the top of its screens, with the wave, the
+  kind of game and the other pilots, and back as before on the screen; the radar, which shows the ships and the
+  Bydos but not the shots, and warns of the boss; where a blip is in the frame of the board.
 
 ```sh
 ./build/bin/rtype_tests "[client]"

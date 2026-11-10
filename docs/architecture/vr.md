@@ -7,9 +7,9 @@ the server, the protocol and the replays do not know whether a player is in a he
 !!! warning "In progress"
 
     The player sits in the cockpit, the sky of the scene around them, and the game is on a flat board outside
-    the canopy; the window shows the left eye. The game is played with the keyboard or a gamepad, and `F9`
-    recentres. The interface on the screens of the cockpit and the controllers come next: see
-    [Next steps](#next-steps).
+    the canopy; the HUD is on the screens of the cockpit and the menus on a holographic panel; the window shows
+    the left eye. The game is played with the keyboard or a gamepad, and `F9` recentres. The controllers, which
+    will point at the panel, come next: see [Next steps](#next-steps).
 
 How to start the game in a headset: [Play in VR](../guides/play-in-vr.md).
 
@@ -147,8 +147,10 @@ again.
 
 While the headset shows the game (`VrMode::isShowing()`), a frame of the client goes:
 
-1. into the **board**, an image of 2560 × 1440 (`Renderer::beginFrame(ImageId)`): the frame of the screen, World
-   and Interface layers, glow and smoothing, without the vignette;
+1. into the **surfaces** of the interface, each an image of its own (`VrView::drawFrames()`,
+   [The interface in the cockpit](#the-interface-in-the-cockpit)): during a game, the screens of the cockpit;
+   the panel while it is unfolded; the **board** last, an image of 2560 × 1440 (`Renderer::beginFrame(ImageId)`):
+   the World layer and what of the interface is on the board, glow and smoothing, without the vignette;
 2. into **each eye**, through `VrHooks::drawEye`: `VrView::drawEye()` starts the eye in the renderer with the view
    and the projection of the headset (`Renderer::beginEye()`), draws the scene of the headset
    ([The cockpit](#the-cockpit)), and ends the eye (`endEye()`), which copies it into the image of the headset
@@ -156,7 +158,7 @@ While the headset shows the game (`VrMode::isShowing()`), a frame of the client 
 3. into the **window**: the left eye, cropped to the shape of the window (`Renderer::showMirror()`), so that the
    people around see what the player sees. `F11`, the size of the window and its screen still work.
 
-The image of the board has mipmaps, remade after each frame, so that it stays smooth though an eye shows it
+The images have mipmaps, remade after each frame, so that it stays smooth though an eye shows it
 smaller than it is.
 
 The frame is drawn before the headset waits for its next refresh, and the eyes after: the board shows the game
@@ -215,8 +217,55 @@ Each eye is drawn in this order:
 | 2 | The board | `drawImageQuad()` with the image of the frame. |
 | 3 | The opaque cockpit | `drawModel()`, without its transparent meshes: it hides the parts of the board behind it. |
 | 4 | The transparent meshes | `drawTransparentModel()`, one at a time from the farthest from the eye point (`farToNear()`): the hologram, then the canopy. They write no depth, so the board stays sharp through them. |
+| 5 | The panel, while unfolded | `drawImageQuad()` curved and on top (`ImageQuadLook::onTop`): nothing of the cockpit hides the menus. |
+
+The screens of the cockpit are not drawn apart: they are meshes of the model, which shows the images of the HUD
+as the emission maps of their materials.
 
 The meshes are found by their names (`ResourceManager::getModelMeshes()`), not by their index in the file.
+
+### The interface in the cockpit
+
+In the headset, the interface leaves the screen (Figma, Série 17, `Cockpit VR`, section 221:1772): the HUD is
+on the screens of the cockpit, the menus on a holographic panel in front of the seat. Each part of the interface
+is on a surface (`engine::Surface`, `engine::OnSurface`, [Surfaces](scenes-and-interface.md#surfaces-in-a-vr-headset)),
+drawn into an image of its own, with an area of its own in game units, where the anchors place it. On the
+screen, nothing changes: everything is drawn as before, whatever its surface.
+
+| Surface | Where | Area, game units | Image, pixels | Shows |
+| ------- | ----- | ---------------- | ------------- | ----- |
+| `Panel` (the default) | The holographic panel, 1.6 × 0.9 m, 1.1 m ahead | 1920 × 1080 | 1920 × 1080 | The menus, the dialogs, the console, the loading; the toasts while it is open. |
+| `Board` | The board, outside the canopy | 1920 × 1080 | 2560 × 1440 | The world, and what belongs to the game: the curtain of the main menu, the prompt of the rescue; the toasts while the panel is folded. |
+| `HudShip` | `CP_ScreenShip`, on the right | 480 × 360 | 640 × 480 | The pilot, its lives, its score ([HUD](client-game.md#in-the-cockpit)). |
+| `HudNav` | `CP_ScreenNav`, in the middle | 480 × 310 | 640 × 412 | The wave, the boss, the kind of game, the ping. |
+| `HudAux` | `CP_ScreenAux`, the four small screens of the sides | 420 × 300 | 560 × 400 | The other pilots and who talks. |
+| `Holo` | `CP_Holo`, the hologram over the dashboard | 480 × 330 | 640 × 440 | A radar of the board. |
+
+While the headset shows the game, the client calls `RendererMetrics::separateSurfaces(surfaceAreas())` before
+the update of the engine, so that the `AnchorSystem` places each entity in the area of its surface, and the
+`HudSystem` lays the HUD out for the screens of the cockpit; once it stops, `separateSurfaces(std::nullopt)`
+puts everything back on the screen.
+
+- **The screens.** Their sizes are in `CockpitScreens` (`Vr/CockpitLook.hpp`), of the shape of each screen of
+  the model, so that nothing is stretched. Once the cockpit is loaded, `Renderer::setModelMaterialImage()` puts
+  the image of each surface on the material of its screen in place of its emission map: the screens of the
+  artist keep their texture coordinates, which cover their whole map, their frame and their glow. They are drawn
+  during a game only, in black before the HUD.
+- **The panel.** A curved holographic pane between the dashboard and the board (`VrLayout::panelWidth`,
+  `panelDistance`, `panelBend`), read without moving the head, about 72° wide. It opens while something is shown
+  on it (`SceneRenderer::hasContent(Surface::Panel)`, toasts apart): in the menus, always; during a game, when
+  the pause, the death screen or the results open, and it folds back when they close. It unfolds from the
+  hologram in 0.25 s (`PanelUnfoldTime`, `panelTransform()`): a line of light rises to its place, then opens in
+  height and in width. The board dims behind it, down to 35 % (`boardBrightness()`). Its image is nearly
+  opaque (`VrView::PanelBackground`), with a light along its edges.
+- **The toasts** go on the panel while it is open, on the board otherwise (`SceneRenderer::setToastSurface()`,
+  `VrView::toastSurface()`): a toast during a game does not open the panel.
+- **The fade between scenes.** When the scenes are switched (`Scenes::bottom()` changes), the board, the panel
+  and the sky fade to black in 0.1 s, still showing the scene left, whose images are kept, then the new scene
+  fades in in 0.1 s (`SceneFade`): a cut that changes all that the player sees at once is harsh in a headset.
+  The cockpit stays lit.
+- **The lore** is drawn in the World layer: on the board, larger than on the panel. The loading screen is a
+  scene of the interface: on the panel.
 
 ### Recentring in the client
 
@@ -241,7 +290,11 @@ headset that does not open, the pacing given and taken back, the frames always e
 between two frames or during one, and each eye drawn between its begin and its end; it also checks where the
 board is (ahead, over the eyes, facing them), that it is seen whole with the field of view of a Quest 2,
 over the dashboard and just outside the canopy, where the cockpit is placed, the order of its transparent meshes, a recentre asked of the
-headset, and what an eye gives to the renderer. `tests/xr_math.cpp` checks the matrices of the poses, the
+headset, and what an eye gives to the renderer; the area of each surface and the shape of the images of the
+screens, the open panel between the dashboard and the board, seen whole and curved, its unfolding from the
+hologram, the board dimmed behind it, and the fade between two scenes. `tests/engine.cpp` checks the anchors in
+the area of a surface, the content of a surface, the toasts that do not open the panel, and `Scenes::bottom()`;
+`tests/client_game.cpp` the HUD and the radar in the cockpit. `tests/xr_math.cpp` checks the matrices of the poses, the
 projections of asymmetric fields of view, and the pose a recentre keeps. In `libs/render`, `tests/render_passes.cpp` checks the order of the
 frames and the eyes, and `tests/viewport.cpp` the crop of the mirror.
 
@@ -249,7 +302,6 @@ frames and the eyes, and `tests/viewport.cpp` the crop of the mirror.
 
 | Step | What it brings |
 | ---- | -------------- |
-| Interface in the cockpit | The HUD on the screens of the cockpit, the menus on a holographic panel, fades between the scenes. |
-| Controllers | The controllers as a virtual gamepad, a pointer for the menus, haptics. |
+| Controllers | The controllers as a virtual gamepad, a pointer for the menus on the panel, haptics. Until then, the mouse does not point at the panel. |
 | Board in relief | The world drawn in 3D for each eye on the plane of the board. |
 | Experience and settings | A VR page in the settings, a cockpit that reacts to the game, an arrival sequence. |

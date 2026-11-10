@@ -5,9 +5,10 @@ Start the game in a VR headset, on Linux or on Windows. How VR works in the clie
 
 !!! warning "In progress"
 
-    For now you sit in the cockpit during a game, and the game is on a flat board outside its canopy, played
-    with the keyboard or a gamepad: the mouse does not point at the board. The interface on the screens of the
-    cockpit and the controllers come next.
+    For now you sit in the cockpit during a game, the game on a flat board outside its canopy, your ship, the
+    wave, the other pilots and a radar on the screens of the cockpit, and the menus on a holographic panel in
+    front of you. You play with the keyboard or a gamepad: the mouse does not point at the panel. The
+    controllers come next.
 
 ## What you need
 
