@@ -2009,3 +2009,23 @@ TEST_CASE("The icon of a pilot says what its voice does", "[client][voice]")
     CHECK(voiceIconColor(VoiceIcon::MutedByAdmin).r == 232);
     CHECK(voiceIconColor(VoiceIcon::MutedByAdmin).g == 114);
 }
+
+TEST_CASE("The session tells the full health of the ship of the player, where the ships are, and no boss",
+          "[client]")
+{
+    Client client({}, armedConfig());
+
+    client.run(3);
+
+    REQUIRE(client.sessions.localHealth() > 0);
+    CHECK(client.sessions.localMaxHealth() == client.sessions.localHealth());
+    CHECK_FALSE(client.sessions.bossIsThere());
+    const auto &ships = client.sessions.ships();
+    REQUIRE(ships.size() == 1);
+    CHECK(ships.front().first == 0);
+    CHECK(ships.front().second < rtype::game::GameWidth / 2.0f);
+
+    client.sessions.stop();
+    CHECK(client.sessions.localMaxHealth() == 0);
+    CHECK(client.sessions.ships().empty());
+}

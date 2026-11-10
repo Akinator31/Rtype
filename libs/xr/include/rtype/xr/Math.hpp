@@ -69,6 +69,12 @@ struct FieldOfView {
 /// player, facing where they look, level whatever the tilt of their head.
 [[nodiscard]] Pose levelled(const Pose &pose);
 
+/// The pose turned around the vertical (y) of the space it is given in, at its position: a positive angle
+/// turns its -z towards -x, to the left. Where a snap turn puts the origin of the space: the cockpit turns
+/// around the head of the player.
+/// @param radians How much it turns.
+[[nodiscard]] Pose turned(const Pose &pose, float radians);
+
 /// The OpenGL projection of a field of view: depth from -1 at `nearest` to 1 at `farthest`, both in metres.
 [[nodiscard]] Matrix projection(const FieldOfView &fieldOfView, float nearest, float farthest);
 

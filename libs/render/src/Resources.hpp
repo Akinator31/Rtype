@@ -360,6 +360,26 @@ public:
         return true;
     }
 
+    // Sets the colour the material with this name emits: its emission map multiplied by it, or, without a
+    // map, the colour all over. Black would read as "no emissive colour", which the lighting shader takes as
+    // white: the darkest colour kept is one step over black. Const like drawing.
+    // @return False if the model has no material by this name.
+    bool glowOnMaterial(std::string_view name, ::Color color) const
+    {
+        const auto found = std::ranges::find(_materialNames, name);
+        if (name.empty() || found == _materialNames.end()) {
+            return false;
+        }
+        const auto material = static_cast<int>(found - _materialNames.begin());
+        if (material >= _model.materialCount) {
+            return false;
+        }
+        const auto kept = [](unsigned char channel) { return std::max<unsigned char>(channel, 1); };
+        _model.materials[material].maps[MATERIAL_MAP_EMISSION].color = {kept(color.r), kept(color.g),
+                                                                        kept(color.b), 255};
+        return true;
+    }
+
     [[nodiscard]] bool hasAnimation(int animation) const
     {
         return animation >= 0 && animation < _animationCount;

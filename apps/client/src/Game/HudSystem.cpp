@@ -49,37 +49,42 @@ constexpr float SignalBottom = 48.0f;
 constexpr render::Color BarLit = render::colors::White;
 constexpr render::Color BarOff{58, 62, 67, 255};
 
-// The screens of the cockpit (Figma, Série 17), each part placed by its centre from the top of its screen
+// The screens of the cockpit (Figma, Série 17), each part placed by its centre from the top of the part of
+// its screen the pilot sees (CockpitScreens): about square for the ship, taller than wide for the navigation
 
 namespace ship
 {
-constexpr float Margin = 32.0f;
-constexpr float PilotCentre = 40.0f;
-constexpr float VoiceGap = 14.0f;
-constexpr float LivesCentre = 92.0f;
+/// Everything from the left: the flight stick hides the bottom right of the screen.
+constexpr float Margin = 24.0f;
+constexpr float PilotCentre = 36.0f;
+constexpr float VoiceGap = 12.0f;
+constexpr float LivesCentre = 84.0f;
 constexpr float LifeGap = 14.0f;
-constexpr float ScoreCentre = 160.0f;
-constexpr float XpCentre = 214.0f;
-constexpr float HealthCentre = 300.0f;
+constexpr float ScoreCentre = 148.0f;
+constexpr float XpCentre = 198.0f;
+constexpr float HealthCentre = 286.0f;
 } // namespace ship
 
 namespace nav
 {
-constexpr float Margin = 32.0f;
-constexpr float LabelCentre = 44.0f;
+constexpr float Margin = 16.0f;
+constexpr float LabelCentre = 40.0f;
 constexpr HudText Label{22.0f, 5.0f};
-constexpr float WaveCentre = 108.0f;
-constexpr HudText Wave{64.0f, 4.0f};
-constexpr float BossCentre = 178.0f;
-constexpr HudText Boss{24.0f, 3.0f};
-constexpr float LineCentre = 262.0f;
+/// "ENDLESS" and "SANS FIN" fit in the width of the screen at this size.
+constexpr float WaveCentre = 92.0f;
+constexpr HudText Wave{42.0f, 4.0f};
+constexpr float BossCentre = 150.0f;
+constexpr HudText Boss{16.0f, 2.0f};
+/// The kind of game on a line, the ping and its bars on the one under it.
+constexpr float ModeCentre = 214.0f;
 constexpr HudText Mode{22.0f, 3.0f};
 constexpr float LightSize = 10.0f;
-constexpr float ModeLeft = 50.0f;
+constexpr float ModeLeft = 34.0f;
+constexpr float PingCentre = 262.0f;
 /// Between the bars and the ping, and between two bars.
 constexpr float PingGap = 16.0f;
 constexpr float BarGap = 6.0f;
-constexpr float SignalBottom = 280.0f;
+constexpr float SignalBottom = 278.0f;
 constexpr render::Color Online{111, 227, 240, 255};
 constexpr render::Color Solo{107, 113, 119, 255};
 } // namespace nav
@@ -362,13 +367,13 @@ void HudSystem::placeInCockpit(const Hud &hud)
     pin(hud.xp, AnchorPoint::TopLeft, ship::Margin, ship::XpCentre, _texts.get(hud.xp).size);
     pin(hud.health, AnchorPoint::TopLeft, ship::Margin, ship::HealthCentre, _texts.get(hud.health).size);
 
-    // The navigation: the wave, the boss, the kind of game on the left, the ping and its bars on the right
+    // The navigation: the wave, the boss, then the kind of game, and under it the ping and its bars
     pin(hud.waveLabel, AnchorPoint::Top, 0.0f, nav::LabelCentre, nav::Label.size);
     pin(hud.wave, AnchorPoint::Top, 0.0f, nav::WaveCentre, nav::Wave.size);
     pin(hud.boss, AnchorPoint::Top, 0.0f, nav::BossCentre, nav::Boss.size);
-    pin(hud.modeLight, AnchorPoint::TopLeft, nav::Margin, nav::LineCentre, nav::LightSize);
-    pin(hud.mode, AnchorPoint::TopLeft, nav::ModeLeft, nav::LineCentre, nav::Mode.size);
-    pin(hud.ping, AnchorPoint::TopRight, -nav::Margin, nav::LineCentre, _texts.get(hud.ping).size);
+    pin(hud.modeLight, AnchorPoint::TopLeft, nav::Margin, nav::ModeCentre, nav::LightSize);
+    pin(hud.mode, AnchorPoint::TopLeft, nav::ModeLeft, nav::ModeCentre, nav::Mode.size);
+    pin(hud.ping, AnchorPoint::TopRight, -nav::Margin, nav::PingCentre, _texts.get(hud.ping).size);
     const float right = nav::Margin + measureWidth(hud.ping) + nav::PingGap;
     for (std::size_t index = 0; index < hud.signal.size(); ++index) {
         const engine::Box &bar = _boxes.get(hud.signal[index]);

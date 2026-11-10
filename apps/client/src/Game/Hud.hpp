@@ -75,8 +75,8 @@ inline constexpr HudScale ScreenHud{.pilot = {13.3f, 2.1f},
                                     .barWidth = 4.0f,
                                     .bars = {6.7f, 10.7f, 14.7f, 18.7f}};
 
-inline constexpr HudScale CockpitHud{.pilot = {24.0f, 3.0f},
-                                     .score = {60.0f, 6.0f},
+inline constexpr HudScale CockpitHud{.pilot = {22.0f, 3.0f},
+                                     .score = {50.0f, 5.0f},
                                      .health = {40.0f, 3.0f},
                                      .xp = {22.0f, 2.0f},
                                      .slot = {20.0f, 1.0f},

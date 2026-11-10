@@ -138,6 +138,12 @@ class GameSessionSystem : public ecs::System
     std::vector<game::PlayerState> _players;
     /// Hit points of the ship of the local player in the latest snapshot, 0 while it is not there.
     std::uint8_t _localHealth = 0;
+    /// The most hit points the ship of the local player had since it last appeared, 0 while it is not there.
+    std::uint8_t _localMaxHealth = 0;
+    /// A boss is in the latest snapshot.
+    bool _boss = false;
+    /// Where the ship of each player is in the latest snapshot, along the game (x), by slot.
+    std::vector<std::pair<std::uint8_t, float>> _ships;
     /// Shots of the local player that appeared since the session started.
     std::uint32_t _localShots = 0;
     std::uint32_t _tick = 0;
@@ -249,6 +255,14 @@ public:
     [[nodiscard]] const std::vector<game::PlayerState> &players() const { return _players; }
     /// Hit points of the ship of the local player in the latest snapshot: for the HUD.
     [[nodiscard]] std::uint8_t localHealth() const { return _localHealth; }
+    /// The most hit points the ship of the local player had since it appeared, its full health: 0 while it is
+    /// not there. The cockpit of a VR headset warns when the ship is low on life.
+    [[nodiscard]] std::uint8_t localMaxHealth() const { return _localMaxHealth; }
+    /// A boss is in the game, in the latest snapshot.
+    [[nodiscard]] bool bossIsThere() const { return _boss; }
+    /// Where the ship of each player is along the game (x, in game units) in the latest snapshot, by slot,
+    /// the local player included: the voices of the others are heard from their side in a VR headset.
+    [[nodiscard]] const std::vector<std::pair<std::uint8_t, float>> &ships() const { return _ships; }
     /// How many shots of the local player appeared since the session started: the controllers of a VR
     /// headset tick at each one.
     [[nodiscard]] std::uint32_t localShots() const { return _localShots; }

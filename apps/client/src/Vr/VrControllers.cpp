@@ -133,6 +133,7 @@ void VrControllers::updateGamepad(const ControllerFrame & /*frame*/)
 void VrControllers::update(const ControllerFrame &frame)
 {
     _recenter = false;
+    _turn = 0.0f;
     if (!frame.showing) {
         *this = VrControllers();
         return;
@@ -153,6 +154,14 @@ void VrControllers::update(const ControllerFrame &frame)
         _recenter = before < RecenterHold && _recenterHeld >= RecenterHold;
     } else {
         _recenterHeld = 0.0f;
+    }
+
+    const float sideways = _hands.at(Right).stickX;
+    if (std::abs(sideways) <= TurnRelease) {
+        _turnArmed = true;
+    } else if (_turnArmed && frame.snapTurn > 0 && std::abs(sideways) >= TurnPush) {
+        _turnArmed = false;
+        _turn = std::copysign(static_cast<float>(frame.snapTurn), sideways);
     }
 
     const bool onPanel = _panelOpen && _hits.at(indexOf(_pointing)).has_value();

@@ -9,6 +9,7 @@
 #include "MainMenu/SettingsMenu.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "MainMenu/VoiceMenu.hpp"
+#include "MainMenu/VrMenu.hpp"
 #include "ShipSelector/ShipSelector.hpp"
 
 #include <memory>
@@ -34,7 +35,7 @@ void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resour
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
                       const engine::InterfaceStyle &style, const engine::RendererMetrics &metrics,
                       GameScenes &games, const game::GameConfig &config, const SettingsTargets &targets,
-                      ShipSelection &ships)
+                      const VrTargets &vr, ShipSelection &ships)
 {
     localization::Localization &translations = targets.translations;
     createMainMenuScene(engine, resources, style, metrics, translations,
@@ -50,6 +51,7 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     createSettingsScene(engine, style, targets);
     createControlsScenes(engine, style, translations);
     createVoiceScenes(engine, style, targets);
+    createVrScene(engine, style, translations, vr);
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
 }

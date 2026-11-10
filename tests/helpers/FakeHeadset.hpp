@@ -19,6 +19,8 @@ struct FakeHeadsetCalls {
     int ended = 0;
     int eyes = 0;
     int recentred = 0;
+    /// The turns asked, in degrees.
+    std::vector<float> turns;
     bool destroyed = false;
 };
 
@@ -58,6 +60,7 @@ struct FakeHeadset final : rtype::xr::Headset {
     void endEye(int /*eye*/) override {}
     void endFrame() override { ++calls.ended; }
     void recenter() override { ++calls.recentred; }
+    void turn(float degrees) override { calls.turns.push_back(degrees); }
     [[nodiscard]] rtype::xr::HandState hand(rtype::xr::Hand hand) const override
     {
         return hands.at(static_cast<std::size_t>(hand));

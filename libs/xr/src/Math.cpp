@@ -87,6 +87,17 @@ Pose levelled(const Pose &pose)
             .orientation = {0.0f, std::sin(heading / 2.0f), 0.0f, std::cos(heading / 2.0f)}};
 }
 
+Pose turned(const Pose &pose, float radians)
+{
+    // The turn around +y, applied after the orientation of the pose: turn * orientation
+    const float sine = std::sin(radians / 2.0f);
+    const float cosine = std::cos(radians / 2.0f);
+    const Quaternion &q = pose.orientation;
+    return {.position = pose.position,
+            .orientation = {(cosine * q.x) + (sine * q.z), (cosine * q.y) + (sine * q.w),
+                            (cosine * q.z) - (sine * q.x), (cosine * q.w) - (sine * q.y)}};
+}
+
 Matrix projection(const FieldOfView &fieldOfView, float nearest, float farthest)
 {
     const float left = std::tan(fieldOfView.left);

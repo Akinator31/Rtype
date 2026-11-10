@@ -317,12 +317,16 @@ In a VR headset, the HUD is on the screens of the cockpit (Figma, Série 17, `Co
 each part given the surface of its screen (`engine::OnSurface`, [VR](vr.md#the-interface-in-the-cockpit)).
 While the surfaces are apart (`Metrics::surfacesApart()`), the `HudSystem` gives the parts the sizes of
 `CockpitHud`, larger than those of the screen (`ScreenHud`) to be read at arm's length, and places them from the
-top of their screen as the design measures them:
+top of the part of their screen the pilot sees: the panel of the dashboard hides the sides of the screens of
+the ship and of the navigation ([VR](vr.md#the-interface-in-the-cockpit)), so what is left of them is about
+square, and taller than wide for the navigation. The screen of the ship keeps everything on its left, out from
+under the flight stick, which hides its bottom right; the navigation puts the kind of game and the ping on two
+lines.
 
 | Screen | Size, game units | Shows |
 | ------ | ---------------- | ----- |
-| Ship (`HudShip`, on the right) | 480 × 360 | The slot and the name of the pilot, the icon of its voice, its lives, its score, its experience, its hit points. |
-| Navigation (`HudNav`, in the middle) | 480 × 310 | `WAVE` over the wave (`03 / 08`, or `WAVE · ENDLESS` over `07`), `BOSS APPROACHING` in red while a boss is in the game, the kind of game (`SOLO`, `ONLINE` after a cyan light), the ping and its bars. |
+| Ship (`HudShip`, on the right) | 317 × 360 | The slot and the name of the pilot, the icon of its voice, its lives, its score, its experience, its hit points. |
+| Navigation (`HudNav`, in the middle) | 230 × 310 | `WAVE` over the wave (`03 / 08`, or `WAVE · ENDLESS` over `07`), `BOSS APPROACHING` in red while a boss is in the game, the kind of game (`SOLO`, `ONLINE` after a cyan light), and under it the ping and its bars. |
 | Sides (`HudAux`, the four small screens) | 420 × 300 | `PILOTS` over a line per other pilot: the icon of its voice, its slot, its name, its score; `FLYING SOLO` alone. |
 | Hologram (`Holo`) | 480 × 330 | The radar: the frame of the board and its grid, a square per ship and Bydo (`radarBlip()`, `Game/Radar.hpp`): the pilot in white, the other players and the allies in cyan, the Bydos in red, the boss framed in orange. The shots are not shown. |
 

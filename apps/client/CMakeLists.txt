@@ -80,6 +80,7 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Submenus.cpp
     src/MainMenu/UiShowcase.cpp
     src/MainMenu/VoiceMenu.cpp
+    src/MainMenu/VrMenu.cpp
     src/Online/AccountScenes.cpp
     src/Online/FormErrors.cpp
     src/Online/KnownProfiles.cpp
@@ -92,6 +93,7 @@ add_library(r-type_client_core STATIC
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
     src/Settings/VoiceSettings.cpp
+    src/Settings/VrSettings.cpp
     src/Quests/EventQuest.cpp
     src/Quests/Quests.cpp
     src/Quests/StatQuest.cpp
@@ -103,6 +105,7 @@ add_library(r-type_client_core STATIC
     src/Voice/VoiceDevices.cpp
     src/Voice/VoiceIcons.cpp
     src/Voice/VoiceKeysSystem.cpp
+    src/Vr/CockpitLife.cpp
     src/Vr/VrControllers.cpp
     src/Vr/VrHaptics.cpp
     src/Vr/VrLayout.cpp

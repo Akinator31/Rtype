@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <numbers>
 
 namespace rtype::xr::detail
 {
@@ -218,14 +219,15 @@ void Session::createSession()
     _views.assign(count, {XR_TYPE_VIEW});
 }
 
-void Session::placeOrigin(const XrPosef &origin)
+void Session::placeOrigin(const Pose &origin)
 {
     XrReferenceSpaceCreateInfo info{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
     info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
-    info.poseInReferenceSpace = origin;
+    info.poseInReferenceSpace = toXr(origin);
     XrSpace space = XR_NULL_HANDLE;
     // Without a new space, the old one stays: the cockpit where it was rather than nowhere
     if (succeeded(xrCreateReferenceSpace(_session, &info, &space), "xrCreateReferenceSpace")) {
+        _origin = origin;
         xrDestroySpace(_space);
         _space = space;
     }
@@ -244,8 +246,17 @@ void Session::recenterOnHead()
         _recenterAsked = true;
         return;
     }
-    placeOrigin(toXr(levelled(toPose(head.pose))));
+    placeOrigin(levelled(toPose(head.pose)));
     logger().info("recentred on the head of the player");
+}
+
+void Session::turn(float degrees)
+{
+    if (_state == HeadsetState::Lost || _session == XR_NULL_HANDLE) {
+        return;
+    }
+    // Around the origin, where the head of the player was put by the last recentre: they stay in the seat
+    placeOrigin(turned(_origin, degrees * std::numbers::pi_v<float> / 180.0f));
 }
 
 void Session::lose(const std::string &reason)
@@ -318,7 +329,7 @@ void Session::pollEvents()
         if (event.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING &&
             reinterpret_cast<const XrEventDataReferenceSpaceChangePending &>(event).referenceSpaceType ==
                 XR_REFERENCE_SPACE_TYPE_LOCAL) {
-            placeOrigin(identityPose());
+            placeOrigin(Pose{});
             logger().info("the runtime recentred the headset");
         }
         event = {XR_TYPE_EVENT_DATA_BUFFER};

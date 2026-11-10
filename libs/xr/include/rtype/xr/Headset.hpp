@@ -126,6 +126,11 @@ public:
     /// level (levelled()): the player is seated at the eye point of the cockpit again. Done at the next frame
     /// drawn. When the runtime recentres by itself (the button of its menu), the space follows it.
     virtual void recenter() = 0;
+    /// Turns the space of the headset around the head of the player, at once: the cockpit and everything
+    /// around it turn, for a player who cannot turn their chair (a snap turn). A positive angle turns the
+    /// player to the right, what was on their right now ahead. A recentre puts it back ahead of them.
+    /// @param degrees How much the player turns.
+    virtual void turn(float degrees) = 0;
 
     /// What the controller of a hand gives, read by the last beginFrame(), where it will be when this frame
     /// is shown. Released and not tracked before the first frame, and while the headset does not show the

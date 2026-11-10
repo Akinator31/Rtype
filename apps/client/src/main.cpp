@@ -6,6 +6,8 @@
 #include "Commands/FpsCommand.hpp"
 #include "Console/Console.hpp"
 #include "Discord/DiscordPresence.hpp"
+#include "Game/EntityLook.hpp"
+#include "Game/EntitySounds.hpp"
 #include "Game/GameScenes.hpp"
 #include "Game/GameSessionSystem.hpp"
 #include "Loading/AssetPreload.hpp"
@@ -16,8 +18,10 @@
 #include "MainMenu/MainMenu.hpp"
 #include "Online/OnlineScenes.hpp"
 #include "Quests/Quests.hpp"
+#include "Settings/VrSettings.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "Voice/VoiceKeysSystem.hpp"
+#include "Vr/CockpitLife.hpp"
 #include "Vr/VrControllers.hpp"
 #include "Vr/VrHaptics.hpp"
 #include "Vr/VrMode.hpp"
@@ -60,6 +64,10 @@ constexpr float CollisionCellSize = 64.0f;
 /// How loud the buttons are: the hover is heard at each move in a menu, the click file is quiet.
 constexpr float ButtonHoverVolume = 0.4f;
 constexpr float ButtonClickVolume = 1.0f;
+/// How loud the alarm of the cockpit is in a VR headset: heard over the battle, not over the voices.
+constexpr float CockpitAlarmVolume = 0.55f;
+/// How large the line of the window is while it shows nothing of the headset (VrMirror::Nothing).
+constexpr float InHeadsetTextSize = 48.0f;
 
 struct StopWorkers {
     rtype::engine::ThreadManager &threads;
@@ -183,14 +191,20 @@ void run(const std::vector<std::string_view> &arguments)
     // The game in a VR headset, with --xr or the VR setting: opened on the OpenGL context of the window, and
     // closed before it. Without a headset, the game stays on the screen and says so once in the main menu.
     // While the headset shows the game, the world of the game is laid on the board in relief for each eye, or
-    // drawn once into the image of the board while it is flat; the window shows the left eye
-    const bool reliefBoard = rtype::client::wantsReliefBoard(engine.getSettings());
-    rtype::client::VrView vrView(renderer, resources, [&] {
+    // drawn once into the image of the board while it is flat; the window shows what the VR page says, the
+    // left eye by default
+    rtype::client::VrPreferences vrPreferences = rtype::client::readVrSettings(engine.getSettings());
+    const auto drawWorld = [&] {
         sceneRenderer.draw(renderer, rtype::engine::Layer::World);
         if (debugViews.hitboxes) {
             colliderDebugRenderer.draw(renderer);
         }
-    });
+    };
+    rtype::client::VrView vrView(renderer, resources, drawWorld, rtype::client::layoutOf(vrPreferences));
+    // The cockpit reacts to the game: its lights, and its alarm
+    rtype::client::CockpitLife cockpitLife;
+    const rtype::audio::SoundId cockpitAlarm = audio.loadSound(RTYPE_SOUND_COCKPIT_ALARM);
+    bool wasInHeadset = false;
     // The controllers: a gamepad, a pointer at the panel, drawn in the hands; and they vibrate with the game
     rtype::client::VrControllers controllers;
     rtype::client::VrHaptics haptics;
@@ -214,6 +228,28 @@ void run(const std::vector<std::string_view> &arguments)
     if (vrWanted) {
         vr.start();
     }
+    // What the VR page changes
+    const rtype::client::VrTargets vrTargets{.preferences = vrPreferences,
+                                             .switchHeadset =
+                                                 [&vr](bool open) {
+                                                     if (open) {
+                                                         return vr.start();
+                                                     }
+                                                     vr.close();
+                                                     return false;
+                                                 },
+                                             .recenter = [&vr] { vr.recenter(); }};
+    // The window while it shows nothing of the headset, and the line it says
+    const auto drawInHeadset = [&renderer, &translations, display] {
+        renderer.beginFrame();
+        const std::string text = translations.text("vr.window.in_headset");
+        const rtype::render::Rectangle area = renderer.visibleArea();
+        const rtype::render::Vector2 size = renderer.measureText(display, text, InHeadsetTextSize);
+        renderer.drawText(display, text,
+                          {area.x + ((area.width - size.x) / 2.0f), area.y + ((area.height - size.y) / 2.0f)},
+                          InHeadsetTextSize, rtype::render::colors::Gray);
+        renderer.endFrame();
+    };
 
     const auto playFrame = [&] {
         const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
@@ -231,11 +267,15 @@ void run(const std::vector<std::string_view> &arguments)
                             .showing = vr.isShowing(),
                             .panelOpen = vrView.panelSurface().has_value(),
                             .hovered = systems.interface.hovered(),
-                            .gamepadUsed = rtype::client::isGamepadUsed(devices)});
+                            .gamepadUsed = rtype::client::isGamepadUsed(devices),
+                            .snapTurn = vrPreferences.snapTurn});
         input.setGamepad(controllers.gamepad());
         input.setPointer(controllers.pointer());
         if (controllers.recenterAsked()) {
             vr.recenter();
+        }
+        if (controllers.turnAsked() != 0.0f) {
+            vr.turn(controllers.turnAsked());
         }
         for (const auto &[hand, vibration] : controllers.takeVibrations()) {
             vr.vibrate(hand, vibration);
@@ -254,20 +294,48 @@ void run(const std::vector<std::string_view> &arguments)
         audio.finishPendingLoads();
         audio.update();
         const bool inHeadset = vr.isShowing();
-        for (const auto &[hand, vibration] : haptics.update({.playing = inHeadset && sessions.running(),
-                                                             .shots = sessions.localShots(),
-                                                             .health = sessions.localHealth()})) {
+        const bool playing = inHeadset && sessions.running();
+        for (const auto &[hand, vibration] : haptics.update(
+                 {.playing = playing, .shots = sessions.localShots(), .health = sessions.localHealth()})) {
             vr.vibrate(hand, vibration);
         }
+        // The voices of the other players, from the side of the board their ship is on, in the headset only
+        std::array<float, rtype::voice::MaxParticipants> voicePans{};
+        if (playing) {
+            for (const auto &[slot, x] : sessions.ships()) {
+                if (slot < voicePans.size()) {
+                    voicePans.at(slot) = rtype::client::soundPan(x);
+                }
+            }
+        }
+        for (rtype::voice::Slot slot = 0; slot < voicePans.size(); ++slot) {
+            voiceStreams.setPan(slot, voicePans.at(slot));
+        }
         if (inHeadset) {
+            if (!wasInHeadset) {
+                vrView.arrive();
+            }
+            const rtype::client::GameSession *session = sessions.session();
+            cockpitLife.update(window.frameTime(),
+                               {.playing = playing,
+                                .health = sessions.localHealth(),
+                                .maxHealth = sessions.localMaxHealth(),
+                                .boss = sessions.bossIsThere(),
+                                .pilot = rtype::client::playerColor(session ? session->localSlot() : 0)});
+            if (cockpitLife.takeAlarm()) {
+                audio.play(cockpitAlarm, {.volume = CockpitAlarmVolume});
+            }
             // The HUD on the screens of the cockpit, the menus on the panel, the world on the board
-            vrView.update(window.frameTime(),
-                          {.light = sceneRenderer.light(),
-                           .sky = sceneRenderer.sky(),
-                           .playing = sessions.running(),
-                           .panel = sceneRenderer.hasContent(rtype::engine::Surface::Panel),
-                           .scenes = engine.getScenes().bottom(),
-                           .relief = reliefBoard && rtype::client::canDrawInRelief(sceneRenderer.camera())});
+            vrView.setLayout(rtype::client::layoutOf(vrPreferences));
+            vrView.update(
+                window.frameTime(),
+                {.light = sceneRenderer.light(),
+                 .sky = sceneRenderer.sky(),
+                 .playing = sessions.running(),
+                 .panel = sceneRenderer.hasContent(rtype::engine::Surface::Panel),
+                 .scenes = engine.getScenes().bottom(),
+                 .relief = !vrPreferences.flatBoard && rtype::client::canDrawInRelief(sceneRenderer.camera()),
+                 .cockpit = cockpitLife.lights()});
             sceneRenderer.setToastSurface(vrView.toastSurface());
             vrView.drawFrames([&](rtype::engine::Surface surface) {
                 sceneRenderer.draw(renderer, surface);
@@ -292,8 +360,23 @@ void run(const std::vector<std::string_view> &arguments)
             renderer.endFrame();
         }
         vr.update();
+        wasInHeadset = inHeadset;
         if (inHeadset) {
-            renderer.showMirror();
+            // The window: what the left eye sees, the game flat as on the board, or a line
+            switch (vrPreferences.mirror) {
+            case rtype::client::VrMirror::LeftEye:
+                renderer.showMirror();
+                break;
+            case rtype::client::VrMirror::FlatGame:
+                renderer.beginFrame();
+                drawWorld();
+                sceneRenderer.draw(renderer, rtype::engine::Surface::Board);
+                renderer.endFrame();
+                break;
+            case rtype::client::VrMirror::Nothing:
+                drawInHeadset();
+                break;
+            }
         }
     };
 
@@ -316,7 +399,8 @@ void run(const std::vector<std::string_view> &arguments)
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord,
                                        discordConnection, ships,
                                        rtype::render::userDataDirectory() / "pictures", config, voice);
-    rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets, ships);
+    rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets,
+                                    vrTargets, ships);
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     rtype::client::registerQuests(engine, translations);
     engine.getEcs().registerSystem<rtype::client::VoiceKeysSystem>(engine, sessions, voice, translations);

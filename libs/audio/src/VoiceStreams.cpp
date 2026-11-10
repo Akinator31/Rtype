@@ -25,6 +25,8 @@ constexpr unsigned int SampleBits = 16;
 struct Stream {
     AudioStream stream{};
     bool open = false;
+    /// Where the voice is heard, from -1 (left) to 1 (right): kept while the stream is closed.
+    float pan = 0.0f;
     voice::RingBuffer<std::int16_t> samples{StreamSamples};
 };
 
@@ -91,6 +93,7 @@ void VoiceStreams::open(voice::Slot slot)
         return;
     }
     SetAudioStreamCallback(stream.stream, Callbacks[slot]);
+    SetAudioStreamPan(stream.stream, stream.pan);
     PlayAudioStream(stream.stream);
     stream.open = true;
 }
@@ -118,6 +121,18 @@ void VoiceStreams::setVolume(voice::Slot slot, float volume)
 {
     if (slot < voice::MaxParticipants && _state->streams[slot].open) {
         SetAudioStreamVolume(_state->streams[slot].stream, std::clamp(volume, 0.0f, voice::MaxVolume));
+    }
+}
+
+void VoiceStreams::setPan(voice::Slot slot, float pan)
+{
+    if (slot >= voice::MaxParticipants) {
+        return;
+    }
+    Stream &stream = _state->streams[slot];
+    stream.pan = std::clamp(pan, -1.0f, 1.0f);
+    if (stream.open) {
+        SetAudioStreamPan(stream.stream, stream.pan);
     }
 }
 

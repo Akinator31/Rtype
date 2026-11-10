@@ -427,16 +427,39 @@ TEST_CASE(
 
     REQUIRE(close(areaOf(Surface::Panel).width, 1920.0f));
     REQUIRE(close(areaOf(Surface::Board).height, 1080.0f));
-    REQUIRE(close(areaOf(Surface::HudShip).width, 480.0f));
+    REQUIRE(close(areaOf(Surface::HudShip).width, 317.0f));
     REQUIRE(close(areaOf(Surface::Holo).height, 330.0f));
     for (const rtype::client::CockpitScreen &screen : rtype::client::CockpitScreens) {
         const rtype::render::Rectangle area = areaOf(screen.surface);
         REQUIRE(close(area.x, 0.0f));
         REQUIRE(close(area.y, 0.0f));
-        // The image has the shape of the area: nothing is stretched
-        REQUIRE(std::abs((screen.resolution.x / screen.resolution.y) - (area.width / area.height)) < 0.01f);
+        REQUIRE(close(area.width, screen.size.x));
+        // The image has the shape of the area of its frame: nothing is stretched
+        const rtype::render::Rectangle frame = rtype::client::screenFrameArea(screen);
+        REQUIRE(std::abs((screen.resolution.x / screen.resolution.y) - (frame.width / frame.height)) < 0.01f);
         REQUIRE_FALSE(screen.material.empty());
     }
+}
+
+TEST_CASE("The surface of a screen is drawn into the part of its image the pilot sees", "[client][vr]")
+{
+    const auto ship = std::ranges::find(rtype::client::CockpitScreens, rtype::engine::Surface::HudShip,
+                                        &rtype::client::CockpitScreen::surface);
+    const rtype::render::Rectangle frame = rtype::client::screenFrameArea(*ship);
+
+    // The panel hides the sides: the area of the surface, from 0 to its width, is in the middle of the frame
+    REQUIRE(frame.x < 0.0f);
+    REQUIRE(close(-frame.x / frame.width, ship->shown.x));
+    REQUIRE(close((ship->size.x - frame.x) / frame.width, ship->shown.x + ship->shown.width));
+    REQUIRE(close(frame.y, 0.0f));
+    REQUIRE(close(frame.height, ship->size.y));
+
+    // A screen seen whole: its frame is its area
+    const auto holo = std::ranges::find(rtype::client::CockpitScreens, rtype::engine::Surface::Holo,
+                                        &rtype::client::CockpitScreen::surface);
+    const rtype::render::Rectangle whole = rtype::client::screenFrameArea(*holo);
+    REQUIRE(close(whole.x, 0.0f));
+    REQUIRE(close(whole.width, holo->size.x));
 }
 
 TEST_CASE("The open panel is between the dashboard and the board, seen whole, curved around the player",
