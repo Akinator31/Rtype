@@ -1,3 +1,5 @@
+#include "Vr/CockpitLook.hpp"
+#include "Vr/VrLayout.hpp"
 #include "Vr/VrMode.hpp"
 #include "Vr/VrView.hpp"
 #include "helpers/FakeHeadset.hpp"
@@ -5,8 +7,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <memory>
+#include <numbers>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -43,6 +48,23 @@ struct Client {
          .lost = [this] { ++lost; },
          .drawEye = [this](int eye, const rtype::xr::EyeView & /*view*/) { drawnEyes.push_back(eye); }}};
 };
+
+constexpr float Tolerance = 1e-4f;
+
+bool close(float actual, float expected)
+{
+    return std::abs(actual - expected) < Tolerance;
+}
+
+bool samePoint(rtype::render::Vector3 actual, rtype::render::Vector3 expected)
+{
+    return close(actual.x, expected.x) && close(actual.y, expected.y) && close(actual.z, expected.z);
+}
+
+float distance(rtype::render::Vector3 a, rtype::render::Vector3 b)
+{
+    return std::sqrt(((a.x - b.x) * (a.x - b.x)) + ((a.y - b.y) * (a.y - b.y)) + ((a.z - b.z) * (a.z - b.z)));
+}
 
 } // namespace
 
@@ -194,20 +216,123 @@ TEST_CASE("A lost headset can be opened again", "[client][vr]")
     REQUIRE(client.vr.isActive());
 }
 
-TEST_CASE("The board floats ahead of the eyes, under them, of the shape of the game", "[client][vr]")
+TEST_CASE("The board floats ahead of the eyes, over them, of the shape of the game, facing them",
+          "[client][vr]")
 {
-    const rtype::client::BoardPlacement placement{.width = 4.0f, .distance = 3.0f, .drop = 0.25f};
-    const rtype::render::Matrix transform = rtype::client::boardTransform(placement, {1920.0f, 1080.0f});
+    const rtype::client::VrLayout layout{.boardWidth = 4.0f, .boardDistance = 3.0f, .boardRise = 0.6f};
+    const rtype::render::Matrix transform = rtype::client::boardTransform(layout, {1920.0f, 1080.0f});
+    const auto corners = rtype::client::boardCorners(layout, {1920.0f, 1080.0f});
 
-    // The centre of the square, and its corners, once moved
-    const auto place = [&](float x, float y) {
-        return std::array<float, 3>{(transform.at(0, 0) * x) + (transform.at(0, 1) * y) + transform.at(0, 3),
-                                    (transform.at(1, 0) * x) + (transform.at(1, 1) * y) + transform.at(1, 3),
-                                    (transform.at(2, 0) * x) + (transform.at(2, 1) * y) + transform.at(2, 3)};
+    // Its centre, ahead and over the eyes
+    REQUIRE(close(transform.values[12], 0.0f));
+    REQUIRE(close(transform.values[13], 0.6f));
+    REQUIRE(close(transform.values[14], -3.0f));
+    // 4 m wide, 2.25 m high: the shape of the game
+    REQUIRE(close(corners[1].x - corners[0].x, 4.0f));
+    REQUIRE(close(distance(corners[0], corners[3]), 2.25f));
+    // Tilted to face the eyes: its normal points back to them
+    const float length = std::hypot(0.6f, 3.0f);
+    REQUIRE(close(transform.values[8], 0.0f));
+    REQUIRE(close(transform.values[9], -0.6f / length));
+    REQUIRE(close(transform.values[10], 3.0f / length));
+    // Its top leans towards the eyes, its bottom away from them
+    REQUIRE(corners[0].z > -3.0f);
+    REQUIRE(corners[3].z < -3.0f);
+}
+
+TEST_CASE("The whole board is seen from the seat without turning the head", "[client][vr]")
+{
+    const rtype::client::VrLayout layout;
+    // The field of view of the eyes of a Quest 2, wider towards the outside
+    const rtype::xr::FieldOfView leftEye{.left = -0.942f, .right = 0.698f, .up = 0.768f, .down = -0.890f};
+    const rtype::xr::FieldOfView rightEye{.left = -0.698f, .right = 0.942f, .up = 0.768f, .down = -0.890f};
+
+    for (const rtype::render::Vector3 corner : rtype::client::boardCorners(layout, {1920.0f, 1080.0f})) {
+        REQUIRE(rtype::client::isSeen(corner, leftEye));
+        REQUIRE(rtype::client::isSeen(corner, rightEye));
+    }
+    // About 67 degrees wide
+    const auto corners = rtype::client::boardCorners(layout, {1920.0f, 1080.0f});
+    const float width = 2.0f * std::atan2(corners[1].x, -corners[1].z) * 180.0f / std::numbers::pi_v<float>;
+    REQUIRE(width > 60.0f);
+    REQUIRE(width < 75.0f);
+}
+
+TEST_CASE("The bottom of the board is seen over the dashboard", "[client][vr]")
+{
+    const rtype::client::VrLayout layout;
+    const auto corners = rtype::client::boardCorners(layout, {1920.0f, 1080.0f});
+
+    float highestDashboard = -90.0f;
+    for (const rtype::render::Vector3 point : rtype::client::CockpitDashboardTop) {
+        highestDashboard = std::max(
+            highestDashboard,
+            rtype::client::elevation(rtype::client::cockpitToHeadset(point, rtype::client::CockpitEyePoint)));
+    }
+    // Along its bottom edge, from corner to corner: its middle is the lowest seen
+    for (int step = 0; step <= 10; ++step) {
+        const float amount = static_cast<float>(step) / 10.0f;
+        const rtype::render::Vector3 point{corners[3].x + ((corners[2].x - corners[3].x) * amount),
+                                           corners[3].y, corners[3].z};
+        REQUIRE(rtype::client::elevation(point) > highestDashboard);
+    }
+}
+
+TEST_CASE("The board is outside the canopy, near it", "[client][vr]")
+{
+    const rtype::client::VrLayout layout;
+    // The nose of the canopy, the farthest part of the cockpit ahead of the eyes
+    const rtype::render::Vector3 nose =
+        rtype::client::cockpitToHeadset(rtype::client::CockpitDashboardTop[0], rtype::client::CockpitEyePoint);
+
+    for (const rtype::render::Vector3 corner : rtype::client::boardCorners(layout, {1920.0f, 1080.0f})) {
+        REQUIRE(corner.z < nose.z);
+        // Near enough to be felt close: not much farther than the canopy
+        REQUIRE(corner.z > nose.z - 1.0f);
+    }
+}
+
+TEST_CASE("The cockpit is placed around the eyes, its nose ahead", "[client][vr]")
+{
+    const rtype::render::Vector3 eye{-0.17f, 0.05f, 0.0f};
+
+    REQUIRE(samePoint(rtype::client::cockpitToHeadset(eye, eye), {0.0f, 0.0f, 0.0f}));
+    // The nose ahead, the right of the pilot on the right, up stays up
+    REQUIRE(samePoint(rtype::client::cockpitToHeadset({0.83f, 0.05f, 0.0f}, eye), {0.0f, 0.0f, -1.0f}));
+    REQUIRE(samePoint(rtype::client::cockpitToHeadset({-0.17f, 0.05f, 0.5f}, eye), {0.5f, 0.0f, 0.0f}));
+    REQUIRE(samePoint(rtype::client::cockpitToHeadset({-0.17f, 1.05f, 0.0f}, eye), {0.0f, 1.0f, 0.0f}));
+
+    const rtype::client::CockpitPlacement placement = rtype::client::placeCockpit(eye);
+    REQUIRE(placement.rotationAngle == 90.0f);
+    REQUIRE(samePoint(placement.rotationAxis, {0.0f, 1.0f, 0.0f}));
+}
+
+TEST_CASE("The transparent meshes are drawn from the farthest to the nearest", "[client][vr]")
+{
+    const std::vector<rtype::render::ModelMesh> meshes{
+        {.name = "Cockpit_Frame", .centre = {3.0f, 0.0f, 0.0f}},
+        {.name = "Cockpit_Glass", .centre = {0.2f, 0.1f, 0.0f}},
+        {.name = "Cockpit_Holo", .centre = {0.66f, -0.1f, 0.0f}},
+        {.name = "Cockpit_Seat", .centre = {-0.3f, -0.4f, 0.0f}},
     };
-    REQUIRE(place(0.0f, 0.0f) == std::array<float, 3>{0.0f, -0.25f, -3.0f});
-    REQUIRE(place(0.5f, 0.5f) == std::array<float, 3>{2.0f, 0.875f, -3.0f});
-    REQUIRE(place(-0.5f, -0.5f) == std::array<float, 3>{-2.0f, -1.375f, -3.0f});
+
+    REQUIRE(rtype::client::farToNear(meshes, rtype::client::CockpitTransparentMeshes,
+                                     rtype::client::CockpitEyePoint) == std::vector<int>{2, 1});
+    // Seen from the nose, the canopy is the farthest
+    REQUIRE(rtype::client::farToNear(meshes, rtype::client::CockpitTransparentMeshes, {1.5f, 0.0f, 0.0f}) ==
+            std::vector<int>{1, 2});
+    REQUIRE(rtype::client::farToNear(meshes, {}, rtype::client::CockpitEyePoint).empty());
+}
+
+TEST_CASE("Recentring is asked of the open headset only", "[client][vr]")
+{
+    Client client;
+    client.vr.recenter();
+    REQUIRE(client.opened == 0);
+
+    client.vr.start();
+    client.vr.recenter();
+    REQUIRE(client.calls.recentred == 1);
 }
 
 TEST_CASE("What an eye sees is given to the renderer as the headset gives it", "[client][vr]")
