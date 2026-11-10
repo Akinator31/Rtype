@@ -211,6 +211,43 @@ copies it into the window._
 The visible area is computed by `computeVisibleArea()` (`Viewport.hpp`), a pure function that is unit tested
 (`tests/viewport.cpp`).
 
+### Frames into an image, and the eyes of a headset
+
+In a VR headset ([VR](vr.md#in-the-headset)), the frame is not shown in the window: it is drawn into an image,
+the board, which each eye of the headset then shows in 3D.
+
+| Function                              | Does                                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `createImage(resolution)`             | Creates an image to draw frames into, filled with black. It lives as long as the renderer.                  |
+| `beginFrame(image, background)`       | Starts a frame into the image instead of the window. `endFrame()` leaves it there and makes its mipmaps.     |
+| `beginEye(eye, view, background)`     | Starts a 3D pass for an eye, into an image of the renderer of the size of the eye, with the view and the projection of the headset (`EyeView`). |
+| `drawImageQuad(image, transform)`     | Draws an image as a rectangle in 3D: the square of side 1 around the origin, facing +z, moved by `transform`. |
+| `drawModel(model, light, ...)`, `drawEnergyModel(model, energy, ...)` | The models of a frame, seen by the eye instead of a camera. They do not glow.                 |
+| `endEye()`                            | Copies the image of the eye, through the colour filter and the dithering, into the framebuffer bound before `beginEye()`: the image of the headset. |
+| `showMirror()`                        | Shows the left eye in the window, in place of a frame, cropped to the shape of the window (`computeMirrorCrop()`). |
+
+```mermaid
+flowchart LR
+    Frame["beginFrame(board)<br/>... endFrame()"] --> Board["Board image<br/>2560x1440"]
+    Board -- "drawImageQuad()" --> Eye["Image of an eye<br/>beginEye() ... endEye()"]
+    Eye -- "endEye(): colour filter" --> Headset["Image of the headset"]
+    Eye -- "showMirror(): left eye, cropped" --> Window["Window"]
+```
+
+_In the headset: the frame goes into the board, the board into each eye, each eye into the headset and the left
+one into the window._
+
+The frame of an image is the frame of the window, glow and smoothing included, without the vignette, which
+belongs to a screen: in the headset the eye looks around the board. The colour filter is not applied to the
+image either, but where the eyes are copied to the headset and to the window: it is for the whole view, not
+only for the board. While the last frame was drawn into an image, `visibleArea()` is the visible area of that
+image.
+
+An eye is drawn in an image of its own rather than directly in the image of the headset so that it can go
+through the colour filter, as the frame of the window does. Its world is in metres, y up, -z ahead, the space of
+the headset. The lighting shader takes where the models are seen from (`detail::ViewPoint`): a `Camera` of a
+frame is one way to give it, the view matrix of an eye another.
+
 ### Drawing functions
 
 | Function                                               | Draws                                                                                                                    |
@@ -237,7 +274,11 @@ multiplied with the texture: white keeps it unchanged, a lower alpha fades it.
 
 Drawing outside of a frame, starting a frame twice or ending a frame that was not started throws
 `std::logic_error`, with a message telling how to fix the call. These are programming errors: raylib would
-otherwise draw to the wrong place without any warning.
+otherwise draw to the wrong place without any warning. The same goes for the eyes: a frame and an eye are never
+drawn at the same time, the 2D drawings and the models seen through a camera are for a frame,
+`drawImageQuad()` and the models without a camera for an eye, and `showMirror()` is called between two passes.
+`PassOrder` (`PassOrder.hpp`) keeps this order; it holds no graphics resource, so `tests/render_passes.cpp`
+checks it without a window.
 
 ### Colour filters
 
@@ -313,7 +354,7 @@ strength of glTF is not applied.
 3. blurs this image, then blurs it again at an eighth of the resolution and adds it back as a wider, fainter
    halo, so that the light fades out slowly instead of stopping at the edge of the blur;
 4. adds the result over the frame, then darkens its corners (`setVignette()`, 0.22 by default, 0 to turn it
-   off). The interface, drawn afterwards, is not darkened.
+   off), in the frames of the window only. The interface, drawn afterwards, is not darkened.
 
 `endFrame()` always adds a faint noise of plus or minus one level per channel (dithering) when it copies the
 frame to the window, in the same pass as the colour filter: the dark gradients of space and of the glow show
@@ -344,7 +385,14 @@ These details only matter when working inside `libs/render`:
   raylib, and puts them where raylib puts those of textured materials (`value` of the roughness and
   metalness maps, `color` of the emission map). A roughness factor of 0 is taken as none.
 - **Upside-down render target.** OpenGL stores off-screen images upside down: `endFrame()` copies the image
-  with a negative source height to flip it back.
+  with a negative source height to flip it back. `drawImageQuad()` reads the top of an image at v = 1 for the
+  same reason.
+- **Framebuffers raylib did not create.** The image of an eye of the headset is a framebuffer of `libs/xr`.
+  `beginEye()` reads which one is bound (`rlGetActiveFramebuffer()`), and `endEye()` binds it again and sets a
+  2D view of its size by hand, as `BeginTextureMode()` does for its own images. The eye pass sets the
+  matrices of the headset with rlgl, as `BeginMode3D()` does with those of a camera.
+- **`render::Matrix` and raylib's `Matrix`.** Both exist inside the library: raylib's one is written
+  `::Matrix`.
 
 ## Limits and next steps
 
