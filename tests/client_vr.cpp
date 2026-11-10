@@ -282,8 +282,8 @@ TEST_CASE("The board is outside the canopy, near it", "[client][vr]")
 {
     const rtype::client::VrLayout layout;
     // The nose of the canopy, the farthest part of the cockpit ahead of the eyes
-    const rtype::render::Vector3 nose =
-        rtype::client::cockpitToHeadset(rtype::client::CockpitDashboardTop[0], rtype::client::CockpitEyePoint);
+    const rtype::render::Vector3 nose = rtype::client::cockpitToHeadset(rtype::client::CockpitDashboardTop[0],
+                                                                        rtype::client::CockpitEyePoint);
 
     for (const rtype::render::Vector3 corner : rtype::client::boardCorners(layout, {1920.0f, 1080.0f})) {
         REQUIRE(corner.z < nose.z);
