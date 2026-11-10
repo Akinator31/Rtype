@@ -95,9 +95,8 @@ void Session::createInstance(const std::string &applicationName)
     }
 
     XrInstanceCreateInfo info{XR_TYPE_INSTANCE_CREATE_INFO};
-    std::strncpy(info.applicationInfo.applicationName, applicationName.c_str(),
-                 XR_MAX_APPLICATION_NAME_SIZE - 1);
-    std::strncpy(info.applicationInfo.engineName, "R-Type", XR_MAX_ENGINE_NAME_SIZE - 1);
+    copyName(info.applicationInfo.applicationName, applicationName);
+    copyName(info.applicationInfo.engineName, "R-Type");
     info.applicationInfo.applicationVersion = 1;
     // 1.0: a runtime of 1.1 accepts it, a runtime of 1.0 would refuse 1.1
     info.applicationInfo.apiVersion = XR_API_VERSION_1_0;

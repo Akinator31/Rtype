@@ -59,7 +59,9 @@ On Linux the client runs on X11, through XWayland under Wayland: raylib builds G
 
 The sources include `rlgl.h` only, never `raylib.h`: `windows.h` and Xlib define names (`Rectangle`, `Font`,
 `near`, `far`, `None`...) that clash with those of raylib. `src/Platform.hpp` includes them in an order that
-works and removes the macros of Xlib that would break the code after it.
+works and removes the macros of Xlib that would break the code after it. On Windows it also includes
+`<unknwn.h>`: `openxr_platform.h` declares Microsoft extensions that take an `IUnknown`, and
+`WIN32_LEAN_AND_MEAN` leaves COM out of `windows.h`.
 
 ### The eyes
 

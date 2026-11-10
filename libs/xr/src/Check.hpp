@@ -3,8 +3,11 @@
 #include "Platform.hpp"
 #include "rtype/xr/Math.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace rtype::xr::detail
 {
@@ -33,6 +36,16 @@ inline void check(XrInstance instance, XrResult result, const char *what)
     if (XR_FAILED(result)) {
         throw OpenXrError(std::string(what) + " failed (" + resultName(instance, result) + ")");
     }
+}
+
+/// Copies a name into a fixed array of an OpenXR structure, cut to fit and always terminated. Instead of
+/// strncpy(), which MSVC deprecates (C4996) and which does not terminate a name that fills the array.
+template <std::size_t Size>
+void copyName(char (&to)[Size], std::string_view from)
+{
+    const std::size_t length = std::min(from.size(), Size - 1);
+    std::copy_n(from.data(), length, to);
+    to[length] = '\0';
 }
 
 /// Our pose from an OpenXR pose.

@@ -3,7 +3,6 @@
 #include "Check.hpp"
 #include "rtype/log/Logger.hpp"
 
-#include <cstring>
 #include <initializer_list>
 #include <vector>
 
@@ -69,8 +68,8 @@ void Controllers::createActions()
 {
     const XrInstance instance = _session.instance();
     XrActionSetCreateInfo set{XR_TYPE_ACTION_SET_CREATE_INFO};
-    std::strncpy(set.actionSetName, "gameplay", XR_MAX_ACTION_SET_NAME_SIZE - 1);
-    std::strncpy(set.localizedActionSetName, "Gameplay", XR_MAX_LOCALIZED_ACTION_SET_NAME_SIZE - 1);
+    copyName(set.actionSetName, "gameplay");
+    copyName(set.localizedActionSetName, "Gameplay");
     check(instance, xrCreateActionSet(instance, &set, &_actionSet), "xrCreateActionSet");
 
     xrStringToPath(instance, "/user/hand/left", &_hands[0]);
@@ -79,8 +78,8 @@ void Controllers::createActions()
     const auto create = [&](XrAction &action, XrActionType type, const char *name, const char *label) {
         XrActionCreateInfo info{XR_TYPE_ACTION_CREATE_INFO};
         info.actionType = type;
-        std::strncpy(info.actionName, name, XR_MAX_ACTION_NAME_SIZE - 1);
-        std::strncpy(info.localizedActionName, label, XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
+        copyName(info.actionName, name);
+        copyName(info.localizedActionName, label);
         info.countSubactionPaths = HandCount;
         info.subactionPaths = _hands.data();
         check(instance, xrCreateAction(_actionSet, &info, &action), name);

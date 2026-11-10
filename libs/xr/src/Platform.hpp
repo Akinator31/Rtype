@@ -15,6 +15,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+// IUnknown, which the Microsoft extensions of openxr_platform.h use: WIN32_LEAN_AND_MEAN leaves COM out of
+// windows.h
+#include <unknwn.h>
 #define XR_USE_PLATFORM_WIN32
 #else
 #include <GL/glx.h>
