@@ -45,6 +45,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <exception>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -119,7 +120,8 @@ void run(const std::vector<std::string_view> &arguments)
         .list = {.titleFont = display, .detailFont = messageFont},
         .avatar = {.font = display},
     };
-    const rtype::engine::RendererMetrics metrics(renderer);
+    // Not const: while a VR headset shows the game, the surfaces of the interface are drawn apart
+    rtype::engine::RendererMetrics metrics(renderer);
     rtype::localization::Localization translations("en");
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
@@ -200,6 +202,9 @@ void run(const std::vector<std::string_view> &arguments)
             vr.recenter();
         }
         recenterKeyWasDown = recenterKeyDown;
+        // While the headset shows the game, the anchors place each part of the interface on its surface
+        metrics.separateSurfaces(
+            vr.isShowing() ? std::optional(rtype::client::surfaceAreas(renderer.gameSize())) : std::nullopt);
         sceneLoadStatus.update();
         window.update();
         network.poll();
@@ -212,24 +217,41 @@ void run(const std::vector<std::string_view> &arguments)
         audio.update();
         const bool inHeadset = vr.isShowing();
         if (inHeadset) {
-            renderer.beginFrame(vrView.board());
+            // The HUD on the screens of the cockpit, the menus on the panel, the world on the board
+            vrView.update(window.frameTime(),
+                          {.light = sceneRenderer.light(),
+                           .sky = sceneRenderer.sky(),
+                           .playing = sessions.running(),
+                           .panel = sceneRenderer.hasContent(rtype::engine::Surface::Panel),
+                           .scenes = engine.getScenes().bottom()});
+            sceneRenderer.setToastSurface(vrView.toastSurface());
+            vrView.drawFrames([&](rtype::engine::Surface surface) {
+                if (surface == rtype::engine::Surface::Board) {
+                    sceneRenderer.draw(renderer, rtype::engine::Layer::World);
+                    if (debugViews.hitboxes) {
+                        colliderDebugRenderer.draw(renderer);
+                    }
+                }
+                sceneRenderer.draw(renderer, surface);
+                if (surface == rtype::engine::Surface::Board && debugViews.fps) {
+                    rtype::client::drawFpsCounter(renderer);
+                }
+                if (surface == rtype::engine::Surface::Panel) {
+                    sceneLoadStatus.draw(renderer);
+                }
+            });
         } else {
             renderer.beginFrame();
-        }
-        sceneRenderer.draw(renderer, rtype::engine::Layer::World);
-        if (debugViews.hitboxes) {
-            colliderDebugRenderer.draw(renderer);
-        }
-        sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
-        if (debugViews.fps) {
-            rtype::client::drawFpsCounter(renderer);
-        }
-        sceneLoadStatus.draw(renderer);
-        renderer.endFrame();
-        if (inHeadset) {
-            vrView.update(
-                window.frameTime(),
-                {.light = sceneRenderer.light(), .sky = sceneRenderer.sky(), .playing = sessions.running()});
+            sceneRenderer.draw(renderer, rtype::engine::Layer::World);
+            if (debugViews.hitboxes) {
+                colliderDebugRenderer.draw(renderer);
+            }
+            sceneRenderer.draw(renderer, rtype::engine::Layer::Interface);
+            if (debugViews.fps) {
+                rtype::client::drawFpsCounter(renderer);
+            }
+            sceneLoadStatus.draw(renderer);
+            renderer.endFrame();
         }
         vr.update();
         if (inHeadset) {

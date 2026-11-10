@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/render/Types.hpp"
 
 #include <array>
@@ -26,6 +27,33 @@ inline constexpr std::array<render::Vector3, 3> CockpitDashboardTop{{
 /// The transparent meshes, drawn after the others from the farthest to the nearest: the canopy and the
 /// hologram over the dashboard.
 inline constexpr std::array<std::string_view, 2> CockpitTransparentMeshes{"Cockpit_Glass", "Cockpit_Holo"};
+
+/// The centre of the hologram over the dashboard (Cockpit_Holo), where the panel of the menus unfolds from.
+inline constexpr render::Vector3 CockpitHoloCentre{0.66f, -0.10f, 0.0f};
+
+/// A screen of the cockpit that shows a surface of the interface (Figma, Série 17): the emission map of its
+/// material is replaced by the image the surface is drawn into. The texture coordinates of the meshes of
+/// these materials cover their whole map, so the image fills the screen in the frame of the artist.
+struct CockpitScreen {
+    engine::Surface surface;
+    /// The material of the screen in the model.
+    std::string_view material;
+    /// The area of the surface, in game units, where the anchors place its entities: of the shape of the
+    /// screen, so that nothing is stretched.
+    render::Vector2 size;
+    /// The image it is drawn into, in pixels: of the same shape, about 4/3 of a pixel per game unit.
+    render::Vector2 resolution;
+};
+
+/// The screens of the cockpit, and what they show: the ship on the right, the wave and the session in the
+/// middle, the other players on the small screens of the sides (the four share the image), the radar on the
+/// hologram.
+inline constexpr std::array<CockpitScreen, 4> CockpitScreens{{
+    {engine::Surface::HudShip, "CP_ScreenShip", {480.0f, 360.0f}, {640.0f, 480.0f}},
+    {engine::Surface::HudNav, "CP_ScreenNav", {480.0f, 310.0f}, {640.0f, 412.0f}},
+    {engine::Surface::HudAux, "CP_ScreenAux", {420.0f, 300.0f}, {560.0f, 400.0f}},
+    {engine::Surface::Holo, "CP_Holo", {480.0f, 330.0f}, {640.0f, 440.0f}},
+}};
 
 /// The animation that moves the small parts of the auxiliary screens.
 inline constexpr std::string_view CockpitScreensAnimation = "Screens";
