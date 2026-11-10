@@ -127,6 +127,7 @@ private:
     ::Model _model;
     ModelAnimation *_animations = nullptr;
     int _animationCount = 0;
+    std::vector<ModelMesh> _meshes;
     // The pose of the vertices in graphics memory, none before the first one
     mutable std::optional<Pose> _pose;
 
@@ -198,6 +199,49 @@ private:
         cgltf_free(data);
     }
 
+    // The names of the meshes of a glTF file, in the order of raylib: each node with a mesh, in the order of
+    // the file, gives a mesh per primitive, named after the node, or after its mesh. None if the file is
+    // another kind, or if raylib did not load them all.
+    static std::vector<std::string> readMeshNames(const std::filesystem::path &file, int meshCount)
+    {
+        const std::string extension = file.extension().string();
+        if (extension != ".glb" && extension != ".gltf") {
+            return {};
+        }
+        const cgltf_options options{};
+        cgltf_data *data = nullptr;
+        if (cgltf_parse_file(&options, file.string().c_str(), &data) != cgltf_result_success) {
+            return {};
+        }
+        std::vector<std::string> names;
+        for (cgltf_size index = 0; index < data->nodes_count; ++index) {
+            const cgltf_node &node = data->nodes[index];
+            if (node.mesh == nullptr) {
+                continue;
+            }
+            const char *name = node.name != nullptr ? node.name : node.mesh->name;
+            names.insert(names.end(), node.mesh->primitives_count, name != nullptr ? name : "");
+        }
+        cgltf_free(data);
+        if (std::cmp_not_equal(names.size(), meshCount)) {
+            return {};
+        }
+        return names;
+    }
+
+    static std::vector<ModelMesh> describeMeshes(const ::Model &model, const std::filesystem::path &file)
+    {
+        const std::vector<std::string> names = readMeshNames(file, model.meshCount);
+        std::vector<ModelMesh> meshes;
+        for (int index = 0; index < model.meshCount; ++index) {
+            const BoundingBox box = GetMeshBoundingBox(model.meshes[index]);
+            meshes.push_back({.name = names.empty() ? std::string() : names[static_cast<std::size_t>(index)],
+                              .centre = {(box.min.x + box.max.x) / 2.0f, (box.min.y + box.max.y) / 2.0f,
+                                         (box.min.z + box.max.z) / 2.0f}});
+        }
+        return meshes;
+    }
+
 public:
     explicit Model(const std::filesystem::path &file) : _model(LoadModel(file.string().c_str()))
     {
@@ -206,6 +250,7 @@ public:
             throw std::runtime_error("Cannot load model " + file.string());
         }
         restoreMaterialFactors(_model, file);
+        _meshes = describeMeshes(_model, file);
         for (int index = 0; index < _model.materialCount; ++index) {
             for (const int map : {MATERIAL_MAP_ALBEDO, MATERIAL_MAP_NORMAL, MATERIAL_MAP_METALNESS,
                                   MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION, MATERIAL_MAP_EMISSION}) {
@@ -230,12 +275,15 @@ public:
     Model &operator=(const Model &) = delete;
     Model(Model &&other) noexcept
         : _model(std::exchange(other._model, {})), _animations(std::exchange(other._animations, nullptr)),
-          _animationCount(std::exchange(other._animationCount, 0)), _pose(std::exchange(other._pose, {}))
+          _animationCount(std::exchange(other._animationCount, 0)), _meshes(std::move(other._meshes)),
+          _pose(std::exchange(other._pose, {}))
     {
     }
     Model &operator=(Model &&) = delete;
 
     [[nodiscard]] const ::Model &get() const { return _model; }
+
+    [[nodiscard]] const std::vector<ModelMesh> &getMeshes() const { return _meshes; }
 
     [[nodiscard]] bool hasAnimation(int animation) const
     {

@@ -142,6 +142,15 @@ public:
     /// @throws std::logic_error if no eye is started.
     void drawImageQuad(ImageId image, const Matrix &transform, Color tint = colors::White);
 
+    /// Draws the sky around the eye (beginEye()), at infinity: a picture of space wrapped on a sphere centred
+    /// on the eye, so that it never comes nearer when the head moves. Draw it first: it hides nothing and
+    /// writes no depth. The picture repeats twice around the eye and twice from the top to the bottom, so
+    /// that it keeps about its proportions; its sides join best if it already repeats, as a scrolling
+    /// Backdrop does.
+    /// @param tint Colour multiplied with the picture.
+    /// @throws std::logic_error if no eye is started.
+    void drawSky(TextureId texture, Color tint = colors::White);
+
     /// Draws a whole texture at its original size.
     /// @param position Top-left corner, in game units.
     /// @param tint Colour multiplied with the texture: white keeps it unchanged, a lower alpha fades it.
@@ -253,6 +262,15 @@ public:
                    Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
                    Color tint = colors::White, float spinAngle = 0.0f,
                    const std::vector<int> &hiddenMeshes = {});
+    /// Draws the transparent meshes of a model in an eye (beginEye()), such as a canopy or a hologram, as the
+    /// drawModel() of an eye does, but seen from both sides and without writing their depth: what is drawn
+    /// behind them stays sharp through them, and they never hide one another. Draw them after everything
+    /// opaque, from the farthest to the nearest.
+    /// @param hiddenMeshes Meshes not drawn, by index: the opaque ones, already drawn.
+    /// @throws std::logic_error if no eye is started.
+    void drawTransparentModel(ModelId model, const Light &light, Vector3 position,
+                              Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
+                              float scale = 1.0f, const std::vector<int> &hiddenMeshes = {});
     /// Draws a 3D model of energy in an eye (beginEye()), seen by the eye, with its halo: the
     /// drawEnergyModel() of a frame, without its camera and without its glow.
     /// @throws std::logic_error if no eye is started.

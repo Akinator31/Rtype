@@ -779,6 +779,55 @@ void Renderer::drawImageQuad(ImageId image, const Matrix &transform, Color tint)
     rlEnableBackfaceCulling();
 }
 
+void Renderer::drawSky(TextureId texture, Color tint)
+{
+    _impl->passes.requireEye();
+    // Far enough to be behind everything of the cockpit and the board, near enough for the depth of the eye
+    // (200 m): it is drawn first and hides nothing anyway
+    constexpr float radius = 100.0f;
+    constexpr int slices = 48;
+    constexpr int rings = 24;
+    constexpr float aroundRepeats = 2.0f;
+    constexpr float downRepeats = 2.0f;
+    const Vector3 eye = _impl->eye->view.position;
+    const auto point = [&](int slice, int ring) {
+        const float around = 2.0f * std::numbers::pi_v<float> * static_cast<float>(slice) / slices;
+        const float down = std::numbers::pi_v<float> * static_cast<float>(ring) / rings;
+        // From the top (ring 0) to the bottom, turning from ahead (-z) to the right (+x)
+        return ::Vector3{eye.x + (radius * std::sin(down) * std::sin(around)),
+                         eye.y + (radius * std::cos(down)),
+                         eye.z - (radius * std::sin(down) * std::cos(around))};
+    };
+    const auto vertex = [&](int slice, int ring) {
+        rlTexCoord2f(aroundRepeats * static_cast<float>(slice) / slices,
+                     downRepeats * static_cast<float>(ring) / rings);
+        const ::Vector3 at = point(slice, ring);
+        rlVertex3f(at.x, at.y, at.z);
+    };
+
+    rlDrawRenderBatchActive();
+    rlDisableDepthTest();
+    rlDisableDepthMask();
+    rlDisableBackfaceCulling();
+    rlSetTexture(_impl->textures.get(texture).get().id);
+    rlBegin(RL_QUADS);
+    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+    for (int ring = 0; ring < rings; ++ring) {
+        for (int slice = 0; slice < slices; ++slice) {
+            vertex(slice, ring);
+            vertex(slice, ring + 1);
+            vertex(slice + 1, ring + 1);
+            vertex(slice + 1, ring);
+        }
+    }
+    rlEnd();
+    rlSetTexture(0);
+    rlDrawRenderBatchActive();
+    rlEnableBackfaceCulling();
+    rlEnableDepthMask();
+    rlEnableDepthTest();
+}
+
 void Renderer::drawTexture(TextureId texture, Vector2 position, Color tint)
 {
     _impl->requireFrame();
@@ -975,6 +1024,21 @@ void Renderer::drawModel(ModelId model, const Light &light, Vector3 position, Ve
     _impl->lightingShader.draw(_impl->models.get(model).get(), light, _impl->eye->viewPoint,
                                toRaylib(position), toRaylib(rotationAxis), rotationAngle, spinAngle, scale,
                                toRaylib(tint), hiddenMeshes);
+}
+
+void Renderer::drawTransparentModel(ModelId model, const Light &light, Vector3 position, Vector3 rotationAxis,
+                                    float rotationAngle, float scale, const std::vector<int> &hiddenMeshes)
+{
+    _impl->passes.requireEye();
+    // A mesh is drawn at once, out of the batch of rlgl: what the batch holds goes before the depth changes
+    rlDrawRenderBatchActive();
+    rlDisableDepthMask();
+    rlDisableBackfaceCulling();
+    _impl->lightingShader.draw(_impl->models.get(model).get(), light, _impl->eye->viewPoint,
+                               toRaylib(position), toRaylib(rotationAxis), rotationAngle, 0.0f, scale,
+                               toRaylib(colors::White), hiddenMeshes);
+    rlEnableBackfaceCulling();
+    rlEnableDepthMask();
 }
 
 void Renderer::drawEnergyModel(ModelId model, const Energy &energy, Vector3 position, Vector3 rotationAxis,
