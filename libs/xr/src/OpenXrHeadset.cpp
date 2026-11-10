@@ -34,6 +34,7 @@ public:
     EyeView beginEye(int eye) override { return _eyes.begin(eye); }
     void endEye(int eye) override { _eyes.end(eye); }
     void endFrame() override { _session.endFrame(_eyes.layerViews()); }
+    void recenter() override { _session.recenter(); }
     [[nodiscard]] std::string runtimeName() const override { return _session.runtimeName(); }
 };
 

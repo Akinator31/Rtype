@@ -46,6 +46,21 @@ std::string versionText(XrVersion version)
            std::to_string(XR_VERSION_PATCH(version));
 }
 
+XrPosef toXr(const Pose &pose)
+{
+    XrPosef result{};
+    result.position = {pose.position.x, pose.position.y, pose.position.z};
+    result.orientation = {pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w};
+    return result;
+}
+
+XrPosef identityPose()
+{
+    XrPosef pose{};
+    pose.orientation.w = 1.0f;
+    return pose;
+}
+
 } // namespace
 
 Session::Session(const std::string &applicationName)
@@ -67,9 +82,11 @@ Session::~Session()
 
 void Session::release()
 {
-    if (_space != XR_NULL_HANDLE) {
-        xrDestroySpace(_space);
-        _space = XR_NULL_HANDLE;
+    for (XrSpace *space : {&_space, &_local, &_head}) {
+        if (*space != XR_NULL_HANDLE) {
+            xrDestroySpace(*space);
+            *space = XR_NULL_HANDLE;
+        }
     }
     if (_session != XR_NULL_HANDLE) {
         xrDestroySession(_session);
@@ -189,13 +206,46 @@ void Session::createSession()
     check(_instance, xrCreateSession(_instance, &info, &_session), "xrCreateSession");
 
     XrReferenceSpaceCreateInfo space{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+    space.poseInReferenceSpace = identityPose();
     space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
-    space.poseInReferenceSpace.orientation.w = 1.0f;
     check(_instance, xrCreateReferenceSpace(_session, &space, &_space), "xrCreateReferenceSpace");
+    check(_instance, xrCreateReferenceSpace(_session, &space, &_local), "xrCreateReferenceSpace");
+    space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+    check(_instance, xrCreateReferenceSpace(_session, &space, &_head), "xrCreateReferenceSpace");
 
     std::uint32_t count = 0;
     xrEnumerateViewConfigurationViews(_instance, _system, ViewConfiguration, 0, &count, nullptr);
     _views.assign(count, {XR_TYPE_VIEW});
+}
+
+void Session::placeOrigin(const XrPosef &origin)
+{
+    XrReferenceSpaceCreateInfo info{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+    info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+    info.poseInReferenceSpace = origin;
+    XrSpace space = XR_NULL_HANDLE;
+    // Without a new space, the old one stays: the cockpit where it was rather than nowhere
+    if (succeeded(xrCreateReferenceSpace(_session, &info, &space), "xrCreateReferenceSpace")) {
+        xrDestroySpace(_space);
+        _space = space;
+    }
+}
+
+void Session::recenterOnHead()
+{
+    XrSpaceLocation head{XR_TYPE_SPACE_LOCATION};
+    if (!succeeded(xrLocateSpace(_head, _local, _frame.predictedDisplayTime, &head), "xrLocateSpace")) {
+        return;
+    }
+    constexpr XrSpaceLocationFlags Tracked =
+        XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+    // Not tracked now: asked again at the next frame, rather than recentred on a wrong place
+    if ((head.locationFlags & Tracked) != Tracked) {
+        _recenterAsked = true;
+        return;
+    }
+    placeOrigin(toXr(levelled(toPose(head.pose))));
+    logger().info("recentred on the head of the player");
 }
 
 void Session::lose(const std::string &reason)
@@ -263,6 +313,14 @@ void Session::pollEvents()
         if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
             changeState(reinterpret_cast<const XrEventDataSessionStateChanged &>(event).state);
         }
+        // The runtime recentred LOCAL on the head of the player (the button of its menu): the origin follows
+        // it, instead of staying where the game had moved it, now somewhere else
+        if (event.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING &&
+            reinterpret_cast<const XrEventDataReferenceSpaceChangePending &>(event).referenceSpaceType ==
+                XR_REFERENCE_SPACE_TYPE_LOCAL) {
+            placeOrigin(identityPose());
+            logger().info("the runtime recentred the headset");
+        }
         event = {XR_TYPE_EVENT_DATA_BUFFER};
     }
 }
@@ -284,6 +342,10 @@ bool Session::beginFrame()
         return false;
     }
     _frameBegun = true;
+    if (_recenterAsked) {
+        _recenterAsked = false;
+        recenterOnHead();
+    }
     if (_frame.shouldRender == XR_FALSE) {
         return false;
     }

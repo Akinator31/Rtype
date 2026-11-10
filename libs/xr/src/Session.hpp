@@ -14,13 +14,20 @@ namespace rtype::xr::detail
 /// throws OpenXrError, destroyed by the destructor.
 ///
 /// The space is LOCAL, not STAGE: the player is seated in a cockpit, and the origin is their head when the
-/// session starts, which the runtime moves back when the player recentres.
+/// session starts, which the runtime moves back when the player recentres from its menu. The game can
+/// recentre too (recenter()): the space drawn in is then LOCAL moved to the head of the player, until the
+/// runtime recentres LOCAL itself.
 class Session
 {
     XrInstance _instance = XR_NULL_HANDLE;
     XrSystemId _system = XR_NULL_SYSTEM_ID;
     XrSession _session = XR_NULL_HANDLE;
+    /// LOCAL, moved to the origin the player recentred on: the space everything is drawn in.
     XrSpace _space = XR_NULL_HANDLE;
+    /// LOCAL as the runtime gives it, and the head of the player (VIEW): where a recentre puts the origin.
+    XrSpace _local = XR_NULL_HANDLE;
+    XrSpace _head = XR_NULL_HANDLE;
+    bool _recenterAsked = false;
     XrEnvironmentBlendMode _blendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     std::string _runtimeName;
     bool _touchControllerPlus = false;
@@ -35,6 +42,10 @@ class Session
     /// Destroys what was created, in the reverse order.
     void release();
     void createSession();
+    /// Creates the space everything is drawn in again: LOCAL, its origin at `origin`, given in LOCAL.
+    void placeOrigin(const XrPosef &origin);
+    /// Moves the origin to the head of the player, level, as it is when the frame will be shown.
+    void recenterOnHead();
     void changeState(XrSessionState state);
     /// The session is over: logged once, and nothing is called on it any more.
     void lose(const std::string &reason);
@@ -60,6 +71,8 @@ public:
     [[nodiscard]] bool hasTouchControllerPlus() const { return _touchControllerPlus; }
 
     void pollEvents();
+    /// Asks for the origin to be moved to the head of the player at the next frame (Headset::recenter()).
+    void recenter() { _recenterAsked = true; }
     [[nodiscard]] HeadsetState state() const { return _state; }
 
     /// Waits for the next frame and begins it. True when its views were located and must be drawn.

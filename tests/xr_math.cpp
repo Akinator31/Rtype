@@ -126,3 +126,38 @@ TEST_CASE("An asymmetric field of view puts its edges at their angles", "[xr][ma
     // Straight ahead is not the centre of the image
     REQUIRE(project(projection, {0.0f, 0.0f, -distance}).x > 0.0f);
 }
+
+TEST_CASE("A recentre keeps the heading of the head, level", "[xr]")
+{
+    // The head turned a quarter to the left (around +y), tilted down and rolled
+    const float quarter = std::numbers::pi_v<float> / 4.0f;
+    const rtype::xr::Quaternion turned{0.0f, std::sin(quarter), 0.0f, std::cos(quarter)};
+    const float tilt = 0.3f;
+    const rtype::xr::Quaternion pitched{std::sin(tilt / 2.0f), 0.0f, 0.0f, std::cos(tilt / 2.0f)};
+    const rtype::xr::Quaternion head{
+        (turned.w * pitched.x) + (turned.x * pitched.w) + (turned.y * pitched.z) - (turned.z * pitched.y),
+        (turned.w * pitched.y) - (turned.x * pitched.z) + (turned.y * pitched.w) + (turned.z * pitched.x),
+        (turned.w * pitched.z) + (turned.x * pitched.y) - (turned.y * pitched.x) + (turned.z * pitched.w),
+        (turned.w * pitched.w) - (turned.x * pitched.x) - (turned.y * pitched.y) - (turned.z * pitched.z)};
+    const Pose pose{.position = {0.1f, 1.2f, -0.3f}, .orientation = head};
+
+    const Pose level = rtype::xr::levelled(pose);
+
+    REQUIRE(samePoint(level.position, pose.position));
+    const Matrix axes = rtype::xr::toMatrix(level);
+    // Looking to the left (-x), level, up still up
+    REQUIRE(samePoint(rtype::xr::transformPoint(axes, {0.0f, 0.0f, -1.0f}), {-0.9f, 1.2f, -0.3f}));
+    REQUIRE(samePoint(rtype::xr::transformPoint(axes, {0.0f, 1.0f, 0.0f}), {0.1f, 2.2f, -0.3f}));
+}
+
+TEST_CASE("A recentre looking straight up keeps a heading", "[xr]")
+{
+    // Pitched a quarter up: the axis ahead has no heading, the right of the head gives it
+    const float half = std::numbers::pi_v<float> / 4.0f;
+    const Pose pose{.position = {}, .orientation = {std::sin(half), 0.0f, 0.0f, std::cos(half)}};
+
+    const Pose level = rtype::xr::levelled(pose);
+
+    const Matrix axes = rtype::xr::toMatrix(level);
+    REQUIRE(samePoint(rtype::xr::transformPoint(axes, {0.0f, 0.0f, -1.0f}), {0.0f, 0.0f, -1.0f}));
+}

@@ -14,6 +14,7 @@ struct FakeHeadsetCalls {
     int frames = 0;
     int ended = 0;
     int eyes = 0;
+    int recentred = 0;
     bool destroyed = false;
 };
 
@@ -50,6 +51,7 @@ struct FakeHeadset final : rtype::xr::Headset {
     }
     void endEye(int /*eye*/) override {}
     void endFrame() override { ++calls.ended; }
+    void recenter() override { ++calls.recentred; }
     [[nodiscard]] std::string runtimeName() const override { return "Fake 1.0.0"; }
 };
 

@@ -78,6 +78,11 @@ public:
     /// Shows the eyes drawn since beginFrame(), or nothing if it returned false.
     virtual void endFrame() = 0;
 
+    /// Puts the origin of the space of the headset back at the head of the player, facing where they look,
+    /// level (levelled()): the player is seated at the eye point of the cockpit again. Done at the next frame
+    /// drawn. When the runtime recentres by itself (the button of its menu), the space follows it.
+    virtual void recenter() = 0;
+
     /// The name of the runtime and its version, for the logs ("Monado 25.0.0").
     [[nodiscard]] virtual std::string runtimeName() const = 0;
 };
