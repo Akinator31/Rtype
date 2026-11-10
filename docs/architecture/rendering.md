@@ -235,6 +235,7 @@ the board, the panel of the menus and the screens of the cockpit, which each eye
 | `setModelMaterialImage(model, material, image)` | Shows an image as the emission map of a material of a model, found by its name in the glTF file: the screens of the cockpit show the HUD in the frame and with the glow of the artist. |
 | `drawSky(texture, tint)`              | Wraps a picture on a sphere around the eye, at infinity (it follows the eye, so it never comes nearer), repeated twice around and twice from top to bottom. Drawn first: it writes no depth. |
 | `drawModel(model, light, ...)`, `drawEnergyModel(model, energy, ...)` | The models of a frame, seen by the eye instead of a camera. They do not glow.                 |
+| `beginBoard(board)`, `endBoard()`     | Inside an eye, lays the World layer on the board in relief (`BoardView`, `Board.hpp`): between them, the drawings of a frame draw in 3D on the board, the 2D on its plane, the models of an orthographic camera with their depth, out of it, the 2D drawn after `drawGlow()` in front of them; `drawGlow()` makes the glow for the eye. A frame around the board, written in the depth only, hides what goes beyond it. `endBoard()` darkens it by `BoardView::brightness`. See [The board in relief](vr.md#the-board-in-relief). |
 | `drawTransparentModel(model, light, ..., hiddenMeshes)` | The transparent meshes of a model (a canopy, a hologram), seen from both sides and without writing their depth, so that what is behind them stays sharp. Drawn after the opaque ones, from the farthest to the nearest. |
 | `drawBeam(from, to, width, color)`, `drawDot(centre, radius, color)` | A ribbon of light turned to face the eye, fading towards its end, and a disc of light facing it, added to what is behind them and over everything: the ray of a controller and where it meets the panel. |
 | `drawBox(transform, color, edge)`     | The cube of side 1 around the origin, moved by `transform`, of one colour with lit edges: a controller in a hand. |
@@ -245,12 +246,13 @@ the board, the panel of the menus and the screens of the cockpit, which each eye
 flowchart LR
     Frame["beginFrame(board)<br/>... endFrame()"] --> Board["Board image<br/>2560x1440"]
     Board -- "drawImageQuad()" --> Eye["Image of an eye<br/>beginEye() ... endEye()"]
+    Relief["beginBoard() ... endBoard()<br/>the world in relief"] --> Eye
     Eye -- "endEye(): colour filter" --> Headset["Image of the headset"]
     Eye -- "showMirror(): left eye, cropped" --> Window["Window"]
 ```
 
-_In the headset: the frame goes into the board, the board into each eye, each eye into the headset and the left
-one into the window._
+_In the headset: the frame goes into the board, the board into each eye, with the world in relief for each eye
+unless the board is flat, each eye into the headset and the left one into the window._
 
 The frame of an image is the frame of the window, glow and smoothing included, without the vignette, which
 belongs to a screen: in the headset the eye looks around the board. The colour filter is not applied to the
@@ -295,8 +297,10 @@ multiplied with the texture: white keeps it unchanged, a lower alpha fades it.
 Drawing outside of a frame, starting a frame twice or ending a frame that was not started throws
 `std::logic_error`, with a message telling how to fix the call. These are programming errors: raylib would
 otherwise draw to the wrong place without any warning. The same goes for the eyes: a frame and an eye are never
-drawn at the same time, the 2D drawings and the models seen through a camera are for a frame,
-`drawImageQuad()`, `drawSky()`, `drawBeam()`, `drawDot()`, `drawBox()` and the models without a camera for an eye, and `showMirror()` is called between two passes.
+drawn at the same time, the 2D drawings and the models seen through a camera are for a frame or a board,
+`drawImageQuad()`, `drawSky()`, `drawBeam()`, `drawDot()`, `drawBox()` and the models without a camera for an eye
+out of its board, a board is drawn inside an eye and ended before it, and `showMirror()` is called between two
+passes.
 `PassOrder` (`PassOrder.hpp`) keeps this order; it holds no graphics resource, so `tests/render_passes.cpp`
 checks it without a window.
 
