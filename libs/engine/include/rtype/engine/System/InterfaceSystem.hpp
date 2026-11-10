@@ -78,6 +78,8 @@ class InterfaceSystem : public ecs::System
     std::vector<DelayedPress> _delayedPresses;
     /// The slider whose handle the player is dragging with the mouse.
     std::optional<ecs::entity_t> _dragged;
+    /// The widget under the pointer at the last update.
+    std::optional<ecs::entity_t> _hovered;
 
     ecs::ComponentCache<Focusable> &_focusables;
     ecs::ComponentCache<Focused> &_focused;
@@ -138,6 +140,10 @@ public:
                     input::ActionMap<Navigation> navigation = defaultNavigationControls());
 
     void update(float elapsed) override;
+
+    /// The widget under the pointer at the last update, if any: a VR controller that points at it lights its
+    /// ray, and ticks when it reaches another one.
+    [[nodiscard]] std::optional<ecs::entity_t> hovered() const { return _hovered; }
 
     /// The navigation controls, to change them in an options menu.
     [[nodiscard]] input::ActionMap<Navigation> &navigation() { return _navigation; }

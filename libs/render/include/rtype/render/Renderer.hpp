@@ -112,7 +112,9 @@ public:
     void beginFrame(Color background = colors::Black);
     /// Starts a new frame drawn into an image instead of the window, and fills it with the background colour.
     /// The frame is the same as in the window (glow, smoothing), without the vignette and without the colour
-    /// filter, which apply where the image is shown (endEye()). Positions stay in game units.
+    /// filter, which apply where the image is shown (endEye()). Positions stay in game units. The image keeps
+    /// its transparency: a background with a low alpha leaves it transparent where nothing is drawn, and
+    /// drawImageQuad() shows what is behind it there.
     /// @throws std::logic_error if a frame or an eye is already started.
     void beginFrame(ImageId image, Color background = colors::Black);
     /// Starts a new frame drawn into an image, showing an area of the game instead of the visible area: a
@@ -158,6 +160,20 @@ public:
     /// both sides. The board of the game and the panel of the menus in the headset.
     /// @throws std::logic_error if no eye is started.
     void drawImageQuad(ImageId image, const Matrix &transform, const ImageQuadLook &look = {});
+
+    /// Draws a beam of light in an eye (beginEye()): a ribbon from `from` to `to`, `width` wide, turned to
+    /// face the eye, its light added to what is behind it, fading towards `to`. Over everything drawn before,
+    /// whatever their depth: the ray of a controller that nothing hides.
+    /// @throws std::logic_error if no eye is started.
+    void drawBeam(Vector3 from, Vector3 to, float width, Color color);
+    /// Draws a disc of light in an eye (beginEye()), facing it, its light added to what is behind it, over
+    /// everything: where the ray of a controller meets the panel.
+    /// @throws std::logic_error if no eye is started.
+    void drawDot(Vector3 centre, float radius, Color color);
+    /// Draws a box of one colour in an eye (beginEye()), its edges lit by `edge`: the cube of side 1 around
+    /// the origin moved by `transform` (scale it to the size wanted). A controller in a hand of the player.
+    /// @throws std::logic_error if no eye is started.
+    void drawBox(const Matrix &transform, Color color, Color edge);
 
     /// Shows an image of the renderer as the emission map of a material of a model, found by its name in the
     /// file: the screens of a cockpit show the frames drawn into their images, in the frame, with the glow,

@@ -2,6 +2,7 @@
 
 #include "Vr/CockpitLook.hpp"
 #include "Vr/SceneFade.hpp"
+#include "Vr/VrControllers.hpp"
 #include "Vr/VrLayout.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Scene/Scenes.hpp"
@@ -14,6 +15,7 @@
 #include <functional>
 #include <future>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace rtype::client
@@ -75,6 +77,8 @@ class VrView
     /// The image of each screen of the cockpit, in the order of CockpitScreens.
     std::array<std::optional<render::ImageId>, CockpitScreens.size()> _screenImages{};
     std::optional<std::shared_future<render::ModelId>> _loading;
+    /// The starry sky of the main menu, drawn around the cockpit during a game.
+    std::optional<render::TextureId> _stars;
     std::optional<Cockpit> _cockpit;
     VrScene _scene;
     float _screensTime = 0.0f;
@@ -92,18 +96,34 @@ class VrView
     void findCockpit();
     /// Poses the screens of the cockpit, a few times per second.
     void animateCockpit(float elapsed);
+    /// Draws the controllers, their rays and their dots.
+    void drawHands(std::span<const HandLook> hands);
+    /// How wide a ray is, and the dot where it meets the panel, in metres.
+    static constexpr float RayWidth = 0.004f;
+    static constexpr float DotRadius = 0.008f;
 
 public:
-    /// The colour behind the menus on the panel: nearly opaque, so that the board is a glimmer behind them.
+    /// The colour behind what the panel shows during a game (the pause, the death screen, the results):
+    /// nearly opaque, so that the battle is a glimmer behind them. In the menus, the panel is a clear
+    /// hologram, the world of the scene seen through it, as on the screen (PanelGlass).
     static constexpr render::Color PanelBackground{5, 8, 11, 235};
-    /// The light along the edges of the panel.
+    static constexpr render::Color PanelGlass{5, 8, 11, 0};
+    /// The light along the edges of the panel, during a game only.
     static constexpr render::Color PanelEdge{111, 227, 240, 200};
+    /// The controllers: their body, their edges, and the light of their rays, dim, of the hand that points,
+    /// and on a widget.
+    static constexpr render::Color ControllerBody{18, 24, 30, 255};
+    static constexpr render::Color ControllerEdge{111, 227, 240, 255};
+    static constexpr render::Color RayIdle{40, 82, 90, 255};
+    static constexpr render::Color RayPointing{70, 150, 165, 255};
+    static constexpr render::Color RayOnWidget{140, 240, 255, 255};
 
     VrView(render::Renderer &renderer, render::ResourceManager &resources, VrLayout layout = {});
 
     /// Once per frame while the headset shows the game, before its frames: starts loading the cockpit, keeps
-    /// what the scene gives, unfolds or folds the panel, fades when the scenes were switched, and during a
-    /// game moves the screens of the cockpit, which are posed once for both eyes.
+    /// what the scene gives (during a game, the stars of the main menu as its sky), unfolds or folds the
+    /// panel, fades when the scenes were switched, and during a game moves the screens of the cockpit, which
+    /// are posed once for both eyes.
     /// @param elapsed Time since the previous frame, in seconds.
     void update(float elapsed, VrScene scene);
     /// Draws the frames of the headset, each into its image, the function drawing what each surface shows:
@@ -113,8 +133,13 @@ public:
     void drawFrames(const std::function<void(engine::Surface)> &draw);
     /// Draws what an eye sees into the image the headset bound for it: the sky, the board once a frame was
     /// drawn into it, during a game the cockpit, then its canopy and its hologram, which the board is seen
-    /// through, and the panel over everything while it is unfolded.
-    void drawEye(int eye, const xr::EyeView &view);
+    /// through, the panel over everything while it is unfolded, and last the controllers in the hands, their
+    /// rays and where they meet the panel.
+    void drawEye(int eye, const xr::EyeView &view, std::span<const HandLook> hands = {});
+
+    /// The panel as the controllers point at it, once it is open and while no fade hides it: nothing while it
+    /// unfolds or folds back.
+    [[nodiscard]] std::optional<PanelSurface> panelSurface() const;
 
     /// Where the toasts go: on the panel while it is open, on the board, over the game, otherwise.
     [[nodiscard]] engine::Surface toastSurface() const;

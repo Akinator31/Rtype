@@ -103,9 +103,10 @@ render::ImageQuadLook panelLook(const VrLayout &layout, float openness, float br
     return {.tint = {channel, channel, channel, 255}, .bend = layout.panelBend * spread, .onTop = true};
 }
 
-float boardBrightness(float openness, float brightness)
+float boardBrightness(float openness, float brightness, bool playing)
 {
-    return std::clamp(brightness, 0.0f, 1.0f) * lerp(1.0f, BoardBehindPanel, smooth(openness));
+    const float behind = playing ? BoardBehindPanel : 1.0f;
+    return std::clamp(brightness, 0.0f, 1.0f) * lerp(1.0f, behind, smooth(openness));
 }
 
 std::array<render::Vector3, 4> panelCorners(const VrLayout &layout, render::Vector2 gameSize)

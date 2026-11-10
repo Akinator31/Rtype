@@ -482,6 +482,8 @@ avatars.
 - Holding a direction repeats it; sticks have a larger dead zone (0.5) than in game.
 - The mouse focuses a widget only when it moves, so that a still pointer does not fight the keyboard.
 - A click activates the widget under the pointer, not the focused one.
+- In a VR headset, the pointer is a controller pointing at the panel, and its trigger the button
+  ([VR](vr.md#the-controllers)); `InterfaceSystem::hovered()` gives the widget under it, which lights the ray.
 - Characters typed while no text field has the focus are dropped.
 - The buttons sound when they light up (under the pointer, or given the focus by the keyboard or a
   gamepad) and when they are pressed, if the style has the sounds (`ButtonStyle::hoverSound`, `clickSound`,

@@ -8,8 +8,8 @@ the server, the protocol and the replays do not know whether a player is in a he
 
     The player sits in the cockpit, the sky of the scene around them, and the game is on a flat board outside
     the canopy; the HUD is on the screens of the cockpit and the menus on a holographic panel; the window shows
-    the left eye. The game is played with the keyboard or a gamepad, and `F9` recentres. The controllers, which
-    will point at the panel, come next: see [Next steps](#next-steps).
+    the left eye. The game is played with the controllers, a keyboard or a gamepad; the controllers point at the
+    panel and vibrate. The board is still flat: see [Next steps](#next-steps).
 
 How to start the game in a headset: [Play in VR](../guides/play-in-vr.md).
 
@@ -20,7 +20,7 @@ standard API of VR headsets. Its public headers have no OpenXR type:
 
 | Header       | Role                                                                                              |
 | ------------ | ------------------------------------------------------------------------------------------------- |
-| `Headset.hpp` | `Headset`, the interface of a headset; `openHeadset()`, which opens the one of the active runtime. |
+| `Headset.hpp` | `Headset`, the interface of a headset, its eyes, the state of each hand (`HandState`) and its vibrations (`Vibration`); `openHeadset()`, which opens the one of the active runtime. |
 | `Math.hpp`   | `Vector3`, `Quaternion`, `Pose`, `Matrix`, `FieldOfView`, the matrices of a pose and of an eye, and `levelled()`, a pose kept to its heading. |
 
 Inside, `openHeadset()` builds three parts, destroyed in the reverse order:
@@ -29,10 +29,30 @@ Inside, `openHeadset()` builds three parts, destroyed in the reverse order:
 | ------------- | ------------------------------------------------------------------------------------------------------------- |
 | `Session`     | The OpenXR instance, the system (the headset), the session on the OpenGL context of the window, its space, its states and its frames. |
 | `Eyes`        | A swapchain per eye, the images the runtime gives, and a framebuffer with its depth buffer that draws into the image of the frame. |
-| `Controllers` | The actions of the controllers and the bindings suggested for each profile (Touch, Touch Plus, simple controller). |
+| `Controllers` | The actions of the controllers, the bindings suggested for each profile (Touch, Touch Plus, Valve Index, HTC Vive, simple controller), what they give each frame, and their vibrations. |
 
-The bindings are made with the session even though nothing reads the controllers yet: OpenXR takes them once,
-before the session starts.
+The bindings are made with the session: OpenXR takes them once, before the session starts. A profile the
+runtime refuses is logged, not an error.
+
+### The controllers in the library
+
+`Headset::beginFrame()` reads the controllers after it waited for the frame (`xrSyncActions()`), where they will
+be when the frame is shown, as the eyes: `Headset::hand(Hand)` gives a `HandState`, the grip pose (where the hand
+holds the controller) and the aim pose (where it points, along its -z), the trigger, the grip, the thumbstick and
+whether it is pushed in, the two face buttons and menu. Everything is released and nothing is tracked while the
+session is not focused (the runtime shows its menu over the game, `XR_SESSION_NOT_FOCUSED`), before the first
+frame, and while the headset does not show the game. `Headset::vibrate(Hand, Vibration)` vibrates a controller
+at once (`xrApplyHapticFeedback()`): an amplitude, a duration, a frequency, or the ones of the runtime.
+
+| Action | Touch, Touch Plus | Valve Index | HTC Vive | Simple |
+| ------ | ----------------- | ----------- | -------- | ------ |
+| trigger | trigger | trigger | trigger | select |
+| squeeze (grip) | squeeze | squeeze | squeeze (a click) | — |
+| thumbstick | thumbstick | thumbstick | trackpad | — |
+| thumbstick click | thumbstick click | right thumbstick click | — | — |
+| primary | A, X | A | trackpad click | — |
+| secondary | B, Y | B | right menu | — |
+| menu | left menu | left thumbstick click | left menu | menu |
 
 ### Built with OpenXR or not
 
@@ -205,7 +225,9 @@ _The scene in the headset, seen from the side of the pilot._
   game, the light of the menus; its screens and its glows emit their own light whatever it is.
 - **The sky**: the picture at the back of the sky of the scene (`SceneRenderer::sky()`) is wrapped around the
   player (`Renderer::drawSky()`), so that they are in space rather than in a dark room with a screen. It does not
-  scroll, as the camera never moves on its own; without a sky, space is plain.
+  scroll, as the camera never moves on its own; without a sky, space is plain. During a game, it is the starry
+  sky of the main menu (`RTYPE_IMAGE_STARFIELD`), not the deep layer of the sky of the board, a dark nebula: the
+  cockpit flies among the stars, and the board feels less like a screen.
 - **The screens**: the animation `Screens` of the model plays at half speed, posed 15 times per second only
   (`CockpitScreensRate`): posing it moves its vertices on the processor, once for both eyes.
 
@@ -256,8 +278,11 @@ puts everything back on the screen.
   on it (`SceneRenderer::hasContent(Surface::Panel)`, toasts apart): in the menus, always; during a game, when
   the pause, the death screen or the results open, and it folds back when they close. It unfolds from the
   hologram in 0.25 s (`PanelUnfoldTime`, `panelTransform()`): a line of light rises to its place, then opens in
-  height and in width. The board dims behind it, down to 35 % (`boardBrightness()`). Its image is nearly
-  opaque (`VrView::PanelBackground`), with a light along its edges.
+  height and in width. In the menus, it is a clear hologram without a frame (`VrView::PanelGlass`):
+  transparent where nothing is drawn on it, the world of the scene (the planet of the main menu, the hangar) seen
+  through it on the board, as bright as on the screen. During a game, its image is nearly opaque
+  (`VrView::PanelBackground`) with a light along its edges, and the board dims behind it, down to 35 % (`boardBrightness()`), so that the
+  pause, the death screen and the results are read over the battle.
 - **The toasts** go on the panel while it is open, on the board otherwise (`SceneRenderer::setToastSurface()`,
   `VrView::toastSurface()`): a toast during a game does not open the panel.
 - **The fade between scenes.** When the scenes are switched (`Scenes::bottom()` changes), the board, the panel
@@ -267,10 +292,81 @@ puts everything back on the screen.
 - **The lore** is drawn in the World layer: on the board, larger than on the panel. The loading screen is a
   scene of the interface: on the panel.
 
+### The controllers
+
+`VrControllers` (`Vr/VrControllers.hpp`) turns the controllers into what the rest of the client already reads:
+a gamepad and a mouse. The game reads an `input::VirtualInput` ([Input](input.md#the-controllers-of-a-vr-headset)),
+the devices with a virtual gamepad and a pointer over them; while the headset shows the game, the client gives
+it, before each update of the engine, the gamepad and the pointer of `VrControllers`. Every `ActionMap`, of the
+menus and of the game, works with the controllers without a case of its own, with the gamepad bindings; the
+keyboard and the real gamepads keep working at the same time.
+
+Each frame, in two steps: `VrControllers::update()` before the engine reads the input, from what the headset gave
+at its last frame; then, once the headset located the controllers for the frame it shows (`VrHooks::located`,
+before its eyes), `VrControllers::place()` takes where they are and where their rays meet the panel, for the eyes
+drawn now and for the next update.
+
+**The virtual gamepad** is gamepad 0: a button is held when it is held on it or on the real one, an axis is the
+one pushed the farthest.
+
+| Controller | Gamepad | In the game, by default | In the menus |
+| ---------- | ------- | ----------------------- | ------------ |
+| Left thumbstick | Left stick | Move | Move between the widgets |
+| Right trigger | FaceDown (A), during a game only | Fire, held to fire again | Clicks where the ray points |
+| A | FaceDown (A) | Fire | Confirm |
+| B | FaceRight (B) | — | Back |
+| X, Y | FaceLeft, FaceUp (X, Y) | Y: mute the voice | — |
+| Left, right grip | LeftBumper, RightBumper | Aim up, aim down | — |
+| Left trigger | LeftTrigger (LT), during a game only | Push to talk | Clicks where the ray points |
+| Menu | Start | The pause menu | Back |
+| Right thumbstick | Right stick | — | Scrolls (the wheel) |
+| Thumbsticks pushed in | LeftThumb, RightThumb | — | — |
+
+**The pointer.** While the panel is open (`VrView::panelSurface()`, once it is unfolded and no fade hides it),
+each tracked controller casts a ray from its aim pose (`aimRay()`), and `hitPanel()` finds where it meets the
+curved panel, as `drawImageQuad()` bends it: the point, and the same point in game units of the frame drawn on
+the panel. The hand that points is the one whose trigger was pulled last on the panel, or the other one once it
+leaves it. Its hit is the position of the mouse, its trigger the left button, the right thumbstick the wheel
+(one notch, then one every 0.15 s while held): hovering, clicking, dragging a slider and scrolling work as with
+the mouse. While the surfaces are apart, `RendererMetrics::windowToGame()` keeps the positions as they are,
+already in game units of the panel. A few details:
+
+- A hand is never still: the pointer moves only when the hit moves by 3 game units or more
+  (`PointerSteadiness`), so that a ray resting on a widget does not take the focus back from the thumbstick.
+- While the panel is open, the triggers only click on it: pulled off the panel, they do nothing, rather than
+  confirm a widget the player does not look at. A click lasts until the trigger is released; a slider dragged
+  off the panel stays where it was left.
+- While the headset shows the game, there is always a pointer: off the panel when no ray meets it
+  (`PointerOff`), so that the mouse of the window, which shows the mirror, points at nothing.
+- `engine::InterfaceSystem::hovered()` gives the widget under the pointer: the ray of the hand that points is
+  brighter on a widget, and ticks in the hand (`HoverTick`) each time it reaches another one.
+
+**In the cockpit**, `VrView::drawEye()` draws each tracked controller last, over the panel: a small box in the
+hand (`controllerTransform()`, `Renderer::drawBox()`), and while the panel is open its ray, a beam of light that
+nothing hides (`Renderer::drawBeam()`), dim, brighter for the hand that points, brighter still on a widget, and a
+dot where it meets the panel (`Renderer::drawDot()`). The controllers are hidden while the player plays with a
+real gamepad (`isGamepadUsed()`), until one of their buttons is used again.
+
+### The haptics
+
+`VrHaptics` (`Vr/VrHaptics.hpp`) reads what the game shows of the ship of the player each frame, the shots of the
+player (`GameSessionSystem::localShots()`) and their hit points (`localHealth()`), and vibrates:
+
+| When | Where | Vibration |
+| ---- | ----- | --------- |
+| A shot of the player appears | The right hand, which fires | A tick, 15 ms (`ShotTick`) |
+| Their ship is hit | Both hands | A pulse, 120 ms (`HitPulse`) |
+| Their ship is destroyed | Both hands | A long one, 600 ms (`DeathRumble`) |
+| The pointer reaches a widget | The hand that points | A light tick, 10 ms (`HoverTick`) |
+
+Held, the fire repeats, and so do the ticks: the rhythm of the fire. The game has no charged shot yet; when it
+has one, its charge will get a rhythm of its own. A game that starts, or a ship that comes back, does not
+vibrate. `VrMode::vibrate()` does nothing while the headset does not show the game.
+
 ### Recentring in the client
 
-`F9` (`RecenterKey`) calls `VrMode::recenter()`, which asks the headset to recentre: the cockpit is around the
-player again, the board ahead. The controllers will do it too ([Next steps](#next-steps)).
+`F9` (`RecenterKey`), or the right thumbstick held in for a second (`RecenterHold`), calls `VrMode::recenter()`,
+which asks the headset to recentre: the cockpit is around the player again, the board ahead.
 
 ### Without a headset
 
@@ -294,7 +390,14 @@ headset, and what an eye gives to the renderer; the area of each surface and the
 screens, the open panel between the dashboard and the board, seen whole and curved, its unfolding from the
 hologram, the board dimmed behind it, and the fade between two scenes. `tests/engine.cpp` checks the anchors in
 the area of a surface, the content of a surface, the toasts that do not open the panel, and `Scenes::bottom()`;
-`tests/client_game.cpp` the HUD and the radar in the cockpit. `tests/xr_math.cpp` checks the matrices of the poses, the
+`tests/client_game.cpp` the HUD and the radar in the cockpit. `tests/client_vr_controllers.cpp` checks the ray of
+a controller, where it meets the curved panel in game units, the sides met before a flat panel would be, the rays
+that meet nothing, the virtual gamepad during a game, the pointer and its button on the panel, the triggers that
+do nothing off it, the hand that points, the steadiness of the pointer, a slider dragged off the panel, the
+wheel, the tick of each widget, the recentre held, the controllers hidden while a gamepad is used, and the
+vibrations of the shots, the hits and a death; `tests/client_vr.cpp` the controllers located before the eyes and
+the vibrations only while the headset shows the game; `tests/virtual_input.cpp` the virtual gamepad held with the
+real one and the pointer that replaces the mouse. `tests/xr_math.cpp` checks the matrices of the poses, the
 projections of asymmetric fields of view, and the pose a recentre keeps. In `libs/render`, `tests/render_passes.cpp` checks the order of the
 frames and the eyes, and `tests/viewport.cpp` the crop of the mirror.
 
@@ -302,6 +405,5 @@ frames and the eyes, and `tests/viewport.cpp` the crop of the mirror.
 
 | Step | What it brings |
 | ---- | -------------- |
-| Controllers | The controllers as a virtual gamepad, a pointer for the menus on the panel, haptics. Until then, the mouse does not point at the panel. |
 | Board in relief | The world drawn in 3D for each eye on the plane of the board. |
 | Experience and settings | A VR page in the settings, a cockpit that reacts to the game, an arrival sequence. |

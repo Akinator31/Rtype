@@ -115,6 +115,7 @@ void GameSessionSystem::stop()
     _killed.clear();
     _players.clear();
     _localHealth = 0;
+    _localShots = 0;
     _tick = 0;
     _wave = 0;
     _rescue = game::RescueStage::None;
@@ -404,6 +405,9 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
     if (isPlayerShot(state.kind)) {
         recoilShooter(state);
+        if (_session && state.owner == _session->localSlot()) {
+            ++_localShots;
+        }
     }
 }
 

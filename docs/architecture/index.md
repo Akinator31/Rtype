@@ -112,7 +112,7 @@ The programs are built on twelve libraries:
 | Library | Role | Page |
 |---|---|---|
 | `libs/render` | Window, textures and fonts, drawing at a fixed logical resolution. Wraps raylib. | [Rendering](rendering.md) |
-| `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
+| `libs/input` | Keyboard, mouse and gamepads turned into game actions, with rebindable controls, and a virtual gamepad and pointer over them (the controllers of a VR headset). Wraps raylib. | [Input](input.md) |
 | `libs/ecs` | Entities, components and systems, with a hierarchy. Shared with the server, so it never depends on raylib. | [ECS](ecs.md) |
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
 | `libs/network` | Addresses, UDP and TCP sockets, the event loop that runs them, TCP framing, TLS and the binary serialization. Wraps Asio and Mbed TLS. Shared with the server. | [Networking](networking.md) |
@@ -125,7 +125,7 @@ The programs are built on twelve libraries:
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
 | `libs/discord` | Discord in the client: an interface per feature (the sign-in, the presence, then the connection), and their implementations through the Discord Social SDK, kept in `libs/discord/sdk/`, on one shared `Session`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
 | `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord, the devices as interfaces (`rtype::voice`, header only), the codec of the voice (`rtype::voice_codec`), the echo cancellation, noise suppression and gain control of the microphone (`rtype::voice_processing`), and the voice of the game with its jitter buffer and the microphone (`rtype::voice_client`). Wraps libopus, webrtc-audio-processing, and the miniaudio of raylib for the microphone. For the client. | [Voice](voice.md) |
-| `libs/xr` | The game in a VR headset: the session of a headset on the OpenGL context of the window, the images of its eyes and the actions of its controllers, behind an interface with no OpenXR type. Wraps OpenXR (the loader, built and linked statically). For the client. | [VR](vr.md) |
+| `libs/xr` | The game in a VR headset: the session of a headset on the OpenGL context of the window, the images of its eyes, its controllers and their vibrations, behind an interface with no OpenXR type. Wraps OpenXR (the loader, built and linked statically). For the client. | [VR](vr.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 

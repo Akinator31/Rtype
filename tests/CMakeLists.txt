@@ -19,6 +19,7 @@ add_executable(rtype_tests
     client_online.cpp
     client_voice.cpp
     client_vr.cpp
+    client_vr_controllers.cpp
     client_profiles.cpp
     client_shot_prediction.cpp
     client_prediction.cpp
@@ -96,6 +97,7 @@ add_executable(rtype_tests
     timer.cpp
     tls.cpp
     viewport.cpp
+    virtual_input.cpp
     voice.cpp
     voice_codec.cpp
     voice_game.cpp
