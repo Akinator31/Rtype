@@ -34,6 +34,9 @@ Name keys by domain with dots, so that the file stays readable:
 | `display.monitor` | The Settings page (`keepDisplaySettings()`): the screen of the game, by its index, from 0 for the primary screen |
 | `display.resolution` | The Settings page: `fullscreen`, or the size of the window, such as `1600x900` |
 | `display.vsync` | The Settings page: the vertical synchronisation, `true` (by default) or `false` |
+| `game.aura.allies` | The Settings page (`keepAuraColors()`): the colour of the aura around the ships of the other players and of their allies, `off`, `blue` (by default), `cyan`, `green`, `yellow`, `orange`, `red`, `purple` or `white` |
+| `game.aura.enemies` | The Settings page: the colour of the aura around the Bydos, as above (`red` by default) |
+| `game.aura.own` | The Settings page: the colour of the aura around the ship of the player, as above (`green` by default) |
 | `interface.language` | The Settings page: the language of the interface, `en` or `fr` |
 | `voice.mode` | The Voice page (`keepVoiceSettings()`): when the player is heard, `push_to_talk` (by default), `voice_activity` or `off` ([Voice](voice.md#the-talk-modes)) |
 | `voice.threshold` | The Voice page: the threshold of the voice activity, in dBFS, from -70 to -10 (-40 by default) |
@@ -53,16 +56,17 @@ Name keys by domain with dots, so that the file stays readable:
 
 The Settings page of the main menu (`apps/client/src/MainMenu/SettingsMenu.cpp`) sets the language, the
 volumes of the music and of the sound effects, the colour filter of the image
-([Rendering](rendering.md#colour-filters)), the activity shown on Discord, the screen the game is on and its resolution. Two files of
-`apps/client/src/Settings/` keep them: `PlayerSettings.hpp` the language, the volumes and the filter,
-`DisplaySettings.hpp` the screen and the resolution; `apps/client/src/Discord/DiscordPresence.hpp` the activity on
-Discord.
+([Rendering](rendering.md#colour-filters)), the colours of the auras around the ships in the game
+([Auras](client-game.md#auras)), the activity shown on Discord, the screen the game is on and its
+resolution. Three files of `apps/client/src/Settings/` keep them: `PlayerSettings.hpp` the language, the
+volumes and the filter, `AuraSettings.hpp` the auras, `DisplaySettings.hpp` the screen and the resolution;
+`apps/client/src/Discord/DiscordPresence.hpp` the activity on Discord.
 
 ```mermaid
 flowchart LR
     File["settings.txt"] -- "readSettings()" --> Settings["engine::Settings"]
-    Settings -- "applyDisplaySettings()<br/>applyPlayerSettings()<br/>at start" --> Apply["Window · Localization<br/>AudioPlayer · Renderer"]
-    Page["Settings page<br/>seven choices, two sliders"] -- "each change, at once" --> Apply
+    Settings -- "applyDisplaySettings()<br/>applyPlayerSettings()<br/>readAuraColors()<br/>at start" --> Apply["Window · Localization<br/>AudioPlayer · Renderer<br/>AuraColors"]
+    Page["Settings page<br/>ten choices, two sliders"] -- "each change, at once" --> Apply
     Page -- "closes: keep...Settings()" --> Settings
     Settings -- "writeSettings()" --> File
 ```

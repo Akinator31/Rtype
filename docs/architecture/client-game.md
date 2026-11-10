@@ -260,6 +260,23 @@ turns red. The bar is created at the first hit, attached to the entity (`ecs::Pa
 and goes with it), and kept in `Replicated::healthBar`: an entity drawn in the World layer, under the damage
 numbers, whose gauge reads `HealthBar::shown`. The `HealthBarSystem` slides it down and fades it out.
 
+### Auras
+
+Each ship drawn in 3D casts an aura in the colour of its side, so that the player tells at a glance its own
+ship, those of its allies and those of its enemies. It is a shader projected on the model
+(`render::Aura`, `Renderer::drawAura()`, `libs/shaders/glsl/Aura.vert` and `Aura.frag`): the meshes of the
+model are drawn again, their vertices pushed 2.5 units out along their normals, lit in the colour of the aura
+where they graze the view (Fresnel) and clear where they face the camera, so that the model shows through. The
+light is faint and breathes a little; it is added to the image without hiding anything, and
+spreads around the ship in the glow of the frame (`Aura::bloom`). The hidden meshes of the model (the trails of
+the flames) have none.
+
+The Settings page chooses the three colours, or none (`AuraColors`, [Settings](settings.md)): the ship of the
+local player (green by default), the ships of the other players and of the allies of the rescue (blue), the
+Bydos (red). The bosses have none. `GameSessionSystem::setAuraColors()` gives the system the colours the page
+changes; a ship reads them when it appears, and its `engine::Model` keeps its aura, which the `SceneRenderer`
+draws right after the model, in its pose.
+
 ### Sounds
 
 A shot that appears in the game plays the sound of the weapon that fired it (`sounds/fx/blaster/`):

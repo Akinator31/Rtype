@@ -120,6 +120,7 @@ void run()
     const auto localeDirectory = applicationDirectory() / "assets" / "locales";
     translations.load("en", localeDirectory / "en.lang");
     translations.load("fr", localeDirectory / "fr.lang");
+    rtype::client::AuraColors auraColors;
     // The one client of the Discord Social SDK, polled by the game loop, and the activity of the player shown
     // in its Discord profile
     rtype::discord::Session discordSession;
@@ -127,8 +128,8 @@ void run()
         discordSession, rtype::client::readDiscordApplication(engine.getSettings()));
     rtype::client::PresenceTracker presence(discordPresence, translations,
                                             rtype::client::readDiscordActivity(engine.getSettings()));
-    const rtype::client::SettingsTargets settingsTargets{translations, audio,      renderer, window,
-                                                         voice,        microphone, presence};
+    const rtype::client::SettingsTargets settingsTargets{translations, audio, renderer,   window,
+                                                         auraColors,   voice, microphone, presence};
     // The choices of the player at the last run
     rtype::client::applySavedSettings(engine, settingsTargets);
 
@@ -151,6 +152,7 @@ void run()
     engine.setInputSource(devices);
     rtype::client::GameSessionSystem &sessions =
         rtype::client::registerClientSystems(engine, devices, audio, metrics, style);
+    sessions.setAuraColors(&auraColors);
     StopSessions stopSessions{sessions};
     rtype::client::SceneAssetLoader sceneAssets(resources, audio);
     UnloadSceneAssets unloadSceneAssets{engine};

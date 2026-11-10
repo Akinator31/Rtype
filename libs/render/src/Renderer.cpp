@@ -1,6 +1,7 @@
 #include "rtype/render/Renderer.hpp"
 
 #include "AntialiasPass.hpp"
+#include "AuraShader.hpp"
 #include "EnergyShader.hpp"
 #include "FilterShader.hpp"
 #include "GlowPass.hpp"
@@ -326,12 +327,13 @@ public:
 } // namespace
 
 struct Renderer::Impl {
-    /// A model drawn in the frame that shines, to draw again in its glow (drawGlow()): an energy model, or a
-    /// lit model with an emission map
+    /// A model drawn in the frame that shines, to draw again in its glow (drawGlow()): an energy model, the
+    /// aura of a model, or a lit model with an emission map
     struct GlowDraw {
         ModelId model;
         Camera3D camera;
         std::optional<Energy> energy;
+        std::optional<Aura> aura;
         ::Vector3 position;
         ::Vector3 rotationAxis;
         float rotationAngle;
@@ -352,6 +354,7 @@ struct Renderer::Impl {
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
     detail::EnergyShader energyShader;
+    detail::AuraShader auraShader;
     detail::GlowPass glowPass;
     Vignette vignette;
     std::vector<GlowDraw> glowQueue;
@@ -406,7 +409,11 @@ struct Renderer::Impl {
             drawn.applyPose(*draw.pose);
         }
         BeginMode3D(draw.camera);
-        if (draw.energy) {
+        if (draw.aura) {
+            auraShader.draw(drawn.get(), *draw.aura, draw.camera, draw.position, draw.rotationAxis,
+                            draw.rotationAngle, draw.spinAngle, draw.scale, draw.hiddenMeshes,
+                            draw.aura->bloom);
+        } else if (draw.energy) {
             energyShader.draw(drawn.get(), *draw.energy, textures.get(draw.energy->noise).get(),
                               draw.camera.position, draw.position, draw.rotationAxis, draw.rotationAngle,
                               draw.spinAngle, draw.scale, draw.tint);
@@ -680,9 +687,9 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
     EndMode3D();
     _impl->beginGameView();
     if (detail::LightingShader::hasEmission(drawn.get())) {
-        _impl->glowQueue.push_back({model, view, std::nullopt, toRaylib(position), toRaylib(rotationAxis),
-                                    rotationAngle, scale, spinAngle, fade(tint, emissionBloom),
-                                    drawn.getPose(), hiddenMeshes});
+        _impl->glowQueue.push_back({model, view, std::nullopt, std::nullopt, toRaylib(position),
+                                    toRaylib(rotationAxis), rotationAngle, scale, spinAngle,
+                                    fade(tint, emissionBloom), drawn.getPose(), hiddenMeshes});
     }
 }
 
@@ -709,6 +716,7 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
         _impl->glowQueue.push_back({model,
                                     view,
                                     energy,
+                                    std::nullopt,
                                     origin,
                                     axis,
                                     rotationAngle,
@@ -717,6 +725,26 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
                                     fade(tint, energy.bloom),
                                     _impl->models.get(model).getPose(),
                                     {}});
+    }
+}
+
+void Renderer::drawAura(ModelId model, const Camera &camera, const Aura &aura, Vector3 position,
+                        Vector3 rotationAxis, float rotationAngle, float scale, float spinAngle,
+                        const std::vector<int> &hiddenMeshes)
+{
+    _impl->requireFrame();
+    const Camera3D view = toRaylib(camera);
+    const ::Vector3 origin = toRaylib(position);
+    const ::Vector3 axis = toRaylib(rotationAxis);
+    const detail::Model &drawn = _impl->models.get(model);
+    BeginMode3D(view);
+    _impl->auraShader.draw(drawn.get(), aura, view, origin, axis, rotationAngle, spinAngle, scale,
+                           hiddenMeshes);
+    EndMode3D();
+    _impl->beginGameView();
+    if (aura.bloom > 0.0f) {
+        _impl->glowQueue.push_back({model, view, std::nullopt, aura, origin, axis, rotationAngle, scale,
+                                    spinAngle, toRaylib(colors::White), drawn.getPose(), hiddenMeshes});
     }
 }
 
@@ -734,10 +762,11 @@ void Renderer::drawGlow()
     const Texture2D *glow = nullptr;
     if (!_impl->glowQueue.empty()) {
         glow = _impl->glowPass.render(toRaylib(resolution), [this] {
-            // The lit models first: they write their depth, so that they hide the energy behind them
-            for (const bool energy : {false, true}) {
+            // The lit models first: they write their depth, so that they hide the energy and the auras behind
+            // them
+            for (const bool added : {false, true}) {
                 for (const Impl::GlowDraw &draw : _impl->glowQueue) {
-                    if (draw.energy.has_value() == energy) {
+                    if ((draw.energy.has_value() || draw.aura.has_value()) == added) {
                         _impl->drawInGlow(draw);
                     }
                 }

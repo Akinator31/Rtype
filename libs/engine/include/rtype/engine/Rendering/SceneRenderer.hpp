@@ -25,8 +25,8 @@ namespace rtype::engine
 {
 
 /// Draws the entities with the Renderer: those with a Drawable, a Position and a Text, Sprite, Box, Panel,
-/// Ring or Toast, and the 3D models (Drawable and Model) seen through the Camera, before the rest of the
-/// World layer. The sky (Backdrop, BackdropSprite) is drawn first, behind the models.
+/// Ring or Toast, and the 3D models (Drawable and Model, with its aura) seen through the Camera, before the
+/// rest of the World layer. The sky (Backdrop, BackdropSprite) is drawn first, behind the models.
 ///
 /// It is not a system of the Ecs: drawing happens between Renderer::beginFrame() and endFrame(), after the
 /// update, and may happen several times per frame (once per eye in VR). Each layer is drawn separately;

@@ -8,6 +8,7 @@
 #include "Game/ImpactLooks.hpp"
 #include "Game/ShipLooks.hpp"
 #include "Game/ShotLooks.hpp"
+#include "Settings/AuraSettings.hpp"
 #include "rtype/ecs/Ecs.hpp"
 #include "rtype/ecs/System/System.hpp"
 #include "rtype/engine/Control/Controls.hpp"
@@ -145,6 +146,8 @@ class GameSessionSystem : public ecs::System
     std::chrono::system_clock::time_point _startedAt;
     /// Seconds the session has been played: the time of the animations of the ships.
     float _clock = 0.0f;
+    /// The colours of the auras around the ships, chosen on the Settings page: none, no aura.
+    const AuraColors *_auraColors = nullptr;
 
     void apply(const game::Snapshot &snapshot);
     /// Moves the entities to where the session draws them between two ticks: positions only.
@@ -163,6 +166,9 @@ class GameSessionSystem : public ecs::System
     [[nodiscard]] std::optional<std::uint8_t> findKiller(ecs::entity_t bydo,
                                                          const std::vector<ecs::entity_t> &killed) const;
     void createEntity(const game::EntityState &state);
+    /// Casts the aura of its side on the 3D model of a ship, if it has one: the ship of the local player,
+    /// those of the other players and of their allies, those of the Bydos. The bosses have none.
+    void addAura(ecs::entity_t entity, const game::EntityState &state);
     /// Plays the recoil of the ship of the players that fired a shot, if it is drawn in 3D.
     void recoilShooter(const game::EntityState &shot);
     /// The ship of the players, or of their allies, drawn in 3D, nearest to a shot that appears, if it is
@@ -226,6 +232,9 @@ public:
     /// Plays a sound where the blade of the shogun goes through a ship of this kind from now on, with its
     /// strike impact: a kind without a strike look makes no sound.
     void setStrikeSound(game::EntityKind kind, const EntitySound &sound);
+    /// Surrounds the ships with an aura in these colours from now on, read when a ship appears: the colours
+    /// must outlive the system. None, the default, draws no aura.
+    void setAuraColors(const AuraColors *colors);
     /// Calls this for each ship drawn that the blade of the shogun goes through from now on.
     void setStrikeHandler(std::function<void()> onStrike);
     /// Calls this for each ship killed in the game while drawn from now on: a Bydo or the ship of a player.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/render/Aura.hpp"
 #include "rtype/render/ColorFilter.hpp"
 #include "rtype/render/Energy.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -201,6 +202,14 @@ public:
     void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
                          Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
                          float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
+    /// Draws the aura of a 3D model placed as by drawModel(): a light of its colour on a shell a little
+    /// larger than the model, bright along its silhouette, added over the model and what is behind it. Draw
+    /// it after the model, in its pose. Its light also spreads around it when drawGlow() is called, as much
+    /// as its bloom. The other parameters are those of drawModel().
+    /// @throws std::logic_error if no frame is started.
+    void drawAura(ModelId model, const Camera &camera, const Aura &aura, Vector3 position,
+                  Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
+                  float spinAngle = 0.0f, const std::vector<int> &hiddenMeshes = {});
     /// Smooths the edges of everything drawn so far (setAntialiasing()). Then makes the energy models, and
     /// the light the models emit (engine flames, windows), drawn since the start of the frame (or the
     /// previous call) shine: their light is blurred around them and added over everything drawn so far. Then
