@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <format>
+#include <random>
 #include <memory>
 #include <optional>
 #include <string>
@@ -48,11 +49,13 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
-/// Online, the waves follow each other until every player is out of lives, and earn experience.
+/// Online, the waves follow each other until every player is out of lives, and earn experience. Each game
+/// draws its own seed, so the waves come in a different order.
 rtype::game::Rules onlineRules()
 {
     rtype::game::Rules rules;
     rules.endless = true;
+    rules.seed = std::random_device{}();
     return rules;
 }
 
