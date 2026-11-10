@@ -228,9 +228,9 @@ TEST_CASE("The items of the repository load, each with a model, and the waves ma
     for (const char *id : {"repair_kit", "extra_life", "bydo_mine", "rapid_fire", "shield"}) {
         INFO(id);
         REQUIRE(simulation.context().items.hasDefinition(id));
-        const std::filesystem::path model =
-            std::filesystem::path(RTYPE_TEST_CONFIG) / ".." / "apps" / "client" / "assets" /
-            simulation.context().items.getDefinition(id).model;
+        const std::filesystem::path model = std::filesystem::path(RTYPE_TEST_CONFIG) / ".." / "apps" /
+                                            "client" / "assets" /
+                                            simulation.context().items.getDefinition(id).model;
         CHECK(std::filesystem::is_regular_file(model));
     }
 }

@@ -78,7 +78,8 @@ public:
 
     /// The item drawn by `entity` was picked up: creates, in a scene, its model playing its Collect animation
     /// where it is drawn. Nothing if its model has none.
-    std::optional<ecs::entity_t> createCollect(ecs::Ecs &ecs, engine::SceneId scene, ecs::entity_t entity) const;
+    std::optional<ecs::entity_t> createCollect(ecs::Ecs &ecs, engine::SceneId scene,
+                                               ecs::entity_t entity) const;
 };
 
 } // namespace rtype::client

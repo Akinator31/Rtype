@@ -19,8 +19,8 @@
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Hitbox.hpp"
-#include "rtype/game/Rules.hpp"
 #include "rtype/game/Item/ItemRegistry.hpp"
+#include "rtype/game/Rules.hpp"
 #include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/log/Logger.hpp"
@@ -411,7 +411,9 @@ void setConfiguredItemLooks(GameSessionSystem &sessions, render::ResourceManager
             const render::ModelId model = resources.loadModel(item.model);
             const physics::Vec3 half = game::halfSizeOf(item.collider);
             sessions.setItemLook(static_cast<std::uint8_t>(index),
-                                 {model, resources.getModelBounds(model), {half.x * 2.0f, half.y * 2.0f},
+                                 {model,
+                                  resources.getModelBounds(model),
+                                  {half.x * 2.0f, half.y * 2.0f},
                                   findItemAnimation(resources, model, ItemIdleAnimation),
                                   findItemAnimation(resources, model, ItemCollectAnimation)});
         } catch (const std::runtime_error &error) {

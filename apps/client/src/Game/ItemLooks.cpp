@@ -48,8 +48,8 @@ void ItemLooks::addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::Entity
     const float width = bounds.max.x - bounds.min.x;
     const float height = bounds.max.y - bounds.min.y;
     // The model fits in the box of its collider
-    const float fit = std::min(width > 0.0f ? look.size.x / width : 1.0f,
-                               height > 0.0f ? look.size.y / height : 1.0f);
+    const float fit =
+        std::min(width > 0.0f ? look.size.x / width : 1.0f, height > 0.0f ? look.size.y / height : 1.0f);
     const render::Vector3 centre{(bounds.min.x + bounds.max.x) / 2.0f, (bounds.min.y + bounds.max.y) / 2.0f,
                                  (bounds.min.z + bounds.max.z) / 2.0f};
     ecs.addComponent<engine::Model>(entity, look.model, render::Vector3{state.x, state.y, 0.0f}, LengthAxis,
@@ -80,8 +80,7 @@ void ItemLooks::placeModel(ecs::Ecs &ecs, ecs::entity_t entity, float elapsed)
                             ? 1.0f
                             : engine::ease(engine::Easing::EaseOutBack, item.age / AppearDuration);
     model.scale = item.scale * std::max(0.0f, grown);
-    const float floating =
-        FloatHeight * std::sin(2.0f * std::numbers::pi_v<float> * item.age / FloatPeriod);
+    const float floating = FloatHeight * std::sin(2.0f * std::numbers::pi_v<float> * item.age / FloatPeriod);
     model.position = placeCentre(item.centre, model.scale, item.x, item.y + floating);
 }
 
