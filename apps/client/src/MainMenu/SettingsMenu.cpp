@@ -3,8 +3,8 @@
 #include "MainMenu/ControlsMenu.hpp"
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/SettingsPage.hpp"
-#include "Settings/AuraSettings.hpp"
 #include "MainMenu/VoiceMenu.hpp"
+#include "Settings/AuraSettings.hpp"
 #include "Settings/DisplaySettings.hpp"
 #include "Settings/NextValue.hpp"
 #include "Settings/PlayerSettings.hpp"
@@ -240,8 +240,8 @@ void addVoiceRow(Page &page, float left, float top)
 }
 
 /// On the left, the language, the volumes, the colour filter, the auras of the ships and the activity on
-/// Discord; on the right, the display, the controls and the voice. The widgets get the focus in the order they are made: down the left
-/// column, then down the right one.
+/// Discord; on the right, the display, the controls and the voice. The widgets get the focus in the order
+/// they are made: down the left column, then down the right one.
 void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
                        const SettingsTargets &targets, const std::function<void()> &close)
 {
