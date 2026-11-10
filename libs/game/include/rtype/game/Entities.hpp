@@ -35,6 +35,11 @@ ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string 
 ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::string &id, std::uint8_t owner,
                               float x, float y, float velocityX, float velocityY);
 
+/// An item of context.items at a position, drifting to the left at its speed: the ships of the players that
+/// touch it pick it up (ItemSystem), once it has appeared (Rules::itemAppearTicks). It vanishes after its
+/// lifetime, or once out of the game area. Throws std::out_of_range if `itemId` is unknown.
+ecs::entity_t spawnItem(ecs::Ecs &ecs, GameContext &context, const std::string &itemId, float x, float y);
+
 /// Gives a weapon of context.weapons to a ship, with a full magazine (it replaces the one it had). From then
 /// on the WeaponSystem makes it fire. Throws std::out_of_range if `weaponId` is not in context.weapons.
 void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const std::string &weaponId);

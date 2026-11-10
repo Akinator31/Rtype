@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/core/Handle.hpp"
+#include "rtype/render/Types.hpp"
 
 #include <filesystem>
 #include <future>
@@ -124,6 +125,10 @@ public:
     /// @throws std::out_of_range if the model has no such animation, or if the handle does not come from this
     /// manager.
     [[nodiscard]] float getModelAnimationDuration(ModelId model, int animation) const;
+    /// Returns the box around the meshes of a loaded model, in model units, in its rest pose: what fits a
+    /// model of any size to the size it is drawn at.
+    /// @throws std::out_of_range if the handle does not come from this manager.
+    [[nodiscard]] Box3 getModelBounds(ModelId model) const;
 };
 
 } // namespace rtype::render

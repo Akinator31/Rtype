@@ -172,9 +172,7 @@ void CombatSystem::protectShip(ecs::entity_t ship)
 void CombatSystem::loseShip(ecs::entity_t ship)
 {
     destroyLater(ship, DestroyCause::Killed);
-    PlayerSlot &player = _context.players[_playerShips.get(ship).slot];
-    player.lives = static_cast<std::uint8_t>(player.lives > 0 ? player.lives - 1 : 0);
-    player.respawnIn = player.lives > 0 ? _context.rules.respawnDelay : 0;
+    _context.loseLife(_context.players[_playerShips.get(ship).slot]);
 }
 
 void CombatSystem::destroyLater(ecs::entity_t entity, DestroyCause cause)

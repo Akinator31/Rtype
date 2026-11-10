@@ -7,6 +7,7 @@
 #include "rtype/physics/Component/Collider.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace rtype::game
@@ -112,6 +113,22 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
     const physics::Vec3 half = halfSizeOf(definition.collider);
     ecs.addComponent<LeavesArea>(projectile, half.x, half.y);
     return projectile;
+}
+
+ecs::entity_t spawnItem(ecs::Ecs &ecs, GameContext &context, const std::string &itemId, float x, float y)
+{
+    const ItemDefinition &item = context.items.getDefinition(itemId);
+    const std::size_t index = context.items.getIndex(itemId);
+    const ecs::entity_t entity = spawnVisible(ecs, context, EntityKind::Item, NoOwner, x, y);
+    const auto lifetime =
+        static_cast<std::uint32_t>(std::lround(item.lifetime * static_cast<float>(TickRate)));
+    ecs.addComponent<Item>(entity, itemId, 0U, std::max<std::uint32_t>(1, lifetime));
+    ecs.addComponent<ItemIndex>(entity, index < NoShip ? static_cast<std::uint8_t>(index) : NoShip);
+    ecs.addComponent<physics::Velocity>(entity, -item.speed, 0.0f);
+    ecs.addComponent<physics::Collider>(entity, item.collider);
+    const physics::Vec3 half = halfSizeOf(item.collider);
+    ecs.addComponent<LeavesArea>(entity, half.x, half.y);
+    return entity;
 }
 
 void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const std::string &weaponId)

@@ -14,6 +14,8 @@ add_library(rtype_game
     src/Enemy/EnemyScripts.cpp
     src/Entities.cpp
     src/Hitbox.cpp
+    src/Item/ItemEffects.cpp
+    src/Item/ItemRegistry.cpp
     src/Messages.cpp
     src/PlayerInput.cpp
     src/Progression.cpp
@@ -26,6 +28,7 @@ add_library(rtype_game
     src/System/AreaSystem.cpp
     src/System/CombatSystem.cpp
     src/System/EnemySystem.cpp
+    src/System/ItemSystem.cpp
     src/System/PlayerControlSystem.cpp
     src/System/ProjectileSystem.cpp
     src/System/RescueSystem.cpp

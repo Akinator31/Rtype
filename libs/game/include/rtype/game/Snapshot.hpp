@@ -27,6 +27,9 @@ enum class EntityKind : std::uint8_t {
     BydoBoss = 0x1F,
     BydoShot = 0x40,
     BydoPlasmaShot = 0x41,
+    /// An item the ships of the players pick up (ItemDefinition): its model is the item of the configuration
+    /// whose index is EntityState::ship.
+    Item = 0x60,
 };
 
 /// Why an entity was destroyed, for what the client shows.
@@ -123,7 +126,8 @@ struct EntityState {
     /// fired at. Written in the byte of the health, which a shot does not have.
     std::uint8_t age = 0;
     /// For a Bydo: the index of its ship among those of the configuration (ShipRegistry::getIndex()), so that
-    /// the client draws its model at the size of its collider. NoShip otherwise.
+    /// the client draws its model at the size of its collider. For an item (EntityKind::Item): the index of
+    /// its item among those of the configuration (ItemRegistry::getIndex()). NoShip otherwise.
     std::uint8_t ship = NoShip;
 
     friend bool operator==(const EntityState &, const EntityState &) = default;

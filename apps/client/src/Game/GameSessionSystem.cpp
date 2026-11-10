@@ -87,6 +87,7 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::ModelAnimation>(caches);
     use<ShipAttitude>(caches);
     use<BossModel>(caches);
+    use<ItemModel>(caches);
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
     use<Impact>(caches);
@@ -161,6 +162,11 @@ void GameSessionSystem::setBossLook(game::EntityKind kind, const BossLook &look)
 void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
 {
     _shotLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setItemLook(std::uint8_t item, const ItemLook &look)
+{
+    _itemLooks.setLook(item, look);
 }
 
 void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &look)
@@ -404,7 +410,9 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.owner, state.health, state.health);
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
-    if (_shipLooks.hasLook(state.kind)) {
+    if (state.kind == game::EntityKind::Item && _itemLooks.hasLook(state.ship)) {
+        _itemLooks.addModel(_ecs, entity, state);
+    } else if (_shipLooks.hasLook(state.kind)) {
         _shipLooks.addModel(_ecs, entity, state, look, _clock, isLocalShip(state));
     } else if (_bossLooks.hasLook(state.kind)) {
         _bossLooks.addModel(_ecs, entity, state, look);
@@ -480,6 +488,12 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
     if (killed) {
         showDamage(entity.id, _ecs.getComponent<Replicated>(entity.id).health);
     }
+    // An item picked up plays its Collect animation where it was, instead of an impact
+    if (killed && _ecs.hasComponent<ItemModel>(entity.id) &&
+        _itemLooks.createCollect(_ecs, *_scene, entity.id)) {
+        _ecs.destroyEntity(entity.id);
+        return;
+    }
     if (killed && _impactLooks.hasLook(kind)) {
         const ecs::Position position = _ecs.getComponent<ecs::Position>(entity.id);
         const ecs::entity_t impact = _impactLooks.createImpact(_ecs, *_scene, kind, position);
@@ -504,6 +518,8 @@ void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState
         _shipLooks.moveModel(_ecs, entity, state, _clock);
     } else if (_ecs.hasComponent<BossModel>(entity)) {
         _bossLooks.moveModel(_ecs, entity, state);
+    } else if (_ecs.hasComponent<ItemModel>(entity)) {
+        ItemLooks::moveModel(_ecs, entity, state);
     } else if (_ecs.hasComponent<engine::Model>(entity)) {
         _shotLooks.placeModel(_ecs, entity, state);
     }
@@ -590,6 +606,8 @@ void GameSessionSystem::placeShipModels(float elapsed)
             ShipLooks::placeModel(_ecs, entity.id, elapsed);
         } else if (_ecs.hasComponent<BossModel>(entity.id)) {
             BossLooks::placeModel(_ecs, entity.id);
+        } else if (_ecs.hasComponent<ItemModel>(entity.id)) {
+            ItemLooks::placeModel(_ecs, entity.id, elapsed);
         }
     }
 }

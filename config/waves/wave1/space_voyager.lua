@@ -11,5 +11,13 @@ return {
         mid = { enemies = { "bydo_scout", "bydo_mosquito", "bydo_sporecaster" }, minGap = 4.5 },
         high = { enemies = { "bydo_mosquito", "bydo_drone", "bydo_interceptor" }, minGap = 4.5 },
     },
+    -- Items that appear at random places and times during the wave: `quantity` of each, or a number
+    -- drawn from `quantity` to `maxQuantity`
+    items = {
+        { item = "repair_kit", quantity = 3, maxQuantity = 6 },
+        { item = "rapid_fire", quantity = 2, maxQuantity = 3 },
+        { item = "shield", quantity = 1, maxQuantity = 2 },
+        { item = "bydo_mine", quantity = 3, maxQuantity = 6 },
+    },
     area = { minX = 1980, maxX = 2020, minY = 100, maxY = 980 },
 }
