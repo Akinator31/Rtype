@@ -1,8 +1,11 @@
 #pragma once
 
+#include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <array>
+#include <optional>
 #include <string>
 
 namespace rtype::render
@@ -34,13 +37,23 @@ public:
     [[nodiscard]] virtual render::Rectangle visibleArea() const = 0;
     /// Converts a position in the window, in pixels, into game units.
     [[nodiscard]] virtual render::Vector2 windowToGame(render::Vector2 position) const = 0;
+    /// Whether the surfaces of the interface are drawn apart, each into its image (a VR headset shows the
+    /// game), or all on the screen (the default).
+    [[nodiscard]] virtual bool surfacesApart() const { return false; }
+    /// The area of a surface, in game units, where the anchors place its entities: the visible area when the
+    /// surfaces are not apart.
+    [[nodiscard]] virtual render::Rectangle surfaceArea(Surface /*surface*/) const { return visibleArea(); }
 };
+
+/// The area of each surface, by Surface.
+using SurfaceAreas = std::array<render::Rectangle, SurfaceCount>;
 
 /// The real measures, given by the Renderer.
 class RendererMetrics : public Metrics
 {
 private:
     const render::Renderer &_renderer;
+    std::optional<SurfaceAreas> _surfaces;
 
 public:
     /// @param renderer It must outlive the metrics.
@@ -51,6 +64,12 @@ public:
     [[nodiscard]] render::Vector2 gameSize() const override;
     [[nodiscard]] render::Rectangle visibleArea() const override;
     [[nodiscard]] render::Vector2 windowToGame(render::Vector2 position) const override;
+    [[nodiscard]] bool surfacesApart() const override { return _surfaces.has_value(); }
+    [[nodiscard]] render::Rectangle surfaceArea(Surface surface) const override;
+
+    /// Draws the surfaces apart, each in its area, or all on the screen again (none). Apart, the visible area
+    /// is the one of the panel: the frames drawn into the images do not move it.
+    void separateSurfaces(std::optional<SurfaceAreas> areas) { _surfaces = areas; }
 };
 
 } // namespace rtype::engine

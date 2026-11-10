@@ -76,6 +76,11 @@ std::optional<SceneId> Scenes::top() const
     return _stack.empty() ? std::nullopt : std::optional<SceneId>(_stack.back().id);
 }
 
+std::optional<SceneId> Scenes::bottom() const
+{
+    return _stack.empty() ? std::nullopt : std::optional<SceneId>(_stack.front().id);
+}
+
 bool Scenes::isOpen(SceneId scene) const
 {
     return find(scene) != nullptr;

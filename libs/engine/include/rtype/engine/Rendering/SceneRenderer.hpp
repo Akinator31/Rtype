@@ -32,6 +32,9 @@ namespace rtype::engine
 /// update, and may happen several times per frame (once per eye in VR). Each layer is drawn separately;
 /// within a layer, entities are drawn by Drawable order, then by id.
 ///
+/// In a VR headset, the interface is drawn surface by surface (Surface, OnSurface), each into its own image:
+/// draw(renderer, surface) draws the entities of the interface layer on one surface.
+///
 /// Hidden entities (see ecs::isHidden()) and entities of hidden scenes are skipped, and so are the entities
 /// of the interface layer under a scene that hides the interface below (SceneSettings::hidesInterfaceBelow).
 /// The focused widget gets a frame around its Hitbox and the focused colour, unless it has a Panel, which
@@ -57,7 +60,14 @@ class SceneRenderer
     /// Posing a skinned model costs milliseconds: a model is posed again only when its pose changes, so that
     /// entities sharing a model and an animation, at the same time, are posed once.
     std::vector<Pose> _poses;
+    /// Where the toasts without an OnSurface are drawn by draw(renderer, surface).
+    Surface _toastSurface = Surface::Panel;
 
+    /// Draws the entities of one layer, only those on the surface if one is given.
+    void drawLayer(render::Renderer &renderer, Layer layer, std::optional<Surface> surface);
+    /// The surface an entity of the interface is drawn on: its OnSurface, the surface of the toasts for a
+    /// toast, the panel otherwise.
+    [[nodiscard]] Surface surfaceOf(ecs::entity_t entity);
     /// Whether the entity is in a visible scene and not hidden.
     [[nodiscard]] bool isShown(ecs::entity_t entity);
     /// Whether the entity is drawn in this layer: in the interface layer, its scene must show its interface.
@@ -170,6 +180,15 @@ public:
     void draw(render::Renderer &renderer, Layer layer);
     /// Draws the world, then the interface on top of it.
     void draw(render::Renderer &renderer);
+    /// Draws the entities of the interface layer on one surface, into the image of this surface in a VR
+    /// headset.
+    void draw(render::Renderer &renderer, Surface surface);
+    /// Whether something of the interface is shown on a surface, toasts and fully transparent entities apart:
+    /// in a VR headset, the panel opens when something is on it (a menu, the pause).
+    [[nodiscard]] bool hasContent(Surface surface);
+    /// Puts the toasts without an OnSurface on a surface: in a VR headset, the panel while it is open, the
+    /// board otherwise. The panel by default.
+    void setToastSurface(Surface surface) { _toastSurface = surface; }
 
     /// The light of the scenes shown, which lights their 3D models: the first shown Light that is not on a
     /// Model, or the default light. In VR, it lights the cockpit around the board too.
