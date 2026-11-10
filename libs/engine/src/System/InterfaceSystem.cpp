@@ -404,6 +404,7 @@ void InterfaceSystem::update(float elapsed)
     _previousMouse = {mouse.x, mouse.y};
 
     const std::vector<ecs::entity_t> list = widgets();
+    _hovered.reset();
     if (list.empty()) {
         // A scene without widgets, such as the game, still goes back: its pause menu, for instance
         if (_navigation.wasPressed(Navigation::Back)) {
@@ -423,6 +424,7 @@ void InterfaceSystem::update(float elapsed)
     const std::optional<ecs::entity_t> hovered =
         hoveredIt == list.end() ? std::nullopt : std::optional<ecs::entity_t>(*hoveredIt);
 
+    _hovered = hovered;
     updatePointerMode(mouseMoved);
     // The pointer only takes the focus when it moves: a still pointer over a widget must not prevent choosing
     // another one with the keyboard

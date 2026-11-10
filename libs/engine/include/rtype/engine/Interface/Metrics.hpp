@@ -35,7 +35,9 @@ public:
     /// Part of the game shown on the screen: the game area, plus what is around it when the screen has
     /// another shape (see render::computeVisibleArea()). The interface follows its edges.
     [[nodiscard]] virtual render::Rectangle visibleArea() const = 0;
-    /// Converts a position in the window, in pixels, into game units.
+    /// Converts a position of the mouse, in pixels of the window, into game units. While the surfaces are
+    /// apart (a VR headset shows the game), the pointer is a controller pointing at the panel, and its
+    /// positions are already in game units of the panel: they are kept as they are.
     [[nodiscard]] virtual render::Vector2 windowToGame(render::Vector2 position) const = 0;
     /// Whether the surfaces of the interface are drawn apart, each into its image (a VR headset shows the
     /// game), or all on the screen (the default).
@@ -68,7 +70,8 @@ public:
     [[nodiscard]] render::Rectangle surfaceArea(Surface surface) const override;
 
     /// Draws the surfaces apart, each in its area, or all on the screen again (none). Apart, the visible area
-    /// is the one of the panel: the frames drawn into the images do not move it.
+    /// is the one of the panel: the frames drawn into the images do not move it; and the pointer is given in
+    /// game units of the panel (windowToGame()).
     void separateSurfaces(std::optional<SurfaceAreas> areas) { _surfaces = areas; }
 };
 

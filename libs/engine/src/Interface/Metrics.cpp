@@ -34,6 +34,10 @@ render::Rectangle RendererMetrics::surfaceArea(Surface surface) const
 
 render::Vector2 RendererMetrics::windowToGame(render::Vector2 position) const
 {
+    // In the headset, the controllers point at the panel, in its game units: the window shows the mirror
+    if (_surfaces) {
+        return position;
+    }
     return _renderer.windowToGame(position);
 }
 
