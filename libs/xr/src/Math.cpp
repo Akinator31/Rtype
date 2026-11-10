@@ -72,6 +72,21 @@ Vector3 transformPoint(const Matrix &matrix, Vector3 point)
             (m[2] * point.x) + (m[6] * point.y) + (m[10] * point.z) + m[14]};
 }
 
+Pose levelled(const Pose &pose)
+{
+    // The heading is that of the axis the pose looks along (-z), laid flat. Looking straight up or down, that
+    // axis has no heading: the right of the pose (+x) gives it instead.
+    const Matrix axes = toMatrix(pose);
+    const float aheadX = -axes.values[8];
+    const float aheadZ = -axes.values[10];
+    constexpr float Vertical = 1e-4f;
+    const float heading = std::hypot(aheadX, aheadZ) > Vertical ? std::atan2(-aheadX, -aheadZ)
+                                                                : std::atan2(-axes.values[2], axes.values[0]);
+    // A turn of `heading` around +y takes -z to (-sin, 0, -cos)
+    return {.position = pose.position,
+            .orientation = {0.0f, std::sin(heading / 2.0f), 0.0f, std::cos(heading / 2.0f)}};
+}
+
 Matrix projection(const FieldOfView &fieldOfView, float nearest, float farthest)
 {
     const float left = std::tan(fieldOfView.left);

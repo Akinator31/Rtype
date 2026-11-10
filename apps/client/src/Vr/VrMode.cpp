@@ -59,6 +59,14 @@ void VrMode::stop()
     _hooks.lost();
 }
 
+void VrMode::recenter()
+{
+    if (_headset != nullptr) {
+        _headset->recenter();
+        logger().info("recentring the headset");
+    }
+}
+
 void VrMode::update()
 {
     if (_headset == nullptr) {

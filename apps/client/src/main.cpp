@@ -172,9 +172,9 @@ void run(const std::vector<std::string_view> &arguments)
     bool assetsLoaded = false;
     // The game in a VR headset, with --xr or the VR setting: opened on the OpenGL context of the window, and
     // closed before it. Without a headset, the game stays on the screen and says so once in the main menu.
-    // While the headset shows the game, the frame is drawn into the board, which each eye shows, and the
-    // window shows the left eye
-    rtype::client::VrView vrView(renderer);
+    // While the headset shows the game, the frame is drawn into the board, which each eye shows from the
+    // cockpit during a game, and the window shows the left eye
+    rtype::client::VrView vrView(renderer, resources);
     rtype::client::VrMode vr(
         {.open = [] { return rtype::xr::openHeadset(); },
          .pace = [&window](bool paced) { window.setPacedElsewhere(paced); },
@@ -183,6 +183,7 @@ void run(const std::vector<std::string_view> &arguments)
                  engine.showToast(translations.text("vr.toast.lost"), rtype::engine::ToastType::Warning);
              },
          .drawEye = [&vrView](int eye, const rtype::xr::EyeView &view) { vrView.drawEye(eye, view); }});
+    bool recenterKeyWasDown = false;
     const bool vrWanted = rtype::client::wantsVr(arguments, engine.getSettings());
     if (vrWanted) {
         vr.start();
@@ -194,6 +195,11 @@ void run(const std::vector<std::string_view> &arguments)
             debugViews.hitboxes = !debugViews.hitboxes;
         }
         debugKeyWasDown = debugKeyDown;
+        const bool recenterKeyDown = devices.isKeyDown(rtype::client::RecenterKey);
+        if (recenterKeyDown && !recenterKeyWasDown) {
+            vr.recenter();
+        }
+        recenterKeyWasDown = recenterKeyDown;
         sceneLoadStatus.update();
         window.update();
         network.poll();
@@ -220,6 +226,11 @@ void run(const std::vector<std::string_view> &arguments)
         }
         sceneLoadStatus.draw(renderer);
         renderer.endFrame();
+        if (inHeadset) {
+            vrView.update(
+                window.frameTime(),
+                {.light = sceneRenderer.light(), .sky = sceneRenderer.sky(), .playing = sessions.running()});
+        }
         vr.update();
         if (inHeadset) {
             renderer.showMirror();

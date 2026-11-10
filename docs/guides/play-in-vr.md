@@ -5,9 +5,9 @@ Start the game in a VR headset, on Linux or on Windows. How VR works in the clie
 
 !!! warning "In progress"
 
-    For now the game floats on a flat board 3 m ahead, in a dark blue space, and is played with the keyboard or
-    a gamepad: the mouse does not point at the board. The cockpit around the player and the controllers come
-    next.
+    For now you sit in the cockpit during a game, and the game is on a flat board outside its canopy, played
+    with the keyboard or a gamepad: the mouse does not point at the board. The interface on the screens of the
+    cockpit and the controllers come next.
 
 ## What you need
 
@@ -40,9 +40,11 @@ on, its default on Linux and Windows.
    ignores its vertical synchronisation and its limit of frames per second. The window shows what the left eye
    sees, so that the people around can follow.
 
-4. **Look at the board.** It is placed from where the head is when the headset starts showing the game: sit
-   as you will play before putting the headset on. If it is not ahead of you, recentre with the runtime (hold
-   the Meta button on a Quest, or the recentre of the SteamVR menu).
+4. **Look at the board.** In the menus, the board floats alone in space; once a game starts, you are seated
+   in the cockpit, the board just outside its canopy, a little over your eyes. The cockpit is placed from where the head is when the headset starts showing the game: sit as you
+   will play before putting the headset on. If you are not in the seat, or the board is not ahead of you,
+   press **`F9`** to recentre, looking ahead; recentring with the runtime works too (hold the Meta button on a
+   Quest, or the recentre of the SteamVR menu). The cockpit appears a moment after the board, once loaded.
 
 ## When the headset shows nothing
 

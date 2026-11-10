@@ -102,6 +102,7 @@ add_library(r-type_client_core STATIC
     src/Voice/VoiceDevices.cpp
     src/Voice/VoiceIcons.cpp
     src/Voice/VoiceKeysSystem.cpp
+    src/Vr/VrLayout.cpp
     src/Vr/VrMode.cpp
     src/Vr/VrView.cpp
 )

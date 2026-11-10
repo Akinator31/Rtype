@@ -447,6 +447,29 @@ std::optional<ecs::entity_t> SceneRenderer::findFirstBackdrop()
     return std::nullopt;
 }
 
+render::Light SceneRenderer::light()
+{
+    return findLight();
+}
+
+std::optional<Backdrop> SceneRenderer::sky()
+{
+    const std::optional<ecs::entity_t> first = findFirstBackdrop();
+    if (!first) {
+        return std::nullopt;
+    }
+    const std::optional<SceneId> scene = _scenes.sceneOf(*first);
+    auto &backdrops = _ecs.cache<Backdrop>();
+    std::optional<Backdrop> back;
+    for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
+        if (backdrops.has(entity) && isShown(entity) && _scenes.sceneOf(entity) == scene &&
+            (!back || backdrops.get(entity).order < back->order)) {
+            back = backdrops.get(entity);
+        }
+    }
+    return back;
+}
+
 float SceneRenderer::getScrollOffset(ecs::entity_t entity)
 {
     auto &scrolls = _ecs.cache<Scroll>();

@@ -64,6 +64,11 @@ struct FieldOfView {
 /// The point moved by the matrix.
 [[nodiscard]] Vector3 transformPoint(const Matrix &matrix, Vector3 point);
 
+/// The pose kept level: its position, and of its orientation only its heading, the turn around the vertical
+/// (y), without its pitch nor its roll. Where a recentre puts the origin of the space: at the head of the
+/// player, facing where they look, level whatever the tilt of their head.
+[[nodiscard]] Pose levelled(const Pose &pose);
+
 /// The OpenGL projection of a field of view: depth from -1 at `nearest` to 1 at `farthest`, both in metres.
 [[nodiscard]] Matrix projection(const FieldOfView &fieldOfView, float nearest, float farthest);
 
