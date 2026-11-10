@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -255,6 +256,44 @@ Camera3D cameraOf(const EyeView &eye)
     return {position, Vector3Subtract(position, back), up, 90.0f, CAMERA_PERSPECTIVE};
 }
 
+// Loads the matrices of an eye, or of anything seen by it, as BeginMode3D() does for a camera: ended by
+// EndMode3D(), which takes the projection back
+void loadMatrices(const Matrix &projection, const Matrix &view)
+{
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPushMatrix();
+    rlLoadIdentity();
+    rlMultMatrixf(projection.values.data());
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
+    rlMultMatrixf(view.values.data());
+    rlEnableDepthTest();
+}
+
+// Writes the depth of the frame around the board (boardFrame()), and no colour: what is behind it, around the
+// board, is hidden. In the matrices of the space of the eye.
+void drawBoardFrame(const std::array<Vector3, 8> &frame)
+{
+    rlDrawRenderBatchActive();
+    rlDisableBackfaceCulling();
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    rlColorMask(false, false, false, false);
+    rlBegin(RL_QUADS);
+    rlColor4ub(255, 255, 255, 255);
+    for (std::size_t side = 0; side < 4; ++side) {
+        const std::size_t next = (side + 1) % 4;
+        for (const std::size_t corner : {side, next, next + 4, side + 4}) {
+            rlVertex3f(frame[corner].x, frame[corner].y, frame[corner].z);
+        }
+    }
+    rlEnd();
+    rlDrawRenderBatchActive();
+    rlColorMask(true, true, true, true);
+    rlEnableBackfaceCulling();
+}
+
 // Starts a 2D pass in pixels over the framebuffer bound, of the given size: as BeginTextureMode() does for a
 // render texture, for a framebuffer raylib did not create (the image of an eye of the headset)
 void beginPixels(int width, int height)
@@ -378,7 +417,14 @@ struct Renderer::Impl {
     /// A model drawn in the frame that shines, to draw again in its glow (drawGlow()): an energy model, or a
     /// lit model with an emission map
     struct GlowDraw {
+        /// Seen by an eye on the board: its projection, and the view of the world of the camera from it
+        struct EyeMatrices {
+            Matrix projection;
+            Matrix view;
+        };
+
         ModelId model;
+        /// The camera, or the eye on the board in the world of the camera: where the model is seen from
         Camera3D camera;
         std::optional<Energy> energy;
         ::Vector3 position;
@@ -389,6 +435,8 @@ struct Renderer::Impl {
         ::Color tint;
         std::optional<detail::Model::Pose> pose;
         std::vector<int> hiddenMeshes;
+        /// Set on a board: seen by these matrices instead of the camera
+        std::optional<EyeMatrices> eye = std::nullopt;
     };
 
     const core::ResourceCache<detail::Texture, TextureId> &textures;
@@ -402,6 +450,15 @@ struct Renderer::Impl {
         detail::ViewPoint viewPoint;
         /// The framebuffer bound before, where the eye is copied at its end: the image the headset shows
         unsigned int framebuffer = 0;
+    };
+    /// The board in relief being drawn in the eye (Renderer::beginBoard())
+    struct BoardPass {
+        BoardView view;
+        /// From game units to the space of the eye: on the board, and in front of the models
+        Matrix plane;
+        Matrix overlay;
+        /// After drawGlow(): the 2D drawings are in front of the models
+        bool raised = false;
     };
 
     Vector2 gameSize;
@@ -417,6 +474,7 @@ struct Renderer::Impl {
     /// The image of the current or last frame, none for the window
     std::optional<ImageId> frameImage;
     std::optional<EyePass> eye;
+    std::optional<BoardPass> board;
     PassOrder passes;
     detail::AntialiasPass antialiasPass;
     detail::FilterShader filterShader;
@@ -441,6 +499,9 @@ struct Renderer::Impl {
 
     [[nodiscard]] Rectangle getVisibleArea() const
     {
+        if (board) {
+            return board->view.area;
+        }
         if (frameImage) {
             return frameArea;
         }
@@ -525,7 +586,11 @@ struct Renderer::Impl {
         if (draw.pose) {
             drawn.applyPose(*draw.pose);
         }
-        BeginMode3D(draw.camera);
+        if (draw.eye) {
+            loadMatrices(draw.eye->projection, draw.eye->view);
+        } else {
+            BeginMode3D(draw.camera);
+        }
         if (draw.energy) {
             energyShader.draw(drawn.get(), *draw.energy, textures.get(draw.energy->noise).get(),
                               draw.camera.position, draw.position, draw.rotationAxis, draw.rotationAngle,
@@ -539,17 +604,122 @@ struct Renderer::Impl {
     }
 
     /// Draws a model of energy with its halo, in the 3D mode of `view`
+    /// @param haloShown Whether the halo is drawn around its centre, in the world; always without it
     void drawEnergy(ModelId model, const Camera3D &view, const Energy &energy, ::Vector3 origin,
-                    ::Vector3 axis, float rotationAngle, float scale, Color tint, float spinAngle)
+                    ::Vector3 axis, float rotationAngle, float scale, Color tint, float spinAngle,
+                    const std::function<bool(::Vector3)> &haloShown = {})
     {
         energyShader.draw(models.get(model).get(), energy, textures.get(energy.noise).get(), view.position,
                           origin, axis, rotationAngle, spinAngle, scale, toRaylib(tint));
         if (energy.halo) {
             const ::Vector3 centre =
                 placePoint(energy.halo->centre, origin, axis, rotationAngle, spinAngle, scale);
+            if (haloShown && !haloShown(centre)) {
+                return;
+            }
             drawHalo(view, textures.get(energy.halo->texture).get(), *energy.halo, centre, scale,
                      static_cast<float>(tint.a) / 255.0f);
         }
+    }
+
+    /// Enters the view of the eye, in the image it is drawn into, bound: as BeginMode3D(), with its matrices
+    void enterEye() const { loadMatrices(eye->view.projection, eye->view.view); }
+
+    /// Seen by the eye, what is drawn next is moved by `world` first: flushes what was drawn before, which
+    /// rlgl draws with the matrices of the moment
+    void seeOnBoard(const Matrix &world) const
+    {
+        rlDrawRenderBatchActive();
+        rlMatrixMode(RL_MODELVIEW);
+        rlLoadIdentity();
+        rlMultMatrixf(eye->view.view.values.data());
+        rlMultMatrixf(world.values.data());
+    }
+
+    /// Back to the 2D drawings of the board: on its plane, or in front of the models after the glow. They are
+    /// hidden by the models in front of them and by the frame around the board, write no depth, and are seen
+    /// from both sides: the game turns y around.
+    void drawOnPlane() const
+    {
+        seeOnBoard(board->raised ? board->overlay : board->plane);
+        rlEnableDepthTest();
+        rlDisableDepthMask();
+        rlDisableBackfaceCulling();
+    }
+
+    /// Ready for a 3D model on the board, seen through its camera: what moves it from the world of the camera
+    /// onto the board, and the eye seen from that world, as a camera, for its light and its halo
+    struct OnBoard {
+        Matrix world;
+        Camera3D seen;
+    };
+    [[nodiscard]] OnBoard placeOnBoard(const Camera &camera) const
+    {
+        const Matrix world = boardWorld(board->view, camera);
+        const Matrix back = invert(world);
+        const Matrix &view = eye->view.view;
+        const Vector3 position = eye->view.position;
+        const Vector3 ahead{-view.at(2, 0), -view.at(2, 1), -view.at(2, 2)};
+        const Vector3 up{view.at(1, 0), view.at(1, 1), view.at(1, 2)};
+        const Vector3 from = transformPoint(back, position);
+        const Vector3 to =
+            transformPoint(back, {position.x + ahead.x, position.y + ahead.y, position.z + ahead.z});
+        const Vector3 top = transformPoint(back, {position.x + up.x, position.y + up.y, position.z + up.z});
+        seeOnBoard(world);
+        rlEnableDepthTest();
+        rlEnableDepthMask();
+        rlEnableBackfaceCulling();
+        return {.world = world,
+                .seen = {toRaylib(from), toRaylib(to), Vector3Subtract(toRaylib(top), toRaylib(from)), 90.0f,
+                         CAMERA_PERSPECTIVE}};
+    }
+
+    /// The matrices a model on the board is seen by in the glow
+    [[nodiscard]] GlowDraw::EyeMatrices glowMatrices(const Matrix &world) const
+    {
+        return {.projection = eye->view.projection, .view = multiply(eye->view.view, world)};
+    }
+
+    /// Makes the shining models of the board glow over the eye, then raises the 2D drawings in front of them
+    void drawGlowOnBoard()
+    {
+        rlDrawRenderBatchActive();
+        if (!glowQueue.empty()) {
+            RenderTarget &image = *eyes[static_cast<std::size_t>(eye->index)];
+            const Vector2 resolution = image.resolution();
+            // Out of the eye, keeping what its image holds: the glow has images of its own
+            EndMode3D();
+            EndTextureMode();
+            const std::array<Vector3, 8> frame =
+                boardFrame(board->view, eye->view.position, BoardFrameNearness);
+            const Texture2D *glow = glowPass.render(toRaylib(resolution), [&] {
+                // Nothing glows beyond the board either
+                enterEye();
+                drawBoardFrame(frame);
+                EndMode3D();
+                for (const bool energy : {false, true}) {
+                    for (const GlowDraw &draw : glowQueue) {
+                        if (draw.energy.has_value() == energy) {
+                            drawInGlow(draw);
+                        }
+                    }
+                }
+            });
+            glowQueue.clear();
+            BeginTextureMode(image.get());
+            if (glow != nullptr) {
+                rlDisableDepthTest();
+                BeginBlendMode(BLEND_ADDITIVE);
+                const auto width = static_cast<float>(glow->width);
+                const auto height = static_cast<float>(glow->height);
+                DrawTexturePro(*glow, {0.0f, 0.0f, width, -height}, {0.0f, 0.0f, resolution.x, resolution.y},
+                               {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
+                EndBlendMode();
+            }
+            enterEye();
+        }
+        board->raised = true;
+        drawOnPlane();
     }
 
     /// Makes the visible area of the game cover the target of the frame: positions and sizes stay in game
@@ -738,14 +908,49 @@ void Renderer::beginEye(int eye, const EyeView &view, Color background)
     BeginTextureMode(image.get());
     ClearBackground(toRaylib(background));
     // As BeginMode3D(), with the matrices of the eye instead of those of a camera
+    _impl->enterEye();
+}
+
+void Renderer::beginBoard(const BoardView &board)
+{
+    _impl->passes.beginBoard();
+    _impl->board = Impl::BoardPass{.view = board,
+                                   .plane = boardPlane(board),
+                                   .overlay = boardPlane(board, board.overlay),
+                                   .raised = false};
+    _impl->glowQueue.clear();
+    // In the space of the eye, before anything of the board: what goes beyond it is hidden from the start
+    drawBoardFrame(boardFrame(board, _impl->eye->view.position, BoardFrameNearness));
+    _impl->drawOnPlane();
+}
+
+void Renderer::endBoard()
+{
+    _impl->passes.endBoard();
+    const BoardView board = _impl->board->view;
+    _impl->board.reset();
+    // A glow not drawn is not drawn in the next board
+    _impl->glowQueue.clear();
+    _impl->seeOnBoard({});
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
+    const float brightness = std::clamp(board.brightness, 0.0f, 1.0f);
+    if (brightness >= 1.0f) {
+        return;
+    }
+    // A veil over the board, over what comes out of it too: the frame cut it to the edges of the board
+    rlDisableDepthTest();
+    rlDisableBackfaceCulling();
+    rlBegin(RL_QUADS);
+    rlColor4ub(0, 0, 0, static_cast<unsigned char>(std::lround((1.0f - brightness) * 255.0f)));
+    for (const Vector2 corner :
+         {Vector2{-0.5f, 0.5f}, Vector2{-0.5f, -0.5f}, Vector2{0.5f, -0.5f}, Vector2{0.5f, 0.5f}}) {
+        const Vector3 at = transformPoint(board.transform, {corner.x, corner.y, 0.0f});
+        rlVertex3f(at.x, at.y, at.z);
+    }
+    rlEnd();
     rlDrawRenderBatchActive();
-    rlMatrixMode(RL_PROJECTION);
-    rlPushMatrix();
-    rlLoadIdentity();
-    rlMultMatrixf(view.projection.values.data());
-    rlMatrixMode(RL_MODELVIEW);
-    rlLoadIdentity();
-    rlMultMatrixf(view.view.values.data());
+    rlEnableBackfaceCulling();
     rlEnableDepthTest();
 }
 
@@ -1149,6 +1354,24 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
                          const std::vector<int> &hiddenMeshes)
 {
     _impl->requireFrame();
+    if (_impl->passes.onBoard()) {
+        if (camera.projection != Projection::Orthographic) {
+            return;
+        }
+        const Impl::OnBoard placed = _impl->placeOnBoard(camera);
+        const detail::Model &shown = _impl->models.get(model);
+        _impl->lightingShader.draw(shown.get(), light, detail::viewPointOf(placed.seen), toRaylib(position),
+                                   toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint),
+                                   hiddenMeshes);
+        if (detail::LightingShader::hasEmission(shown.get())) {
+            _impl->glowQueue.push_back({model, placed.seen, std::nullopt, toRaylib(position),
+                                        toRaylib(rotationAxis), rotationAngle, scale, spinAngle,
+                                        fade(tint, emissionBloom), shown.getPose(), hiddenMeshes,
+                                        _impl->glowMatrices(placed.world)});
+        }
+        _impl->drawOnPlane();
+        return;
+    }
     const Camera3D view = toRaylib(camera);
     const detail::Model &drawn = _impl->models.get(model);
     BeginMode3D(view);
@@ -1170,6 +1393,38 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
                                float spinAngle)
 {
     _impl->requireFrame();
+    if (_impl->passes.onBoard()) {
+        if (camera.projection != Projection::Orthographic) {
+            return;
+        }
+        const Impl::OnBoard placed = _impl->placeOnBoard(camera);
+        const BoardView &board = _impl->board->view;
+        // The halo is drawn over everything, the frame around the board too: only while it is over the board
+        const auto overBoard = [&](::Vector3 centre) {
+            const Vector2 at =
+                boardToGame(board, transformPoint(placed.world, {centre.x, centre.y, centre.z}));
+            return at.x >= board.area.x && at.x <= board.area.x + board.area.width && at.y >= board.area.y &&
+                   at.y <= board.area.y + board.area.height;
+        };
+        _impl->drawEnergy(model, placed.seen, energy, toRaylib(position), toRaylib(rotationAxis),
+                          rotationAngle, scale, tint, spinAngle, overBoard);
+        if (energy.bloom > 0.0f) {
+            _impl->glowQueue.push_back({model,
+                                        placed.seen,
+                                        energy,
+                                        toRaylib(position),
+                                        toRaylib(rotationAxis),
+                                        rotationAngle,
+                                        scale,
+                                        spinAngle,
+                                        fade(tint, energy.bloom),
+                                        _impl->models.get(model).getPose(),
+                                        {},
+                                        _impl->glowMatrices(placed.world)});
+        }
+        _impl->drawOnPlane();
+        return;
+    }
     const Camera3D view = toRaylib(camera);
     const ::Vector3 origin = toRaylib(position);
     const ::Vector3 axis = toRaylib(rotationAxis);
@@ -1229,6 +1484,10 @@ void Renderer::drawEnergyModel(ModelId model, const Energy &energy, Vector3 posi
 void Renderer::drawGlow()
 {
     _impl->requireFrame();
+    if (_impl->passes.onBoard()) {
+        _impl->drawGlowOnBoard();
+        return;
+    }
     const Vector2 resolution = _impl->frame->resolution();
     // The smoothing, the glow and the vignette are drawn in pixels of the frame, the first two in images of
     // their own: leave the game view and the frame, then come back to them, keeping what the frame holds

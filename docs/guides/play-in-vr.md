@@ -5,10 +5,10 @@ Start the game in a VR headset, on Linux or on Windows. How VR works in the clie
 
 !!! warning "In progress"
 
-    For now you sit in the cockpit during a game, the game on a flat board outside its canopy, your ship, the
-    wave, the other pilots and a radar on the screens of the cockpit, and the menus on a holographic panel in
-    front of you. You play with the controllers, which point at the panel and vibrate, or with the keyboard or
-    a gamepad. The board in relief and a VR page in the settings come next.
+    For now you sit in the cockpit during a game, the game on a board in relief outside its canopy, your ship,
+    the wave, the other pilots and a radar on the screens of the cockpit, and the menus on a holographic panel
+    in front of you. You play with the controllers, which point at the panel and vibrate, or with the keyboard
+    or a gamepad. A VR page in the settings comes next.
 
 ## What you need
 
@@ -46,6 +46,14 @@ on, its default on Linux and Windows.
    will play before putting the headset on. If you are not in the seat, or the board is not ahead of you,
    hold the **right thumbstick** pushed in for a second, or press **`F9`**, to recentre, looking ahead; recentring with the runtime works too (hold the Meta button on a
    Quest, or the recentre of the SteamVR menu). The cockpit appears a moment after the board, once loaded.
+   During a game, the ships, the shots and the bosses come out of the board, as a hologram on a table; the
+   planet of the main menu and the hangar stay flat on it.
+
+    !!! tip "A flat board"
+
+        If the game does not keep the pace of the headset, or if you prefer it, add `vr.flatBoard=true` to the
+        settings file: the game is then drawn once per frame on a flat board, as on a screen, instead of once
+        per eye in relief.
 
 ## The controllers
 

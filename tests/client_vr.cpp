@@ -5,14 +5,17 @@
 #include "Vr/VrView.hpp"
 #include "helpers/FakeHeadset.hpp"
 #include "rtype/engine/Settings/Settings.hpp"
+#include "rtype/render/Board.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -92,6 +95,16 @@ TEST_CASE("VR is wanted with --xr or with the setting", "[client][vr]")
     REQUIRE(rtype::client::wantsVr(without, settings));
     settings.setBool(rtype::client::VrSettingsKey, false);
     REQUIRE_FALSE(rtype::client::wantsVr({}, settings));
+}
+
+TEST_CASE("The board is in relief unless the flat board is chosen", "[client][vr]")
+{
+    rtype::engine::Settings settings;
+    REQUIRE(rtype::client::wantsReliefBoard(settings));
+    settings.setBool(rtype::client::VrFlatBoardKey, true);
+    REQUIRE_FALSE(rtype::client::wantsReliefBoard(settings));
+    settings.setBool(rtype::client::VrFlatBoardKey, false);
+    REQUIRE(rtype::client::wantsReliefBoard(settings));
 }
 
 TEST_CASE("Without a headset the client stays on the screen", "[client][vr]")
@@ -301,6 +314,74 @@ TEST_CASE("The board is outside the canopy, near it", "[client][vr]")
         REQUIRE(corner.z < nose.z);
         // Near enough to be felt close: not much farther than the canopy
         REQUIRE(corner.z > nose.z - 1.0f);
+    }
+}
+
+TEST_CASE("Only the world of the game, a plane, is laid on the board in relief", "[client][vr]")
+{
+    rtype::render::Camera game;
+    game.projection = rtype::render::Projection::Orthographic;
+    rtype::render::Camera hangar;
+    hangar.projection = rtype::render::Projection::Perspective;
+
+    REQUIRE(rtype::client::canDrawInRelief(game));
+    REQUIRE_FALSE(rtype::client::canDrawInRelief(hangar));
+    // No camera, no model: the 2D of the world is on the plane already
+    REQUIRE(rtype::client::canDrawInRelief(std::nullopt));
+}
+
+TEST_CASE("The board in relief shows the game where the flat board does", "[client][vr]")
+{
+    const rtype::client::VrLayout layout;
+    const rtype::render::Vector2 game{1920.0f, 1080.0f};
+    const rtype::render::BoardView board = rtype::client::boardView(layout, game, 0.4f);
+    const auto corners = rtype::client::boardCorners(layout, game);
+
+    REQUIRE(board.transform.values == rtype::client::boardTransform(layout, game).values);
+    REQUIRE(close(board.brightness, 0.4f));
+    // Each entity at the same place of the board in both ways of showing it
+    REQUIRE(samePoint(rtype::render::gameToBoard(board, {0.0f, 0.0f}), corners[0]));
+    REQUIRE(samePoint(rtype::render::gameToBoard(board, {1920.0f, 0.0f}), corners[1]));
+    REQUIRE(samePoint(rtype::render::gameToBoard(board, {1920.0f, 1080.0f}), corners[2]));
+    REQUIRE(samePoint(rtype::render::gameToBoard(board, {0.0f, 1080.0f}), corners[3]));
+    REQUIRE(close(rtype::client::boardView(layout, game, 1.5f).brightness, 1.0f));
+}
+
+TEST_CASE("In relief, the ships come out of the board and the damage floats over them, outside the canopy",
+          "[client][vr]")
+{
+    const rtype::client::VrLayout layout;
+    const rtype::render::BoardView board = rtype::client::boardView(layout, {1920.0f, 1080.0f}, 1.0f);
+    const rtype::render::Vector3 eyes{0.0f, 0.0f, 0.0f};
+    const rtype::render::Vector3 nose = rtype::client::cockpitToHeadset(rtype::client::CockpitDashboardTop[0],
+                                                                        rtype::client::CockpitEyePoint);
+
+    for (const rtype::render::Vector2 point :
+         {rtype::render::Vector2{960.0f, 540.0f}, rtype::render::Vector2{0.0f, 1080.0f}}) {
+        const rtype::render::Vector3 plane = rtype::render::gameToBoard(board, point);
+        const rtype::render::Vector3 ship = rtype::render::gameToBoard(board, point, board.lift);
+        const rtype::render::Vector3 damage = rtype::render::gameToBoard(board, point, board.overlay);
+        REQUIRE(distance(eyes, ship) < distance(eyes, plane));
+        REQUIRE(distance(eyes, damage) < distance(eyes, ship));
+        // A few centimetres: felt, without leaving the board
+        REQUIRE(distance(plane, ship) > 0.03f);
+        REQUIRE(distance(plane, damage) < 0.2f);
+        REQUIRE(damage.z < nose.z);
+    }
+    // The frame that hides what goes beyond the board is nearer than what comes out of it, and farther than
+    // the nose of the canopy, the farthest part of the cockpit: it hides nothing of the cockpit
+    const auto frame = rtype::render::boardFrame(board, eyes, rtype::render::BoardFrameNearness);
+    for (std::size_t corner = 0; corner < 4; ++corner) {
+        const rtype::render::Vector3 &next = frame[(corner + 1) % 4];
+        const rtype::render::Vector3 middle{(frame[corner].x + next.x) / 2.0f,
+                                            (frame[corner].y + next.y) / 2.0f,
+                                            (frame[corner].z + next.z) / 2.0f};
+        for (const rtype::render::Vector3 edge : {frame[corner], middle}) {
+            const rtype::render::Vector2 at = rtype::render::boardToGame(board, edge);
+            const rtype::render::Vector3 damage = rtype::render::gameToBoard(board, at, board.overlay);
+            REQUIRE(distance(eyes, edge) < distance(eyes, damage));
+            REQUIRE(distance(eyes, edge) > distance(eyes, nose) + 0.1f);
+        }
     }
 }
 

@@ -770,6 +770,31 @@ TEST_CASE("The toasts do not open the panel", "[engine][vr]")
     CHECK_FALSE(renderer.hasContent(Surface::Board));
 }
 
+TEST_CASE("The camera of the scenes shown is the one the board in relief lays their world with",
+          "[engine][vr]")
+{
+    World world;
+    SceneRenderer renderer(world.ecs, world.scenes, world.style);
+    CHECK_FALSE(renderer.camera().has_value());
+
+    const SceneId scene = world.scenes.open();
+    const entity_t camera = world.ecs.createEntity();
+    world.ecs.addComponent<SceneMember>(camera, scene);
+    rtype::render::Camera view;
+    view.fieldOfView = 1080.0f;
+    view.projection = rtype::render::Projection::Orthographic;
+    world.ecs.addComponent<Camera>(camera, view);
+    world.update();
+    REQUIRE(renderer.camera().has_value());
+    CHECK(renderer.camera()->projection == rtype::render::Projection::Orthographic);
+    CHECK(renderer.camera()->fieldOfView == 1080.0f);
+
+    // Gone with its scene
+    world.scenes.close(scene);
+    world.update();
+    CHECK_FALSE(renderer.camera().has_value());
+}
+
 TEST_CASE("The scene at the bottom changes when the scenes are switched, not when one opens over it",
           "[engine][scenes]")
 {

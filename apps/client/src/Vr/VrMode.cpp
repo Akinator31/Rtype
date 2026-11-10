@@ -25,6 +25,11 @@ bool wantsVr(std::span<const std::string_view> arguments, const engine::Settings
            settings.getBool(VrSettingsKey).value_or(false);
 }
 
+bool wantsReliefBoard(const engine::Settings &settings)
+{
+    return !settings.getBool(VrFlatBoardKey).value_or(false);
+}
+
 VrMode::VrMode(VrHooks hooks) : _hooks(std::move(hooks)) {}
 
 bool VrMode::start()

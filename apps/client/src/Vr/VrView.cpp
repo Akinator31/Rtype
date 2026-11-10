@@ -26,8 +26,9 @@ render::EyeView toRenderEye(const xr::EyeView &eye)
     return view;
 }
 
-VrView::VrView(render::Renderer &renderer, render::ResourceManager &resources, VrLayout layout)
-    : _renderer(renderer), _resources(resources), _layout(layout)
+VrView::VrView(render::Renderer &renderer, render::ResourceManager &resources,
+               std::function<void()> drawWorld, VrLayout layout)
+    : _renderer(renderer), _resources(resources), _drawWorld(std::move(drawWorld)), _layout(layout)
 {
 }
 
@@ -159,10 +160,7 @@ void VrView::drawFrames(const std::function<void(engine::Surface)> &draw)
             _renderer.endFrame();
         }
     }
-    if (_fade.holding()) {
-        return;
-    }
-    if (_openness > 0.0f) {
+    if (!_fade.holding() && _openness > 0.0f) {
         const render::Vector2 gameSize = _renderer.gameSize();
         const render::Rectangle area{0.0f, 0.0f, gameSize.x, gameSize.y};
         _renderer.beginFrame(panel(), area, _scene.playing ? PanelBackground : PanelGlass);
@@ -174,7 +172,20 @@ void VrView::drawFrames(const std::function<void(engine::Surface)> &draw)
         }
         _renderer.endFrame();
     }
-    _renderer.beginFrame(board());
+    // An image drawn for the other way of showing the board would be shown wrong: drawn again, fade or not
+    if (_fade.holding() && _board && _boardRelief == _scene.relief) {
+        return;
+    }
+    _boardRelief = _scene.relief;
+    if (_boardRelief) {
+        // The world is laid on the board for each eye: the image holds what of the interface is over it
+        _renderer.beginFrame(board(), render::colors::Transparent);
+    } else {
+        _renderer.beginFrame(board());
+        if (_drawWorld) {
+            _drawWorld();
+        }
+    }
     draw(engine::Surface::Board);
     _renderer.endFrame();
 }
@@ -228,8 +239,20 @@ void VrView::drawEye(int eye, const xr::EyeView &view, std::span<const HandLook>
                                                 static_cast<unsigned char>(tint.b * fade.b / 255), tint.a});
     }
     if (_board) {
-        _renderer.drawImageQuad(*_board, boardTransform(_layout, _renderer.gameSize()),
-                                {.tint = grey(boardBrightness(_openness, brightness, _scene.playing))});
+        const render::Vector2 gameSize = _renderer.gameSize();
+        const float shown = boardBrightness(_openness, brightness, _scene.playing);
+        if (_boardRelief) {
+            // The world for this eye, then over it, whatever its depth, what of the interface is on the board
+            _renderer.beginBoard(boardView(_layout, gameSize, shown));
+            if (_drawWorld) {
+                _drawWorld();
+            }
+            _renderer.endBoard();
+            _renderer.drawImageQuad(*_board, boardTransform(_layout, gameSize),
+                                    {.tint = grey(shown), .onTop = true});
+        } else {
+            _renderer.drawImageQuad(*_board, boardTransform(_layout, gameSize), {.tint = grey(shown)});
+        }
     }
     // In the menus, the board floats alone in the sky: the player sits in the cockpit for a game
     if (_cockpit && _scene.playing) {

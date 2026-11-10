@@ -182,9 +182,15 @@ void run(const std::vector<std::string_view> &arguments)
     bool assetsLoaded = false;
     // The game in a VR headset, with --xr or the VR setting: opened on the OpenGL context of the window, and
     // closed before it. Without a headset, the game stays on the screen and says so once in the main menu.
-    // While the headset shows the game, the frame is drawn into the board, which each eye shows from the
-    // cockpit during a game, and the window shows the left eye
-    rtype::client::VrView vrView(renderer, resources);
+    // While the headset shows the game, the world of the game is laid on the board in relief for each eye, or
+    // drawn once into the image of the board while it is flat; the window shows the left eye
+    const bool reliefBoard = rtype::client::wantsReliefBoard(engine.getSettings());
+    rtype::client::VrView vrView(renderer, resources, [&] {
+        sceneRenderer.draw(renderer, rtype::engine::Layer::World);
+        if (debugViews.hitboxes) {
+            colliderDebugRenderer.draw(renderer);
+        }
+    });
     // The controllers: a gamepad, a pointer at the panel, drawn in the hands; and they vibrate with the game
     rtype::client::VrControllers controllers;
     rtype::client::VrHaptics haptics;
@@ -260,15 +266,10 @@ void run(const std::vector<std::string_view> &arguments)
                            .sky = sceneRenderer.sky(),
                            .playing = sessions.running(),
                            .panel = sceneRenderer.hasContent(rtype::engine::Surface::Panel),
-                           .scenes = engine.getScenes().bottom()});
+                           .scenes = engine.getScenes().bottom(),
+                           .relief = reliefBoard && rtype::client::canDrawInRelief(sceneRenderer.camera())});
             sceneRenderer.setToastSurface(vrView.toastSurface());
             vrView.drawFrames([&](rtype::engine::Surface surface) {
-                if (surface == rtype::engine::Surface::Board) {
-                    sceneRenderer.draw(renderer, rtype::engine::Layer::World);
-                    if (debugViews.hitboxes) {
-                        colliderDebugRenderer.draw(renderer);
-                    }
-                }
                 sceneRenderer.draw(renderer, surface);
                 if (surface == rtype::engine::Surface::Board && debugViews.fps) {
                     rtype::client::drawFpsCounter(renderer);

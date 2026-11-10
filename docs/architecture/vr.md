@@ -6,10 +6,11 @@ the server, the protocol and the replays do not know whether a player is in a he
 
 !!! warning "In progress"
 
-    The player sits in the cockpit, the sky of the scene around them, and the game is on a flat board outside
-    the canopy; the HUD is on the screens of the cockpit and the menus on a holographic panel; the window shows
-    the left eye. The game is played with the controllers, a keyboard or a gamepad; the controllers point at the
-    panel and vibrate. The board is still flat: see [Next steps](#next-steps).
+    The player sits in the cockpit, the sky of the scene around them, and the game is on a board in relief
+    outside the canopy, the ships, the shots and the bosses coming out of it; the HUD is on the screens of the
+    cockpit and the menus on a holographic panel; the window shows the left eye. The game is played with the
+    controllers, a keyboard or a gamepad; the controllers point at the panel and vibrate. The VR page of the
+    settings comes next: see [Next steps](#next-steps).
 
 How to start the game in a headset: [Play in VR](../guides/play-in-vr.md).
 
@@ -170,11 +171,13 @@ While the headset shows the game (`VrMode::isShowing()`), a frame of the client 
 1. into the **surfaces** of the interface, each an image of its own (`VrView::drawFrames()`,
    [The interface in the cockpit](#the-interface-in-the-cockpit)): during a game, the screens of the cockpit;
    the panel while it is unfolded; the **board** last, an image of 2560 × 1440 (`Renderer::beginFrame(ImageId)`):
-   the World layer and what of the interface is on the board, glow and smoothing, without the vignette;
+   what of the interface is on the board, and while the board is flat the World layer under it, glow and
+   smoothing, without the vignette;
 2. into **each eye**, through `VrHooks::drawEye`: `VrView::drawEye()` starts the eye in the renderer with the view
    and the projection of the headset (`Renderer::beginEye()`), draws the scene of the headset
-   ([The cockpit](#the-cockpit)), and ends the eye (`endEye()`), which copies it into the image of the headset
-   through the colour filter;
+   ([The cockpit](#the-cockpit)), the World layer laid on the board in relief for this eye
+   ([The board in relief](#the-board-in-relief)), and ends the eye (`endEye()`), which copies it into the image
+   of the headset through the colour filter;
 3. into the **window**: the left eye, cropped to the shape of the window (`Renderer::showMirror()`), so that the
    people around see what the player sees. `F11`, the size of the window and its screen still work.
 
@@ -236,7 +239,7 @@ Each eye is drawn in this order:
 | # | What | How |
 | - | ---- | --- |
 | 1 | The sky | `drawSky()`, without depth: everything else is in front of it. |
-| 2 | The board | `drawImageQuad()` with the image of the frame. |
+| 2 | The board | In relief: `beginBoard()`, the World layer, `endBoard()`, then the image of the board over it, on top (what of the interface is on the board). Flat: `drawImageQuad()` with the image of the frame. |
 | 3 | The opaque cockpit | `drawModel()`, without its transparent meshes: it hides the parts of the board behind it. |
 | 4 | The transparent meshes | `drawTransparentModel()`, one at a time from the farthest from the eye point (`farToNear()`): the hologram, then the canopy. They write no depth, so the board stays sharp through them. |
 | 5 | The panel, while unfolded | `drawImageQuad()` curved and on top (`ImageQuadLook::onTop`): nothing of the cockpit hides the menus. |
@@ -245,6 +248,62 @@ The screens of the cockpit are not drawn apart: they are meshes of the model, wh
 as the emission maps of their materials.
 
 The meshes are found by their names (`ResourceManager::getModelMeshes()`), not by their index in the file.
+
+### The board in relief
+
+The World layer of the game is drawn for each eye, in 3D, on the board, instead of once into its image: the
+ships, the shots and the bosses have a real depth, as a hologram on a table. `VrView` lays it there
+(`VrScene::relief`) when two things are true:
+
+- the player did not choose the **flat board** (`vr.flatBoard=true` in the [settings](settings.md) file, written
+  by hand until the VR page of the settings: `wantsReliefBoard()`), for a weaker computer or by taste;
+- the world of the scene has a plane to lay on the board (`canDrawInRelief(SceneRenderer::camera())`): the game,
+  seen through an orthographic camera (`computeGameView()`), or a scene without a camera. The planet of the
+  main menu and the hangar are seen through a perspective camera: their world stays flat, in the image of the
+  board.
+
+Between `Renderer::beginBoard(BoardView)` and `endBoard()`, inside an eye, the drawings of a frame draw in 3D on
+the board (`Pass::Board`): `SceneRenderer::draw(renderer, Layer::World)` draws the world unchanged. The maths are
+in `rtype/render/Board.hpp`, pure functions:
+
+| Function | Moves |
+| -------- | ----- |
+| `boardPlane(board, height)` | The 2D drawings, in game units: the area of the board (`BoardView::area`, the game) stretched on the rectangle of the board (`boardTransform()`), y down in the game and up on the board, `height` game units in front of it. About 1.4 mm for a game unit, on a board 2.7 m wide. |
+| `boardWorld(board, camera)` | The 3D models, in the world of an orthographic camera: what the camera sees is stretched on the board, the depth in the same scale as the width, its plane (through its target) `BoardView::lift` in front of the board. The camera of the game at rest puts a model where its box would be; the camera of the rescue, which pushes in, turns and shakes, moves the models on the board, never the board: the camera of the player still never moves. |
+| `gameToBoard()`, `boardToGame()` | A point of the game to the board, and back along its normal. |
+| `boardFrame(board, eye, nearness)` | The frame that hides what goes beyond the board. |
+
+| Height | Game units | About | What |
+| ------ | ---------- | ----- | ---- |
+| On the board | 0 | 0 | The sky of the game (`Backdrop`, `BackdropSprite`), the 2D drawn before the glow. |
+| `VrLayout::reliefLift` | 40 | 6 cm | The plane of the models: they come out of the board rather than sink into it. |
+| `VrLayout::reliefOverlay` | 80 | 11 cm | The 2D drawn after `drawGlow()`: the damage, the bars of life, the impacts, the voice badges, float over the models, as they are drawn over them on the screen. |
+
+A model is lit in the world of its camera, by the light of the scene: the eye is moved into that world (the
+inverse of `boardWorld()`), so that the light, the highlights and the halos are those of the screen. Things to
+know:
+
+- **Nothing is seen beyond the board.** The entities come in from the right of the game and go out on its left,
+  beyond the area of the board. `beginBoard()` writes the depth of a frame around the board, and no colour: its
+  inner edge is on the edge of the board as the eye sees it, every point pulled towards the eye on its line of
+  sight to 85 % of its distance (`BoardFrameNearness`). What is drawn behind it, around the board, fails the
+  depth test. The frame is nearer than anything that comes out of the board, and farther than the nose of the
+  canopy, the farthest part of the cockpit, which is drawn over it. The halos of the shots are drawn over
+  everything: only while their centre is over the board.
+- **The glow per eye.** `drawGlow()` on a board makes the glow of the energy models and of the emission maps
+  for the eye, at a quarter of its resolution (about 500 × 525 on a Quest 3), with the frame around the board in
+  its depth too, and adds it over the eye. The edges of the models are not smoothed (no FXAA): the eye is
+  sharper than the image of the board. Its cost is to be measured in the headset, against the 11 ms of a frame;
+  if it does not hold, the flat board stays the choice for a weaker computer.
+- **Dimming.** `BoardView::brightness` darkens the board at `endBoard()`, by a veil over its rectangle: behind
+  the panel during a game, and with the fade between two scenes. The image of the board over it is dimmed by
+  its tint.
+- **The fade between two scenes** keeps the image of the board while the scene left fades out only if the board
+  is shown the same way after it, in relief or flat. The world in relief is drawn live: during the 0.1 s of the
+  fade out, it is the new scene that darkens.
+- **The interface on the board** (the curtain of the main menu, the prompt of the rescue, the toasts while the
+  panel is folded, the frames per second) is still drawn once into the image of the board, over a clear
+  background, then shown over the world in relief, whatever its depth.
 
 ### The interface in the cockpit
 
@@ -389,7 +448,8 @@ over the dashboard and just outside the canopy, where the cockpit is placed, the
 headset, and what an eye gives to the renderer; the area of each surface and the shape of the images of the
 screens, the open panel between the dashboard and the board, seen whole and curved, its unfolding from the
 hologram, the board dimmed behind it, and the fade between two scenes. `tests/engine.cpp` checks the anchors in
-the area of a surface, the content of a surface, the toasts that do not open the panel, and `Scenes::bottom()`;
+the area of a surface, the content of a surface, the toasts that do not open the panel, `Scenes::bottom()`, and
+the camera of the scenes shown (`SceneRenderer::camera()`);
 `tests/client_game.cpp` the HUD and the radar in the cockpit. `tests/client_vr_controllers.cpp` checks the ray of
 a controller, where it meets the curved panel in game units, the sides met before a flat panel would be, the rays
 that meet nothing, the virtual gamepad during a game, the pointer and its button on the panel, the triggers that
@@ -399,11 +459,15 @@ vibrations of the shots, the hits and a death; `tests/client_vr.cpp` the control
 the vibrations only while the headset shows the game; `tests/virtual_input.cpp` the virtual gamepad held with the
 real one and the pointer that replaces the mouse. `tests/xr_math.cpp` checks the matrices of the poses, the
 projections of asymmetric fields of view, and the pose a recentre keeps. In `libs/render`, `tests/render_passes.cpp` checks the order of the
-frames and the eyes, and `tests/viewport.cpp` the crop of the mirror.
+frames, the eyes and the boards in them, `tests/render_board.cpp` the board in relief (the game stretched on the
+board and back, the height in front of it in the metres of its width, a model of the camera at rest where its box
+would be, the models lifted, a camera that zooms moving the models and not the board, the frame around the board
+on the lines of sight of its edges), and `tests/viewport.cpp` the crop of the mirror. `tests/client_vr.cpp` also
+checks the flat board setting, which worlds are laid in relief, the board in relief showing the game where the
+flat board does, and the heights of the ships, of the damage and of the frame, between the board and the canopy.
 
 ## Next steps
 
 | Step | What it brings |
 | ---- | -------------- |
-| Board in relief | The world drawn in 3D for each eye on the plane of the board. |
 | Experience and settings | A VR page in the settings, a cockpit that reacts to the game, an arrival sequence. |

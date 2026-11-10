@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rtype/render/Board.hpp"
 #include "rtype/render/ColorFilter.hpp"
 #include "rtype/render/Energy.hpp"
 #include "rtype/render/ResourceManager.hpp"
@@ -76,7 +77,8 @@ public:
     [[nodiscard]] Vector2 gameSize() const;
     /// Part of the game shown in the window, in game units, for its current size: the game area, plus what is
     /// around it when the window has another shape. Its origin can be negative. When the last frame was drawn
-    /// into an image (beginFrame(ImageId)), the part shown in that image instead.
+    /// into an image (beginFrame(ImageId)), the part shown in that image instead; on a board (beginBoard()),
+    /// the area of the board.
     [[nodiscard]] Rectangle visibleArea() const;
 
     /// Converts a position in the window, such as the mouse pointer, into game units, taking the scaling
@@ -146,8 +148,30 @@ public:
     void beginEye(int eye, const EyeView &view, Color background = {5, 8, 20, 255});
     /// Ends the eye: copies its image through the colour filter and the dithering into the framebuffer that
     /// was bound when beginEye() was called, the image the headset shows, and keeps it for showMirror().
-    /// @throws std::logic_error if no eye is started.
+    /// @throws std::logic_error if no eye is started, or if its board is not ended.
     void endEye();
+
+    /// Starts laying the World layer on the board in relief, in the eye (beginEye()): between beginBoard()
+    /// and endBoard(), the drawings of a frame draw in 3D on the board, positions in game units, as a frame
+    /// would show them (docs/architecture/vr.md#the-board-in-relief). The 2D drawings are on the plane of the
+    /// board (BoardView::area stretched on it), the sky of the game first; the 3D models seen through an
+    /// orthographic camera keep their depth and come out of the board (boardWorld()); after drawGlow(), the
+    /// 2D drawings float in front of the models (BoardView::overlay). Nothing drawn beyond the edges of the
+    /// board is seen: a frame around it, invisible, hides it by its depth (boardFrame()).
+    /// @code
+    /// renderer.beginEye(0, eye);
+    /// renderer.drawSky(stars);
+    /// renderer.beginBoard({.transform = board, .area = {0.0f, 0.0f, 1920.0f, 1080.0f}, .lift = 40.0f,
+    ///                      .overlay = 80.0f});
+    /// sceneRenderer.draw(renderer, engine::Layer::World);
+    /// renderer.endBoard();
+    /// renderer.endEye();
+    /// @endcode
+    /// @throws std::logic_error if no eye is started, or if a board already is.
+    void beginBoard(const BoardView &board);
+    /// Ends the board, back to the eye: darkens it by BoardView::brightness.
+    /// @throws std::logic_error if no board is started.
+    void endBoard();
     /// Shows the left eye (eye 0) in the window, in place of a frame: the largest part of it of the shape of
     /// the window, in its middle (computeMirrorCrop()), so that the people around see what the player sees.
     /// Black until an eye is drawn. Call it once per frame of the game while it is in the headset, outside of
@@ -280,7 +304,10 @@ public:
     /// rotation around rotationAxis: a tilted ring keeps its tilt while it spins.
     /// @param hiddenMeshes Meshes not drawn, by index in the model file: the flame of a ship that does not
     /// fly.
-    /// @throws std::logic_error if no frame is started.
+    /// On a board (beginBoard()), the model is seen by the eye, laid on the board by the camera
+    /// (boardWorld()): a model seen through a perspective camera is not drawn there, its world has no plane
+    /// to lay on the board.
+    /// @throws std::logic_error if no frame nor board is started.
     void drawModel(ModelId model, const Camera &camera, const Light &light, Vector3 position,
                    Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
                    Color tint = colors::White, float spinAngle = 0.0f,
@@ -289,8 +316,9 @@ public:
     /// colour of its texture, added to what is behind it, white hot where it faces the camera, flickering
     /// with the noise of `energy`, with the halo of `energy` around it. It hides nothing: draw it after the
     /// models it may cover. Its light also spreads around it when drawGlow() is called.
-    /// The other parameters are those of drawModel().
-    /// @throws std::logic_error if no frame is started.
+    /// The other parameters are those of drawModel(), on a board too; there, its halo is drawn only while its
+    /// centre is over the board.
+    /// @throws std::logic_error if no frame nor board is started.
     void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
                          Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
                          float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
@@ -322,7 +350,10 @@ public:
     /// darkens the corners (setVignette()). Call it after the 3D models and
     /// before the interface, which it would otherwise cover. If the graphics card cannot blur, a warning is
     /// logged once and nothing glows.
-    /// @throws std::logic_error if no frame is started.
+    /// On a board (beginBoard()), the glow is made for the eye, at a quarter of its resolution, and added
+    /// over it; its edges are not smoothed, the eye is sharp enough. The 2D drawings after it float in front
+    /// of the models.
+    /// @throws std::logic_error if no frame nor board is started.
     void drawGlow();
 
     /// Poses an animated model at a time of one of its animations: the next draws of this model show this

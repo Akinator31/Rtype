@@ -506,6 +506,15 @@ std::optional<Backdrop> SceneRenderer::sky()
     return back;
 }
 
+std::optional<render::Camera> SceneRenderer::camera()
+{
+    const Camera *shown = findCamera();
+    if (shown == nullptr) {
+        return std::nullopt;
+    }
+    return shown->view;
+}
+
 float SceneRenderer::getScrollOffset(ecs::entity_t entity)
 {
     auto &scrolls = _ecs.cache<Scroll>();

@@ -100,8 +100,8 @@ flowchart TB
 *Each frame updates the ECS, then draws the world layer and the interface layer on top of it.*
 
 - Only the `Renderer` draws: the systems never call raylib.
-- The interface layer is always drawn after the world. In VR, the world layer is drawn on the board and the
-  interface layer on a floating panel.
+- The interface layer is always drawn after the world. In VR, the world layer is drawn on the board, in relief
+  for each eye, and the interface layer on a floating panel and the screens of the cockpit.
 - Phases of the game (home screen, game, pause menu) are **scenes**: groups of entities opened and closed
   together. See [Scenes and interface](scenes-and-interface.md).
 

@@ -197,7 +197,9 @@ Layers going faster the nearer they are make a parallax: the game scene scrolls 
 
 In a VR headset, the sky is also drawn around the cockpit: `SceneRenderer::sky()` gives the `Backdrop` at the
 back of it, and `SceneRenderer::light()` the light of the scene, which lights the cockpit
-([VR](vr.md#the-cockpit)).
+([VR](vr.md#the-cockpit)). `SceneRenderer::camera()` gives the camera of the scenes shown: only the world of an
+orthographic camera, the plane of the game, is laid on the board in relief
+([VR](vr.md#the-board-in-relief)).
 
 ## Animations
 
