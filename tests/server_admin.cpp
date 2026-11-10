@@ -302,9 +302,9 @@ TEST_CASE("Each action goes through the games and the lobby, and is recorded", "
     fixture.lobby.players = {adminPlayer(1, "Alice", "203.0.113.9", 7),
                              adminPlayer(2, "Bob", "198.51.100.4", 7),
                              adminPlayer(3, "Carol", "198.51.100.4"), adminPlayer(4, "Dave", "192.0.2.1")};
-    fixture.games.games = {adminGame(7, "Bydo hunters",
-                                     {{1, "Alice", false, std::nullopt}, {2, "Bob", false, std::nullopt}}),
-                           adminGame(8, "Solo", {})};
+    fixture.games.games = {
+        adminGame(7, "Bydo hunters", {{1, "Alice", false, std::nullopt}, {2, "Bob", false, std::nullopt}}),
+        adminGame(8, "Solo", {})};
     Administration &administration = *fixture.administration;
 
     // Removed: from its game, then from the lobby with KICKED
