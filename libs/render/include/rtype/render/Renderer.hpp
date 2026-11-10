@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rtype::render
@@ -17,6 +18,17 @@ class Window;
 /// Handle of an image the renderer draws a frame into instead of the window (Renderer::createImage()): the
 /// board of the game in a VR headset.
 using ImageId = core::Handle<struct ImageTag>;
+
+/// How Renderer::drawImageQuad() shows an image in 3D.
+struct ImageQuadLook {
+    /// Colour multiplied with the image: a darker one dims it.
+    Color tint = colors::White;
+    /// How far its left and right edges come towards the eye (+z), in units of its own space before the
+    /// transform: a pane curved around the eye. 0 for a flat one.
+    float bend = 0.0f;
+    /// Drawn over everything drawn before, whatever their depth: a panel that nothing in the cockpit hides.
+    bool onTop = false;
+};
 
 /// Draws the game: textures, text and shapes.
 ///
@@ -103,6 +115,12 @@ public:
     /// filter, which apply where the image is shown (endEye()). Positions stay in game units.
     /// @throws std::logic_error if a frame or an eye is already started.
     void beginFrame(ImageId image, Color background = colors::Black);
+    /// Starts a new frame drawn into an image, showing an area of the game instead of the visible area: a
+    /// surface of the interface in a VR headset (a screen of the cockpit, the panel), of its own size in game
+    /// units. The area is stretched to the image: give them the same shape.
+    /// @throws std::logic_error if a frame or an eye is already started.
+    /// @throws std::invalid_argument if the area is not strictly positive.
+    void beginFrame(ImageId image, Rectangle area, Color background);
     /// Ends the frame: shows it in the window, or leaves it in its image.
     /// @throws std::logic_error if no frame is started.
     void endFrame();
@@ -136,11 +154,16 @@ public:
     void showMirror();
 
     /// Draws an image in 3D: a rectangle from (-0.5, -0.5, 0) to (0.5, 0.5, 0), its top along +y, facing +z,
-    /// moved by `transform` (scale it to the size wanted). Seen from both sides. The board of the game in the
-    /// headset.
-    /// @param tint Colour multiplied with the image.
+    /// moved by `transform` (scale it to the size wanted), curved and drawn on top as `look` says. Seen from
+    /// both sides. The board of the game and the panel of the menus in the headset.
     /// @throws std::logic_error if no eye is started.
-    void drawImageQuad(ImageId image, const Matrix &transform, Color tint = colors::White);
+    void drawImageQuad(ImageId image, const Matrix &transform, const ImageQuadLook &look = {});
+
+    /// Shows an image of the renderer as the emission map of a material of a model, found by its name in the
+    /// file: the screens of a cockpit show the frames drawn into their images, in the frame, with the glow,
+    /// of the artist. The texture coordinates of the meshes of the material must cover the whole image.
+    /// @throws std::out_of_range if the model has no material by this name.
+    void setModelMaterialImage(ModelId model, std::string_view material, ImageId image);
 
     /// Draws the sky around the eye (beginEye()), at infinity: a picture of space wrapped on a sphere centred
     /// on the eye, so that it never comes nearer when the head moves. Draw it first: it hides nothing and
