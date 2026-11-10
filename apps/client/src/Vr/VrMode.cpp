@@ -75,9 +75,10 @@ void VrMode::update()
     }
     if (_headset->beginFrame()) {
         for (int eye = 0; eye < _headset->eyeCount(); ++eye) {
-            // The eyes show the background colour of the headset until the renderer draws in them
-            // (docs/architecture/vr.md#next-steps)
-            static_cast<void>(_headset->beginEye(eye));
+            const xr::EyeView view = _headset->beginEye(eye);
+            if (_hooks.drawEye) {
+                _hooks.drawEye(eye, view);
+            }
             _headset->endEye(eye);
         }
     }
