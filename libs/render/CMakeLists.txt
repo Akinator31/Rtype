@@ -1,5 +1,6 @@
 add_library(rtype_render
     src/AntialiasPass.cpp
+    src/Board.cpp
     src/ColorFilter.cpp
     src/EnergyShader.cpp
     src/FilterShader.cpp
