@@ -196,6 +196,10 @@ public:
     /// The picture at the back of the sky of the scenes shown: the Backdrop of the lowest order in the scene
     /// of the first shown Backdrop, or nothing without one. In VR, the sky drawn around the cockpit.
     [[nodiscard]] std::optional<Backdrop> sky();
+    /// The camera the 3D models of the scenes shown are seen through: the first shown Camera, or nothing
+    /// without one. In VR, only the world of an orthographic camera, the plane of the game, is laid on the
+    /// board in relief (render::Renderer::beginBoard()).
+    [[nodiscard]] std::optional<render::Camera> camera();
 };
 
 } // namespace rtype::engine
