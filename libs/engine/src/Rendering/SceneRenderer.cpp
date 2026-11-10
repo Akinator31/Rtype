@@ -1210,7 +1210,8 @@ void SceneRenderer::drawGauge(render::Renderer &renderer, const Gauge &gauge, re
     const float y = gauge.caption.empty() ? centre.y : style.getRailY(centre.y);
 
     if (!gauge.caption.empty()) {
-        const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%";
+        const std::string percentage =
+            gauge.showsPercentage ? std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%" : "";
         drawCaption(renderer, style.font, gauge.caption, percentage, left, left + width, top,
                     style.captionSize, style.letterSpacing, faded(style.caption, opacity),
                     faded(style.litCaption, opacity));

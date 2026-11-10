@@ -15,7 +15,7 @@ inline constexpr const char *OnlineMenuScene = "online_menu";
 
 /// Declares the submenus of the main menu. Each one opens over the main menu, whose world stays visible but
 /// not its buttons, and shows its title after a back button that closes it, like Escape. Play offers a game
-/// offline, the hangar and the story of the game (LoreScene). The Settings page is declared by
+/// offline, the hangar, the story of the game (LoreScene) and the quests (QuestsMenuScene). The Settings page is declared by
 /// createSettingsScene(), the Online menu by OnlineScenes.
 /// @param style Look of the interface. It must outlive the engine.
 /// @param playSolo Starts a game offline.

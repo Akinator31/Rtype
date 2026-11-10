@@ -93,6 +93,7 @@ add_library(r-type_client_core STATIC
     src/Settings/VoiceSettings.cpp
     src/Quests/EventQuest.cpp
     src/Quests/Quests.cpp
+    src/Quests/QuestsMenu.cpp
     src/Quests/StatQuest.cpp
     src/ShipModel.cpp
     src/ShipSelector/ShipCatalog.cpp
