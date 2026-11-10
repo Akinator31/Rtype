@@ -659,6 +659,7 @@ TEST_CASE("The link presents the instance, then gives the configuration and the 
                     {.onConfigure = [&](const ConfigureMessage &game) { configured = game; },
                      .onAddPlayer = [&](const AddPlayerMessage &p) { added.push_back(p); },
                      .onRemovePlayer = {},
+                     .onMuteVoice = {},
                      .onShutdown = {},
                      .onFailed = [&](const std::string &reason) { failure = reason; }});
 
@@ -692,6 +693,7 @@ TEST_CASE("The link fails on what the protocol does not expect", "[instance]")
             MasterLink::Handlers{.onConfigure = {},
                                  .onAddPlayer = {},
                                  .onRemovePlayer = {},
+                                 .onMuteVoice = {},
                                  .onShutdown = {},
                                  .onFailed = [&](const std::string &reason) { failure = reason; }},
             timeout);
@@ -750,6 +752,7 @@ TEST_CASE("The link fails on what the protocol does not expect", "[instance]")
                           {.onConfigure = {},
                            .onAddPlayer = {},
                            .onRemovePlayer = {},
+                           .onMuteVoice = {},
                            .onShutdown = {},
                            .onFailed = [&](const std::string &reason) { failure = reason; }});
         REQUIRE(waitUntil(loop, [&] { return failure.has_value(); }));
