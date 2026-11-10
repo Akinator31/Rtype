@@ -1,12 +1,14 @@
 #pragma once
 
 #include "rtype/engine/Interface/Metrics.hpp"
+#include "rtype/render/Board.hpp"
 #include "rtype/render/Renderer.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 #include "rtype/xr/Math.hpp"
 
 #include <array>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -27,6 +29,11 @@ struct VrLayout {
     float boardDistance = 2.0f;
     /// How far its centre is over the eyes, in metres.
     float boardRise = 0.4f;
+    /// The board in relief (docs/architecture/vr.md#the-board-in-relief), in game units, about 1.4 mm each on
+    /// a board 2.7 m wide: how far the ships, the shots and the bosses come out of it, about 6 cm, and how
+    /// far in front of it the damage and the bars of life float over them, about 11 cm.
+    float reliefLift = 40.0f;
+    float reliefOverlay = 80.0f;
 
     /// The panel of the menus, between the dashboard and the board: its width, in metres; its height follows
     /// the shape of the game. About 72 degrees wide, read without moving the head.
@@ -77,6 +84,17 @@ inline constexpr render::Vector2 BoardResolution{2560.0f, 1440.0f};
 /// to the board, tilted to face the eyes and moved ahead of them.
 /// @param gameSize Size of the game, in game units: the shape of the board.
 [[nodiscard]] render::Matrix boardTransform(const VrLayout &layout, render::Vector2 gameSize);
+
+/// The board in relief, for render::Renderer::beginBoard(): where boardTransform() puts it, the whole game
+/// laid on it.
+/// @param brightness From 0 to 1: boardBrightness().
+[[nodiscard]] render::BoardView boardView(const VrLayout &layout, render::Vector2 gameSize, float brightness);
+
+/// Whether the world of a scene can be laid on the board in relief: the world of the game, seen through an
+/// orthographic camera, is a plane; a scene without a camera has only that plane. The world of a perspective
+/// camera (the planet of the main menu, the hangar) has no plane to lay on the board: it stays flat, in the
+/// image of the board.
+[[nodiscard]] bool canDrawInRelief(const std::optional<render::Camera> &camera);
 
 /// The corners of the board in the space of the headset: top left, top right, bottom right, bottom left.
 [[nodiscard]] std::array<render::Vector3, 4> boardCorners(const VrLayout &layout, render::Vector2 gameSize);

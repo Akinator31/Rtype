@@ -9,16 +9,10 @@
 namespace rtype::client
 {
 
+using render::transformPoint;
+
 namespace
 {
-
-render::Vector3 transformPoint(const render::Matrix &matrix, render::Vector3 point)
-{
-    const auto &m = matrix.values;
-    return {(m[0] * point.x) + (m[4] * point.y) + (m[8] * point.z) + m[12],
-            (m[1] * point.x) + (m[5] * point.y) + (m[9] * point.z) + m[13],
-            (m[2] * point.x) + (m[6] * point.y) + (m[10] * point.z) + m[14]};
-}
 
 float squaredDistance(render::Vector3 a, render::Vector3 b)
 {
@@ -70,6 +64,20 @@ render::Matrix boardTransform(const VrLayout &layout, render::Vector2 gameSize)
 {
     return facingTransform({0.0f, layout.boardRise, -layout.boardDistance}, layout.boardWidth,
                            heightOf(layout.boardWidth, gameSize));
+}
+
+render::BoardView boardView(const VrLayout &layout, render::Vector2 gameSize, float brightness)
+{
+    return {.transform = boardTransform(layout, gameSize),
+            .area = {0.0f, 0.0f, gameSize.x, gameSize.y},
+            .lift = layout.reliefLift,
+            .overlay = layout.reliefOverlay,
+            .brightness = std::clamp(brightness, 0.0f, 1.0f)};
+}
+
+bool canDrawInRelief(const std::optional<render::Camera> &camera)
+{
+    return !camera || camera->projection == render::Projection::Orthographic;
 }
 
 engine::SurfaceAreas surfaceAreas(render::Vector2 gameSize)

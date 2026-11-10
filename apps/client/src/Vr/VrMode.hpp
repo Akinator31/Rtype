@@ -21,11 +21,17 @@ inline constexpr input::Key RecenterKey = input::Key::F9;
 /// Where the choice of starting in the headset is kept in the settings. Not on the Settings page yet
 /// (docs/architecture/vr.md#next-steps): written by hand in the settings file.
 inline constexpr std::string_view VrSettingsKey = "vr.enabled";
+/// Where the choice of the flat board is kept in the settings: the world drawn once into an image, shown on
+/// the board, instead of in relief for each eye, for a weaker computer or a player who prefers it. Off by
+/// default; written by hand in the settings file until the VR page of the settings.
+inline constexpr std::string_view VrFlatBoardKey = "vr.flatBoard";
 /// The option of the command line that starts the client in the headset.
 inline constexpr std::string_view VrOption = "--xr";
 
 /// Whether the client starts in VR: --xr among the arguments of the command line, or the VR setting on.
 [[nodiscard]] bool wantsVr(std::span<const std::string_view> arguments, const engine::Settings &settings);
+/// Whether the board shows the world in relief: unless the flat board is chosen in the settings.
+[[nodiscard]] bool wantsReliefBoard(const engine::Settings &settings);
 
 /// What VrMode asks of the rest of the client.
 struct VrHooks {

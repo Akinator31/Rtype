@@ -39,20 +39,29 @@ struct VrScene {
     /// The scene at the bottom of those open (engine::Scenes::bottom()): when it changes, the scenes were
     /// switched, and the view fades from one to the other.
     std::optional<engine::SceneId> scenes;
+    /// The world of the scene is drawn in relief on the board, for each eye: the board in relief is wanted
+    /// (wantsReliefBoard()), and the world of the scene can be laid on it (canDrawInRelief()). Otherwise it
+    /// is drawn once into the image of the board.
+    bool relief = false;
 };
 
 /// What the player sees in the headset (docs/architecture/vr.md): seated in the cockpit, the sky of the scene
-/// around them, the board outside the canopy with the world of the game drawn into it, the HUD on the screens
-/// of the cockpit, and the menus on a holographic panel that unfolds from the hologram, between the dashboard
-/// and the board. The cockpit is there only during a game: in the menus, the board and the panel float alone
-/// in the sky. The images are created and the cockpit loaded the first time the headset shows the game, so
-/// that a game out of the headset never holds them, and the cockpit is ready when a game starts; until it is
-/// loaded, the board floats alone.
+/// around them, the board outside the canopy with the world of the game on it, in relief or flat, the HUD on
+/// the screens of the cockpit, and the menus on a holographic panel that unfolds from the hologram, between
+/// the dashboard and the board. The cockpit is there only during a game: in the menus, the board and the
+/// panel float alone in the sky. The images are created and the cockpit loaded the first time the headset
+/// shows the game, so that a game out of the headset never holds them, and the cockpit is ready when a game
+/// starts; until it is loaded, the board floats alone.
+///
+/// The world of the scene is drawn by the function given at construction: once per frame into the image of
+/// the board while it is flat, once per eye on the board in relief otherwise.
 ///
 /// Destroy it before the window, with the renderer.
 /// @code
+/// VrView vrView(renderer, resources, [&] { sceneRenderer.draw(renderer, Layer::World); });
 /// vrView.update(elapsed, {sceneRenderer.light(), sceneRenderer.sky(), sessions.running(),
-///                         sceneRenderer.hasContent(Surface::Panel), scenes.bottom()}); // each frame
+///                         sceneRenderer.hasContent(Surface::Panel), scenes.bottom(),
+///                         canDrawInRelief(sceneRenderer.camera())});                      // each frame
 /// vrView.drawFrames([&](engine::Surface surface) { /* draw the surface */ });          // each frame
 /// vrView.drawEye(eye, view);                                                            // each eye
 /// @endcode
@@ -71,8 +80,13 @@ class VrView
 
     render::Renderer &_renderer;
     render::ResourceManager &_resources;
+    std::function<void()> _drawWorld;
     VrLayout _layout;
+    /// The image of the board: the world and what of the interface is on the board while it is flat, that
+    /// interface alone, over a clear background, while it is in relief.
     std::optional<render::ImageId> _board;
+    /// How the image of the board was last drawn: for the board in relief, or flat.
+    bool _boardRelief = false;
     std::optional<render::ImageId> _panel;
     /// The image of each screen of the cockpit, in the order of CockpitScreens.
     std::array<std::optional<render::ImageId>, CockpitScreens.size()> _screenImages{};
@@ -118,7 +132,9 @@ public:
     static constexpr render::Color RayPointing{70, 150, 165, 255};
     static constexpr render::Color RayOnWidget{140, 240, 255, 255};
 
-    VrView(render::Renderer &renderer, render::ResourceManager &resources, VrLayout layout = {});
+    /// @param drawWorld Draws the World layer of the scenes shown, in a frame or on the board.
+    VrView(render::Renderer &renderer, render::ResourceManager &resources, std::function<void()> drawWorld,
+           VrLayout layout = {});
 
     /// Once per frame while the headset shows the game, before its frames: starts loading the cockpit, keeps
     /// what the scene gives (during a game, the stars of the main menu as its sky), unfolds or folds the
@@ -128,13 +144,15 @@ public:
     void update(float elapsed, VrScene scene);
     /// Draws the frames of the headset, each into its image, the function drawing what each surface shows:
     /// during a game, the screens of the cockpit; the panel while it is unfolded; the board last, the World
-    /// layer and the Board surface, so that the visible area of the renderer is the one of the game after it.
-    /// While the scene left fades out, the panel and the board keep their images.
+    /// layer while it is flat and the Board surface, so that the visible area of the renderer is the one of
+    /// the game after it. While the scene left fades out, the panel and the board keep their images, unless
+    /// the board is now drawn another way (in relief or flat).
     void drawFrames(const std::function<void(engine::Surface)> &draw);
     /// Draws what an eye sees into the image the headset bound for it: the sky, the board once a frame was
-    /// drawn into it, during a game the cockpit, then its canopy and its hologram, which the board is seen
-    /// through, the panel over everything while it is unfolded, and last the controllers in the hands, their
-    /// rays and where they meet the panel.
+    /// drawn into it (in relief, the world laid on it for this eye, then the image of the board over it),
+    /// during a game the cockpit, then its canopy and its hologram, which the board is seen through, the
+    /// panel over everything while it is unfolded, and last the controllers in the hands, their rays and
+    /// where they meet the panel.
     void drawEye(int eye, const xr::EyeView &view, std::span<const HandLook> hands = {});
 
     /// The panel as the controllers point at it, once it is open and while no fade hides it: nothing while it
