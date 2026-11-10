@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+using rtype::render::computeMirrorCrop;
 using rtype::render::computeVisibleArea;
 using rtype::render::Rectangle;
 using rtype::render::Vector2;
@@ -70,4 +71,28 @@ TEST_CASE("Window positions follow the visible area of a window of another shape
 TEST_CASE("An empty window gives the origin", "[render][viewport]")
 {
     REQUIRE(samePoint(windowToGame({100.0f, 100.0f}, {0.0f, 0.0f}, game), {0.0f, 0.0f}));
+}
+
+TEST_CASE("The mirror of an eye in a wide window is a band across its middle", "[render][viewport][vr]")
+{
+    // An eye of 2000x2000 in a 16:9 window: the whole width, 1125 pixels high, centred
+    REQUIRE(
+        sameArea(computeMirrorCrop({2000.0f, 2000.0f}, {1600.0f, 900.0f}), {0.0f, 437.5f, 2000.0f, 1125.0f}));
+}
+
+TEST_CASE("The mirror of an eye in a tall window is a column across its middle", "[render][viewport][vr]")
+{
+    REQUIRE(
+        sameArea(computeMirrorCrop({2000.0f, 1000.0f}, {500.0f, 1000.0f}), {750.0f, 0.0f, 500.0f, 1000.0f}));
+}
+
+TEST_CASE("The mirror of an eye of the shape of the window is the whole eye", "[render][viewport][vr]")
+{
+    REQUIRE(
+        sameArea(computeMirrorCrop({1832.0f, 1920.0f}, {916.0f, 960.0f}), {0.0f, 0.0f, 1832.0f, 1920.0f}));
+}
+
+TEST_CASE("The mirror in a minimised window is the whole eye", "[render][viewport][vr]")
+{
+    REQUIRE(sameArea(computeMirrorCrop({1832.0f, 1920.0f}, {0.0f, 0.0f}), {0.0f, 0.0f, 1832.0f, 1920.0f}));
 }
