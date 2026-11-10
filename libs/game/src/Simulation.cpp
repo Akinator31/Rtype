@@ -6,6 +6,7 @@
 #include "rtype/game/System/AreaSystem.hpp"
 #include "rtype/game/System/CombatSystem.hpp"
 #include "rtype/game/System/EnemySystem.hpp"
+#include "rtype/game/System/ItemSystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
 #include "rtype/game/System/RescueSystem.hpp"
@@ -58,7 +59,7 @@ Simulation::Simulation(Rules rules, const GameConfig &config)
     registerConfig(config);
     // The order of a tick: the inputs, the waves, the Bydos, the rescue against the final boss (which flies
     // over the inputs and the Bydos), the weapons, the projectiles, the movement, the walls, the hits, then
-    // what left the area
+    // the items picked up, then what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
     _ecs.registerSystem<WaveSystem>(_ecs, _context);
     _ecs.registerSystem<EnemySystem>(_ecs, _context);
@@ -68,6 +69,7 @@ Simulation::Simulation(Rules rules, const GameConfig &config)
     _ecs.registerSystem<physics::MovementSystem>();
     _ecs.registerSystem<physics::BoundsSystem>(_ecs);
     _ecs.registerSystem<CombatSystem>(_ecs, _context);
+    _ecs.registerSystem<ItemSystem>(_ecs, _context);
     _ecs.registerSystem<AreaSystem>(_ecs, _context);
 }
 
@@ -85,7 +87,16 @@ void Simulation::registerConfig(const GameConfig &config)
     for (const EnemyDefinition &enemy : config.enemies) {
         _context.enemies.addDefinition(enemy);
     }
+    for (const ItemDefinition &item : config.items) {
+        _context.items.addDefinition(item);
+    }
     for (const WaveDefinition &wave : config.waves) {
+        for (const WaveItem &item : wave.items) {
+            if (!_context.items.hasDefinition(item.item)) {
+                throw std::invalid_argument(
+                    std::format("the wave '{}' uses the unknown item '{}'", wave.name, item.item));
+            }
+        }
         _context.waves.addDefinition(wave, _context.enemies);
     }
     registerPlayer(config.player);
@@ -198,6 +209,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<EnemyOrders> &orders = _ecs.cache<EnemyOrders>();
     ecs::ComponentCache<Projectile> &projectiles = _ecs.cache<Projectile>();
     ecs::ComponentCache<ShipIndex> &shipIndexes = _ecs.cache<ShipIndex>();
+    ecs::ComponentCache<ItemIndex> &itemIndexes = _ecs.cache<ItemIndex>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -214,6 +226,9 @@ void Simulation::buildSnapshot()
         }
         state.health = healths.has(entity) ? healths.get(entity).points : 0;
         state.ship = shipIndexes.has(entity) ? shipIndexes.get(entity).value : NoShip;
+        if (itemIndexes.has(entity)) {
+            state.ship = itemIndexes.get(entity).value;
+        }
         if (projectiles.has(entity)) {
             state.age = static_cast<std::uint8_t>(std::min<std::uint32_t>(projectiles.get(entity).age, 255));
         }

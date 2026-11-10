@@ -6,6 +6,7 @@
 #include "Game/GameSession.hpp"
 #include "Game/HealthBarLooks.hpp"
 #include "Game/ImpactLooks.hpp"
+#include "Game/ItemLooks.hpp"
 #include "Game/ShipLooks.hpp"
 #include "Game/ShotLooks.hpp"
 #include "Settings/AuraSettings.hpp"
@@ -83,7 +84,8 @@ struct Kill {
 /// 3. each snapshot becomes entities of the scene: one per entity of the game, created when it appears,
 ///    moved, and destroyed when it is no longer in the world. The kinds given a ShipLook are 3D models, which
 ///    roll around their length, smoothly, as their ship climbs or dives, and recoil when a shot of the
-///    players appears at their nose; those given a BossLook are standing
+///    players appears at their nose; the items given an ItemLook pop up, then turn and float; those given a
+///    BossLook are standing
 ///    3D models, which play the animation of their stance; those given a ShotLook are models of energy; the
 ///    others are boxes. An entity killed in the game (a ship shot down, a shot that hit) leaves
 ///    the impact of its kind where it was last drawn, if its kind was given an ImpactLook. An entity whose
@@ -125,6 +127,7 @@ class GameSessionSystem : public ecs::System
     ShipLooks _shipLooks;
     BossLooks _bossLooks;
     ShotLooks _shotLooks;
+    ItemLooks _itemLooks;
     ImpactLooks _impactLooks;
     DamageLooks _damageLooks;
     HealthBarLooks _healthBarLooks;
@@ -213,6 +216,9 @@ public:
     void setBossLook(game::EntityKind kind, const BossLook &look);
     /// Draws the shots of this kind with a 3D model of energy from now on, instead of a box.
     void setShotLook(game::EntityKind kind, const ShotLook &look);
+    /// Draws the items of this index of the configuration (game::EntityState::ship) with this animated 3D
+    /// model from now on, instead of a box.
+    void setItemLook(std::uint8_t item, const ItemLook &look);
     /// Leaves an impact where the game kills an entity of this kind from now on.
     void setImpactLook(game::EntityKind kind, const ImpactLook &look);
     /// Writes the damage taken by the entities of this kind where they are hit from now on.

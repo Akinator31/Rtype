@@ -362,9 +362,14 @@ hence what the client draws:
 | `BYDO_BOSS` | `0x1F` | None | Hit points left |
 | `BYDO_SHOT` | `0x40` | None | Age |
 | `BYDO_PLASMA_SHOT` | `0x41` | None | Age |
+| `ITEM` | `0x60` | None | 0 |
 
-- Ranges: `0x01`–`0x0F` players and their shots, `0x10`–`0x3F` Bydos, `0x40`–`0x5F` Bydo shots, `0x60`–`0xFF`
-  reserved for later kinds (power-ups, the Force, obstacles). Kind `0x00` is invalid.
+- Ranges: `0x01`–`0x0F` players and their shots, `0x10`–`0x3F` Bydos, `0x40`–`0x5F` Bydo shots, `0x60`–`0x6F`
+  items, `0x70`–`0xFF` reserved for later kinds (the Force, obstacles). Kind `0x00` is invalid.
+- The **ship** byte of a Bydo is the index of its ship among the ids of `config/ships/` in alphabetical order;
+  that of an **item** (`0x60`) is the index of its item among the ids of `config/items/`, so that the client,
+  which reads the same configuration, draws its model. An item the ship of a player picked up is destroyed
+  with the cause *killed*; one nobody picked up, with the cause *removed*.
 - The **owner** is a player slot (0 to 3), or `0xFF` for none.
 - A **shot** (`0x02`, `0x03`, `0x40`–`0x5F`) has no hit points: in their place, its **age**, the ticks since it
   was fired, at most 255. A snapshot of tick `T` with a shot of age `a` says it was fired at tick `T − a`: the

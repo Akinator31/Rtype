@@ -2,6 +2,7 @@
 
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
+#include "rtype/game/Item/ItemRegistry.hpp"
 #include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Progression.hpp"
@@ -76,6 +77,7 @@ struct GameContext {
     WeaponRegistry weapons;
     EnemyRegistry enemies;
     WaveRegistry waves;
+    ItemRegistry items;
     /// The ship and the weapon of every player.
     PlayerDefinition player;
     /// The experience of the endless games.
@@ -105,6 +107,14 @@ struct GameContext {
         if (rules.endless) {
             killer.xp += applyMultiplier(enemy.xp, streakMultiplier(progression, killer.streak));
         }
+    }
+
+    /// The ship of a player was lost: one life less, and a new ship after Rules::respawnDelay if it has
+    /// lives left.
+    void loseLife(PlayerSlot &player) const
+    {
+        player.lives = static_cast<std::uint8_t>(player.lives > 0 ? player.lives - 1 : 0);
+        player.respawnIn = player.lives > 0 ? rules.respawnDelay : 0;
     }
 
     /// A number from `first` to `last` included. Same result on every platform, unlike the distributions of

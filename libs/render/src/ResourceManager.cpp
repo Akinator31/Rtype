@@ -181,4 +181,10 @@ float ResourceManager::getModelAnimationDuration(ModelId model, int animation) c
     return _impl->models.get(model).getAnimationDuration(animation);
 }
 
+Box3 ResourceManager::getModelBounds(ModelId model) const
+{
+    const ::BoundingBox box = GetModelBoundingBox(_impl->models.get(model).get());
+    return {{box.min.x, box.min.y, box.min.z}, {box.max.x, box.max.y, box.max.z}};
+}
+
 } // namespace rtype::render

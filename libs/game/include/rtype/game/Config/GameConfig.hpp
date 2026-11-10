@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/game/Enemy/EnemyDefinition.hpp"
+#include "rtype/game/Item/ItemDefinition.hpp"
 #include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/Progression.hpp"
 #include "rtype/game/Projectile/ProjectileDefinition.hpp"
@@ -28,6 +29,8 @@ struct GameConfig {
     Progression progression;
     /// From config/hangar.lua, optional: the level each ship of the hangar needs, empty without it.
     std::vector<ShipUnlock> shipUnlocks;
+    /// From config/items/: what the waves make appear (WaveDefinition::items).
+    std::vector<ItemDefinition> items;
 };
 
 } // namespace rtype::game

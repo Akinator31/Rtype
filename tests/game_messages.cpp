@@ -358,11 +358,11 @@ TEST_CASE("The ship of a Bydo travels with its state, a ship of a player has non
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")
 {
     std::vector<std::byte> payload = ExampleSnapshot;
-    payload[43] = std::byte{0x60}; // the kind of the entity: reserved for later kinds
+    payload[43] = std::byte{0x70}; // the kind of the entity: reserved for later kinds
     const auto part = decodeSnapshotPart(payload);
 
     REQUIRE(part);
-    CHECK(part->entities[0].kind == EntityKind{0x60});
+    CHECK(part->entities[0].kind == EntityKind{0x70});
     CHECK_FALSE(isKnown(part->entities[0].kind));
     CHECK(isKnown(EntityKind::BydoBoss));
 }
@@ -670,7 +670,7 @@ TEST_CASE("The world of a client skips the kinds it does not know", "[game][worl
 {
     RemoteWorld world;
     EntityState future = entity(4);
-    future.kind = EntityKind{0x60};
+    future.kind = EntityKind{0x70};
 
     world.apply({1, 0, 0, 1, {}, {future, entity(5)}, NoInputLead, {}});
 

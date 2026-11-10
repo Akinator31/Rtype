@@ -147,7 +147,7 @@ constexpr std::array<bool, ByteValues> KnownKinds = [] {
     for (const EntityKind kind :
          {EntityKind::PlayerShip, EntityKind::PlayerShot, EntityKind::PlayerChargedShot,
           EntityKind::BydoFlyer, EntityKind::BydoShooter, EntityKind::BydoTank, EntityKind::BydoBoss,
-          EntityKind::BydoShot, EntityKind::BydoPlasmaShot}) {
+          EntityKind::BydoShot, EntityKind::BydoPlasmaShot, EntityKind::Item}) {
         known[static_cast<std::uint8_t>(kind)] = true;
     }
     return known;
