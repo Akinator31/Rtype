@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -28,7 +29,74 @@ const log::Logger &logger()
     return instance;
 }
 
+/// The index of the ship of the catalog with this code, shipCount when there is none.
+std::size_t findShip(std::string_view code)
+{
+    const auto &catalog = getShipCatalog();
+    for (std::size_t index = 0; index < shipCount; ++index) {
+        if (code == catalog[index].code) {
+            return index;
+        }
+    }
+    return shipCount;
+}
+
+void writeSettings(engine::Settings &settings)
+{
+    try {
+        settings.writeFile();
+    } catch (const std::exception &error) {
+        logger().error("Cannot write the settings {}: {}", settings.getPath().string(), error.what());
+    }
+}
+
 } // namespace
+
+void readRequiredLevels(ShipSelection &selection, const std::vector<game::ShipUnlock> &unlocks)
+{
+    for (const game::ShipUnlock &unlock : unlocks) {
+        const std::size_t index = findShip(unlock.ship);
+        if (index == shipCount) {
+            logger().warning("hangar.lua: no ship '{}' in the hangar", unlock.ship);
+            continue;
+        }
+        selection.requiredLevels[index] = unlock.level;
+    }
+    selection.setLevel(selection.level);
+}
+
+void readPlayerLevel(ShipSelection &selection, const engine::Settings &settings)
+{
+    const std::optional<int> level = settings.getInt(PlayerLevelSettingsKey);
+    if (level && *level >= 1) {
+        selection.setLevel(static_cast<std::uint32_t>(*level));
+    }
+}
+
+void writePlayerLevel(ShipSelection &selection, std::uint32_t level, engine::Settings &settings)
+{
+    selection.setLevel(level);
+    const int kept = static_cast<int>(std::min<std::uint32_t>(level, std::numeric_limits<int>::max()));
+    if (settings.getInt(PlayerLevelSettingsKey) == kept) {
+        return;
+    }
+    settings.setInt(PlayerLevelSettingsKey, kept);
+    // A lower level may have changed the ship equipped
+    writeEquippedShip(selection, settings);
+}
+
+std::vector<std::size_t> listUnlockedShips(const ShipSelection &selection, std::uint32_t before,
+                                           std::uint32_t level)
+{
+    std::vector<std::size_t> unlocked;
+    for (std::size_t index = 0; index < shipCount; ++index) {
+        const std::uint32_t required = selection.requiredLevels[index];
+        if (required > before && required <= level) {
+            unlocked.push_back(index);
+        }
+    }
+    return unlocked;
+}
 
 void readEquippedShip(ShipSelection &selection, const engine::Settings &settings)
 {
@@ -36,24 +104,17 @@ void readEquippedShip(ShipSelection &selection, const engine::Settings &settings
     if (!code) {
         return;
     }
-    const auto &catalog = getShipCatalog();
-    for (std::size_t index = 0; index < shipCount; ++index) {
-        if (*code == catalog[index].code && !catalog[index].locked) {
-            selection.equipped = index;
-            selection.focused = index;
-            return;
-        }
+    const std::size_t index = findShip(*code);
+    if (index != shipCount && !selection.isLocked(index)) {
+        selection.equipped = index;
+        selection.focused = index;
     }
 }
 
 void writeEquippedShip(const ShipSelection &selection, engine::Settings &settings)
 {
     settings.setString(EquippedShipSettingsKey, getShipCatalog()[selection.equipped].code);
-    try {
-        settings.writeFile();
-    } catch (const std::exception &error) {
-        logger().error("Cannot write the settings {}: {}", settings.getPath().string(), error.what());
-    }
+    writeSettings(settings);
 }
 
 void ShipSelection::step(int direction)
@@ -64,8 +125,18 @@ void ShipSelection::step(int direction)
 
 void ShipSelection::equipFocused()
 {
-    if (!getFocused().locked) {
+    if (!isLocked(focused)) {
         equipped = focused;
+    }
+}
+
+void ShipSelection::setLevel(std::uint32_t value)
+{
+    level = value;
+    for (std::size_t index = 0; isLocked(equipped) && index < shipCount; ++index) {
+        if (!isLocked(index)) {
+            equipped = index;
+        }
     }
 }
 

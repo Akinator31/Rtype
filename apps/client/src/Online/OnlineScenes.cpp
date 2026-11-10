@@ -582,19 +582,22 @@ void OnlineScenes::disconnect()
 
 void OnlineScenes::showProgress(const lobby::ProgressMessage &progress)
 {
+    const game::Level level = game::levelOf(progress.xp);
+    const game::Level before =
+        game::levelOf(progress.xp - std::min<std::uint64_t>(progress.gained, progress.xp));
+    writePlayerLevel(_ships, level.level, _engine.getSettings());
     refreshIfShown(LobbyScene);
     // At the sign-in, the level shows in the menu: only a game is announced
     if (progress.gained == 0) {
         return;
     }
+    // The results do not show the ships unlocked
+    showUnlockedShips(before.level, level.level);
     // The game just played, or its results, show it; in a toast otherwise
     _games.setAccountXp(progress.xp);
     if (_engine.isSceneOpen(GameScene) || _engine.isSceneOpen(ResultsScene)) {
         return;
     }
-    const game::Level level = game::levelOf(progress.xp);
-    const game::Level before =
-        game::levelOf(progress.xp - std::min<std::uint64_t>(progress.gained, progress.xp));
     const std::string title = std::format("{} {}", _translations.text("progress.level"), level.level);
     const std::string detail =
         std::format("+{} {} - {} / {} XP", progress.gained, _translations.text("progress.gained"),
@@ -603,6 +606,16 @@ void OnlineScenes::showProgress(const lobby::ProgressMessage &progress)
         _engine.showToast(_translations.text("progress.level_up"), title, "", engine::ToastType::Success);
     }
     _engine.showToast(title, detail, "", engine::ToastType::Info);
+}
+
+void OnlineScenes::showUnlockedShips(std::uint32_t before, std::uint32_t level)
+{
+    for (const std::size_t index : listUnlockedShips(_ships, before, level)) {
+        const ShipEntry &ship = getShipCatalog()[index];
+        _engine.showToast(_translations.text("ship.unlocked"),
+                          std::format("{} {}", ship.code, _translations.text(ship.nameKey)), "",
+                          engine::ToastType::Success);
+    }
 }
 
 void OnlineScenes::lobbyClosed(const std::string &reason)

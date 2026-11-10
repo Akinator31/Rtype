@@ -233,6 +233,7 @@ ship.armor=ARMOR
 ship.equip=EQUIP
 ship.equipped=EQUIPPED
 ship.launch=LAUNCH
+ship.unlocked=SHIP UNLOCKED
 ship.locked=LOCKED
 ship.vx01=SCOUT
 ship.vx02=LANCE

@@ -392,6 +392,43 @@ TEST_CASE("The progression of the repository loads", "[game]")
     CHECK(loaded.config.progression.streakCap == 300);
 }
 
+TEST_CASE("The levels of the ships of the hangar are read from hangar.lua, none without it", "[game]")
+{
+    const ConfigDirectory directory("hangar");
+    directory.writeValid();
+    const LoadedGameConfig none = loadGameConfig(directory.path);
+    INFO(listErrors(none));
+    REQUIRE(none.isValid());
+    CHECK(none.config.shipUnlocks.empty());
+
+    directory.write("hangar.lua",
+                    "return { ships = { { ship = 'VX-01', level = 1 }, { ship = 'VX-02', level = 4 } } }");
+    const LoadedGameConfig loaded = loadGameConfig(directory.path);
+    INFO(listErrors(loaded));
+    REQUIRE(loaded.isValid());
+    REQUIRE(loaded.config.shipUnlocks.size() == 2);
+    CHECK(loaded.config.shipUnlocks[0].ship == "VX-01");
+    CHECK(loaded.config.shipUnlocks[0].level == 1);
+    CHECK(loaded.config.shipUnlocks[1].ship == "VX-02");
+    CHECK(loaded.config.shipUnlocks[1].level == 4);
+
+    CHECK(errorWith("hangar_level", "hangar.lua", "return { ships = { { ship = 'VX-01', level = 0 } } }") ==
+          "hangar.lua: ships[1].level: expected an integer from 1 to 4294967295");
+    CHECK(errorWith("hangar_twice", "hangar.lua",
+                    "return { ships = { { ship = 'VX-01', level = 1 }, { ship = 'VX-01', level = 2 } } }") ==
+          "hangar.lua: ships: 'VX-01' listed twice");
+    CHECK_THAT(
+        errorWith("hangar_unknown", "hangar.lua", "return { ships = { { ship = 'VX-01', lvl = 2 } } }"),
+        ContainsSubstring("level"));
+}
+
+TEST_CASE("The hangar of the repository loads", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    CHECK(loaded.config.shipUnlocks.size() == 6);
+}
+
 TEST_CASE("A directory without player.lua is an error, as a missing one", "[game]")
 {
     const ConfigDirectory directory("empty");

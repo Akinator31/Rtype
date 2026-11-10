@@ -5,6 +5,7 @@
 #include "rtype/game/Progression.hpp"
 #include "rtype/game/Projectile/ProjectileDefinition.hpp"
 #include "rtype/game/Ship/ShipDefinition.hpp"
+#include "rtype/game/ShipUnlock.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/game/Weapon/WeaponDefinition.hpp"
 
@@ -25,6 +26,8 @@ struct GameConfig {
     PlayerDefinition player;
     /// From config/progression.lua, optional: the defaults without it.
     Progression progression;
+    /// From config/hangar.lua, optional: the level each ship of the hangar needs, empty without it.
+    std::vector<ShipUnlock> shipUnlocks;
 };
 
 } // namespace rtype::game

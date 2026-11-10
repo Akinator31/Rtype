@@ -23,6 +23,7 @@ Name keys by domain with dots, so that the file stays readable:
 
 | Keys | Written by |
 |---|---|
+| `account.level` | `writePlayerLevel()`: the level of the last account signed in (PROGRESS), which opens the ships of the hangar offline and as a guest ([hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-of-the-hangar-confighangarlua)) |
 | `audio.effects_volume` | The Settings page (`keepPlayerSettings()`): the volume of the sound effects, from 0 to 1 |
 | `audio.music_volume` | The Settings page: the volume of the music, from 0 to 1 |
 | `discord.presence_application_id` | Nobody: written by hand. The Discord application whose activity the client shows, its id in decimal, in place of the one of the build (`RTYPE_DISCORD_APPLICATION_ID`); `0` for none ([Rich presence](client-online.md#rich-presence)) |

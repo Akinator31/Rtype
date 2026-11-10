@@ -1,7 +1,9 @@
 #include "Config/DefinitionReaders.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <format>
 #include <limits>
 
 namespace rtype::game
@@ -252,6 +254,23 @@ Progression readProgression(TableReader &table)
         static_cast<std::uint32_t>(table.readInteger("streakCap", 100, MaxU16, progression.streakCap));
     table.checkAllFieldsRead();
     return progression;
+}
+
+std::vector<ShipUnlock> readShipUnlocks(TableReader &table)
+{
+    std::vector<ShipUnlock> unlocks;
+    for (TableReader &item : table.readList("ships")) {
+        ShipUnlock unlock;
+        unlock.ship = item.readString("ship");
+        unlock.level = static_cast<std::uint32_t>(item.readInteger("level", 1, MaxU32));
+        item.checkAllFieldsRead();
+        if (std::ranges::find(unlocks, unlock.ship, &ShipUnlock::ship) != unlocks.end()) {
+            throw ConfigError(std::format("ships: '{}' listed twice", unlock.ship));
+        }
+        unlocks.push_back(std::move(unlock));
+    }
+    table.checkAllFieldsRead();
+    return unlocks;
 }
 
 } // namespace rtype::game

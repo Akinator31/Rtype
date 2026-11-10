@@ -186,7 +186,7 @@ The workflows run on the team's self-hosted runners. The Linux runner needs:
   *Docker* builds the image with BuildKit (Docker 25 or newer, for `--start-interval` in its health check).
   Without Docker, *Build*, *Sanitizers* and *Docker* fail on Linux instead of testing on SQLite only. The
   smoke tests publish the UDP ports 47243 to 47245, then 47253 to 47255, on the loopback of the runner; the
-  build keeps its downloads and the objects of ccache in the cache of BuildKit, `docker builder prune` empties it.
+  build keeps its downloads and its build folder in the cache of BuildKit, `docker builder prune` empties it.
   To publish, the user of the runner must be allowed `docker run --privileged`: *Docker* installs the QEMU
   of arm64 with `tonistiigi/binfmt`, then builds in the buildx builder `rtype-multi-arch`, a container kept
   from one publication to the next with its own cache (`docker buildx prune --builder rtype-multi-arch`).

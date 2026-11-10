@@ -6,9 +6,10 @@ How the client plays a game: one game scene, fed by a **game session**, offline 
 snapshots (the online session comes with `client: networking`).
 
 To play: **Play**, then **Solo**, in the main menu. The hangar opens first, on the ship equipped last:
-**Launch** starts the game with the ship looked at, and keeps it for the next time. Arrows (or WASD, ZQSD)
-move the ship, Space fires, Q and E (A and E on AZERTY) held turn the ship by 30° up and down to fire
-diagonally, Escape opens the pause menu.
+**Launch** starts the game with the ship looked at, and keeps it for the next time. A ship locked by the level
+of the account ([config/hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-of-the-hangar-confighangarlua))
+can be looked at, not launched. Arrows (or WASD, ZQSD) move the ship, Space fires, Q and E (A and E on AZERTY)
+held turn the ship by 30° up and down to fire diagonally, Escape opens the pause menu.
 
 ## Code layout
 
