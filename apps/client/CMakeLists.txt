@@ -64,12 +64,14 @@ add_library(r-type_client_core STATIC
     src/Lore/LoreLayout.cpp
     src/Lore/LoreScene.cpp
     src/Lore/LoreText.cpp
+    src/MainMenu/CameraFlight.cpp
     src/MainMenu/Capitals.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
     src/MainMenu/Logo.cpp
     src/MainMenu/LogoFlareSystem.cpp
     src/MainMenu/MainMenu.cpp
+    src/MainMenu/MenuTransitionSystem.cpp
     src/MainMenu/Planet.cpp
     src/MainMenu/ControlsMenu.cpp
     src/MainMenu/SettingsMenu.cpp

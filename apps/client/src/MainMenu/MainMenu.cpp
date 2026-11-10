@@ -1,14 +1,17 @@
 #include "MainMenu/MainMenu.hpp"
 
 #include "Assets.hpp"
+#include "MainMenu/CameraFlight.hpp"
 #include "MainMenu/Capitals.hpp"
 #include "MainMenu/Intro.hpp"
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/Logo.hpp"
 #include "MainMenu/LogoFlare.hpp"
+#include "MainMenu/MenuTransition.hpp"
 #include "MainMenu/Planet.hpp"
 #include "MainMenu/SettingsMenu.hpp"
 #include "MainMenu/Ships.hpp"
+#include "MainMenu/Space.hpp"
 #include "MainMenu/Station.hpp"
 #include "MainMenu/Submenus.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
@@ -91,6 +94,42 @@ render::Camera createMainMenuView()
     return view;
 }
 
+/// How close the camera flies to the station, in world units: the station is about 45 long.
+constexpr float stationDistance = 66.0f;
+/// Where the camera stops under the rings and over them: this far from the axis of the planet, on the side
+/// of the menu, and this far from the plane of the rings. The rocks of the rings end 32.5 from the axis and
+/// their dust 33.8: the camera goes down outside of them.
+constexpr float underRingsRadius = 38.0f;
+constexpr float underRingsDepth = 20.0f;
+constexpr float overRingsRadius = 39.0f;
+constexpr float overRingsHeight = 41.0f;
+/// How far the views are turned from what they look at, in degrees to the right: the planet is kept on the
+/// left of the middle of the screen, the station on its right, away from the settings.
+constexpr float underRingsTurn = 10.0f;
+constexpr float overRingsTurn = 8.0f;
+constexpr float stationTurn = -10.0f;
+
+/// Where the camera flies through the world while a submenu is open, and stays until it closes:
+/// - Play: down under the scene, looking up at the planet and the underside of its rings;
+/// - Online: up over the rings, looking down on the planet and the whole of its rings;
+/// - Settings: across the world to the station, kept on the right of the screen, the settings on the left.
+/// None of these flights crosses the planet nor the rocks of its rings.
+std::vector<SubmenuView> createSubmenuViews(const render::Camera &menu)
+{
+    const render::Vector3 planet = getPlanetCentre();
+    const render::Vector3 normal = getRingsNormal();
+    // From the axis of the planet towards the camera of the menu, along the plane of the rings
+    const render::Vector3 towardsMenu = menu.position - planet;
+    const render::Vector3 outwards = normalize(towardsMenu - (normal * dot(towardsMenu, normal)));
+    const render::Vector3 underRings = planet + (outwards * underRingsRadius) - (normal * underRingsDepth);
+    const render::Vector3 overRings = planet + (outwards * overRingsRadius) + (normal * overRingsHeight);
+    return {
+        {PlayMenuScene, lookAtView(menu, underRings, planet, underRingsTurn)},
+        {OnlineMenuScene, lookAtView(menu, overRings, planet, overRingsTurn)},
+        {SettingsMenuScene, approachView(menu, convertStationPointToWorld({}), stationDistance, stationTurn)},
+    };
+}
+
 /// The sun is on the right, a little behind the planet and above: the side facing the menu is lit, the night
 /// side fades out towards the edge of the screen.
 render::Light createMainMenuSun()
@@ -102,8 +141,8 @@ render::Light createMainMenuSun()
     return sun;
 }
 
-/// Creates the entity that the main menu is seen through and lit by. It starts in the asteroids, and flies
-/// to the view of the menu when the player presses.
+/// Creates the entity that the main menu is seen through and lit by. It starts in the asteroids, flies to
+/// the view of the menu when the player presses, then to the view of each submenu while it is open.
 ecs::entity_t createMainMenuCamera(ecs::Ecs &ecs, engine::SceneId scene)
 {
     const render::Camera view = createMainMenuView();
@@ -113,6 +152,7 @@ ecs::entity_t createMainMenuCamera(ecs::Ecs &ecs, engine::SceneId scene)
     ecs.addComponent<engine::Camera>(camera, asteroids);
     ecs.addComponent<engine::Light>(camera, createMainMenuSun());
     ecs.addComponent<Intro>(camera, asteroids, view);
+    ecs.addComponent<MenuCameraFlight>(camera, createSubmenuViews(view));
     return camera;
 }
 

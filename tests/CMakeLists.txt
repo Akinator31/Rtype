@@ -16,6 +16,7 @@ add_executable(rtype_tests
     client_input_clock.cpp
     client_interpolation.cpp
     client_lore.cpp
+    client_menu_transitions.cpp
     client_online.cpp
     client_voice.cpp
     client_profiles.cpp
