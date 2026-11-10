@@ -2,9 +2,13 @@
 
 // A headset that opens no runtime and draws nothing, for the tests of what drives VR in the client: it counts
 // what it is asked, and a test moves it from state to state with `currentState`, or loses it on its next
-// frame with `loseOnFrame`.
+// frame with `loseOnFrame`. Its controllers are what the test puts in `hands`; it keeps the vibrations asked.
 
 #include "rtype/xr/Headset.hpp"
+
+#include <array>
+#include <utility>
+#include <vector>
 
 namespace testing
 {
@@ -23,6 +27,8 @@ struct FakeHeadset final : rtype::xr::Headset {
     rtype::xr::HeadsetState currentState = rtype::xr::HeadsetState::Waiting;
     bool shouldRender = true;
     bool loseOnFrame = false;
+    std::array<rtype::xr::HandState, rtype::xr::HandCount> hands{};
+    std::vector<std::pair<rtype::xr::Hand, rtype::xr::Vibration>> vibrations;
 
     explicit FakeHeadset(FakeHeadsetCalls &calls) : calls(calls) {}
     ~FakeHeadset() override { calls.destroyed = true; }
@@ -52,6 +58,14 @@ struct FakeHeadset final : rtype::xr::Headset {
     void endEye(int /*eye*/) override {}
     void endFrame() override { ++calls.ended; }
     void recenter() override { ++calls.recentred; }
+    [[nodiscard]] rtype::xr::HandState hand(rtype::xr::Hand hand) const override
+    {
+        return hands.at(static_cast<std::size_t>(hand));
+    }
+    void vibrate(rtype::xr::Hand hand, const rtype::xr::Vibration &vibration) override
+    {
+        vibrations.emplace_back(hand, vibration);
+    }
     [[nodiscard]] std::string runtimeName() const override { return "Fake 1.0.0"; }
 };
 

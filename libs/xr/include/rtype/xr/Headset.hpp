@@ -33,6 +33,50 @@ struct EyeView {
     int height = 0;
 };
 
+/// A hand of the player, which holds a controller.
+enum class Hand {
+    Left,
+    Right,
+};
+
+/// The number of hands: Hand::Left, then Hand::Right.
+inline constexpr int HandCount = 2;
+
+/// What a controller gives this frame (Headset::hand()): where it is, and its buttons. Everything is
+/// released, and nothing tracked, while the headset does not show the game, while the runtime shows its own
+/// menu over it, or without a controller in this hand.
+struct HandState {
+    /// The runtime knows where the controller is this frame: `grip` and `aim` are valid.
+    bool tracked = false;
+    /// The palm of the hand around the controller, in the space of the headset: where to draw it.
+    Pose grip;
+    /// Where the controller points, in the space of the headset: from its tip, along its -z.
+    Pose aim;
+    /// The grip button, and the trigger, from 0 (released) to 1 (fully pressed).
+    float squeeze = 0.0f;
+    float trigger = 0.0f;
+    /// The thumbstick (or the touchpad), from -1 to 1: x to the right, y up.
+    float stickX = 0.0f;
+    float stickY = 0.0f;
+    /// The thumbstick pushed in.
+    bool stickClick = false;
+    /// The lower face button (A on the right hand, X on the left one), and the upper one (B, Y).
+    bool primary = false;
+    bool secondary = false;
+    /// The menu button: only on the left Touch controller, on both of the others.
+    bool menu = false;
+};
+
+/// A vibration of a controller (Headset::vibrate()).
+struct Vibration {
+    /// From 0 (nothing) to 1 (the strongest the controller does).
+    float amplitude = 0.5f;
+    /// How long it lasts, in seconds; the shortest one of the controller when 0.
+    float seconds = 0.02f;
+    /// Its frequency, in hertz; the one the runtime chooses when 0.
+    float frequency = 0.0f;
+};
+
 /// A colour of the background of the eyes, each channel from 0 to 1.
 struct Rgb {
     float red = 0.0f;
@@ -82,6 +126,14 @@ public:
     /// level (levelled()): the player is seated at the eye point of the cockpit again. Done at the next frame
     /// drawn. When the runtime recentres by itself (the button of its menu), the space follows it.
     virtual void recenter() = 0;
+
+    /// What the controller of a hand gives, read by the last beginFrame(), where it will be when this frame
+    /// is shown. Released and not tracked before the first frame, and while the headset does not show the
+    /// game.
+    [[nodiscard]] virtual HandState hand(Hand hand) const = 0;
+    /// Makes the controller of a hand vibrate, at once: a vibration that was playing stops. Nothing while the
+    /// headset does not show the game, or without a controller in this hand.
+    virtual void vibrate(Hand hand, const Vibration &vibration) = 0;
 
     /// The name of the runtime and its version, for the logs ("Monado 25.0.0").
     [[nodiscard]] virtual std::string runtimeName() const = 0;

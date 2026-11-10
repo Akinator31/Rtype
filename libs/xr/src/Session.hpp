@@ -77,6 +77,9 @@ public:
 
     /// Waits for the next frame and begins it. True when its views were located and must be drawn.
     bool beginFrame();
+    /// A frame was begun by beginFrame() and not ended yet: its display time is known, even when it is not
+    /// drawn.
+    [[nodiscard]] bool frameBegun() const { return _frameBegun; }
     /// Where the eyes are this frame, valid after beginFrame() returned true.
     [[nodiscard]] const std::vector<XrView> &views() const { return _views; }
     /// When the frame will be shown: the time to locate the controllers at.
