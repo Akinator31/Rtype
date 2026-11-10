@@ -158,7 +158,7 @@ void VrView::drawFrames(const std::function<void(engine::Surface)> &draw)
     if (_openness > 0.0f) {
         const render::Vector2 gameSize = _renderer.gameSize();
         const render::Rectangle area{0.0f, 0.0f, gameSize.x, gameSize.y};
-        _renderer.beginFrame(panel(), area, PanelBackground);
+        _renderer.beginFrame(panel(), area, _scene.playing ? PanelBackground : PanelGlass);
         draw(engine::Surface::Panel);
         _renderer.drawRectangleOutline(area, 4.0f, PanelEdge);
         _renderer.endFrame();
@@ -173,7 +173,38 @@ engine::Surface VrView::toastSurface() const
     return _openness > 0.5f ? engine::Surface::Panel : engine::Surface::Board;
 }
 
-void VrView::drawEye(int eye, const xr::EyeView &view)
+std::optional<PanelSurface> VrView::panelSurface() const
+{
+    // Open enough to be read: the pointer would not know where to go on a panel that still moves
+    constexpr float Open = 0.99f;
+    if (!_panel || _openness < Open || _fade.holding()) {
+        return std::nullopt;
+    }
+    const render::Vector2 gameSize = _renderer.gameSize();
+    return PanelSurface{.transform = panelTransform(_layout, gameSize, _openness),
+                        .bend = panelLook(_layout, _openness, 1.0f).bend,
+                        .gameSize = gameSize};
+}
+
+void VrView::drawHands(std::span<const HandLook> hands)
+{
+    for (const HandLook &hand : hands) {
+        if (!hand.shown) {
+            continue;
+        }
+        _renderer.drawBox(hand.controller, ControllerBody, ControllerEdge);
+        if (!hand.ray) {
+            continue;
+        }
+        const render::Color light = hand.onWidget ? RayOnWidget : hand.pointing ? RayPointing : RayIdle;
+        _renderer.drawBeam(hand.from, hand.to, hand.onWidget ? RayWidth * 1.5f : RayWidth, light);
+        if (hand.dot && hand.pointing) {
+            _renderer.drawDot(*hand.dot, hand.onWidget ? DotRadius * 1.4f : DotRadius, light);
+        }
+    }
+}
+
+void VrView::drawEye(int eye, const xr::EyeView &view, std::span<const HandLook> hands)
 {
     _renderer.beginEye(eye, toRenderEye(view));
     // Space first, at infinity: everything else is in front of it
@@ -187,7 +218,7 @@ void VrView::drawEye(int eye, const xr::EyeView &view)
     }
     if (_board) {
         _renderer.drawImageQuad(*_board, boardTransform(_layout, _renderer.gameSize()),
-                                {.tint = grey(boardBrightness(_openness, brightness))});
+                                {.tint = grey(boardBrightness(_openness, brightness, _scene.playing))});
     }
     // In the menus, the board floats alone in the sky: the player sits in the cockpit for a game
     if (_cockpit && _scene.playing) {
@@ -208,6 +239,8 @@ void VrView::drawEye(int eye, const xr::EyeView &view)
         _renderer.drawImageQuad(*_panel, panelTransform(_layout, _renderer.gameSize(), _openness),
                                 panelLook(_layout, _openness, brightness));
     }
+    // The hands of the player, over the panel they point at
+    drawHands(hands);
     _renderer.endEye();
 }
 

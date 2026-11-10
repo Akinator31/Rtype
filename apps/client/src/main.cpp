@@ -18,6 +18,8 @@
 #include "Quests/Quests.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "Voice/VoiceKeysSystem.hpp"
+#include "Vr/VrControllers.hpp"
+#include "Vr/VrHaptics.hpp"
 #include "Vr/VrMode.hpp"
 #include "Vr/VrView.hpp"
 #include "rtype/audio/AudioDevice.hpp"
@@ -32,6 +34,7 @@
 #include "rtype/engine/Engine.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/input/Devices.hpp"
+#include "rtype/input/VirtualInput.hpp"
 #include "rtype/localization/Localization.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/network/EventLoop.hpp"
@@ -42,6 +45,7 @@
 #include "rtype/voice/Microphone.hpp"
 #include "rtype/xr/Headset.hpp"
 
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <exception>
@@ -98,6 +102,9 @@ void run(const std::vector<std::string_view> &arguments)
     StopWorkers stopWorkers{engine.getThreads()};
     Renderer renderer(window, resources);
     rtype::input::Devices devices(window);
+    // What the game reads: the devices, and the controllers of a VR headset over them, as a gamepad and a
+    // pointer, while it shows the game
+    rtype::input::VirtualInput input(devices);
 
     const FontId display = resources.loadFont(RTYPE_FONT_DISPLAY, 96);
     const FontId messageFont = resources.loadFont(RTYPE_FONT_BUTTON, 96);
@@ -154,9 +161,10 @@ void run(const std::vector<std::string_view> &arguments)
             presence.resend();
         }
     });
-    engine.setInputSource(devices);
-    rtype::client::GameSessionSystem &sessions =
-        rtype::client::registerClientSystems(engine, devices, audio, metrics, style);
+    engine.setInputSource(input);
+    const rtype::client::ClientSystems systems =
+        rtype::client::registerClientSystems(engine, input, audio, metrics, style);
+    rtype::client::GameSessionSystem &sessions = systems.sessions;
     StopSessions stopSessions{sessions};
     rtype::client::SceneAssetLoader sceneAssets(resources, audio);
     UnloadSceneAssets unloadSceneAssets{engine};
@@ -177,6 +185,9 @@ void run(const std::vector<std::string_view> &arguments)
     // While the headset shows the game, the frame is drawn into the board, which each eye shows from the
     // cockpit during a game, and the window shows the left eye
     rtype::client::VrView vrView(renderer, resources);
+    // The controllers: a gamepad, a pointer at the panel, drawn in the hands; and they vibrate with the game
+    rtype::client::VrControllers controllers;
+    rtype::client::VrHaptics haptics;
     rtype::client::VrMode vr(
         {.open = [] { return rtype::xr::openHeadset(); },
          .pace = [&window](bool paced) { window.setPacedElsewhere(paced); },
@@ -184,7 +195,14 @@ void run(const std::vector<std::string_view> &arguments)
              [&engine, &translations] {
                  engine.showToast(translations.text("vr.toast.lost"), rtype::engine::ToastType::Warning);
              },
-         .drawEye = [&vrView](int eye, const rtype::xr::EyeView &view) { vrView.drawEye(eye, view); }});
+         .drawEye =
+             [&vrView, &controllers](int eye, const rtype::xr::EyeView &view) {
+                 vrView.drawEye(eye, view, controllers.looks());
+             },
+         .located =
+             [&vrView, &controllers](const std::array<rtype::xr::HandState, rtype::xr::HandCount> &hands) {
+                 controllers.place(hands, vrView.panelSurface());
+             }});
     bool recenterKeyWasDown = false;
     const bool vrWanted = rtype::client::wantsVr(arguments, engine.getSettings());
     if (vrWanted) {
@@ -202,6 +220,20 @@ void run(const std::vector<std::string_view> &arguments)
             vr.recenter();
         }
         recenterKeyWasDown = recenterKeyDown;
+        // The controllers, read at the last frame of the headset, before the engine reads the input
+        controllers.update({.elapsed = window.frameTime(),
+                            .showing = vr.isShowing(),
+                            .panelOpen = vrView.panelSurface().has_value(),
+                            .hovered = systems.interface.hovered(),
+                            .gamepadUsed = rtype::client::isGamepadUsed(devices)});
+        input.setGamepad(controllers.gamepad());
+        input.setPointer(controllers.pointer());
+        if (controllers.recenterAsked()) {
+            vr.recenter();
+        }
+        for (const auto &[hand, vibration] : controllers.takeVibrations()) {
+            vr.vibrate(hand, vibration);
+        }
         // While the headset shows the game, the anchors place each part of the interface on its surface
         metrics.separateSurfaces(
             vr.isShowing() ? std::optional(rtype::client::surfaceAreas(renderer.gameSize())) : std::nullopt);
@@ -216,6 +248,11 @@ void run(const std::vector<std::string_view> &arguments)
         audio.finishPendingLoads();
         audio.update();
         const bool inHeadset = vr.isShowing();
+        for (const auto &[hand, vibration] : haptics.update({.playing = inHeadset && sessions.running(),
+                                                             .shots = sessions.localShots(),
+                                                             .health = sessions.localHealth()})) {
+            vr.vibrate(hand, vibration);
+        }
         if (inHeadset) {
             // The HUD on the screens of the cockpit, the menus on the panel, the world on the board
             vrView.update(window.frameTime(),

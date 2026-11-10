@@ -67,6 +67,21 @@ void VrMode::recenter()
     }
 }
 
+std::array<xr::HandState, xr::HandCount> VrMode::hands() const
+{
+    if (_headset == nullptr) {
+        return {};
+    }
+    return {_headset->hand(xr::Hand::Left), _headset->hand(xr::Hand::Right)};
+}
+
+void VrMode::vibrate(xr::Hand hand, const xr::Vibration &vibration)
+{
+    if (_headset != nullptr && _paced) {
+        _headset->vibrate(hand, vibration);
+    }
+}
+
 void VrMode::update()
 {
     if (_headset == nullptr) {
@@ -81,7 +96,11 @@ void VrMode::update()
     if (!_paced) {
         return;
     }
-    if (_headset->beginFrame()) {
+    const bool drawn = _headset->beginFrame();
+    if (_hooks.located) {
+        _hooks.located(hands());
+    }
+    if (drawn) {
         for (int eye = 0; eye < _headset->eyeCount(); ++eye) {
             const xr::EyeView view = _headset->beginEye(eye);
             if (_hooks.drawEye) {

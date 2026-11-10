@@ -4,6 +4,7 @@
 #include "rtype/input/Keys.hpp"
 #include "rtype/xr/Headset.hpp"
 
+#include <array>
 #include <functional>
 #include <memory>
 #include <span>
@@ -13,8 +14,8 @@
 namespace rtype::client
 {
 
-/// The key that puts the cockpit back around the player (VrMode::recenter()), until the controllers can
-/// (docs/plan/vr.md, X5).
+/// The key that puts the cockpit back around the player (VrMode::recenter()); the right thumbstick held in
+/// does it too (VrControllers).
 inline constexpr input::Key RecenterKey = input::Key::F9;
 
 /// Where the choice of starting in the headset is kept in the settings. Not on the Settings page yet
@@ -38,6 +39,9 @@ struct VrHooks {
     /// Draws what an eye sees, its image bound by the headset: VrView::drawEye() in the game. None leaves the
     /// eyes to the background colour of the headset.
     std::function<void(int eye, const xr::EyeView &view)> drawEye;
+    /// The headset located the controllers for the frame it shows, before its eyes are drawn: where they are
+    /// drawn, and where they point (VrControllers::place()). Called at each frame of the headset.
+    std::function<void(const std::array<xr::HandState, xr::HandCount> &hands)> located;
 };
 
 /// The game in a VR headset (docs/architecture/vr.md). It opens the headset, gives it a frame after each
@@ -87,6 +91,11 @@ public:
     /// Puts the cockpit back around the player: the origin of the headset at their head, facing where they
     /// look (xr::Headset::recenter()). Nothing without a headset.
     void recenter();
+
+    /// What the controllers gave at the last frame of the headset: released and not tracked without one.
+    [[nodiscard]] std::array<xr::HandState, xr::HandCount> hands() const;
+    /// Makes a controller vibrate. Nothing without a headset, or while it does not show the game.
+    void vibrate(xr::Hand hand, const xr::Vibration &vibration);
 
     /// A headset is open: shown or waiting for the runtime.
     [[nodiscard]] bool isActive() const { return _headset != nullptr; }

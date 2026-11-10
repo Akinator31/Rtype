@@ -138,6 +138,8 @@ class GameSessionSystem : public ecs::System
     std::vector<game::PlayerState> _players;
     /// Hit points of the ship of the local player in the latest snapshot, 0 while it is not there.
     std::uint8_t _localHealth = 0;
+    /// Shots of the local player that appeared since the session started.
+    std::uint32_t _localShots = 0;
     std::uint32_t _tick = 0;
     /// The last wave started in the session, 0 before the first.
     std::uint16_t _wave = 0;
@@ -247,6 +249,9 @@ public:
     [[nodiscard]] const std::vector<game::PlayerState> &players() const { return _players; }
     /// Hit points of the ship of the local player in the latest snapshot: for the HUD.
     [[nodiscard]] std::uint8_t localHealth() const { return _localHealth; }
+    /// How many shots of the local player appeared since the session started: the controllers of a VR
+    /// headset tick at each one.
+    [[nodiscard]] std::uint32_t localShots() const { return _localShots; }
     /// The tick of the latest snapshot.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }
     /// The last wave started in the session played, from 1; 0 before the first.

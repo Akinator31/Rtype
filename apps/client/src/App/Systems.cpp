@@ -20,14 +20,15 @@
 namespace rtype::client
 {
 
-GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices &devices,
-                                         audio::AudioPlayer &audio, const engine::RendererMetrics &metrics,
-                                         const engine::InterfaceStyle &style)
+ClientSystems registerClientSystems(engine::Engine &engine, input::InputSource &input,
+                                    audio::AudioPlayer &audio, const engine::RendererMetrics &metrics,
+                                    const engine::InterfaceStyle &style)
 {
     ecs::Ecs &ecs = engine.getEcs();
-    ecs.registerSystem<ConsoleSystem>(engine, devices);
-    ecs.registerSystem<engine::InterfaceSystem>(ecs, engine.getScenes(), devices, metrics, style);
-    ecs.registerSystem<KeyCaptureSystem>(ecs, engine.getScenes(), devices);
+    ecs.registerSystem<ConsoleSystem>(engine, input);
+    const auto &interface =
+        ecs.registerSystem<engine::InterfaceSystem>(ecs, engine.getScenes(), input, metrics, style);
+    ecs.registerSystem<KeyCaptureSystem>(ecs, engine.getScenes(), input);
     // After the menus, which read the input first: Escape opens the pause menu before the game reads it
     auto &sessions = ecs.registerSystem<GameSessionSystem>(ecs, engine.getScenes(), engine.getControls());
     // After the session, which moves the shogun it follows
@@ -49,17 +50,17 @@ GameSessionSystem &registerClientSystems(engine::Engine &engine, input::Devices 
     ecs.registerSystem<engine::SpinSystem>();
     ecs.registerSystem<engine::ScrollSystem>();
     ecs.registerSystem<FlightSystem>();
-    ecs.registerSystem<IntroSystem>(engine.getScenes(), devices);
+    ecs.registerSystem<IntroSystem>(engine.getScenes(), input);
     ecs.registerSystem<LogoFlareSystem>();
     ecs.registerSystem<CrawlSystem>(engine.getScenes());
-    ecs.registerSystem<ShipSelectorSystem>(engine.getScenes(), engine.getControls(), devices);
+    ecs.registerSystem<ShipSelectorSystem>(engine.getScenes(), engine.getControls(), input);
     ecs.registerSystem<engine::ModelAnimationSystem>();
     ecs.registerSystem<engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<engine::ColumnLayoutSystem>(ecs);
     ecs.registerSystem<engine::AnchorSystem>(metrics);
     ecs.registerSystem<engine::ToastSystem>(ecs, metrics, style);
     ecs.registerSystem<ecs::TransformSystem>(ecs);
-    return sessions;
+    return {.sessions = sessions, .interface = interface};
 }
 
 } // namespace rtype::client
