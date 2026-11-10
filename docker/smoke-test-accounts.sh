@@ -13,6 +13,7 @@
 # Discord it always uses. The UDP port of the games, published once with the same number inside and outside, is
 # RTYPE_SMOKE_GAME_PORT (default 47253): change it if it is taken.
 set -euo pipefail
+# After a pipe, grep without -q: -q stops at the first match, and the writer killed by SIGPIPE fails the pipe
 
 server_image=${1:?usage: smoke-test-accounts.sh <server image> <smoke image>}
 smoke_image=${2:?usage: smoke-test-accounts.sh <server image> <smoke image>}
@@ -72,7 +73,7 @@ docker create --name "$name-services" --network "$name-net" \
 docker start "$name-services" >/dev/null
 ready=""
 for _ in $(seq 1 30); do
-    if docker logs "$name-services" 2>&1 | grep -q '^ready$'; then
+    if docker logs "$name-services" 2>&1 | grep '^ready$' >/dev/null; then
         ready=yes
         break
     fi
@@ -135,7 +136,7 @@ docker cp "$work/server.key" "$name-players:/opt/smoke/server.key" >/dev/null
 docker start "$name-players" >/dev/null
 ready=""
 for _ in $(seq 1 60); do
-    if docker logs "$name-players" 2>&1 | grep -q '^ready '; then
+    if docker logs "$name-players" 2>&1 | grep '^ready ' >/dev/null; then
         ready=yes
         break
     fi

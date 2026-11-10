@@ -25,6 +25,7 @@ config/
   waves/         a group of enemies that appear one after the other
   player.lua     what every player starts with: its ship, its weapon, its health
   progression.lua  the experience the players earn online, optional
+  hangar.lua     the level of the account each ship of the hangar needs, optional
 ```
 
 - **One file per definition.** The file returns the table of one projectile, one weapon... Its name is free
@@ -262,6 +263,30 @@ alive as the wave ends; its **streak** counts the waves it cleared in a row.
 | `xpPerWave` | whole number, 0 or more | `100` | Experience for a wave cleared, times the multiplier of the streak |
 | `streakBonus` | whole number from 0 to 65535 | `25` | Percent added to the multiplier for each wave of the streak after the first: `25` gives x1, x1.25, x1.5... It counts for the Bydos shot down too |
 | `streakCap` | whole number from 100 to 65535 | `300` | Highest multiplier, in percent |
+
+### The ships of the hangar (`config/hangar.lua`)
+
+One file, at the root of `config/`, optional: without it, every ship of the hangar is open. A ship needs a
+**level** of the account before the player can equip it; a locked one can still be looked at, and its button
+says the level it needs. The level is that of the account signed in, or, offline and as a guest, of the last
+account signed in on this machine (`account.level` in the [settings](../architecture/settings.md)). A level
+up that opens a ship shows a toast. The ships of the hangar are those of the client, named by their code:
+only the client uses this file.
+
+```lua
+return {
+    ships = {
+        { ship = "VX-01", level = 1 },
+        { ship = "VX-02", level = 3 },
+    },
+}
+```
+
+| Field | Type | Default | What it is |
+|---|---|---|---|
+| `ships` | list of tables | empty | The ships that need a level; a ship of the hangar left out is open from level 1 |
+| `ships[i].ship` | string | *required* | The code of a ship of the hangar, such as `VX-03`, listed once; an unknown code is logged by the client |
+| `ships[i].level` | whole number, 1 or more | *required* | The level of the account from which the ship can be equipped |
 
 ## Computing values
 

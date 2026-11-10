@@ -6,6 +6,7 @@
 #include "rtype/game/Progression.hpp"
 #include "rtype/game/Projectile/ProjectileDefinition.hpp"
 #include "rtype/game/Ship/ShipDefinition.hpp"
+#include "rtype/game/ShipUnlock.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/game/Weapon/WeaponDefinition.hpp"
 
@@ -22,5 +23,7 @@ namespace rtype::game
 [[nodiscard]] WaveDefinition readWaveDefinition(TableReader &table);
 [[nodiscard]] PlayerDefinition readPlayerDefinition(TableReader &table);
 [[nodiscard]] Progression readProgression(TableReader &table);
+/// The `ships` list of config/hangar.lua; a ship listed twice is an error.
+[[nodiscard]] std::vector<ShipUnlock> readShipUnlocks(TableReader &table);
 
 } // namespace rtype::game

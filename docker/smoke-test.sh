@@ -8,6 +8,7 @@
 # The images: `docker build .` and `docker build --target smoke .`. The UDP port of the games, published once with
 # the same number inside and outside, is RTYPE_SMOKE_GAME_PORT (default 47243): change it if it is taken.
 set -euo pipefail
+# After a pipe, grep without -q: -q stops at the first match, and the writer killed by SIGPIPE fails the pipe
 
 server_image=${1:?usage: smoke-test.sh <server image> <players image>}
 players_image=${2:?usage: smoke-test.sh <server image> <players image>}
@@ -74,7 +75,7 @@ docker cp "$work/server.key" "$name-players:/opt/smoke/server.key" >/dev/null
 docker start "$name-players" >/dev/null
 ready=""
 for _ in $(seq 1 60); do
-    if docker logs "$name-players" 2>&1 | grep -q '^ready '; then
+    if docker logs "$name-players" 2>&1 | grep '^ready ' >/dev/null; then
         ready=yes
         break
     fi
@@ -87,7 +88,7 @@ if [ -z "$ready" ]; then
     fail "The players could not play a game"
 fi
 echo "Players in a game: $(docker logs "$name-players" 2>&1 | grep '^ready ')"
-docker logs "$name" 2>&1 | grep -q "Alice (.*) joined the lobby" || fail "The lobby did not log the players"
+docker logs "$name" 2>&1 | grep "Alice (.*) joined the lobby" >/dev/null || fail "The lobby did not log the players"
 
 # SIGTERM, as docker stop sends it: the games end, the master stops with code 0
 docker rm -f "$name-players" >/dev/null
