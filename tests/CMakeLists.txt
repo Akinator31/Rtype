@@ -20,6 +20,7 @@ add_executable(rtype_tests
     client_voice.cpp
     client_vr.cpp
     client_vr_controllers.cpp
+    client_vr_experience.cpp
     client_profiles.cpp
     client_shot_prediction.cpp
     client_prediction.cpp
