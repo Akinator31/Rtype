@@ -77,6 +77,8 @@ class VrView
     /// The image of each screen of the cockpit, in the order of CockpitScreens.
     std::array<std::optional<render::ImageId>, CockpitScreens.size()> _screenImages{};
     std::optional<std::shared_future<render::ModelId>> _loading;
+    /// The starry sky of the main menu, drawn around the cockpit during a game.
+    std::optional<render::TextureId> _stars;
     std::optional<Cockpit> _cockpit;
     VrScene _scene;
     float _screensTime = 0.0f;
@@ -106,7 +108,7 @@ public:
     /// hologram, the world of the scene seen through it, as on the screen (PanelGlass).
     static constexpr render::Color PanelBackground{5, 8, 11, 235};
     static constexpr render::Color PanelGlass{5, 8, 11, 0};
-    /// The light along the edges of the panel.
+    /// The light along the edges of the panel, during a game only.
     static constexpr render::Color PanelEdge{111, 227, 240, 200};
     /// The controllers: their body, their edges, and the light of their rays, dim, of the hand that points,
     /// and on a widget.
@@ -119,8 +121,9 @@ public:
     VrView(render::Renderer &renderer, render::ResourceManager &resources, VrLayout layout = {});
 
     /// Once per frame while the headset shows the game, before its frames: starts loading the cockpit, keeps
-    /// what the scene gives, unfolds or folds the panel, fades when the scenes were switched, and during a
-    /// game moves the screens of the cockpit, which are posed once for both eyes.
+    /// what the scene gives (during a game, the stars of the main menu as its sky), unfolds or folds the
+    /// panel, fades when the scenes were switched, and during a game moves the screens of the cockpit, which
+    /// are posed once for both eyes.
     /// @param elapsed Time since the previous frame, in seconds.
     void update(float elapsed, VrScene scene);
     /// Draws the frames of the headset, each into its image, the function drawing what each surface shows:

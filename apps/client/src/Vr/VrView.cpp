@@ -128,6 +128,13 @@ void VrView::update(float elapsed, VrScene scene)
 {
     if (!_loading) {
         _loading = _resources.loadModelAsync(RTYPE_MODEL_COCKPIT);
+        // The stars of the main menu, already loaded for it: the sky around the cockpit during a game
+        _stars = _resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth);
+    }
+    // During a game, the cockpit flies among the stars of the main menu rather than in the deep layer of the
+    // sky of the board, a dark nebula: space around the player, not a screen in the dark
+    if (scene.playing && _stars) {
+        scene.sky = engine::Backdrop{.texture = *_stars, .tint = render::colors::White, .order = 0};
     }
     findCockpit();
     if (scene.scenes != _scene.scenes) {
@@ -160,7 +167,11 @@ void VrView::drawFrames(const std::function<void(engine::Surface)> &draw)
         const render::Rectangle area{0.0f, 0.0f, gameSize.x, gameSize.y};
         _renderer.beginFrame(panel(), area, _scene.playing ? PanelBackground : PanelGlass);
         draw(engine::Surface::Panel);
-        _renderer.drawRectangleOutline(area, 4.0f, PanelEdge);
+        // The dark pane of a game has its edges lit; the clear hologram of the menus has no frame, the world
+        // of the scene seen through it as on the screen
+        if (_scene.playing) {
+            _renderer.drawRectangleOutline(area, 4.0f, PanelEdge);
+        }
         _renderer.endFrame();
     }
     _renderer.beginFrame(board());

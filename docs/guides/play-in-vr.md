@@ -7,8 +7,8 @@ Start the game in a VR headset, on Linux or on Windows. How VR works in the clie
 
     For now you sit in the cockpit during a game, the game on a flat board outside its canopy, your ship, the
     wave, the other pilots and a radar on the screens of the cockpit, and the menus on a holographic panel in
-    front of you. You play with the keyboard or a gamepad: the mouse does not point at the panel. The
-    controllers come next.
+    front of you. You play with the controllers, which point at the panel and vibrate, or with the keyboard or
+    a gamepad. The board in relief and a VR page in the settings come next.
 
 ## What you need
 
@@ -44,8 +44,32 @@ on, its default on Linux and Windows.
 4. **Look at the board.** In the menus, the board floats alone in space; once a game starts, you are seated
    in the cockpit, the board just outside its canopy, a little over your eyes. The cockpit is placed from where the head is when the headset starts showing the game: sit as you
    will play before putting the headset on. If you are not in the seat, or the board is not ahead of you,
-   press **`F9`** to recentre, looking ahead; recentring with the runtime works too (hold the Meta button on a
+   hold the **right thumbstick** pushed in for a second, or press **`F9`**, to recentre, looking ahead; recentring with the runtime works too (hold the Meta button on a
    Quest, or the recentre of the SteamVR menu). The cockpit appears a moment after the board, once loaded.
+
+## The controllers
+
+In the menus, point at the panel and pull the **trigger** to click: the ray of the controller lights up on a
+button, and the controller ticks in your hand. Drag a slider with the trigger held, scroll with the **right
+thumbstick**. Either hand points: the one whose trigger you pulled last. While the panel is open, a trigger
+pulled off the panel does nothing.
+
+| Controller | In a game | In the menus |
+| ---------- | --------- | ------------ |
+| Left thumbstick | Move | Move between the buttons |
+| Right trigger, or A | Fire, held to fire again | Trigger: click; A: confirm |
+| Left, right grip | Aim up, aim down | — |
+| Left trigger | Push to talk | Click |
+| Y | Mute the voice | — |
+| B | — | Back |
+| Menu | The pause menu | Back |
+| Right thumbstick | — | Scroll |
+| Right thumbstick held in, 1 s | Recentre | Recentre |
+
+The controllers are a gamepad for the game, with the buttons of a gamepad, and the keyboard and a real gamepad
+still work beside them. On a Valve Index, the left thumbstick pushed in is the menu button; on an HTC Vive, the trackpad is the
+thumbstick. A shot ticks in your right hand, a hit pulses in both, and your ship destroyed rumbles. While you
+play with a real gamepad, the controllers are no longer drawn, until you use one of their buttons.
 
 ## When the headset shows nothing
 

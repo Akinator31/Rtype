@@ -231,11 +231,13 @@ the board, the panel of the menus and the screens of the cockpit, which each eye
 | `beginFrame(image, background)`       | Starts a frame into the image instead of the window. `endFrame()` leaves it there and makes its mipmaps.     |
 | `beginFrame(image, area, background)` | Starts a frame into the image showing an area of the game of its own, stretched to the image: a surface of the interface, a screen of the cockpit of 480 × 360 game units for instance. |
 | `beginEye(eye, view, background)`     | Starts a 3D pass for an eye, into an image of the renderer of the size of the eye, with the view and the projection of the headset (`EyeView`). |
-| `drawImageQuad(image, transform, look)` | Draws an image as a rectangle in 3D: the square of side 1 around the origin, facing +z, moved by `transform`. `ImageQuadLook` gives its tint, how far its sides bend towards the eye (a curved panel, drawn in 32 strips), and whether it is drawn over everything, whatever its depth. |
+| `drawImageQuad(image, transform, look)` | Draws an image as a rectangle in 3D: the square of side 1 around the origin, facing +z, moved by `transform`, transparent where the image is. The images keep their transparency: a frame drawn into an image adds up how much of each pixel is covered, its colours premultiplied, so that a background with a low alpha leaves a pane clear where nothing is drawn on it. `ImageQuadLook` gives its tint, how far its sides bend towards the eye (a curved panel, drawn in 32 strips), and whether it is drawn over everything, whatever its depth. |
 | `setModelMaterialImage(model, material, image)` | Shows an image as the emission map of a material of a model, found by its name in the glTF file: the screens of the cockpit show the HUD in the frame and with the glow of the artist. |
 | `drawSky(texture, tint)`              | Wraps a picture on a sphere around the eye, at infinity (it follows the eye, so it never comes nearer), repeated twice around and twice from top to bottom. Drawn first: it writes no depth. |
 | `drawModel(model, light, ...)`, `drawEnergyModel(model, energy, ...)` | The models of a frame, seen by the eye instead of a camera. They do not glow.                 |
 | `drawTransparentModel(model, light, ..., hiddenMeshes)` | The transparent meshes of a model (a canopy, a hologram), seen from both sides and without writing their depth, so that what is behind them stays sharp. Drawn after the opaque ones, from the farthest to the nearest. |
+| `drawBeam(from, to, width, color)`, `drawDot(centre, radius, color)` | A ribbon of light turned to face the eye, fading towards its end, and a disc of light facing it, added to what is behind them and over everything: the ray of a controller and where it meets the panel. |
+| `drawBox(transform, color, edge)`     | The cube of side 1 around the origin, moved by `transform`, of one colour with lit edges: a controller in a hand. |
 | `endEye()`                            | Copies the image of the eye, through the colour filter and the dithering, into the framebuffer bound before `beginEye()`: the image of the headset. |
 | `showMirror()`                        | Shows the left eye in the window, in place of a frame, cropped to the shape of the window (`computeMirrorCrop()`). |
 
@@ -294,7 +296,7 @@ Drawing outside of a frame, starting a frame twice or ending a frame that was no
 `std::logic_error`, with a message telling how to fix the call. These are programming errors: raylib would
 otherwise draw to the wrong place without any warning. The same goes for the eyes: a frame and an eye are never
 drawn at the same time, the 2D drawings and the models seen through a camera are for a frame,
-`drawImageQuad()`, `drawSky()` and the models without a camera for an eye, and `showMirror()` is called between two passes.
+`drawImageQuad()`, `drawSky()`, `drawBeam()`, `drawDot()`, `drawBox()` and the models without a camera for an eye, and `showMirror()` is called between two passes.
 `PassOrder` (`PassOrder.hpp`) keeps this order; it holds no graphics resource, so `tests/render_passes.cpp`
 checks it without a window.
 
