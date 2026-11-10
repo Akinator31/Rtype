@@ -195,6 +195,10 @@ drawn by `order`, the lowest at the back.
 Layers going faster the nearer they are make a parallax: the game scene scrolls four layers and three objects
 ([A game in the client](client-game.md#the-sky)).
 
+In a VR headset, the sky is also drawn around the cockpit: `SceneRenderer::sky()` gives the `Backdrop` at the
+back of it, and `SceneRenderer::light()` the light of the scene, which lights the cockpit
+([VR](vr.md#the-cockpit)).
+
 ## Animations
 
 A `Tween` animates the `Scale` or the `Opacity` of an entity, then is removed, unless it goes back and forth:

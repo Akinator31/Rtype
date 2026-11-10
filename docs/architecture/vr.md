@@ -6,9 +6,10 @@ the server, the protocol and the replays do not know whether a player is in a he
 
 !!! warning "In progress"
 
-    The headset shows the game on a flat board ahead of the player, and the window shows the left eye. The
-    game is played with the keyboard or a gamepad. The cockpit, the interface on its screens and the
-    controllers come next: see [Next steps](#next-steps).
+    The player sits in the cockpit, the sky of the scene around them, and the game is on a flat board outside
+    the canopy; the window shows the left eye. The game is played with the keyboard or a gamepad, and `F9`
+    recentres. The interface on the screens of the cockpit and the controllers come next: see
+    [Next steps](#next-steps).
 
 How to start the game in a headset: [Play in VR](../guides/play-in-vr.md).
 
@@ -20,7 +21,7 @@ standard API of VR headsets. Its public headers have no OpenXR type:
 | Header       | Role                                                                                              |
 | ------------ | ------------------------------------------------------------------------------------------------- |
 | `Headset.hpp` | `Headset`, the interface of a headset; `openHeadset()`, which opens the one of the active runtime. |
-| `Math.hpp`   | `Vector3`, `Quaternion`, `Pose`, `Matrix`, `FieldOfView`, and the matrices of a pose and of an eye. |
+| `Math.hpp`   | `Vector3`, `Quaternion`, `Pose`, `Matrix`, `FieldOfView`, the matrices of a pose and of an eye, and `levelled()`, a pose kept to its heading. |
 
 Inside, `openHeadset()` builds three parts, destroyed in the reverse order:
 
@@ -99,6 +100,17 @@ The space of reference is `LOCAL`: its origin is the head of the player when the
 runtime moves back when the player recentres. The player is seated in a cockpit, so `STAGE`, the floor of a
 room, is not used.
 
+### Recentring
+
+`Headset::recenter()` puts the origin back at the head of the player, at the next frame: the session locates the
+head (a `VIEW` space) in `LOCAL` at the time the frame will be shown, keeps only its heading (`levelled()`: no
+pitch, no roll, so the cockpit stays level whatever the tilt of the head), and creates the space it draws in
+again, `LOCAL` moved to that pose. If the head is not tracked at that moment, it tries again at the next frame.
+
+The runtime can recentre too, from its own menu: it then sends `XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING`
+for `LOCAL`, whose origin is already at the head. The space drawn in goes back to `LOCAL` itself, instead of
+keeping a move that the runtime has made obsolete.
+
 ## In the client
 
 `VrMode` (`apps/client/src/Vr/`) drives the headset. It is created after the window and before the loading
@@ -138,19 +150,78 @@ While the headset shows the game (`VrMode::isShowing()`), a frame of the client 
 1. into the **board**, an image of 2560 × 1440 (`Renderer::beginFrame(ImageId)`): the frame of the screen, World
    and Interface layers, glow and smoothing, without the vignette;
 2. into **each eye**, through `VrHooks::drawEye`: `VrView::drawEye()` starts the eye in the renderer with the view
-   and the projection of the headset (`Renderer::beginEye()`), draws the board (`drawImageQuad()`), 4 m wide,
-   3 m ahead, its centre 25 cm under the eyes, and ends the eye (`endEye()`), which copies it into the image of
-   the headset through the colour filter;
+   and the projection of the headset (`Renderer::beginEye()`), draws the scene of the headset
+   ([The cockpit](#the-cockpit)), and ends the eye (`endEye()`), which copies it into the image of the headset
+   through the colour filter;
 3. into the **window**: the left eye, cropped to the shape of the window (`Renderer::showMirror()`), so that the
    people around see what the player sees. `F11`, the size of the window and its screen still work.
 
-The board is placed by `BoardPlacement` and `boardTransform()` (`Vr/VrView.hpp`). It is a first placement: the
-cockpit around the player, and the board outside its canopy, come with the next step. Its image has mipmaps,
-remade after each frame, so that it stays smooth though an eye shows it smaller than it is.
+The image of the board has mipmaps, remade after each frame, so that it stays smooth though an eye shows it
+smaller than it is.
 
 The frame is drawn before the headset waits for its next refresh, and the eyes after: the board shows the game
 of the frame being drawn. When the headset gives no frame to draw (its menu in front, the tracking lost for a
 moment), the window keeps the last left eye.
+
+### The cockpit
+
+During a game, the player is seated in `cockpit.glb` (`RTYPE_MODEL_COCKPIT`); in the menus, the board floats
+alone in the sky of the scene (`VrScene::playing`, a session of `GameSessionSystem` running, the pause menu
+included). The cockpit is loaded on the assets worker the first time the headset shows the game, menus
+included, so that it is ready when a game starts and a game out of the headset never loads it; until it is
+ready, the board floats alone. What was measured on the model is in `Vr/CockpitLook.hpp`; where things are in the headset, in
+`Vr/VrLayout.hpp`, pure functions without a renderer.
+
+```text
+                 sky of the scene, at infinity
+
+        ┌───────────────────────────────────────┐
+        │               THE BOARD               │   2.7 m wide, 2 m ahead, its centre 40 cm over
+        │                                       │   the eyes, tilted to face them: 67° wide
+        └───────────────────────────────────────┘
+               \        canopy (glass)        /
+                \  [Aux] [Nav] [Holo] [Ship] /      dashboard: its top 11 to 13° under the eyes
+                 \__________________________/
+                         (  the seat  )             eye point: the origin of LOCAL
+```
+
+_The scene in the headset, seen from the side of the pilot._
+
+- **The eye point** (`CockpitEyePoint`): 9 cm in front of the headrest of `Cockpit_Seat`, a little under its top,
+  73 cm over its cushion. The model has its nose towards +x; `placeCockpit()` turns it a quarter around y, nose
+  ahead (-z), and moves it so that the eye point is at the origin of the space of the headset, the head of the
+  player.
+- **The board** (`VrLayout`, `boardTransform()`): 2.7 m wide, 2 m ahead, its centre 40 cm over the eyes, tilted
+  to face them. It is just outside the canopy, whose nose is 1.5 m ahead of the eyes: near, so that the game is
+  felt close, rather than a screen far away; 3 m was too far. It is seen whole without turning the head, about
+  67° wide, inside the field of view of a Quest 2, and
+  its bottom, 9° under the eyes, stays over the top of the dashboard (`CockpitDashboardTop`, the nose of the hull
+  and its sides, 11 to 13° under the eyes): the player looks a little up at it. The thin parts of the canopy (its
+  arch, the arch around the hologram) are seen in front of its edges, as in a real cockpit; the player sees past
+  them by moving the head.
+- **The light**: the cockpit is lit by the light of the scene shown (`SceneRenderer::light()`), the sun of the
+  game, the light of the menus; its screens and its glows emit their own light whatever it is.
+- **The sky**: the picture at the back of the sky of the scene (`SceneRenderer::sky()`) is wrapped around the
+  player (`Renderer::drawSky()`), so that they are in space rather than in a dark room with a screen. It does not
+  scroll, as the camera never moves on its own; without a sky, space is plain.
+- **The screens**: the animation `Screens` of the model plays at half speed, posed 15 times per second only
+  (`CockpitScreensRate`): posing it moves its vertices on the processor, once for both eyes.
+
+Each eye is drawn in this order:
+
+| # | What | How |
+| - | ---- | --- |
+| 1 | The sky | `drawSky()`, without depth: everything else is in front of it. |
+| 2 | The board | `drawImageQuad()` with the image of the frame. |
+| 3 | The opaque cockpit | `drawModel()`, without its transparent meshes: it hides the parts of the board behind it. |
+| 4 | The transparent meshes | `drawTransparentModel()`, one at a time from the farthest from the eye point (`farToNear()`): the hologram, then the canopy. They write no depth, so the board stays sharp through them. |
+
+The meshes are found by their names (`ResourceManager::getModelMeshes()`), not by their index in the file.
+
+### Recentring in the client
+
+`F9` (`RecenterKey`) calls `VrMode::recenter()`, which asks the headset to recentre: the cockpit is around the
+player again, the board ahead. The controllers will do it too ([Next steps](#next-steps)).
 
 ### Without a headset
 
@@ -168,15 +239,16 @@ The tests never open a runtime. `testing::FakeHeadset` (`tests/helpers/FakeHeads
 asked and changes state when a test says so: `tests/client_vr.cpp` checks the option and the setting, a
 headset that does not open, the pacing given and taken back, the frames always ended, and a session lost
 between two frames or during one, and each eye drawn between its begin and its end; it also checks where the
-board is and what an eye gives to the renderer. `tests/xr_math.cpp` checks the matrices of the poses and the
-projections of asymmetric fields of view. In `libs/render`, `tests/render_passes.cpp` checks the order of the
+board is (ahead, over the eyes, facing them), that it is seen whole with the field of view of a Quest 2,
+over the dashboard and just outside the canopy, where the cockpit is placed, the order of its transparent meshes, a recentre asked of the
+headset, and what an eye gives to the renderer. `tests/xr_math.cpp` checks the matrices of the poses, the
+projections of asymmetric fields of view, and the pose a recentre keeps. In `libs/render`, `tests/render_passes.cpp` checks the order of the
 frames and the eyes, and `tests/viewport.cpp` the crop of the mirror.
 
 ## Next steps
 
 | Step | What it brings |
 | ---- | -------------- |
-| Cockpit and board | `cockpit.glb` around the player, at the headrest of its seat; the board outside the canopy; the sky of the scene all around; a recenter action. |
 | Interface in the cockpit | The HUD on the screens of the cockpit, the menus on a holographic panel, fades between the scenes. |
 | Controllers | The controllers as a virtual gamepad, a pointer for the menus, haptics. |
 | Board in relief | The world drawn in 3D for each eye on the plane of the board. |

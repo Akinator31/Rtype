@@ -120,6 +120,14 @@ path) to a handle and loads missing resources with a function given by the calle
 raylib, which is why it is unit tested without a window (`tests/resource_cache.cpp`). It is part of the core
 library (`libs/core`), with the `Handle` type, so that the [audio library](audio.md) uses it too.
 
+### The meshes of a model
+
+`getModelMeshes(model)` lists the meshes of a loaded model, by the index that `drawModel()` hides them by: for a
+glTF file, the name of the node that holds each one (or of its mesh), and the centre of its box at rest. raylib
+makes a mesh per primitive, node by node, in the order of the file; the names are read again from the file in
+that order, since raylib keeps none. A part is found by its name instead of an index that would change with the
+file: the cockpit of [VR](vr.md#the-cockpit) finds its canopy and its hologram so.
+
 ### Pictures from the network
 
 `loadRoundPicture(key, png, size)` makes a texture from a PNG in memory rather than from a file: the picture
@@ -222,7 +230,9 @@ the board, which each eye of the headset then shows in 3D.
 | `beginFrame(image, background)`       | Starts a frame into the image instead of the window. `endFrame()` leaves it there and makes its mipmaps.     |
 | `beginEye(eye, view, background)`     | Starts a 3D pass for an eye, into an image of the renderer of the size of the eye, with the view and the projection of the headset (`EyeView`). |
 | `drawImageQuad(image, transform)`     | Draws an image as a rectangle in 3D: the square of side 1 around the origin, facing +z, moved by `transform`. |
+| `drawSky(texture, tint)`              | Wraps a picture on a sphere around the eye, at infinity (it follows the eye, so it never comes nearer), repeated twice around and twice from top to bottom. Drawn first: it writes no depth. |
 | `drawModel(model, light, ...)`, `drawEnergyModel(model, energy, ...)` | The models of a frame, seen by the eye instead of a camera. They do not glow.                 |
+| `drawTransparentModel(model, light, ..., hiddenMeshes)` | The transparent meshes of a model (a canopy, a hologram), seen from both sides and without writing their depth, so that what is behind them stays sharp. Drawn after the opaque ones, from the farthest to the nearest. |
 | `endEye()`                            | Copies the image of the eye, through the colour filter and the dithering, into the framebuffer bound before `beginEye()`: the image of the headset. |
 | `showMirror()`                        | Shows the left eye in the window, in place of a frame, cropped to the shape of the window (`computeMirrorCrop()`). |
 
@@ -276,7 +286,7 @@ Drawing outside of a frame, starting a frame twice or ending a frame that was no
 `std::logic_error`, with a message telling how to fix the call. These are programming errors: raylib would
 otherwise draw to the wrong place without any warning. The same goes for the eyes: a frame and an eye are never
 drawn at the same time, the 2D drawings and the models seen through a camera are for a frame,
-`drawImageQuad()` and the models without a camera for an eye, and `showMirror()` is called between two passes.
+`drawImageQuad()`, `drawSky()` and the models without a camera for an eye, and `showMirror()` is called between two passes.
 `PassOrder` (`PassOrder.hpp`) keeps this order; it holds no graphics resource, so `tests/render_passes.cpp`
 checks it without a window.
 
