@@ -34,20 +34,31 @@ struct Client {
     std::vector<bool> paces;
     int lost = 0;
     std::vector<int> drawnEyes;
-    VrMode vr{
-        {.open =
-             [this] {
-                 ++opened;
-                 if (!opens) {
-                     return rtype::xr::OpenedHeadset{.headset = nullptr, .error = "no runtime"};
-                 }
-                 auto fake = std::make_unique<FakeHeadset>(calls);
-                 headset = fake.get();
-                 return rtype::xr::OpenedHeadset{.headset = std::move(fake), .error = {}};
-             },
-         .pace = [this](bool paced) { paces.push_back(paced); },
-         .lost = [this] { ++lost; },
-         .drawEye = [this](int eye, const rtype::xr::EyeView & /*view*/) { drawnEyes.push_back(eye); }}};
+    /// The order of what VrMode does in a frame: 'l' located, 'e' an eye drawn.
+    std::vector<char> steps;
+    std::array<rtype::xr::HandState, rtype::xr::HandCount> located{};
+    VrMode vr{{.open =
+                   [this] {
+                       ++opened;
+                       if (!opens) {
+                           return rtype::xr::OpenedHeadset{.headset = nullptr, .error = "no runtime"};
+                       }
+                       auto fake = std::make_unique<FakeHeadset>(calls);
+                       headset = fake.get();
+                       return rtype::xr::OpenedHeadset{.headset = std::move(fake), .error = {}};
+                   },
+               .pace = [this](bool paced) { paces.push_back(paced); },
+               .lost = [this] { ++lost; },
+               .drawEye =
+                   [this](int eye, const rtype::xr::EyeView & /*view*/) {
+                       drawnEyes.push_back(eye);
+                       steps.push_back('e');
+                   },
+               .located =
+                   [this](const std::array<rtype::xr::HandState, rtype::xr::HandCount> &hands) {
+                       located = hands;
+                       steps.push_back('l');
+                   }}};
 };
 
 constexpr float Tolerance = 1e-4f;
@@ -399,13 +410,18 @@ TEST_CASE("The panel unfolds from the hologram", "[client][vr]")
     REQUIRE(close(open.values[14], -layout.panelDistance));
 }
 
-TEST_CASE("The board dims behind the panel and with the fade between two scenes", "[client][vr]")
+TEST_CASE("The board dims behind the panel during a game, and with the fade between two scenes",
+          "[client][vr]")
 {
-    REQUIRE(close(rtype::client::boardBrightness(0.0f, 1.0f), 1.0f));
-    REQUIRE(close(rtype::client::boardBrightness(1.0f, 1.0f), rtype::client::BoardBehindPanel));
-    REQUIRE(close(rtype::client::boardBrightness(0.0f, 0.0f), 0.0f));
-    REQUIRE(rtype::client::boardBrightness(0.5f, 1.0f) < 1.0f);
-    REQUIRE(rtype::client::boardBrightness(0.5f, 1.0f) > rtype::client::BoardBehindPanel);
+    using rtype::client::boardBrightness;
+    REQUIRE(close(boardBrightness(0.0f, 1.0f, true), 1.0f));
+    REQUIRE(close(boardBrightness(1.0f, 1.0f, true), rtype::client::BoardBehindPanel));
+    REQUIRE(close(boardBrightness(0.0f, 0.0f, true), 0.0f));
+    REQUIRE(boardBrightness(0.5f, 1.0f, true) < 1.0f);
+    REQUIRE(boardBrightness(0.5f, 1.0f, true) > rtype::client::BoardBehindPanel);
+    // In the menus, the world of the scene stays as bright as on the screen, behind the open panel
+    REQUIRE(close(boardBrightness(1.0f, 1.0f, false), 1.0f));
+    REQUIRE(close(boardBrightness(1.0f, 0.5f, false), 0.5f));
 }
 
 TEST_CASE("A switch of scenes fades out, keeping the images, then in", "[client][vr]")
@@ -460,4 +476,39 @@ TEST_CASE("What an eye sees is given to the renderer as the headset gives it", "
     REQUIRE(view.position.z == 0.2f);
     REQUIRE(view.width == 1832);
     REQUIRE(view.height == 1920);
+}
+
+TEST_CASE("The controllers are located before the eyes are drawn", "[client][vr]")
+{
+    Client client;
+    client.vr.start();
+    client.headset->currentState = HeadsetState::Running;
+    client.headset->hands[1].tracked = true;
+    client.headset->hands[1].trigger = 0.8f;
+    client.vr.update();
+    REQUIRE(client.steps == std::vector<char>{'l', 'e', 'e'});
+    REQUIRE(client.located[1].tracked);
+    REQUIRE(client.vr.hands()[1].trigger == 0.8f);
+    // Located even for a frame that is not drawn: the hands follow the frames of the headset
+    client.headset->shouldRender = false;
+    client.vr.update();
+    REQUIRE(client.steps.back() == 'l');
+}
+
+TEST_CASE("A controller vibrates only while the headset shows the game", "[client][vr]")
+{
+    Client client;
+    client.vr.vibrate(rtype::xr::Hand::Left, {});
+    REQUIRE(client.vr.hands()[0].trigger == 0.0f);
+    client.vr.start();
+    client.vr.update();
+    client.vr.vibrate(rtype::xr::Hand::Left, {});
+    REQUIRE(client.headset->vibrations.empty());
+
+    client.headset->currentState = HeadsetState::Running;
+    client.vr.update();
+    client.vr.vibrate(rtype::xr::Hand::Right, {.amplitude = 0.7f, .seconds = 0.1f, .frequency = 0.0f});
+    REQUIRE(client.headset->vibrations.size() == 1);
+    REQUIRE(client.headset->vibrations[0].first == rtype::xr::Hand::Right);
+    REQUIRE(client.headset->vibrations[0].second.amplitude == 0.7f);
 }
