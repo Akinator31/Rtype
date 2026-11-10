@@ -74,6 +74,14 @@ bool emitsLight(const MaterialMap &emission)
 
 } // namespace
 
+ViewPoint viewPointOf(const Camera3D &camera)
+{
+    return {.position = camera.position,
+            .direction = Vector3Subtract(camera.target, camera.position),
+            .up = camera.up,
+            .orthographic = camera.projection == CAMERA_ORTHOGRAPHIC};
+}
+
 LightingShader::LightingShader()
     : _shader(LoadShaderFromMemory(shaders::lightingVertex, shaders::lightingFragment))
 {
@@ -121,17 +129,16 @@ bool LightingShader::hasEmission(const Model &model)
     });
 }
 
-void LightingShader::setScene(const Light &light, const Camera3D &camera, bool emissionOnly)
+void LightingShader::setScene(const Light &light, const ViewPoint &viewer, bool emissionOnly)
 {
     const ::Vector3 direction = normalized(light.direction);
     const ::Vector3 color = toVector(light.color);
     const ::Vector3 ambient = toVector(light.ambient);
     const ::Vector3 rimDirection = normalized(light.rimDirection);
     const ::Vector3 rim = toVector(light.rim);
-    const ::Vector3 up = normalized(camera.up, {0.0f, 1.0f, 0.0f});
-    const ::Vector3 viewDirection =
-        normalized(Vector3Subtract(camera.target, camera.position), {0.0f, 0.0f, -1.0f});
-    const int orthographic = camera.projection == CAMERA_ORTHOGRAPHIC ? 1 : 0;
+    const ::Vector3 up = normalized(viewer.up, {0.0f, 1.0f, 0.0f});
+    const ::Vector3 viewDirection = normalized(viewer.direction, {0.0f, 0.0f, -1.0f});
+    const int orthographic = viewer.orthographic ? 1 : 0;
     const int emission = emissionOnly ? 1 : 0;
     SetShaderValue(_shader, _lightDirectionLocation, &direction, SHADER_UNIFORM_VEC3);
     SetShaderValue(_shader, _lightColorLocation, &color, SHADER_UNIFORM_VEC3);
@@ -139,7 +146,7 @@ void LightingShader::setScene(const Light &light, const Camera3D &camera, bool e
     SetShaderValue(_shader, _rimDirectionLocation, &rimDirection, SHADER_UNIFORM_VEC3);
     SetShaderValue(_shader, _rimColorLocation, &rim, SHADER_UNIFORM_VEC3);
     SetShaderValue(_shader, _upDirectionLocation, &up, SHADER_UNIFORM_VEC3);
-    SetShaderValue(_shader, _viewPositionLocation, &camera.position, SHADER_UNIFORM_VEC3);
+    SetShaderValue(_shader, _viewPositionLocation, &viewer.position, SHADER_UNIFORM_VEC3);
     SetShaderValue(_shader, _viewDirectionLocation, &viewDirection, SHADER_UNIFORM_VEC3);
     SetShaderValue(_shader, _orthographicLocation, &orthographic, SHADER_UNIFORM_INT);
     SetShaderValue(_shader, _emissionOnlyLocation, &emission, SHADER_UNIFORM_INT);
@@ -181,10 +188,10 @@ void LightingShader::drawMeshes(const Model &model, ::Vector3 position, ::Vector
 {
     // As DrawModelEx(): the transform of the model, turned around its own vertical axis first, then scaled,
     // rotated and moved
-    const Matrix rotation = MatrixRotate(rotationAxis, rotationAngle * DEG2RAD);
-    const Matrix placement = MatrixMultiply(MatrixMultiply(MatrixScale(scale, scale, scale), rotation),
-                                            MatrixTranslate(position.x, position.y, position.z));
-    const Matrix transform =
+    const ::Matrix rotation = MatrixRotate(rotationAxis, rotationAngle * DEG2RAD);
+    const ::Matrix placement = MatrixMultiply(MatrixMultiply(MatrixScale(scale, scale, scale), rotation),
+                                              MatrixTranslate(position.x, position.y, position.z));
+    const ::Matrix transform =
         MatrixMultiply(MatrixMultiply(MatrixRotateY(spinAngle * DEG2RAD), model.transform), placement);
 
     for (int mesh = 0; mesh < model.meshCount; ++mesh) {
@@ -211,25 +218,25 @@ void LightingShader::drawMeshes(const Model &model, ::Vector3 position, ::Vector
     }
 }
 
-void LightingShader::draw(const Model &model, const Light &light, const Camera3D &camera, ::Vector3 position,
+void LightingShader::draw(const Model &model, const Light &light, const ViewPoint &viewer, ::Vector3 position,
                           ::Vector3 rotationAxis, float rotationAngle, float spinAngle, float scale,
                           ::Color tint, const std::vector<int> &hiddenMeshes)
 {
     if (_available) {
-        setScene(light, camera, false);
+        setScene(light, viewer, false);
     }
     drawMeshes(model, position, rotationAxis, rotationAngle, spinAngle, scale, tint, hiddenMeshes,
                _available);
 }
 
-void LightingShader::drawEmission(const Model &model, const Camera3D &camera, ::Vector3 position,
+void LightingShader::drawEmission(const Model &model, const ViewPoint &viewer, ::Vector3 position,
                                   ::Vector3 rotationAxis, float rotationAngle, float spinAngle, float scale,
                                   ::Color tint, const std::vector<int> &hiddenMeshes)
 {
     if (!_available) {
         return;
     }
-    setScene(Light{}, camera, true);
+    setScene(Light{}, viewer, true);
     drawMeshes(model, position, rotationAxis, rotationAngle, spinAngle, scale, tint, hiddenMeshes, true);
 }
 

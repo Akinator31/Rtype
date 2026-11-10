@@ -6,6 +6,7 @@
 #include "GlowPass.hpp"
 #include "LightingShader.hpp"
 #include "Resources.hpp"
+#include "rtype/render/PassOrder.hpp"
 #include "rtype/render/Viewport.hpp"
 
 #include <raylib.h>
@@ -17,6 +18,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
@@ -187,11 +189,13 @@ void addVertex(Vector2 position, Color color)
     rlVertex2f(position.x, position.y);
 }
 
-// Owns the off-screen image the game is drawn to, at the resolution it is shown at in the window
+// Owns an off-screen image with its depth buffer: the one the game is drawn to, at the resolution it is shown
+// at in the window, an image of Renderer::createImage(), or the image of an eye
 class RenderTarget
 {
 private:
     RenderTexture2D _target;
+    bool _mipmapped = false;
 
 public:
     explicit RenderTarget(Vector2 resolution)
@@ -217,6 +221,16 @@ public:
     RenderTarget &operator=(RenderTarget &&) = delete;
 
     [[nodiscard]] const RenderTexture2D &get() const { return _target; }
+    /// Makes the smaller versions of the image from what it holds, so that it stays smooth when it is shown
+    /// smaller than it is, far in 3D: the board in the headset
+    void generateMipmaps()
+    {
+        GenTextureMipmaps(&_target.texture);
+        if (!_mipmapped && _target.texture.mipmaps > 1) {
+            SetTextureFilter(_target.texture, TEXTURE_FILTER_TRILINEAR);
+            _mipmapped = true;
+        }
+    }
     [[nodiscard]] Vector2 resolution() const
     {
         return {static_cast<float>(_target.texture.width), static_cast<float>(_target.texture.height)};
@@ -226,6 +240,39 @@ public:
 Vector2 getWindowSize()
 {
     return {static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
+}
+
+// Where an eye looks from, as a raylib camera: its position, and its axes read from its view matrix, whose
+// rows are the right, the top and the back of the eye in the world. The billboards and the lighting need it.
+Camera3D cameraOf(const EyeView &eye)
+{
+    const Matrix &view = eye.view;
+    const ::Vector3 position = toRaylib(eye.position);
+    const ::Vector3 back{view.at(2, 0), view.at(2, 1), view.at(2, 2)};
+    const ::Vector3 up{view.at(1, 0), view.at(1, 1), view.at(1, 2)};
+    return {position, Vector3Subtract(position, back), up, 90.0f, CAMERA_PERSPECTIVE};
+}
+
+// Starts a 2D pass in pixels over the framebuffer bound, of the given size: as BeginTextureMode() does for a
+// render texture, for a framebuffer raylib did not create (the image of an eye of the headset)
+void beginPixels(int width, int height)
+{
+    rlViewport(0, 0, width, height);
+    rlMatrixMode(RL_PROJECTION);
+    rlPushMatrix();
+    rlLoadIdentity();
+    rlOrtho(0.0, static_cast<double>(width), static_cast<double>(height), 0.0, 0.0, 1.0);
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
+}
+
+void endPixels()
+{
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPopMatrix();
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
 }
 
 // The colour with its alpha multiplied by `opacity`, from 0 to 1
@@ -345,9 +392,30 @@ struct Renderer::Impl {
     const core::ResourceCache<detail::Texture, TextureId> &textures;
     const core::ResourceCache<detail::Font, FontId> &fonts;
     const core::ResourceCache<detail::Model, ModelId> &models;
+    /// The image of an eye being drawn (Renderer::beginEye())
+    struct EyePass {
+        int index = 0;
+        EyeView view;
+        Camera3D camera{};
+        detail::ViewPoint viewPoint;
+        /// The framebuffer bound before, where the eye is copied at its end: the image the headset shows
+        unsigned int framebuffer = 0;
+    };
+
     Vector2 gameSize;
     Rectangle frameArea;
+    /// The image of the frames of the window
     std::optional<RenderTarget> target;
+    /// The images of createImage(), by index of their ImageId
+    std::vector<std::unique_ptr<RenderTarget>> images;
+    /// The image of each eye, by index, created at its first draw
+    std::vector<std::unique_ptr<RenderTarget>> eyes;
+    /// Where the current frame is drawn, or the last one: the window target or an image
+    RenderTarget *frame = nullptr;
+    /// The image of the current or last frame, none for the window
+    std::optional<ImageId> frameImage;
+    std::optional<EyePass> eye;
+    PassOrder passes;
     detail::AntialiasPass antialiasPass;
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
@@ -358,7 +426,6 @@ struct Renderer::Impl {
     ColorFilter colorFilter = ColorFilter::None;
     float vignetteStrength = 0.22f;
     bool antialiasing = true;
-    bool inFrame = false;
 
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
          const core::ResourceCache<detail::Font, FontId> &fontCache,
@@ -367,22 +434,58 @@ struct Renderer::Impl {
           frameArea{0.0f, 0.0f, size.x, size.y}
     {
         fitTargetToWindow();
+        frame = &*target;
     }
 
-    [[nodiscard]] Rectangle getVisibleArea() const { return computeVisibleArea(getWindowSize(), gameSize); }
-
-    void requireFrame() const
+    [[nodiscard]] Rectangle getVisibleArea() const
     {
-        if (!inFrame) {
-            throw std::logic_error("Drawing outside of a frame: call beginFrame() first");
+        if (frameImage) {
+            return computeVisibleArea(getImage(*frameImage).resolution(), gameSize);
         }
+        return computeVisibleArea(getWindowSize(), gameSize);
     }
 
+    void requireFrame() const { passes.requireFrame(); }
+
+    [[nodiscard]] RenderTarget &getImage(ImageId image) const
+    {
+        if (image.index >= images.size()) {
+            throw std::invalid_argument("Unknown image: create it with createImage()");
+        }
+        return *images[image.index];
+    }
+
+    /// Starts a frame into a target, the visible area `area` covering it
+    void beginFrameInto(RenderTarget &into, Rectangle area, Color background)
+    {
+        passes.beginFrame();
+        frame = &into;
+        frameArea = area;
+        glowQueue.clear();
+        BeginTextureMode(into.get());
+        ClearBackground(toRaylib(background));
+        beginGameView();
+    }
+
+    /// The image of an eye, of its size
+    RenderTarget &fitEye(int index, int width, int height)
+    {
+        const auto slot = static_cast<std::size_t>(index);
+        if (eyes.size() <= slot) {
+            eyes.resize(slot + 1);
+        }
+        std::unique_ptr<RenderTarget> &image = eyes[slot];
+        const Vector2 size{static_cast<float>(width), static_cast<float>(height)};
+        if (!image || image->resolution().x != size.x || image->resolution().y != size.y) {
+            image.reset();
+            image = std::make_unique<RenderTarget>(size);
+        }
+        return *image;
+    }
     /// Recreates the render target when the window changed size, so that the image is drawn at the resolution
     /// of the window and never stretched. A minimised window keeps the previous target.
     void fitTargetToWindow()
     {
-        frameArea = getVisibleArea();
         const Vector2 window = getWindowSize();
         Vector2 resolution{std::round(window.x), std::round(window.y)};
         if (resolution.x < 1.0f || resolution.y < 1.0f) {
@@ -411,18 +514,32 @@ struct Renderer::Impl {
                               draw.camera.position, draw.position, draw.rotationAxis, draw.rotationAngle,
                               draw.spinAngle, draw.scale, draw.tint);
         } else {
-            lightingShader.drawEmission(drawn.get(), draw.camera, draw.position, draw.rotationAxis,
-                                        draw.rotationAngle, draw.spinAngle, draw.scale, draw.tint,
-                                        draw.hiddenMeshes);
+            lightingShader.drawEmission(drawn.get(), detail::viewPointOf(draw.camera), draw.position,
+                                        draw.rotationAxis, draw.rotationAngle, draw.spinAngle, draw.scale,
+                                        draw.tint, draw.hiddenMeshes);
         }
         EndMode3D();
     }
 
-    /// Makes the visible area of the game cover the render target: positions and sizes stay in game units
-    /// whatever its resolution.
+    /// Draws a model of energy with its halo, in the 3D mode of `view`
+    void drawEnergy(ModelId model, const Camera3D &view, const Energy &energy, ::Vector3 origin,
+                    ::Vector3 axis, float rotationAngle, float scale, Color tint, float spinAngle)
+    {
+        energyShader.draw(models.get(model).get(), energy, textures.get(energy.noise).get(), view.position,
+                          origin, axis, rotationAngle, spinAngle, scale, toRaylib(tint));
+        if (energy.halo) {
+            const ::Vector3 centre =
+                placePoint(energy.halo->centre, origin, axis, rotationAngle, spinAngle, scale);
+            drawHalo(view, textures.get(energy.halo->texture).get(), *energy.halo, centre, scale,
+                     static_cast<float>(tint.a) / 255.0f);
+        }
+    }
+
+    /// Makes the visible area of the game cover the target of the frame: positions and sizes stay in game
+    /// units whatever its resolution.
     void beginGameView() const
     {
-        const float zoom = target->resolution().x / frameArea.width;
+        const float zoom = frame->resolution().x / frameArea.width;
         BeginMode2D(Camera2D{
             .offset = {0.0f, 0.0f}, .target = {frameArea.x, frameArea.y}, .rotation = 0.0f, .zoom = zoom});
     }
@@ -489,25 +606,30 @@ Vector2 Renderer::windowToGame(Vector2 position) const
 
 void Renderer::beginFrame(Color background)
 {
-    if (_impl->inFrame) {
-        throw std::logic_error("A frame is already started: call endFrame() first");
+    // Not while a pass is drawn into the target: starting the frame throws
+    if (_impl->passes.current() == Pass::None) {
+        _impl->fitTargetToWindow();
     }
-    _impl->fitTargetToWindow();
-    _impl->glowQueue.clear();
-    BeginTextureMode(_impl->target->get());
-    ClearBackground(toRaylib(background));
-    _impl->beginGameView();
-    _impl->inFrame = true;
+    _impl->beginFrameInto(*_impl->target, computeVisibleArea(getWindowSize(), _impl->gameSize), background);
+    _impl->frameImage.reset();
+}
+
+void Renderer::beginFrame(ImageId image, Color background)
+{
+    RenderTarget &into = _impl->getImage(image);
+    _impl->beginFrameInto(into, computeVisibleArea(into.resolution(), _impl->gameSize), background);
+    _impl->frameImage = image;
 }
 
 void Renderer::endFrame()
 {
-    if (!_impl->inFrame) {
-        throw std::logic_error("No frame to end: call beginFrame() first");
-    }
+    _impl->passes.endFrame();
     EndMode2D();
     EndTextureMode();
-    _impl->inFrame = false;
+    if (_impl->frameImage) {
+        _impl->frame->generateMipmaps();
+        return;
+    }
 
     const Texture2D &image = _impl->target->get().texture;
     const Vector2 windowSize = getWindowSize();
@@ -524,6 +646,137 @@ void Renderer::endFrame()
         EndShaderMode();
     }
     EndDrawing();
+}
+
+ImageId Renderer::createImage(Vector2 resolution)
+{
+    if (resolution.x < 1.0f || resolution.y < 1.0f) {
+        throw std::invalid_argument("The resolution of an image must be strictly positive");
+    }
+    auto image = std::make_unique<RenderTarget>(Vector2{std::round(resolution.x), std::round(resolution.y)});
+    // Never shown with what the graphics card left in it
+    BeginTextureMode(image->get());
+    ClearBackground(toRaylib(colors::Black));
+    EndTextureMode();
+    _impl->images.push_back(std::move(image));
+    return ImageId{static_cast<std::uint32_t>(_impl->images.size() - 1)};
+}
+
+void Renderer::beginEye(int eye, const EyeView &view, Color background)
+{
+    if (eye < 0) {
+        throw std::invalid_argument("The index of an eye cannot be negative");
+    }
+    if (view.width <= 0 || view.height <= 0) {
+        throw std::invalid_argument("The size of an eye must be strictly positive");
+    }
+    _impl->passes.beginEye();
+    // Read before anything is bound: the image of the headset, where the eye goes at its end
+    const unsigned int framebuffer = rlGetActiveFramebuffer();
+    RenderTarget *fitted = nullptr;
+    try {
+        fitted = &_impl->fitEye(eye, view.width, view.height);
+    } catch (...) {
+        // No eye was started
+        _impl->passes.endEye();
+        throw;
+    }
+    RenderTarget &image = *fitted;
+    const Camera3D camera = cameraOf(view);
+    _impl->eye = Impl::EyePass{.index = eye,
+                               .view = view,
+                               .camera = camera,
+                               .viewPoint = detail::viewPointOf(camera),
+                               .framebuffer = framebuffer};
+
+    BeginTextureMode(image.get());
+    ClearBackground(toRaylib(background));
+    // As BeginMode3D(), with the matrices of the eye instead of those of a camera
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPushMatrix();
+    rlLoadIdentity();
+    rlMultMatrixf(view.projection.values.data());
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
+    rlMultMatrixf(view.view.values.data());
+    rlEnableDepthTest();
+}
+
+void Renderer::endEye()
+{
+    _impl->passes.endEye();
+    const Impl::EyePass pass = *_impl->eye;
+    _impl->eye.reset();
+    EndMode3D();
+    EndTextureMode();
+
+    // The image of the eye into the one of the headset, through the colour filter, as endFrame() does for the
+    // window: the filter is for the whole view, not only for the board
+    const Texture2D &image = _impl->eyes[static_cast<std::size_t>(pass.index)]->get().texture;
+    const auto width = static_cast<float>(image.width);
+    const auto height = static_cast<float>(image.height);
+    rlEnableFramebuffer(pass.framebuffer);
+    beginPixels(image.width, image.height);
+    const bool filtered = _impl->filterShader.begin(_impl->colorFilter);
+    DrawTexturePro(image, {0.0f, 0.0f, width, -height}, {0.0f, 0.0f, width, height}, {0.0f, 0.0f}, 0.0f,
+                   toRaylib(colors::White));
+    if (filtered) {
+        EndShaderMode();
+    }
+    endPixels();
+}
+
+void Renderer::showMirror()
+{
+    if (_impl->passes.current() != Pass::None) {
+        throw std::logic_error("The mirror is shown between two passes: end the frame or the eye first");
+    }
+    // Back to the window, at its size: the eyes left the viewport at theirs
+    EndTextureMode();
+    const Vector2 windowSize = getWindowSize();
+    BeginDrawing();
+    ClearBackground(toRaylib(colors::Black));
+    if (!_impl->eyes.empty() && _impl->eyes.front()) {
+        const Texture2D &image = _impl->eyes.front()->get().texture;
+        const Rectangle crop = computeMirrorCrop(
+            {static_cast<float>(image.width), static_cast<float>(image.height)}, windowSize);
+        const bool filtered = _impl->filterShader.begin(_impl->colorFilter);
+        DrawTexturePro(image, {crop.x, crop.y, crop.width, -crop.height},
+                       {0.0f, 0.0f, windowSize.x, windowSize.y}, {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
+        if (filtered) {
+            EndShaderMode();
+        }
+    }
+    EndDrawing();
+}
+
+void Renderer::drawImageQuad(ImageId image, const Matrix &transform, Color tint)
+{
+    _impl->passes.requireEye();
+    const Texture2D &texture = _impl->getImage(image).get().texture;
+    rlDrawRenderBatchActive();
+    rlDisableBackfaceCulling();
+    rlPushMatrix();
+    rlMultMatrixf(transform.values.data());
+    rlSetTexture(texture.id);
+    rlBegin(RL_QUADS);
+    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+    rlNormal3f(0.0f, 0.0f, 1.0f);
+    // The image is stored from its bottom row: its top is at v = 1
+    rlTexCoord2f(0.0f, 1.0f);
+    rlVertex3f(-0.5f, 0.5f, 0.0f);
+    rlTexCoord2f(0.0f, 0.0f);
+    rlVertex3f(-0.5f, -0.5f, 0.0f);
+    rlTexCoord2f(1.0f, 0.0f);
+    rlVertex3f(0.5f, -0.5f, 0.0f);
+    rlTexCoord2f(1.0f, 1.0f);
+    rlVertex3f(0.5f, 0.5f, 0.0f);
+    rlEnd();
+    rlSetTexture(0);
+    rlPopMatrix();
+    rlDrawRenderBatchActive();
+    rlEnableBackfaceCulling();
 }
 
 void Renderer::drawTexture(TextureId texture, Vector2 position, Color tint)
@@ -674,8 +927,9 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
     const Camera3D view = toRaylib(camera);
     const detail::Model &drawn = _impl->models.get(model);
     BeginMode3D(view);
-    _impl->lightingShader.draw(drawn.get(), light, view, toRaylib(position), toRaylib(rotationAxis),
-                               rotationAngle, spinAngle, scale, toRaylib(tint), hiddenMeshes);
+    _impl->lightingShader.draw(drawn.get(), light, detail::viewPointOf(view), toRaylib(position),
+                               toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint),
+                               hiddenMeshes);
     // EndMode3D() resets the view to window pixels: go back to game units for what is drawn next
     EndMode3D();
     _impl->beginGameView();
@@ -695,14 +949,7 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
     const ::Vector3 origin = toRaylib(position);
     const ::Vector3 axis = toRaylib(rotationAxis);
     BeginMode3D(view);
-    _impl->energyShader.draw(_impl->models.get(model).get(), energy, _impl->textures.get(energy.noise).get(),
-                             view.position, origin, axis, rotationAngle, spinAngle, scale, toRaylib(tint));
-    if (energy.halo) {
-        const ::Vector3 centre =
-            placePoint(energy.halo->centre, origin, axis, rotationAngle, spinAngle, scale);
-        drawHalo(view, _impl->textures.get(energy.halo->texture).get(), *energy.halo, centre, scale,
-                 static_cast<float>(tint.a) / 255.0f);
-    }
+    _impl->drawEnergy(model, view, energy, origin, axis, rotationAngle, scale, tint, spinAngle);
     EndMode3D();
     _impl->beginGameView();
     if (energy.bloom > 0.0f) {
@@ -720,16 +967,34 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
     }
 }
 
+void Renderer::drawModel(ModelId model, const Light &light, Vector3 position, Vector3 rotationAxis,
+                         float rotationAngle, float scale, Color tint, float spinAngle,
+                         const std::vector<int> &hiddenMeshes)
+{
+    _impl->passes.requireEye();
+    _impl->lightingShader.draw(_impl->models.get(model).get(), light, _impl->eye->viewPoint,
+                               toRaylib(position), toRaylib(rotationAxis), rotationAngle, spinAngle, scale,
+                               toRaylib(tint), hiddenMeshes);
+}
+
+void Renderer::drawEnergyModel(ModelId model, const Energy &energy, Vector3 position, Vector3 rotationAxis,
+                               float rotationAngle, float scale, Color tint, float spinAngle)
+{
+    _impl->passes.requireEye();
+    _impl->drawEnergy(model, _impl->eye->camera, energy, toRaylib(position), toRaylib(rotationAxis),
+                      rotationAngle, scale, tint, spinAngle);
+}
+
 void Renderer::drawGlow()
 {
     _impl->requireFrame();
-    const Vector2 resolution = _impl->target->resolution();
+    const Vector2 resolution = _impl->frame->resolution();
     // The smoothing, the glow and the vignette are drawn in pixels of the frame, the first two in images of
     // their own: leave the game view and the frame, then come back to them, keeping what the frame holds
     EndMode2D();
     EndTextureMode();
     if (_impl->antialiasing) {
-        _impl->antialiasPass.apply(_impl->target->get());
+        _impl->antialiasPass.apply(_impl->frame->get());
     }
     const Texture2D *glow = nullptr;
     if (!_impl->glowQueue.empty()) {
@@ -746,7 +1011,7 @@ void Renderer::drawGlow()
         _impl->glowQueue.clear();
     }
 
-    BeginTextureMode(_impl->target->get());
+    BeginTextureMode(_impl->frame->get());
     if (glow != nullptr) {
         BeginBlendMode(BLEND_ADDITIVE);
         const auto width = static_cast<float>(glow->width);
@@ -755,7 +1020,10 @@ void Renderer::drawGlow()
                        {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
         EndBlendMode();
     }
-    _impl->vignette.draw(resolution, _impl->vignetteStrength);
+    // The vignette belongs to a screen: an image is shown in 3D, where the eye looks around it
+    if (!_impl->frameImage) {
+        _impl->vignette.draw(resolution, _impl->vignetteStrength);
+    }
     _impl->beginGameView();
 }
 

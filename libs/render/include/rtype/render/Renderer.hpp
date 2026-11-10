@@ -14,6 +14,10 @@ namespace rtype::render
 
 class Window;
 
+/// Handle of an image the renderer draws a frame into instead of the window (Renderer::createImage()): the
+/// board of the game in a VR headset.
+using ImageId = core::Handle<struct ImageTag>;
+
 /// Draws the game: textures, text and shapes.
 ///
 /// The game has a fixed size (1920x1080 by default), whatever the window: positions and sizes are always in
@@ -59,7 +63,8 @@ public:
     /// Size of the game, in game units: the area from (0, 0) that is shown on every screen.
     [[nodiscard]] Vector2 gameSize() const;
     /// Part of the game shown in the window, in game units, for its current size: the game area, plus what is
-    /// around it when the window has another shape. Its origin can be negative.
+    /// around it when the window has another shape. Its origin can be negative. When the last frame was drawn
+    /// into an image (beginFrame(ImageId)), the part shown in that image instead.
     [[nodiscard]] Rectangle visibleArea() const;
 
     /// Converts a position in the window, such as the mouse pointer, into game units, taking the scaling
@@ -80,7 +85,7 @@ public:
     [[nodiscard]] ColorFilter colorFilter() const;
 
     /// Darkens the corners of the world, under the interface, to draw the eye to the middle of the screen. It
-    /// is drawn by drawGlow().
+    /// is drawn by drawGlow(), in the frames of the window only: an image is not a screen.
     /// @param strength How dark the corners are, from 0 (no vignette) to 1 (black); 0.22 by default.
     void setVignette(float strength);
     /// How dark the vignette makes the corners, from 0 to 1.
@@ -93,9 +98,49 @@ public:
     /// Starts a new frame and fills it with the background colour.
     /// @throws std::logic_error if a frame is already started.
     void beginFrame(Color background = colors::Black);
-    /// Ends the frame and shows it in the window.
+    /// Starts a new frame drawn into an image instead of the window, and fills it with the background colour.
+    /// The frame is the same as in the window (glow, smoothing), without the vignette and without the colour
+    /// filter, which apply where the image is shown (endEye()). Positions stay in game units.
+    /// @throws std::logic_error if a frame or an eye is already started.
+    void beginFrame(ImageId image, Color background = colors::Black);
+    /// Ends the frame: shows it in the window, or leaves it in its image.
     /// @throws std::logic_error if no frame is started.
     void endFrame();
+
+    /// Creates an image to draw frames into (beginFrame(ImageId)) and to show in 3D (drawImageQuad()), filled
+    /// with black. It lives as long as the renderer.
+    /// @param resolution Its size, in pixels; of the shape of the game, so that the game fills it.
+    /// @throws std::invalid_argument if the resolution is not strictly positive.
+    /// @throws std::runtime_error if the graphics card cannot create it.
+    [[nodiscard]] ImageId createImage(Vector2 resolution);
+
+    /// Starts drawing what an eye of a VR headset sees, in 3D: into an image of the renderer of the size of
+    /// the eye, cleared to the background colour, seen with the view and the projection of the eye. The world
+    /// of the eye is in metres, y up, -z ahead. Only drawImageQuad() and the drawModel() and
+    /// drawEnergyModel() without a camera draw in it.
+    /// @param eye Index of the eye, from 0: the left eye, which showMirror() shows.
+    /// @param view What the eye sees this frame.
+    /// @param background Colour the image is cleared to: space, around what is drawn.
+    /// @throws std::logic_error if a frame or an eye is already started.
+    /// @throws std::invalid_argument if the eye index is negative or the size of the eye is not positive.
+    void beginEye(int eye, const EyeView &view, Color background = {5, 8, 20, 255});
+    /// Ends the eye: copies its image through the colour filter and the dithering into the framebuffer that
+    /// was bound when beginEye() was called, the image the headset shows, and keeps it for showMirror().
+    /// @throws std::logic_error if no eye is started.
+    void endEye();
+    /// Shows the left eye (eye 0) in the window, in place of a frame: the largest part of it of the shape of
+    /// the window, in its middle (computeMirrorCrop()), so that the people around see what the player sees.
+    /// Black until an eye is drawn. Call it once per frame of the game while it is in the headset, outside of
+    /// a pass.
+    /// @throws std::logic_error if a frame or an eye is started.
+    void showMirror();
+
+    /// Draws an image in 3D: a rectangle from (-0.5, -0.5, 0) to (0.5, 0.5, 0), its top along +y, facing +z,
+    /// moved by `transform` (scale it to the size wanted). Seen from both sides. The board of the game in the
+    /// headset.
+    /// @param tint Colour multiplied with the image.
+    /// @throws std::logic_error if no eye is started.
+    void drawImageQuad(ImageId image, const Matrix &transform, Color tint = colors::White);
 
     /// Draws a whole texture at its original size.
     /// @param position Top-left corner, in game units.
@@ -199,6 +244,19 @@ public:
     /// The other parameters are those of drawModel().
     /// @throws std::logic_error if no frame is started.
     void drawEnergyModel(ModelId model, const Camera &camera, const Energy &energy, Vector3 position,
+                         Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
+                         float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
+    /// Draws a 3D model in an eye (beginEye()), seen by the eye and lit by the light: the drawModel() of a
+    /// frame, without its camera. It does not glow: the glow belongs to the frames.
+    /// @throws std::logic_error if no eye is started.
+    void drawModel(ModelId model, const Light &light, Vector3 position,
+                   Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f, float scale = 1.0f,
+                   Color tint = colors::White, float spinAngle = 0.0f,
+                   const std::vector<int> &hiddenMeshes = {});
+    /// Draws a 3D model of energy in an eye (beginEye()), seen by the eye, with its halo: the
+    /// drawEnergyModel() of a frame, without its camera and without its glow.
+    /// @throws std::logic_error if no eye is started.
+    void drawEnergyModel(ModelId model, const Energy &energy, Vector3 position,
                          Vector3 rotationAxis = {0.0f, 1.0f, 0.0f}, float rotationAngle = 0.0f,
                          float scale = 1.0f, Color tint = colors::White, float spinAngle = 0.0f);
     /// Smooths the edges of everything drawn so far (setAntialiasing()). Then makes the energy models, and

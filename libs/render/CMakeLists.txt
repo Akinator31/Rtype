@@ -6,6 +6,7 @@ add_library(rtype_render
     src/FontCharacters.cpp
     src/GlowPass.cpp
     src/LightingShader.cpp
+    src/PassOrder.cpp
     src/Paths.cpp
     src/RaylibLog.cpp
     src/Renderer.cpp
