@@ -20,8 +20,8 @@ using rtype::network::Reader;
 using rtype::network::Writer;
 
 /// The fields before the players in SNAPSHOT: tick, last input, input lead, weapon (cooldown, ammo, reload),
-/// part, parts, player count.
-constexpr std::size_t SnapshotHeaderSize = 18;
+/// part, parts, player count, then the weapon in hand and the one put away (cooldown, ammo, reload).
+constexpr std::size_t SnapshotHeaderSize = 25;
 /// One player in SNAPSHOT: slot, lives, score, kills, waves cleared, streak, best streak, experience.
 constexpr std::size_t PlayerStateSize = 20;
 /// One entity in SNAPSHOT.
@@ -331,6 +331,10 @@ std::vector<std::byte> encode(const SnapshotPart &part)
     writer.writeU16(part.weapon.reloadLeft);
     writer.writeU8(part.part);
     writer.writeU8(part.parts);
+    writer.writeU8(part.weapon.inHand);
+    writer.writeU16(part.weapon.spareCooldown);
+    writer.writeU16(part.weapon.spareAmmo);
+    writer.writeU16(part.weapon.spareReloadLeft);
     writePlayers(writer, part.players);
     writer.writeU8(static_cast<std::uint8_t>(part.entities.size()));
     for (const EntityState &entity : part.entities) {
@@ -352,6 +356,13 @@ std::optional<SnapshotPart> decodeSnapshotPart(std::span<const std::byte> payloa
     part.part = reader.readU8();
     part.parts = reader.readU8();
     if (part.parts == 0 || part.parts > MaxSnapshotParts || part.part >= part.parts) {
+        reader.fail();
+    }
+    part.weapon.inHand = reader.readU8();
+    part.weapon.spareCooldown = reader.readU16();
+    part.weapon.spareAmmo = reader.readU16();
+    part.weapon.spareReloadLeft = reader.readU16();
+    if (part.weapon.inHand >= LoadoutSize) {
         reader.fail();
     }
 
@@ -625,6 +636,31 @@ std::optional<VoiceFrameMessage> decodeVoiceFrame(std::span<const std::byte> pay
         reader.fail();
     }
     readVoice(reader, message.sequence, message.last, message.frame);
+    if (!reader.finish()) {
+        return std::nullopt;
+    }
+    return message;
+}
+
+std::vector<std::byte> encode(const LoadoutMessage &message)
+{
+    for (const std::string &weapon : message.weapons) {
+        require(!weapon.empty() && weapon.size() <= MaxWeaponIdLength, "A weapon id is 1 to 255 bytes");
+    }
+    Writer writer(message.weapons[0].size() + message.weapons[1].size() + LoadoutSize);
+    for (const std::string &weapon : message.weapons) {
+        writer.writeString(weapon);
+    }
+    return writer.take();
+}
+
+std::optional<LoadoutMessage> decodeLoadout(std::span<const std::byte> payload)
+{
+    Reader reader(payload);
+    LoadoutMessage message;
+    for (std::string &weapon : message.weapons) {
+        weapon = reader.readString(1, MaxWeaponIdLength);
+    }
     if (!reader.finish()) {
         return std::nullopt;
     }
