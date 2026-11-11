@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +27,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rtype::render
@@ -444,6 +446,8 @@ struct Renderer::Impl {
     const core::ResourceCache<detail::Texture, TextureId> &textures;
     const core::ResourceCache<detail::Font, FontId> &fonts;
     const core::ResourceCache<detail::Model, ModelId> &models;
+    /// What the poses cost since takePoseStats()
+    PoseStats poseStats;
     /// The image of an eye being drawn (Renderer::beginEye())
     struct EyePass {
         int index = 0;
@@ -581,13 +585,30 @@ struct Renderer::Impl {
         }
     }
 
+    /// Poses a model with `apply`, which tells whether its vertices moved, and counts what it cost.
+    /// @param glow Whether it is posed again to be drawn in the glow.
+    template <typename Apply>
+    void pose(const detail::Model &model, Apply apply, bool glow = false)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        if (!apply()) {
+            return;
+        }
+        poseStats.seconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        ++poseStats.poses;
+        if (glow) {
+            ++poseStats.glowPoses;
+        }
+        poseStats.bones += model.countBones();
+    }
+
     /// Draws a model again in the glow of the frame: an energy model as it is, a lit model only where it
     /// emits light. Must be called in the images of the glow (GlowPass::render()).
     void drawInGlow(const GlowDraw &draw)
     {
         const detail::Model &drawn = models.get(draw.model);
         if (draw.pose) {
-            drawn.applyPose(*draw.pose);
+            pose(drawn, [&] { return drawn.applyPose(*draw.pose); }, true);
         }
         if (draw.eye) {
             loadMatrices(draw.eye->projection, draw.eye->view);
@@ -1585,20 +1606,28 @@ void Renderer::drawGlow()
 
 void Renderer::animateModel(ModelId model, int animation, float time)
 {
-    _impl->models.get(model).animate(animation, time);
+    const detail::Model &posed = _impl->models.get(model);
+    _impl->pose(posed, [&] { return posed.animate(animation, time); });
 }
 
 void Renderer::blendModelAnimations(ModelId model, int from, float fromTime, int to, float toTime,
                                     float amount)
 {
-    _impl->models.get(model).blendAnimations(from, fromTime, to, toTime, amount);
+    const detail::Model &posed = _impl->models.get(model);
+    _impl->pose(posed, [&] { return posed.blendAnimations(from, fromTime, to, toTime, amount); });
 }
 
 void Renderer::poseModel(ModelId model, const ModelPose &pose)
 {
     ModelPose clamped = pose;
     clamped.amount = std::clamp(pose.amount, 0.0f, 1.0f);
-    _impl->models.get(model).applyPose(clamped);
+    const detail::Model &posed = _impl->models.get(model);
+    _impl->pose(posed, [&] { return posed.applyPose(clamped); });
+}
+
+PoseStats Renderer::takePoseStats()
+{
+    return std::exchange(_impl->poseStats, {});
 }
 
 void Renderer::drawText(FontId font, const std::string &text, Vector2 position, float size, Color color,

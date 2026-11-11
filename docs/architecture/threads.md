@@ -28,6 +28,7 @@ main thread.
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | **Main**   | window, raylib (graphics, input, audio), `Renderer`, `ResourceManager`, `AudioPlayer`, `Ecs`, scenes, events, game systems, `network::EventLoop`, `discord::Session` | the frame loop: input, `network.poll()`, `discordSession.poll()`, `engine.update()`, finishing the loads, drawing |
 | **Assets** | nothing persistent                                                                                                                               | reads asset files and decodes them in CPU memory, one request at a time                  |
+| **Friend pictures** | nothing persistent: the URL it downloads | downloads the pictures of the Discord friends from the CDN of Discord with libcurl, one at a time (`client::FriendPictures`); hands each PNG to Main through `network::EventLoop::post()`. Its queue is under a mutex, its stop an `atomic<bool>` that aborts the download running |
 
 Why nothing else gets a thread:
 
@@ -200,6 +201,12 @@ stateDiagram-v2
   the futures at each update with `wait_for(0)`. When all are ready, it pops it and applies the switch.
 - `SceneAssets` counts the open scenes using each asset. At zero, it is unloaded. A memory budget with LRU eviction can come
   later.
+- A scene with `SceneSettings::keepsAssets` keeps its assets loaded once it has opened, even after it closes:
+  the engine holds one more use of them until `unloadSceneAssets()`. Opening it again needs neither the
+  loading scene nor a frame spent creating them on the main thread. The client sets it on the scenes the
+  player keeps coming back to: the main menu, the game and the results. Without it, going back from a game to
+  the main menu unloaded the planet, the station and the ships, preloaded at startup, then parsed them again
+  on the main thread: the game froze.
 - `SceneSettings::assets` holds a type and path for each resource. The client also distinguishes smooth
   textures with `AssetType::SmoothTexture`; other textures use the default filtering.
 - The client registers its `SceneAssetLoader` with the engine and pumps `ResourceManager` and `AudioPlayer`

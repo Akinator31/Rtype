@@ -147,6 +147,8 @@ private:
     /// The address of the server, as the player wrote it: the choices for the other players are kept under
     /// it.
     std::string _server;
+    /// The id of the game on its master (GAME_JOINED).
+    std::uint32_t _gameId = 0;
 
     game::PlayerInput _input;
     /// The inputs sent, newest first.
@@ -306,6 +308,10 @@ public:
 
     /// The game accepted the player.
     [[nodiscard]] bool accepted() const { return _accepted.has_value(); }
+    /// The address of the server, as the player wrote it ("host:port"), and the id of the game on it: what a
+    /// friend invited from Discord joins.
+    [[nodiscard]] const std::string &server() const { return _server; }
+    [[nodiscard]] std::uint32_t gameId() const { return _gameId; }
     /// Why the game ended, for the player.
     [[nodiscard]] const std::string &endReason() const { return _endReason; }
     /// The names of the players, by slot.

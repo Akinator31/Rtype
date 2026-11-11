@@ -131,7 +131,7 @@ void GameSessionSystem::stop()
     _tick = 0;
     _wave = 0;
     _rescue = game::RescueStage::None;
-    _outcomeTold = false;
+    _outcome.reset();
     _clock = 0.0f;
 }
 
@@ -337,8 +337,11 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     if (snapshot.rescue != std::exchange(_rescue, snapshot.rescue) && _onRescue) {
         _onRescue(snapshot.rescue);
     }
-    if (snapshot.gameOver && !std::exchange(_outcomeTold, true) && _onOutcome) {
-        _onOutcome(*snapshot.gameOver);
+    if (snapshot.gameOver && !_outcome) {
+        _outcome = snapshot.gameOver;
+        if (_onOutcome) {
+            _onOutcome(*snapshot.gameOver);
+        }
     }
 
     // Each snapshot holds the whole world: what is not in it any more is gone

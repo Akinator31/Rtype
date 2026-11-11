@@ -76,11 +76,11 @@ TEST_CASE("Discord fake: the presence shows the last activity until cleared", "[
     rtype::discord::Activity solo;
     solo.state = "Solo · vague 7/12";
     solo.details = "Dans le hangar";
-    sdk.presence.update(solo);
+    sdk.presence.update(solo, {});
     rtype::discord::Activity online;
     online.state = "Partie · vague 1/12";
     online.party = rtype::discord::Party{.size = 3, .max = 4};
-    sdk.presence.update(online);
+    sdk.presence.update(online, {});
     REQUIRE(sdk.presence.shown);
     CHECK(sdk.presence.shown->party == rtype::discord::Party{.size = 3, .max = 4});
     CHECK(sdk.presence.updates.size() == 2);

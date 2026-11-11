@@ -13,6 +13,10 @@
 namespace rtype::client
 {
 
+/// Where the intro puts its camera now: in the asteroids until the player presses, then on its flight to
+/// the view of the menu, where it stays.
+[[nodiscard]] render::Camera computeIntroView(const Intro &intro);
+
 /// Plays the intro of the main menu: waits until the player presses any key, gamepad button or mouse button
 /// while the scene of the Intro receives the input, then flies its Camera from the asteroids to the view of
 /// the menu, shows the Hidden elements with an IntroSlide and moves, scales and fades them all to their

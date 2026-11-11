@@ -117,8 +117,8 @@ class GameSessionSystem : public ecs::System
     std::function<void(std::uint16_t, const std::string &)> _onWave;
     std::function<void(game::RescueStage)> _onRescue;
     std::function<void(game::GameOutcome)> _onOutcome;
-    /// The outcome of the game was told: a game ends once, though several snapshots may tell it.
-    bool _outcomeTold = false;
+    /// How the game ended, once a snapshot told it: a game ends once, though several snapshots may tell it.
+    std::optional<game::GameOutcome> _outcome;
     std::function<void()> _onStrike;
     /// The local player holds the second weapon of its loadout: switched by SwitchWeaponControl, sent in
     /// every input (game::PlayerInput::SecondWeapon).
@@ -304,6 +304,8 @@ public:
     [[nodiscard]] std::chrono::system_clock::time_point startedAt() const { return _startedAt; }
     /// The stage of the rescue against the final boss in the latest snapshot.
     [[nodiscard]] game::RescueStage rescue() const { return _rescue; }
+    /// How the game played ended, once a snapshot told it.
+    [[nodiscard]] std::optional<game::GameOutcome> outcome() const { return _outcome; }
     /// The entity of the scene that draws an entity of the game, if it is drawn.
     [[nodiscard]] std::optional<ecs::entity_t> entityOf(std::uint32_t networkId) const;
     /// Entities of the game drawn.

@@ -1,6 +1,6 @@
 # Discord in the client (docs/architecture/client-online.md#discord), in three targets:
 #   rtype::discord      the interfaces the client and its tests know, one per feature (rtype/discord/Authorizer.hpp,
-#                       Presence.hpp, Connection.hpp, VoiceCall.hpp), faked in tests/helpers/FakeSocialSdk.hpp
+#                       Presence.hpp, Connection.hpp, VoiceCall.hpp, Friends.hpp), faked in tests/helpers/FakeSocialSdk.hpp
 #   rtype::discord_voice  the voice of a game carried by Discord (rtype/discord/DiscordVoice.hpp), a
 #                       rtype::voice::VoiceChannel on the VoiceCall interface: without the SDK, so the client
 #                       core and its tests link it on every platform
@@ -42,6 +42,7 @@ add_library(rtype_discord_sdk STATIC
     src/SocialSdkAuthorizer.cpp
     src/SocialSdkPresence.cpp
     src/SocialSdkConnection.cpp
+    src/SocialSdkFriends.cpp
     src/SocialSdkVoiceCall.cpp
 )
 add_library(rtype::discord_sdk ALIAS rtype_discord_sdk)

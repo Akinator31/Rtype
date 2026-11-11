@@ -1,5 +1,6 @@
 #include "LightingShader.hpp"
 
+#include "SkeletonPose.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/shaders/Lighting.hpp"
 
@@ -99,6 +100,7 @@ LightingShader::LightingShader()
     _metalnessLocation = GetShaderLocation(_shader, "metalness");
     _emissionOnlyLocation = GetShaderLocation(_shader, "emissionOnly");
     _emissionColorLocation = GetShaderLocation(_shader, "emissionColor");
+    _skinnedLocation = GetShaderLocation(_shader, "skinned");
     _available = IsShaderValid(_shader) && _lightDirectionLocation >= 0;
     if (!_available) {
         log::Logger("render").warning("Cannot compile the lighting shader: 3D models are drawn unlit");
@@ -194,6 +196,11 @@ void LightingShader::drawMeshes(const Model &model, ::Vector3 position, ::Vector
     const ::Matrix transform =
         MatrixMultiply(MatrixMultiply(MatrixRotateY(spinAngle * DEG2RAD), model.transform), placement);
 
+    // The pose the model was last given, moved on the graphics card. The shader of raylib, without
+    // lighting, does not move them: the model keeps its rest pose then
+    if (lit) {
+        setBoneMatrices(_shader, model);
+    }
     for (int mesh = 0; mesh < model.meshCount; ++mesh) {
         if (std::ranges::find(hiddenMeshes, mesh) != hiddenMeshes.end()) {
             continue;
@@ -205,6 +212,8 @@ void LightingShader::drawMeshes(const Model &model, ::Vector3 position, ::Vector
         material.maps = maps.data();
         if (lit) {
             prepareMaterial(material);
+            const int skinned = isSkinned(model.meshes[mesh]) && model.boneMatrices != nullptr ? 1 : 0;
+            SetShaderValue(_shader, _skinnedLocation, &skinned, SHADER_UNIFORM_INT);
         }
         maps[MATERIAL_MAP_DIFFUSE].color = multiply(maps[MATERIAL_MAP_DIFFUSE].color, tint);
         const bool doubleSided = material.params[DoubleSidedParameter] > 0.0f;

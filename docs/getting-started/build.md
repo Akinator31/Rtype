@@ -30,8 +30,8 @@ system-wide besides a compiler and, on Linux, the X11/OpenGL and OpenSSL develop
     Install [Visual Studio 2022](https://visualstudio.microsoft.com/) with the
     **Desktop development with C++** workload, which includes CMake.
 
-OpenSSL (`libssl-dev`, `openssl`) is required on Linux: libcurl, which sends the mails of the server and is the
-HTTP client of the tests, takes its TLS from it, and so does the fake mail server of the tests. Windows uses its
+OpenSSL (`libssl-dev`, `openssl`) is required on Linux: libcurl, which sends the mails of the server, downloads
+the pictures of the Discord friends in the client, and is the HTTP client of the tests, takes its TLS from it, and so does the fake mail server of the tests. Windows uses its
 own (Schannel).
 
 PulseAudio and ALSA (`libpulse0`, `libasound2t64`) are required on Linux by the Discord Social SDK the client

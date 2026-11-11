@@ -14,7 +14,8 @@ Run a server and play the same game from several machines, or from several clien
     For players on other machines, open 4242 over TCP and over UDP.
 
 2. **Connect.** Start the client, choose **Online**, type a name and the server, then **Connect**, or pick one
-   of the **Servers met** on the right, which shows the account you will be signed in to:
+   of the **Servers met** on the right, which shows the account you will be signed in to (**Forget**, beside a
+   server, forgets its key):
 
     | Field | Example | Meaning |
     |---|---|---|
@@ -26,8 +27,8 @@ Run a server and play the same game from several machines, or from several clien
    client remembers it in its settings, and connects at once the next times.
 
 4. **Do not trust a key that changed.** A known server that presents another key is refused, with a warning
-   that shows both: someone may be pretending to be it. If its owner did change its key, **Forget the server
-   key** in the Online menu, then connect again.
+   that shows both: someone may be pretending to be it. If its owner did change its key, **Forget the old
+   key** on the warning: the client connects again and shows the new key, to check and trust as the first time.
 
 5. **Sign in**, on a server with accounts ([Set up accounts](set-up-accounts.md)). After **Connect**, the
    client offers what the server offers: **Continue with Discord** first, then **Sign in** (a username or an
@@ -59,6 +60,17 @@ Run a server and play the same game from several machines, or from several clien
    each name says when it is muted, muted by you, or without a microphone. In the pause menu, **Player voices**
    sets the volume of each player for you (Left, Right), and Enter mutes or unmutes it: the choice is kept for
    its account, and found again in the next game.
+
+8. **Play with your Discord friends.** Signed in with Discord on a server that gives the token (its
+   `[discord] social = true`), the lobby lists your Discord friends right of the games: those playing R-Type
+   first, with what they do. **Ask to join** a friend whose game has room: it accepts in its game, or in
+   Discord, then you get an invitation. An invitation shows a toast, then **Join** in the lobby: the game
+   connects to its server, asks you to trust it the first time, then opens the hangar before the game. In a
+   game, the pause menu lists your friends online: **Invite** one, or **Accept** a friend who asks to join.
+   In the lobby, **Invite** a friend online: it comes to your server. From Discord too, without any of this:
+   **Join** on the profile of a friend in the lobby of a server or in a game online with room, or **+** →
+   *Invite to play* in a conversation while you are in the lobby or in a game online; Discord starts the game if it
+   is closed.
 
 ## Result
 

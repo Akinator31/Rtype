@@ -65,7 +65,7 @@ sending it anything, and a player who trusted another key for this server sees a
 
 Replace the key only if it must change: stop the server, move `server.key` away, and start the server, which
 makes a new one. The players who trusted the old key are warned that it changed, and must forget it
-(**Forget the server key**, in the Online menu) before trusting the new one. Tell them beforehand, with the
+(**Forget the old key**, on the warning) before trusting the new one. Tell them beforehand, with the
 new fingerprint.
 
 **If `server.key` leaked** (committed, sent, copied to a machine you do not trust), replace it at once:

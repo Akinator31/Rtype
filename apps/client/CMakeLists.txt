@@ -1,6 +1,7 @@
 # The code of the client is a library of its own, so that the tests can use it, like the server's:
 #   App/                 what the program puts together: its configuration, its systems and its scenes
 #   Commands/, Console/  the console and its commands
+#   Diagnostics/         what the client measures to find what is slow
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
 #   Loading/             the loading screen at startup, and the loading of the assets of the scenes
 #   Lore/                the story of the game, scrolling away towards the horizon
@@ -18,6 +19,7 @@ add_library(r-type_client_core STATIC
     src/Commands/Commands.cpp
     src/Commands/FpsCommand.cpp
     src/Commands/HitboxesCommand.cpp
+    src/Commands/ProfileCommand.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
     src/Commands/Switch.cpp
@@ -27,6 +29,10 @@ add_library(r-type_client_core STATIC
     src/Console/ConsoleSystem.cpp
     src/Controls/KeyCaptureSystem.cpp
     src/Controls/KeyChoice.cpp
+    src/Diagnostics/FrameProfile.cpp
+    src/Discord/DiscordFriends.cpp
+    src/Discord/FriendPictures.cpp
+    src/Discord/DiscordInvite.cpp
     src/Discord/DiscordPresence.cpp
     src/Game/BossLooks.cpp
     src/Game/DamageLooks.cpp
@@ -67,12 +73,14 @@ add_library(r-type_client_core STATIC
     src/Lore/LoreLayout.cpp
     src/Lore/LoreScene.cpp
     src/Lore/LoreText.cpp
+    src/MainMenu/CameraFlight.cpp
     src/MainMenu/Capitals.cpp
     src/MainMenu/FlightSystem.cpp
     src/MainMenu/IntroSystem.cpp
     src/MainMenu/Logo.cpp
     src/MainMenu/LogoFlareSystem.cpp
     src/MainMenu/MainMenu.cpp
+    src/MainMenu/MenuTransitionSystem.cpp
     src/MainMenu/Planet.cpp
     src/MainMenu/ControlsMenu.cpp
     src/MainMenu/SettingsMenu.cpp
@@ -117,10 +125,12 @@ add_library(r-type_client_core STATIC
     src/Vr/VrView.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
+# libcurl downloads the pictures of the Discord friends (cmake/Curl.cmake, shared with the server)
+include(${PROJECT_SOURCE_DIR}/cmake/Curl.cmake)
 target_link_libraries(r-type_client_core
     PUBLIC rtype::audio rtype::discord rtype::discord_voice rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
            rtype::log rtype::network rtype::physics rtype::render rtype::voice_client rtype::xr
-    PRIVATE rtype_options)
+    PRIVATE rtype_options CURL::libcurl)
 
 # The Discord application whose activity the client shows in the profile of the player (its rich presence), by
 # default: the official one of R-Type, its id from the developer portal, the one the official server signs in

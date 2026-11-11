@@ -252,8 +252,8 @@ void addVrRow(Page &page, float left, float top)
     page.hints->emplace_back(row, "settings.hint.vr_headset");
 }
 
-/// On the left, the language, the volumes, the colour filter, the auras of the ships and the activity on
-/// Discord; on the right, the display, the controls, the voice and VR. The widgets get the focus in the order
+/// On the left, the language, the volumes, the colour filter and the auras of the ships; on the right, the
+/// display, the controls, the voice, VR and the activity on Discord. The widgets get the focus in the order
 /// they are made: down the left column, then down the right one.
 void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engine::InterfaceStyle &style,
                        const SettingsTargets &targets, const std::function<void()> &close)
@@ -282,9 +282,7 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     top += 2.0f * style.slider.getHeight() + groupGap;
     top = addGroup(interface, ecs, style, translations, "settings.group.accessibility", left, top, width);
     top = addColorFilterRow(page, left, top);
-    top = addAuraRows(page, left, top) + groupGap;
-    top = addGroup(interface, ecs, style, translations, "settings.group.discord", left, top, width);
-    addDiscordActivityRow(page, left, top);
+    addAuraRows(page, left, top);
 
     top = addGroup(interface, ecs, style, translations, "settings.group.display", right, settings_page::top,
                    width);
@@ -300,9 +298,11 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     top += style.setting.height + groupGap;
     top = addGroup(interface, ecs, style, translations, "settings.group.vr", right, top, width);
     addVrRow(page, right, top);
+    top += style.setting.height + groupGap;
+    top = addGroup(interface, ecs, style, translations, "settings.group.discord", right, top, width);
+    top = addDiscordActivityRow(page, right, top) + groupGap;
 
     // The hint of the focused row, under the right column
-    top += style.setting.height + groupGap;
     settings_page::addHint(interface, ecs, translations, page.hints,
                            {engine::AnchorPoint::TopLeft, right + style.setting.inset, top});
 }

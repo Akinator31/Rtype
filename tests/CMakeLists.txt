@@ -13,10 +13,12 @@ add_executable(rtype_tests
     audio.cpp
     aura_settings.cpp
     beat.cpp
+    client_frame_profile.cpp
     client_game.cpp
     client_input_clock.cpp
     client_interpolation.cpp
     client_lore.cpp
+    client_menu_transitions.cpp
     client_online.cpp
     client_voice.cpp
     client_vr.cpp
@@ -35,6 +37,8 @@ add_executable(rtype_tests
     datagram.cpp
     debug_commands.cpp
     discord.cpp
+    discord_friends.cpp
+    discord_invite.cpp
     discord_presence.cpp
     discord_voice.cpp
     display_settings.cpp
