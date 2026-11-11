@@ -7,9 +7,11 @@ snapshots (the online session comes with `client: networking`).
 
 To play: **Play**, then **Solo**, in the main menu. The hangar opens first, on the ship equipped last:
 **Launch** starts the game with the ship looked at, and keeps it for the next time. A ship locked by the level
-of the account ([config/hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-of-the-hangar-confighangarlua))
-can be looked at, not launched. Arrows (or WASD, ZQSD) move the ship, Space fires, Q and E (A and E on AZERTY)
-held turn the ship by 30° up and down to fire diagonally, Escape opens the pause menu.
+of the account ([config/hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-and-the-weapons-of-the-hangar-confighangarlua))
+can be looked at, not launched. In the top right corner, the player chooses its two weapons among those its
+level opens: the primary one, in hand when the ship appears, and the secondary one. Arrows (or WASD, ZQSD) move
+the ship, Space fires, Q and E (A and E on AZERTY) held turn the ship by 30° up and down to fire diagonally,
+Left Shift takes the other weapon in hand (the HUD names both, the one in hand bright), Escape opens the pause menu.
 
 ## Code layout
 
@@ -136,6 +138,14 @@ plane of the game the way it flies, from its velocity: a Bydo shot aimed at a pl
 ([Enemy behaviors](game.md#enemy-behaviors)) flies askew, and a plasma orb sways with its zigzag. Its collider
 stays a box aligned with the axes. The plasma orbs of the Bydos have their own kind, `BYDO_PLASMA_SHOT`, so
 that they have their own model.
+
+The shots of the players are drawn with the model of their projectile (`model` of `config/projectiles/`):
+each weapon its own. The snapshots give the index of the projectile of a shot of a player among the ids of
+the projectiles, in alphabetical order (`EntityState::ship`), and the client loads every projectile of its
+configuration at the opening of the game (`setConfiguredProjectileLooks()`): its core is measured on the
+bounds of the model, the front of the model, at most three times as long as it is tall, the rest being its
+trail, and its light takes the colour of the mechanic of the weapon that fires it (blue bullets, orange
+missiles, pink lasers, green plasma). The basic shot keeps its measured core.
 
 ### Ships in 3D
 

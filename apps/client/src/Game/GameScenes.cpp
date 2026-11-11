@@ -20,6 +20,7 @@
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Hitbox.hpp"
 #include "rtype/game/Item/ItemRegistry.hpp"
+#include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
@@ -30,6 +31,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <format>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -161,6 +163,15 @@ constexpr render::Color BydoShotLight{185, 90, 255, 115};
 constexpr render::Color PlasmaOrbLight{255, 120, 35, 135};
 /// How far the light of a shot spreads around its core, in heights of the core.
 constexpr float ShotLightSpread = 1.5f;
+
+/// The light around the shots of the players by the mechanic of their weapon, when their projectile has a
+/// look of its own: blue bullets, orange missiles, pink lasers, green plasma.
+constexpr render::Color PlayerMissileLight{255, 150, 60, 130};
+constexpr render::Color PlayerLaserLight{255, 90, 200, 130};
+constexpr render::Color PlayerPlasmaLight{110, 255, 140, 130};
+/// The core of a projectile model measured from its bounds: its front, at most this many times as long as it
+/// is tall, the rest being its trail.
+constexpr float ProjectileCoreRatio = 3.0f;
 
 /// The damage taken by the Bydos, written where they are hit: in the font of the titles, loaded at this size
 /// for the whole interface, in a warm yellow that stands out from the blue shots and the purple Bydos.
@@ -394,6 +405,77 @@ std::optional<ItemAnimation> findItemAnimation(render::ResourceManager &resource
     }
 }
 
+/// The light of the shots of a player with this mechanic.
+render::Color playerShotLight(game::ProjectileCategory mechanic)
+{
+    switch (mechanic) {
+    case game::ProjectileCategory::Missile:
+        return PlayerMissileLight;
+    case game::ProjectileCategory::Laser:
+        return PlayerLaserLight;
+    case game::ProjectileCategory::Plasma:
+        return PlayerPlasmaLight;
+    case game::ProjectileCategory::Bullet:
+        break;
+    }
+    return PlayerShotLight;
+}
+
+/// The core of a projectile model, as in ShotLook, from its bounds: the models fly along +x, nose first, and
+/// their trail behind is left out.
+render::Rectangle measureProjectileCore(const render::Box3 &bounds)
+{
+    const float height = bounds.max.y - bounds.min.y;
+    const float length = std::min(bounds.max.x - bounds.min.x, ProjectileCoreRatio * height);
+    // Through the camera of the game, y points down: the models have y up
+    return {bounds.max.x - length, -bounds.max.y, length, height};
+}
+
+/// Gives each projectile of the configuration its model, the asset its file names, at the size of its
+/// collider: the shots of the players are drawn with the model of their projectile (game::EntityState::ship),
+/// the one of the ProjectileRegistry of the game, lit in the colour of the mechanic of the weapon that fires
+/// it. A projectile whose model cannot be loaded is drawn with the look of PlayerShot.
+void setConfiguredProjectileLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                                  const game::GameConfig &config)
+{
+    game::ProjectileRegistry projectiles;
+    for (const game::ProjectileDefinition &definition : config.projectiles) {
+        projectiles.addDefinition(definition);
+    }
+    const render::Energy energy{
+        resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
+    const render::TextureId light =
+        resources.loadTexture(RTYPE_IMAGE_GLOW_CORE, render::TextureFiltering::Smooth);
+    const std::size_t count = std::min<std::size_t>(projectiles.getDefinitionCount(), game::NoShip);
+    for (std::size_t index = 0; index < count; ++index) {
+        const game::ProjectileDefinition &projectile = projectiles.getDefinitionAt(index);
+        if (projectile.model.empty()) {
+            continue;
+        }
+        // The mechanic of the first weapon that fires it, its own otherwise
+        game::ProjectileCategory mechanic = projectile.category;
+        const auto weapon =
+            std::ranges::find(config.weapons, projectile.id, &game::WeaponDefinition::projectile);
+        if (weapon != config.weapons.end()) {
+            mechanic = weapon->mechanic;
+        }
+        try {
+            const render::ModelId model = resources.loadModel(projectile.model);
+            const render::Rectangle core = projectile.model == RTYPE_MODEL_SHOT_BASIC
+                                               ? ShotBasicCore
+                                               : measureProjectileCore(resources.getModelBounds(model));
+            const physics::Vec3 half = game::halfSizeOf(projectile.collider);
+            sessions.setProjectileLook(
+                static_cast<std::uint8_t>(index),
+                {model, core, false, shine(energy, light, core, playerShotLight(mechanic))},
+                {half.x * 2.0f, half.y * 2.0f});
+        } catch (const std::runtime_error &error) {
+            log::Logger("game").warning("The model of the projectile '{}' cannot be loaded: {}",
+                                        projectile.id, error.what());
+        }
+    }
+}
+
 /// Gives each item of the configuration its model, the asset its file names, at the size of its collider:
 /// each item is drawn with the model of its index (game::EntityState::ship), the one of the ItemRegistry of
 /// the game. An item whose model cannot be loaded is drawn as a box.
@@ -589,10 +671,11 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations,
                        const ShipSelection &ships, const std::vector<game::ShipDefinition> &shipDefinitions,
-                       const std::vector<game::ItemDefinition> &itemDefinitions)
+                       const std::vector<game::ItemDefinition> &itemDefinitions,
+                       const game::GameConfig &config)
     : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
       _translations(translations), _ships(ships), _shipDefinitions(shipDefinitions),
-      _itemDefinitions(itemDefinitions), _recorder(engine)
+      _itemDefinitions(itemDefinitions), _config(config), _recorder(engine)
 {
     sessions.setKillHandler([this](const Kill &kill) {
         recordKill(kill);
@@ -609,6 +692,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         recordResults();
     });
     sessions.setStrikeHandler([this] { showStrike(); });
+
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
@@ -1039,6 +1123,7 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     configureGameLooks(_sessions, resources, audio, getShipCatalog()[_ships.equipped]);
     setConfiguredShipLooks(_sessions, resources, _shipDefinitions);
     setConfiguredItemLooks(_sessions, resources, _itemDefinitions);
+    setConfiguredProjectileLooks(_sessions, resources, _config);
     _scene = scene;
     _prompt.reset();
     _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),
@@ -1069,6 +1154,11 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
          .size = VoiceBadgeSize,
          .x = (AllyHealthBar.width / 2.0f) + VoiceBadgeGap + (VoiceBadgeSize / 2.0f),
          .y = -AllyHealthBar.raise});
+    std::map<std::string, std::string> weaponNames;
+    for (const game::WeaponUnlock &unlock : _config.weaponUnlocks) {
+        weaponNames.emplace(unlock.weapon, _translations.text("weapon." + unlock.weapon));
+    }
+    weaponNames.emplace(_config.player.weapon, _translations.text("weapon." + _config.player.weapon));
     openHud(ecs, scene,
             {.life = _deathLook.life,
              .lostLife = _deathLook.lostLife,
@@ -1080,7 +1170,8 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
                        .online = _translations.text("hud.online"),
                        .solo = _translations.text("hud.solo"),
                        .pilots = _translations.text("hud.pilots"),
-                       .alone = _translations.text("hud.alone")}},
+                       .alone = _translations.text("hud.alone"),
+                       .weapons = std::move(weaponNames)}},
             game::Rules{}.lives);
 
     _onEnd = std::exchange(_nextEnd, nullptr);
