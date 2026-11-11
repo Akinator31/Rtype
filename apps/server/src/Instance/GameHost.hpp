@@ -44,7 +44,8 @@ namespace rtype::server
 /// - On `CONNECT`, the client receives `ACCEPTED` (its slot, the tick rate, the tick), then `PLAYER_JOINED`
 ///   for each player connected, itself included, with the id of its account; the others receive its
 ///   `PLAYER_JOINED`.
-/// - The inputs of each `INPUT` go to the game, which applies each one at its tick.
+/// - The inputs of each `INPUT` go to the game, which applies each one at its tick. The first `LOADOUT` of a
+///   player gives its weapons to the game; the next ones are ignored.
 /// - The voice (section 9.4, ADR 0035): each player tells what carries its voice (`VOICE_STATE`, None until
 ///   then), and every client knows it for all (`VOICE_ROSTER`, at its connection and at every change). Each
 ///   player also tells whether it is muted, deafened or without a microphone (`VOICE_STATUS`), and every
@@ -90,6 +91,9 @@ private:
         bool connected = false;
         /// What carries its voice (`VOICE_STATE`).
         rtype::voice::Backend voice = rtype::voice::Backend::None;
+        /// It sent its `LOADOUT`: the next ones are ignored, so that a player cannot fill its magazines by
+        /// sending it again.
+        bool loadoutChosen = false;
         /// What it tells about its voice (`VOICE_STATUS`).
         rtype::voice::Status voiceStatus{};
         VoiceRate voiceRate;
@@ -135,6 +139,7 @@ private:
     void receivedVoice(Player &player, std::uint32_t session, std::span<const std::byte> payload);
     void receivedVoiceState(Player &player, std::uint32_t session, std::span<const std::byte> payload);
     void receivedVoiceStatus(Player &player, std::uint32_t session, std::span<const std::byte> payload);
+    void receivedLoadout(Player &player, std::uint32_t session, std::span<const std::byte> payload);
     /// What carries the voice of each connected player, by slot.
     [[nodiscard]] rtype::game::VoiceRosterMessage voiceRoster() const;
     /// `VOICE_ROSTER` to every connected player.
