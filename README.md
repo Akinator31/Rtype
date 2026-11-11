@@ -68,6 +68,8 @@ by up to four players. Everything below the game is our own: an **ECS engine**, 
 **networking layer** (Asio, TLS and encrypted UDP), an **interface toolkit** whose menus are entities, and a
 **renderer** over raylib that draws the world in 3D.
 
+The project ran from **28 September 2026, 08:00** to **8 November 2026, 23:42**.
+
 The project ships three programs:
 
 | Program | Role |

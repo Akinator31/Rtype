@@ -12,6 +12,8 @@ Up to four players connect to an authoritative server and fight the Bydos togeth
 with voice chat, accounts, a web administration panel, and a VR cockpit. The project is split into a graphical
 client, a multithreaded server, and the engine they both rely on.
 
+The project ran from **28 September 2026, 08:00** to **8 November 2026, 23:42**.
+
 ![Gameplay: the ship of the player fires plasma shards at a wave of Bydos, which explode](assets/gifs/gameplay.gif)
 
 *A wave of Bydos against the plasma shards of the player.*
