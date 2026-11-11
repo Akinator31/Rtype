@@ -180,7 +180,7 @@ clang-format -i path/to/file.cpp
 
 ### Runners
 
-The workflows run on the runners hosted by GitHub: `ubuntu-24.04` for every Linux job, `windows-2025` for the
+The workflows run on the runners hosted by GitHub: `ubuntu-24.04` for every Linux job, `windows-2022` for the
 Windows build. Each job starts on a fresh machine, so nothing is kept from one run to the next but what
 `actions/cache` restores (the downloads of CPM) and the artifacts.
 
@@ -194,7 +194,8 @@ Windows build. Each job starts on a fresh machine, so nothing is kept from one r
   compiles the server from scratch. To publish, *Docker* installs the QEMU of arm64 with `tonistiigi/binfmt`,
   then builds in a buildx builder `rtype-multi-arch` created for the run. `actions/setup-node` provides Node
   LTS, and Playwright downloads Chromium.
-- **Windows** (`windows-2025`): Visual Studio 2022 and CMake come with the image; it tests the database on
+- **Windows** (`windows-2022`): Visual Studio 2022 and CMake come with the image (`windows-2025` has moved to
+  Visual Studio 2026, which the generator `Visual Studio 17 2022` does not find); it tests the database on
   SQLite only.
 
 The *Test* steps set `TMPDIR` to the temporary directory of their runner, and `TMP` and `TEMP` too, the ones
