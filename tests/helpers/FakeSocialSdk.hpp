@@ -197,6 +197,8 @@ public:
     std::vector<rtype::discord::CallMember> others;
     bool selfSpeaking = false;
     bool selfMuted = false;
+    /// Each change of selfMuted, counted: a mute held is not lifted and set again.
+    int selfMuteChanges = 0;
     bool selfDeafened = false;
     rtype::discord::CallTalkMode mode = rtype::discord::CallTalkMode::PushToTalk;
     float threshold = 0.0f;
@@ -241,7 +243,13 @@ public:
     [[nodiscard]] rtype::discord::CallStatus status() const override { return _status; }
     [[nodiscard]] std::vector<rtype::discord::CallMember> members() const override { return others; }
     [[nodiscard]] bool speaking() const override { return selfSpeaking; }
-    void setSelfMute(bool muted) override { selfMuted = muted; }
+    void setSelfMute(bool muted) override
+    {
+        if (muted != selfMuted) {
+            ++selfMuteChanges;
+        }
+        selfMuted = muted;
+    }
     void setSelfDeaf(bool deafened) override { selfDeafened = deafened; }
     void setTalkMode(rtype::discord::CallTalkMode talkMode, float level) override
     {

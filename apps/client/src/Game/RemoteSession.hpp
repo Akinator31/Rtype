@@ -37,13 +37,16 @@ namespace rtype::client
 /// one of Discord (discord::DiscordVoice).
 /// @param pushToTalk The push-to-talk key is held, or was released less than voice::PushToTalk::ReleaseDelay
 ///   ago.
+/// @param forceMute Muted whatever the player chose (by an administrator, for instance): given here rather
+///   than muted after, so that the microphone is not opened and closed again at every update.
 template <typename Voice>
-void applyVoice(Voice &voice, const VoiceDevices &devices, bool pushToTalk)
+void applyVoice(Voice &voice, const VoiceDevices &devices, bool pushToTalk, bool forceMute = false)
 {
     const VoicePreferences &preferences = devices.preferences;
     const bool activity = preferences.mode == voice::TalkMode::VoiceActivity;
     voice.setDeafened(devices.deafened);
-    voice.setSelfMute(preferences.mode == voice::TalkMode::Off || devices.muted || devices.deafened);
+    voice.setSelfMute(forceMute || preferences.mode == voice::TalkMode::Off || devices.muted ||
+                      devices.deafened);
     voice.setVoiceActivity(activity ? std::optional<float>(preferences.threshold) : std::nullopt);
     voice.setTalking(activity || (preferences.mode == voice::TalkMode::PushToTalk && pushToTalk));
     voice.setInputVolume(preferences.inputVolume);

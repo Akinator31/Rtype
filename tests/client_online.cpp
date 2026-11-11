@@ -1264,6 +1264,8 @@ TEST_CASE(
     int frames = 0;
     REQUIRE(playWithDiscord([&] { return ++frames > 10; }));
     CHECK_FALSE(aliceMicrophone.isOpen);
+    // Never opened meanwhile, not even for an update
+    CHECK(aliceMicrophone.opens == 0);
 
     // Their calls connect: both are on Discord, as the game knows
     aliceDiscord.call.addMember(2000, *bob.playerId());
@@ -1513,7 +1515,11 @@ TEST_CASE("In a game of two players on Discord and two on the game, each hears t
     for (const auto &listener : players) {
         before.push_back(listener->playback.played[alice.slot].size());
     }
+    const int muteChanges = alice.discord.call.selfMuteChanges;
     REQUIRE(talk(alice, Frames));
+    // Muted all along: never lifted and set again at an update
+    CHECK(alice.discord.call.selfMuteChanges == muteChanges);
+    CHECK(alice.discord.call.selfMuted);
     for (std::size_t i = 1; i < players.size(); ++i) {
         INFO("Player in slot " << int{players[i]->slot});
         CHECK(players[i]->playback.played[alice.slot].size() == before[i]);
