@@ -37,7 +37,7 @@ void addUp(FrameSample &sum, const FrameSample &frame)
     sum.present += frame.present;
     sum.poses.poses += frame.poses.poses;
     sum.poses.glowPoses += frame.poses.glowPoses;
-    sum.poses.vertices += frame.poses.vertices;
+    sum.poses.bones += frame.poses.bones;
     sum.poses.seconds += frame.poses.seconds;
     sum.animatedModels += frame.animatedModels;
 }
@@ -50,7 +50,7 @@ void keepLongest(FrameSample &longest, const FrameSample &frame)
     longest.present = std::max(longest.present, frame.present);
     longest.poses.poses = std::max(longest.poses.poses, frame.poses.poses);
     longest.poses.glowPoses = std::max(longest.poses.glowPoses, frame.poses.glowPoses);
-    longest.poses.vertices = std::max(longest.poses.vertices, frame.poses.vertices);
+    longest.poses.bones = std::max(longest.poses.bones, frame.poses.bones);
     longest.poses.seconds = std::max(longest.poses.seconds, frame.poses.seconds);
     longest.animatedModels = std::max(longest.animatedModels, frame.animatedModels);
 }
@@ -83,11 +83,11 @@ void FrameProfile::reset()
 void FrameProfile::reportSlowFrame(const FrameSample &frame) const
 {
     _report(std::format("slow frame: {:.1f} ms (usual {:.1f} ms) | update {:.1f} ms, draw {:.1f} ms, present "
-                        "{:.1f} ms | poses {} ({} for the glow), {} vertices, {:.1f} ms, {} animated models",
+                        "{:.1f} ms | poses {} ({} for the glow), {} bones, {:.1f} ms, {} animated models",
                         toMilliseconds(frame.total), toMilliseconds(_usualFrame),
                         toMilliseconds(frame.update), toMilliseconds(frame.draw),
                         toMilliseconds(frame.present), frame.poses.poses, frame.poses.glowPoses,
-                        frame.poses.vertices, toMilliseconds(frame.poses.seconds), frame.animatedModels));
+                        frame.poses.bones, toMilliseconds(frame.poses.seconds), frame.animatedModels));
 }
 
 void FrameProfile::reportWindow()
@@ -98,14 +98,14 @@ void FrameProfile::reportWindow()
     _report(std::format(
         "{} frames, {} slow | frame {:.1f} ms (longest {:.1f}) | update {:.1f} ({:.1f}) | draw {:.1f} "
         "({:.1f}) "
-        "| present {:.1f} ({:.1f}) | poses {:.1f} a frame ({}), glow {:.1f} ({}), {:.0f} vertices ({}), "
+        "| present {:.1f} ({:.1f}) | poses {:.1f} a frame ({}), glow {:.1f} ({}), {:.0f} bones ({}), "
         "{:.2f} ms ({:.2f}) | animated models {:.1f} ({})",
         _window.frames, _slowFrames, toMilliseconds(sum.total / frames), toMilliseconds(longest.total),
         toMilliseconds(sum.update / frames), toMilliseconds(longest.update),
         toMilliseconds(sum.draw / frames), toMilliseconds(longest.draw), toMilliseconds(sum.present / frames),
         toMilliseconds(longest.present), static_cast<double>(sum.poses.poses) / frames, longest.poses.poses,
         static_cast<double>(sum.poses.glowPoses) / frames, longest.poses.glowPoses,
-        static_cast<double>(sum.poses.vertices) / frames, longest.poses.vertices,
+        static_cast<double>(sum.poses.bones) / frames, longest.poses.bones,
         toMilliseconds(sum.poses.seconds / frames), toMilliseconds(longest.poses.seconds),
         static_cast<double>(sum.animatedModels) / frames, longest.animatedModels));
     _usualFrame = sum.total / frames;

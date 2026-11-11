@@ -599,7 +599,7 @@ struct Renderer::Impl {
         if (glow) {
             ++poseStats.glowPoses;
         }
-        poseStats.vertices += model.countSkinnedVertices();
+        poseStats.bones += model.countBones();
     }
 
     /// Draws a model again in the glow of the frame: an energy model as it is, a lit model only where it

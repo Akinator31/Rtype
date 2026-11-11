@@ -32,10 +32,10 @@ TEST_CASE("The frame profile reports each second, part by part", "[client][profi
     }
     CHECK(lines.empty());
     profile.record(
-        {.total = usualFrame, .poses = {.poses = 4, .glowPoses = 2, .vertices = 1000, .seconds = 0.001}});
+        {.total = usualFrame, .poses = {.poses = 4, .glowPoses = 2, .bones = 1000, .seconds = 0.001}});
     REQUIRE(lines.size() == 1);
     CHECK(lines.front().starts_with("100 frames, 0 slow | frame 10.0 ms (longest 10.0)"));
-    CHECK(lines.front().find("poses 0.0 a frame (4), glow 0.0 (2), 10 vertices (1000)") != std::string::npos);
+    CHECK(lines.front().find("poses 0.0 a frame (4), glow 0.0 (2), 10 bones (1000)") != std::string::npos);
 }
 
 TEST_CASE("The frame profile reports a frame twice as long as the usual ones", "[client][profile]")
@@ -51,12 +51,12 @@ TEST_CASE("The frame profile reports a frame twice as long as the usual ones", "
                     .update = 0.002,
                     .draw = 0.025,
                     .present = 0.003,
-                    .poses = {.poses = 9, .glowPoses = 3, .vertices = 500000, .seconds = 0.02},
+                    .poses = {.poses = 9, .glowPoses = 3, .bones = 120, .seconds = 0.02},
                     .animatedModels = 7});
     REQUIRE(lines.size() == 1);
     CHECK(lines.front() ==
           "slow frame: 30.0 ms (usual 10.0 ms) | update 2.0 ms, draw 25.0 ms, present 3.0 ms | "
-          "poses 9 (3 for the glow), 500000 vertices, 20.0 ms, 7 animated models");
+          "poses 9 (3 for the glow), 120 bones, 20.0 ms, 7 animated models");
 }
 
 TEST_CASE("A short frame is never slow, however short the usual ones", "[client][profile]")

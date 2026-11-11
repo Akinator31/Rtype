@@ -8,6 +8,7 @@
 #include "SkeletonPose.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
+#include "rtype/log/Logger.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
 #include <external/cgltf.h>
@@ -292,6 +293,10 @@ public:
         if (_model.skeleton.boneCount > 0) {
             _animations = LoadModelAnimations(file.string().c_str(), &_animationCount);
         }
+        if (_model.skeleton.boneCount > MaxShaderBones) {
+            log::Logger("render").warning("Model {} has {} bones, the shaders pose {} at most", file.string(),
+                                          _model.skeleton.boneCount, MaxShaderBones);
+        }
     }
     ~Model()
     {
@@ -430,10 +435,10 @@ public:
     // The pose of the vertices, none if the model was never animated.
     [[nodiscard]] const std::optional<Pose> &getPose() const { return _pose; }
 
-    // Moves the vertices of the model to a pose, unless they already are in it: several entities share the
-    // model, each posing it before it is drawn. raylib moves them on the processor (CPU skinning), then sends
-    // them again to the graphics card.
-    // @return Whether the vertices moved: false if the model already was in this pose, or has no animation.
+    // Moves the bones of the model to a pose, unless they already are in it: several entities share the
+    // model, each posing it before it is drawn. raylib computes the matrices of the bones, which the shaders
+    // apply to the vertices on the graphics card (GPU skinning).
+    // @return Whether the bones moved: false if the model already was in this pose, or has no animation.
     bool applyPose(const Pose &pose) const
     {
         if (_pose == pose) {
@@ -456,17 +461,10 @@ public:
         return true;
     }
 
-    // The vertices that a pose moves: those of the meshes with bones.
-    [[nodiscard]] std::size_t countSkinnedVertices() const
+    // The bones that a pose moves.
+    [[nodiscard]] std::size_t countBones() const
     {
-        std::size_t count = 0;
-        for (int index = 0; index < _model.meshCount; ++index) {
-            const Mesh &mesh = _model.meshes[index];
-            if (mesh.boneIndices != nullptr && mesh.boneWeights != nullptr) {
-                count += static_cast<std::size_t>(mesh.vertexCount);
-            }
-        }
-        return count;
+        return static_cast<std::size_t>(std::max(_model.skeleton.boneCount, 0));
     }
 
 private:
