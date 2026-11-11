@@ -666,6 +666,9 @@ void RemoteSession::update(float elapsed)
     if (sent == MaxInputsPerUpdate) {
         _pending = std::min(_pending, Tick);
     }
+    // The inputs and the voice of this frame sent now: waiting for the next update would add a frame of
+    // latency to both
+    _session.update(Clock::now());
 }
 
 std::optional<std::chrono::milliseconds> RemoteSession::ping() const
