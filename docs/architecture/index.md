@@ -1,9 +1,5 @@
 # Architecture
 
-!!! warning "Draft"
-
-    This page describes the **target** architecture. It is updated as each subsystem is implemented.
-
 R-Type follows a client/server model with an **authoritative server**: clients only send player inputs and
 render what the server tells them; every gameplay decision (spawns, collisions, deaths) is taken by the
 server.
@@ -107,7 +103,7 @@ flowchart TB
 
 ## Libraries
 
-The programs are built on twelve libraries:
+The programs are built on nineteen libraries:
 
 | Library | Role | Page |
 |---|---|---|
@@ -126,6 +122,8 @@ The programs are built on twelve libraries:
 | `libs/discord` | Discord in the client: an interface per feature (the sign-in, the presence and the invitations, the connection, the voice call, the friends), and their implementations through the Discord Social SDK, kept in `libs/discord/sdk/`, on one shared `Session`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
 | `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord, the devices as interfaces (`rtype::voice`, header only), the codec of the voice (`rtype::voice_codec`), the echo cancellation, noise suppression and gain control of the microphone (`rtype::voice_processing`), and the voice of the game with its jitter buffer and the microphone (`rtype::voice_client`). Wraps libopus, webrtc-audio-processing, and the miniaudio of raylib for the microphone. For the client. | [Voice](voice.md) |
 | `libs/xr` | The game in a VR headset: the session of a headset on the OpenGL context of the window, the images of its eyes, its controllers and their vibrations, behind an interface with no OpenXR type. Wraps OpenXR (the loader, built and linked statically). For the client. | [VR](vr.md) |
+| `libs/beat` | The beats of a piece of music: decodes the file and finds the attacks in three bands of frequencies, for the waves placed on the music. Knows no game. Shared by the client and the server. | [Configure enemies and weapons](../guides/configure-enemies-and-weapons.md#waves-configwaves) |
+| `libs/localization` | The translations of the interface: `key=value` catalogs in UTF-8, English and French, with English as the fallback. No dependency. For the client. | [Localization](localization.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
@@ -159,19 +157,24 @@ apps/       executables, one subdirectory per program
 config/     the Lua configuration of the game: enemies, weapons... (client and server)
 libs/       libraries shared by the programs, one subdirectory per library
   audio/    sound effects, music and the voices played (client)
+  beat/     beats of the music, for the waves (client and server)
   core/     handles and resource caches (all)
   database/ SQLite and PostgreSQL through SOCI, migrations (server)
+  discord/  the Discord Social SDK behind interfaces (client)
   ecs/      entity component system, hierarchy (client and server)
   engine/   client systems: drawing, animations, menus (client)
   game/     rules of the R-Type, the Simulation (server and client offline)
   input/    keyboard and gamepad input (client)
+  localization/ translations of the interface (client)
   lobby/    messages between a client and the master (client and server)
   log/      logging (client and server)
   network/  addresses, sockets and event loop (client and server)
   render/   window, resources and drawing (client)
   scripting/ Lua and its sandbox (client and server)
   shaders/  GLSL shaders, embedded in the binaries at build time (client)
+  voice/    voice chat: codec, sound processing, microphone (client)
   xr/       VR headsets through OpenXR (client)
+web/admin/  the administration panel of the server (React)
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
 docs/       this documentation (Zensical)
