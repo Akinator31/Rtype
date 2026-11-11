@@ -16,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace rtype::engine
@@ -92,6 +93,8 @@ class Engine
     SceneAssets _sceneAssets;
     std::string _loadingScene;
     std::optional<PendingScene> _pendingScene;
+    /// The scenes with SceneSettings::keepsAssets opened once: the engine holds their assets for good.
+    std::unordered_set<std::string> _scenesKeepingAssets;
 
     void applySceneRequests();
     void openScene(const std::string &name, std::vector<SceneAsset> assets = {});
@@ -137,8 +140,8 @@ public:
     [[nodiscard]] const std::string &getSceneLoadError() const;
     /// Loads the assets of the waiting scene again. Does nothing unless getSceneLoadState() is Failed.
     void retrySceneLoad();
-    /// Closes every scene and unloads their assets: at shutdown, before the loader and what it loads with
-    /// are destroyed.
+    /// Closes every scene and unloads their assets, those kept by SceneSettings::keepsAssets too: at
+    /// shutdown, before the loader and what it loads with are destroyed.
     void unloadSceneAssets();
 
     /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without

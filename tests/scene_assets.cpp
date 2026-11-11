@@ -161,3 +161,33 @@ TEST_CASE("A later scene request cancels the pending scene", "[engine][assets]")
     CHECK(assets.states[ship].unloaded == 1);
     CHECK_FALSE(engine.isSceneOpen("game"));
 }
+
+TEST_CASE("A scene keeping its assets opens again without loading them", "[engine][assets]")
+{
+    Engine engine;
+    FakeAssets assets;
+    configure(engine, assets);
+    const SceneAsset planet{AssetType::Model, "planet.glb"};
+    const SceneAsset ship{AssetType::Model, "ship.glb"};
+    assets.states[planet].ready = true;
+    assets.states[ship].ready = true;
+    engine.createScene("menu", {.assets = {planet}, .keepsAssets = true});
+    engine.createScene("game", {.assets = {ship}});
+
+    engine.switchScene("menu");
+    engine.update(0.016f);
+    engine.switchScene("game");
+    engine.update(0.016f);
+    CHECK(assets.states[planet].unloaded == 0);
+
+    engine.switchScene("menu");
+    engine.update(0.016f);
+    CHECK(engine.isSceneOpen("menu"));
+    CHECK_FALSE(engine.isSceneOpen("loading"));
+    CHECK(assets.states[planet].requests == 1);
+    CHECK(assets.states[planet].unloaded == 0);
+    CHECK(assets.states[ship].unloaded == 1);
+
+    engine.unloadSceneAssets();
+    CHECK(assets.states[planet].unloaded == 1);
+}
