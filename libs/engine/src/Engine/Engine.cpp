@@ -84,6 +84,10 @@ void Engine::unloadSceneAssets()
     if (_pendingScene) {
         cancelPendingScene();
     }
+    for (const std::string &name : _scenesKeepingAssets) {
+        _sceneAssets.releaseAssets(_sceneDefinitions.at(name).settings.assets);
+    }
+    _scenesKeepingAssets.clear();
     _scenes.clear();
     destroyClosedScenes();
     _sceneAssets.forgetAssets();
@@ -249,6 +253,10 @@ void Engine::applySceneRequests()
 void Engine::openScene(const std::string &name, std::vector<SceneAsset> assets)
 {
     const SceneDefinition &definition = _sceneDefinitions.at(name);
+    if (definition.settings.keepsAssets && !assets.empty() && _scenesKeepingAssets.insert(name).second) {
+        // A second use of assets already loaded, never released: the loader is not called
+        _sceneAssets.acquireAssets(assets);
+    }
     const SceneId id = _scenes.open(definition.settings);
     _namedScenes.push_back({id, name, std::move(assets)});
     try {

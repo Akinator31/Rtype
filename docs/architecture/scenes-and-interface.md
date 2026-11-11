@@ -77,7 +77,7 @@ renderer.endFrame();
 | 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
 | 8 | `ToastSystem` | Places, fades and destroys the toasts. |
 | 9 | `TransformSystem` | Positions of the children from their parents, last. |
-| 10 | `LoadingSystem` | Client, at startup: the `loading` scene fades the logo in over black with a gauge under it while `AssetPreload` loads the pictures and models in the background, then fades the gauge out. `main.cpp` runs frames until it is finished, builds the other scenes from the cache, then switches to the main menu, which opens on black around the same logo and fades in. |
+| 10 | `LoadingSystem` | Client, at startup: the `loading` scene fades the logo in over black with a gauge under it while `AssetPreload` loads the pictures and models in the background, then fades the gauge out. `main.cpp` runs frames until it is finished, builds the other scenes from the cache, then switches to the main menu, which opens on black around the same logo and fades in. Only the first time: opened again (back from a game or from online play), the main menu skips its intro and shows the camera, the logo and the buttons at their place. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
 and may happen several times per frame (once per eye in VR).
@@ -114,6 +114,8 @@ Scenes form a stack:
 | `hidesInterfaceBelow` | With `overlay`, only the world of the scenes below stays visible, not their interface | Submenu over the 3D background of the main menu |
 | `updatesWhenCovered` | The scene keeps updating under others | Network game under the pause menu |
 | `onBack` | Called on Back instead of closing the scene | Game: opens the pause menu |
+| `assets` | Loaded before the scene opens, under the loading scene (see [threads](threads.md)) | Models of the main menu |
+| `keepsAssets` | The assets stay loaded after the scene closes: it opens again at once | Main menu, game, results |
 
 Systems ask `Scenes` what to do with an entity or a scene: `receivesInput()` (only the scene at the top),
 `updates()`, `isVisible()`, `isInterfaceVisible()`.
@@ -225,6 +227,8 @@ between views instead of cutting from one to the other (`apps/client/src/MainMen
 
 ```mermaid
 stateDiagram-v2
+    [*] --> Asteroids: first opening
+    [*] --> Menu: opened again
     Asteroids --> Menu: the player presses a key<br/>(IntroSystem, 4 s)
     Menu --> Play: Play opens
     Menu --> Online: Online opens
@@ -235,7 +239,7 @@ stateDiagram-v2
 ```
 
 *The camera waits in the asteroids, flies to the view of the menu, then to the view of each submenu while it
-is open, and back.*
+is open, and back. Opened again, the menu starts with its intro over (`Intro::started`, `IntroLength`).*
 
 - **The intro** (`Intro`, `IntroSystem`): the camera waits in the asteroids until the player presses, then
   flies to the view of the menu while the logo rises and the buttons slide in.

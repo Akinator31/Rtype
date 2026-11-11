@@ -141,17 +141,22 @@ render::Light createMainMenuSun()
     return sun;
 }
 
-/// Creates the entity that the main menu is seen through and lit by. It starts in the asteroids, flies to
-/// the view of the menu when the player presses, then to the view of each submenu while it is open.
-ecs::entity_t createMainMenuCamera(ecs::Ecs &ecs, engine::SceneId scene)
+/// Creates the entity that the main menu is seen through and lit by. With the intro, it starts in the
+/// asteroids and flies to the view of the menu when the player presses; without it, it starts there. Then it
+/// flies to the view of each submenu while it is open.
+ecs::entity_t createMainMenuCamera(ecs::Ecs &ecs, engine::SceneId scene, bool playsIntro)
 {
     const render::Camera view = createMainMenuView();
     const render::Camera asteroids = createAsteroidsView(view);
     const ecs::entity_t camera = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(camera, scene);
-    ecs.addComponent<engine::Camera>(camera, asteroids);
+    ecs.addComponent<engine::Camera>(camera, playsIntro ? asteroids : view);
     ecs.addComponent<engine::Light>(camera, createMainMenuSun());
-    ecs.addComponent<Intro>(camera, asteroids, view);
+    // Without the intro, it is over already: the logo, its flare and the buttons are at their place
+    ecs.addComponent<Intro>(camera, Intro{.from = asteroids,
+                                          .to = view,
+                                          .started = !playsIntro,
+                                          .time = playsIntro ? 0.0f : IntroLength});
     ecs.addComponent<MenuCameraFlight>(camera, createSubmenuViews(view));
     return camera;
 }
@@ -235,11 +240,11 @@ void createLogoFlares(ecs::Ecs &ecs, engine::InterfaceBuilder &interface, render
     createLogoFlare(ecs, interface, texture, flare, flareTrail + 1);
 }
 
-/// The button at `row` of the column, counted from the top, hidden until the player presses, then fading
-/// in from the right.
+/// The button at `row` of the column, counted from the top. With the intro, it is hidden until the player
+/// presses, then fades in from the right.
 void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
                   localization::Localization &translations, const std::string &key,
-                  const std::function<void()> &onPress, int row)
+                  const std::function<void()> &onPress, int row, bool playsIntro)
 {
     const auto rowsBelow = static_cast<float>(buttonsCount - 1 - row);
     const render::Vector2 place{-screenMargin, -buttonsBottom - (rowsBelow * buttonsSpacing)};
@@ -250,7 +255,9 @@ void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
     ecs.addComponent<engine::BoundText>(button,
                                         [&translations, key] { return toCapitals(translations.text(key)); });
     ecs.addComponent<engine::Opacity>(button);
-    ecs.addComponent<ecs::Hidden>(button);
+    if (playsIntro) {
+        ecs.addComponent<ecs::Hidden>(button);
+    }
     ecs.addComponent<IntroSlide>(button, IntroSlide{.from = entrance,
                                                     .to = place,
                                                     .delay = delay,
@@ -261,34 +268,41 @@ void createButton(ecs::Ecs &ecs, engine::InterfaceBuilder &interface,
 
 /// The buttons of the menu: Play, Online and Settings open their submenu.
 void createButtons(engine::Engine &engine, engine::InterfaceBuilder &interface,
-                   localization::Localization &translations, const std::function<void()> &quit)
+                   localization::Localization &translations, const std::function<void()> &quit,
+                   bool playsIntro)
 {
     ecs::Ecs &ecs = engine.getEcs();
     createButton(
-        ecs, interface, translations, "menu.play", [&engine] { engine.pushScene(PlayMenuScene); }, 0);
+        ecs, interface, translations, "menu.play", [&engine] { engine.pushScene(PlayMenuScene); }, 0,
+        playsIntro);
     createButton(
-        ecs, interface, translations, "menu.online", [&engine] { engine.pushScene(OnlineMenuScene); }, 1);
+        ecs, interface, translations, "menu.online", [&engine] { engine.pushScene(OnlineMenuScene); }, 1,
+        playsIntro);
     createButton(
-        ecs, interface, translations, "menu.settings", [&engine] { engine.pushScene(SettingsMenuScene); }, 2);
-    createButton(ecs, interface, translations, "menu.quit", quit, 3);
+        ecs, interface, translations, "menu.settings", [&engine] { engine.pushScene(SettingsMenuScene); }, 2,
+        playsIntro);
+    createButton(ecs, interface, translations, "menu.quit", quit, 3, playsIntro);
 }
 
 void buildMainMenu(engine::Engine &engine, engine::SceneId scene, render::ResourceManager &resources,
                    const engine::InterfaceStyle &style, const engine::Metrics &metrics,
-                   localization::Localization &translations, const std::function<void()> &quit)
+                   localization::Localization &translations, const std::function<void()> &quit,
+                   bool playsIntro)
 {
     ecs::Ecs &ecs = engine.getEcs();
-    const ecs::entity_t camera = createMainMenuCamera(ecs, scene);
+    const ecs::entity_t camera = createMainMenuCamera(ecs, scene, playsIntro);
     createMainMenuSky(ecs, scene, resources);
     createPlanetSystem(ecs, scene, resources);
     createStation(ecs, scene, resources);
     createShips(ecs, scene, resources, {createMainMenuView(), getPlanetCentre(), getPlanetRadius()});
 
-    createCurtain(ecs, scene, metrics);
+    if (playsIntro) {
+        createCurtain(ecs, scene, metrics);
+    }
     engine::InterfaceBuilder interface(ecs, scene, style);
     const ecs::entity_t logo = createMenuLogo(ecs, interface, resources);
     createLogoFlares(ecs, interface, resources, logo, camera);
-    createButtons(engine, interface, translations, quit);
+    createButtons(engine, interface, translations, quit, playsIntro);
 }
 
 } // namespace
@@ -297,11 +311,15 @@ void createMainMenuScene(engine::Engine &engine, render::ResourceManager &resour
                          const engine::InterfaceStyle &style, const engine::Metrics &metrics,
                          localization::Localization &translations, std::function<void()> quit)
 {
-    engine.createScene(MainMenuScene, {.updatesWhenCovered = true, .onBack = [] {}, .assets = MainMenuAssets},
-                       [&resources, &style, &metrics, &translations,
-                        quit = std::move(quit)](engine::Engine &target, engine::SceneId scene) {
-                           buildMainMenu(target, scene, resources, style, metrics, translations, quit);
-                       });
+    engine.createScene(
+        MainMenuScene,
+        {.updatesWhenCovered = true, .onBack = [] {}, .assets = MainMenuAssets, .keepsAssets = true},
+        // The intro plays at the first opening only: back from a game, the menu is there at once
+        [&resources, &style, &metrics, &translations, quit = std::move(quit),
+         introPlayed = false](engine::Engine &target, engine::SceneId scene) mutable {
+            const bool playsIntro = !std::exchange(introPlayed, true);
+            buildMainMenu(target, scene, resources, style, metrics, translations, quit, playsIntro);
+        });
 }
 
 } // namespace rtype::client

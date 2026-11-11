@@ -613,13 +613,15 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         GameScene,
         {.updatesWhenCovered = true,
          .onBack = [&engine] { engine.pushScene(PauseScene); },
-         .assets = GameAssets},
+         .assets = GameAssets,
+         .keepsAssets = true},
         [this, &resources, &audio, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {
             build(scene, resources, audio, metrics, style);
         });
     engine.createScene(PauseScene, {.overlay = true, .onBack = [this] { resume(); }},
                        [this](engine::Engine & /*target*/, engine::SceneId scene) { buildPause(scene); });
-    engine.createScene(ResultsScene, {.onBack = [this] { leaveResults(); }, .assets = ResultsAssets},
+    engine.createScene(ResultsScene,
+                       {.onBack = [this] { leaveResults(); }, .assets = ResultsAssets, .keepsAssets = true},
                        [this, &resources](engine::Engine & /*target*/, engine::SceneId scene) {
                            buildResults(scene, resources);
                        });
