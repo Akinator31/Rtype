@@ -18,7 +18,10 @@ inline constexpr const char *MainMenuScene = "main_menu";
 /// with ships landing on it and leaving, and a column of buttons in the bottom left corner: Play, Online and
 /// Settings, which open their submenu (see createSubmenuScenes()), and Quit. The ships need a FlightSystem.
 /// The scene keeps updating when covered, so that the ships keep flying behind the submenus. It opens on
-/// black, around the logo, then fades in. Its models are loaded before it opens (SceneSettings::assets).
+/// black, around the logo, then fades in, and plays its intro: only the first time. Opened again (back from a
+/// game or from online play), it shows the menu at once. Its models are loaded before it first opens
+/// (SceneSettings::assets) and stay loaded (SceneSettings::keepsAssets), so that it opens again without a
+/// freeze.
 /// @param resources, style, metrics, translations They must outlive the engine.
 /// @param quit Called when the player presses the quit button.
 void createMainMenuScene(engine::Engine &engine, render::ResourceManager &resources,
