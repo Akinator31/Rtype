@@ -410,46 +410,63 @@ public:
     // Moves the vertices of the model to their place at a time of an animation, in seconds. The animation
     // loops. The model keeps this pose until it is animated again. Const like drawing: only the vertices in
     // graphics memory change, and the renderer, which poses models, only reads the resources.
-    void animate(int animation, float time) const
+    // @return Whether the vertices moved: false if the model already was in this pose.
+    bool animate(int animation, float time) const
     {
-        applyPose({.from = animation, .fromTime = time, .to = animation, .toTime = time});
+        return applyPose({.from = animation, .fromTime = time, .to = animation, .toTime = time});
     }
 
     // Like animate(), with a pose between two animations: `amount` goes from 0 for the first one to 1 for the
     // second one.
-    void blendAnimations(int first, float firstTime, int second, float secondTime, float amount) const
+    bool blendAnimations(int first, float firstTime, int second, float secondTime, float amount) const
     {
-        applyPose({.from = first,
-                   .fromTime = firstTime,
-                   .to = second,
-                   .toTime = secondTime,
-                   .amount = std::clamp(amount, 0.0f, 1.0f)});
+        return applyPose({.from = first,
+                          .fromTime = firstTime,
+                          .to = second,
+                          .toTime = secondTime,
+                          .amount = std::clamp(amount, 0.0f, 1.0f)});
     }
 
     // The pose of the vertices, none if the model was never animated.
     [[nodiscard]] const std::optional<Pose> &getPose() const { return _pose; }
 
     // Moves the vertices of the model to a pose, unless they already are in it: several entities share the
-    // model, each posing it before it is drawn.
-    void applyPose(const Pose &pose) const
+    // model, each posing it before it is drawn. raylib moves them on the processor (CPU skinning), then sends
+    // them again to the graphics card.
+    // @return Whether the vertices moved: false if the model already was in this pose, or has no animation.
+    bool applyPose(const Pose &pose) const
     {
         if (_pose == pose) {
-            return;
+            return false;
         }
         _pose = pose;
         if (!hasAnimation(pose.to)) {
-            return;
+            return false;
         }
         if (hasAnimation(pose.added)) {
             applyAddedPose(pose);
-            return;
+            return true;
         }
         if (pose.amount >= 1.0f || !hasAnimation(pose.from)) {
             UpdateModelAnimation(_model, _animations[pose.to], pose.toTime * framesPerSecond);
-            return;
+            return true;
         }
         UpdateModelAnimationEx(_model, _animations[pose.from], pose.fromTime * framesPerSecond,
                                _animations[pose.to], pose.toTime * framesPerSecond, pose.amount);
+        return true;
+    }
+
+    // The vertices that a pose moves: those of the meshes with bones.
+    [[nodiscard]] std::size_t countSkinnedVertices() const
+    {
+        std::size_t count = 0;
+        for (int index = 0; index < _model.meshCount; ++index) {
+            const Mesh &mesh = _model.meshes[index];
+            if (mesh.boneIndices != nullptr && mesh.boneWeights != nullptr) {
+                count += static_cast<std::size_t>(mesh.vertexCount);
+            }
+        }
+        return count;
     }
 
 private:
