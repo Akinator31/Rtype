@@ -82,7 +82,10 @@ another thread hands work to the network thread. The handlers are always called 
 data they touch must be protected if another thread reads it.
 
 **Lifetime.** Sockets must be destroyed before their loop. A socket can be destroyed at any time otherwise,
-including from inside one of its handlers: data that arrives afterwards is ignored.
+including from inside one of its handlers: data that arrives afterwards is ignored. Its handlers are no longer
+called from the moment `close()` or its destructor returns, even for data already received whose handler
+still waits in the loop (on Windows, in the completion port of the loop): the object a handler points to can
+be destroyed right after the socket. Only the sends given before still go out, on the loop's thread.
 
 **Exceptions.** An exception thrown by a handler leaves `run()` or `poll()`, which can be called again.
 
