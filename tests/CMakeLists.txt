@@ -45,6 +45,7 @@ add_executable(rtype_tests
     framing.cpp
     game_config.cpp
     game_items.cpp
+    game_loadout.cpp
     game_messages.cpp
     game_rescue.cpp
     game_simulation.cpp
