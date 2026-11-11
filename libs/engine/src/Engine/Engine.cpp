@@ -79,11 +79,40 @@ void Engine::retrySceneLoad()
     beginSceneRequest(request);
 }
 
+void Engine::preloadScene(const std::string &name)
+{
+    const std::vector<SceneAsset> &assets = _sceneDefinitions.at(name).settings.assets;
+    if (assets.empty() || !_sceneAssets.hasLoader() || _preloads.contains(name)) {
+        return;
+    }
+    // A request that throws is left to the opening of the scene, which shows the error
+    try {
+        _sceneAssets.acquireAssets(assets);
+    } catch (...) {
+        return;
+    }
+    _preloads.emplace(name, assets);
+}
+
+bool Engine::isSceneReady(const std::string &name) const
+{
+    const std::vector<SceneAsset> &assets = _sceneDefinitions.at(name).settings.assets;
+    if (assets.empty()) {
+        return true;
+    }
+    const auto preload = _preloads.find(name);
+    return preload != _preloads.end() && _sceneAssets.areAssetsReady(preload->second);
+}
+
 void Engine::unloadSceneAssets()
 {
     if (_pendingScene) {
         cancelPendingScene();
     }
+    for (const auto &[name, assets] : _preloads) {
+        _sceneAssets.releaseAssets(assets);
+    }
+    _preloads.clear();
     for (const std::string &name : _scenesKeepingAssets) {
         _sceneAssets.releaseAssets(_sceneDefinitions.at(name).settings.assets);
     }
@@ -259,6 +288,11 @@ void Engine::openScene(const std::string &name, std::vector<SceneAsset> assets)
     }
     const SceneId id = _scenes.open(definition.settings);
     _namedScenes.push_back({id, name, std::move(assets)});
+    // The scene holds its assets now: the preload has done its work
+    if (const auto preload = _preloads.find(name); preload != _preloads.end()) {
+        _sceneAssets.releaseAssets(preload->second);
+        _preloads.erase(preload);
+    }
     try {
         if (definition.build) {
             definition.build(*this, id);
