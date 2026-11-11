@@ -3,6 +3,7 @@
 #include "Asio.hpp"
 #include "TcpConnectionImpl.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <format>
 #include <system_error>
@@ -21,6 +22,9 @@ struct TcpListener::Impl : std::enable_shared_from_this<Impl> {
 
     tcp::acceptor acceptor;
     asio::steady_timer retry;
+    /// Set by close() at once, as UdpSocket::Impl::closed: a connection accepted before the acceptor is
+    /// closed on the loop's thread is not delivered.
+    std::atomic<bool> closed{false};
     /// Wraps the accept handler: TcpConnection's constructor is only reachable from TcpListener.
     std::function<void(std::shared_ptr<TcpConnection::Impl>)> deliver;
     Address local;
@@ -36,7 +40,7 @@ struct TcpListener::Impl : std::enable_shared_from_this<Impl> {
 
     void onAccepted(const std::error_code &error, tcp::socket socket)
     {
-        if (!acceptor.is_open()) {
+        if (closed.load(std::memory_order_acquire) || !acceptor.is_open()) {
             return;
         }
         if (!error) {
@@ -127,7 +131,7 @@ void TcpListener::startAccepting(AcceptHandler handler)
         handler(TcpConnection(std::move(connection)));
     };
     asio::post(_impl->acceptor.get_executor(), [impl = _impl, deliver = std::move(deliver)]() mutable {
-        if (impl->acceptor.is_open()) {
+        if (!impl->closed.load(std::memory_order_acquire) && impl->acceptor.is_open()) {
             impl->deliver = std::move(deliver);
             impl->acceptNext();
         }
@@ -139,6 +143,7 @@ void TcpListener::close()
     if (!_impl) {
         return;
     }
+    _impl->closed.store(true, std::memory_order_release);
     asio::post(_impl->acceptor.get_executor(), [impl = _impl] { impl->closeNow(); });
 }
 

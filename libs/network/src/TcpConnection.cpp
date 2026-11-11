@@ -57,7 +57,7 @@ void TcpConnection::Impl::onRead(const std::error_code &error, std::size_t size)
     if (logger().isEnabled(rtype::log::Level::Trace)) {
         logger().trace("TCP {} received {} bytes", remote, size);
     }
-    if (!closing && onReceive) {
+    if (!closing && !closeRequested.load(std::memory_order_acquire) && onReceive) {
         onReceive(std::span<const std::byte>(buffer.data(), size));
     }
     if (!closed) {
@@ -139,7 +139,7 @@ void TcpConnection::Impl::fail(const std::error_code &error)
     onReceive = nullptr;
     const CloseHandler handler = std::move(onClose);
     onClose = nullptr;
-    if (handler) {
+    if (handler && !closeRequested.load(std::memory_order_acquire)) {
         handler(reason);
     }
 }
@@ -236,6 +236,8 @@ void TcpConnection::close()
     if (!_impl) {
         return;
     }
+    // The handlers are no longer called from now on; the bytes given to send() before still go out
+    _impl->closeRequested.store(true, std::memory_order_release);
     asio::post(_impl->socket.get_executor(), [impl = _impl] { impl->requestClose(); });
 }
 

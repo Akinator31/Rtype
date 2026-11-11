@@ -5,6 +5,7 @@
 #include "Asio.hpp"
 #include "rtype/network/TcpConnection.hpp"
 
+#include <atomic>
 #include <deque>
 #include <vector>
 
@@ -12,7 +13,7 @@ namespace rtype::network
 {
 
 // Owned by the connection and by its pending operations, like UdpSocket::Impl. Only used on the loop's
-// thread.
+// thread, but for closeRequested.
 struct TcpConnection::Impl : std::enable_shared_from_this<Impl> {
     static constexpr std::size_t ReadBufferSize = 16384;
 
@@ -28,6 +29,10 @@ struct TcpConnection::Impl : std::enable_shared_from_this<Impl> {
     bool closing = false;
     /// The socket is closed.
     bool closed = false;
+    /// Set by TcpConnection::close() at once, before requestClose() runs on the loop's thread: what was read
+    /// before, whose completion already waits in the loop (on Windows, in the completion port), reaches
+    /// neither handler, whose owner may be gone.
+    std::atomic<bool> closeRequested{false};
 
     explicit Impl(asio::ip::tcp::socket connected);
 
