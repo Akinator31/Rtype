@@ -14,7 +14,8 @@ Run a server and play the same game from several machines, or from several clien
     For players on other machines, open 4242 over TCP and over UDP.
 
 2. **Connect.** Start the client, choose **Online**, type a name and the server, then **Connect**, or pick one
-   of the **Servers met** on the right, which shows the account you will be signed in to:
+   of the **Servers met** on the right, which shows the account you will be signed in to (**Forget**, beside a
+   server, forgets its key):
 
     | Field | Example | Meaning |
     |---|---|---|
@@ -26,8 +27,8 @@ Run a server and play the same game from several machines, or from several clien
    client remembers it in its settings, and connects at once the next times.
 
 4. **Do not trust a key that changed.** A known server that presents another key is refused, with a warning
-   that shows both: someone may be pretending to be it. If its owner did change its key, **Forget the server
-   key** in the Online menu, then connect again.
+   that shows both: someone may be pretending to be it. If its owner did change its key, **Forget the old
+   key** on the warning: the client connects again and shows the new key, to check and trust as the first time.
 
 5. **Sign in**, on a server with accounts ([Set up accounts](set-up-accounts.md)). After **Connect**, the
    client offers what the server offers: **Continue with Discord** first, then **Sign in** (a username or an

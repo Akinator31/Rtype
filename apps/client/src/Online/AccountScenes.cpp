@@ -345,7 +345,6 @@ void OnlineScenes::declareAccountScenes(const engine::InterfaceStyle &style)
                 page.note(_translations.text("account.no_guests"),
                           {engine::AnchorPoint::TopLeft, columnLeft, top + 10.0f}, Tone::Hint);
             }
-            page.keys(_translations.text("account.keys_welcome"));
         });
 
     declareFormScenes(style);
@@ -413,7 +412,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                 _translations.text("account.forgot"), [this] { _engine.switchScene(ForgotPasswordScene); },
                 {engine::AnchorPoint::TopLeft, columnLeft, buttonsTop(2) + online_layout::buttonsSpacing});
             discordBeside(page, online_layout::fieldsTop, 780.0f);
-            page.keys(_translations.text("account.keys_form"));
         });
 
     // E3: the username, the email and the password, its strength in a gauge
@@ -465,7 +463,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                 },
                 {engine::AnchorPoint::TopLeft, columnLeft, gaugeTop + style.gauge.getHeight() + 70.0f});
             discordBeside(page, online_layout::fieldsTop, 820.0f);
-            page.keys(_translations.text("account.keys_form"));
         });
 
     // C1: six cells for the code of the email, sent as soon as they are full
@@ -511,7 +508,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                             }
                         },
                         {engine::AnchorPoint::TopLeft, columnLeft, 540.0f + online_layout::buttonsSpacing});
-            page.keys(_translations.text("account.keys_code"));
         });
 
     _engine.createScene(
@@ -538,7 +534,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                                                    });
                         },
                         {engine::AnchorPoint::TopLeft, columnLeft, buttonsTop(1)});
-            page.keys(_translations.text("account.keys_form"));
         });
 
     _engine.createScene(
@@ -572,7 +567,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                             }
                         },
                         {engine::AnchorPoint::TopLeft, columnLeft, buttonsTop(3) + 30.0f});
-            page.keys(_translations.text("account.keys_form"));
         });
 }
 
@@ -682,7 +676,6 @@ void OnlineScenes::declareDiscordScenes(const engine::InterfaceStyle &style)
                         {engine::AnchorPoint::TopLeft, textLeft, 660.0f});
             page.button(_translations.text("online.cancel"), [this] { _engine.switchScene(AccountsScene); },
                         {engine::AnchorPoint::TopLeft, textLeft, 660.0f + online_layout::buttonsSpacing});
-            page.keys(_translations.text("account.keys_new_pilot"));
         });
 }
 
@@ -775,7 +768,6 @@ void OnlineScenes::declareMyAccountScenes(const engine::InterfaceStyle &style)
             page.dangerButton(_translations.text("account.delete"),
                               [this] { _engine.pushScene(DeleteAccountScene); },
                               {engine::AnchorPoint::TopLeft, sheetLeft + 520.0f, buttons});
-            page.keys(_translations.text("account.keys_mine"));
         });
 
     // A2: the deletion asked over My account, in red, No by default
@@ -832,8 +824,6 @@ void OnlineScenes::declareMyAccountScenes(const engine::InterfaceStyle &style)
                                   },
                                   {engine::AnchorPoint::Top, 260.0f, 780.0f});
             }
-            page.note(toCapitals(_translations.text("online.keys_cancel")),
-                      {engine::AnchorPoint::Bottom, 0.0f, -84.0f}, Tone::Hint, 20.0f);
         });
 }
 

@@ -13,6 +13,7 @@
 #include "MainMenu/FlightSystem.hpp"
 #include "MainMenu/IntroSystem.hpp"
 #include "MainMenu/LogoFlareSystem.hpp"
+#include "MainMenu/MenuTransitionSystem.hpp"
 #include "ShipSelector/ShipSelectorSystem.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Engine.hpp"
@@ -52,6 +53,8 @@ ClientSystems registerClientSystems(engine::Engine &engine, input::InputSource &
     ecs.registerSystem<FlightSystem>();
     ecs.registerSystem<IntroSystem>(engine.getScenes(), input);
     ecs.registerSystem<LogoFlareSystem>();
+    // After the intro and the tweens: it has the last word on the camera and the opacities of the menus
+    ecs.registerSystem<MenuTransitionSystem>(ecs, engine, engine.getScenes());
     ecs.registerSystem<CrawlSystem>(engine.getScenes());
     ecs.registerSystem<ShipSelectorSystem>(engine.getScenes(), engine.getControls(), input);
     ecs.registerSystem<engine::ModelAnimationSystem>();

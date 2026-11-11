@@ -29,8 +29,6 @@ inline constexpr float labelHeight = 32.0f;
 inline constexpr float groupGap = 40.0f;
 /// Space between the two columns of the Settings page.
 inline constexpr float columnGap = 72.0f;
-/// The keys of the page, this far above the bottom of the screen.
-inline constexpr float keysBottom = 64.0f;
 
 /// The darkness of the veil on the left of the screen, and on its right.
 inline constexpr render::Color veilLeft{5, 5, 8, 205};
@@ -73,16 +71,6 @@ inline void bindText(ecs::Ecs &ecs, ecs::entity_t entity, const localization::Lo
 {
     ecs.addComponent<engine::BoundText>(
         entity, [&translations, key = std::move(key)] { return translations.text(key); });
-}
-
-/// The keys of the page, at its bottom left, following the language.
-inline ecs::entity_t addKeys(engine::InterfaceBuilder &interface, ecs::Ecs &ecs,
-                             const localization::Localization &translations, const std::string &key)
-{
-    const ecs::entity_t keys =
-        interface.note(translations.text(key), {engine::AnchorPoint::BottomLeft, screenMargin, -keysBottom});
-    bindText(ecs, keys, translations, key);
-    return keys;
 }
 
 /// The widgets of a page with the key of the hint shown while they have the focus.

@@ -305,7 +305,6 @@ void buildSettingsPage(engine::Engine &engine, engine::SceneId scene, const engi
     top += style.setting.height + groupGap;
     settings_page::addHint(interface, ecs, translations, page.hints,
                            {engine::AnchorPoint::TopLeft, right + style.setting.inset, top});
-    settings_page::addKeys(interface, ecs, translations, "settings.keys");
 }
 
 } // namespace

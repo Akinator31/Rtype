@@ -183,7 +183,6 @@ void buildVrPage(engine::Engine &engine, engine::SceneId scene, const engine::In
     settings_page::addHint(
         interface, ecs, translations, page.hints,
         {engine::AnchorPoint::TopLeft, right + style.setting.inset, top + settings_page::groupGap});
-    settings_page::addKeys(interface, ecs, translations, "settings.keys");
 }
 
 } // namespace

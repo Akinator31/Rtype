@@ -1,6 +1,6 @@
 #include "MainMenu/IntroSystem.hpp"
 
-#include "MainMenu/Space.hpp"
+#include "MainMenu/CameraFlight.hpp"
 
 #include <algorithm>
 
@@ -16,37 +16,18 @@ constexpr float cameraFlight = 4.0f;
 /// The gamepads checked for a press.
 constexpr int gamepadCount = 4;
 
-/// Starts slowly, speeds up, then slows down until it stops: the camera neither jumps nor brakes suddenly.
-[[nodiscard]] float easeInOut(float progress)
-{
-    return progress * progress * (3.0f - (2.0f * progress));
-}
-
 [[nodiscard]] float mix(float from, float to, float amount)
 {
     return from + ((to - from) * amount);
 }
 
-[[nodiscard]] render::Vector3 mix(render::Vector3 from, render::Vector3 to, float amount)
-{
-    return from + ((to - from) * amount);
-}
-
-/// The view between two others: the camera moves in a straight line and turns smoothly from one direction
-/// to the other.
-[[nodiscard]] render::Camera mix(const render::Camera &from, const render::Camera &to, float amount)
-{
-    const render::Vector3 fromForward = normalize(from.target - from.position);
-    const render::Vector3 toForward = normalize(to.target - to.position);
-    render::Camera view = to;
-    view.position = mix(from.position, to.position, amount);
-    view.target = view.position + normalize(mix(fromForward, toForward, amount));
-    view.up = normalize(mix(from.up, to.up, amount));
-    view.fieldOfView = mix(from.fieldOfView, to.fieldOfView, amount);
-    return view;
-}
-
 } // namespace
+
+render::Camera computeIntroView(const Intro &intro)
+{
+    const float progress = intro.started ? intro.time / cameraFlight : 0.0f;
+    return mixViews(intro.from, intro.to, easeInOut(progress));
+}
 
 IntroSystem::IntroSystem(ecs::ComponentCaches &caches, const engine::Scenes &scenes,
                          const input::InputSource &input)
@@ -94,11 +75,9 @@ void IntroSystem::start(Intro &intro)
 
 void IntroSystem::placeCamera(ecs::entity_t entity, const Intro &intro)
 {
-    if (!_cameras.has(entity)) {
-        return;
+    if (_cameras.has(entity)) {
+        _cameras.get(entity).view = computeIntroView(intro);
     }
-    const float progress = intro.started ? std::min(intro.time / cameraFlight, 1.0f) : 0.0f;
-    _cameras.get(entity).view = mix(intro.from, intro.to, easeInOut(progress));
 }
 
 void IntroSystem::placeSlides(const Intro &intro)
