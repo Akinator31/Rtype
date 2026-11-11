@@ -26,7 +26,8 @@ config/
   items/         what the ships of the players pick up: its model, its hitbox, its effects
   player.lua     what every player starts with: its ship, its weapon, its health
   progression.lua  the experience the players earn online, optional
-  hangar.lua     the level of the account each ship and each weapon of the hangar needs, optional
+  hangar.lua     the level of the account each ship and each weapon of the hangar needs, and the
+                 characteristics of the ships, optional
 ```
 
 - **One file per definition.** The file returns the table of one projectile, one weapon... Its name is free
@@ -329,8 +330,14 @@ only have the weapon of `config/player.lua`. A ship needs a
 **level** of the account before the player can equip it; a locked one can still be looked at, and its button
 says the level it needs. The level is that of the account signed in, or, offline and as a guest, of the last
 account signed in on this machine (`account.level` in the [settings](../architecture/settings.md)). A level
-up that opens a ship shows a toast. The ships of the hangar are those of the client, named by their code:
-only the client reads them.
+up that opens a ship shows a toast. The ships of the hangar are those of the client, named by their code.
+
+Each ship has three **characteristics**, from 0 to 1, shown as gauges in the hangar and applied in the game:
+`speed` multiplies the speed of the ship, `power` the damage of its shots, `armor` its health (that of
+`config/player.lua`). A characteristic multiplies by 0.75 at 0, 1 at 0.5 and 1.25 at 1: a ship left out of
+the list, or a characteristic left out, is the ship of the rules. The client tells the server the ship it
+flies, and the server applies the characteristics of its own file: the server and the clients need the same
+file.
 
 The **weapons** are those the players choose two of in the hangar, under the ship: a primary weapon, in hand
 when the ship appears, and a secondary one, put away. In a game, Left Shift (X on a gamepad, rebindable in the
@@ -343,7 +350,7 @@ the translation `weapon.<id>` of the client (`apps/client/assets/locales/`).
 ```lua
 return {
     ships = {
-        { ship = "VX-01", level = 1 },
+        { ship = "VX-01", level = 1, speed = 0.9, power = 0.3, armor = 0.25 },
         { ship = "VX-02", level = 3 },
     },
     weapons = {
@@ -359,6 +366,9 @@ return {
 | `ships` | list of tables | empty | The ships that need a level; a ship of the hangar left out is open from level 1 |
 | `ships[i].ship` | string | *required* | The code of a ship of the hangar, such as `VX-03`, listed once; an unknown code is logged by the client |
 | `ships[i].level` | whole number, 1 or more | *required* | The level of the account from which the ship can be equipped |
+| `ships[i].speed` | number from 0 to 1 | `0.5` | Its speed: `Rules::shipSpeed` times 0.75 at 0, 1.25 at 1 |
+| `ships[i].power` | number from 0 to 1 | `0.5` | The damage of its shots, rounded, times 0.75 at 0, 1.25 at 1 |
+| `ships[i].armor` | number from 0 to 1 | `0.5` | Its health, rounded, times 0.75 at 0, 1.25 at 1, at most 255 |
 | `weapons` | list of tables | empty | The weapons the players can choose, in the order of the hangar; with fewer than two open, the players only have the weapon of `config/player.lua` |
 | `weapons[i].weapon` | string | *required* | The id of a weapon of `config/weapons/`, listed once |
 | `weapons[i].level` | whole number, 1 or more | *required* | The level of the account from which the weapon can be chosen |

@@ -32,7 +32,8 @@ void heal(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, std::uint8_t 
 {
     Health &health = ecs.getComponent<Health>(ship);
     const unsigned healed = static_cast<unsigned>(health.points) + amount;
-    health.points = static_cast<std::uint8_t>(std::min<unsigned>(healed, context.player.health));
+    const unsigned most = context.maxHealth(playerOf(ecs, context, ship));
+    health.points = static_cast<std::uint8_t>(std::min(healed, most));
 }
 
 void addLives(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, std::uint8_t amount)

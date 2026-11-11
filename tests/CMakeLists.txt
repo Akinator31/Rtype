@@ -52,6 +52,7 @@ add_executable(rtype_tests
     game_loadout.cpp
     game_messages.cpp
     game_rescue.cpp
+    game_ship_stats.cpp
     game_simulation.cpp
     known_servers.cpp
     lobby_messages.cpp

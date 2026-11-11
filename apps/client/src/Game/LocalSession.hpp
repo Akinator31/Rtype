@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rtype::client
@@ -50,8 +51,10 @@ private:
 public:
     /// @param config The definitions of the game, loaded once by the client (loadGameConfig()).
     /// @param loadout The weapons the player chose in the hangar; empty, that of the config alone.
+    /// @param ship The code of the ship the player equipped in the hangar, whose characteristics the game
+    /// applies (Simulation::setShip()); empty, or not in the hangar of the config, the ship of the rules.
     explicit LocalSession(game::Rules rules = {}, const game::GameConfig &config = {},
-                          const game::Loadout &loadout = {});
+                          const game::Loadout &loadout = {}, const std::string &ship = {});
 
     [[nodiscard]] std::uint8_t localSlot() const override { return 0; }
     [[nodiscard]] std::optional<std::uint16_t> waveCount() const override { return _waveCount; }

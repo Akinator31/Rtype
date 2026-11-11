@@ -15,6 +15,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <thread>
 #include <variant>
 #include <vector>
@@ -82,6 +83,7 @@ private:
     struct SetLoadout {
         std::uint8_t slot;
         rtype::game::Loadout loadout;
+        std::string ship;
     };
     using Command = std::variant<AddPlayer, RemovePlayer, ReceiveInputs, SetLoadout>;
 
@@ -122,9 +124,10 @@ public:
     /// The inputs of an INPUT of a player, from any thread: the input of `tick`, then of `tick - 1`, and so
     /// on. Each one is applied at its tick (InputBuffer, docs/protocol/game.md, section 9.2).
     void receiveInputs(std::uint8_t slot, std::uint32_t tick, std::vector<rtype::game::PlayerInput> inputs);
-    /// The weapons a player chose (`LOADOUT`), from any thread: its ship gets them at the next tick, unless
-    /// the game refuses them (Simulation::setLoadout()), which is logged.
-    void setLoadout(std::uint8_t slot, rtype::game::Loadout loadout);
+    /// The weapons and the ship a player chose (`LOADOUT`), from any thread: its ship gets them at the next
+    /// tick, unless the game refuses them (Simulation::setLoadout(), Simulation::setShip()), which is logged.
+    /// Without weapons, it keeps the weapon of every player.
+    void setLoadout(std::uint8_t slot, rtype::game::Loadout loadout, std::string ship);
 
     /// The last tick simulated, from any thread: for `ACCEPTED`.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }

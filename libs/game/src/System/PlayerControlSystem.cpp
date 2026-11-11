@@ -17,9 +17,9 @@ void PlayerControlSystem::update(float)
         if (!_ships.has(entity) || !_velocities.has(entity) || !_ecs.isAlive(entity)) {
             continue;
         }
-        const PlayerInput input = _context.players[_ships.get(entity).slot].input;
+        const PlayerSlot &player = _context.players[_ships.get(entity).slot];
         // The same velocity as the prediction of the client (ShipMovement.hpp)
-        _velocities.get(entity) = shipVelocity(input, _context.rules);
+        _velocities.get(entity) = shipVelocity(player.input, _context.rules, statFactor(player.stats.speed));
     }
 }
 

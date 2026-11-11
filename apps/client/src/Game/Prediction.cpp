@@ -66,7 +66,7 @@ std::optional<PredictedShot> Prediction::step(ecs::Position &position, std::opti
                                  weapon.definition.mechanic, weapon.projectile};
         }
     }
-    position = game::moveShip(position, input, _rules);
+    position = game::moveShip(position, input, _rules, _speedFactor);
     return shot;
 }
 
@@ -187,7 +187,7 @@ std::optional<ecs::Position> Prediction::position(double fraction, game::PlayerI
         return std::nullopt;
     }
     const auto part = static_cast<float>(std::clamp(fraction, 0.0, 1.0));
-    const ecs::Position next = game::moveShip(*_predicted, held, _rules);
+    const ecs::Position next = game::moveShip(*_predicted, held, _rules, _speedFactor);
     return ecs::Position{_predicted->x + ((next.x - _predicted->x) * part) + _offsetX,
                          _predicted->y + ((next.y - _predicted->y) * part) + _offsetY};
 }

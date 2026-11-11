@@ -75,6 +75,8 @@ private:
     };
 
     game::Rules _rules;
+    /// The factor of the speed of the ship of the hangar the player flies (game::statFactor()).
+    float _speedFactor = 1.0f;
     std::deque<Sent> _sent;
     std::optional<ecs::Position> _predicted;
     /// The weapons of the ship, once armed(): one, or the two of its loadout.
@@ -106,6 +108,10 @@ public:
     /// The ship of the player of `slot` has these weapons, the first in hand when it appears: one, or the two
     /// of its loadout.
     void arm(std::vector<Weapon> weapons, std::uint8_t slot);
+
+    /// The ship moves at Rules::shipSpeed times this factor, as the game moves the ship of the hangar the
+    /// player flies (game::statFactor() of its speed). 1 until set.
+    void setSpeedFactor(float factor) { _speedFactor = factor; }
 
     /// An input sent for `tick`: the predicted ship moves at once.
     void apply(std::uint32_t tick, game::PlayerInput input);

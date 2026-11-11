@@ -245,13 +245,13 @@ void createStatGauges(engine::InterfaceBuilder &interface, localization::Localiz
                       const ShipSelection &selection)
 {
     interface.gauge(translations.text("ship.speed"),
-                    [&selection] { return selection.getBlend(&ShipEntry::speed); },
+                    [&selection] { return selection.getBlend(&game::ShipStats::speed); },
                     {engine::AnchorPoint::Bottom, -gaugesSpacing, gaugesBottom});
     interface.gauge(translations.text("ship.power"),
-                    [&selection] { return selection.getBlend(&ShipEntry::power); },
+                    [&selection] { return selection.getBlend(&game::ShipStats::power); },
                     {engine::AnchorPoint::Bottom, 0.0f, gaugesBottom});
     interface.gauge(translations.text("ship.armor"),
-                    [&selection] { return selection.getBlend(&ShipEntry::armor); },
+                    [&selection] { return selection.getBlend(&game::ShipStats::armor); },
                     {engine::AnchorPoint::Bottom, gaugesSpacing, gaugesBottom});
 }
 
@@ -286,8 +286,10 @@ void createShipSelectorScene(engine::Engine &engine, render::ResourceManager &re
         });
 }
 
-void openShipSelector(engine::Engine &engine, ShipSelection &selection, std::function<void()> launch)
+void openShipSelector(engine::Engine &engine, ShipSelection &selection, std::function<void()> launch,
+                      bool allUnlocked)
 {
+    selection.setAllUnlocked(allUnlocked);
     selection.launch = std::move(launch);
     engine.pushScene(ShipSelectorScene);
 }

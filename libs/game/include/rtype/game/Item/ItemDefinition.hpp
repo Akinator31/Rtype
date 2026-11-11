@@ -12,7 +12,8 @@ namespace rtype::game
 /// What an item does to the ship of the player who picks it up. The behaviors are written in C++
 /// (applyItemEffect()); the files of config/items/ only choose them and set their numbers.
 enum class ItemEffectType : std::uint8_t {
-    /// Gives back `amount` hit points, up to the health of the player (PlayerDefinition::health).
+    /// Gives back `amount` hit points, up to the health of the ship (PlayerDefinition::health times its
+    /// armor, ShipStats).
     Heal,
     /// Gives `amount` lives more to the player, up to 255.
     ExtraLife,

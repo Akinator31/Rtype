@@ -96,9 +96,9 @@ void GameThread::receiveInputs(std::uint8_t slot, std::uint32_t tick,
     push(ReceiveInputs{slot, tick, std::move(inputs)});
 }
 
-void GameThread::setLoadout(std::uint8_t slot, rtype::game::Loadout loadout)
+void GameThread::setLoadout(std::uint8_t slot, rtype::game::Loadout loadout, std::string ship)
 {
-    push(SetLoadout{slot, std::move(loadout)});
+    push(SetLoadout{slot, std::move(loadout), std::move(ship)});
 }
 
 void GameThread::run()
@@ -142,9 +142,14 @@ void GameThread::run()
                                    }
                                },
                                [&](const SetLoadout &chosen) {
-                                   if (!simulation.setLoadout(chosen.slot, chosen.loadout)) {
+                                   if (!chosen.loadout[0].empty() &&
+                                       !simulation.setLoadout(chosen.slot, chosen.loadout)) {
                                        logger().warning("Loadout {} and {} of slot {} refused",
                                                         chosen.loadout[0], chosen.loadout[1], chosen.slot);
+                                   }
+                                   if (!simulation.setShip(chosen.slot, chosen.ship)) {
+                                       logger().warning("Ship {} of slot {} refused", chosen.ship,
+                                                        chosen.slot);
                                    }
                                },
                            },

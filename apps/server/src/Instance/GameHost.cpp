@@ -205,9 +205,9 @@ void GameHost::receivedLoadout(Player &player, std::uint32_t session, std::span<
         return;
     }
     player.loadoutChosen = true;
-    logger().debug("{} ({}) takes {} and {}", player.name, player.playerId, loadout->weapons[0],
-                   loadout->weapons[1]);
-    _game.setLoadout(player.slot, std::move(loadout->weapons));
+    logger().debug("{} ({}) flies {} with {} and {}", player.name, player.playerId, loadout->ship,
+                   loadout->weapons[0], loadout->weapons[1]);
+    _game.setLoadout(player.slot, std::move(loadout->weapons), std::move(loadout->ship));
 }
 
 void GameHost::receivedVoice(Player &player, std::uint32_t session, std::span<const std::byte> payload)
