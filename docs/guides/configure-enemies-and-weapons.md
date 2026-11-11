@@ -129,7 +129,7 @@ written `5` or `5.0`, not `5.5`.
 | Field | Type | Default | What it is |
 |---|---|---|---|
 | `id` | string | *required* | Unique among the projectiles |
-| `model` | string | `""` | Path of the 3D model. The client chooses the model by kind of shot (shot of a player, plasma orb or other shot of a Bydo) and draws it to the width of the collider: give the collider the proportions of the core of the model |
+| `model` | string | `""` | Path of the 3D model, under the assets of the client. The client draws the shots of the players and of the Bydos with it, to the width of the collider: give the collider the proportions of the core of the model. Without one, a shot is drawn with the model of its kind (shot of a player, plasma orb or other shot of a Bydo) |
 | `category` | `"bullet"`, `"missile"`, `"laser"` or `"plasma"` | `"bullet"` | How it moves: straight, speeding up, straight, zigzagging ([behaviors](../architecture/game.md#projectiles)) |
 | `collider` | table | *required* | The shape that hits, see below |
 
@@ -178,7 +178,7 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `weapon` | string | *required* | The id of its weapon |
 | `score` | whole number, 0 or more | `100` | Points for the player who destroys it |
 | `xp` | whole number, 0 or more | a tenth of `score` | Experience for the player who destroys it, online only, times its streak ([The experience](#the-experience-configprogressionlua)) |
-| `collisionDamage` | whole number from 0 to 255 | `20` | Hit points a player ship loses when it runs into it; the enemy keeps going |
+| `collisionDamage` | whole number from 0 to 255 | `20` | Hit points a player ship loses when it runs into it; the enemy is destroyed, and the player scores it, unless it is a boss, which keeps going |
 | `update` | function | none | Its behavior, called at every tick: see [Script the behavior of an enemy](script-enemy-behaviors.md). Without one, it flies left and fires as soon as it is in the game area |
 | `phases` | whole number from 1 to 255 | `1` | How many times its `health` is filled: once it runs out, it gets all of it back, until its last phase. A boss lasts `health × phases` hit points |
 | `boss` | boolean | `false` | The clients draw it as a boss (the shogun model) instead of a Bydo ship |
