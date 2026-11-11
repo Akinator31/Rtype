@@ -528,6 +528,7 @@ Read more in the [architecture documentation](https://akinator31.github.io/Rtype
 apps/        the programs
   client/    r-type_client, and its assets (models, sounds, fonts, translations)
   server/    r-type_server: master and game instances
+example/     games made with the engine alone
   minigame/  orbit_breaker
 libs/        the engine and the shared libraries (see Architecture)
 config/      the Lua configuration of the game, shared by the client and the server
