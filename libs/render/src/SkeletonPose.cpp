@@ -1,6 +1,7 @@
 #include "SkeletonPose.hpp"
 
 #include <raymath.h>
+#include <rlgl.h>
 
 #include <algorithm>
 #include <cmath>
@@ -155,6 +156,21 @@ void applyBonePoses(const ::Model &model, BonePoses &poses)
     animation.keyframeCount = 1;
     animation.keyframePoses = &frame;
     UpdateModelAnimation(model, animation, 0.0f);
+}
+
+bool isSkinned(const ::Mesh &mesh)
+{
+    return mesh.boneIndices != nullptr && mesh.boneWeights != nullptr;
+}
+
+void setBoneMatrices(const ::Shader &shader, const ::Model &model)
+{
+    const int location = shader.locs != nullptr ? shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] : -1;
+    if (location < 0 || model.boneMatrices == nullptr || model.skeleton.boneCount <= 0) {
+        return;
+    }
+    rlEnableShader(shader.id);
+    rlSetUniformMatrices(location, model.boneMatrices, std::min(model.skeleton.boneCount, MaxShaderBones));
 }
 
 } // namespace rtype::render::detail

@@ -57,6 +57,8 @@ private:
     int _metalnessLocation = -1;
     int _emissionOnlyLocation = -1;
     int _emissionColorLocation = -1;
+    /// Whether the mesh drawn moves with the bones of its model (GPU skinning)
+    int _skinnedLocation = -1;
     bool _available = false;
 
     /// Sends the view point, the lights and whether only the emitted light is drawn to the shader.
