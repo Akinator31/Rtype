@@ -138,6 +138,17 @@ the server tells them, with prediction and interpolation so that the game stays 
 
 ### The Bydos and the final boss
 
+<table>
+<tr>
+<td width="50%"><img src="docs/assets/gifs/boss.gif" alt="The Shogun, the final boss, swings its red blade and fires bursts of plasma orbs while the player shoots at it"></td>
+<td width="50%"><img src="docs/assets/gifs/rescue.gif" alt="The rescue: REINFORCEMENTS, allied ships join the fight, the Shogun dashes through them, then the COMBINED ATTACK destroys it and the Boss slayer quest is completed"></td>
+</tr>
+<tr>
+<td align="center"><sub>The Shogun, the final boss</sub></td>
+<td align="center"><sub>The rescue and the combined attack</sub></td>
+</tr>
+</table>
+
 - **20 kinds of Bydos**: scouts, mosquitoes, gunners, snipers, sporecasters, carriers, phalanxes, siege
   ships... each with its own 3D model, health, speed, weapon and score.
 - **Behaviours scripted in Lua**: waving, firing in bursts, following the nearest player, guarding, chaining
@@ -196,6 +207,17 @@ the server tells them, with prediction and interpolation so that the game stays 
 - **One process per game**: a crashing game never takes the lobby or the other games down.
 
 ### Accounts and Discord
+
+<table>
+<tr>
+<td width="55%"><img src="docs/assets/gifs/discord-presence.gif" alt="Discord Rich Presence: the activity card in the Discord profile goes from In the hangar to Choosing a ship, then Solo, Wave 1/8, as the player launches a game"></td>
+<td width="45%"><img src="docs/assets/gifs/discord-friends.gif" alt="The lobby of a server with the Discord friends of the player and an Invite button for each, their names blurred"></td>
+</tr>
+<tr>
+<td align="center"><sub>Rich Presence follows the game live</sub></td>
+<td align="center"><sub>Discord friends in the lobby, ready to invite</sub></td>
+</tr>
+</table>
 
 - **Accounts** kept by the server: username, email and password (hashed with **Argon2**), email verification
   and password reset by **codes sent by mail**, sessions remembered by the client, account deletion.
