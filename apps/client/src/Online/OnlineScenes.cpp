@@ -536,7 +536,7 @@ void OnlineScenes::joined(const LobbyClient::JoinResult &result)
         // The id of the player, for the Discord lobby of the game
         const std::uint32_t playerId = _lobby ? _lobby->playerId().value_or(0) : 0;
         _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config,
-                                                    &_voice, _address, playerId),
+                                                    &_voice, _address, playerId, _ships.getLoadout()),
                     [this] { gameEnded(); });
     } catch (const std::system_error &error) {
         _engine.showToast(std::format("Cannot join the game: {}", error.what()), engine::ToastType::Error);

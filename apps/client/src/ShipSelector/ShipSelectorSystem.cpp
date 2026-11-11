@@ -57,13 +57,24 @@ ShipSelectorSystem::ShipSelectorSystem(ecs::ComponentCaches &caches, const engin
                                        const engine::Controls &controls, const input::InputSource &input)
     : _scenes(scenes), _controls(controls), _input(input), _carousels(use<ShipCarousel>(caches)),
       _models(use<engine::Model>(caches)), _boxes(use<engine::Box>(caches)),
-      _opacities(use<engine::Opacity>(caches))
+      _opacities(use<engine::Opacity>(caches)), _focused(use<engine::Focused>(caches)),
+      _rows(use<engine::SettingRow>(caches))
 {
+}
+
+bool ShipSelectorSystem::isRowFocused() const
+{
+    for (ecs::entity_t entity = 0; entity < _focused.size(); ++entity) {
+        if (_focused.has(entity) && _rows.has(entity) && _scenes.receivesInput(entity)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void ShipSelectorSystem::readControls(ecs::entity_t entity, const ShipCarousel &carousel)
 {
-    if (!_scenes.receivesInput(entity)) {
+    if (!_scenes.receivesInput(entity) || isRowFocused()) {
         return;
     }
     if (_controls.wasPressed(engine::Control::Left)) {

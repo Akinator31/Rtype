@@ -61,6 +61,9 @@ constexpr float dotsSpacing = 70.0f;
 constexpr float dotHeight = 3.0f;
 constexpr float gaugesBottom = -80.0f;
 constexpr float gaugesSpacing = 600.0f;
+/// The rows of the two weapons, one under the other in the top right corner, over the sky.
+constexpr float weaponsWidth = 640.0f;
+constexpr float weaponsGap = 12.0f;
 
 void createHangarCamera(ecs::Ecs &ecs, engine::SceneId scene)
 {
@@ -202,6 +205,41 @@ std::vector<ecs::entity_t> createDots(engine::InterfaceBuilder &interface)
     return dots;
 }
 
+/// A row of the loadout: the weapon at `place`, changed with Left, Right and a click, and kept in the
+/// settings at once.
+void createWeaponRow(engine::Engine &target, engine::InterfaceBuilder &interface,
+                     localization::Localization &translations, ShipSelection &selection, std::size_t place,
+                     float top)
+{
+    const char *caption = place == 0 ? "ship.weapon_first" : "ship.weapon_second";
+    const ecs::entity_t row = interface.settingRow(
+        translations.text(caption),
+        [&translations, &selection, place] {
+            return translations.text("weapon." + selection.weapons[selection.loadout[place]].weapon);
+        },
+        [&target, &selection, place](int direction) {
+            selection.stepWeapon(place, direction);
+            writeEquippedWeapons(selection, target.getSettings());
+        },
+        {engine::AnchorPoint::TopRight, -screenMargin, top}, weaponsWidth);
+    target.getEcs().addComponent<engine::BoundText>(
+        row, [&translations, caption] { return translations.text(caption); });
+}
+
+/// The two weapons taken into the games, when the hangar has two open.
+void createWeaponRows(engine::Engine &target, engine::InterfaceBuilder &interface,
+                      const engine::InterfaceStyle &style, localization::Localization &translations,
+                      ShipSelection &selection)
+{
+    if (selection.getLoadout()[0].empty()) {
+        return;
+    }
+    for (std::size_t place = 0; place < game::LoadoutSize; ++place) {
+        const float top = screenMargin + (static_cast<float>(place) * (style.setting.height + weaponsGap));
+        createWeaponRow(target, interface, translations, selection, place, top);
+    }
+}
+
 /// The characteristics of the ship looked at, as gauges, side by side along the bottom.
 void createStatGauges(engine::InterfaceBuilder &interface, localization::Localization &translations,
                       const ShipSelection &selection)
@@ -244,6 +282,7 @@ void createShipSelectorScene(engine::Engine &engine, render::ResourceManager &re
             carousel.fading = {name, equip};
             carousel.dots = createDots(interface);
             createStatGauges(interface, translations, selection);
+            createWeaponRows(target, interface, style, translations, selection);
         });
 }
 

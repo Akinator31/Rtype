@@ -23,7 +23,7 @@ Name keys by domain with dots, so that the file stays readable:
 
 | Keys | Written by |
 |---|---|
-| `account.level` | `writePlayerLevel()`: the level of the last account signed in (PROGRESS), which opens the ships of the hangar offline and as a guest ([hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-of-the-hangar-confighangarlua)) |
+| `account.level` | `writePlayerLevel()`: the level of the last account signed in (PROGRESS), which opens the ships of the hangar offline and as a guest ([hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-and-the-weapons-of-the-hangar-confighangarlua)) |
 | `audio.effects_volume` | The Settings page (`keepPlayerSettings()`): the volume of the sound effects, from 0 to 1 |
 | `audio.music_volume` | The Settings page: the volume of the music, from 0 to 1 |
 | `discord.presence_application_id` | Nobody: written by hand. The Discord application whose activity the client shows, its id in decimal, in place of the one of the build (`RTYPE_DISCORD_APPLICATION_ID`); `0` for none ([Rich presence](client-online.md#rich-presence)) |
@@ -57,6 +57,7 @@ Name keys by domain with dots, so that the file stays readable:
 | `servers.session.<host>:<port>` | `SessionTokens`: the session token of the account signed in on that server, 64 hexadecimal digits, sent in the next `HELLO` ([Accounts](client-online.md#accounts)). A secret: never logged |
 | `servers.profile.<host>:<port>` | `KnownProfiles`: the account signed in on that server, shown in the Online menu: `<1 if Discord, else 0>:<version of its picture>:<username>`; the picture itself in `pictures/<version>.png` beside the settings ([Profiles](client-online.md#profiles)) |
 | `ship.equipped` | The hangar (`writeEquippedShip()`): the code of the ship the player equipped last, such as `VX-03`, on which the hangar opens at the next run |
+| `ship.weapons` | The hangar (`writeEquippedWeapons()`): the ids of the two weapons the player chose last, the primary first, such as `player_cannon,rapid_rifle` |
 
 ## The Settings page
 

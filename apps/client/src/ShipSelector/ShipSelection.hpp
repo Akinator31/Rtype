@@ -2,6 +2,7 @@
 
 #include "ShipSelector/ShipCatalog.hpp"
 #include "rtype/engine/Settings/Settings.hpp"
+#include "rtype/game/Loadout.hpp"
 #include "rtype/game/ShipUnlock.hpp"
 
 #include <array>
@@ -15,7 +16,8 @@ namespace rtype::client
 {
 
 /// What the player has chosen in the hangar: the ship looked at, and the one equipped, as indices in the
-/// catalog; and what it may equip: a ship needs a level of the account (config/hangar.lua).
+/// catalog, and its two weapons; and what it may equip: a ship or a weapon needs a level of the account
+/// (config/hangar.lua).
 struct ShipSelection {
     std::size_t focused = 0;
     std::size_t equipped = 0;
@@ -30,6 +32,11 @@ struct ShipSelection {
     /// What to do once the player has picked the ship of the game it starts: the hangar then launches the
     /// game instead of only equipping the ship. Empty when the hangar is opened to look at the ships.
     std::function<void()> launch;
+    /// The weapons of the hangar, in the order of config/hangar.lua, with the level each one needs.
+    std::vector<game::WeaponUnlock> weapons;
+    /// The two weapons equipped, as indices in `weapons`: different, and open at `level`, once the hangar
+    /// has two weapons open.
+    std::array<std::size_t, game::LoadoutSize> loadout{0, 1};
 
     /// Looks at the next ship (+1) or the previous one (-1), around.
     void step(int direction);
@@ -49,6 +56,16 @@ struct ShipSelection {
     [[nodiscard]] float getShownClarity() const;
     /// A characteristic mixed between the two ships the carousel is between.
     [[nodiscard]] float getBlend(float ShipEntry::*characteristic) const;
+
+    /// A locked weapon cannot be equipped: it needs a higher level than the player's.
+    [[nodiscard]] bool isWeaponLocked(std::size_t index) const { return level < weapons[index].level; }
+    /// Equips the next weapon (+1) or the previous one (-1) of the hangar at a place of the loadout (0 or 1),
+    /// around, past the locked ones and the one at the other place. Nothing changes without another weapon
+    /// to take.
+    void stepWeapon(std::size_t place, int direction);
+    /// The loadout to take into a game: the ids of the two weapons equipped. Empty, for the weapon of
+    /// config/player.lua alone, while the hangar has fewer than two weapons open.
+    [[nodiscard]] game::Loadout getLoadout() const;
 };
 
 /// Takes the levels the ships need from config/hangar.lua: a ship of the catalog it leaves out is open from
@@ -57,6 +74,9 @@ void readRequiredLevels(ShipSelection &selection, const std::vector<game::ShipUn
 
 /// Where the level of the last account signed in is kept in the settings.
 inline constexpr std::string_view PlayerLevelSettingsKey = "account.level";
+
+/// Takes the weapons of the hangar from config/hangar.lua, the first two open equipped.
+void readHangarWeapons(ShipSelection &selection, const std::vector<game::WeaponUnlock> &weapons);
 
 /// Takes the level kept in the settings, if any.
 void readPlayerLevel(ShipSelection &selection, const engine::Settings &settings);
@@ -75,6 +95,15 @@ void readEquippedShip(ShipSelection &selection, const engine::Settings &settings
 /// Keeps the ship equipped in the settings, and writes them. A file that cannot be written is logged: the
 /// ship is then only remembered until the client closes.
 void writeEquippedShip(const ShipSelection &selection, engine::Settings &settings);
+
+/// Where the weapons equipped are kept in the settings, by their ids: "player_cannon,rapid_rifle".
+inline constexpr std::string_view EquippedWeaponsSettingsKey = "ship.weapons";
+
+/// Equips the weapons kept in the settings, if they are still in the hangar, open and different. Read the
+/// weapons and the level first.
+void readEquippedWeapons(ShipSelection &selection, const engine::Settings &settings);
+/// Keeps the weapons equipped in the settings, and writes them, as writeEquippedShip().
+void writeEquippedWeapons(const ShipSelection &selection, engine::Settings &settings);
 
 /// How far the ship at `index` is from the carousel, in ships, around the catalog: negative on the left of
 /// the carousel, positive on its right, from -3 to 3.
