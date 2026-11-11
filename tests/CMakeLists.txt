@@ -19,6 +19,9 @@ add_executable(rtype_tests
     client_lore.cpp
     client_online.cpp
     client_voice.cpp
+    client_vr.cpp
+    client_vr_controllers.cpp
+    client_vr_experience.cpp
     client_profiles.cpp
     client_shot_prediction.cpp
     client_prediction.cpp
@@ -67,6 +70,8 @@ add_executable(rtype_tests
     physics_resolution.cpp
     physics_step.cpp
     relay_frame.cpp
+    render_board.cpp
+    render_passes.cpp
     reliability.cpp
     resource_cache.cpp
     scene_assets.cpp
@@ -96,12 +101,14 @@ add_executable(rtype_tests
     timer.cpp
     tls.cpp
     viewport.cpp
+    virtual_input.cpp
     voice.cpp
     voice_codec.cpp
     voice_game.cpp
     voice_jitter.cpp
     voice_processing.cpp
     voice_talk.cpp
+    xr_math.cpp
     helpers/FakeDiscord.cpp
 )
 # The fake Discord is a Crow server: Asio for Windows 10 and later, as libs/network, and on MSVC, Crow and Asio in
@@ -114,7 +121,7 @@ if(MSVC)
 endif()
 target_link_libraries(rtype_tests PRIVATE
     rtype_options rtype::audio rtype::beat rtype::database rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization rtype::log rtype::network rtype::physics rtype::render
-    rtype::scripting rtype::shaders rtype::voice rtype::voice_codec rtype::voice_client rtype::voice_processing r-type_client_core
+    rtype::scripting rtype::shaders rtype::voice rtype::voice_codec rtype::voice_client rtype::voice_processing rtype::xr r-type_client_core
     r-type_server_core orbit_breaker_core
     CURL::libcurl Crow::Crow Catch2::Catch2WithMain)
 # The fake mail server of the tests speaks TLS with OpenSSL, there where libcurl uses it: not on Windows, whose

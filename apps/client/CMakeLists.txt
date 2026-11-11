@@ -9,6 +9,7 @@
 #   Quests/              the quests of the player, woken by the events of the game
 #   ShipSelector/        the hangar: the catalog of ships and the scene where the player picks one
 #   ShipModel            the ship models and their animations, flown by the menu and by the game
+#   Vr/                  the game in a VR headset (docs/architecture/vr.md)
 add_library(r-type_client_core STATIC
     src/App/Configuration.cpp
     src/App/Scenes.cpp
@@ -42,6 +43,7 @@ add_library(r-type_client_core STATIC
     src/Game/HealthBarSystem.cpp
     src/Game/Hud.cpp
     src/Game/HudSystem.cpp
+    src/Game/Radar.cpp
     src/Game/ImpactLooks.cpp
     src/Game/ImpactSystem.cpp
     src/Game/InputClock.cpp
@@ -79,6 +81,7 @@ add_library(r-type_client_core STATIC
     src/MainMenu/Submenus.cpp
     src/MainMenu/UiShowcase.cpp
     src/MainMenu/VoiceMenu.cpp
+    src/MainMenu/VrMenu.cpp
     src/Online/AccountScenes.cpp
     src/Online/FormErrors.cpp
     src/Online/KnownProfiles.cpp
@@ -92,6 +95,7 @@ add_library(r-type_client_core STATIC
     src/Settings/DisplaySettings.cpp
     src/Settings/PlayerSettings.cpp
     src/Settings/VoiceSettings.cpp
+    src/Settings/VrSettings.cpp
     src/Quests/EventQuest.cpp
     src/Quests/Quests.cpp
     src/Quests/QuestsMenu.cpp
@@ -104,11 +108,18 @@ add_library(r-type_client_core STATIC
     src/Voice/VoiceDevices.cpp
     src/Voice/VoiceIcons.cpp
     src/Voice/VoiceKeysSystem.cpp
+    src/Vr/CockpitLife.cpp
+    src/Vr/VrControllers.cpp
+    src/Vr/VrHaptics.cpp
+    src/Vr/VrLayout.cpp
+    src/Vr/VrMode.cpp
+    src/Vr/VrPointer.cpp
+    src/Vr/VrView.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
 target_link_libraries(r-type_client_core
     PUBLIC rtype::audio rtype::discord rtype::discord_voice rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
-           rtype::log rtype::network rtype::physics rtype::render rtype::voice_client
+           rtype::log rtype::network rtype::physics rtype::render rtype::voice_client rtype::xr
     PRIVATE rtype_options)
 
 # The Discord application whose activity the client shows in the profile of the player (its rich presence), by

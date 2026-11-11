@@ -1011,6 +1011,8 @@ void GameScenes::openPrompt()
     ecs.addComponent<engine::Anchor>(prompt, engine::AnchorPoint::Center, 0.0f, PromptOffset);
     ecs.addComponent<ecs::Position>(prompt);
     ecs.addComponent<engine::Drawable>(prompt, engine::Layer::Interface, PromptOrder);
+    // Over the game, on the board in a VR headset: it says what to do in the game
+    ecs.addComponent<engine::OnSurface>(prompt, engine::Surface::Board);
     ecs.addComponent<engine::Text>(prompt, _translations.text("rescue.prompt"), _style.toast.nameFont,
                                    PromptSize, render::colors::White, PromptSpacing);
     ecs.addComponent<engine::Title>(prompt);
@@ -1069,7 +1071,18 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
          .size = VoiceBadgeSize,
          .x = (AllyHealthBar.width / 2.0f) + VoiceBadgeGap + (VoiceBadgeSize / 2.0f),
          .y = -AllyHealthBar.raise});
-    openHud(ecs, scene, {_deathLook.life, _deathLook.lostLife, style.toast.nameFont, _voiceIcons},
+    openHud(ecs, scene,
+            {.life = _deathLook.life,
+             .lostLife = _deathLook.lostLife,
+             .font = style.toast.nameFont,
+             .voice = _voiceIcons,
+             .words = {.wave = _translations.text("hud.wave"),
+                       .endless = _translations.text("hud.endless"),
+                       .boss = _translations.text("hud.boss"),
+                       .online = _translations.text("hud.online"),
+                       .solo = _translations.text("hud.solo"),
+                       .pilots = _translations.text("hud.pilots"),
+                       .alone = _translations.text("hud.alone")}},
             game::Rules{}.lives);
 
     _onEnd = std::exchange(_nextEnd, nullptr);

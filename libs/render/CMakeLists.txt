@@ -1,12 +1,14 @@
 add_library(rtype_render
     src/AntialiasPass.cpp
     src/AuraShader.cpp
+    src/Board.cpp
     src/ColorFilter.cpp
     src/EnergyShader.cpp
     src/FilterShader.cpp
     src/FontCharacters.cpp
     src/GlowPass.cpp
     src/LightingShader.cpp
+    src/PassOrder.cpp
     src/Paths.cpp
     src/RaylibLog.cpp
     src/Renderer.cpp

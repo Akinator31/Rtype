@@ -225,7 +225,11 @@ signed 16 bits. The client gives the real ones; the tests give fakes (`tests/hel
   (`MA_NO_JACK`, `MA_NO_WAV`…, as `raudio.c`), so that `ma_device` has the same layout, and links the symbols
   of raylib. Neither a second copy nor a new dependency.
 - **The microphone is open only while it can be heard**: in a game, in a mode other than off, neither muted
-  nor deafened; or on the Voice page, to try it. The system shows it in use only then.
+  nor deafened; or on the Voice page, to try it. The system shows it in use only then. A mute the player did
+  not choose (by an administrator, while the call of Discord connects, or on Discord with nobody on the game)
+  is given to `applyVoice()` with the choices of the player, never set after them: unmuted then muted again
+  at each update, the microphone would be opened, its sound processing started over, and closed, 60 times
+  per second.
 - **The microphone is chosen** on the Voice page, by its name (`Microphone::devices()`, from
   `ma_context_get_devices()`), the default of the system otherwise. A microphone unplugged while open is
   followed: its device stops, its notification callback says so, and the next `read()` opens the one chosen if

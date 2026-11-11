@@ -98,6 +98,9 @@ public:
 
     /// The scene at the top, if any.
     [[nodiscard]] std::optional<SceneId> top() const;
+    /// The scene at the bottom, if any: it changes when the scenes are switched (Engine::switchScene()), not
+    /// when one is opened over it.
+    [[nodiscard]] std::optional<SceneId> bottom() const;
     /// Tells whether a scene is open.
     [[nodiscard]] bool isOpen(SceneId scene) const;
 

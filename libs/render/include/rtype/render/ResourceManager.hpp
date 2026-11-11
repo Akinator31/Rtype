@@ -26,6 +26,17 @@ using FontId = core::Handle<struct FontTag>;
 /// Handle of a 3D model loaded by the ResourceManager.
 using ModelId = core::Handle<struct ModelTag>;
 
+/// A mesh of a loaded model (ResourceManager::getModelMeshes()). Its index in the model is the one
+/// Renderer::drawModel() hides it by.
+struct ModelMesh {
+    /// The name of the node of the glTF file that holds it ("Cockpit_Glass"), or of its mesh if the node has
+    /// none; empty for another kind of file. A mesh of several materials gives a mesh per material, each
+    /// with this name.
+    std::string name;
+    /// The centre of its box, in the space of the model, at rest (not posed by an animation).
+    Vector3 centre;
+};
+
 /// How a texture looks when it is drawn at another size than its own.
 enum class TextureFiltering {
     /// Each pixel stays a sharp square: pixel art.
@@ -129,6 +140,10 @@ public:
     /// model of any size to the size it is drawn at.
     /// @throws std::out_of_range if the handle does not come from this manager.
     [[nodiscard]] Box3 getModelBounds(ModelId model) const;
+    /// Returns the meshes of a loaded model, by their index: to find the index of a part by its name, to
+    /// hide it or to draw it alone, and where it is.
+    /// @throws std::out_of_range if the handle does not come from this manager.
+    [[nodiscard]] std::vector<ModelMesh> getModelMeshes(ModelId model) const;
 };
 
 } // namespace rtype::render

@@ -78,6 +78,7 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | **Audio** | Music, sound effects and the voices of the players, built on raylib (`libs/audio`) | Client |
 | **Voice** | The voice chat of an online game, through the game or Discord (`libs/voice`, [Voice](voice.md)) | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
+| **VR** | The game in a VR headset, through OpenXR (`libs/xr`, [VR](vr.md)) | Client |
 
 ## World and interface
 
@@ -99,8 +100,8 @@ flowchart TB
 *Each frame updates the ECS, then draws the world layer and the interface layer on top of it.*
 
 - Only the `Renderer` draws: the systems never call raylib.
-- The interface layer is always drawn after the world. In VR, the world layer is drawn on the board and the
-  interface layer on a floating panel.
+- The interface layer is always drawn after the world. In VR, the world layer is drawn on the board, in relief
+  for each eye, and the interface layer on a floating panel and the screens of the cockpit.
 - Phases of the game (home screen, game, pause menu) are **scenes**: groups of entities opened and closed
   together. See [Scenes and interface](scenes-and-interface.md).
 
@@ -111,7 +112,7 @@ The programs are built on twelve libraries:
 | Library | Role | Page |
 |---|---|---|
 | `libs/render` | Window, textures and fonts, drawing at a fixed logical resolution. Wraps raylib. | [Rendering](rendering.md) |
-| `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
+| `libs/input` | Keyboard, mouse and gamepads turned into game actions, with rebindable controls, and a virtual gamepad and pointer over them (the controllers of a VR headset). Wraps raylib. | [Input](input.md) |
 | `libs/ecs` | Entities, components and systems, with a hierarchy. Shared with the server, so it never depends on raylib. | [ECS](ecs.md) |
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
 | `libs/network` | Addresses, UDP and TCP sockets, the event loop that runs them, TCP framing, TLS and the binary serialization. Wraps Asio and Mbed TLS. Shared with the server. | [Networking](networking.md) |
@@ -124,6 +125,7 @@ The programs are built on twelve libraries:
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
 | `libs/discord` | Discord in the client: an interface per feature (the sign-in, the presence, then the connection), and their implementations through the Discord Social SDK, kept in `libs/discord/sdk/`, on one shared `Session`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
 | `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord, the devices as interfaces (`rtype::voice`, header only), the codec of the voice (`rtype::voice_codec`), the echo cancellation, noise suppression and gain control of the microphone (`rtype::voice_processing`), and the voice of the game with its jitter buffer and the microphone (`rtype::voice_client`). Wraps libopus, webrtc-audio-processing, and the miniaudio of raylib for the microphone. For the client. | [Voice](voice.md) |
+| `libs/xr` | The game in a VR headset: the session of a headset on the OpenGL context of the window, the images of its eyes, its controllers and their vibrations, behind an interface with no OpenXR type. Wraps OpenXR (the loader, built and linked statically). For the client. | [VR](vr.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
@@ -140,7 +142,9 @@ private dependency of `rtype::discord_sdk`, linked by `r-type_client` alone
 of `rtype::voice_codec` ([Voice](voice.md#the-codec)); webrtc-audio-processing and abseil, which take the echo
 and the noise out of the microphone, private dependencies of `rtype::voice_processing`
 ([Voice](voice.md#the-sound-processing)); the microphone is captured by the miniaudio raylib
-compiles, a private dependency of `rtype::voice_client` ([Voice](voice.md#the-devices)).
+compiles, a private dependency of `rtype::voice_client` ([Voice](voice.md#the-devices)). The OpenXR loader is a
+private dependency of `rtype::xr`, which uses rlgl for the framebuffers of the eyes but never includes
+`raylib.h` ([VR](vr.md#the-opengl-context)).
 
 ## Repository layout
 
@@ -165,6 +169,7 @@ libs/       libraries shared by the programs, one subdirectory per library
   render/   window, resources and drawing (client)
   scripting/ Lua and its sandbox (client and server)
   shaders/  GLSL shaders, embedded in the binaries at build time (client)
+  xr/       VR headsets through OpenXR (client)
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
 docs/       this documentation (Zensical)

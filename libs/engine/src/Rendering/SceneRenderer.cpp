@@ -385,6 +385,42 @@ void SceneRenderer::draw(render::Renderer &renderer)
     draw(renderer, Layer::Interface);
 }
 
+void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
+{
+    drawLayer(renderer, layer, std::nullopt);
+}
+
+void SceneRenderer::draw(render::Renderer &renderer, Surface surface)
+{
+    drawLayer(renderer, Layer::Interface, surface);
+}
+
+Surface SceneRenderer::surfaceOf(ecs::entity_t entity)
+{
+    auto &surfaces = _ecs.cache<OnSurface>();
+    if (surfaces.has(entity)) {
+        return surfaces.get(entity).surface;
+    }
+    return _ecs.cache<Toast>().has(entity) ? _toastSurface : Surface::Panel;
+}
+
+bool SceneRenderer::hasContent(Surface surface)
+{
+    auto &drawables = _ecs.cache<Drawable>();
+    auto &positions = _ecs.cache<ecs::Position>();
+    auto &toasts = _ecs.cache<Toast>();
+    auto &opacities = _ecs.cache<Opacity>();
+    for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
+        if (drawables.has(entity) && drawables.get(entity).layer == Layer::Interface &&
+            positions.has(entity) && !toasts.has(entity) &&
+            (!opacities.has(entity) || opacities.get(entity).value > 0.0f) && surfaceOf(entity) == surface &&
+            isShown(entity, Layer::Interface)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool SceneRenderer::isShown(ecs::entity_t entity)
 {
     return _scenes.isVisible(entity) && !ecs::isHidden(_ecs, entity);
@@ -445,6 +481,38 @@ std::optional<ecs::entity_t> SceneRenderer::findFirstBackdrop()
         }
     }
     return std::nullopt;
+}
+
+render::Light SceneRenderer::light()
+{
+    return findLight();
+}
+
+std::optional<Backdrop> SceneRenderer::sky()
+{
+    const std::optional<ecs::entity_t> first = findFirstBackdrop();
+    if (!first) {
+        return std::nullopt;
+    }
+    const std::optional<SceneId> scene = _scenes.sceneOf(*first);
+    auto &backdrops = _ecs.cache<Backdrop>();
+    std::optional<Backdrop> back;
+    for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
+        if (backdrops.has(entity) && isShown(entity) && _scenes.sceneOf(entity) == scene &&
+            (!back || backdrops.get(entity).order < back->order)) {
+            back = backdrops.get(entity);
+        }
+    }
+    return back;
+}
+
+std::optional<render::Camera> SceneRenderer::camera()
+{
+    const Camera *shown = findCamera();
+    if (shown == nullptr) {
+        return std::nullopt;
+    }
+    return shown->view;
 }
 
 float SceneRenderer::getScrollOffset(ecs::entity_t entity)
@@ -1448,7 +1516,7 @@ void SceneRenderer::drawEventLine(render::Renderer &renderer, const Toast &toast
                   style.iconThickness, faded(accent, opacity));
 }
 
-void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
+void SceneRenderer::drawLayer(render::Renderer &renderer, Layer layer, std::optional<Surface> surface)
 {
     if (layer == Layer::World) {
         drawBackdrop(renderer);
@@ -1483,7 +1551,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
         if (drawables.has(entity) && drawables.get(entity).layer == layer && positions.has(entity) &&
-            isShown(entity, layer)) {
+            isShown(entity, layer) && (!surface || surfaceOf(entity) == *surface)) {
             entities.push_back(entity);
         }
     }

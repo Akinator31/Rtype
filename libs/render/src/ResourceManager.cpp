@@ -181,6 +181,11 @@ float ResourceManager::getModelAnimationDuration(ModelId model, int animation) c
     return _impl->models.get(model).getAnimationDuration(animation);
 }
 
+std::vector<ModelMesh> ResourceManager::getModelMeshes(ModelId model) const
+{
+    return _impl->models.get(model).getMeshes();
+}
+
 Box3 ResourceManager::getModelBounds(ModelId model) const
 {
     const ::BoundingBox box = GetModelBoundingBox(_impl->models.get(model).get());

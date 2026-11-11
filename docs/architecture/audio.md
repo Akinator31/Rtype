@@ -135,7 +135,9 @@ format).
 
 `VoiceStreams` is the `voice::Playback` of the client ([Voice](voice.md#the-devices)): one `AudioStream` of
 raylib per slot, 48 kHz mono, signed 16 bits, mixed by raylib with the music and the effects, each at the volume
-of its player (`setVolume()`, from 0 to 2, under the master volume).
+of its player (`setVolume()`, from 0 to 2, under the master volume), from a side (`setPan()`, from -1 on the left
+to 1 on the right, in the middle by default, kept for a stream not open yet): in a VR headset, each voice is heard
+from the side of the board the ship of its player is on ([VR](vr.md#the-sound)).
 
 ```cpp
 const AudioDevice device;

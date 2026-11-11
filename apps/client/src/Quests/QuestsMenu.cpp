@@ -147,9 +147,8 @@ void addQuestCard(engine::InterfaceBuilder &interface, ecs::Ecs &ecs, const engi
     addCardText(interface, ecs, getShortName(translations.text("quest." + quest.id)),
                 {left, corner.y + nameTop}, nameSize, quest.completed ? render::colors::White : lockedName,
                 nameSpacing);
-    const ecs::entity_t goal =
-        interface.note(translations.text("quest_goal." + quest.id),
-                       {engine::AnchorPoint::TopLeft, left, corner.y + goalTop});
+    const ecs::entity_t goal = interface.note(translations.text("quest_goal." + quest.id),
+                                              {engine::AnchorPoint::TopLeft, left, corner.y + goalTop});
     ecs.getComponent<engine::Text>(goal).size = goalSize;
     ecs.getComponent<engine::Drawable>(goal).order = contentOrder;
     addCardProgress(interface, ecs, style, translations, quest, corner);
@@ -195,8 +194,9 @@ void addProgress(engine::InterfaceBuilder &interface, ecs::Ecs &ecs, const engin
         std::ranges::count_if(quests, [](const QuestProgress &quest) { return quest.completed; });
     const float ratio =
         quests.empty() ? 0.0f : static_cast<float>(completed) / static_cast<float>(quests.size());
-    const std::string caption = std::format("{} · {} / {} {}", translations.text("quests.progress"), completed,
-                                            quests.size(), translations.text("quests.completed_suffix"));
+    const std::string caption =
+        std::format("{} · {} / {} {}", translations.text("quests.progress"), completed, quests.size(),
+                    translations.text("quests.completed_suffix"));
     const ecs::entity_t gauge = interface.gauge(caption, [ratio] { return ratio; },
                                                 {engine::AnchorPoint::TopLeft, screenMargin, progressTop});
     ecs.getComponent<engine::Gauge>(gauge).showsPercentage = false;

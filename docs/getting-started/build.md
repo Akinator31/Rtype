@@ -124,6 +124,15 @@ settings of the client give one, [Rich presence](../architecture/client-online.m
 cmake -S . -B build -DRTYPE_DISCORD_APPLICATION_ID=<id of the application>
 ```
 
+The client is built with VR on Linux and Windows ([VR](../architecture/vr.md)): the configure says
+`VR: OpenXR 1.1.60`. The OpenXR loader is downloaded and built with the game, and linked into the client, so no
+OpenXR package is needed, to build or to play; on Linux it uses the GLX of Mesa, already listed above. Without
+VR, for instance on a computer that cannot build it:
+
+```sh
+cmake -S . -B build -DRTYPE_OPENXR=OFF
+```
+
 ## Troubleshooting
 
 ??? question "CMake reports a dependency path that no longer exists"

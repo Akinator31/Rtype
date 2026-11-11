@@ -62,6 +62,9 @@
 #define RTYPE_MODEL_IMPACT_BURST "models/fx/impacts/impact_burst.glb"
 #define RTYPE_MODEL_IMPACT_SPLASH "models/fx/impacts/impact_splash.glb"
 #define RTYPE_MODEL_IMPACT_EXPLOSION "models/fx/impacts/impact_explosion.glb"
+/// The cockpit the player sits in, in a VR headset (Vr/CockpitLook.hpp): loaded only when a headset shows the
+/// game.
+#define RTYPE_MODEL_COCKPIT "models/cockpit.glb"
 
 // Sounds
 #define RTYPE_SOUND_BASICAL_BLASTER "sounds/fx/blaster/basical_blaster.wav"
@@ -85,3 +88,6 @@
 #define RTYPE_SOUND_RESULTS_LEVEL_UP "sounds/fx/results/level_up.wav"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"
+/// The alarm of the cockpit in a VR headset (CockpitLife): when the ship of the player is hit, and again
+/// while it is low on life. Two tones, made for the game.
+#define RTYPE_SOUND_COCKPIT_ALARM "sounds/fx/cockpit/alarm.wav"

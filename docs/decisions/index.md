@@ -41,6 +41,7 @@ technical and comparative study of the project.
 | [0034](0034-discord-token-in-the-client.md)             | The Discord token of the player given to its client         | Accepted                                                                               |
 | [0035](0035-voice-chat-in-the-game-session.md)          | A voice chat of our own in the game session, and Discord beside it in the same game | Accepted                                                       |
 | [0036](0036-webrtc-audio-processing.md)                 | The echo, the noise and the gain of the microphone by the audio processing of WebRTC | Accepted                                                      |
+| [0037](0037-vr-through-openxr.md)                       | VR through OpenXR, seated in a cockpit                      | Accepted                                                                               |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

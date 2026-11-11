@@ -134,6 +134,8 @@ void createCurtain(ecs::Ecs &ecs, engine::SceneId scene, const engine::Metrics &
     ecs.addComponent<ecs::Position>(curtain, screen.x + (screen.width / 2.0f),
                                     screen.y + (screen.height / 2.0f));
     ecs.addComponent<engine::Drawable>(curtain, engine::Layer::Interface, curtainOrder);
+    // It covers the world: on the board in a VR headset, the menu itself being on the panel
+    ecs.addComponent<engine::OnSurface>(curtain, engine::Surface::Board);
     ecs.addComponent<engine::Box>(curtain, screen.width, screen.height, render::colors::Black, 0.0f);
     ecs.addComponent<engine::Opacity>(curtain);
     ecs.addComponent<engine::Tween>(curtain, engine::Tween{.target = engine::TweenTarget::Opacity,

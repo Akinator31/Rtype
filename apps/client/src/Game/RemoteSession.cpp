@@ -230,23 +230,21 @@ void RemoteSession::updateVoice()
     for (voice::Slot slot = 0; slot < _voiceRoster.backends.size(); ++slot) {
         _playbacks->setSource(slot, _onDiscord ? _voiceRoster.backends[slot] : voice::Backend::Game);
     }
+    // Muted at once, not unmuted then muted again: each unmute would open the microphone, and start its sound
+    // processing over, at every update
+    const bool mutedByAdministrator = mutedByAdmin();
     if (_onDiscord) {
-        applyVoice(*_discord, *_devices, talking);
         // Muted by an administrator: its microphone closed on Discord too
-        if (mutedByAdmin()) {
-            _discord->setSelfMute(true);
-        }
+        applyVoice(*_discord, *_devices, talking, mutedByAdministrator);
         applyPlayerVoices(*_discord);
         _discord->poll();
     }
-    applyVoice(*_voice, *_devices, talking);
     // Muted by an administrator: the game drops its voice, the microphone stays closed. While the call of
     // Discord connects the first time, closed too: Discord takes it. On Discord, nothing to send while nobody
     // is on the game
-    if (mutedByAdmin() || (_discord && !_onDiscord && !_discordWasConnected) ||
-        (_onDiscord && !anyOnGame())) {
-        _voice->setSelfMute(true);
-    }
+    applyVoice(*_voice, *_devices, talking,
+               mutedByAdministrator || (_discord && !_onDiscord && !_discordWasConnected) ||
+                   (_onDiscord && !anyOnGame()));
     if (_onDiscord) {
         const bool heard =
             !_voice->selfMuted() && (_devices->preferences.mode == voice::TalkMode::VoiceActivity ||

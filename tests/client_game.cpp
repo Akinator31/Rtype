@@ -18,6 +18,7 @@
 #include "Game/ImpactLooks.hpp"
 #include "Game/ImpactSystem.hpp"
 #include "Game/LocalSession.hpp"
+#include "Game/Radar.hpp"
 #include "Game/RescueCameraSystem.hpp"
 #include "Game/ResultsScreen.hpp"
 #include "Game/ResultsSystem.hpp"
@@ -1295,10 +1296,13 @@ TEST_CASE("Each wave started in the game is told with its number, once", "[clien
 namespace
 {
 
-// Every character is half as wide as the text is high, on a screen of the shape of the game
+// Every character is half as wide as the text is high, on a screen of the shape of the game; with `apart`,
+// the surfaces of a VR headset are drawn apart, each of the size of its screen in the cockpit
 class GameMetrics final : public rtype::engine::Metrics
 {
 public:
+    bool apart = false;
+
     [[nodiscard]] rtype::render::Vector2 measureText(rtype::render::FontId /*font*/, const std::string &text,
                                                      float size, float spacing) const override
     {
@@ -1314,6 +1318,7 @@ public:
     {
         return position;
     }
+    [[nodiscard]] bool surfacesApart() const override { return apart; }
 };
 
 const DeathScreenLook DeathLook{{1}, {2}, {}, {}, "LIVES LEFT", "RESPAWN"};
@@ -1699,6 +1704,151 @@ TEST_CASE("The signal bars light up as the ping gets shorter", "[client]")
     CHECK(formatScore(42) == "0000042");
 }
 
+TEST_CASE("The parts of the HUD are on the screens of the cockpit that show them", "[client][vr]")
+{
+    using rtype::engine::OnSurface;
+    using rtype::engine::Surface;
+    HudClient client;
+    const Hud &hud = client.hud();
+    const auto surfaceOf = [&](rtype::ecs::entity_t part) {
+        return client.ecs.getComponent<OnSurface>(part).surface;
+    };
+    CHECK(surfaceOf(hud.score) == Surface::HudShip);
+    CHECK(surfaceOf(hud.lives[0]) == Surface::HudShip);
+    CHECK(surfaceOf(hud.pilotVoice) == Surface::HudShip);
+    CHECK(surfaceOf(hud.ping) == Surface::HudNav);
+    CHECK(surfaceOf(hud.signal[0]) == Surface::HudNav);
+    CHECK(surfaceOf(hud.wave) == Surface::HudNav);
+    CHECK(surfaceOf(hud.allies[0].name) == Surface::HudAux);
+    CHECK(surfaceOf(hud.pilots) == Surface::HudAux);
+    CHECK(surfaceOf(hud.radarFrame) == Surface::Holo);
+    CHECK(surfaceOf(hud.radarBlips[0]) == Surface::Holo);
+}
+
+TEST_CASE("On the screen, the HUD keeps its look and shows nothing of the cockpit", "[client][vr]")
+{
+    HudClient client;
+    client.receive(snapshotWith(1, {{0, 3, 24500}}));
+    const Hud &hud = client.hud();
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(hud.score).size == Approx(ScreenHud.score.size));
+    CHECK(client.ecs.getComponent<rtype::engine::Anchor>(hud.score).point ==
+          rtype::engine::AnchorPoint::BottomLeft);
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(hud.topShadow).value == Approx(1.0f));
+    for (const rtype::ecs::entity_t part :
+         {hud.waveLabel, hud.wave, hud.boss, hud.mode, hud.pilots, hud.radarTitle}) {
+        CHECK(client.textOf(part).empty());
+    }
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(hud.radarFrame).value == Approx(0.0f));
+}
+
+TEST_CASE("In the cockpit, the HUD is larger, placed on its screens, with the wave and the kind of game",
+          "[client][vr]")
+{
+    HudClient client;
+    client.metrics.apart = true;
+    client.receive(snapshotWith(1, {{0, 3, 24500}}));
+    const Hud &hud = client.hud();
+    const auto &anchors = client.ecs.cache<rtype::engine::Anchor>();
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(hud.score).size == Approx(CockpitHud.score.size));
+    CHECK(anchors.get(hud.score).point == rtype::engine::AnchorPoint::TopLeft);
+    // From the top of the ship screen: the pilot, then the score, then the hit points
+    CHECK(anchors.get(hud.pilot).y < anchors.get(hud.score).y);
+    CHECK(anchors.get(hud.score).y < anchors.get(hud.health).y);
+    CHECK(client.ecs.getComponent<rtype::engine::Sprite>(hud.lives[0]).width == Approx(CockpitHud.life.x));
+    // The shadows belong to the screen
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(hud.topShadow).value == Approx(0.0f));
+    // Offline, before the first wave, alone
+    CHECK(client.textOf(hud.waveLabel) == "WAVE");
+    CHECK(client.textOf(hud.wave) == "00");
+    CHECK(client.textOf(hud.mode) == "SOLO");
+    CHECK(client.textOf(hud.boss).empty());
+    CHECK(client.textOf(hud.pilots) == "FLYING SOLO");
+
+    // Back on the screen, the HUD looks as before
+    client.metrics.apart = false;
+    client.engine.update(Tick);
+    CHECK(client.ecs.getComponent<rtype::engine::Text>(hud.score).size == Approx(ScreenHud.score.size));
+    CHECK(anchors.get(hud.score).point == rtype::engine::AnchorPoint::BottomLeft);
+    CHECK(client.textOf(hud.wave).empty());
+}
+
+TEST_CASE("In the cockpit, the screens of the sides list the other pilots under their title", "[client][vr]")
+{
+    HudClient client;
+    client.metrics.apart = true;
+    client.receive(snapshotWith(1, {{0, 3, 100}, {1, 3, 98100}, {3, 1, 71300}}));
+    const Hud &hud = client.hud();
+    const auto &anchors = client.ecs.cache<rtype::engine::Anchor>();
+    CHECK(client.textOf(hud.pilots) == "PILOTS");
+    CHECK(anchors.get(hud.pilots).y < anchors.get(hud.allies[0].slot).y);
+    CHECK(anchors.get(hud.allies[0].slot).y < anchors.get(hud.allies[1].slot).y);
+    CHECK(anchors.get(hud.allies[0].score).point == rtype::engine::AnchorPoint::TopRight);
+}
+
+TEST_CASE("The radar of the hologram shows the ships and the Bydos, not the shots, and warns of the boss",
+          "[client][vr]")
+{
+    HudClient client;
+    client.metrics.apart = true;
+    rtype::game::Snapshot snapshot = snapshotWith(1, {{0, 3, 0}});
+    snapshot.entities = {{1, rtype::game::EntityKind::PlayerShip, 0, 100.0f, 540.0f},
+                         {2, rtype::game::EntityKind::BydoFlyer, rtype::game::NoOwner, 1500.0f, 300.0f},
+                         {3, rtype::game::EntityKind::PlayerShot, 0, 400.0f, 540.0f},
+                         {4, rtype::game::EntityKind::BydoBoss, rtype::game::NoOwner, 1700.0f, 540.0f}};
+    client.receive(std::move(snapshot));
+    const Hud &hud = client.hud();
+    const auto shown = std::ranges::count_if(hud.radarBlips, [&](rtype::ecs::entity_t blip) {
+        return client.ecs.getComponent<rtype::engine::Opacity>(blip).value > 0.0f;
+    });
+    CHECK(shown == 3);
+    CHECK(client.ecs.getComponent<rtype::engine::Opacity>(hud.radarFrame).value == Approx(1.0f));
+    CHECK(client.textOf(hud.boss) == "BOSS APPROACHING");
+
+    // On the screen, no radar
+    client.metrics.apart = false;
+    client.engine.update(Tick);
+    CHECK(std::ranges::none_of(hud.radarBlips, [&](rtype::ecs::entity_t blip) {
+        return client.ecs.getComponent<rtype::engine::Opacity>(blip).value > 0.0f;
+    }));
+}
+
+TEST_CASE("A blip of the radar is where its entity is in the frame of the board, by its kind", "[client][vr]")
+{
+    using rtype::game::EntityKind;
+    const rtype::render::Vector2 game{1920.0f, 1080.0f};
+    const auto pilot = radarBlip(EntityKind::PlayerShip, 0, 0, {0.0f, 0.0f}, game);
+    REQUIRE(pilot.has_value());
+    CHECK(pilot->centre.x == Approx(RadarFrame.x));
+    CHECK(pilot->centre.y == Approx(RadarFrame.y));
+    const auto other = radarBlip(EntityKind::PlayerShip, 1, 0, {1920.0f, 1080.0f}, game);
+    REQUIRE(other.has_value());
+    CHECK(other->centre.x == Approx(RadarFrame.x + RadarFrame.width));
+    CHECK(other->centre.y == Approx(RadarFrame.y + RadarFrame.height));
+    // The pilot stands out from the others
+    CHECK(pilot->size > other->size);
+    CHECK((pilot->color.r != other->color.r || pilot->color.g != other->color.g));
+    // An entity coming in stays on the edge of the frame
+    const auto coming = radarBlip(EntityKind::BydoFlyer, rtype::game::NoOwner, 0, {2100.0f, 540.0f}, game);
+    REQUIRE(coming.has_value());
+    CHECK(coming->centre.x == Approx(RadarFrame.x + RadarFrame.width));
+    const auto boss = radarBlip(EntityKind::BydoBoss, rtype::game::NoOwner, 0, {960.0f, 540.0f}, game);
+    REQUIRE(boss.has_value());
+    CHECK(boss->outlined);
+    CHECK_FALSE(radarBlip(EntityKind::PlayerShot, 0, 0, {960.0f, 540.0f}, game).has_value());
+    CHECK_FALSE(
+        radarBlip(EntityKind::BydoPlasmaShot, rtype::game::NoOwner, 0, {960.0f, 540.0f}, game).has_value());
+    // The frame of the board is inside the hologram, of the shape of the game
+    CHECK(RadarFrame.x + RadarFrame.width <= RadarSurface.x);
+    CHECK(RadarFrame.y + RadarFrame.height <= RadarSurface.y);
+    CHECK(RadarFrame.width / RadarFrame.height == Approx(game.x / game.y).epsilon(0.01));
+}
+
+TEST_CASE("The navigation screen writes the wave with the number of waves, or alone", "[client][vr]")
+{
+    CHECK(formatWave(3, 8) == "03 / 08");
+    CHECK(formatWave(12, std::nullopt) == "12");
+}
+
 TEST_CASE("The recorder counts what happens in the games in the stats", "[client][quest]")
 {
     rtype::engine::Engine engine;
@@ -1860,4 +2010,24 @@ TEST_CASE("The icon of a pilot says what its voice does", "[client][voice]")
     // Red, as in the design
     CHECK(voiceIconColor(VoiceIcon::MutedByAdmin).r == 232);
     CHECK(voiceIconColor(VoiceIcon::MutedByAdmin).g == 114);
+}
+
+TEST_CASE("The session tells the full health of the ship of the player, where the ships are, and no boss",
+          "[client]")
+{
+    Client client({}, armedConfig());
+
+    client.run(3);
+
+    REQUIRE(client.sessions.localHealth() > 0);
+    CHECK(client.sessions.localMaxHealth() == client.sessions.localHealth());
+    CHECK_FALSE(client.sessions.bossIsThere());
+    const auto &ships = client.sessions.ships();
+    REQUIRE(ships.size() == 1);
+    CHECK(ships.front().first == 0);
+    CHECK(ships.front().second < rtype::game::GameWidth / 2.0f);
+
+    client.sessions.stop();
+    CHECK(client.sessions.localMaxHealth() == 0);
+    CHECK(client.sessions.ships().empty());
 }

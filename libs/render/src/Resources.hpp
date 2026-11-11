@@ -20,6 +20,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -127,6 +128,14 @@ private:
     ::Model _model;
     ModelAnimation *_animations = nullptr;
     int _animationCount = 0;
+    std::vector<ModelMesh> _meshes;
+    // The names of the materials, by index in raylib: its default material first, unnamed
+    std::vector<std::string> _materialNames;
+    // The emission maps replaced by an image (showOnMaterial()), by index of their material: given back
+    // before the model is unloaded, which frees the maps of its materials, and must not free an image
+    mutable std::vector<std::pair<int, Texture2D>> _replacedEmissions;
+    // The meshes whose texture coordinates were turned upside down for an image
+    mutable std::vector<bool> _flipped;
     // The pose of the vertices in graphics memory, none before the first one
     mutable std::optional<Pose> _pose;
 
@@ -198,6 +207,71 @@ private:
         cgltf_free(data);
     }
 
+    // The names of the meshes of a glTF file, in the order of raylib: each node with a mesh, in the order of
+    // the file, gives a mesh per primitive, named after the node, or after its mesh. None if the file is
+    // another kind, or if raylib did not load them all.
+    static std::vector<std::string> readMeshNames(const std::filesystem::path &file, int meshCount)
+    {
+        const std::string extension = file.extension().string();
+        if (extension != ".glb" && extension != ".gltf") {
+            return {};
+        }
+        const cgltf_options options{};
+        cgltf_data *data = nullptr;
+        if (cgltf_parse_file(&options, file.string().c_str(), &data) != cgltf_result_success) {
+            return {};
+        }
+        std::vector<std::string> names;
+        for (cgltf_size index = 0; index < data->nodes_count; ++index) {
+            const cgltf_node &node = data->nodes[index];
+            if (node.mesh == nullptr) {
+                continue;
+            }
+            const char *name = node.name != nullptr ? node.name : node.mesh->name;
+            names.insert(names.end(), node.mesh->primitives_count, name != nullptr ? name : "");
+        }
+        cgltf_free(data);
+        if (std::cmp_not_equal(names.size(), meshCount)) {
+            return {};
+        }
+        return names;
+    }
+
+    // The names of the materials of a glTF file, in the order of raylib, its default material first. None if
+    // the file is another kind.
+    static std::vector<std::string> readMaterialNames(const std::filesystem::path &file)
+    {
+        const std::string extension = file.extension().string();
+        if (extension != ".glb" && extension != ".gltf") {
+            return {};
+        }
+        const cgltf_options options{};
+        cgltf_data *data = nullptr;
+        if (cgltf_parse_file(&options, file.string().c_str(), &data) != cgltf_result_success) {
+            return {};
+        }
+        std::vector<std::string> names{std::string()};
+        for (cgltf_size index = 0; index < data->materials_count; ++index) {
+            const char *name = data->materials[index].name;
+            names.emplace_back(name != nullptr ? name : "");
+        }
+        cgltf_free(data);
+        return names;
+    }
+
+    static std::vector<ModelMesh> describeMeshes(const ::Model &model, const std::filesystem::path &file)
+    {
+        const std::vector<std::string> names = readMeshNames(file, model.meshCount);
+        std::vector<ModelMesh> meshes;
+        for (int index = 0; index < model.meshCount; ++index) {
+            const BoundingBox box = GetMeshBoundingBox(model.meshes[index]);
+            meshes.push_back({.name = names.empty() ? std::string() : names[static_cast<std::size_t>(index)],
+                              .centre = {(box.min.x + box.max.x) / 2.0f, (box.min.y + box.max.y) / 2.0f,
+                                         (box.min.z + box.max.z) / 2.0f}});
+        }
+        return meshes;
+    }
+
 public:
     explicit Model(const std::filesystem::path &file) : _model(LoadModel(file.string().c_str()))
     {
@@ -206,6 +280,9 @@ public:
             throw std::runtime_error("Cannot load model " + file.string());
         }
         restoreMaterialFactors(_model, file);
+        _meshes = describeMeshes(_model, file);
+        _materialNames = readMaterialNames(file);
+        _flipped.assign(static_cast<std::size_t>(_model.meshCount), false);
         for (int index = 0; index < _model.materialCount; ++index) {
             for (const int map : {MATERIAL_MAP_ALBEDO, MATERIAL_MAP_NORMAL, MATERIAL_MAP_METALNESS,
                                   MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION, MATERIAL_MAP_EMISSION}) {
@@ -222,6 +299,9 @@ public:
             UnloadModelAnimations(_animations, _animationCount);
         }
         if (isLoaded(_model)) {
+            for (const auto &[material, texture] : _replacedEmissions) {
+                _model.materials[material].maps[MATERIAL_MAP_EMISSION].texture = texture;
+            }
             UnloadModel(_model);
         }
     }
@@ -230,12 +310,75 @@ public:
     Model &operator=(const Model &) = delete;
     Model(Model &&other) noexcept
         : _model(std::exchange(other._model, {})), _animations(std::exchange(other._animations, nullptr)),
-          _animationCount(std::exchange(other._animationCount, 0)), _pose(std::exchange(other._pose, {}))
+          _animationCount(std::exchange(other._animationCount, 0)), _meshes(std::move(other._meshes)),
+          _materialNames(std::move(other._materialNames)),
+          _replacedEmissions(std::move(other._replacedEmissions)), _flipped(std::move(other._flipped)),
+          _pose(std::exchange(other._pose, {}))
     {
     }
     Model &operator=(Model &&) = delete;
 
     [[nodiscard]] const ::Model &get() const { return _model; }
+
+    [[nodiscard]] const std::vector<ModelMesh> &getMeshes() const { return _meshes; }
+
+    // Shows a texture, an image the renderer draws into, as the emission map of the material with this name:
+    // a screen of a cockpit. Its meshes keep their texture coordinates, turned upside down once, as an image
+    // drawn into is stored from its bottom row. The model gives back its own map before it is unloaded. Const
+    // like drawing: only what the graphics card draws changes.
+    // @return False if the model has no material by this name.
+    bool showOnMaterial(std::string_view name, const Texture2D &texture) const
+    {
+        const auto found = std::ranges::find(_materialNames, name);
+        if (name.empty() || found == _materialNames.end()) {
+            return false;
+        }
+        const auto material = static_cast<int>(found - _materialNames.begin());
+        if (material >= _model.materialCount) {
+            return false;
+        }
+        MaterialMap &emission = _model.materials[material].maps[MATERIAL_MAP_EMISSION];
+        if (std::ranges::find(_replacedEmissions, material, &std::pair<int, Texture2D>::first) ==
+            _replacedEmissions.end()) {
+            _replacedEmissions.emplace_back(material, emission.texture);
+        }
+        emission.texture = texture;
+        emission.color = {255, 255, 255, 255};
+        for (int index = 0; index < _model.meshCount; ++index) {
+            Mesh &mesh = _model.meshes[index];
+            const auto slot = static_cast<std::size_t>(index);
+            if (_model.meshMaterial[index] != material || _flipped[slot] || mesh.texcoords == nullptr) {
+                continue;
+            }
+            for (int vertex = 0; vertex < mesh.vertexCount; ++vertex) {
+                mesh.texcoords[(vertex * 2) + 1] = 1.0f - mesh.texcoords[(vertex * 2) + 1];
+            }
+            UpdateMeshBuffer(mesh, 1, mesh.texcoords, mesh.vertexCount * 2 * static_cast<int>(sizeof(float)),
+                             0);
+            _flipped[slot] = true;
+        }
+        return true;
+    }
+
+    // Sets the colour the material with this name emits: its emission map multiplied by it, or, without a
+    // map, the colour all over. Black would read as "no emissive colour", which the lighting shader takes as
+    // white: the darkest colour kept is one step over black. Const like drawing.
+    // @return False if the model has no material by this name.
+    bool glowOnMaterial(std::string_view name, ::Color color) const
+    {
+        const auto found = std::ranges::find(_materialNames, name);
+        if (name.empty() || found == _materialNames.end()) {
+            return false;
+        }
+        const auto material = static_cast<int>(found - _materialNames.begin());
+        if (material >= _model.materialCount) {
+            return false;
+        }
+        const auto kept = [](unsigned char channel) { return std::max<unsigned char>(channel, 1); };
+        _model.materials[material].maps[MATERIAL_MAP_EMISSION].color = {kept(color.r), kept(color.g),
+                                                                        kept(color.b), 255};
+        return true;
+    }
 
     [[nodiscard]] bool hasAnimation(int animation) const
     {

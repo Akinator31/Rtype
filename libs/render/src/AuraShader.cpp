@@ -66,10 +66,10 @@ void AuraShader::draw(const Model &model, const Aura &aura, const Camera3D &came
 
     // As DrawModelEx(): the transform of the model, turned around its own vertical axis first, then scaled,
     // rotated and moved
-    const Matrix rotation = MatrixRotate(rotationAxis, rotationAngle * DEG2RAD);
-    const Matrix placement = MatrixMultiply(MatrixMultiply(MatrixScale(scale, scale, scale), rotation),
-                                            MatrixTranslate(position.x, position.y, position.z));
-    const Matrix transform =
+    const ::Matrix rotation = MatrixRotate(rotationAxis, rotationAngle * DEG2RAD);
+    const ::Matrix placement = MatrixMultiply(MatrixMultiply(MatrixScale(scale, scale, scale), rotation),
+                                              MatrixTranslate(position.x, position.y, position.z));
+    const ::Matrix transform =
         MatrixMultiply(MatrixMultiply(MatrixRotateY(spinAngle * DEG2RAD), model.transform), placement);
 
     // Added over the model and what is behind it, hiding nothing; both sides of the shell, so that a mesh

@@ -7,6 +7,7 @@
 #include "GlowPass.hpp"
 #include "LightingShader.hpp"
 #include "Resources.hpp"
+#include "rtype/render/PassOrder.hpp"
 #include "rtype/render/Viewport.hpp"
 
 #include <raylib.h>
@@ -18,9 +19,13 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace rtype::render
@@ -188,11 +193,13 @@ void addVertex(Vector2 position, Color color)
     rlVertex2f(position.x, position.y);
 }
 
-// Owns the off-screen image the game is drawn to, at the resolution it is shown at in the window
+// Owns an off-screen image with its depth buffer: the one the game is drawn to, at the resolution it is shown
+// at in the window, an image of Renderer::createImage(), or the image of an eye
 class RenderTarget
 {
 private:
     RenderTexture2D _target;
+    bool _mipmapped = false;
 
 public:
     explicit RenderTarget(Vector2 resolution)
@@ -218,6 +225,16 @@ public:
     RenderTarget &operator=(RenderTarget &&) = delete;
 
     [[nodiscard]] const RenderTexture2D &get() const { return _target; }
+    /// Makes the smaller versions of the image from what it holds, so that it stays smooth when it is shown
+    /// smaller than it is, far in 3D: the board in the headset
+    void generateMipmaps()
+    {
+        GenTextureMipmaps(&_target.texture);
+        if (!_mipmapped && _target.texture.mipmaps > 1) {
+            SetTextureFilter(_target.texture, TEXTURE_FILTER_TRILINEAR);
+            _mipmapped = true;
+        }
+    }
     [[nodiscard]] Vector2 resolution() const
     {
         return {static_cast<float>(_target.texture.width), static_cast<float>(_target.texture.height)};
@@ -227,6 +244,77 @@ public:
 Vector2 getWindowSize()
 {
     return {static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
+}
+
+// Where an eye looks from, as a raylib camera: its position, and its axes read from its view matrix, whose
+// rows are the right, the top and the back of the eye in the world. The billboards and the lighting need it.
+Camera3D cameraOf(const EyeView &eye)
+{
+    const Matrix &view = eye.view;
+    const ::Vector3 position = toRaylib(eye.position);
+    const ::Vector3 back{view.at(2, 0), view.at(2, 1), view.at(2, 2)};
+    const ::Vector3 up{view.at(1, 0), view.at(1, 1), view.at(1, 2)};
+    return {position, Vector3Subtract(position, back), up, 90.0f, CAMERA_PERSPECTIVE};
+}
+
+// Loads the matrices of an eye, or of anything seen by it, as BeginMode3D() does for a camera: ended by
+// EndMode3D(), which takes the projection back
+void loadMatrices(const Matrix &projection, const Matrix &view)
+{
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPushMatrix();
+    rlLoadIdentity();
+    rlMultMatrixf(projection.values.data());
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
+    rlMultMatrixf(view.values.data());
+    rlEnableDepthTest();
+}
+
+// Writes the depth of the frame around the board (boardFrame()), and no colour: what is behind it, around the
+// board, is hidden. In the matrices of the space of the eye.
+void drawBoardFrame(const std::array<Vector3, 8> &frame)
+{
+    rlDrawRenderBatchActive();
+    rlDisableBackfaceCulling();
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    rlColorMask(false, false, false, false);
+    rlBegin(RL_QUADS);
+    rlColor4ub(255, 255, 255, 255);
+    for (std::size_t side = 0; side < 4; ++side) {
+        const std::size_t next = (side + 1) % 4;
+        for (const std::size_t corner : {side, next, next + 4, side + 4}) {
+            rlVertex3f(frame[corner].x, frame[corner].y, frame[corner].z);
+        }
+    }
+    rlEnd();
+    rlDrawRenderBatchActive();
+    rlColorMask(true, true, true, true);
+    rlEnableBackfaceCulling();
+}
+
+// Starts a 2D pass in pixels over the framebuffer bound, of the given size: as BeginTextureMode() does for a
+// render texture, for a framebuffer raylib did not create (the image of an eye of the headset)
+void beginPixels(int width, int height)
+{
+    rlViewport(0, 0, width, height);
+    rlMatrixMode(RL_PROJECTION);
+    rlPushMatrix();
+    rlLoadIdentity();
+    rlOrtho(0.0, static_cast<double>(width), static_cast<double>(height), 0.0, 0.0, 1.0);
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
+}
+
+void endPixels()
+{
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPopMatrix();
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
 }
 
 // The colour with its alpha multiplied by `opacity`, from 0 to 1
@@ -330,7 +418,14 @@ struct Renderer::Impl {
     /// A model drawn in the frame that shines, to draw again in its glow (drawGlow()): an energy model, the
     /// aura of a model, or a lit model with an emission map
     struct GlowDraw {
+        /// Seen by an eye on the board: its projection, and the view of the world of the camera from it
+        struct EyeMatrices {
+            Matrix projection;
+            Matrix view;
+        };
+
         ModelId model;
+        /// The camera, or the eye on the board in the world of the camera: where the model is seen from
         Camera3D camera;
         std::optional<Energy> energy;
         std::optional<Aura> aura;
@@ -342,14 +437,47 @@ struct Renderer::Impl {
         ::Color tint;
         std::optional<detail::Model::Pose> pose;
         std::vector<int> hiddenMeshes;
+        /// Set on a board: seen by these matrices instead of the camera
+        std::optional<EyeMatrices> eye = std::nullopt;
     };
 
     const core::ResourceCache<detail::Texture, TextureId> &textures;
     const core::ResourceCache<detail::Font, FontId> &fonts;
     const core::ResourceCache<detail::Model, ModelId> &models;
+    /// The image of an eye being drawn (Renderer::beginEye())
+    struct EyePass {
+        int index = 0;
+        EyeView view;
+        Camera3D camera{};
+        detail::ViewPoint viewPoint;
+        /// The framebuffer bound before, where the eye is copied at its end: the image the headset shows
+        unsigned int framebuffer = 0;
+    };
+    /// The board in relief being drawn in the eye (Renderer::beginBoard())
+    struct BoardPass {
+        BoardView view;
+        /// From game units to the space of the eye: on the board, and in front of the models
+        Matrix plane;
+        Matrix overlay;
+        /// After drawGlow(): the 2D drawings are in front of the models
+        bool raised = false;
+    };
+
     Vector2 gameSize;
     Rectangle frameArea;
+    /// The image of the frames of the window
     std::optional<RenderTarget> target;
+    /// The images of createImage(), by index of their ImageId
+    std::vector<std::unique_ptr<RenderTarget>> images;
+    /// The image of each eye, by index, created at its first draw
+    std::vector<std::unique_ptr<RenderTarget>> eyes;
+    /// Where the current frame is drawn, or the last one: the window target or an image
+    RenderTarget *frame = nullptr;
+    /// The image of the current or last frame, none for the window
+    std::optional<ImageId> frameImage;
+    std::optional<EyePass> eye;
+    std::optional<BoardPass> board;
+    PassOrder passes;
     detail::AntialiasPass antialiasPass;
     detail::FilterShader filterShader;
     detail::LightingShader lightingShader;
@@ -361,7 +489,6 @@ struct Renderer::Impl {
     ColorFilter colorFilter = ColorFilter::None;
     float vignetteStrength = 0.22f;
     bool antialiasing = true;
-    bool inFrame = false;
 
     Impl(const core::ResourceCache<detail::Texture, TextureId> &textureCache,
          const core::ResourceCache<detail::Font, FontId> &fontCache,
@@ -370,22 +497,76 @@ struct Renderer::Impl {
           frameArea{0.0f, 0.0f, size.x, size.y}
     {
         fitTargetToWindow();
+        frame = &*target;
     }
 
-    [[nodiscard]] Rectangle getVisibleArea() const { return computeVisibleArea(getWindowSize(), gameSize); }
-
-    void requireFrame() const
+    [[nodiscard]] Rectangle getVisibleArea() const
     {
-        if (!inFrame) {
-            throw std::logic_error("Drawing outside of a frame: call beginFrame() first");
+        if (board) {
+            return board->view.area;
         }
+        if (frameImage) {
+            return frameArea;
+        }
+        return computeVisibleArea(getWindowSize(), gameSize);
     }
 
+    void requireFrame() const { passes.requireFrame(); }
+
+    [[nodiscard]] RenderTarget &getImage(ImageId image) const
+    {
+        if (image.index >= images.size()) {
+            throw std::invalid_argument("Unknown image: create it with createImage()");
+        }
+        return *images[image.index];
+    }
+
+    /// How what is drawn blends into the target of the frame. Into the window, as usual. Into an image, its
+    /// alpha is how much of it is covered (the colour blends as usual, the alpha adds up), and its colour is
+    /// premultiplied by it, from a background cleared to transparent black: drawImageQuad() lays it over what
+    /// is behind it as it is, a panel transparent where nothing is drawn on it. The additive passes (the
+    /// glow, the energy models) set the usual blending back when they end: called again after them.
+    void blendFrame() const
+    {
+        if (!frameImage) {
+            return;
+        }
+        rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA, RL_ONE, RL_ONE_MINUS_SRC_ALPHA,
+                                  RL_FUNC_ADD, RL_FUNC_ADD);
+        rlSetBlendMode(RL_BLEND_CUSTOM_SEPARATE);
+    }
+
+    /// Starts a frame into a target, the visible area `area` covering it
+    void beginFrameInto(RenderTarget &into, Rectangle area, Color background)
+    {
+        passes.beginFrame();
+        frame = &into;
+        frameArea = area;
+        glowQueue.clear();
+        BeginTextureMode(into.get());
+        ClearBackground(toRaylib(background));
+        beginGameView();
+    }
+
+    /// The image of an eye, of its size
+    RenderTarget &fitEye(int index, int width, int height)
+    {
+        const auto slot = static_cast<std::size_t>(index);
+        if (eyes.size() <= slot) {
+            eyes.resize(slot + 1);
+        }
+        std::unique_ptr<RenderTarget> &image = eyes[slot];
+        const Vector2 size{static_cast<float>(width), static_cast<float>(height)};
+        if (!image || image->resolution().x != size.x || image->resolution().y != size.y) {
+            image.reset();
+            image = std::make_unique<RenderTarget>(size);
+        }
+        return *image;
+    }
     /// Recreates the render target when the window changed size, so that the image is drawn at the resolution
     /// of the window and never stretched. A minimised window keeps the previous target.
     void fitTargetToWindow()
     {
-        frameArea = getVisibleArea();
         const Vector2 window = getWindowSize();
         Vector2 resolution{std::round(window.x), std::round(window.y)};
         if (resolution.x < 1.0f || resolution.y < 1.0f) {
@@ -408,7 +589,11 @@ struct Renderer::Impl {
         if (draw.pose) {
             drawn.applyPose(*draw.pose);
         }
-        BeginMode3D(draw.camera);
+        if (draw.eye) {
+            loadMatrices(draw.eye->projection, draw.eye->view);
+        } else {
+            BeginMode3D(draw.camera);
+        }
         if (draw.aura) {
             auraShader.draw(drawn.get(), *draw.aura, draw.camera, draw.position, draw.rotationAxis,
                             draw.rotationAngle, draw.spinAngle, draw.scale, draw.hiddenMeshes,
@@ -418,18 +603,137 @@ struct Renderer::Impl {
                               draw.camera.position, draw.position, draw.rotationAxis, draw.rotationAngle,
                               draw.spinAngle, draw.scale, draw.tint);
         } else {
-            lightingShader.drawEmission(drawn.get(), draw.camera, draw.position, draw.rotationAxis,
-                                        draw.rotationAngle, draw.spinAngle, draw.scale, draw.tint,
-                                        draw.hiddenMeshes);
+            lightingShader.drawEmission(drawn.get(), detail::viewPointOf(draw.camera), draw.position,
+                                        draw.rotationAxis, draw.rotationAngle, draw.spinAngle, draw.scale,
+                                        draw.tint, draw.hiddenMeshes);
         }
         EndMode3D();
     }
 
-    /// Makes the visible area of the game cover the render target: positions and sizes stay in game units
-    /// whatever its resolution.
+    /// Draws a model of energy with its halo, in the 3D mode of `view`
+    /// @param haloShown Whether the halo is drawn around its centre, in the world; always without it
+    void drawEnergy(ModelId model, const Camera3D &view, const Energy &energy, ::Vector3 origin,
+                    ::Vector3 axis, float rotationAngle, float scale, Color tint, float spinAngle,
+                    const std::function<bool(::Vector3)> &haloShown = {})
+    {
+        energyShader.draw(models.get(model).get(), energy, textures.get(energy.noise).get(), view.position,
+                          origin, axis, rotationAngle, spinAngle, scale, toRaylib(tint));
+        if (energy.halo) {
+            const ::Vector3 centre =
+                placePoint(energy.halo->centre, origin, axis, rotationAngle, spinAngle, scale);
+            if (haloShown && !haloShown(centre)) {
+                return;
+            }
+            drawHalo(view, textures.get(energy.halo->texture).get(), *energy.halo, centre, scale,
+                     static_cast<float>(tint.a) / 255.0f);
+        }
+    }
+
+    /// Enters the view of the eye, in the image it is drawn into, bound: as BeginMode3D(), with its matrices
+    void enterEye() const { loadMatrices(eye->view.projection, eye->view.view); }
+
+    /// Seen by the eye, what is drawn next is moved by `world` first: flushes what was drawn before, which
+    /// rlgl draws with the matrices of the moment
+    void seeOnBoard(const Matrix &world) const
+    {
+        rlDrawRenderBatchActive();
+        rlMatrixMode(RL_MODELVIEW);
+        rlLoadIdentity();
+        rlMultMatrixf(eye->view.view.values.data());
+        rlMultMatrixf(world.values.data());
+    }
+
+    /// Back to the 2D drawings of the board: on its plane, or in front of the models after the glow. They are
+    /// hidden by the models in front of them and by the frame around the board, write no depth, and are seen
+    /// from both sides: the game turns y around.
+    void drawOnPlane() const
+    {
+        seeOnBoard(board->raised ? board->overlay : board->plane);
+        rlEnableDepthTest();
+        rlDisableDepthMask();
+        rlDisableBackfaceCulling();
+    }
+
+    /// Ready for a 3D model on the board, seen through its camera: what moves it from the world of the camera
+    /// onto the board, and the eye seen from that world, as a camera, for its light and its halo
+    struct OnBoard {
+        Matrix world;
+        Camera3D seen;
+    };
+    [[nodiscard]] OnBoard placeOnBoard(const Camera &camera) const
+    {
+        const Matrix world = boardWorld(board->view, camera);
+        const Matrix back = invert(world);
+        const Matrix &view = eye->view.view;
+        const Vector3 position = eye->view.position;
+        const Vector3 ahead{-view.at(2, 0), -view.at(2, 1), -view.at(2, 2)};
+        const Vector3 up{view.at(1, 0), view.at(1, 1), view.at(1, 2)};
+        const Vector3 from = transformPoint(back, position);
+        const Vector3 to =
+            transformPoint(back, {position.x + ahead.x, position.y + ahead.y, position.z + ahead.z});
+        const Vector3 top = transformPoint(back, {position.x + up.x, position.y + up.y, position.z + up.z});
+        seeOnBoard(world);
+        rlEnableDepthTest();
+        rlEnableDepthMask();
+        rlEnableBackfaceCulling();
+        return {.world = world,
+                .seen = {toRaylib(from), toRaylib(to), Vector3Subtract(toRaylib(top), toRaylib(from)), 90.0f,
+                         CAMERA_PERSPECTIVE}};
+    }
+
+    /// The matrices a model on the board is seen by in the glow
+    [[nodiscard]] GlowDraw::EyeMatrices glowMatrices(const Matrix &world) const
+    {
+        return {.projection = eye->view.projection, .view = multiply(eye->view.view, world)};
+    }
+
+    /// Makes the shining models of the board glow over the eye, then raises the 2D drawings in front of them
+    void drawGlowOnBoard()
+    {
+        rlDrawRenderBatchActive();
+        if (!glowQueue.empty()) {
+            RenderTarget &image = *eyes[static_cast<std::size_t>(eye->index)];
+            const Vector2 resolution = image.resolution();
+            // Out of the eye, keeping what its image holds: the glow has images of its own
+            EndMode3D();
+            EndTextureMode();
+            const std::array<Vector3, 8> frame =
+                boardFrame(board->view, eye->view.position, BoardFrameNearness);
+            const Texture2D *glow = glowPass.render(toRaylib(resolution), [&] {
+                // Nothing glows beyond the board either
+                enterEye();
+                drawBoardFrame(frame);
+                EndMode3D();
+                for (const bool energy : {false, true}) {
+                    for (const GlowDraw &draw : glowQueue) {
+                        if (draw.energy.has_value() == energy) {
+                            drawInGlow(draw);
+                        }
+                    }
+                }
+            });
+            glowQueue.clear();
+            BeginTextureMode(image.get());
+            if (glow != nullptr) {
+                rlDisableDepthTest();
+                BeginBlendMode(BLEND_ADDITIVE);
+                const auto width = static_cast<float>(glow->width);
+                const auto height = static_cast<float>(glow->height);
+                DrawTexturePro(*glow, {0.0f, 0.0f, width, -height}, {0.0f, 0.0f, resolution.x, resolution.y},
+                               {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
+                EndBlendMode();
+            }
+            enterEye();
+        }
+        board->raised = true;
+        drawOnPlane();
+    }
+
+    /// Makes the visible area of the game cover the target of the frame: positions and sizes stay in game
+    /// units whatever its resolution.
     void beginGameView() const
     {
-        const float zoom = target->resolution().x / frameArea.width;
+        const float zoom = frame->resolution().x / frameArea.width;
         BeginMode2D(Camera2D{
             .offset = {0.0f, 0.0f}, .target = {frameArea.x, frameArea.y}, .rotation = 0.0f, .zoom = zoom});
     }
@@ -496,25 +800,59 @@ Vector2 Renderer::windowToGame(Vector2 position) const
 
 void Renderer::beginFrame(Color background)
 {
-    if (_impl->inFrame) {
-        throw std::logic_error("A frame is already started: call endFrame() first");
+    // Not while a pass is drawn into the target: starting the frame throws
+    if (_impl->passes.current() == Pass::None) {
+        _impl->fitTargetToWindow();
     }
-    _impl->fitTargetToWindow();
-    _impl->glowQueue.clear();
-    BeginTextureMode(_impl->target->get());
-    ClearBackground(toRaylib(background));
-    _impl->beginGameView();
-    _impl->inFrame = true;
+    _impl->beginFrameInto(*_impl->target, computeVisibleArea(getWindowSize(), _impl->gameSize), background);
+    _impl->frameImage.reset();
+}
+
+namespace
+{
+
+/// A colour multiplied by its alpha: the background of an image, whose colours are premultiplied.
+Color premultiplied(Color color)
+{
+    const auto scale = [&](std::uint8_t channel) {
+        return static_cast<std::uint8_t>((static_cast<unsigned>(channel) * color.a + 127u) / 255u);
+    };
+    return {scale(color.r), scale(color.g), scale(color.b), color.a};
+}
+
+} // namespace
+
+void Renderer::beginFrame(ImageId image, Color background)
+{
+    RenderTarget &into = _impl->getImage(image);
+    _impl->beginFrameInto(into, computeVisibleArea(into.resolution(), _impl->gameSize),
+                          premultiplied(background));
+    _impl->frameImage = image;
+    _impl->blendFrame();
+}
+
+void Renderer::beginFrame(ImageId image, Rectangle area, Color background)
+{
+    if (area.width <= 0.0f || area.height <= 0.0f) {
+        throw std::invalid_argument("The area of a frame must be strictly positive");
+    }
+    RenderTarget &into = _impl->getImage(image);
+    _impl->beginFrameInto(into, area, premultiplied(background));
+    _impl->frameImage = image;
+    _impl->blendFrame();
 }
 
 void Renderer::endFrame()
 {
-    if (!_impl->inFrame) {
-        throw std::logic_error("No frame to end: call beginFrame() first");
-    }
+    _impl->passes.endFrame();
     EndMode2D();
+    // What the batch holds is drawn with the blending of the frame, then the usual one comes back
+    rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
-    _impl->inFrame = false;
+    if (_impl->frameImage) {
+        _impl->frame->generateMipmaps();
+        return;
+    }
 
     const Texture2D &image = _impl->target->get().texture;
     const Vector2 windowSize = getWindowSize();
@@ -531,6 +869,358 @@ void Renderer::endFrame()
         EndShaderMode();
     }
     EndDrawing();
+}
+
+ImageId Renderer::createImage(Vector2 resolution)
+{
+    if (resolution.x < 1.0f || resolution.y < 1.0f) {
+        throw std::invalid_argument("The resolution of an image must be strictly positive");
+    }
+    auto image = std::make_unique<RenderTarget>(Vector2{std::round(resolution.x), std::round(resolution.y)});
+    // Never shown with what the graphics card left in it
+    BeginTextureMode(image->get());
+    ClearBackground(toRaylib(colors::Black));
+    EndTextureMode();
+    _impl->images.push_back(std::move(image));
+    return ImageId{static_cast<std::uint32_t>(_impl->images.size() - 1)};
+}
+
+void Renderer::beginEye(int eye, const EyeView &view, Color background)
+{
+    if (eye < 0) {
+        throw std::invalid_argument("The index of an eye cannot be negative");
+    }
+    if (view.width <= 0 || view.height <= 0) {
+        throw std::invalid_argument("The size of an eye must be strictly positive");
+    }
+    _impl->passes.beginEye();
+    // Read before anything is bound: the image of the headset, where the eye goes at its end
+    const unsigned int framebuffer = rlGetActiveFramebuffer();
+    RenderTarget *fitted = nullptr;
+    try {
+        fitted = &_impl->fitEye(eye, view.width, view.height);
+    } catch (...) {
+        // No eye was started
+        _impl->passes.endEye();
+        throw;
+    }
+    RenderTarget &image = *fitted;
+    const Camera3D camera = cameraOf(view);
+    _impl->eye = Impl::EyePass{.index = eye,
+                               .view = view,
+                               .camera = camera,
+                               .viewPoint = detail::viewPointOf(camera),
+                               .framebuffer = framebuffer};
+
+    BeginTextureMode(image.get());
+    ClearBackground(toRaylib(background));
+    // As BeginMode3D(), with the matrices of the eye instead of those of a camera
+    _impl->enterEye();
+}
+
+void Renderer::beginBoard(const BoardView &board)
+{
+    _impl->passes.beginBoard();
+    _impl->board = Impl::BoardPass{.view = board,
+                                   .plane = boardPlane(board),
+                                   .overlay = boardPlane(board, board.overlay),
+                                   .raised = false};
+    _impl->glowQueue.clear();
+    // In the space of the eye, before anything of the board: what goes beyond it is hidden from the start
+    drawBoardFrame(boardFrame(board, _impl->eye->view.position, BoardFrameNearness));
+    _impl->drawOnPlane();
+}
+
+void Renderer::endBoard()
+{
+    _impl->passes.endBoard();
+    const BoardView board = _impl->board->view;
+    _impl->board.reset();
+    // A glow not drawn is not drawn in the next board
+    _impl->glowQueue.clear();
+    _impl->seeOnBoard({});
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
+    const float brightness = std::clamp(board.brightness, 0.0f, 1.0f);
+    if (brightness >= 1.0f) {
+        return;
+    }
+    // A veil over the board, over what comes out of it too: the frame cut it to the edges of the board
+    rlDisableDepthTest();
+    rlDisableBackfaceCulling();
+    rlBegin(RL_QUADS);
+    rlColor4ub(0, 0, 0, static_cast<unsigned char>(std::lround((1.0f - brightness) * 255.0f)));
+    for (const Vector2 corner :
+         {Vector2{-0.5f, 0.5f}, Vector2{-0.5f, -0.5f}, Vector2{0.5f, -0.5f}, Vector2{0.5f, 0.5f}}) {
+        const Vector3 at = transformPoint(board.transform, {corner.x, corner.y, 0.0f});
+        rlVertex3f(at.x, at.y, at.z);
+    }
+    rlEnd();
+    rlDrawRenderBatchActive();
+    rlEnableBackfaceCulling();
+    rlEnableDepthTest();
+}
+
+void Renderer::endEye()
+{
+    _impl->passes.endEye();
+    const Impl::EyePass pass = *_impl->eye;
+    _impl->eye.reset();
+    EndMode3D();
+    EndTextureMode();
+
+    // The image of the eye into the one of the headset, through the colour filter, as endFrame() does for the
+    // window: the filter is for the whole view, not only for the board
+    const Texture2D &image = _impl->eyes[static_cast<std::size_t>(pass.index)]->get().texture;
+    const auto width = static_cast<float>(image.width);
+    const auto height = static_cast<float>(image.height);
+    rlEnableFramebuffer(pass.framebuffer);
+    beginPixels(image.width, image.height);
+    const bool filtered = _impl->filterShader.begin(_impl->colorFilter);
+    DrawTexturePro(image, {0.0f, 0.0f, width, -height}, {0.0f, 0.0f, width, height}, {0.0f, 0.0f}, 0.0f,
+                   toRaylib(colors::White));
+    if (filtered) {
+        EndShaderMode();
+    }
+    endPixels();
+}
+
+void Renderer::showMirror()
+{
+    if (_impl->passes.current() != Pass::None) {
+        throw std::logic_error("The mirror is shown between two passes: end the frame or the eye first");
+    }
+    // Back to the window, at its size: the eyes left the viewport at theirs
+    EndTextureMode();
+    const Vector2 windowSize = getWindowSize();
+    BeginDrawing();
+    ClearBackground(toRaylib(colors::Black));
+    if (!_impl->eyes.empty() && _impl->eyes.front()) {
+        const Texture2D &image = _impl->eyes.front()->get().texture;
+        const Rectangle crop = computeMirrorCrop(
+            {static_cast<float>(image.width), static_cast<float>(image.height)}, windowSize);
+        const bool filtered = _impl->filterShader.begin(_impl->colorFilter);
+        DrawTexturePro(image, {crop.x, crop.y, crop.width, -crop.height},
+                       {0.0f, 0.0f, windowSize.x, windowSize.y}, {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
+        if (filtered) {
+            EndShaderMode();
+        }
+    }
+    EndDrawing();
+}
+
+void Renderer::drawImageQuad(ImageId image, const Matrix &transform, const ImageQuadLook &look)
+{
+    _impl->passes.requireEye();
+    const Texture2D &texture = _impl->getImage(image).get().texture;
+    // A flat image is one strip; a curved one, strips thin enough for the curve to look round
+    const int strips = look.bend == 0.0f ? 1 : 32;
+    rlDrawRenderBatchActive();
+    rlDisableBackfaceCulling();
+    if (look.onTop) {
+        rlDisableDepthTest();
+    }
+    rlPushMatrix();
+    rlMultMatrixf(transform.values.data());
+    // Its colours are premultiplied by its alpha (Impl::blendFrame()): laid over what is behind as they are
+    rlSetBlendMode(RL_BLEND_ALPHA_PREMULTIPLY);
+    rlSetTexture(texture.id);
+    rlBegin(RL_QUADS);
+    const Color tint = premultiplied(look.tint);
+    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+    rlNormal3f(0.0f, 0.0f, 1.0f);
+    const auto vertex = [&](float u, float v) {
+        const float across = (2.0f * u) - 1.0f;
+        // The image is stored from its bottom row: its top is at v = 1
+        rlTexCoord2f(u, v);
+        rlVertex3f(u - 0.5f, v - 0.5f, look.bend * across * across);
+    };
+    for (int strip = 0; strip < strips; ++strip) {
+        const float left = static_cast<float>(strip) / static_cast<float>(strips);
+        const float right = static_cast<float>(strip + 1) / static_cast<float>(strips);
+        vertex(left, 1.0f);
+        vertex(left, 0.0f);
+        vertex(right, 0.0f);
+        vertex(right, 1.0f);
+    }
+    rlEnd();
+    rlSetTexture(0);
+    rlPopMatrix();
+    rlDrawRenderBatchActive();
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    if (look.onTop) {
+        rlEnableDepthTest();
+    }
+    rlEnableBackfaceCulling();
+}
+
+namespace
+{
+
+/// Draws light over everything drawn before, added to it, writing no depth: the rays of the controllers.
+class GlowingOnTop
+{
+public:
+    GlowingOnTop()
+    {
+        rlDrawRenderBatchActive();
+        rlDisableBackfaceCulling();
+        rlDisableDepthTest();
+        rlDisableDepthMask();
+        rlSetBlendMode(RL_BLEND_ADDITIVE);
+    }
+    ~GlowingOnTop()
+    {
+        rlDrawRenderBatchActive();
+        rlSetBlendMode(RL_BLEND_ALPHA);
+        rlEnableDepthMask();
+        rlEnableDepthTest();
+        rlEnableBackfaceCulling();
+    }
+
+    GlowingOnTop(const GlowingOnTop &) = delete;
+    GlowingOnTop &operator=(const GlowingOnTop &) = delete;
+    GlowingOnTop(GlowingOnTop &&) = delete;
+    GlowingOnTop &operator=(GlowingOnTop &&) = delete;
+};
+
+} // namespace
+
+void Renderer::drawBeam(Vector3 from, Vector3 to, float width, Color color)
+{
+    _impl->passes.requireEye();
+    const ::Vector3 start = toRaylib(from);
+    const ::Vector3 end = toRaylib(to);
+    const ::Vector3 eye = toRaylib(_impl->eye->view.position);
+    const ::Vector3 along = Vector3Subtract(end, start);
+    // Across the beam and across the line of sight: the ribbon is seen flat from the eye
+    ::Vector3 across = Vector3CrossProduct(along, Vector3Subtract(Vector3Lerp(start, end, 0.5f), eye));
+    if (Vector3Length(across) <= 0.0f) {
+        return;
+    }
+    across = Vector3Scale(Vector3Normalize(across), width / 2.0f);
+    const GlowingOnTop glowing;
+    rlBegin(RL_QUADS);
+    rlColor4ub(color.r, color.g, color.b, color.a);
+    rlVertex3f(start.x - across.x, start.y - across.y, start.z - across.z);
+    rlVertex3f(start.x + across.x, start.y + across.y, start.z + across.z);
+    // Fading towards its end: the light of the controller goes out in the distance
+    rlColor4ub(color.r / 4, color.g / 4, color.b / 4, color.a);
+    rlVertex3f(end.x + across.x, end.y + across.y, end.z + across.z);
+    rlVertex3f(end.x - across.x, end.y - across.y, end.z - across.z);
+    rlEnd();
+}
+
+void Renderer::drawDot(Vector3 centre, float radius, Color color)
+{
+    _impl->passes.requireEye();
+    const ::Vector3 middle = toRaylib(centre);
+    const ::Vector3 facing = Vector3Subtract(toRaylib(_impl->eye->view.position), middle);
+    if (Vector3Length(facing) <= 0.0f) {
+        return;
+    }
+    // Two axes of the plane facing the eye
+    const ::Vector3 normal = Vector3Normalize(facing);
+    const ::Vector3 helper =
+        std::abs(normal.y) < 0.9f ? ::Vector3{0.0f, 1.0f, 0.0f} : ::Vector3{1.0f, 0.0f, 0.0f};
+    const ::Vector3 first = Vector3Normalize(Vector3CrossProduct(normal, helper));
+    const ::Vector3 second = Vector3CrossProduct(normal, first);
+    constexpr int Sides = 24;
+    const GlowingOnTop glowing;
+    rlBegin(RL_TRIANGLES);
+    for (int side = 0; side < Sides; ++side) {
+        const float angle = 2.0f * std::numbers::pi_v<float> * static_cast<float>(side) / Sides;
+        const float next = 2.0f * std::numbers::pi_v<float> * static_cast<float>(side + 1) / Sides;
+        const auto rim = [&](float at) {
+            return Vector3Add(middle, Vector3Add(Vector3Scale(first, std::cos(at) * radius),
+                                                 Vector3Scale(second, std::sin(at) * radius)));
+        };
+        const ::Vector3 a = rim(angle);
+        const ::Vector3 b = rim(next);
+        // Bright in its middle, fading to its edge
+        rlColor4ub(color.r, color.g, color.b, color.a);
+        rlVertex3f(middle.x, middle.y, middle.z);
+        rlColor4ub(color.r / 6, color.g / 6, color.b / 6, color.a);
+        rlVertex3f(a.x, a.y, a.z);
+        rlVertex3f(b.x, b.y, b.z);
+    }
+    rlEnd();
+}
+
+void Renderer::drawBox(const Matrix &transform, Color color, Color edge)
+{
+    _impl->passes.requireEye();
+    rlDrawRenderBatchActive();
+    rlPushMatrix();
+    rlMultMatrixf(transform.values.data());
+    DrawCube({0.0f, 0.0f, 0.0f}, 1.0f, 1.0f, 1.0f, toRaylib(color));
+    DrawCubeWires({0.0f, 0.0f, 0.0f}, 1.0f, 1.0f, 1.0f, toRaylib(edge));
+    rlPopMatrix();
+    rlDrawRenderBatchActive();
+}
+
+void Renderer::setModelMaterialImage(ModelId model, std::string_view material, ImageId image)
+{
+    const Texture2D &texture = _impl->getImage(image).get().texture;
+    if (!_impl->models.get(model).showOnMaterial(material, texture)) {
+        throw std::out_of_range("No material " + std::string(material) + " in this model");
+    }
+}
+
+void Renderer::setModelMaterialGlow(ModelId model, std::string_view material, Color color)
+{
+    if (!_impl->models.get(model).glowOnMaterial(material, toRaylib(color))) {
+        throw std::out_of_range("No material " + std::string(material) + " in this model");
+    }
+}
+
+void Renderer::drawSky(TextureId texture, Color tint)
+{
+    _impl->passes.requireEye();
+    // Far enough to be behind everything of the cockpit and the board, near enough for the depth of the eye
+    // (200 m): it is drawn first and hides nothing anyway
+    constexpr float radius = 100.0f;
+    constexpr int slices = 48;
+    constexpr int rings = 24;
+    constexpr float aroundRepeats = 2.0f;
+    constexpr float downRepeats = 2.0f;
+    const Vector3 eye = _impl->eye->view.position;
+    const auto point = [&](int slice, int ring) {
+        const float around = 2.0f * std::numbers::pi_v<float> * static_cast<float>(slice) / slices;
+        const float down = std::numbers::pi_v<float> * static_cast<float>(ring) / rings;
+        // From the top (ring 0) to the bottom, turning from ahead (-z) to the right (+x)
+        return ::Vector3{eye.x + (radius * std::sin(down) * std::sin(around)),
+                         eye.y + (radius * std::cos(down)),
+                         eye.z - (radius * std::sin(down) * std::cos(around))};
+    };
+    const auto vertex = [&](int slice, int ring) {
+        rlTexCoord2f(aroundRepeats * static_cast<float>(slice) / slices,
+                     downRepeats * static_cast<float>(ring) / rings);
+        const ::Vector3 at = point(slice, ring);
+        rlVertex3f(at.x, at.y, at.z);
+    };
+
+    rlDrawRenderBatchActive();
+    rlDisableDepthTest();
+    rlDisableDepthMask();
+    rlDisableBackfaceCulling();
+    rlSetTexture(_impl->textures.get(texture).get().id);
+    rlBegin(RL_QUADS);
+    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+    for (int ring = 0; ring < rings; ++ring) {
+        for (int slice = 0; slice < slices; ++slice) {
+            vertex(slice, ring);
+            vertex(slice, ring + 1);
+            vertex(slice + 1, ring + 1);
+            vertex(slice + 1, ring);
+        }
+    }
+    rlEnd();
+    rlSetTexture(0);
+    rlDrawRenderBatchActive();
+    rlEnableBackfaceCulling();
+    rlEnableDepthMask();
+    rlEnableDepthTest();
 }
 
 void Renderer::drawTexture(TextureId texture, Vector2 position, Color tint)
@@ -678,11 +1368,30 @@ void Renderer::drawModel(ModelId model, const Camera &camera, const Light &light
                          const std::vector<int> &hiddenMeshes)
 {
     _impl->requireFrame();
+    if (_impl->passes.onBoard()) {
+        if (camera.projection != Projection::Orthographic) {
+            return;
+        }
+        const Impl::OnBoard placed = _impl->placeOnBoard(camera);
+        const detail::Model &shown = _impl->models.get(model);
+        _impl->lightingShader.draw(shown.get(), light, detail::viewPointOf(placed.seen), toRaylib(position),
+                                   toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint),
+                                   hiddenMeshes);
+        if (detail::LightingShader::hasEmission(shown.get())) {
+            _impl->glowQueue.push_back({model, placed.seen, std::nullopt, std::nullopt, toRaylib(position),
+                                        toRaylib(rotationAxis), rotationAngle, scale, spinAngle,
+                                        fade(tint, emissionBloom), shown.getPose(), hiddenMeshes,
+                                        _impl->glowMatrices(placed.world)});
+        }
+        _impl->drawOnPlane();
+        return;
+    }
     const Camera3D view = toRaylib(camera);
     const detail::Model &drawn = _impl->models.get(model);
     BeginMode3D(view);
-    _impl->lightingShader.draw(drawn.get(), light, view, toRaylib(position), toRaylib(rotationAxis),
-                               rotationAngle, spinAngle, scale, toRaylib(tint), hiddenMeshes);
+    _impl->lightingShader.draw(drawn.get(), light, detail::viewPointOf(view), toRaylib(position),
+                               toRaylib(rotationAxis), rotationAngle, spinAngle, scale, toRaylib(tint),
+                               hiddenMeshes);
     // EndMode3D() resets the view to window pixels: go back to game units for what is drawn next
     EndMode3D();
     _impl->beginGameView();
@@ -698,19 +1407,46 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
                                float spinAngle)
 {
     _impl->requireFrame();
+    if (_impl->passes.onBoard()) {
+        if (camera.projection != Projection::Orthographic) {
+            return;
+        }
+        const Impl::OnBoard placed = _impl->placeOnBoard(camera);
+        const BoardView &board = _impl->board->view;
+        // The halo is drawn over everything, the frame around the board too: only while it is over the board
+        const auto overBoard = [&](::Vector3 centre) {
+            const Vector2 at =
+                boardToGame(board, transformPoint(placed.world, {centre.x, centre.y, centre.z}));
+            return at.x >= board.area.x && at.x <= board.area.x + board.area.width && at.y >= board.area.y &&
+                   at.y <= board.area.y + board.area.height;
+        };
+        _impl->drawEnergy(model, placed.seen, energy, toRaylib(position), toRaylib(rotationAxis),
+                          rotationAngle, scale, tint, spinAngle, overBoard);
+        if (energy.bloom > 0.0f) {
+            _impl->glowQueue.push_back({model,
+                                        placed.seen,
+                                        energy,
+                                        std::nullopt,
+                                        toRaylib(position),
+                                        toRaylib(rotationAxis),
+                                        rotationAngle,
+                                        scale,
+                                        spinAngle,
+                                        fade(tint, energy.bloom),
+                                        _impl->models.get(model).getPose(),
+                                        {},
+                                        _impl->glowMatrices(placed.world)});
+        }
+        _impl->drawOnPlane();
+        return;
+    }
     const Camera3D view = toRaylib(camera);
     const ::Vector3 origin = toRaylib(position);
     const ::Vector3 axis = toRaylib(rotationAxis);
     BeginMode3D(view);
-    _impl->energyShader.draw(_impl->models.get(model).get(), energy, _impl->textures.get(energy.noise).get(),
-                             view.position, origin, axis, rotationAngle, spinAngle, scale, toRaylib(tint));
-    if (energy.halo) {
-        const ::Vector3 centre =
-            placePoint(energy.halo->centre, origin, axis, rotationAngle, spinAngle, scale);
-        drawHalo(view, _impl->textures.get(energy.halo->texture).get(), *energy.halo, centre, scale,
-                 static_cast<float>(tint.a) / 255.0f);
-    }
+    _impl->drawEnergy(model, view, energy, origin, axis, rotationAngle, scale, tint, spinAngle);
     EndMode3D();
+    _impl->blendFrame();
     _impl->beginGameView();
     if (energy.bloom > 0.0f) {
         _impl->glowQueue.push_back({model,
@@ -728,19 +1464,70 @@ void Renderer::drawEnergyModel(ModelId model, const Camera &camera, const Energy
     }
 }
 
+void Renderer::drawModel(ModelId model, const Light &light, Vector3 position, Vector3 rotationAxis,
+                         float rotationAngle, float scale, Color tint, float spinAngle,
+                         const std::vector<int> &hiddenMeshes)
+{
+    _impl->passes.requireEye();
+    _impl->lightingShader.draw(_impl->models.get(model).get(), light, _impl->eye->viewPoint,
+                               toRaylib(position), toRaylib(rotationAxis), rotationAngle, spinAngle, scale,
+                               toRaylib(tint), hiddenMeshes);
+}
+
+void Renderer::drawTransparentModel(ModelId model, const Light &light, Vector3 position, Vector3 rotationAxis,
+                                    float rotationAngle, float scale, const std::vector<int> &hiddenMeshes)
+{
+    _impl->passes.requireEye();
+    // A mesh is drawn at once, out of the batch of rlgl: what the batch holds goes before the depth changes
+    rlDrawRenderBatchActive();
+    rlDisableDepthMask();
+    rlDisableBackfaceCulling();
+    _impl->lightingShader.draw(_impl->models.get(model).get(), light, _impl->eye->viewPoint,
+                               toRaylib(position), toRaylib(rotationAxis), rotationAngle, 0.0f, scale,
+                               toRaylib(colors::White), hiddenMeshes);
+    rlEnableBackfaceCulling();
+    rlEnableDepthMask();
+}
+
+void Renderer::drawEnergyModel(ModelId model, const Energy &energy, Vector3 position, Vector3 rotationAxis,
+                               float rotationAngle, float scale, Color tint, float spinAngle)
+{
+    _impl->passes.requireEye();
+    _impl->drawEnergy(model, _impl->eye->camera, energy, toRaylib(position), toRaylib(rotationAxis),
+                      rotationAngle, scale, tint, spinAngle);
+}
+
 void Renderer::drawAura(ModelId model, const Camera &camera, const Aura &aura, Vector3 position,
                         Vector3 rotationAxis, float rotationAngle, float scale, float spinAngle,
                         const std::vector<int> &hiddenMeshes)
 {
     _impl->requireFrame();
-    const Camera3D view = toRaylib(camera);
     const ::Vector3 origin = toRaylib(position);
     const ::Vector3 axis = toRaylib(rotationAxis);
     const detail::Model &drawn = _impl->models.get(model);
+    if (_impl->passes.onBoard()) {
+        // As the model it surrounds: laid on the board by its camera, seen by the eye
+        if (camera.projection != Projection::Orthographic) {
+            return;
+        }
+        const Impl::OnBoard placed = _impl->placeOnBoard(camera);
+        _impl->auraShader.draw(drawn.get(), aura, placed.seen, origin, axis, rotationAngle, spinAngle, scale,
+                               hiddenMeshes);
+        if (aura.bloom > 0.0f) {
+            _impl->glowQueue.push_back({model, placed.seen, std::nullopt, aura, origin, axis, rotationAngle,
+                                        scale, spinAngle, toRaylib(colors::White), drawn.getPose(),
+                                        hiddenMeshes, _impl->glowMatrices(placed.world)});
+        }
+        _impl->drawOnPlane();
+        return;
+    }
+    const Camera3D view = toRaylib(camera);
     BeginMode3D(view);
     _impl->auraShader.draw(drawn.get(), aura, view, origin, axis, rotationAngle, spinAngle, scale,
                            hiddenMeshes);
     EndMode3D();
+    // The shader leaves the usual blending: back to the one of a frame drawn into an image
+    _impl->blendFrame();
     _impl->beginGameView();
     if (aura.bloom > 0.0f) {
         _impl->glowQueue.push_back({model, view, std::nullopt, aura, origin, axis, rotationAngle, scale,
@@ -751,13 +1538,17 @@ void Renderer::drawAura(ModelId model, const Camera &camera, const Aura &aura, V
 void Renderer::drawGlow()
 {
     _impl->requireFrame();
-    const Vector2 resolution = _impl->target->resolution();
+    if (_impl->passes.onBoard()) {
+        _impl->drawGlowOnBoard();
+        return;
+    }
+    const Vector2 resolution = _impl->frame->resolution();
     // The smoothing, the glow and the vignette are drawn in pixels of the frame, the first two in images of
     // their own: leave the game view and the frame, then come back to them, keeping what the frame holds
     EndMode2D();
     EndTextureMode();
     if (_impl->antialiasing) {
-        _impl->antialiasPass.apply(_impl->target->get());
+        _impl->antialiasPass.apply(_impl->frame->get());
     }
     const Texture2D *glow = nullptr;
     if (!_impl->glowQueue.empty()) {
@@ -775,7 +1566,7 @@ void Renderer::drawGlow()
         _impl->glowQueue.clear();
     }
 
-    BeginTextureMode(_impl->target->get());
+    BeginTextureMode(_impl->frame->get());
     if (glow != nullptr) {
         BeginBlendMode(BLEND_ADDITIVE);
         const auto width = static_cast<float>(glow->width);
@@ -784,7 +1575,11 @@ void Renderer::drawGlow()
                        {0.0f, 0.0f}, 0.0f, toRaylib(colors::White));
         EndBlendMode();
     }
-    _impl->vignette.draw(resolution, _impl->vignetteStrength);
+    // The vignette belongs to a screen: an image is shown in 3D, where the eye looks around it
+    if (!_impl->frameImage) {
+        _impl->vignette.draw(resolution, _impl->vignetteStrength);
+    }
+    _impl->blendFrame();
     _impl->beginGameView();
 }
 

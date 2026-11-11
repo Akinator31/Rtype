@@ -57,6 +57,9 @@ private:
 
     bool _closeRequested = false;
     int _targetFps = 0;
+    bool _vsync = true;
+    /// See setPacedElsewhere().
+    bool _pacedElsewhere = false;
     /// Where the window was before fullscreen, to go back there.
     Area _windowed;
     PendingSize _pendingSize;
@@ -131,6 +134,13 @@ public:
     void setTargetFps(int fps);
     /// The maximum number of frames per second, 0 for no limit.
     [[nodiscard]] int targetFps() const;
+
+    /// Lets something else pace the frames: a VR headset, which waits for its own refresh. While true, the
+    /// window neither waits for the screen (no vertical synchronisation) nor limits the frames per second,
+    /// which would make the headset miss its frames. setVsync() and setTargetFps() are kept, isVsync() and
+    /// targetFps() still say what they asked, and false applies them again.
+    void setPacedElsewhere(bool paced);
+    [[nodiscard]] bool isPacedElsewhere() const;
 };
 
 } // namespace rtype::render

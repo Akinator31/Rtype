@@ -3,6 +3,7 @@
 #include "Console/Console.hpp"
 #include "Game/GameScenes.hpp"
 #include "Settings/SettingsTargets.hpp"
+#include "Settings/VrSettings.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
@@ -25,9 +26,10 @@ void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resour
 /// and the story. Those of a game are declared by GameScenes, those of online play by OnlineScenes.
 /// Everything given must outlive the engine.
 /// @param targets What the Settings page changes; its translations are those of every menu.
+/// @param vr What the VR page changes.
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
                       const engine::InterfaceStyle &style, const engine::RendererMetrics &metrics,
                       GameScenes &games, const game::GameConfig &config, const SettingsTargets &targets,
-                      ShipSelection &ships);
+                      const VrTargets &vr, ShipSelection &ships);
 
 } // namespace rtype::client

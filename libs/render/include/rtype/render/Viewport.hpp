@@ -28,4 +28,13 @@ namespace rtype::render
 /// @return The position in game units, or (0, 0) if one of the sizes is empty.
 [[nodiscard]] Vector2 windowToGame(Vector2 position, Vector2 windowSize, Vector2 gameSize);
 
+/// Part of the image of an eye shown in the window while the game is in a VR headset
+/// (Renderer::showMirror()): the largest one of the shape of the window, in its middle, so that the window is
+/// filled without stretching the image. A wide window shows a band of the eye, a tall one a column of it.
+/// @param imageSize Size of the image of the eye, in pixels.
+/// @param windowSize Size of the window, in pixels.
+/// @return The part shown, in pixels of the image, or the whole image if one of the sizes is empty, such as a
+/// minimised window.
+[[nodiscard]] Rectangle computeMirrorCrop(Vector2 imageSize, Vector2 windowSize);
+
 } // namespace rtype::render
