@@ -129,6 +129,7 @@ void GameSessionSystem::stop()
     _ships.clear();
     _localShots = 0;
     _tick = 0;
+    _inputLockedUntil = 0;
     _wave = 0;
     _rescue = game::RescueStage::None;
     _outcome.reset();
@@ -279,8 +280,9 @@ void GameSessionSystem::update(float elapsed)
     }
     const bool playing = _scenes.receivesInput(*_scene);
     _session->setPaused(!playing);
-    switchWeapon(playing);
-    game::PlayerInput input = playing ? inputFrom(_controls) : game::PlayerInput{};
+    const bool locked = _tick < _inputLockedUntil;
+    switchWeapon(playing && !locked);
+    game::PlayerInput input = playing && !locked ? inputFrom(_controls) : game::PlayerInput{};
     // Kept in the pause too: the weapon in hand is a state of the input, not a press
     input.set(game::PlayerInput::SecondWeapon, _secondWeapon);
     _session->setInput(input);

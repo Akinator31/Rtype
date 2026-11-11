@@ -22,4 +22,16 @@ void createLoreScene(engine::Engine &engine, render::ResourceManager &resources,
                      const engine::InterfaceStyle &style, const engine::Metrics &metrics,
                      const localization::Localization &translations);
 
+/// Name of the epilogue of the campaign, once its last mission is won.
+inline constexpr const char *CampaignEndingScene = "campaign_ending";
+
+/// Declares the epilogue of the campaign: like the story (createLoreScene()), the ending file of the
+/// language of the player scrolls away on the stars, over the music of the lore, up to its last words, "THE
+/// END" and a thank you. Then, or with its back button or Escape, back to the main menu.
+/// @param resources, audio, style, metrics, translations They must outlive the engine.
+void createCampaignEndingScene(engine::Engine &engine, render::ResourceManager &resources,
+                               audio::AudioPlayer &audio, const engine::InterfaceStyle &style,
+                               const engine::Metrics &metrics,
+                               const localization::Localization &translations);
+
 } // namespace rtype::client

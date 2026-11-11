@@ -23,7 +23,9 @@
 #include "Game/ResultsScreen.hpp"
 #include "Game/ResultsSystem.hpp"
 #include "Game/ShotLooks.hpp"
+#include "Game/VoiceSystem.hpp"
 #include "Quests/StatQuest.hpp"
+#include "rtype/audio/AudioDevice.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -33,6 +35,7 @@
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
 #include "rtype/engine/System/ModelAnimationSystem.hpp"
+#include "rtype/engine/ThreadManager.hpp"
 #include "rtype/game/Config/GameConfig.hpp"
 #include "rtype/game/Constants.hpp"
 
@@ -43,6 +46,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <numbers>
@@ -609,6 +614,33 @@ TEST_CASE("Under a menu, the session gets an empty input, even one that goes on"
     CHECK(session.pauses.back());
 }
 
+TEST_CASE("The controls do nothing while the input is locked, during a cutscene", "[client]")
+{
+    Client client;
+    client.run(1);
+    const auto shipX = [&client] {
+        auto &replicated = client.ecs.cache<Replicated>();
+        for (rtype::ecs::entity_t entity = 0; entity < replicated.size(); ++entity) {
+            if (replicated.has(entity) &&
+                replicated.get(entity).kind == rtype::game::EntityKind::PlayerShip) {
+                return client.ecs.getComponent<rtype::ecs::Position>(entity).x;
+            }
+        }
+        FAIL("No ship drawn");
+        return 0.0f;
+    };
+    const float start = shipX();
+    client.sessions.lockInputUntil(client.sessions.tick() + 30);
+    client.input.keys = {Key::Right};
+
+    client.run(20);
+    CHECK(shipX() == Approx(start));
+
+    // The cutscene over, the ship moves again
+    client.run(30);
+    CHECK(shipX() > start + 50.0f);
+}
+
 TEST_CASE("The session stops when its scene closes", "[client]")
 {
     Client client;
@@ -1013,6 +1045,112 @@ TEST_CASE("The camera pushes in on the ship of the player during the voice of th
     }
     CHECK(view().fieldOfView == Approx(1080.0f).epsilon(0.001));
     CHECK(view().target.x == Approx(960.0f).epsilon(0.001));
+}
+
+TEST_CASE("The camera shows the ship in perspective during the voice of the start, then sees the whole game",
+          "[client]")
+{
+    ImpactClient client;
+    client.ecs.registerSystem<RescueCameraSystem>(client.sessions);
+    const rtype::render::Rectangle area{0.0f, 0.0f, 1920.0f, 1080.0f};
+    const rtype::ecs::entity_t camera = client.ecs.createEntity();
+    client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
+    const rtype::render::Vector2 centre{960.0f, 540.0f};
+    client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, centre, centre).cutsceneEnd = 300;
+    const auto view = [&client, camera] {
+        return client.ecs.getComponent<rtype::engine::Camera>(camera).view;
+    };
+    rtype::game::EntityState ship{5, rtype::game::EntityKind::PlayerShip, 0};
+    ship.x = 300.0f;
+    ship.y = 540.0f;
+
+    // Close to the ship, behind it and above it, in perspective
+    client.receive(snapshotOf(1, {ship}));
+    CHECK(view().projection == rtype::render::Projection::Perspective);
+    CHECK(view().position.x < 300.0f);
+    CHECK(view().position.y < 540.0f);
+    CHECK(view().position.z > -600.0f);
+    CHECK(view().target.x > 300.0f);
+
+    // Turning around it towards its side
+    const float before = view().position.x;
+    client.receive(snapshotOf(150, {ship}));
+    CHECK(view().position.x > before);
+
+    // Flying back to the view of the game as the voice ends
+    client.receive(snapshotOf(290, {ship}));
+    CHECK(view().projection == rtype::render::Projection::Perspective);
+    CHECK(view().position.z < -800.0f);
+
+    // Over: the whole game, through the orthographic camera
+    client.receive(snapshotOf(300, {ship}));
+    CHECK(view().projection == rtype::render::Projection::Orthographic);
+    CHECK(view().fieldOfView == Approx(1080.0f));
+    CHECK(view().target.x == Approx(960.0f));
+}
+
+TEST_CASE("A cutscene may start later in the game: the camera is the view of the game until then", "[client]")
+{
+    ImpactClient client;
+    client.ecs.registerSystem<RescueCameraSystem>(client.sessions);
+    const rtype::render::Rectangle area{0.0f, 0.0f, 1920.0f, 1080.0f};
+    const rtype::ecs::entity_t camera = client.ecs.createEntity();
+    client.ecs.addComponent<rtype::engine::Camera>(camera, computeGameView(area));
+    const rtype::render::Vector2 centre{960.0f, 540.0f};
+    RescueCamera &rescue = client.ecs.addComponent<RescueCamera>(camera, area, 1.0f, 0.0f, centre, centre);
+    rescue.cutsceneStart = 1000;
+    rescue.cutsceneEnd = 1300;
+    const auto view = [&client, camera] {
+        return client.ecs.getComponent<rtype::engine::Camera>(camera).view;
+    };
+    rtype::game::EntityState ship{5, rtype::game::EntityKind::PlayerShip, 0};
+    ship.x = 620.0f;
+    ship.y = 540.0f;
+
+    client.receive(snapshotOf(900, {ship}));
+    CHECK(view().projection == rtype::render::Projection::Orthographic);
+
+    // From its start, close to the ship, behind it, as at the start of a game
+    client.receive(snapshotOf(1000, {ship}));
+    CHECK(view().projection == rtype::render::Projection::Perspective);
+    CHECK(view().position.x < 620.0f);
+    CHECK(view().position.z > -600.0f);
+    const float before = view().position.x;
+    client.receive(snapshotOf(1150, {ship}));
+    CHECK(view().position.x > before);
+
+    client.receive(snapshotOf(1300, {ship}));
+    CHECK(view().projection == rtype::render::Projection::Orthographic);
+}
+
+TEST_CASE("A voice waits for its tick of the session, then plays once", "[client]")
+{
+    ImpactClient client;
+    // Audio is disabled: the files of the voices are only checked to exist
+    const std::filesystem::path assets = std::filesystem::temp_directory_path() / "rtype_voice_tests";
+    std::filesystem::create_directories(assets);
+    std::ofstream(assets / "fail.wav") << "fake";
+    std::ofstream(assets / "rescue.wav") << "fake";
+    const rtype::audio::AudioDevice device({.enabled = false});
+    rtype::engine::ThreadManager threads;
+    rtype::audio::AudioPlayer audio(device, assets, threads.getAssetsWorker());
+    client.ecs.registerSystem<VoiceSystem>(client.sessions, audio);
+    const rtype::ecs::entity_t first = client.ecs.createEntity();
+    client.ecs.addComponent<ScheduledVoice>(first, audio.loadSound("fail.wav"), 10U, 1.0f);
+    const rtype::ecs::entity_t second = client.ecs.createEntity();
+    client.ecs.addComponent<ScheduledVoice>(second, audio.loadSound("rescue.wav"), 20U, 1.0f);
+
+    client.receive(snapshotOf(9, {}));
+    CHECK(client.ecs.hasComponent<ScheduledVoice>(first));
+
+    client.receive(snapshotOf(10, {}));
+    CHECK_FALSE(client.ecs.hasComponent<ScheduledVoice>(first));
+    CHECK(client.ecs.hasComponent<ScheduledVoice>(second));
+    CHECK(client.ecs.isAlive(first));
+
+    client.receive(snapshotOf(25, {}));
+    CHECK_FALSE(client.ecs.hasComponent<ScheduledVoice>(second));
+    std::filesystem::remove_all(assets);
 }
 
 TEST_CASE(

@@ -39,6 +39,17 @@
 // The story of the game, in each language, laid out for the crawl of the lore scene (see LoreLineKind)
 #define RTYPE_LORE_FRENCH "lore/fr.txt"
 #define RTYPE_LORE_ENGLISH "lore/en.txt"
+// The briefings of the missions of the campaign, received as a transmission, in each language (a "# "
+// title, then lines): the first one, the road to Saturn, then the duel against the shogun
+#define RTYPE_CAMPAIGN_BRIEFING_FRENCH "campaign/fr.txt"
+#define RTYPE_CAMPAIGN_BRIEFING_ENGLISH "campaign/en.txt"
+#define RTYPE_CAMPAIGN_SATURN_FRENCH "campaign/saturn_fr.txt"
+#define RTYPE_CAMPAIGN_SATURN_ENGLISH "campaign/saturn_en.txt"
+#define RTYPE_CAMPAIGN_SHOGUN_FRENCH "campaign/shogun_fr.txt"
+#define RTYPE_CAMPAIGN_SHOGUN_ENGLISH "campaign/shogun_en.txt"
+// The epilogue of the campaign, laid out as the lore, which scrolls away once the shogun has fallen
+#define RTYPE_CAMPAIGN_ENDING_FRENCH "campaign/ending_fr.txt"
+#define RTYPE_CAMPAIGN_ENDING_ENGLISH "campaign/ending_en.txt"
 
 // Models
 #define RTYPE_MODEL_PLANET "models/SC_PlanetSystem_export/planet.glb"
@@ -77,6 +88,16 @@
 /// The voice played when the allies are called to the rescue against the final boss, offline: its length is
 /// game::Rules::rescueVoiceTicks. Not in the assets yet: the rescue goes on silently without it.
 #define RTYPE_SOUND_RESCUE_VOICE "sounds/rescue_voice.wav"
+/// The voice of the start of the first mission of the campaign, once in space: its first wave comes as it
+/// ends (CampaignMission::firstWaveDelay).
+#define RTYPE_SOUND_CAMPAIGN_START "cooper_jude_start.mp3"
+/// The voices of the duel against the shogun, the last mission of the campaign: Brown to Cooper once in
+/// space, Cooper as his last ship is lost, then Jude coming back to the rescue with the allies, and Cooper
+/// once the shogun has fallen. Their lengths are in CampaignMission.cpp.
+#define RTYPE_SOUND_CAMPAIGN_SHOGUN_START "brown_to_cooper.mp3"
+#define RTYPE_SOUND_CAMPAIGN_SHOGUN_FAIL "fail_cooper.mp3"
+#define RTYPE_SOUND_CAMPAIGN_SHOGUN_RESCUE "jude_rescue_back.mp3"
+#define RTYPE_SOUND_CAMPAIGN_SHOGUN_WIN "cooper_win.mp3"
 /// The music of the lore scene, played once while the story scrolls: about as long as the crawl.
 #define RTYPE_MUSIC_LORE "sounds/lore.mp3"
 /// The results of a game online (ResultsScreen): the game over as the screen opens, a figure that lands, the
@@ -88,6 +109,16 @@
 #define RTYPE_SOUND_RESULTS_LEVEL_UP "sounds/fx/results/level_up.wav"
 #define RTYPE_SOUND_BUTTON_HOVER "sounds/fx/button/hover.wav"
 #define RTYPE_SOUND_BUTTON_CLICK "sounds/fx/button/click.wav"
+/// The transmission of the briefing of the campaign (TransmissionSystem): the static as the radio opens, the
+/// beeps of the incoming signal, the channel that connects, a key of the teletype, the end of a line, and the
+/// over and out. The hum of the open channel loops under it.
+#define RTYPE_SOUND_TRANSMISSION_STATIC "sounds/fx/transmission/static.wav"
+#define RTYPE_SOUND_TRANSMISSION_BEEP "sounds/fx/transmission/beep.wav"
+#define RTYPE_SOUND_TRANSMISSION_CONNECT "sounds/fx/transmission/connect.wav"
+#define RTYPE_SOUND_TRANSMISSION_TYPE "sounds/fx/transmission/type.wav"
+#define RTYPE_SOUND_TRANSMISSION_LINE "sounds/fx/transmission/line.wav"
+#define RTYPE_SOUND_TRANSMISSION_END "sounds/fx/transmission/end.wav"
+#define RTYPE_MUSIC_TRANSMISSION_HUM "sounds/fx/transmission/hum.wav"
 /// The alarm of the cockpit in a VR headset (CockpitLife): when the ship of the player is hit, and again
 /// while it is low on life. Two tones, made for the game.
 #define RTYPE_SOUND_COCKPIT_ALARM "sounds/fx/cockpit/alarm.wav"

@@ -52,6 +52,12 @@ struct Rules {
     /// Ticks of the voice the client plays when the rescue starts: the allies come when it ends. Keep it the
     /// length of the file of RTYPE_SOUND_RESCUE_VOICE in the client.
     std::uint32_t rescueVoiceTicks = 360;
+    /// Ticks into the voice at which the ship of the player comes back, at the tip of the formation, before
+    /// the allies: with them if 0.
+    std::uint32_t rescueShipTicks = 0;
+    /// Ticks into the voice at which the first ally, the escort, flies in next to the ship of the player,
+    /// before the others: with them if 0.
+    std::uint32_t rescueEscortTicks = 0;
     /// Ticks the allies and the new ship of the player take to fly in.
     std::uint32_t rescueArrivalTicks = 150;
     /// Ticks the allies shoot at the shogun before it strikes back.

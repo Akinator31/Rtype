@@ -434,8 +434,9 @@ void run(const std::vector<std::string_view> &arguments)
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord,
                                        discordConnection, discordFriends, ships,
                                        rtype::render::userDataDirectory() / "pictures", config, voice);
+    rtype::client::Campaign campaign(engine, games, config);
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets,
-                                    vrTargets, ships);
+                                    vrTargets, ships, campaign);
     // A friend invited the player, or accepted it, in Discord: its game, from the start, since Discord may
     // launch the game to join it
     discordPresence.onJoin([&online](const std::string &secret) { online.joinFromDiscord(secret); });

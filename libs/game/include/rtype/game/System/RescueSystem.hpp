@@ -17,7 +17,9 @@ namespace rtype::game
 /// wave; from then on, the RescueSystem flies the boss, the allies and the ship of the player, stage by stage
 /// (RescueStage):
 ///
-/// 1. **Voice**, Rules::rescueVoiceTicks: the client plays the voice; the boss guards on its spot.
+/// 1. **Voice**, Rules::rescueVoiceTicks: the client plays the voice; the boss guards on its spot. The ship
+///    of the player may come back during it (Rules::rescueShipTicks), then the first ally flies in next to it
+///    (Rules::rescueEscortTicks).
 /// 2. **Arrival**, Rules::rescueArrivalTicks: five allies fly in from the left with a new ship for the
 ///    player, who gets a life back, into an arrowhead formation, the player at its tip.
 /// 3. **Assault**, Rules::rescueAssaultTicks: the allies shoot at the boss, which guards and cannot be hurt;
@@ -66,6 +68,14 @@ private:
     /// `withPlayer`.
     void fireAt(ecs::entity_t boss, std::uint32_t interval, bool withPlayer);
 
+    /// Gives the player a life back and, after the systems, its ship if it has none: at the tip of the
+    /// formation if `atTip`, else where ships start.
+    void giveShipBack(bool atTip);
+    /// The first ally, the escort, flies in next to the ship of the player, after the systems, if not there.
+    void callEscort();
+    /// During the voice: the ship of the player holds the tip of the formation, the escort its spot next to it.
+    void holdEscort(float elapsed);
+    /// The allies not there yet fly in, with a new ship for the player if it has none.
     void callAllies();
     void runDash(ecs::entity_t boss, float elapsed);
     void runPrompt();

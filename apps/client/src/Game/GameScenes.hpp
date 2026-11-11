@@ -19,13 +19,39 @@
 #include "rtype/localization/Localization.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rtype::client
 {
+
+/// A voice played during a game: a path of the assets, and its length in ticks.
+struct GameVoice {
+    std::string path;
+    std::uint32_t ticks = 0;
+};
+
+/// The voices of a game offline, those of a mission of the campaign.
+struct GameVoices {
+    /// Played as the game opens. While it plays, the camera shows the ship of the local player from another
+    /// angle, as a cutscene (RescueCamera::cutsceneEnd), and its controls do nothing. None if its path is
+    /// empty.
+    GameVoice start;
+    /// Played one after the other as the rescue against the final boss starts (game::RescueStage::Voice),
+    /// each one as the previous one ends: their lengths add up to game::Rules::rescueVoiceTicks. One without
+    /// a path is a silence. Empty: RTYPE_SOUND_RESCUE_VOICE.
+    std::vector<GameVoice> rescue;
+    /// The ticks into the rescue at which its cutscene starts, until the end of its voices: the ship of the
+    /// local player, back (game::Rules::rescueShipTicks), shown as at the start, its controls doing nothing.
+    /// None by default.
+    std::optional<std::uint32_t> rescueCutscene;
+    /// Played as the shogun falls. None if empty.
+    std::string victory;
+};
 
 /// Names of the scenes of a game.
 inline constexpr const char *GameScene = "game";
@@ -53,6 +79,8 @@ class RemoteSession;
 ///   camera closes up on it and follows it (RescueCamera), each ship its blade goes through shows the cut and
 ///   shakes the camera; then a blinking prompt asks for Space, the combined attack, during which the camera
 ///   pushes in slowly on the shogun, rumbling, until its fall shakes it hard, then pulls back.
+/// - The voices of the game given to play() (GameVoices): at its start, during the rescue, at the fall of the
+///   shogun.
 /// - Escape (or Start on a gamepad) opens the pause menu (Figma, Série 16): Resume, or Leave the game, and
 ///   online with a voice, the voice of each other player: its volume for this client (Left, Right) and
 ///   muted (Confirm), with the icon of its voice. Online and connected to Discord, the Discord friends: those
@@ -95,6 +123,11 @@ class GameScenes
     /// The session of the next game scene opened, and what to do when it ends.
     std::unique_ptr<GameSession> _next;
     std::function<void()> _nextEnd;
+    /// The voices of the next game scene opened, and those of the game played.
+    GameVoices _nextVoices;
+    GameVoices _voices;
+    /// How the game played ended, once its session told it.
+    std::optional<game::GameOutcome> _outcome;
     /// What to do when the game played ends.
     std::function<void()> _onEnd;
     /// The icons of the voice, loaded with the game scene.
@@ -155,8 +188,11 @@ class GameScenes
     void showStrike();
     /// Shakes the camera of the game scene open by a blow of a strength from 0 to 1 (shakeCamera()).
     void shakeGameCamera(float strength);
-    /// Plays the voice of the rescue, if its file is in the assets.
-    void playRescueVoice();
+    /// Plays a voice of the assets once, if its file is there.
+    void playVoice(const std::string &path);
+    /// Plays the voices of the rescue one after the other (VoiceSystem), from now, and its cutscene if it has
+    /// one.
+    void playRescueVoices();
     /// The prompt of the combined attack, blinking under the middle of the screen until the player presses
     /// Fire.
     void openPrompt();
@@ -180,7 +216,11 @@ public:
     /// Starts a game with this session: the game scene replaces every scene at the next update of the engine.
     /// @param onEnd Called once when the player leaves the game or its session is over. Empty: back to the
     /// main menu.
-    void play(std::unique_ptr<GameSession> session, std::function<void()> onEnd = {});
+    /// @param voices The voices of the game: none by default, but that of the rescue.
+    void play(std::unique_ptr<GameSession> session, std::function<void()> onEnd = {}, GameVoices voices = {});
+
+    /// How the game played ended, once its session told it: none before, or if the player left it.
+    [[nodiscard]] const std::optional<game::GameOutcome> &outcome() const { return _outcome; }
 
     /// Online, what the local player did in the game played, if it went to its end; none before, offline,
     /// or once the player left it.

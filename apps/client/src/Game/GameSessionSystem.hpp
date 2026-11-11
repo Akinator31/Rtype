@@ -79,7 +79,7 @@ struct Kill {
 /// Plays the game session of the game scene (ADR 0015), each frame:
 ///
 /// 1. the controls of the engine become the PlayerInput of the local player, an empty one when the scene does
-///    not receive the input (a menu is over it);
+///    not receive the input (a menu is over it) or while the input is locked (lockInputUntil());
 /// 2. the session updates, paused while a menu is over the scene;
 /// 3. each snapshot becomes entities of the scene: one per entity of the game, created when it appears,
 ///    moved, and destroyed when it is no longer in the world. The kinds given a ShipLook are 3D models, which
@@ -154,6 +154,8 @@ class GameSessionSystem : public ecs::System
     /// Shots of the local player that appeared since the session started.
     std::uint32_t _localShots = 0;
     std::uint32_t _tick = 0;
+    /// The local player has no control of its ship before this tick: during a cutscene.
+    std::uint32_t _inputLockedUntil = 0;
     /// The last wave started in the session, 0 before the first.
     std::uint16_t _wave = 0;
     /// When the session started, for the time Discord counts since.
@@ -216,6 +218,9 @@ public:
                std::function<void()> onOver = {});
     /// Stops the session. Its entities stay until their scene closes.
     void stop();
+    /// The controls of the local player do nothing until this tick of the session played: its ship is left
+    /// alone during a cutscene. Back to 0 when the session stops.
+    void lockInputUntil(std::uint32_t tick) { _inputLockedUntil = tick; }
     /// Draws the ships of this kind with a 3D model from now on, instead of a box.
     void setShipLook(game::EntityKind kind, const ShipLook &look);
     /// Draws the ships of this kind with these 3D models from now on, each ship with one of them, picked by

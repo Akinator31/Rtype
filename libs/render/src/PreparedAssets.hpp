@@ -47,8 +47,8 @@ public:
     [[nodiscard]] Image image() const { return _image; }
 };
 
-/// The characters a font is loaded with: ASCII, Latin-1 (without the soft hyphen), œ, Œ, € and ←, those
-/// of them the font has (see filterCharactersInFont()).
+/// The characters a font is loaded with: ASCII, Latin-1 (without the soft hyphen), œ, Œ, the dashes – and —,
+/// € and ←, those of them the font has (see filterCharactersInFont()).
 /// @param file The content of the font file.
 inline std::vector<int> fontCharacters(const std::vector<unsigned char> &file)
 {
@@ -62,7 +62,7 @@ inline std::vector<int> fontCharacters(const std::vector<unsigned char> &file)
             characters.push_back(character);
         }
     }
-    characters.insert(characters.end(), {0x152, 0x153, 0x20AC, 0x2190});
+    characters.insert(characters.end(), {0x152, 0x153, 0x2013, 0x2014, 0x20AC, 0x2190});
     return filterCharactersInFont(file, characters);
 }
 

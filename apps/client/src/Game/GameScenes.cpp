@@ -7,6 +7,7 @@
 #include "Game/LocalSession.hpp"
 #include "Game/RemoteSession.hpp"
 #include "Game/RescueCameraSystem.hpp"
+#include "Game/VoiceSystem.hpp"
 #include "MainMenu/Layout.hpp"
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/SettingsPage.hpp"
@@ -134,8 +135,8 @@ constexpr int PromptOrder = 20;
 /// How hard the camera shakes when the blade of the shogun goes through a ship, and when the shogun falls.
 constexpr float StrikeShake = 0.75f;
 constexpr float FallShake = 1.0f;
-/// How loud the voice of the rescue is.
-constexpr float RescueVoiceVolume = 1.0f;
+/// How loud the voices are: that of the rescue, and that of the start of a game.
+constexpr float VoiceVolume = 1.0f;
 /// Time the banner of the combined attack stays fully shown, in seconds.
 constexpr float CombinedBannerDuration = 1.2f;
 
@@ -642,6 +643,19 @@ bool isAssetPath(const std::string &path)
            std::ranges::none_of(file, [](const std::filesystem::path &part) { return part == ".."; });
 }
 
+/// Loads a voice of the assets, if its path is not empty and its file is there.
+void preloadVoice(audio::AudioPlayer &audio, const std::string &path)
+{
+    if (path.empty()) {
+        return;
+    }
+    try {
+        static_cast<void>(audio.loadSound(path));
+    } catch (const std::runtime_error &error) {
+        log::Logger("game").warning("Voice {} not loaded: {}", path, error.what());
+    }
+}
+
 } // namespace
 
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
@@ -665,6 +679,7 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
     });
     sessions.setRescueHandler([this](game::RescueStage stage) { showRescue(stage); });
     sessions.setOutcomeHandler([this](game::GameOutcome outcome) {
+        _outcome = outcome;
         _recorder.recordOutcome(outcome);
         recordResults();
     });
@@ -866,10 +881,12 @@ void GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left
     settings_page::bindText(ecs, note, translations, "game.voices.note");
 }
 
-void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd)
+void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd, GameVoices voices)
 {
     _next = std::move(session);
     _nextEnd = std::move(onEnd);
+    _nextVoices = std::move(voices);
+    _outcome.reset();
     _results.reset();
     _xpAfter.reset();
     _engine.switchScene(GameScene);
@@ -944,6 +961,9 @@ void GameScenes::showKill(const Kill &kill)
     const std::uint8_t local = session->localSlot();
     if (kill.kind == game::EntityKind::BydoBoss && _sessions.rescue() != game::RescueStage::None) {
         shakeGameCamera(FallShake);
+    }
+    if (kill.kind == game::EntityKind::BydoBoss && !_voices.victory.empty()) {
+        playVoice(_voices.victory);
     }
     if (kill.kind == game::EntityKind::PlayerShip) {
         _engine.showToast(playerName(kill.owner), _translations.text("event.player_down"), "",
@@ -1059,7 +1079,7 @@ void GameScenes::showRescue(game::RescueStage stage)
     }
     switch (stage) {
     case game::RescueStage::Voice:
-        playRescueVoice();
+        playRescueVoices();
         break;
     case game::RescueStage::Arrival:
         _engine.showBanner(_translations.text("rescue.title"), _translations.text("rescue.detail"),
@@ -1090,12 +1110,49 @@ void GameScenes::shakeGameCamera(float strength)
     }
 }
 
-void GameScenes::playRescueVoice()
+void GameScenes::playVoice(const std::string &path)
 {
     try {
-        _audio.play(_audio.loadSound(RTYPE_SOUND_RESCUE_VOICE), {.volume = RescueVoiceVolume});
+        _audio.play(_audio.loadSound(path), {.volume = VoiceVolume});
     } catch (const std::runtime_error &error) {
-        log::Logger("game").warning("Voice of the rescue not played: {}", error.what());
+        log::Logger("game").warning("Voice {} not played: {}", path, error.what());
+    }
+}
+
+void GameScenes::playRescueVoices()
+{
+    if (_voices.rescue.empty()) {
+        playVoice(RTYPE_SOUND_RESCUE_VOICE);
+        return;
+    }
+    if (!_scene) {
+        return;
+    }
+    ecs::Ecs &ecs = _engine.getEcs();
+    const std::uint32_t start = _sessions.tick();
+    std::uint32_t tick = start;
+    for (const GameVoice &voice : _voices.rescue) {
+        if (voice.path.empty()) {
+            tick += voice.ticks;
+            continue;
+        }
+        try {
+            const audio::SoundId sound = _audio.loadSound(voice.path);
+            const ecs::entity_t entity = ecs.createEntity();
+            ecs.addComponent<engine::SceneMember>(entity, *_scene);
+            ecs.addComponent<ScheduledVoice>(entity, sound, tick, VoiceVolume);
+        } catch (const std::runtime_error &error) {
+            log::Logger("game").warning("Voice {} not played: {}", voice.path, error.what());
+        }
+        tick += voice.ticks;
+    }
+    if (_voices.rescueCutscene && _camera && ecs.isAlive(*_camera)) {
+        RescueCamera &camera = ecs.getComponent<RescueCamera>(_camera->id);
+        camera.cutsceneStart = start + *_voices.rescueCutscene;
+        camera.cutsceneEnd = tick;
+        camera.cutsceneFocus.reset();
+        // The ship back is left alone during the cutscene
+        _sessions.lockInputUntil(tick);
     }
 }
 
@@ -1159,7 +1216,10 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
     ecs.addComponent<engine::SceneMember>(sky, scene);
     const render::Rectangle area = metrics.visibleArea();
     const render::Vector2 centre{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)};
+    _voices = std::exchange(_nextVoices, {});
+    const std::uint32_t cutsceneEnd = _voices.start.path.empty() ? 0 : _voices.start.ticks;
     RescueCamera &rescue = ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre);
+    rescue.cutsceneEnd = cutsceneEnd;
     render::Camera view = computeGameView(area);
     if (arrival) {
         const ecs::Position spawn = game::getShipSpawn(_next ? _next->localSlot() : 0);
@@ -1205,7 +1265,17 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
 
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });
+    // The ship is left alone during the cutscene of the voice
+    _sessions.lockInputUntil(cutsceneEnd);
     _recorder.recordStart();
+    if (!_voices.start.path.empty()) {
+        playVoice(_voices.start.path);
+    }
+    // Loaded now rather than when they play: the long ones would stop the game a moment
+    for (const GameVoice &voice : _voices.rescue) {
+        preloadVoice(_audio, voice.path);
+    }
+    preloadVoice(_audio, _voices.victory);
 }
 
 } // namespace rtype::client

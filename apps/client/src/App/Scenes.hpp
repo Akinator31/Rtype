@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Campaign/CampaignMission.hpp"
 #include "Console/Console.hpp"
 #include "Game/GameScenes.hpp"
 #include "Settings/SettingsTargets.hpp"
@@ -27,9 +28,10 @@ void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resour
 /// Everything given must outlive the engine.
 /// @param targets What the Settings page changes; its translations are those of every menu.
 /// @param vr What the VR page changes.
+/// @param campaign What the briefings of the campaign brief, then play.
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
                       const engine::InterfaceStyle &style, const engine::RendererMetrics &metrics,
                       GameScenes &games, const game::GameConfig &config, const SettingsTargets &targets,
-                      const VrTargets &vr, ShipSelection &ships);
+                      const VrTargets &vr, ShipSelection &ships, Campaign &campaign);
 
 } // namespace rtype::client

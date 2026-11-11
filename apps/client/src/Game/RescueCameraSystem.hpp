@@ -8,6 +8,7 @@
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <cstdint>
 #include <optional>
 
 namespace rtype::client
@@ -24,6 +25,9 @@ namespace rtype::client
 ///   tilted, rumbling under the fire; the fall of the shogun shakes it hard.
 /// - Once the shogun has fallen (Finished), it pulls back slowly from its explosion to the whole game.
 ///
+/// During a cutscene (cutsceneStart to cutsceneEnd: the voice of the start of a game, Jude coming back during
+/// the rescue), it shows the ship of the local player instead: in perspective, from behind it and above,
+/// close, it turns slowly around it towards its side, then flies back to the view of the game as it ends.
 /// A game opened from the take-off of the hangar starts on the shot the hangar ends with (ArrivalShot in
 /// GameView.hpp): close up on the ship of the local player, which it follows while it pulls back to the whole
 /// game; the ship takes the colour of its player meanwhile, from the white of the hangar.
@@ -42,6 +46,12 @@ struct RescueCamera {
     float shake = 0.0f;
     /// Seconds it has been moved: the time of its shake.
     float time = 0.0f;
+    /// The ticks of the session at which the cutscene ends, none if 0, and at which it starts.
+    std::uint32_t cutsceneEnd = 0;
+    std::uint32_t cutsceneStart = 0;
+    /// The point the cutscene frames: the ship of the local player, followed a little late, from the first
+    /// time it is drawn. Reset for a new cutscene.
+    std::optional<render::Vector2> cutsceneFocus;
     /// Seconds since the game opened on the shot of the hangar, while it pulls back from it; none after.
     std::optional<float> arrival;
     /// The colour of the ship of the local player, read when it first shows during the arrival.
