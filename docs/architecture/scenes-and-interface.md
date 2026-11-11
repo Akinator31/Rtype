@@ -72,12 +72,12 @@ renderer.endFrame();
 | 2 | `ConsoleSystem`, `InterfaceSystem` | Console commands, menu focus, and navigation; they read the input before the game. |
 | 3 | `GameSessionSystem`, `SoundSystem` | The game: the input of the player to its session, the snapshots to the entities of the game scene ([A game in the client](client-game.md)). Then the sounds: the `SoundSystem` plays each `SoundEffect` given to an entity and removes it, in the frame the game gave it ([Audio](audio.md#in-the-engine)). |
 | 4 | `WidgetTextSystem`, `BoundTextSystem`, `TweenSystem`, `SpinSystem`, `ScrollSystem` | Texts of the widgets and bound texts, tweens, spinning models, scrolling skies. |
-| 5 | `FlightSystem`, `IntroSystem` | Client systems of the main menu: the ships flying around the station, the intro. |
+| 5 | `FlightSystem`, `IntroSystem`, `MenuTransitionSystem` | Client systems of the main menu: the ships flying around the station, the intro, then the [transitions](#transitions-of-the-main-menu) to the submenus. |
 | 6 | `ModelAnimationSystem` | Animations of skinned models: the `SceneRenderer` poses each model before drawing it, fading from the previous animation after `switchModelAnimation()`, unless the model already has this pose (entities sharing a model and an animation at the same time are posed once). `ModelAnimation::speed` 0 holds the pose; `blendedAnimation` and `blendAmount` mix a second animation in, in step; `addModelAnimation()` plays a third one once over them (`addedAnimation`, removed after `addedDuration`): what it changes from its first frame adds to their pose, bone by bone (a recoil over a flight). |
 | 7 | `HitboxSystem`, `ColumnLayoutSystem`, `AnchorSystem` | Sizes, then layout: columns, then anchors, which need the final sizes. |
 | 8 | `ToastSystem` | Places, fades and destroys the toasts. |
 | 9 | `TransformSystem` | Positions of the children from their parents, last. |
-| 10 | `LoadingSystem` | Client, at startup: the `loading` scene fades the logo in over black with a gauge under it while `AssetPreload` loads the pictures and models in the background, then fades the gauge out. `main.cpp` runs frames until it is finished, builds the other scenes from the cache, then switches to the main menu, which opens on black around the same logo and fades in. |
+| 10 | `LoadingSystem` | Client, at startup: the `loading` scene fades the logo in over black with a gauge under it while `AssetPreload` loads the pictures and models in the background, then fades the gauge out. `main.cpp` runs frames until it is finished, builds the other scenes from the cache, then switches to the main menu, which opens on black around the same logo and fades in. Only the first time: opened again (back from a game or from online play), the main menu skips its intro and shows the camera, the logo and the buttons at their place. |
 
 The `SceneRenderer` is not a system: drawing happens after the update, between `beginFrame()` and `endFrame()`,
 and may happen several times per frame (once per eye in VR).
@@ -114,6 +114,8 @@ Scenes form a stack:
 | `hidesInterfaceBelow` | With `overlay`, only the world of the scenes below stays visible, not their interface | Submenu over the 3D background of the main menu |
 | `updatesWhenCovered` | The scene keeps updating under others | Network game under the pause menu |
 | `onBack` | Called on Back instead of closing the scene | Game: opens the pause menu |
+| `assets` | Loaded before the scene opens, under the loading scene (see [threads](threads.md)) | Models of the main menu |
+| `keepsAssets` | The assets stay loaded after the scene closes: it opens again at once | Main menu, game, results |
 
 Systems ask `Scenes` what to do with an entity or a scene: `receivesInput()` (only the scene at the top),
 `updates()`, `isVisible()`, `isInterfaceVisible()`.
@@ -167,7 +169,26 @@ of the screen, over the interface (`drawFpsCounter()`, `apps/client/src/Commands
 then orange and red as the frame rate drops. It checks the limit of frames per second and the vertical
 synchronisation chosen on the Settings page ([Settings](settings.md#the-settings-page)).
 
-Both views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
+### Frame diagnostics
+
+Type `profile [on|off]` in the console, or start the client with `RTYPE_PROFILE_FRAMES=1`, to log what the
+frames take, under the `profile` logger (`apps/client/src/Diagnostics/FrameProfile.hpp`). Each frame is cut in
+three parts: the update (input, network, engine, loads, audio), the drawing calls on the processor, and the
+showing of the frame (waiting for the graphics card and the vertical synchronisation). The renderer adds what
+posing the animated models cost (`Renderer::takePoseStats()`): the poses, the bones moved and the time spent
+computing their matrices, in the frame and again in its glow ([Animated models](rendering.md#animated-models)).
+
+```text
+INFO  profile  60 frames, 0 slow | frame 16.7 ms (longest 16.7) | update 0.1 (0.1) | draw 7.3 (9.9) | present 9.3 (14.1) | poses 3.0 a frame (3), glow 0.0 (0), 20 bones (20), 0.02 ms (0.02) | animated models 3.0 (3)
+INFO  profile  slow frame: 74.7 ms (usual 16.7 ms) | update 0.1 ms, draw 7.4 ms, present 67.3 ms | poses 3 (0 for the glow), 20 bones, 0.0 ms, 3 animated models
+```
+
+Once a second, a line gives the average of each part and, in brackets, the longest. A frame twice as long as
+the average of the second before, and of 10 ms at least, gets a line of its own. Where its time went tells
+what to look at: the update, the drawing calls, the poses, or the showing (the graphics card, or the
+compositor of the desktop: a screenshot taken meanwhile makes such a frame).
+
+The debug views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
 and hide something read their `on` / `off` argument with `readSwitch()` (`Commands/Switch.hpp`).
 
 | Component | Draws |
@@ -195,6 +216,12 @@ drawn by `order`, the lowest at the back.
 Layers going faster the nearer they are make a parallax: the game scene scrolls four layers and three objects
 ([A game in the client](client-game.md#the-sky)).
 
+In a VR headset, the sky is also drawn around the cockpit: `SceneRenderer::sky()` gives the `Backdrop` at the
+back of it, and `SceneRenderer::light()` the light of the scene, which lights the cockpit
+([VR](vr.md#the-cockpit)). `SceneRenderer::camera()` gives the camera of the scenes shown: only the world of an
+orthographic camera, the plane of the game, is laid on the board in relief
+([VR](vr.md#the-board-in-relief)).
+
 ## Animations
 
 A `Tween` animates the `Scale` or the `Opacity` of an entity, then is removed, unless it goes back and forth:
@@ -211,6 +238,56 @@ ecs.addComponent<Tween>(enemy, Tween{.target = TweenTarget::Opacity, .from = 1.0
 | `EaseOutBack` | Goes slightly past the end, then comes back: a bounce |
 
 The focused widget of a menu bounces to `InterfaceStyle::focusScale` with `EaseOutBack`.
+
+### Transitions of the main menu
+
+The main menu is a 3D world seen through a camera, which stays visible behind its submenus. The camera moves
+between views instead of cutting from one to the other (`apps/client/src/MainMenu/`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> Asteroids: first opening
+    [*] --> Menu: opened again
+    Asteroids --> Menu: the player presses a key<br/>(IntroSystem, 4 s)
+    Menu --> Play: Play opens
+    Menu --> Online: Online opens
+    Menu --> Settings: Settings opens
+    Play --> Menu: back
+    Online --> Menu: back
+    Settings --> Menu: back
+```
+
+*The camera waits in the asteroids, flies to the view of the menu, then to the view of each submenu while it
+is open, and back. Opened again, the menu starts with its intro over (`Intro::started`, `IntroLength`).*
+
+- **The intro** (`Intro`, `IntroSystem`): the camera waits in the asteroids until the player presses, then
+  flies to the view of the menu while the logo rises and the buttons slide in.
+- **The submenus** (`MenuCameraFlight`, `MenuTransitionSystem`): the entity of the camera lists a view for
+  each submenu, by the name of its scene (`createSubmenuViews()` in `MainMenu.cpp`). While that scene is
+  open, the camera flies there in `MenuFlightDuration` (2.2 s), and back to the view of the menu when it
+  closes. A scene opened over a submenu (the controls over the settings) keeps its view. A flight starts
+  from where the camera is, so that the player can go back before it has arrived, and the view of the menu is
+  where the intro puts the camera (`computeIntroView()`), even while it still flies out of the asteroids.
+- **The interface** (`MenuFade`): when another scene comes to the front, a submenu that opens or the menu
+  shown again when it closes, the elements of its `Interface` layer fade in in `MenuFadeDuration` (0.35 s),
+  up to the opacity they had. Nothing fades before the intro has started: the menu brings its elements in
+  by itself.
+
+The camera really travels through the world, as in the intro, rather than turning on the spot:
+
+| Submenu | Where the camera flies | What is seen |
+|---|---|---|
+| Play | Down under the scene, 20 units under the plane of the rings | The planet and the underside of its rings, from below |
+| Online | Up over the rings, 41 units above their plane | The planet and the whole of its rings, from above |
+| Settings | Across the world to the station, 66 units from it (139 from the menu) | The station on the right of the screen, the settings on the left over the dark of space |
+
+None of these flights crosses the planet nor the rocks of its rings: the camera goes down under them from
+outside, 37 units from the axis of the planet, where the rocks end at 32.5. A view is given with the functions of
+`CameraFlight.hpp`: `approachView()` stops on the line from the camera of the menu to a point of the world, at
+a distance from it; `lookAtView()` looks at a point from any place; both then turn the view, in degrees, to
+keep the point off the middle of the screen. To give a view to another submenu, add its scene to
+`createSubmenuViews()`. The `MenuTransitionSystem` is registered after the `IntroSystem` and the `TweenSystem`:
+it has the last word on the camera and on the opacities while a transition plays.
 
 ## Menus
 
@@ -286,6 +363,23 @@ engine.createScene("game", {.updatesWhenCovered = true}, [&](Engine &engine, Sce
 
 A `BoundText` can also be added to any entity with a `Text`, outside of the builders.
 
+### Surfaces, in a VR headset
+
+In a VR headset the interface is not drawn on one screen but on several surfaces of the cockpit
+([VR](vr.md#the-interface-in-the-cockpit)), each into an image of its own: `engine::Surface` names them
+(`Panel`, `Board`, `HudShip`, `HudNav`, `HudAux`, `Holo`). An entity of the interface is on the panel, unless
+it has an `OnSurface`. A toast without one goes where `SceneRenderer::setToastSurface()` says: the panel while
+it is open, the board otherwise.
+
+| Piece | Role |
+| ----- | ---- |
+| `OnSurface` | The surface of an entity of the interface. On the screen, it changes nothing: everything is drawn as before. |
+| `Metrics::surfacesApart()`, `surfaceArea(surface)` | Whether the surfaces are drawn apart, and the area of each, in game units. `RendererMetrics::separateSurfaces()` sets them, or none to come back to the screen; apart, `visibleArea()` is the area of the panel. |
+| `AnchorSystem` | Places an entity with an `OnSurface` in the area of its surface, from its own origin: a screen of 317 × 360 game units. |
+| `SceneRenderer::draw(renderer, surface)` | Draws the entities of the interface on one surface, into the image of the frame started. |
+| `SceneRenderer::hasContent(surface)` | Whether something is shown on a surface, toasts and fully transparent entities apart: the panel opens for a menu. |
+| `Scenes::bottom()` | The scene at the bottom of those open: it changes when the scenes are switched, which the headset fades. |
+
 ### Toasts
 
 A toast is a short message shown in a corner of the screen for a few seconds, over every scene and across
@@ -346,7 +440,13 @@ lights up as a `SettingRow` while it is under the pointer or has the focus; the 
 pointed at, and more while it is dragged: the `InterfaceSystem` writes the `SliderTrack` of the slider, and
 moves the value to the pointer while the mouse button is held. Left, Right and the wheel step the value as for
 every `Slider`. The row is `SliderStyle::width` wide, or `SliderTrack::width` (the last parameter of
-`slider()`); `getRailLeft()` and `getRailWidth()` give its rail.
+`slider()`); `getRailLeft()` and `getRailWidth()` give its rail. Four fields of the `Slider`, set after
+`slider()`, are optional: `label`, a text written instead of the percentage when it gives one; `onConfirm`, what
+Confirm does on the row; `icon`, a picture tinted after the caption (`SliderStyle::iconSize`, `iconGap`); and
+`locked`, read every frame: while it says so, the row is dimmed (`SliderStyle::lockedOpacity`), its value red
+(`lockedValue`), and the focus, the pointer and a drag pass it over. The voice of a player in the pause menu
+uses all four: its volume, *MUTED* once Confirm muted it, the icon of its voice, and locked while an
+administrator muted it ([Voice](voice.md#in-the-hud-and-the-pause-menu)).
 
 `InterfaceBuilder::toggle()` makes an on / off setting drawn as "OFF - dot - ON" (`InterfaceStyle::toggle`,
 `SwitchStyle`): the dot slides to the side that is on, and the label of that side lights up. The switch lights
@@ -377,7 +477,7 @@ The client shows all of them, with the toasts, in the *Interface* menu of the se
 
 ### Pages of settings
 
-The Settings and Controls pages of the client are made of rows that share one look (`InterfaceStyle::setting`,
+The Settings, Controls and Voice pages of the client are made of rows that share one look (`InterfaceStyle::setting`,
 `SettingStyle`), drawn by `SceneRenderer::drawRowFrame()`: a fine rule under each row, and while the row is lit
 (its `Panel`, as a button), a veil from its left, a mark on its left edge and a line of light that traces
 itself along its bottom. The caption is on the left, in the font of the text (Exo 2); the value is on the
@@ -396,7 +496,9 @@ right, in the font of the values (Audiowide), and every value ends on the same c
 The client lays them out in `MainMenu/SettingsPage.hpp`: a veil (a `Box` that fades to the right) darkens the
 side of the screen where the page is, so that its text reads over the planet of the main menu; the groups are
 in columns, and the hint of the focused row and the keys of the page are notes. The design is the series 15 of
-the Figma of the interface.
+the Figma of the interface. The rows of keys and the scene that asks for a key over the page are shared by the
+Controls and Voice pages (`Controls/KeyChoice.hpp`: `addActionRow()`, `createKeyChoiceScene()`), each with its
+table and the place of its banner.
 
 ### Forms
 
@@ -453,6 +555,8 @@ avatars.
 - Holding a direction repeats it; sticks have a larger dead zone (0.5) than in game.
 - The mouse focuses a widget only when it moves, so that a still pointer does not fight the keyboard.
 - A click activates the widget under the pointer, not the focused one.
+- In a VR headset, the pointer is a controller pointing at the panel, and its trigger the button
+  ([VR](vr.md#the-controllers)); `InterfaceSystem::hovered()` gives the widget under it, which lights the ray.
 - Characters typed while no text field has the focus are dropped.
 - The buttons sound when they light up (under the pointer, or given the focus by the keyboard or a
   gamepad) and when they are pressed, if the style has the sounds (`ButtonStyle::hoverSound`, `clickSound`,

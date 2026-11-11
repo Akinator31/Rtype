@@ -34,6 +34,16 @@ export async function kick(player: PlayerRef, reason: string): Promise<void> {
   notify('bonus', strings.notify.kicked, withReason(`${player.name} #${player.id}`, reason));
 }
 
+/** Mutes a pilot for the rest of its game, or lets it talk again. */
+export async function muteVoice(player: PlayerRef, muted: boolean, reason: string): Promise<void> {
+  await (muted ? api.muteVoice : api.unmuteVoice)(player.id, reason.trim());
+  notify(
+    'bonus',
+    muted ? strings.notify.voiceMuted : strings.notify.voiceUnmuted,
+    withReason(`${player.name} #${player.id}`, reason),
+  );
+}
+
 export async function end(game: GameRef, reason: string): Promise<void> {
   await api.endGame(game.id, reason.trim());
   notify('bonus', strings.notify.ended, withReason(`${game.name} #${game.id}`, reason));

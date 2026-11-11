@@ -91,7 +91,8 @@ TEST_CASE("An input gives the direction of its buttons, opposite ones cancelling
     input.set(PlayerInput::Up, true);
     input.set(PlayerInput::Up, false);
     CHECK(input.buttons == PlayerInput::Fire);
-    CHECK(PlayerInput::fromByte(0xFF).buttons == 0x7F);
+    // Every bit is a control since version 7: none is dropped
+    CHECK(PlayerInput::fromByte(0xFF).buttons == 0xFF);
 }
 
 TEST_CASE("An input aims up or down, both cancelling", "[game]")
@@ -975,6 +976,23 @@ TEST_CASE("A ship registry refuses a ship without id or model, and accepts one w
     CHECK(registry.getDefinition("silent").sounds.move.empty());
 }
 
+TEST_CASE("A ship registry numbers its ships in the order of their ids, whatever the order they came in",
+          "[game]")
+{
+    ShipRegistry registry;
+    registry.addDefinition({"wasp", "models/wasp.glb", {}});
+    registry.addDefinition({"drone", "models/drone.glb", {}});
+    registry.addDefinition({"heavy", "models/heavy.glb", {}});
+
+    CHECK(registry.getDefinitionCount() == 3);
+    CHECK(registry.getIndex("drone") == 0);
+    CHECK(registry.getIndex("heavy") == 1);
+    CHECK(registry.getIndex("wasp") == 2);
+    CHECK(registry.getDefinitionAt(2).model == "models/wasp.glb");
+    CHECK_THROWS_AS(registry.getIndex("nope"), std::out_of_range);
+    CHECK_THROWS_AS(registry.getDefinitionAt(3), std::out_of_range);
+}
+
 namespace
 {
 
@@ -1227,6 +1245,7 @@ TEST_CASE("spawnEnemy() makes a Bydo of its definition, and refuses an unknown o
     CHECK(ecs.getComponent<Damage>(enemy).points == 20);
     CHECK(ecs.getComponent<Armed>(enemy).weapon == "blaster");
     CHECK(halfSizeOf(ecs.getComponent<rtype::physics::Collider>(enemy)).x == Approx(48.0f));
+    CHECK(ecs.getComponent<ShipIndex>(enemy).value == simulation.context().ships.getIndex("bydo_scout"));
     CHECK_THROWS_AS(spawnEnemy(ecs, simulation.context(), "nope", 0.0f, 0.0f), std::out_of_range);
 }
 
@@ -1317,7 +1336,7 @@ TEST_CASE("A shot that hits is killed, for the client to draw its impact", "[gam
     CHECK(cause == DestroyCause::Killed);
 }
 
-TEST_CASE("A Bydo that runs into a ship hurts it and keeps going; the ship is safe for a while", "[game]")
+TEST_CASE("A Bydo that runs into a ship hurts it and is destroyed; the ship is safe for a while", "[game]")
 {
     Rules rules;
     rules.hitInvulnerableTicks = 30;
@@ -1333,11 +1352,30 @@ TEST_CASE("A Bydo that runs into a ship hurts it and keeps going; the ship is sa
     const EntityState hit = *shipOf(simulation.snapshot(), 0);
     CHECK(hit.health == 80);
     CHECK((hit.flags & EntityState::Invulnerable) != 0);
-    CHECK(findEntity(simulation.snapshot(), enemy));
+    CHECK_FALSE(findEntity(simulation.snapshot(), enemy));
+    CHECK(wasDestroyed(simulation.snapshot(), enemy, DestroyCause::Killed));
+    CHECK(simulation.snapshot().players[0].score == 100);
 
-    // Still on it, and its shots too: nothing more while it is safe
+    // Its shots too: nothing more while it is safe
     run(simulation, 10);
     CHECK(shipOf(simulation.snapshot(), 0)->health == 80);
+}
+
+TEST_CASE("A boss that runs into a ship hurts it and keeps going", "[game]")
+{
+    GameConfig config = battleConfig();
+    config.enemies.front().boss = true;
+    Simulation simulation({}, config);
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x, ship.y);
+    const std::uint32_t boss = networkIdOf(simulation, spawned);
+
+    simulation.step();
+    CHECK(shipOf(simulation.snapshot(), 0)->health == 80);
+    CHECK(findEntity(simulation.snapshot(), boss));
 }
 
 TEST_CASE("Nothing comes without a player, nor without waves", "[game]")
@@ -1530,7 +1568,10 @@ TEST_CASE("An endless game is lost once every player is out of lives", "[game]")
 {
     Rules rules = endlessRules();
     rules.lives = 1;
-    Simulation simulation(rules, battleConfig({waveOf("line", 1)}));
+    GameConfig config = battleConfig({waveOf("line", 1)});
+    // Destroyed by the ram: it has to take the ship with it
+    config.enemies.front().collisionDamage = 255;
+    Simulation simulation(rules, config);
     simulation.addPlayer(0);
     runUntilWave(simulation, 10);
     clearAndRunUntilWave(simulation);

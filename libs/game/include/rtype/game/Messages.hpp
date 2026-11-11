@@ -1,9 +1,14 @@
 #pragma once
 
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Loadout.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Snapshot.hpp"
+#include "rtype/voice/Backend.hpp"
+#include "rtype/voice/Format.hpp"
+#include "rtype/voice/Status.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -48,6 +53,14 @@ inline constexpr std::uint8_t PlayerJoined = 0x04;
 inline constexpr std::uint8_t PlayerLeft = 0x05;
 /// Client → game: the inputs of the last ticks.
 inline constexpr std::uint8_t Input = 0x40;
+/// Client → game: one frame of the voice of the player.
+inline constexpr std::uint8_t Voice = 0x41;
+/// Client → game: what carries the voice of the player.
+inline constexpr std::uint8_t VoiceState = 0x42;
+/// Client → game: whether the player is muted, deafened, without a microphone.
+inline constexpr std::uint8_t VoiceStatus = 0x43;
+/// Client → game: the weapons the player chose in the hangar.
+inline constexpr std::uint8_t Loadout = 0x44;
 /// Game → client: one part of a snapshot.
 inline constexpr std::uint8_t Snapshot = 0x80;
 /// Game → client: the entities destroyed during a tick.
@@ -56,6 +69,12 @@ inline constexpr std::uint8_t EntitiesDestroyed = 0x81;
 inline constexpr std::uint8_t WaveStarted = 0x82;
 /// Game → client: the game ended.
 inline constexpr std::uint8_t GameOver = 0x83;
+/// Game → client: one frame of the voice of another player.
+inline constexpr std::uint8_t VoiceFrame = 0x84;
+/// Game → client: what carries the voice of each player.
+inline constexpr std::uint8_t VoiceRoster = 0x85;
+/// Game → client: what each player tells about its voice.
+inline constexpr std::uint8_t VoiceStatuses = 0x86;
 } // namespace message_type
 
 /// Most inputs in one INPUT message.
@@ -64,15 +83,21 @@ inline constexpr std::size_t MaxInputsPerMessage = 32;
 inline constexpr std::size_t InputRedundancy = 8;
 /// Most parts of one snapshot.
 inline constexpr std::size_t MaxSnapshotParts = 16;
-/// The weapon of the ship of a client, in its snapshots (docs/protocol/game.md, section 9.3): what its
+/// The weapons of the ship of a client, in its snapshots (docs/protocol/game.md, section 9.3): what its
 /// prediction of the shots starts again from. All 0 without a ship.
 struct WeaponState {
-    /// Ticks before it can fire again.
+    /// Ticks before the weapon in hand can fire again.
     std::uint16_t cooldown = 0;
-    /// Shots left in the magazine.
+    /// Shots left in its magazine.
     std::uint16_t ammo = 0;
-    /// Ticks before the magazine is full again, 0 when it is not reloading.
+    /// Ticks before its magazine is full again, 0 when it is not reloading.
     std::uint16_t reloadLeft = 0;
+    /// Which weapon of the loadout is in hand, 0 or 1 (version 7).
+    std::uint8_t inHand = 0;
+    /// The weapon put away (Holster), all 0 without one (version 7).
+    std::uint16_t spareCooldown = 0;
+    std::uint16_t spareAmmo = 0;
+    std::uint16_t spareReloadLeft = 0;
 
     friend bool operator==(const WeaponState &, const WeaponState &) = default;
 };
@@ -83,6 +108,10 @@ inline constexpr std::int8_t NoInputLead = -128;
 inline constexpr std::size_t MaxDestroyedPerMessage = 228;
 /// Longest name of a player, in bytes of UTF-8.
 inline constexpr std::size_t MaxPlayerNameLength = 16;
+/// Most bytes of the id of a weapon in LOADOUT.
+inline constexpr std::size_t MaxWeaponIdLength = 255;
+/// Most bytes of the code of a ship of the hangar in LOADOUT.
+inline constexpr std::size_t MaxShipCodeLength = 32;
 /// Most bytes of the music of a wave in WAVE_STARTED.
 inline constexpr std::size_t MaxWaveMusicLength = 128;
 
@@ -94,6 +123,9 @@ struct AcceptedMessage {
     std::uint8_t tickRate = TickRate;
     /// The tick the game is at.
     std::uint32_t tick = 0;
+    /// The game carries the voice (version 5, `[voice] enabled` of the server): without it, the client hides
+    /// the voice and sends none.
+    bool voice = true;
 
     friend bool operator==(const AcceptedMessage &, const AcceptedMessage &) = default;
 };
@@ -106,6 +138,9 @@ struct PlayerJoinedMessage {
     std::uint32_t playerId = 0;
     /// 1 to MaxPlayerNameLength bytes of UTF-8, without control characters.
     std::string name;
+    /// The id of its account on the server, 0 for a guest (version 4): the other clients keep their choices
+    /// for this player (its volume, muted) under it.
+    std::uint64_t accountId = 0;
 
     friend bool operator==(const PlayerJoinedMessage &, const PlayerJoinedMessage &) = default;
 };
@@ -193,6 +228,71 @@ struct GameOverMessage {
     friend bool operator==(const GameOverMessage &, const GameOverMessage &) = default;
 };
 
+/// `VOICE`: one frame of the voice of the player, 20 ms of Opus (docs/protocol/game.md, section 9.4).
+struct VoiceMessage {
+    /// The number of the frame: one more every 20 ms while the player talks, wrapping after 65535.
+    std::uint16_t sequence = 0;
+    /// The last frame of a talk spurt: the player stopped talking after it.
+    bool last = false;
+    /// 1 to voice::MaxFrameBytes bytes of Opus. The game does not decode them.
+    std::vector<std::byte> frame;
+
+    friend bool operator==(const VoiceMessage &, const VoiceMessage &) = default;
+};
+
+/// `VOICE_FRAME`: a frame of `VOICE`, forwarded by the game to the other players.
+struct VoiceFrameMessage {
+    /// The slot of the player who talks, 0 to 3.
+    std::uint8_t slot = 0;
+    /// As sent in `VOICE`.
+    std::uint16_t sequence = 0;
+    bool last = false;
+    std::vector<std::byte> frame;
+
+    friend bool operator==(const VoiceFrameMessage &, const VoiceFrameMessage &) = default;
+};
+
+/// `LOADOUT`: the two weapons a player chose in the hangar, by the ids of their definitions (version 7), and
+/// the ship it flies, by its code (version 8).
+struct LoadoutMessage {
+    /// 1 to MaxWeaponIdLength bytes each, or both empty: the weapon of every player.
+    Loadout weapons;
+    /// 0 to MaxShipCodeLength bytes: the code of a ship of the hangar (GameConfig::shipUnlocks), empty for
+    /// the ship of the rules.
+    std::string ship;
+
+    friend bool operator==(const LoadoutMessage &, const LoadoutMessage &) = default;
+};
+
+/// `VOICE_STATE`: what carries the voice of the player (ADR 0035).
+struct VoiceStateMessage {
+    voice::Backend backend = voice::Backend::None;
+
+    friend bool operator==(const VoiceStateMessage &, const VoiceStateMessage &) = default;
+};
+
+/// `VOICE_ROSTER`: what carries the voice of each player, by slot; None for a slot without a player.
+struct VoiceRosterMessage {
+    std::array<voice::Backend, MaxPlayers> backends{};
+
+    friend bool operator==(const VoiceRosterMessage &, const VoiceRosterMessage &) = default;
+};
+
+/// `VOICE_STATUS`: what the player tells about its voice.
+struct VoiceStatusMessage {
+    voice::Status status{};
+
+    friend bool operator==(const VoiceStatusMessage &, const VoiceStatusMessage &) = default;
+};
+
+/// `VOICE_STATUSES`: what each player tells about its voice, by slot; nothing set for a slot without a
+/// player.
+struct VoiceStatusesMessage {
+    std::array<voice::Status, MaxPlayers> statuses{};
+
+    friend bool operator==(const VoiceStatusesMessage &, const VoiceStatusesMessage &) = default;
+};
+
 /// Tells whether a kind is one this version knows: a client skips the others (docs/protocol/game.md,
 /// section 9.1).
 [[nodiscard]] bool isKnown(EntityKind kind);
@@ -214,10 +314,17 @@ struct GameOverMessage {
 [[nodiscard]] std::vector<std::byte> encode(const EntitiesDestroyedMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const WaveStartedMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const GameOverMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceFrameMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const LoadoutMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceStateMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceRosterMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceStatusMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const VoiceStatusesMessage &message);
 
 /// The messages read from their payloads, strictly: nothing for every case the protocol calls malformed, or
-/// for bytes left after the last field. Unknown reasons, causes and outcomes are read as the protocol says
-/// (Quit, Removed, Defeat), and the reserved bits are dropped.
+/// for bytes left after the last field. Unknown reasons, causes, outcomes and backends are read as the
+/// protocol says (Quit, Removed, Defeat, None), and the reserved bits are dropped.
 [[nodiscard]] std::optional<AcceptedMessage> decodeAccepted(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<PlayerJoinedMessage> decodePlayerJoined(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<PlayerLeftMessage> decodePlayerLeft(std::span<const std::byte> payload);
@@ -227,12 +334,19 @@ struct GameOverMessage {
 decodeEntitiesDestroyed(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<WaveStartedMessage> decodeWaveStarted(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<GameOverMessage> decodeGameOver(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceMessage> decodeVoice(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceFrameMessage> decodeVoiceFrame(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<LoadoutMessage> decodeLoadout(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceStateMessage> decodeVoiceState(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceRosterMessage> decodeVoiceRoster(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceStatusMessage> decodeVoiceStatus(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<VoiceStatusesMessage> decodeVoiceStatuses(std::span<const std::byte> payload);
 
-/// Most entities in one part of a snapshot with this many players: 69 with four players.
+/// Most entities in one part of a snapshot with this many players: 61 with four players.
 [[nodiscard]] std::size_t maxEntitiesPerPart(std::size_t playerCount);
 
 /// Splits a snapshot in the parts that fit in datagrams, each with the tick and the players, for one client.
-/// A snapshot without entities is one part. Beyond MaxSnapshotParts full parts (1104 entities with four
+/// A snapshot without entities is one part. Beyond MaxSnapshotParts full parts (976 entities with four
 /// players), the last entities are left out: the rules must never have that many.
 /// @param lastInput The tick of the last input of this client that the game applied, 0 if none.
 /// @param inputLead How early the inputs of this client arrive (SnapshotPart::inputLead).

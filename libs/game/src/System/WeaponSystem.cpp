@@ -8,9 +8,9 @@ namespace rtype::game
 {
 
 WeaponSystem::WeaponSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context)
-    : _ecs(ecs), _context(context), _weapons(use<Armed>(caches)), _ships(use<PlayerShip>(caches)),
-      _enemies(use<Enemy>(caches)), _orders(use<EnemyOrders>(caches)), _positions(use<ecs::Position>(caches)),
-      _colliders(use<physics::Collider>(caches))
+    : _ecs(ecs), _context(context), _weapons(use<Armed>(caches)), _holsters(use<Holster>(caches)),
+      _ships(use<PlayerShip>(caches)), _enemies(use<Enemy>(caches)), _orders(use<EnemyOrders>(caches)),
+      _positions(use<ecs::Position>(caches)), _colliders(use<physics::Collider>(caches))
 {
 }
 
@@ -22,6 +22,10 @@ void WeaponSystem::update(float)
             continue;
         }
         Armed &armed = _weapons.get(entity);
+        if (_holsters.has(entity) && _ships.has(entity)) {
+            const PlayerInput input = _context.players[_ships.get(entity).slot].input;
+            selectWeapon(armed, _holsters.get(entity), input.weaponInHand());
+        }
         const WeaponDefinition &weapon = _context.weapons.getDefinition(armed.weapon);
 
         // The same steps as the prediction of the client (WeaponFiring.hpp)

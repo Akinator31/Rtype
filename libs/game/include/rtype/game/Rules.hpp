@@ -67,6 +67,15 @@ struct Rules {
     /// Ticks between the fall of the shogun and the victory.
     std::uint32_t rescueVictoryDelay = 180;
 
+    /// Where the items of the waves appear, at random: from itemMinX to the right edge less itemMargin, and
+    /// itemMargin away from the top and the bottom.
+    float itemMinX = 640.0f;
+    float itemMargin = 120.0f;
+    /// Ticks an item takes to appear, while the client plays its animation: it cannot be picked up before.
+    std::uint32_t itemAppearTicks = 30;
+    /// Ticks the items of a wave appear over, at least, when its enemies come faster.
+    std::uint32_t itemMinWindow = 120;
+
     /// Seed of the random numbers of a game: the same seed and the same inputs give the same game.
     std::uint32_t seed = 1;
 

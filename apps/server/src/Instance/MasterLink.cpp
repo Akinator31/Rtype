@@ -110,6 +110,14 @@ void MasterLink::received(std::uint8_t type, std::span<const std::byte> payload)
             return;
         }
         break;
+    case instance_message::MuteVoice:
+        if (const auto mute = decodeMuteVoice(payload)) {
+            if (_handlers.onMuteVoice) {
+                _handlers.onMuteVoice(*mute);
+            }
+            return;
+        }
+        break;
     default:
         fail(std::format("unexpected message {:#04x} from the master", type));
         return;

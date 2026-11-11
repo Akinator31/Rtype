@@ -1,8 +1,10 @@
 #include "App/Configuration.hpp"
 
+#include "Settings/AuraSettings.hpp"
 #include "Settings/ControlSettings.hpp"
 #include "Settings/DisplaySettings.hpp"
 #include "Settings/PlayerSettings.hpp"
+#include "Settings/VoiceSettings.hpp"
 #include "rtype/game/Config/GameConfigLoader.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/render/Paths.hpp"
@@ -47,6 +49,9 @@ void applySavedSettings(engine::Engine &engine, const SettingsTargets &targets)
     applyDisplaySettings(settings, targets.window);
     applyPlayerSettings(settings, targets.translations, targets.audio);
     targets.renderer.setColorFilter(readColorFilter(settings));
+    targets.auras = readAuraColors(settings);
+    targets.voice.preferences = readVoiceSettings(settings);
+    targets.microphone.setDevice(targets.voice.preferences.inputDevice);
 }
 
 } // namespace rtype::client

@@ -2,7 +2,7 @@
 return {
     id = "bydo_mosquito",
     ship = "bydo_mosquito",
-    health = 25,
+    health = 11,
     speed = 340,
     weapon = "micro_missile_launcher",
     score = 200,

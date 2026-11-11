@@ -27,6 +27,8 @@ namespace
 
 /// Most games listed: the others are reached with Refresh once some end.
 constexpr std::size_t MaxGamesShown = 5;
+/// The rows of Discord friends the lobby shows.
+constexpr std::size_t MaxFriendsShown = 7;
 /// Players of a game created from the client.
 constexpr std::uint8_t CreatedGamePlayers = 4;
 
@@ -117,14 +119,20 @@ std::vector<std::string> fingerprintLines(const network::KeyFingerprint &fingerp
 OnlineScenes::OnlineScenes(engine::Engine &engine, render::ResourceManager &resources,
                            network::EventLoop &loop, GameScenes &games, const engine::InterfaceStyle &style,
                            localization::Localization &translations, discord::Authorizer &discord,
+                           discord::Connection &discordConnection, discord::Friends &friends,
                            ShipSelection &ships, std::filesystem::path pictures,
-                           const game::GameConfig &config)
-    : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord), _games(games),
-      _translations(translations), _ships(ships), _config(config), _known(engine.getSettings()),
-      _sessions(engine.getSettings()), _profiles(engine.getSettings(), std::move(pictures)),
+                           const game::GameConfig &config, VoiceDevices &voice)
+    : _engine(engine), _style(style), _resources(resources), _loop(loop), _discord(discord),
+      _discordConnection(discordConnection), _friends(friends), _friendPictures(loop), _games(games),
+      _translations(translations), _ships(ships), _config(config), _voice(voice),
+      _known(engine.getSettings()), _sessions(engine.getSettings()),
+      _profiles(engine.getSettings(), std::move(pictures)),
       _sky(resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth)),
       _discordLogo(resources.loadTexture(RTYPE_IMAGE_DISCORD, render::TextureFiltering::Smooth))
 {
+    _discordConnection.onTokenExpiring([this] { refreshDiscord(); });
+    _friends.onChanged([this] { friendsChanged(); });
+    _friendPictures.onReady([this] { refreshIfShown(LobbyScene); });
     declareServerScenes(style);
     declareLobbyScene(style);
     declareAccountScenes(style);
@@ -163,6 +171,7 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
             *server = page.field(_translations.text("online.server"), _serverText, 1, 64,
                                  [this, read, server](const std::string &) {
                                      read(*server);
+                                     _invite.reset();
                                      connect();
                                  });
             page.note(_translations.text("online.server_hint"),
@@ -171,6 +180,7 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
             page.button(_translations.text("online.connect"),
                         [this, read, server] {
                             read(*server);
+                            _invite.reset();
                             connect();
                         },
                         {engine::AnchorPoint::TopLeft, columnLeft, 600.0f});
@@ -192,6 +202,8 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                           Tone::Hint);
             }
             constexpr std::size_t MaxServersShown = 5;
+            // The right of each row, for its Forget button
+            constexpr float forgetWidth = 280.0f;
             float top = online_layout::fieldsTop + 30.0f;
             for (std::size_t index = 0; index < std::min(keys.size(), MaxServersShown); ++index) {
                 const std::string address = keys[index].substr(KnownServers::SettingsKeyPrefix.size());
@@ -211,16 +223,27 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                 }
                 page.ui().listRow(toCapitals(address),
                                   {.detail = detail + " · " + _translations.text("online.known_trusted"),
-                                   .width = rightWidth,
+                                   .width = rightWidth - forgetWidth,
                                    .avatar = avatar},
                                   [this, address] {
                                       _serverText = address;
+                                      _invite.reset();
                                       connect();
                                   },
                                   {engine::AnchorPoint::TopLeft, rightLeft, top});
+                // Forgets the key of this server without typing it: the row leaves the list
+                page.ui().arrowButton(_translations.text("online.known_forget"),
+                                      [this, address] {
+                                          forgetKey(address);
+                                          // Built again over the main menu: switchScene() would close it,
+                                          // and with it the background and the way back
+                                          _engine.popScene();
+                                          _engine.pushScene(OnlineMenuScene);
+                                      },
+                                      {engine::AnchorPoint::TopRight, rightLeft + rightWidth - 1920.0f,
+                                       top + (style.list.height - style.flare.height) / 2.0f});
                 top += style.list.height;
             }
-            page.keys(_translations.text("online.keys_menu"));
         });
 
     // O2: a server met for the first time shows its key, and is trusted only if the player says so
@@ -259,8 +282,6 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                                             connect();
                                         },
                                         {engine::AnchorPoint::Top, 330.0f, 680.0f});
-                            page.note(toCapitals(_translations.text("online.keys_cancel")),
-                                      {engine::AnchorPoint::Bottom, 0.0f, -84.0f}, Tone::Hint, 20.0f);
                         });
 
     // O3: a known server with another key is refused, the two keys side by side, under a red banner
@@ -305,8 +326,17 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                       Tone::Detail, 24.0f);
             page.note(_translations.text("changed.forget"), {engine::AnchorPoint::Top, 0.0f, 738.0f},
                       Tone::Detail, 24.0f);
+            // Refusing is the default: the old key is forgotten on purpose
             page.button(_translations.text("changed.back"), [&target] { target.popScene(); },
-                        {engine::AnchorPoint::Top, 0.0f, 820.0f});
+                        {engine::AnchorPoint::Top, -330.0f, 820.0f});
+            // Forgets the old key, then connects again: the new one is shown, to be checked and trusted
+            page.dangerButton(_translations.text("changed.forget_key"),
+                              [this, &target] {
+                                  target.popScene();
+                                  forgetKey(_address);
+                                  connect();
+                              },
+                              {engine::AnchorPoint::Top, 330.0f, 820.0f});
         });
 }
 
@@ -405,8 +435,107 @@ void OnlineScenes::declareLobbyScene(const engine::InterfaceStyle &style)
             }
             page.note(under, {engine::AnchorPoint::TopRight, nameRight - 12.0f, screenMargin + 40.0f},
                       Tone::Hint, 20.0f);
-            page.keys(_translations.text("online.keys_lobby"));
+            // The Discord friends, right of the games
+            constexpr float friendsWidth = 520.0f;
+            constexpr float friendsLeft = 1920.0f - screenMargin - friendsWidth;
+            page.note(toCapitals(_translations.text("friends.title")),
+                      {engine::AnchorPoint::TopLeft, friendsLeft, listTop - 44.0f}, Tone::Detail, 20.0f);
+            _friendRows = friendRows(_friends, FriendsView::Lobby, _translations, MaxFriendsShown);
+            float friendTop = listTop;
+            for (const FriendRow &row : _friendRows) {
+                engine::Avatar avatar{.initial = initialOf(row.name), .kind = engine::AvatarKind::Discord};
+                if (const std::vector<std::byte> *png = _friendPictures.picture(row.avatarUrl)) {
+                    avatar.picture = roundPicture(row.avatarUrl, std::span<const std::byte>(*png));
+                } else {
+                    _friendPictures.request(row.avatarUrl);
+                }
+                // Online, a row is lit as the others, even with nothing to do; offline, it is dimmed
+                std::function<void()> act;
+                if (row.action != FriendRow::Action::None) {
+                    act = [this, row] { actOnFriend(row); };
+                } else if (row.online) {
+                    act = [] {};
+                }
+                page.ui().listRow(row.name,
+                                  {.detail = row.detail,
+                                   .side = toCapitals(row.side),
+                                   .width = friendsWidth,
+                                   .avatar = avatar},
+                                  std::move(act), {engine::AnchorPoint::TopLeft, friendsLeft, friendTop});
+                friendTop += style.list.height;
+            }
+            if (_friendRows.empty()) {
+                page.note(_translations.text(_friends.ready() ? "friends.none" : "friends.not_connected"),
+                          {engine::AnchorPoint::TopLeft, friendsLeft, listTop + 20.0f}, Tone::Hint, 20.0f);
+            }
         });
+}
+
+std::optional<std::string> OnlineScenes::lobbyServer() const
+{
+    if (!_lobby || !_lobby->welcomed() || !_engine.isSceneOpen(LobbyScene)) {
+        return std::nullopt;
+    }
+    return _address;
+}
+
+OnlineScenes::~OnlineScenes()
+{
+    _friends.onChanged(nullptr);
+}
+
+void OnlineScenes::friendsChanged()
+{
+    // A toast for each invitation that came, wherever the player is
+    const std::vector<discord::Invitation> invitations = _friends.invitations();
+    for (const discord::Invitation &invitation : invitations) {
+        if (std::ranges::find(_toldInvitations, invitation.id) != _toldInvitations.end()) {
+            continue;
+        }
+        _toldInvitations.push_back(invitation.id);
+        const bool invite = invitation.kind == discord::Invitation::Kind::Invite;
+        _engine.showToast(
+            std::format("{} {}", invitation.name,
+                        _translations.text(invite ? "friends.new_invite" : "friends.new_request")));
+    }
+    std::erase_if(_toldInvitations, [&invitations](std::uint64_t id) {
+        return std::ranges::find(invitations, id, &discord::Invitation::id) == invitations.end();
+    });
+    if (friendRows(_friends, FriendsView::Lobby, _translations, MaxFriendsShown) != _friendRows) {
+        refreshIfShown(LobbyScene);
+    }
+}
+
+void OnlineScenes::actOnFriend(const FriendRow &row)
+{
+    switch (row.action) {
+    case FriendRow::Action::AcceptInvite:
+        _friends.accept(row.id, [this](bool accepted, const std::optional<std::string> &secret) {
+            if (accepted && secret) {
+                joinFromDiscord(*secret);
+            } else {
+                _engine.showToast(_translations.text("friends.not_sent"), engine::ToastType::Error);
+            }
+        });
+        return;
+    case FriendRow::Action::AskToJoin:
+        _friends.askToJoin(row.id, [this, name = row.name](bool sent) {
+            _engine.showToast(sent ? std::format("{} {}", _translations.text("friends.request_sent"), name)
+                                   : _translations.text("friends.not_sent"),
+                              sent ? engine::ToastType::Success : engine::ToastType::Error);
+        });
+        return;
+    case FriendRow::Action::Invite:
+        _friends.invite(row.id, [this, name = row.name](bool sent) {
+            _engine.showToast(sent ? std::format("{} {}", _translations.text("friends.invite_sent"), name)
+                                   : _translations.text("friends.not_sent"),
+                              sent ? engine::ToastType::Success : engine::ToastType::Error);
+        });
+        return;
+    case FriendRow::Action::None:
+    case FriendRow::Action::AcceptRequest:
+        return;
+    }
 }
 
 void OnlineScenes::connect()
@@ -461,6 +590,7 @@ void OnlineScenes::connect()
             .onServerMessage =
                 [this](const std::string &text) { _engine.showToast(std::format("Server: {}", text)); },
             .onProgress = [this](const lobby::ProgressMessage &progress) { showProgress(progress); },
+            .onDiscordToken = [this](const lobby::DiscordTokenMessage &token) { discordToken(token); },
             .onClosed = [this](const std::string &reason) { lobbyClosed(reason); },
             .onUntrusted = [this](const network::KeyFingerprint &presented) { untrusted(presented); },
             .onSessionExpired =
@@ -497,7 +627,11 @@ void OnlineScenes::forgetServer()
         _engine.showToast("Invalid server: give host:port", engine::ToastType::Error);
         return;
     }
-    const std::string address = serverAddress(parts->first, parts->second);
+    forgetKey(serverAddress(parts->first, parts->second));
+}
+
+void OnlineScenes::forgetKey(const std::string &address)
+{
     if (_known.forget(address)) {
         _engine.showToast(
             std::format("Key of {} forgotten: it is asked again at the next connection", address));
@@ -515,7 +649,49 @@ void OnlineScenes::refresh()
         _list = games;
         // Built again with the new list
         _engine.switchScene(LobbyScene);
+        // Come from Discord to join a friend: its game, once the player is on its server; invited to the
+        // server only, the list is where the friend is
+        if (_invite && _invite->server == _address) {
+            if (const std::optional<std::uint32_t> game = std::exchange(_invite, std::nullopt)->gameId) {
+                joinInvited(*game);
+            }
+        }
     });
+}
+
+void OnlineScenes::joinInvited(std::uint32_t gameId)
+{
+    openShipSelector(_engine, _ships, [this, gameId] {
+        if (_lobby) {
+            _lobby->joinGame(gameId, [this](const LobbyClient::JoinResult &result) { joined(result); });
+        }
+    });
+}
+
+void OnlineScenes::joinFromDiscord(const std::string &secret)
+{
+    const std::optional<GameInvite> invite = parseInviteSecret(secret);
+    if (!invite) {
+        _engine.showToast(_translations.text("invite.invalid"), engine::ToastType::Error);
+        return;
+    }
+    if (_engine.isSceneOpen(GameScene)) {
+        _engine.showToast(_translations.text("invite.in_game"), engine::ToastType::Warning);
+        return;
+    }
+    _engine.showToast(_translations.text("invite.joining"));
+    if (_lobby && _lobby->welcomed() && _address == invite->server) {
+        // Already on its server: the game at once, or its list
+        if (invite->gameId) {
+            joinInvited(*invite->gameId);
+        } else {
+            refresh();
+        }
+        return;
+    }
+    _serverText = invite->server;
+    _invite = invite;
+    connect();
 }
 
 void OnlineScenes::joined(const LobbyClient::JoinResult &result)
@@ -533,7 +709,11 @@ void OnlineScenes::joined(const LobbyClient::JoinResult &result)
     }
     try {
         // The game is on the IP address of the master
-        _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config),
+        // The id of the player, for the Discord lobby of the game
+        const std::uint32_t playerId = _lobby ? _lobby->playerId().value_or(0) : 0;
+        _games.play(std::make_unique<RemoteSession>(_loop, _server->withPort(game.udpPort), game, _config,
+                                                    &_voice, _address, playerId, _ships.getLoadout(),
+                                                    _ships.getEquippedCode()),
                     [this] { gameEnded(); });
     } catch (const std::system_error &error) {
         _engine.showToast(std::format("Cannot join the game: {}", error.what()), engine::ToastType::Error);
@@ -566,6 +746,7 @@ void OnlineScenes::gameEnded()
 
 void OnlineScenes::disconnect()
 {
+    _invite.reset();
     if (_lobby) {
         _lobby->close();
     }
@@ -575,19 +756,22 @@ void OnlineScenes::disconnect()
 
 void OnlineScenes::showProgress(const lobby::ProgressMessage &progress)
 {
+    const game::Level level = game::levelOf(progress.xp);
+    const game::Level before =
+        game::levelOf(progress.xp - std::min<std::uint64_t>(progress.gained, progress.xp));
+    writePlayerLevel(_ships, level.level, _engine.getSettings());
     refreshIfShown(LobbyScene);
     // At the sign-in, the level shows in the menu: only a game is announced
     if (progress.gained == 0) {
         return;
     }
+    // The results do not show the ships unlocked
+    showUnlockedShips(before.level, level.level);
     // The game just played, or its results, show it; in a toast otherwise
     _games.setAccountXp(progress.xp);
     if (_engine.isSceneOpen(GameScene) || _engine.isSceneOpen(ResultsScene)) {
         return;
     }
-    const game::Level level = game::levelOf(progress.xp);
-    const game::Level before =
-        game::levelOf(progress.xp - std::min<std::uint64_t>(progress.gained, progress.xp));
     const std::string title = std::format("{} {}", _translations.text("progress.level"), level.level);
     const std::string detail =
         std::format("+{} {} - {} / {} XP", progress.gained, _translations.text("progress.gained"),
@@ -598,8 +782,19 @@ void OnlineScenes::showProgress(const lobby::ProgressMessage &progress)
     _engine.showToast(title, detail, "", engine::ToastType::Info);
 }
 
+void OnlineScenes::showUnlockedShips(std::uint32_t before, std::uint32_t level)
+{
+    for (const std::size_t index : listUnlockedShips(_ships, before, level)) {
+        const ShipEntry &ship = getShipCatalog()[index];
+        _engine.showToast(_translations.text("ship.unlocked"),
+                          std::format("{} {}", ship.code, _translations.text(ship.nameKey)), "",
+                          engine::ToastType::Success);
+    }
+}
+
 void OnlineScenes::lobbyClosed(const std::string &reason)
 {
+    _invite.reset();
     _engine.showToast(reason, engine::ToastType::Error);
     forgetLobby();
     if (_engine.isSceneOpen(LobbyScene) || _engine.isSceneOpen(GameScene)) {
@@ -612,8 +807,9 @@ void OnlineScenes::forgetLobby()
     if (!_lobby) {
         return;
     }
-    // What Discord would give goes to no connection
+    // What Discord would give goes to no connection, and the Discord of this server is left
     _discord.cancel();
+    _discordConnection.disconnect();
     // Destroyed once the loop runs again: this may be one of its handlers
     std::shared_ptr<LobbyClient> old(std::move(_lobby));
     _loop.post([old] {});

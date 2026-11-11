@@ -13,6 +13,7 @@
 #include "Instance/Instance.hpp"
 #include "Instance/MasterLink.hpp"
 #include "Instance/RelayedTransport.hpp"
+#include "Instance/VoiceRate.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/game/Standalone.hpp"
 #include "rtype/network/Address.hpp"
@@ -219,6 +220,59 @@ struct TestClient {
         return players;
     }
 
+    void sendVoiceState(rtype::voice::Backend backend)
+    {
+        session.send(rtype::game::message_type::VoiceState,
+                     rtype::game::encode(rtype::game::VoiceStateMessage{backend}), Delivery::Reliable);
+    }
+
+    void sendVoiceStatus(rtype::voice::Status status)
+    {
+        session.send(rtype::game::message_type::VoiceStatus,
+                     rtype::game::encode(rtype::game::VoiceStatusMessage{status}), Delivery::Reliable);
+    }
+
+    /// The latest VOICE_STATUSES received.
+    [[nodiscard]] std::optional<rtype::game::VoiceStatusesMessage> lastStatuses() const
+    {
+        for (auto message = messages.rbegin(); message != messages.rend(); ++message) {
+            if (message->first == rtype::game::message_type::VoiceStatuses) {
+                return rtype::game::decodeVoiceStatuses(message->second);
+            }
+        }
+        return std::nullopt;
+    }
+
+    void sendVoice(std::uint16_t sequence)
+    {
+        session.send(rtype::game::message_type::Voice,
+                     rtype::game::encode(rtype::game::VoiceMessage{sequence, false, {std::byte{0xF8}}}),
+                     Delivery::Unreliable);
+    }
+
+    /// The slots whose voice the game forwarded to this client, in order.
+    [[nodiscard]] std::vector<std::uint8_t> voicesFrom() const
+    {
+        std::vector<std::uint8_t> slots;
+        for (const auto &[type, payload] : messages) {
+            if (type == rtype::game::message_type::VoiceFrame) {
+                slots.push_back(rtype::game::decodeVoiceFrame(payload)->slot);
+            }
+        }
+        return slots;
+    }
+
+    /// The latest VOICE_ROSTER received.
+    [[nodiscard]] std::optional<rtype::game::VoiceRosterMessage> lastRoster() const
+    {
+        for (auto message = messages.rbegin(); message != messages.rend(); ++message) {
+            if (message->first == rtype::game::message_type::VoiceRoster) {
+                return rtype::game::decodeVoiceRoster(message->second);
+            }
+        }
+        return std::nullopt;
+    }
+
     /// The latest snapshot part received.
     [[nodiscard]] std::optional<rtype::game::SnapshotPart> lastSnapshot() const
     {
@@ -379,7 +433,18 @@ TEST_CASE("The messages of the instances survive a round trip", "[instance]")
     CHECK(decodeConfigure(encode(relayed)) == relayed);
     const AddPlayerMessage added = player(42, 5, "Alice");
     CHECK(decodeAddPlayer(encode(added)) == added);
-    CHECK(encode(added).size() == 72 + 1 + 5);
+    CHECK(encode(added).size() == 72 + 1 + 5 + 8 + 4);
+    AddPlayerMessage signedIn = added;
+    signedIn.accountId = 0x0102030405060708;
+    signedIn.voiceMuted = 3600;
+    CHECK(decodeAddPlayer(encode(signedIn)) == signedIn);
+    const ConfigureMessage quiet{
+        "Duo", 2, 4242, {.enabled = false, .maxFrameBytes = 1, .maxFramesPerSecond = 120}};
+    CHECK(decodeConfigure(encode(quiet)) == quiet);
+    for (const MuteVoiceMessage mute :
+         {MuteVoiceMessage{42, 0}, MuteVoiceMessage{42, 600}, MuteVoiceMessage{42, VoiceMutedForTheGame}}) {
+        CHECK(decodeMuteVoice(encode(mute)) == mute);
+    }
     for (const RemovePlayerReason reason :
          {RemovePlayerReason::Left, RemovePlayerReason::LobbyClosed, RemovePlayerReason::Kicked}) {
         const RemovePlayerMessage removed{42, reason};
@@ -403,8 +468,15 @@ TEST_CASE("The messages of the instances are written field by field", "[instance
     CHECK(encode(ReadyMessage{4251}) == bytes({0x10, 0x9B}));
     CHECK(encode(PlayerDisconnectedMessage{42, PlayerDisconnectedReason::TimedOut}) ==
           bytes({0, 0, 0, 0x2A, 1}));
-    CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2, 0, 0}));
-    CHECK(encode(ConfigureMessage{"Duo", 2, 4242}) == bytes({3, 'D', 'u', 'o', 2, 0x10, 0x92}));
+    // The voice: on, frames of 160 bytes at most, 60 per second (version 7)
+    CHECK(encode(ConfigureMessage{"Duo", 2}) == bytes({3, 'D', 'u', 'o', 2, 0, 0, 1, 160, 60}));
+    CHECK(encode(ConfigureMessage{"Duo", 2, 4242}) == bytes({3, 'D', 'u', 'o', 2, 0x10, 0x92, 1, 160, 60}));
+    CHECK(encode(ConfigureMessage{
+              "Duo", 2, 0, {.enabled = false, .maxFrameBytes = 80, .maxFramesPerSecond = 50}}) ==
+          bytes({3, 'D', 'u', 'o', 2, 0, 0, 0, 80, 50}));
+    CHECK(encode(MuteVoiceMessage{42, 600}) == bytes({0, 0, 0, 0x2A, 0, 0, 0x02, 0x58}));
+    CHECK(encode(MuteVoiceMessage{42, VoiceMutedForTheGame}) ==
+          bytes({0, 0, 0, 0x2A, 0xFF, 0xFF, 0xFF, 0xFF}));
     CHECK(encode(GameOverReport{{{1, 1500, 12, 3, 2, 450}}}) ==
           bytes({1, 0, 0, 0, 1, 0, 0, 0x05, 0xDC, 0, 0, 0, 12, 0, 3, 0, 2, 0, 0, 0x01, 0xC2}));
     CHECK(encode(ShutdownMessage{ShutdownReason::Empty}) == bytes({0}));
@@ -440,13 +512,23 @@ TEST_CASE("The messages of the instances refuse what the protocol forbids", "[in
 
     Bytes hello = encode(InstanceHelloMessage{1, 7, {}});
     hello[2] = hello[3] = hello[4] = hello[5] = std::byte{0};
-    CHECK_FALSE(decodeInstanceHello(hello));                                                      // id 0
-    CHECK_FALSE(decodePlayerDisconnected(bytes({0, 0, 0, 1, 2})));                                // reason 2
-    CHECK_FALSE(decodeRemovePlayer(bytes({0, 0, 0, 1, 3})));                                      // reason 3
-    CHECK_FALSE(decodeShutdown(bytes({3})));                                                      // reason 3
-    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 0, 0, 0})));                                       // no player
-    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 5, 0, 0})));                                       // 5 players
-    CHECK_FALSE(decodeConfigure(bytes({0, 2, 0, 0})));                                            // no name
+    CHECK_FALSE(decodeInstanceHello(hello));                            // id 0
+    CHECK_FALSE(decodePlayerDisconnected(bytes({0, 0, 0, 1, 2})));      // reason 2
+    CHECK_FALSE(decodeRemovePlayer(bytes({0, 0, 0, 1, 3})));            // reason 3
+    CHECK_FALSE(decodeShutdown(bytes({3})));                            // reason 3
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 0, 0, 0, 1, 160, 60}))); // no player
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 5, 0, 0, 1, 160, 60}))); // 5 players
+    CHECK_FALSE(decodeConfigure(bytes({0, 2, 0, 0, 1, 160, 60})));      // no name
+    CHECK(decodeConfigure(bytes({1, 'A', 1, 0, 0, 1, 160, 60})));
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 1, 0, 0, 2, 160, 60}))); // voice 2
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 1, 0, 0, 1, 0, 60})));   // 0 bytes
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 1, 0, 0, 1, 161, 60}))); // 161 bytes
+    CHECK_FALSE(decodeConfigure(bytes({1, 'A', 1, 0, 0, 1, 160, 0})));  // rate 0
+    CHECK_THROWS_AS(encode(ConfigureMessage{"G", 1, 0, {.enabled = true, .maxFrameBytes = 161}}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(
+        encode(ConfigureMessage{"G", 1, 0, {.enabled = true, .maxFrameBytes = 160, .maxFramesPerSecond = 0}}),
+        std::invalid_argument);
     CHECK_FALSE(decodeGameOverReport(bytes({5})));                                                // 5 scores
     CHECK_FALSE(decodeGameOverReport(bytes({1, 0, 0, 0, 1})));                                    // cut
     CHECK_FALSE(decodeGameStatus(bytes({0, 0, 0, 1, 0, 1, 5})));                                  // 5 players
@@ -471,6 +553,7 @@ TEST_CASE("The messages of the instances refuse what the protocol forbids", "[in
         {encode(player(1, 2, "Bob")), [](auto p) { return decodeAddPlayer(p).has_value(); }},
         {encode(RemovePlayerMessage{1, {}}), [](auto p) { return decodeRemovePlayer(p).has_value(); }},
         {encode(ShutdownMessage{}), [](auto p) { return decodeShutdown(p).has_value(); }},
+        {encode(MuteVoiceMessage{1, 60}), [](auto p) { return decodeMuteVoice(p).has_value(); }},
     };
     for (const auto &[payload, decodes] : messages) {
         CHECK(decodes(payload));
@@ -503,6 +586,7 @@ TEST_CASE("Random bytes never crash the decoders of the instances", "[instance]"
         (void)decodeAddPlayer(payload);
         (void)decodeRemovePlayer(payload);
         (void)decodeShutdown(payload);
+        (void)decodeMuteVoice(payload);
     }
     SUCCEED();
 }
@@ -575,6 +659,7 @@ TEST_CASE("The link presents the instance, then gives the configuration and the 
                     {.onConfigure = [&](const ConfigureMessage &game) { configured = game; },
                      .onAddPlayer = [&](const AddPlayerMessage &p) { added.push_back(p); },
                      .onRemovePlayer = {},
+                     .onMuteVoice = {},
                      .onShutdown = {},
                      .onFailed = [&](const std::string &reason) { failure = reason; }});
 
@@ -608,6 +693,7 @@ TEST_CASE("The link fails on what the protocol does not expect", "[instance]")
             MasterLink::Handlers{.onConfigure = {},
                                  .onAddPlayer = {},
                                  .onRemovePlayer = {},
+                                 .onMuteVoice = {},
                                  .onShutdown = {},
                                  .onFailed = [&](const std::string &reason) { failure = reason; }},
             timeout);
@@ -666,6 +752,7 @@ TEST_CASE("The link fails on what the protocol does not expect", "[instance]")
                           {.onConfigure = {},
                            .onAddPlayer = {},
                            .onRemovePlayer = {},
+                           .onMuteVoice = {},
                            .onShutdown = {},
                            .onFailed = [&](const std::string &reason) { failure = reason; }});
         REQUIRE(waitUntil(loop, [&] { return failure.has_value(); }));
@@ -911,8 +998,9 @@ TEST_CASE("An instance runs a game for the players the master gives it", "[insta
             }
         }));
 
-    // A second player: both know each other
-    const AddPlayerMessage bob = player(43, 6, "Bob");
+    // A second player, signed in to an account: both know each other, and the account of Bob
+    AddPlayerMessage bob = player(43, 6, "Bob");
+    bob.accountId = 77;
     master.send(instance_message::AddPlayer, bob);
     loop.poll();
     std::this_thread::sleep_for(20ms);
@@ -924,7 +1012,7 @@ TEST_CASE("An instance runs a game for the players the master gives it", "[insta
     REQUIRE(waitUntil(loop, [&] { return bobClient.joined().size() == 2; }, updateBoth));
     CHECK(bobClient.accepted->slot == 1);
     REQUIRE(waitUntil(loop, [&] { return aliceClient.joined().size() == 2; }, updateBoth));
-    CHECK(aliceClient.joined()[1] == rtype::game::PlayerJoinedMessage{1, 43, "Bob"});
+    CHECK(aliceClient.joined()[1] == rtype::game::PlayerJoinedMessage{1, 43, "Bob", 77});
 
     // The master removes Bob: Bob is disconnected, Alice is told, the master is not told back
     master.send(instance_message::RemovePlayer, RemovePlayerMessage{43, RemovePlayerReason::LobbyClosed});
@@ -1170,4 +1258,348 @@ TEST_CASE("A standalone instance takes clients with the public keys, until stopp
     REQUIRE(waitUntil(loop, [&] { return client.end.has_value(); }, [&] { client.update(); }));
     CHECK(client.end->reason == DisconnectReason::Shutdown);
     CHECK(instance.waitForExit(loop) == Success);
+}
+
+// --- The voice ---
+
+TEST_CASE("The rate of the voice lets a burst of 200 ms pass, then 60 frames per second", "[instance][voice]")
+{
+    VoiceRate rate;
+    const auto start = VoiceRate::Clock::now();
+    int allowed = 0;
+    for (int i = 0; i < 40; ++i) {
+        allowed += rate.allow(start) ? 1 : 0;
+    }
+    CHECK(allowed == 10);
+
+    // A second later, the bucket is full again, no more
+    allowed = 0;
+    for (int i = 0; i < 40; ++i) {
+        allowed += rate.allow(start + 1s) ? 1 : 0;
+    }
+    CHECK(allowed == 10);
+}
+
+TEST_CASE("The rate of the voice never drops a voice of 50 frames per second, and cuts one of 100",
+          "[instance][voice]")
+{
+    VoiceRate voice;
+    VoiceRate flood;
+    const auto start = VoiceRate::Clock::now();
+    int voiceAllowed = 0;
+    int floodAllowed = 0;
+    for (int frame = 0; frame < 500; ++frame) {
+        voiceAllowed += voice.allow(start + frame * 20ms) ? 1 : 0;
+    }
+    for (int frame = 0; frame < 1000; ++frame) {
+        floodAllowed += flood.allow(start + frame * 10ms) ? 1 : 0;
+    }
+    CHECK(voiceAllowed == 500);
+    // 10 seconds at 60 per second, and the burst of the start
+    CHECK(floodAllowed >= 600);
+    CHECK(floodAllowed <= 611);
+}
+
+namespace
+{
+
+/// A game host on the loopback with four clients connected, slots 0 to 3.
+struct VoiceGame {
+    EventLoop loop;
+    GameThread game{{}, {}, [](TickResult) {}};
+    GameHost host;
+    std::vector<std::unique_ptr<TestClient>> clients;
+
+    explicit VoiceGame(std::size_t count = 4, VoiceRules rules = {})
+        : host(loop, std::make_unique<DirectTransport>(loop, Address::loopbackIpv4(0)), 4, game, {}, rules)
+    {
+        for (std::uint32_t i = 0; i < count; ++i) {
+            const AddPlayerMessage added = player(40 + i, 10 + i, "Player" + std::to_string(i));
+            REQUIRE(host.addPlayer(added));
+            clients.push_back(std::make_unique<TestClient>(loop, host.localAddress().port(), added));
+            // One at a time, so that each takes the next slot
+            REQUIRE(waitUntil(loop, [&] { return clients.back()->accepted.has_value(); }, [&] { update(); }));
+            REQUIRE(clients.back()->accepted->slot == i);
+        }
+    }
+
+    void update()
+    {
+        for (const auto &client : clients) {
+            client->update();
+        }
+    }
+
+    /// Every client knows these backends.
+    void setBackends(const std::array<rtype::voice::Backend, 4> &backends)
+    {
+        for (std::size_t i = 0; i < clients.size(); ++i) {
+            clients[i]->sendVoiceState(backends[i]);
+        }
+        rtype::game::VoiceRosterMessage expected;
+        std::copy_n(backends.begin(), clients.size(), expected.backends.begin());
+        REQUIRE(waitUntil(
+            loop,
+            [&] {
+                return std::ranges::all_of(
+                    clients, [&](const auto &client) { return client->lastRoster() == expected; });
+            },
+            [&] { update(); }));
+    }
+
+    /// Lets the datagrams under way arrive.
+    void settle()
+    {
+        (void)waitUntil(loop, [] { return false; }, [&] { update(); }, 150ms);
+    }
+};
+
+std::vector<std::uint8_t> sorted(std::vector<std::uint8_t> slots)
+{
+    std::ranges::sort(slots);
+    return slots;
+}
+
+} // namespace
+
+TEST_CASE("A client knows what carries the voice of each player: at its connection, at every change",
+          "[instance][voice]")
+{
+    VoiceGame voice(2);
+    // Nobody said anything: no voice for anyone
+    CHECK(voice.clients[1]->lastRoster() == rtype::game::VoiceRosterMessage{});
+
+    voice.setBackends({rtype::voice::Backend::Game, rtype::voice::Backend::Discord});
+
+    // A newcomer is told at once what carries the voice of the others
+    const AddPlayerMessage carol = player(50, 20, "Carol");
+    REQUIRE(voice.host.addPlayer(carol));
+    TestClient newcomer(voice.loop, voice.host.localAddress().port(), carol);
+    const rtype::game::VoiceRosterMessage expected{
+        {rtype::voice::Backend::Game, rtype::voice::Backend::Discord, rtype::voice::Backend::None,
+         rtype::voice::Backend::None}};
+    REQUIRE(waitUntil(
+        voice.loop, [&] { return newcomer.lastRoster() == expected; },
+        [&] {
+            voice.update();
+            newcomer.update();
+        }));
+
+    // The player on Discord leaves: the others are told its slot has no voice
+    voice.host.removePlayer(41, RemovePlayerReason::Kicked);
+    const rtype::game::VoiceRosterMessage afterLeave{
+        {rtype::voice::Backend::Game, rtype::voice::Backend::None, rtype::voice::Backend::None,
+         rtype::voice::Backend::None}};
+    CHECK(waitUntil(
+        voice.loop, [&] { return newcomer.lastRoster() == afterLeave; },
+        [&] {
+            voice.update();
+            newcomer.update();
+        }));
+}
+
+TEST_CASE("A client knows what each player tells about its voice: at its connection, at every change",
+          "[instance][voice]")
+{
+    using rtype::voice::Status;
+    VoiceGame voice(2);
+    CHECK(waitUntil(
+        voice.loop, [&] { return voice.clients[1]->lastStatuses() == rtype::game::VoiceStatusesMessage{}; },
+        [&] { voice.update(); }));
+
+    voice.clients[0]->sendVoiceStatus({.muted = true});
+    voice.clients[1]->sendVoiceStatus({.noMicrophone = true});
+    const rtype::game::VoiceStatusesMessage expected{{Status{.muted = true}, Status{.noMicrophone = true}}};
+    REQUIRE(waitUntil(
+        voice.loop,
+        [&] {
+            return voice.clients[0]->lastStatuses() == expected &&
+                   voice.clients[1]->lastStatuses() == expected;
+        },
+        [&] { voice.update(); }));
+
+    // A newcomer is told at once
+    const AddPlayerMessage carol = player(50, 20, "Carol");
+    REQUIRE(voice.host.addPlayer(carol));
+    TestClient newcomer(voice.loop, voice.host.localAddress().port(), carol);
+    REQUIRE(waitUntil(
+        voice.loop, [&] { return newcomer.lastStatuses() == expected; },
+        [&] {
+            voice.update();
+            newcomer.update();
+        }));
+
+    // The muted player leaves: its slot is told empty
+    voice.host.removePlayer(40, RemovePlayerReason::Kicked);
+    const rtype::game::VoiceStatusesMessage afterLeave{{Status{}, Status{.noMicrophone = true}}};
+    CHECK(waitUntil(
+        voice.loop, [&] { return newcomer.lastStatuses() == afterLeave; },
+        [&] {
+            voice.update();
+            newcomer.update();
+        }));
+}
+
+TEST_CASE("In a game of two players on Discord and two on the game, the game carries each voice once",
+          "[instance][voice]")
+{
+    using rtype::voice::Backend;
+    VoiceGame voice;
+    // Slots 0 and 1 on the game, 2 and 3 on Discord
+    voice.setBackends({Backend::Game, Backend::Game, Backend::Discord, Backend::Discord});
+    for (std::uint8_t slot = 0; slot < 4; ++slot) {
+        voice.clients[slot]->sendVoice(slot);
+    }
+    REQUIRE(waitUntil(
+        voice.loop,
+        [&] {
+            return voice.clients[0]->voicesFrom().size() == 3 && voice.clients[2]->voicesFrom().size() == 2;
+        },
+        [&] { voice.update(); }));
+    voice.settle();
+
+    // The players on the game hear the three others through it, never themselves
+    CHECK(sorted(voice.clients[0]->voicesFrom()) == std::vector<std::uint8_t>{1, 2, 3});
+    CHECK(sorted(voice.clients[1]->voicesFrom()) == std::vector<std::uint8_t>{0, 2, 3});
+    // The players on Discord hear the players on the game through it, each other through Discord only
+    CHECK(sorted(voice.clients[2]->voicesFrom()) == std::vector<std::uint8_t>{0, 1});
+    CHECK(sorted(voice.clients[3]->voicesFrom()) == std::vector<std::uint8_t>{0, 1});
+}
+
+TEST_CASE("A player without voice is neither heard nor sent the voice of the others", "[instance][voice]")
+{
+    using rtype::voice::Backend;
+    VoiceGame voice(3);
+    voice.setBackends({Backend::Game, Backend::Game, Backend::None});
+    // Slot 2 talks without having said it has a voice: dropped
+    voice.clients[2]->sendVoice(1);
+    voice.clients[0]->sendVoice(1);
+    REQUIRE(waitUntil(
+        voice.loop, [&] { return voice.clients[1]->voicesFrom().size() == 1; }, [&] { voice.update(); }));
+    voice.settle();
+
+    CHECK(voice.clients[1]->voicesFrom() == std::vector<std::uint8_t>{0});
+    CHECK(voice.clients[0]->voicesFrom().empty());
+    CHECK(voice.clients[2]->voicesFrom().empty());
+}
+
+TEST_CASE("The game forwards no more voice than its rate, and drops a malformed one", "[instance][voice]")
+{
+    using rtype::voice::Backend;
+    VoiceGame voice(2);
+    voice.setBackends({Backend::Game, Backend::Game});
+    // A frame of 161 bytes, as no client of ours writes it
+    std::vector<std::byte> tooBig{std::byte{0}, std::byte{1}, std::byte{0}, std::byte{161}};
+    tooBig.resize(tooBig.size() + 161, std::byte{0xF8});
+    voice.clients[0]->session.send(rtype::game::message_type::Voice, tooBig, Delivery::Unreliable);
+    // 40 frames at once: the burst of the rate passes, not the rest
+    for (std::uint16_t sequence = 0; sequence < 40; ++sequence) {
+        voice.clients[0]->sendVoice(sequence);
+    }
+    REQUIRE(waitUntil(
+        voice.loop, [&] { return voice.clients[1]->voicesFrom().size() >= 10; }, [&] { voice.update(); }));
+    voice.settle();
+    CHECK(voice.clients[1]->voicesFrom().size() == 10);
+}
+
+TEST_CASE("Without the voice, ACCEPTED tells the client and the game forwards none", "[instance][voice]")
+{
+    using rtype::voice::Backend;
+    VoiceGame voice(2, {.enabled = false});
+    CHECK_FALSE(voice.clients[0]->accepted->voice);
+    voice.setBackends({Backend::Game, Backend::Game});
+    for (std::uint16_t sequence = 0; sequence < 5; ++sequence) {
+        voice.clients[0]->sendVoice(sequence);
+    }
+    voice.settle();
+    CHECK(voice.clients[1]->voicesFrom().empty());
+
+    VoiceGame carried(1);
+    CHECK(carried.clients[0]->accepted->voice);
+}
+
+TEST_CASE("A frame bigger than the server allows is dropped, a smaller one forwarded", "[instance][voice]")
+{
+    using rtype::voice::Backend;
+    VoiceGame voice(2, {.enabled = true, .maxFrameBytes = 60, .maxFramesPerSecond = 60});
+    voice.setBackends({Backend::Game, Backend::Game});
+    const auto frame = [&](std::uint16_t sequence, std::size_t size) {
+        voice.clients[0]->session.send(
+            rtype::game::message_type::Voice,
+            rtype::game::encode(rtype::game::VoiceMessage{sequence, false, Bytes(size, std::byte{0xF8})}),
+            Delivery::Unreliable);
+    };
+    frame(0, 61);
+    frame(1, 60);
+    frame(2, 160);
+    REQUIRE(waitUntil(
+        voice.loop, [&] { return !voice.clients[1]->voicesFrom().empty(); }, [&] { voice.update(); }));
+    voice.settle();
+    CHECK(voice.clients[1]->voicesFrom().size() == 1);
+}
+
+TEST_CASE("A player muted by an administrator is heard by nobody and shown muted, until its mute ends",
+          "[instance][voice]")
+{
+    using rtype::voice::Backend;
+    using rtype::voice::Status;
+    VoiceGame voice(2);
+    voice.setBackends({Backend::Game, Backend::Game});
+    const auto statusesAre = [&](const rtype::game::VoiceStatusesMessage &expected) {
+        return waitUntil(
+            voice.loop,
+            [&] {
+                return voice.clients[0]->lastStatuses() == expected &&
+                       voice.clients[1]->lastStatuses() == expected;
+            },
+            [&] { voice.update(); });
+    };
+
+    // For the rest of the game: every client sees it, its voice goes nowhere
+    REQUIRE(voice.host.muteVoice(40, VoiceMutedForTheGame));
+    REQUIRE(statusesAre({{Status{.mutedByAdmin = true}, Status{}}}));
+    for (std::uint16_t sequence = 0; sequence < 3; ++sequence) {
+        voice.clients[0]->sendVoice(sequence);
+    }
+    voice.settle();
+    CHECK(voice.clients[1]->voicesFrom().empty());
+    // What a player tells cannot lift it: the bit is the game's
+    voice.clients[0]->sendVoiceStatus({.muted = true, .mutedByAdmin = false});
+    REQUIRE(statusesAre({{Status{.muted = true, .mutedByAdmin = true}, Status{}}}));
+
+    // Let talk again: forwarded at once
+    REQUIRE(voice.host.muteVoice(40, 0));
+    REQUIRE(statusesAre({{Status{.muted = true}, Status{}}}));
+    voice.clients[0]->sendVoice(10);
+    REQUIRE(waitUntil(
+        voice.loop, [&] { return voice.clients[1]->voicesFrom().size() == 1; }, [&] { voice.update(); }));
+
+    // For a second: it ends by itself
+    REQUIRE(voice.host.muteVoice(41, 1));
+    REQUIRE(statusesAre({{Status{.muted = true}, Status{.mutedByAdmin = true}}}));
+    CHECK(waitUntil(
+        voice.loop,
+        [&] {
+            return voice.clients[0]->lastStatuses() ==
+                   rtype::game::VoiceStatusesMessage{{Status{.muted = true}, Status{}}};
+        },
+        [&] { voice.update(); }, 3s));
+    CHECK_FALSE(voice.host.muteVoice(99, 60));
+
+    // A player whose account is muted joins muted (ADD_PLAYER), for itself and the others
+    AddPlayerMessage carol = player(50, 20, "Carol");
+    carol.voiceMuted = 600;
+    REQUIRE(voice.host.addPlayer(carol));
+    TestClient newcomer(voice.loop, voice.host.localAddress().port(), carol);
+    CHECK(waitUntil(
+        voice.loop,
+        [&] {
+            const auto mine = newcomer.lastStatuses();
+            const auto theirs = voice.clients[1]->lastStatuses();
+            return mine && mine->statuses[2].mutedByAdmin && theirs && theirs->statuses[2].mutedByAdmin;
+        },
+        [&] {
+            voice.update();
+            newcomer.update();
+        }));
 }

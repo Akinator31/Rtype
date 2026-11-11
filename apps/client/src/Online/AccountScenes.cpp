@@ -7,6 +7,7 @@
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Widget.hpp"
+#include "rtype/log/Logger.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -19,6 +20,12 @@ namespace rtype::client
 
 namespace
 {
+
+const log::Logger &logger()
+{
+    static const log::Logger instance("online");
+    return instance;
+}
 
 using online_layout::columnLeft;
 using online_layout::rightLeft;
@@ -98,12 +105,47 @@ void OnlineScenes::showError(lobby::ErrorCode code, const std::map<FormField, ec
 void OnlineScenes::welcomed()
 {
     if (_lobby && _lobby->account()) {
+        // Signed in by the token of HELLO: the Discord token too, from the refresh token kept
+        refreshDiscord();
         readProfile();
     } else if (_lobby && (_lobby->features().passwordAccounts || _lobby->features().discord)) {
         _engine.switchScene(AccountsScene);
         return;
     }
     refresh();
+}
+
+void OnlineScenes::discordToken(const lobby::DiscordTokenMessage &token)
+{
+    if (!_sessions.keepDiscord(_address, token.refreshToken)) {
+        logger().warning("The Discord token of {} is not kept: it is asked again at the next sign-in",
+                         _address);
+    }
+    _discordConnection.connect(token.accessToken);
+}
+
+void OnlineScenes::refreshDiscord()
+{
+    if (!_lobby || !_lobby->account()) {
+        return;
+    }
+    const std::optional<std::string> refreshToken = _sessions.discordRefreshToken(_address);
+    if (!refreshToken) {
+        // Signed in before the server gave the tokens, or with a password: no voice through Discord
+        logger().info("No Discord token kept for {}: sign in with Discord again for its voice", _address);
+        return;
+    }
+    _lobby->discordRefresh(*refreshToken, [this](std::optional<lobby::ErrorCode> error) {
+        if (!error) {
+            return;
+        }
+        if (*error == lobby::ErrorCode::DiscordTokenRefused) {
+            // Discord, or the server, will not renew it: the next sign-in with Discord gives another
+            _sessions.forgetDiscord(_address);
+            _discordConnection.disconnect();
+        }
+        logger().info("No Discord token from {}: {}", _address, describe(*error));
+    });
 }
 
 void OnlineScenes::signedIn(const LobbyClient::SignInResult &result)
@@ -164,35 +206,37 @@ void OnlineScenes::startDiscord(DiscordPurpose purpose)
         // Discord opens: the player accepts there, then comes back
         _discordStep = 1;
         _engine.pushScene(DiscordScene);
-        const std::uint64_t application = std::get<lobby::DiscordAuthorizeMessage>(result).applicationId;
-        _discord.authorize(application, [this, purpose](const discord::AuthorizationResult &authorization) {
-            if (!_lobby) {
-                return;
-            }
-            if (const auto *error = std::get_if<discord::AuthorizationError>(&authorization)) {
-                _engine.showToast(_translations.text(*error == discord::AuthorizationError::Refused
-                                                         ? "account.discord_refused"
-                                                         : "account.discord_failed"),
-                                  engine::ToastType::Warning);
+        const auto &authorize = std::get<lobby::DiscordAuthorizeMessage>(result);
+        _discord.authorize(
+            authorize.applicationId, authorize.scopes,
+            [this, purpose](const discord::AuthorizationResult &authorization) {
+                if (!_lobby) {
+                    return;
+                }
+                if (const auto *error = std::get_if<discord::AuthorizationError>(&authorization)) {
+                    _engine.showToast(_translations.text(*error == discord::AuthorizationError::Refused
+                                                             ? "account.discord_refused"
+                                                             : "account.discord_failed"),
+                                      engine::ToastType::Warning);
+                    if (_engine.isSceneOpen(DiscordScene)) {
+                        _engine.popScene();
+                    }
+                    return;
+                }
+                // Accepted: the server checks it with Discord
+                _discordStep = 2;
                 if (_engine.isSceneOpen(DiscordScene)) {
                     _engine.popScene();
+                    _engine.pushScene(DiscordScene);
                 }
-                return;
-            }
-            // Accepted: the server checks it with Discord
-            _discordStep = 2;
-            if (_engine.isSceneOpen(DiscordScene)) {
-                _engine.popScene();
-                _engine.pushScene(DiscordScene);
-            }
-            const auto &accepted = std::get<discord::Authorization>(authorization);
-            _lobby->discordConfirm({.code = accepted.code,
-                                    .codeVerifier = accepted.codeVerifier,
-                                    .redirectUri = accepted.redirectUri},
-                                   [this, purpose](const LobbyClient::DiscordConfirmResult &confirmed) {
-                                       discordConfirmed(purpose, confirmed);
-                                   });
-        });
+                const auto &accepted = std::get<discord::Authorization>(authorization);
+                _lobby->discordConfirm({.code = accepted.code,
+                                        .codeVerifier = accepted.codeVerifier,
+                                        .redirectUri = accepted.redirectUri},
+                                       [this, purpose](const LobbyClient::DiscordConfirmResult &confirmed) {
+                                           discordConfirmed(purpose, confirmed);
+                                       });
+            });
     });
 }
 
@@ -301,7 +345,6 @@ void OnlineScenes::declareAccountScenes(const engine::InterfaceStyle &style)
                 page.note(_translations.text("account.no_guests"),
                           {engine::AnchorPoint::TopLeft, columnLeft, top + 10.0f}, Tone::Hint);
             }
-            page.keys(_translations.text("account.keys_welcome"));
         });
 
     declareFormScenes(style);
@@ -369,7 +412,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                 _translations.text("account.forgot"), [this] { _engine.switchScene(ForgotPasswordScene); },
                 {engine::AnchorPoint::TopLeft, columnLeft, buttonsTop(2) + online_layout::buttonsSpacing});
             discordBeside(page, online_layout::fieldsTop, 780.0f);
-            page.keys(_translations.text("account.keys_form"));
         });
 
     // E3: the username, the email and the password, its strength in a gauge
@@ -421,7 +463,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                 },
                 {engine::AnchorPoint::TopLeft, columnLeft, gaugeTop + style.gauge.getHeight() + 70.0f});
             discordBeside(page, online_layout::fieldsTop, 820.0f);
-            page.keys(_translations.text("account.keys_form"));
         });
 
     // C1: six cells for the code of the email, sent as soon as they are full
@@ -467,7 +508,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                             }
                         },
                         {engine::AnchorPoint::TopLeft, columnLeft, 540.0f + online_layout::buttonsSpacing});
-            page.keys(_translations.text("account.keys_code"));
         });
 
     _engine.createScene(
@@ -494,7 +534,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                                                    });
                         },
                         {engine::AnchorPoint::TopLeft, columnLeft, buttonsTop(1)});
-            page.keys(_translations.text("account.keys_form"));
         });
 
     _engine.createScene(
@@ -528,7 +567,6 @@ void OnlineScenes::declareFormScenes(const engine::InterfaceStyle &style)
                             }
                         },
                         {engine::AnchorPoint::TopLeft, columnLeft, buttonsTop(3) + 30.0f});
-            page.keys(_translations.text("account.keys_form"));
         });
 }
 
@@ -638,7 +676,6 @@ void OnlineScenes::declareDiscordScenes(const engine::InterfaceStyle &style)
                         {engine::AnchorPoint::TopLeft, textLeft, 660.0f});
             page.button(_translations.text("online.cancel"), [this] { _engine.switchScene(AccountsScene); },
                         {engine::AnchorPoint::TopLeft, textLeft, 660.0f + online_layout::buttonsSpacing});
-            page.keys(_translations.text("account.keys_new_pilot"));
         });
 }
 
@@ -731,7 +768,6 @@ void OnlineScenes::declareMyAccountScenes(const engine::InterfaceStyle &style)
             page.dangerButton(_translations.text("account.delete"),
                               [this] { _engine.pushScene(DeleteAccountScene); },
                               {engine::AnchorPoint::TopLeft, sheetLeft + 520.0f, buttons});
-            page.keys(_translations.text("account.keys_mine"));
         });
 
     // A2: the deletion asked over My account, in red, No by default
@@ -788,8 +824,6 @@ void OnlineScenes::declareMyAccountScenes(const engine::InterfaceStyle &style)
                                   },
                                   {engine::AnchorPoint::Top, 260.0f, 780.0f});
             }
-            page.note(toCapitals(_translations.text("online.keys_cancel")),
-                      {engine::AnchorPoint::Bottom, 0.0f, -84.0f}, Tone::Hint, 20.0f);
         });
 }
 

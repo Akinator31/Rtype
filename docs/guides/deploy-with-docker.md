@@ -12,7 +12,7 @@ Discord configured, their secrets as files, and the panel on its domain over HTT
 - A Linux machine with Docker 25 or newer, and Dokploy on it if you deploy with Dokploy.
 - Its firewall open for **4242/tcp** (the lobby) and **4242/udp** (every game), as for a server without
   Docker ([Run a server](run-a-server.md), step 2).
-- The image: `ghcr.io/akinator31/rtype`, built and published by the CI, tagged `latest` and with its version
+- The image: `ghcr.io/akinator31/rtype-server`, built and published by the CI, tagged `latest` and with its version
   for each release, `main` for the last commit of `main`. It exists for **linux/amd64** and **linux/arm64**
   (an ARM server, a Raspberry Pi 4 or 5 with a 64-bit system): Docker pulls the one of the machine. To build
   it yourself, from the root of the repository: `docker build -t rtype-server .`.
@@ -54,7 +54,7 @@ with 0, as without Docker.
     ```yaml
     services:
       server:
-        image: ${RTYPE_IMAGE:-ghcr.io/akinator31/rtype:latest}
+        image: ${RTYPE_IMAGE:-ghcr.io/akinator31/rtype-server:latest}
         restart: unless-stopped
         init: true
         ports:
@@ -78,7 +78,7 @@ with 0, as without Docker.
     repository without its settings and secrets, which part two adds. To change the settings, mount a file of
     your own over those of the image, `./server.toml:/config/server.toml:ro` in `volumes`. Keep `key` and
     `database` in `/data`, and the ports the file publishes. Another version than `latest`:
-    `RTYPE_IMAGE=ghcr.io/akinator31/rtype:0.1.0`, in the environment of the service.
+    `RTYPE_IMAGE=ghcr.io/akinator31/rtype-server:0.1.0`, in the environment of the service.
 
 3. **Check that it runs.** After a few seconds, the service is *healthy*:
 

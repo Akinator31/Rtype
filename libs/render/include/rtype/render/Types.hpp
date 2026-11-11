@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace rtype::render
@@ -16,6 +18,30 @@ struct Vector3 {
     float x = 0.0f;
     float y = 0.0f;
     float z = 0.0f;
+};
+
+/// A 4x4 matrix stored column by column, as OpenGL reads it: `values[12]`, `values[13]` and `values[14]` are
+/// the translation. The identity by default.
+struct Matrix {
+    std::array<float, 16> values{1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                                 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+
+    /// The value at a row and a column, from 0.
+    [[nodiscard]] float at(int row, int column) const { return values[(column * 4) + row]; }
+};
+
+/// What an eye of a VR headset sees, for Renderer::beginEye(). The space it is given in is the world of the
+/// eye pass: in metres, y up, -z ahead.
+struct EyeView {
+    /// From the world to the space of the eye.
+    Matrix view;
+    /// OpenGL projection of the eye, depth in [-1, 1].
+    Matrix projection;
+    /// Where the eye is, in the world.
+    Vector3 position;
+    /// Size of the image of the eye, in pixels.
+    int width = 0;
+    int height = 0;
 };
 
 /// How a camera projects the 3D models on the screen.
@@ -45,6 +71,12 @@ struct Rectangle {
     float y = 0.0f;
     float width = 0.0f;
     float height = 0.0f;
+};
+
+/// An axis-aligned box in 3D: its smallest and largest corners.
+struct Box3 {
+    Vector3 min;
+    Vector3 max;
 };
 
 /// A colour, with an alpha channel for transparency (0 is invisible, 255 is opaque).
@@ -110,6 +142,20 @@ struct ModelPose {
     float addedTime = 0.0f;
 
     friend bool operator==(const ModelPose &, const ModelPose &) = default;
+};
+
+/// What posing the animated models cost since it was last read (Renderer::takePoseStats()): raylib computes
+/// the matrices of their bones each time a shared model changes pose, and the shaders move the vertices on
+/// the graphics card. For the diagnostics of the frames.
+struct PoseStats {
+    /// Times the bones of a model moved: the poses asked for that were not the current pose of the model.
+    std::size_t poses = 0;
+    /// Of these, the ones made again to draw a model in the glow (drawGlow()).
+    std::size_t glowPoses = 0;
+    /// The bones moved, added up over the poses.
+    std::size_t bones = 0;
+    /// Time spent computing their matrices, in seconds, on the processor.
+    double seconds = 0.0;
 };
 
 } // namespace rtype::render

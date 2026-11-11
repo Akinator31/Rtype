@@ -1,9 +1,5 @@
 # Architecture
 
-!!! warning "Draft"
-
-    This page describes the **target** architecture. It is updated as each subsystem is implemented.
-
 R-Type follows a client/server model with an **authoritative server**: clients only send player inputs and
 render what the server tells them; every gameplay decision (spawns, collisions, deaths) is taken by the
 server.
@@ -75,8 +71,10 @@ The engine is split into decoupled subsystems, shared by the client and the serv
 | **Game logic** | Players, Bydos, missiles, waves, collisions (`libs/game`, [ADR 0015](../decisions/0015-one-game-scene-local-or-remote-session.md), [Game](game.md)) | Server, client offline |
 | **Rendering** | Window, textures, drawing, built on raylib | Client |
 | **Interface** | Menus, options and HUD, made of entities like the world (`libs/engine`) | Client |
-| **Audio** | Music and sound effects, built on raylib (`libs/audio`) | Client |
+| **Audio** | Music, sound effects and the voices of the players, built on raylib (`libs/audio`) | Client |
+| **Voice** | The voice chat of an online game, through the game or Discord (`libs/voice`, [Voice](voice.md)) | Client |
 | **Input** | Keyboard / gamepad mapping to player actions | Client |
+| **VR** | The game in a VR headset, through OpenXR (`libs/xr`, [VR](vr.md)) | Client |
 
 ## World and interface
 
@@ -98,19 +96,19 @@ flowchart TB
 *Each frame updates the ECS, then draws the world layer and the interface layer on top of it.*
 
 - Only the `Renderer` draws: the systems never call raylib.
-- The interface layer is always drawn after the world. In VR, the world layer is drawn on the board and the
-  interface layer on a floating panel.
+- The interface layer is always drawn after the world. In VR, the world layer is drawn on the board, in relief
+  for each eye, and the interface layer on a floating panel and the screens of the cockpit.
 - Phases of the game (home screen, game, pause menu) are **scenes**: groups of entities opened and closed
   together. See [Scenes and interface](scenes-and-interface.md).
 
 ## Libraries
 
-The programs are built on twelve libraries:
+The programs are built on nineteen libraries:
 
 | Library | Role | Page |
 |---|---|---|
 | `libs/render` | Window, textures and fonts, drawing at a fixed logical resolution. Wraps raylib. | [Rendering](rendering.md) |
-| `libs/input` | Keyboard and gamepads turned into game actions, with rebindable controls. Wraps raylib. | [Input](input.md) |
+| `libs/input` | Keyboard, mouse and gamepads turned into game actions, with rebindable controls, and a virtual gamepad and pointer over them (the controllers of a VR headset). Wraps raylib. | [Input](input.md) |
 | `libs/ecs` | Entities, components and systems, with a hierarchy. Shared with the server, so it never depends on raylib. | [ECS](ecs.md) |
 | `libs/log` | Messages with a level and a subsystem name, coloured in a terminal. Shared with the server. | [Logging](logging.md) |
 | `libs/network` | Addresses, UDP and TCP sockets, the event loop that runs them, TCP framing, TLS and the binary serialization. Wraps Asio and Mbed TLS. Shared with the server. | [Networking](networking.md) |
@@ -119,22 +117,34 @@ The programs are built on twelve libraries:
 | `libs/scripting` | Lua 5.4 and LuaBridge3, built from source, and a sandboxed `State` that runs a file in its own environment. Knows no game. Shared with the server. | [Game](game.md#configuration) |
 | `libs/lobby` | The messages of the lobby protocol, between a client and the master: hello, list, create and join games, the messages of the administrators. Shared by the client and the server. | [Server](server.md#the-lobby) |
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
-| `libs/audio` | Sound effects and streamed music, with separate volumes. Wraps raylib. | [Audio](audio.md) |
+| `libs/audio` | Sound effects, streamed music and the voices of the other players, with separate volumes, and what the output plays, for the echo cancellation. Wraps raylib. | [Audio](audio.md) |
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
-| `libs/discord` | Signing in with Discord from the client: an interface, and its implementation through the Discord Social SDK, kept in `libs/discord/sdk/`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
+| `libs/discord` | Discord in the client: an interface per feature (the sign-in, the presence and the invitations, the connection, the voice call, the friends), and their implementations through the Discord Social SDK, kept in `libs/discord/sdk/`, on one shared `Session`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
+| `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord, the devices as interfaces (`rtype::voice`, header only), the codec of the voice (`rtype::voice_codec`), the echo cancellation, noise suppression and gain control of the microphone (`rtype::voice_processing`), and the voice of the game with its jitter buffer and the microphone (`rtype::voice_client`). Wraps libopus, webrtc-audio-processing, and the miniaudio of raylib for the microphone. For the client. | [Voice](voice.md) |
+| `libs/xr` | The game in a VR headset: the session of a headset on the OpenGL context of the window, the images of its eyes, its controllers and their vibrations, behind an interface with no OpenXR type. Wraps OpenXR (the loader, built and linked statically). For the client. | [VR](vr.md) |
+| `libs/beat` | The beats of a piece of music: decodes the file and finds the attacks in three bands of frequencies, for the waves placed on the music. Knows no game. Shared by the client and the server. | [Configure enemies and weapons](../guides/configure-enemies-and-weapons.md#waves-configwaves) |
+| `libs/localization` | The translations of the interface: `key=value` catalogs in UTF-8, English and French, with English as the fallback. No dependency. For the client. | [Localization](localization.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
 | `libs/shaders` | GLSL shaders (colour filters, lighting of the 3D models), one file per stage in `glsl/`, embedded at build time as C++ strings and compiled by `render`. Header-only, no dependency. | [Rendering](rendering.md) |
 
-Their public headers contain no raylib type: raylib is a private dependency of `render`, `input` and `audio`,
+Their public headers contain no raylib type: raylib is a private dependency of `render`, `input`, `audio` and `voice_client`,
 and the client code only uses our own classes. The server only links the libraries that do not depend on
 raylib: the ECS, the physics, the game, the scripting, the lobby, the log, the core and the network libraries. Likewise, Asio and Mbed TLS are
 private dependencies of `network`, and reproc, which starts the instances of the server, toml++, which reads
 its settings file, Crow, which serves its panel ([Web server](web.md)), and Argon2, which hashes the passwords of
 the accounts ([Accounts](accounts.md#passwords)), private dependencies of `r-type_server`. libcurl, which sends
-the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who a player is, and is the HTTP
-client of the tests, comes through CPM too, with OpenSSL from the system on Linux. The Discord Social SDK is a
+the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who a player is, downloads the
+pictures of the Discord friends in the client ([Friends](client-online.md#friends)), and is the HTTP client of the
+tests, comes through CPM too (`cmake/Curl.cmake`, shared by the server and the client), a private dependency of
+`r-type_server` and of the client, with OpenSSL from the system on Linux. The Discord Social SDK is a
 private dependency of `rtype::discord_sdk`, linked by `r-type_client` alone
-([ADR 0026](../decisions/0026-discord-social-sdk.md)).
+([ADR 0026](../decisions/0026-discord-social-sdk.md)). libopus, which encodes the voice, is a private dependency
+of `rtype::voice_codec` ([Voice](voice.md#the-codec)); webrtc-audio-processing and abseil, which take the echo
+and the noise out of the microphone, private dependencies of `rtype::voice_processing`
+([Voice](voice.md#the-sound-processing)); the microphone is captured by the miniaudio raylib
+compiles, a private dependency of `rtype::voice_client` ([Voice](voice.md#the-devices)). The OpenXR loader is a
+private dependency of `rtype::xr`, which uses rlgl for the framebuffers of the eyes but never includes
+`raylib.h` ([VR](vr.md#the-opengl-context)).
 
 ## Repository layout
 
@@ -143,22 +153,29 @@ apps/       executables, one subdirectory per program
   client/   graphical client (r-type_client)
     assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
-  minigame/ Orbit Breaker, a brick breaker made with the engine alone (orbit_breaker)
+example/    games made with the engine alone, to show that it runs other games
+  minigame/ Orbit Breaker, a brick breaker (orbit_breaker)
 config/     the Lua configuration of the game: enemies, weapons... (client and server)
 libs/       libraries shared by the programs, one subdirectory per library
-  audio/    sound effects and music (client)
+  audio/    sound effects, music and the voices played (client)
+  beat/     beats of the music, for the waves (client and server)
   core/     handles and resource caches (all)
   database/ SQLite and PostgreSQL through SOCI, migrations (server)
+  discord/  the Discord Social SDK behind interfaces (client)
   ecs/      entity component system, hierarchy (client and server)
   engine/   client systems: drawing, animations, menus (client)
   game/     rules of the R-Type, the Simulation (server and client offline)
   input/    keyboard and gamepad input (client)
+  localization/ translations of the interface (client)
   lobby/    messages between a client and the master (client and server)
   log/      logging (client and server)
   network/  addresses, sockets and event loop (client and server)
   render/   window, resources and drawing (client)
   scripting/ Lua and its sandbox (client and server)
   shaders/  GLSL shaders, embedded in the binaries at build time (client)
+  voice/    voice chat: codec, sound processing, microphone (client)
+  xr/       VR headsets through OpenXR (client)
+web/admin/  the administration panel of the server (React)
 tests/      unit and smoke tests (Catch2)
 cmake/      CMake helpers (CPM bootstrap)
 docs/       this documentation (Zensical)

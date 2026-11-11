@@ -1,6 +1,6 @@
--- A tiny dropship: hard to hit.
+-- A dropship that stings.
 return {
     id = "bydo_stinger",
     model = "models/drop_ship_v2.glb",
-    collider = { shape = "box", halfWidth = 30, halfHeight = 12 },
+    collider = { shape = "box", halfWidth = 84, halfHeight = 49 },
 }

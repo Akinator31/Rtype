@@ -12,6 +12,22 @@
 namespace rtype::render::detail
 {
 
+/// Where the models are seen from, as the lighting needs it: a camera of the frame (viewPointOf()) or an eye
+/// of a VR headset.
+struct ViewPoint {
+    /// Where the viewer is, in the world.
+    ::Vector3 position{0.0f, 0.0f, 0.0f};
+    /// Where it looks, of any length.
+    ::Vector3 direction{0.0f, 0.0f, -1.0f};
+    /// The top of its view.
+    ::Vector3 up{0.0f, 1.0f, 0.0f};
+    /// Seen from infinitely far along `direction`: every point is seen along it.
+    bool orthographic = false;
+};
+
+/// The view point of a camera.
+[[nodiscard]] ViewPoint viewPointOf(const Camera3D &camera);
+
 /// The generic parameter of a raylib Material (Material::params) that a model sets to 1 for a transparent
 /// glTF material marked doubleSided, such as the flame of a blade, a sheet seen from both sides: raylib
 /// ignores that flag and culls the back of its faces, so the draw turns the culling off for it.
@@ -41,10 +57,12 @@ private:
     int _metalnessLocation = -1;
     int _emissionOnlyLocation = -1;
     int _emissionColorLocation = -1;
+    /// Whether the mesh drawn moves with the bones of its model (GPU skinning)
+    int _skinnedLocation = -1;
     bool _available = false;
 
-    /// Sends the camera, the lights and whether only the emitted light is drawn to the shader.
-    void setScene(const Light &light, const Camera3D &camera, bool emissionOnly);
+    /// Sends the view point, the lights and whether only the emitted light is drawn to the shader.
+    void setScene(const Light &light, const ViewPoint &viewer, bool emissionOnly);
     /// Turns a copy of a material, and of its maps, into one drawn with the lighting shader: its missing maps
     /// replaced, its factors sent to the shader.
     void prepareMaterial(Material &material);
@@ -68,14 +86,14 @@ public:
     [[nodiscard]] static bool hasEmission(const Model &model);
 
     /// Draws a model lit by the light, like DrawModelEx(), turned first by spinAngle degrees around its own
-    /// vertical axis, without its hidden meshes (by index). Must be called in 3D mode, through `camera`.
-    void draw(const Model &model, const Light &light, const Camera3D &camera, ::Vector3 position,
+    /// vertical axis, without its hidden meshes (by index). Must be called in 3D mode, seen from `viewer`.
+    void draw(const Model &model, const Light &light, const ViewPoint &viewer, ::Vector3 position,
               ::Vector3 rotationAxis, float rotationAngle, float spinAngle, float scale, ::Color tint,
               const std::vector<int> &hiddenMeshes);
     /// Draws only the light the model emits, black elsewhere, so that it hides the glow behind it: the glow
     /// of the frame (Renderer::drawGlow()). Does nothing if the shader is not available. The parameters are
     /// those of draw().
-    void drawEmission(const Model &model, const Camera3D &camera, ::Vector3 position, ::Vector3 rotationAxis,
+    void drawEmission(const Model &model, const ViewPoint &viewer, ::Vector3 position, ::Vector3 rotationAxis,
                       float rotationAngle, float spinAngle, float scale, ::Color tint,
                       const std::vector<int> &hiddenMeshes);
 };

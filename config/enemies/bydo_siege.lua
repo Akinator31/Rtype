@@ -2,7 +2,7 @@
 return {
     id = "bydo_siege",
     ship = "bydo_siege",
-    health = 200,
+    health = 84,
     speed = 85,
     acceleration = 170,
     weapon = "siege_launcher",

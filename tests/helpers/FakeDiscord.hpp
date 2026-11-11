@@ -1,6 +1,7 @@
 #pragma once
 
-// A Discord of the tests: the two routes of its API the master uses (/oauth2/token and /users/@me) and the
+// A Discord of the tests: the two routes of its API the master uses (/oauth2/token, its codes and its refresh
+// tokens, and /users/@me) and the
 // pictures of its CDN (/cdn/avatars/<id>/<hash>.png), on the loopback, over HTTP. A user given to accept() or
 // authorize() with an avatarHash has its `avatar` served as its picture, whatever its bytes. The tests play
 // the player and the Discord Social SDK with accept(), which gives what the client would get once the user
@@ -65,6 +66,10 @@ public:
     void setDown(bool down);
     /// The codes the master tried to exchange, right or wrong.
     [[nodiscard]] std::size_t exchanges() const;
+    /// The refresh tokens the master tried to renew, right or wrong.
+    [[nodiscard]] std::size_t refreshes() const;
+    /// A new refresh token of a user, as a sign-in would give it: single use.
+    [[nodiscard]] std::string refreshTokenOf(const rtype::server::DiscordUser &user);
 };
 
 } // namespace testing

@@ -1,11 +1,11 @@
--- A fast patrol that weaves across its path and fires often.
+-- A fast patrol that weaves across its path and fires zigzagging plasma shards often.
 return {
     id = "bydo_interceptor",
     ship = "bydo_interceptor",
-    health = 25,
+    health = 11,
     speed = 390,
     acceleration = 780,
-    weapon = "rapid_rifle",
+    weapon = "plasma_shard_cannon",
     score = 180,
     collisionDamage = 15,
 

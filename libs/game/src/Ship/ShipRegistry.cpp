@@ -1,6 +1,7 @@
 #include "rtype/game/Ship/ShipRegistry.hpp"
 
 #include <format>
+#include <iterator>
 #include <stdexcept>
 #include <utility>
 
@@ -34,6 +35,28 @@ const ShipDefinition &ShipRegistry::getDefinition(const std::string &id) const
         throw std::out_of_range(std::format("unknown ship '{}'", id));
     }
     return found->second;
+}
+
+std::size_t ShipRegistry::getDefinitionCount() const
+{
+    return _definitions.size();
+}
+
+std::size_t ShipRegistry::getIndex(const std::string &id) const
+{
+    const auto found = _definitions.find(id);
+    if (found == _definitions.end()) {
+        throw std::out_of_range(std::format("unknown ship '{}'", id));
+    }
+    return static_cast<std::size_t>(std::distance(_definitions.begin(), found));
+}
+
+const ShipDefinition &ShipRegistry::getDefinitionAt(std::size_t index) const
+{
+    if (index >= _definitions.size()) {
+        throw std::out_of_range(std::format("no ship at index {}", index));
+    }
+    return std::next(_definitions.begin(), static_cast<std::ptrdiff_t>(index))->second;
 }
 
 } // namespace rtype::game

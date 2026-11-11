@@ -34,8 +34,8 @@ inline constexpr float rightWidth = 796.0f;
 inline constexpr float dividerX = 940.0f;
 } // namespace online_layout
 
-/// The look of the Online screens: a header with its back arrow, the forms on the left, the keys at the
-/// bottom left, and the small texts in the font of the captions. Each screen is built with one in its scene.
+/// The look of the Online screens: a header with its back arrow, the forms on the left, and the small texts
+/// in the font of the captions. Each screen is built with one in its scene.
 class OnlineScreen
 {
     ecs::Ecs &_ecs;
@@ -49,7 +49,7 @@ public:
         Bright,
         /// Silver: a detail.
         Detail,
-        /// Grey: a hint, the keys.
+        /// Grey: a hint.
         Hint,
         /// Red: what went wrong, or what deletes.
         Alert,
@@ -66,8 +66,6 @@ public:
     /// A small text, its top left corner at the anchor.
     ecs::entity_t note(const std::string &text, engine::Anchor anchor, Tone tone = Tone::Detail,
                        float size = 22.0f);
-    /// The keys of the screen, at the bottom left: "ESCAPE · BACK".
-    void keys(const std::string &text);
     /// A field of the column of the forms, at its row.
     ecs::entity_t field(const std::string &caption, const std::string &content, int row,
                         std::size_t maxLength, std::function<void(const std::string &)> onSubmit = {});

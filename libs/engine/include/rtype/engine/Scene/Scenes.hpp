@@ -42,6 +42,10 @@ struct SceneSettings {
     std::function<void()> onBack{};
     /// Loaded before the scene opens, while the loading scene is shown: see Engine::setSceneAssetLoader().
     std::vector<SceneAsset> assets{};
+    /// The assets stay loaded once the scene has opened, even after it closes: opening it again is instant,
+    /// without the loading scene nor a frame spent creating them. For the scenes the player keeps coming back
+    /// to, like the main menu. They are only freed by Engine::unloadSceneAssets().
+    bool keepsAssets = false;
 };
 
 /// The stack of open scenes: home screen, game, pause menu over the game...
@@ -98,6 +102,9 @@ public:
 
     /// The scene at the top, if any.
     [[nodiscard]] std::optional<SceneId> top() const;
+    /// The scene at the bottom, if any: it changes when the scenes are switched (Engine::switchScene()), not
+    /// when one is opened over it.
+    [[nodiscard]] std::optional<SceneId> bottom() const;
     /// Tells whether a scene is open.
     [[nodiscard]] bool isOpen(SceneId scene) const;
 

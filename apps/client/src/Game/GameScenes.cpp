@@ -1,21 +1,31 @@
 #include "Game/GameScenes.hpp"
 
 #include "Assets.hpp"
+#include "Game/GameSky.hpp"
 #include "Game/GameView.hpp"
 #include "Game/Hud.hpp"
 #include "Game/LocalSession.hpp"
+#include "Game/RemoteSession.hpp"
 #include "Game/RescueCameraSystem.hpp"
 #include "Game/VoiceSystem.hpp"
+#include "MainMenu/Layout.hpp"
 #include "MainMenu/MainMenu.hpp"
+#include "MainMenu/SettingsPage.hpp"
+#include "Settings/PlayerSettings.hpp"
+#include "Settings/VoiceSettings.hpp"
 #include "ShipModel.hpp"
 #include "ShipSelector/ShipCatalog.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
 #include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
-#include "rtype/engine/Interface/MenuBuilder.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Entities.hpp"
+#include "rtype/game/Hitbox.hpp"
+#include "rtype/game/Item/ItemRegistry.hpp"
+#include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Rules.hpp"
+#include "rtype/game/Ship/ShipRegistry.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/log/Logger.hpp"
 
@@ -24,6 +34,8 @@
 #include <cstddef>
 #include <filesystem>
 #include <format>
+#include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -44,6 +56,13 @@ const std::vector<engine::SceneAsset> GameAssets{
     {AssetType::SmoothTexture, RTYPE_IMAGE_GLOW_CORE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_LIFE_LOST},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_SPEAKING},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_MUTED},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_MUTED_BY_ME},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_NO_MICROPHONE},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_DEAFENED},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_MUTED_BY_ADMIN},
+    {AssetType::SmoothTexture, RTYPE_IMAGE_VOICE_BADGE},
     {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_DEEP},
     {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_NEBULA},
     {AssetType::SmoothTexture, RTYPE_IMAGE_SKY_STARS},
@@ -132,21 +151,25 @@ constexpr render::Rectangle ShotBasicCore{-1.6f, -0.55f, 4.0f, 1.1f};
 constexpr render::Rectangle ShotSpiralCore{-2.4f, -0.73f, 4.48f, 1.46f};
 constexpr render::Rectangle OrbPlasmaCore{-0.9f, -0.9f, 1.8f, 1.8f};
 
-/// The ships are lit from the top left, in front of them, in the world of the game where y points down. A
-/// cold rim light from behind, at the top right where the Bydos come from, outlines their hulls against
-/// space.
-constexpr render::Light GameLight{.direction = {0.5f, 0.8f, 0.6f},
-                                  .color = {255, 248, 240, 255},
-                                  .ambient = {48, 50, 62, 255},
-                                  .rimDirection = {-0.6f, 0.35f, -1.0f},
-                                  .rim = {95, 135, 210, 255}};
-
 /// The colours of the light around the shots, those of their energy; the alpha is how bright it is.
 constexpr render::Color PlayerShotLight{80, 200, 255, 130};
 constexpr render::Color BydoShotLight{185, 90, 255, 115};
 constexpr render::Color PlasmaOrbLight{255, 120, 35, 135};
 /// How far the light of a shot spreads around its core, in heights of the core.
 constexpr float ShotLightSpread = 1.5f;
+
+/// The light around the shots of the players by the mechanic of their weapon, when their projectile has a
+/// look of its own: blue bullets, orange missiles, pink lasers, green plasma.
+constexpr render::Color PlayerMissileLight{255, 150, 60, 130};
+constexpr render::Color PlayerLaserLight{255, 90, 200, 130};
+constexpr render::Color PlayerPlasmaLight{110, 255, 140, 130};
+/// The light around the shots of the Bydos by the mechanic of their weapon, when their projectile has a look
+/// of its own: purple bullets, red missiles, magenta lasers, orange plasma.
+constexpr render::Color BydoMissileLight{255, 70, 50, 125};
+constexpr render::Color BydoLaserLight{255, 60, 170, 120};
+/// The core of a projectile model measured from its bounds: its front, at most this many times as long as it
+/// is tall, the rest being its trail.
+constexpr float ProjectileCoreRatio = 3.0f;
 
 /// The damage taken by the Bydos, written where they are hit: in the font of the titles, loaded at this size
 /// for the whole interface, in a warm yellow that stands out from the blue shots and the purple Bydos.
@@ -159,6 +182,34 @@ constexpr render::Color DamageColor{255, 220, 90, 255};
 constexpr HealthBarLook BydoHealthBar{100.0f, 42.0f, 0.3f};
 constexpr HealthBarLook BossHealthBar{240.0f, 180.0f, 0.3f};
 constexpr HealthBarLook AllyHealthBar{110.0f, 62.0f, 0.3f};
+
+/// The icons of the voice, in the order of VoiceIcon from Speaking, and the badge above the ship of another
+/// player who talks: right of its health bar, on its line (Figma, Série 16, 22 px scaled by 4/3).
+constexpr std::array<const char *, VoiceIconCount> VoiceIconPaths{
+    RTYPE_IMAGE_VOICE_SPEAKING,      RTYPE_IMAGE_VOICE_MUTED,    RTYPE_IMAGE_VOICE_MUTED_BY_ME,
+    RTYPE_IMAGE_VOICE_NO_MICROPHONE, RTYPE_IMAGE_VOICE_DEAFENED, RTYPE_IMAGE_VOICE_MUTED_BY_ADMIN};
+constexpr render::Rectangle VoiceIconSource{0.0f, 0.0f, 64.0f, 64.0f};
+constexpr float VoiceBadgeSize = 29.3f;
+/// From the line that tells what carries the voice of the player to the note under it, in the pause menu.
+constexpr float VoiceNoteLine = 34.0f;
+
+/// What carries the voice of another pilot, beside its name in the pause menu: nothing without a voice.
+std::string backendLabel(const localization::Localization &translations, voice::Backend backend)
+{
+    switch (backend) {
+    case voice::Backend::Game:
+        return translations.text("game.voices.backend.game");
+    case voice::Backend::Discord:
+        return translations.text("game.voices.backend.discord");
+    case voice::Backend::None:
+        break;
+    }
+    return {};
+}
+constexpr float VoiceBadgeGap = 12.0f;
+
+/// The volume of another player in the pause menu changes by this much.
+constexpr float PlayerVolumeStep = 0.05f;
 
 /// The animation of the impact models, played once.
 constexpr const char *ImpactAnimation = "Impact";
@@ -214,6 +265,10 @@ render::Energy shine(render::Energy energy, render::TextureId light, render::Rec
     return energy;
 }
 
+/// The flash of an item picked up.
+constexpr float ItemPickupScale = 24.0f;
+constexpr render::Color ItemPickupTint{255, 213, 79, 255};
+
 /// The impact played by the model at a path, its animation played once.
 ImpactLook loadImpactLook(render::ResourceManager &resources, const char *path, float scale,
                           render::Color tint, const render::Energy &energy)
@@ -246,6 +301,9 @@ void setImpactLooks(GameSessionSystem &sessions, render::ResourceManager &resour
     sessions.setImpactLook(game::EntityKind::PlayerShip,
                            loadImpactLook(resources, RTYPE_MODEL_IMPACT_EXPLOSION, ShipExplosionScale,
                                           ExplosionTint, explosion));
+    // An item picked up whose model has no Collect animation: a golden flash where it was
+    sessions.setImpactLook(game::EntityKind::Item, loadImpactLook(resources, RTYPE_MODEL_IMPACT_BURST,
+                                                                  ItemPickupScale, ItemPickupTint, energy));
 }
 
 /// Gives the ships of the formation of the rescue the cut the blade of the shogun leaves on them, and its
@@ -290,6 +348,182 @@ void setCollisionSounds(GameSessionSystem &sessions, audio::AudioPlayer &audio)
     for (const game::EntityKind kind :
          {game::EntityKind::PlayerShot, game::EntityKind::BydoShot, game::EntityKind::BydoPlasmaShot}) {
         sessions.setDestructionSound(kind, {collision, CollisionVolume});
+    }
+}
+
+/// The ship of the hangar with this model, if any.
+const ShipEntry *findCatalogEntry(const std::string &model)
+{
+    const auto &catalog = getShipCatalog();
+    const auto found = std::ranges::find(catalog, std::string_view(model), [](const ShipEntry &entry) {
+        return std::string_view(entry.modelPath);
+    });
+    return found != catalog.end() ? &*found : nullptr;
+}
+
+/// Gives each ship of the configuration that flies a model of the hangar its look, facing left, at the size
+/// of its collider: each Bydo is drawn with the model of its ship (game::EntityState::ship), whose index is
+/// the one of the ShipRegistry of the game.
+void setConfiguredShipLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                            const std::vector<game::ShipDefinition> &definitions)
+{
+    game::ShipRegistry ships;
+    for (const game::ShipDefinition &definition : definitions) {
+        ships.addDefinition(definition);
+    }
+    const std::size_t count = std::min<std::size_t>(ships.getDefinitionCount(), game::NoShip);
+    for (std::size_t index = 0; index < count; ++index) {
+        const game::ShipDefinition &ship = ships.getDefinitionAt(index);
+        const ShipEntry *entry = findCatalogEntry(ship.model);
+        if (entry == nullptr) {
+            continue;
+        }
+        const physics::Vec3 half = game::halfSizeOf(ship.collider);
+        sessions.setShipLook(
+            static_cast<std::uint8_t>(index),
+            {loadShipModel(resources, entry->modelPath), entry->hull, true, entry->trailMeshes},
+            {half.x * 2.0f, half.y * 2.0f});
+    }
+}
+
+/// The animations of the models of the items, by name: looped while an item lies in the game, and played once
+/// where it is picked up.
+constexpr const char *ItemIdleAnimation = "Idle";
+constexpr const char *ItemCollectAnimation = "Collect";
+
+/// An animation of the model of an item, if it has one by this name.
+std::optional<ItemAnimation> findItemAnimation(render::ResourceManager &resources, render::ModelId model,
+                                               const char *name)
+{
+    try {
+        const int animation = resources.getModelAnimation(model, name);
+        return ItemAnimation{animation, resources.getModelAnimationDuration(model, animation)};
+    } catch (const std::out_of_range &) {
+        return std::nullopt;
+    }
+}
+
+/// The light of the shots of a player with this mechanic.
+render::Color playerShotLight(game::ProjectileCategory mechanic)
+{
+    switch (mechanic) {
+    case game::ProjectileCategory::Missile:
+        return PlayerMissileLight;
+    case game::ProjectileCategory::Laser:
+        return PlayerLaserLight;
+    case game::ProjectileCategory::Plasma:
+        return PlayerPlasmaLight;
+    case game::ProjectileCategory::Bullet:
+        break;
+    }
+    return PlayerShotLight;
+}
+
+/// The light of the shots of a Bydo with this mechanic.
+render::Color bydoShotLight(game::ProjectileCategory mechanic)
+{
+    switch (mechanic) {
+    case game::ProjectileCategory::Missile:
+        return BydoMissileLight;
+    case game::ProjectileCategory::Laser:
+        return BydoLaserLight;
+    case game::ProjectileCategory::Plasma:
+        return PlasmaOrbLight;
+    case game::ProjectileCategory::Bullet:
+        break;
+    }
+    return BydoShotLight;
+}
+
+/// The core of a projectile model, as in ShotLook, from its bounds: the models fly along +x, nose first, and
+/// their trail behind is left out.
+render::Rectangle measureProjectileCore(const render::Box3 &bounds)
+{
+    const float height = bounds.max.y - bounds.min.y;
+    const float length = std::min(bounds.max.x - bounds.min.x, ProjectileCoreRatio * height);
+    // Through the camera of the game, y points down: the models have y up
+    return {bounds.max.x - length, -bounds.max.y, length, height};
+}
+
+/// Gives each projectile of the configuration its model, the asset its file names, at the size of its
+/// collider: the shots of the players and of the Bydos are drawn with the model of their projectile
+/// (game::EntityState::ship), the one of the ProjectileRegistry of the game, lit in the colour of the mechanic
+/// of the weapon that fires it. The models of the shots of the Bydos measured by hand keep their core, facing
+/// left. A projectile whose model cannot be loaded is drawn with the look of its kind.
+void setConfiguredProjectileLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                                  const game::GameConfig &config)
+{
+    game::ProjectileRegistry projectiles;
+    for (const game::ProjectileDefinition &definition : config.projectiles) {
+        projectiles.addDefinition(definition);
+    }
+    const render::Energy energy{
+        resources.loadTexture(RTYPE_IMAGE_ENERGY_NOISE, render::TextureFiltering::Smooth)};
+    const render::TextureId light =
+        resources.loadTexture(RTYPE_IMAGE_GLOW_CORE, render::TextureFiltering::Smooth);
+    const std::size_t count = std::min<std::size_t>(projectiles.getDefinitionCount(), game::NoShip);
+    for (std::size_t index = 0; index < count; ++index) {
+        const game::ProjectileDefinition &projectile = projectiles.getDefinitionAt(index);
+        if (projectile.model.empty()) {
+            continue;
+        }
+        // The mechanic of the first weapon that fires it, its own otherwise
+        game::ProjectileCategory mechanic = projectile.category;
+        const auto weapon =
+            std::ranges::find(config.weapons, projectile.id, &game::WeaponDefinition::projectile);
+        if (weapon != config.weapons.end()) {
+            mechanic = weapon->mechanic;
+        }
+        try {
+            const render::ModelId model = resources.loadModel(projectile.model);
+            const render::Rectangle core = projectile.model == RTYPE_MODEL_SHOT_BASIC
+                                               ? ShotBasicCore
+                                               : measureProjectileCore(resources.getModelBounds(model));
+            const physics::Vec3 half = game::halfSizeOf(projectile.collider);
+            const render::Vector2 size{half.x * 2.0f, half.y * 2.0f};
+            const auto slot = static_cast<std::uint8_t>(index);
+            sessions.setProjectileLook(
+                slot, {model, core, false, shine(energy, light, core, playerShotLight(mechanic))}, size);
+            const bool spiral = projectile.model == RTYPE_MODEL_SHOT_SPIRAL;
+            const bool orb = projectile.model == RTYPE_MODEL_ORB_PLASMA;
+            const render::Rectangle bydoCore = spiral ? ShotSpiralCore : orb ? OrbPlasmaCore : core;
+            sessions.setBydoProjectileLook(
+                slot,
+                {model, bydoCore, spiral || orb, shine(energy, light, bydoCore, bydoShotLight(mechanic))},
+                size);
+        } catch (const std::runtime_error &error) {
+            log::Logger("game").warning("The model of the projectile '{}' cannot be loaded: {}",
+                                        projectile.id, error.what());
+        }
+    }
+}
+
+/// Gives each item of the configuration its model, the asset its file names, at the size of its collider:
+/// each item is drawn with the model of its index (game::EntityState::ship), the one of the ItemRegistry of
+/// the game. An item whose model cannot be loaded is drawn as a box.
+void setConfiguredItemLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
+                            const std::vector<game::ItemDefinition> &definitions)
+{
+    game::ItemRegistry items;
+    for (const game::ItemDefinition &definition : definitions) {
+        items.addDefinition(definition);
+    }
+    const std::size_t count = std::min<std::size_t>(items.getDefinitionCount(), game::NoShip);
+    for (std::size_t index = 0; index < count; ++index) {
+        const game::ItemDefinition &item = items.getDefinitionAt(index);
+        try {
+            const render::ModelId model = resources.loadModel(item.model);
+            const physics::Vec3 half = game::halfSizeOf(item.collider);
+            sessions.setItemLook(static_cast<std::uint8_t>(index),
+                                 {model,
+                                  resources.getModelBounds(model),
+                                  {half.x * 2.0f, half.y * 2.0f},
+                                  findItemAnimation(resources, model, ItemIdleAnimation),
+                                  findItemAnimation(resources, model, ItemCollectAnimation)});
+        } catch (const std::runtime_error &error) {
+            log::Logger("game").warning("The model of the item '{}' cannot be loaded: {}", item.id,
+                                        error.what());
+        }
     }
 }
 
@@ -347,69 +581,25 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
     setCollisionSounds(sessions, audio);
 }
 
-/// A layer of the sky of the game, covering the screen, scrolling at its speed in game units per second.
-struct SkyLayer {
-    const char *path;
-    float speed;
-};
-
-/// A picture passing in the sky of the game, between the layers, as in engine::BackdropSprite.
-struct SkyObject {
-    const char *path;
-    float speed;
-    float height;
-    float y;
-    float period;
-    float start;
-};
-
-/// The layers from the back to the front: the nearer, the faster, so that the ships seem to fly to the right.
-/// Even the deep sky moves visibly: nothing of the sky stays still on the screen.
-const std::array<SkyLayer, 4> SkyLayers{{
-    {RTYPE_IMAGE_SKY_DEEP, 40.0f},
-    {RTYPE_IMAGE_SKY_NEBULA, 80.0f},
-    {RTYPE_IMAGE_SKY_STARS, 140.0f},
-    {RTYPE_IMAGE_SKY_NEAR, 300.0f},
-}};
-
-/// The objects of the sky, each drawn just in front of a layer: the galaxy in front of the deep sky, the
-/// moon and the ringed planet in front of the stars, which they hide, at about their speed. They come back
-/// every minute or so, the galaxy seen from the start.
-const std::array<std::pair<std::size_t, SkyObject>, 3> SkyObjects{{
-    {0, {RTYPE_IMAGE_SKY_GALAXY, 50.0f, 360.0f, 280.0f, 4200.0f, 1300.0f}},
-    {2, {RTYPE_IMAGE_SKY_MOON, 160.0f, 200.0f, 760.0f, 9000.0f, 3000.0f}},
-    {2, {RTYPE_IMAGE_SKY_PLANET, 170.0f, 640.0f, 380.0f, 13000.0f, 8000.0f}},
-}};
-
-/// The order of the Backdrop of a layer: room is left in between for the objects in front of it.
-int skyOrder(std::size_t layer)
+/// Fades in the HUD of a game opened from the hangar, as the camera pulls back: what shows of it, the parts
+/// hidden for now staying hidden.
+void fadeInHud(ecs::Ecs &ecs, engine::SceneId scene)
 {
-    return static_cast<int>(layer) * 2;
-}
-
-/// Creates the scrolling sky of the game: its layers and the objects passing between them.
-void createGameSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
-{
-    for (std::size_t layer = 0; layer < SkyLayers.size(); ++layer) {
-        const ecs::entity_t entity = ecs.createEntity();
-        ecs.addComponent<engine::SceneMember>(entity, scene);
-        ecs.addComponent<engine::Backdrop>(
-            entity, resources.loadTexture(SkyLayers[layer].path, render::TextureFiltering::Smooth),
-            render::colors::White, skyOrder(layer));
-        ecs.addComponent<engine::Scroll>(entity, SkyLayers[layer].speed);
-    }
-    for (const auto &[layer, object] : SkyObjects) {
-        const ecs::entity_t entity = ecs.createEntity();
-        ecs.addComponent<engine::SceneMember>(entity, scene);
-        ecs.addComponent<engine::BackdropSprite>(
-            entity, engine::BackdropSprite{
-                        .texture = resources.loadTexture(object.path, render::TextureFiltering::Smooth),
-                        .height = object.height,
-                        .y = object.y,
-                        .period = object.period,
-                        .start = object.start,
-                        .order = skyOrder(layer) + 1});
-        ecs.addComponent<engine::Scroll>(entity, object.speed);
+    auto &members = ecs.cache<engine::SceneMember>();
+    auto &drawables = ecs.cache<engine::Drawable>();
+    auto &opacities = ecs.cache<engine::Opacity>();
+    for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
+        if (!drawables.has(entity) || drawables.get(entity).layer != engine::Layer::Interface ||
+            !members.has(entity) || members.get(entity).scene != scene ||
+            (opacities.has(entity) && opacities.get(entity).value < 1.0f)) {
+            continue;
+        }
+        opacities.emplace(entity, 0.0f);
+        ecs.addComponent<engine::Tween>(entity, engine::Tween{.target = engine::TweenTarget::Opacity,
+                                                              .from = 0.0f,
+                                                              .to = 1.0f,
+                                                              .duration = ArrivalDuration,
+                                                              .easing = engine::Easing::EaseOut});
     }
 }
 
@@ -471,9 +661,12 @@ void preloadVoice(audio::AudioPlayer &audio, const std::string &path)
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations,
-                       const ShipSelection &ships)
+                       ShipSelection &ships, const std::vector<game::ShipDefinition> &shipDefinitions,
+                       const std::vector<game::ItemDefinition> &itemDefinitions,
+                       const game::GameConfig &config)
     : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
-      _translations(translations), _ships(ships), _recorder(engine)
+      _translations(translations), _ships(ships), _shipDefinitions(shipDefinitions),
+      _itemDefinitions(itemDefinitions), _config(config), _recorder(engine)
 {
     sessions.setKillHandler([this](const Kill &kill) {
         recordKill(kill);
@@ -491,25 +684,201 @@ GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resource
         recordResults();
     });
     sessions.setStrikeHandler([this] { showStrike(); });
+
     engine.createScene(
         GameScene,
         {.updatesWhenCovered = true,
          .onBack = [&engine] { engine.pushScene(PauseScene); },
-         .assets = GameAssets},
+         .assets = GameAssets,
+         .keepsAssets = true},
         [this, &resources, &audio, &metrics, &style](engine::Engine & /*target*/, engine::SceneId scene) {
             build(scene, resources, audio, metrics, style);
         });
-    engine.createScene(PauseScene, {.overlay = true},
-                       [this, &metrics, &style](engine::Engine &target, engine::SceneId scene) {
-                           engine::MenuBuilder menu(target.getEcs(), scene, metrics, style,
-                                                    _translations.text("game.pause"), true);
-                           menu.button(_translations.text("game.resume"), [&target] { target.popScene(); });
-                           menu.button(_translations.text("game.leave"), [this] { end(); });
-                       });
-    engine.createScene(ResultsScene, {.onBack = [this] { leaveResults(); }, .assets = ResultsAssets},
+    engine.createScene(PauseScene, {.overlay = true, .onBack = [this] { resume(); }},
+                       [this](engine::Engine & /*target*/, engine::SceneId scene) { buildPause(scene); });
+    engine.createScene(ResultsScene,
+                       {.onBack = [this] { leaveResults(); }, .assets = ResultsAssets, .keepsAssets = true},
                        [this, &resources](engine::Engine & /*target*/, engine::SceneId scene) {
                            buildResults(scene, resources);
                        });
+}
+
+RemoteSession *GameScenes::onlineSession() const
+{
+    return dynamic_cast<RemoteSession *>(_sessions.session());
+}
+
+void GameScenes::keepPlayerVoices()
+{
+    const RemoteSession *session = onlineSession();
+    if (session == nullptr || session->voiceDevices() == nullptr) {
+        return;
+    }
+    engine::Settings &settings = _engine.getSettings();
+    keepVoiceSettings(settings, session->voiceDevices()->preferences);
+    writeSettings(settings);
+}
+
+void GameScenes::resume()
+{
+    keepPlayerVoices();
+    _engine.popScene();
+}
+
+void GameScenes::buildPause(engine::SceneId scene)
+{
+    ecs::Ecs &ecs = _engine.getEcs();
+    engine::InterfaceBuilder interface(ecs, scene, _style);
+    settings_page::addVeil(interface, ecs);
+    const localization::Localization &translations = _translations;
+    interface.boundHeader([&translations] { return translations.text("game.pause"); }, [this] { resume(); },
+                          {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
+
+    const float width = _style.setting.width;
+    const float left = screenMargin;
+    float top = settings_page::addGroup(interface, ecs, _style, translations, "game.group.game", left,
+                                        settings_page::top, width);
+    const ecs::entity_t resumeRow = interface.linkRow(translations.text("game.resume"), [this] { resume(); },
+                                                      {engine::AnchorPoint::TopLeft, left, top});
+    settings_page::bindText(ecs, resumeRow, translations, "game.resume");
+    top += _style.setting.height;
+    const ecs::entity_t leaveRow = interface.linkRow(translations.text("game.leave"),
+                                                     [this] {
+                                                         keepPlayerVoices();
+                                                         end();
+                                                     },
+                                                     {engine::AnchorPoint::TopLeft, left, top});
+    settings_page::bindText(ecs, leaveRow, translations, "game.leave");
+    addFriends(interface, left, top + _style.setting.height + settings_page::groupGap);
+
+    addPlayerVoices(interface, left + width + settings_page::columnGap);
+}
+
+void GameScenes::addFriends(engine::InterfaceBuilder &interface, float left, float top)
+{
+    constexpr std::size_t MaxFriendsShown = 5;
+    if (_friends == nullptr || !_friends->ready() || onlineSession() == nullptr) {
+        return;
+    }
+    const std::vector<FriendRow> rows =
+        friendRows(*_friends, FriendsView::Game, _translations, MaxFriendsShown);
+    if (rows.empty()) {
+        return;
+    }
+    ecs::Ecs &ecs = _engine.getEcs();
+    top = settings_page::addGroup(interface, ecs, _style, _translations, "game.group.friends", left, top,
+                                  _style.setting.width);
+    for (const FriendRow &row : rows) {
+        const auto act = [this, row] {
+            const auto told = [this, name = row.name](bool sent) {
+                _engine.showToast(sent ? std::format("{} {}", _translations.text("friends.invite_sent"), name)
+                                       : _translations.text("friends.not_sent"),
+                                  sent ? engine::ToastType::Success : engine::ToastType::Error);
+            };
+            if (_friends == nullptr) {
+                return;
+            }
+            if (row.action == FriendRow::Action::AcceptRequest) {
+                _friends->accept(
+                    row.id, [told](bool accepted, const std::optional<std::string> &) { told(accepted); });
+            } else if (row.action == FriendRow::Action::Invite) {
+                _friends->invite(row.id, told);
+            }
+        };
+        interface.linkRow(std::format("{} · {} · {}", row.side, row.name, row.detail), act,
+                          {engine::AnchorPoint::TopLeft, left, top});
+        top += _style.setting.height;
+    }
+}
+
+void GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left)
+{
+    const RemoteSession *session = onlineSession();
+    const std::optional<VoiceView> view = session != nullptr ? session->voiceView() : std::nullopt;
+    if (!view || view->others.empty() || session->voiceDevices() == nullptr) {
+        return;
+    }
+    ecs::Ecs &ecs = _engine.getEcs();
+    const localization::Localization &translations = _translations;
+    const float width = _style.setting.width;
+    float top = settings_page::addGroup(interface, ecs, _style, translations, "game.group.voices", left,
+                                        settings_page::top, width);
+    VoicePreferences &preferences = session->voiceDevices()->preferences;
+    const std::map<std::uint8_t, std::string> names = session->playerNames();
+    for (const voice::Participant &pilot : view->others) {
+        const std::optional<std::string> key = session->voiceKey(pilot.slot);
+        const auto name = names.find(pilot.slot);
+        if (!key || name == names.end()) {
+            continue;
+        }
+        // A player not changed yet is heard at full volume: it is kept once changed
+        const auto choice = [&preferences, key = *key]() -> PlayerVoice & {
+            return preferences.players[key];
+        };
+        const ecs::entity_t slider = interface.slider(
+            name->second, [choice] { return choice().volume; },
+            [choice](float volume) { choice().volume = volume; }, PlayerVolumeStep,
+            {engine::AnchorPoint::TopLeft, left, top});
+        engine::Slider &row = ecs.getComponent<engine::Slider>(slider);
+        // Muted by an administrator: what the player chose cannot change it, the row is locked
+        const auto byAdmin = [this, slot = pilot.slot] {
+            const RemoteSession *online = onlineSession();
+            const std::optional<VoiceView> voice = online != nullptr ? online->voiceView() : std::nullopt;
+            if (!voice) {
+                return false;
+            }
+            const auto found = std::ranges::find(voice->others, slot, &voice::Participant::slot);
+            return found != voice->others.end() && found->status.mutedByAdmin;
+        };
+        row.locked = byAdmin;
+        row.label = [this, slot = pilot.slot, choice, byAdmin, &translations] {
+            if (byAdmin()) {
+                return translations.text("game.voices.muted_by_admin");
+            }
+            if (choice().muted) {
+                return translations.text("game.voices.muted");
+            }
+            // What carries its voice, from the roster of the game
+            const RemoteSession *online = onlineSession();
+            const std::optional<VoiceView> voice = online != nullptr ? online->voiceView() : std::nullopt;
+            if (!voice) {
+                return std::string();
+            }
+            const auto found = std::ranges::find(voice->others, slot, &voice::Participant::slot);
+            return found != voice->others.end() ? backendLabel(translations, found->backend) : std::string();
+        };
+        row.onConfirm = [choice] { choice().muted = !choice().muted; };
+        row.icon = [this, slot = pilot.slot]() -> std::optional<engine::Slider::Icon> {
+            const RemoteSession *online = onlineSession();
+            const std::optional<VoiceView> voice = online != nullptr ? online->voiceView() : std::nullopt;
+            if (!voice) {
+                return std::nullopt;
+            }
+            const auto found = std::ranges::find(voice->others, slot, &voice::Participant::slot);
+            const VoiceIcon icon = found == voice->others.end() ? VoiceIcon::None : voiceIconOf(*found);
+            const render::TextureId *texture = voiceIconTexture(_voiceIcons, icon);
+            if (texture == nullptr) {
+                return std::nullopt;
+            }
+            return engine::Slider::Icon{*texture, VoiceIconSource, voiceIconColor(icon)};
+        };
+        top += _style.slider.getHeight();
+    }
+    // What carries the voice of the player, then where the choices are kept
+    const ecs::entity_t through = interface.note(
+        {}, {engine::AnchorPoint::TopLeft, left + _style.setting.inset, top + settings_page::groupGap});
+    ecs.addComponent<engine::BoundText>(through, [this, &translations] {
+        const RemoteSession *online = onlineSession();
+        const std::optional<VoiceView> voice = online != nullptr ? online->voiceView() : std::nullopt;
+        const voice::Backend backend = voice ? voice->local.backend : voice::Backend::None;
+        return translations.text(backend == voice::Backend::Discord ? "game.voices.through.discord"
+                                 : backend == voice::Backend::Game  ? "game.voices.through.game"
+                                                                    : "game.voices.through.none");
+    });
+    const ecs::entity_t note = interface.note(translations.text("game.voices.note"),
+                                              {engine::AnchorPoint::TopLeft, left + _style.setting.inset,
+                                               top + settings_page::groupGap + VoiceNoteLine});
+    settings_page::bindText(ecs, note, translations, "game.voices.note");
 }
 
 void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd, GameVoices voices)
@@ -798,6 +1167,8 @@ void GameScenes::openPrompt()
     ecs.addComponent<engine::Anchor>(prompt, engine::AnchorPoint::Center, 0.0f, PromptOffset);
     ecs.addComponent<ecs::Position>(prompt);
     ecs.addComponent<engine::Drawable>(prompt, engine::Layer::Interface, PromptOrder);
+    // Over the game, on the board in a VR headset: it says what to do in the game
+    ecs.addComponent<engine::OnSurface>(prompt, engine::Surface::Board);
     ecs.addComponent<engine::Text>(prompt, _translations.text("rescue.prompt"), _style.toast.nameFont,
                                    PromptSize, render::colors::White, PromptSpacing);
     ecs.addComponent<engine::Title>(prompt);
@@ -824,6 +1195,9 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style)
 {
     configureGameLooks(_sessions, resources, audio, getShipCatalog()[_ships.equipped]);
+    setConfiguredShipLooks(_sessions, resources, _shipDefinitions);
+    setConfiguredItemLooks(_sessions, resources, _itemDefinitions);
+    setConfiguredProjectileLooks(_sessions, resources, _config);
     _scene = scene;
     _prompt.reset();
     _deathLook = {resources.loadTexture(RTYPE_IMAGE_LIFE, render::TextureFiltering::Smooth),
@@ -835,19 +1209,59 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
 
     ecs::Ecs &ecs = _engine.getEcs();
 
-    createGameSky(ecs, scene, resources);
+    // Opened from the take-off of the hangar: on the shot it ends with, its sky going on
+    const std::optional<float> arrival = std::exchange(_ships.arrivalSky, std::nullopt);
+    createGameSky(ecs, scene, resources, arrival.value_or(0.0f));
     const ecs::entity_t sky = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(sky, scene);
-    ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
     const render::Rectangle area = metrics.visibleArea();
     const render::Vector2 centre{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)};
     _voices = std::exchange(_nextVoices, {});
     const std::uint32_t cutsceneEnd = _voices.start.path.empty() ? 0 : _voices.start.ticks;
-    ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre).cutsceneEnd = cutsceneEnd;
+    RescueCamera &rescue = ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre);
+    rescue.cutsceneEnd = cutsceneEnd;
+    render::Camera view = computeGameView(area);
+    if (arrival) {
+        const ecs::Position spawn = game::getShipSpawn(_next ? _next->localSlot() : 0);
+        rescue.arrival = 0.0f;
+        rescue.ship = {spawn.x, spawn.y};
+        view = computeGameView(computeArrivalFrame(area, rescue.ship));
+    }
+    ecs.addComponent<engine::Camera>(sky, view);
     _camera = ecs.ref(sky);
     ecs.addComponent<engine::Light>(sky, GameLight);
 
-    openHud(ecs, scene, {_deathLook.life, _deathLook.lostLife, style.toast.nameFont}, game::Rules{}.lives);
+    for (std::size_t index = 0; index < VoiceIconPaths.size(); ++index) {
+        _voiceIcons[index] = resources.loadTexture(VoiceIconPaths[index], render::TextureFiltering::Smooth);
+    }
+    _sessions.setVoiceBadgeLook(
+        {.texture = resources.loadTexture(RTYPE_IMAGE_VOICE_BADGE, render::TextureFiltering::Smooth),
+         .source = VoiceIconSource,
+         .size = VoiceBadgeSize,
+         .x = (AllyHealthBar.width / 2.0f) + VoiceBadgeGap + (VoiceBadgeSize / 2.0f),
+         .y = -AllyHealthBar.raise});
+    std::map<std::string, std::string> weaponNames;
+    for (const game::WeaponUnlock &unlock : _config.weaponUnlocks) {
+        weaponNames.emplace(unlock.weapon, _translations.text("weapon." + unlock.weapon));
+    }
+    weaponNames.emplace(_config.player.weapon, _translations.text("weapon." + _config.player.weapon));
+    openHud(ecs, scene,
+            {.life = _deathLook.life,
+             .lostLife = _deathLook.lostLife,
+             .font = style.toast.nameFont,
+             .voice = _voiceIcons,
+             .words = {.wave = _translations.text("hud.wave"),
+                       .endless = _translations.text("hud.endless"),
+                       .boss = _translations.text("hud.boss"),
+                       .online = _translations.text("hud.online"),
+                       .solo = _translations.text("hud.solo"),
+                       .pilots = _translations.text("hud.pilots"),
+                       .alone = _translations.text("hud.alone"),
+                       .weapons = std::move(weaponNames)}},
+            game::Rules{}.lives);
+    if (arrival) {
+        fadeInHud(ecs, scene);
+    }
 
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });

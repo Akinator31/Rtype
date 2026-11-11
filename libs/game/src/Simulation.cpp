@@ -6,6 +6,7 @@
 #include "rtype/game/System/AreaSystem.hpp"
 #include "rtype/game/System/CombatSystem.hpp"
 #include "rtype/game/System/EnemySystem.hpp"
+#include "rtype/game/System/ItemSystem.hpp"
 #include "rtype/game/System/PlayerControlSystem.hpp"
 #include "rtype/game/System/ProjectileSystem.hpp"
 #include "rtype/game/System/RescueSystem.hpp"
@@ -58,7 +59,7 @@ Simulation::Simulation(Rules rules, const GameConfig &config)
     registerConfig(config);
     // The order of a tick: the inputs, the waves, the Bydos, the rescue against the final boss (which flies
     // over the inputs and the Bydos), the weapons, the projectiles, the movement, the walls, the hits, then
-    // what left the area
+    // the items picked up, then what left the area
     _ecs.registerSystem<PlayerControlSystem>(_ecs, _context);
     _ecs.registerSystem<WaveSystem>(_ecs, _context);
     _ecs.registerSystem<EnemySystem>(_ecs, _context);
@@ -68,6 +69,7 @@ Simulation::Simulation(Rules rules, const GameConfig &config)
     _ecs.registerSystem<physics::MovementSystem>();
     _ecs.registerSystem<physics::BoundsSystem>(_ecs);
     _ecs.registerSystem<CombatSystem>(_ecs, _context);
+    _ecs.registerSystem<ItemSystem>(_ecs, _context);
     _ecs.registerSystem<AreaSystem>(_ecs, _context);
 }
 
@@ -85,10 +87,26 @@ void Simulation::registerConfig(const GameConfig &config)
     for (const EnemyDefinition &enemy : config.enemies) {
         _context.enemies.addDefinition(enemy);
     }
+    for (const ItemDefinition &item : config.items) {
+        _context.items.addDefinition(item);
+    }
     for (const WaveDefinition &wave : config.waves) {
+        for (const WaveItem &item : wave.items) {
+            if (!_context.items.hasDefinition(item.item)) {
+                throw std::invalid_argument(
+                    std::format("the wave '{}' uses the unknown item '{}'", wave.name, item.item));
+            }
+        }
         _context.waves.addDefinition(wave, _context.enemies);
     }
     registerPlayer(config.player);
+    for (const WeaponUnlock &unlock : config.weaponUnlocks) {
+        if (!_context.weapons.hasDefinition(unlock.weapon)) {
+            throw std::invalid_argument(std::format("the hangar has the unknown weapon '{}'", unlock.weapon));
+        }
+        _context.loadoutWeapons.push_back(unlock.weapon);
+    }
+    _context.hangarShips = config.shipUnlocks;
     _context.progression = config.progression;
 }
 
@@ -141,6 +159,72 @@ std::optional<Armed> Simulation::weaponOf(std::uint8_t slot)
         return std::nullopt;
     }
     return _ecs.getComponent<Armed>(*ship);
+}
+
+std::optional<Holster> Simulation::holsterOf(std::uint8_t slot)
+{
+    const std::optional<ecs::entity_t> ship = findPlayerShip(_ecs, slot);
+    if (!ship || !_ecs.hasComponent<Holster>(*ship)) {
+        return std::nullopt;
+    }
+    return _ecs.getComponent<Holster>(*ship);
+}
+
+bool Simulation::isLoadoutAllowed(const Loadout &loadout) const
+{
+    if (loadout[0].empty() && loadout[1].empty()) {
+        return true;
+    }
+    const auto allowed = [this](const std::string &weapon) {
+        return _context.weapons.hasDefinition(weapon) &&
+               (weapon == _context.player.weapon ||
+                std::ranges::find(_context.loadoutWeapons, weapon) != _context.loadoutWeapons.end());
+    };
+    return allowed(loadout[0]) && allowed(loadout[1]) && loadout[0] != loadout[1];
+}
+
+bool Simulation::setLoadout(std::uint8_t slot, const Loadout &loadout)
+{
+    if (!hasPlayer(slot) || !isLoadoutAllowed(loadout)) {
+        return false;
+    }
+    _context.players[slot].loadout = loadout;
+    if (const auto ship = findPlayerShip(_ecs, slot)) {
+        equipLoadout(_ecs, _context, *ship, loadout);
+    }
+    logger().debug("Player {} takes {} and {}", slot, loadout[0], loadout[1]);
+    return true;
+}
+
+bool Simulation::setShip(std::uint8_t slot, const std::string &ship)
+{
+    if (!hasPlayer(slot)) {
+        return false;
+    }
+    ShipStats stats;
+    if (!ship.empty()) {
+        const auto unlock = std::ranges::find(_context.hangarShips, ship, &ShipUnlock::ship);
+        if (unlock == _context.hangarShips.end()) {
+            return false;
+        }
+        stats = unlock->stats;
+    }
+    PlayerSlot &player = _context.players[slot];
+    const std::uint8_t previousHealth = _context.maxHealth(player);
+    player.stats = stats;
+    if (const auto current = findPlayerShip(_ecs, slot)) {
+        // A ship not hit yet gets all its new health, another keeps what it has left, within it
+        std::uint8_t &points = _ecs.getComponent<Health>(*current).points;
+        const std::uint8_t health = _context.maxHealth(player);
+        points = points == previousHealth ? health : std::min(points, health);
+    }
+    logger().debug("Player {} flies {}", slot, ship.empty() ? "the ship of the rules" : ship);
+    return true;
+}
+
+ShipStats Simulation::statsOf(std::uint8_t slot) const
+{
+    return hasPlayer(slot) ? _context.players[slot].stats : ShipStats{};
 }
 
 bool Simulation::hasPlayer(std::uint8_t slot) const
@@ -197,6 +281,9 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<PlayerShip> &ships = _ecs.cache<PlayerShip>();
     ecs::ComponentCache<EnemyOrders> &orders = _ecs.cache<EnemyOrders>();
     ecs::ComponentCache<Projectile> &projectiles = _ecs.cache<Projectile>();
+    ecs::ComponentCache<ShipIndex> &shipIndexes = _ecs.cache<ShipIndex>();
+    ecs::ComponentCache<ItemIndex> &itemIndexes = _ecs.cache<ItemIndex>();
+    ecs::ComponentCache<ProjectileIndex> &projectileIndexes = _ecs.cache<ProjectileIndex>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -212,6 +299,13 @@ void Simulation::buildSnapshot()
             state.velocityY = velocities.get(entity).y;
         }
         state.health = healths.has(entity) ? healths.get(entity).points : 0;
+        state.ship = shipIndexes.has(entity) ? shipIndexes.get(entity).value : NoShip;
+        if (itemIndexes.has(entity)) {
+            state.ship = itemIndexes.get(entity).value;
+        }
+        if (projectileIndexes.has(entity)) {
+            state.ship = projectileIndexes.get(entity).value;
+        }
         if (projectiles.has(entity)) {
             state.age = static_cast<std::uint8_t>(std::min<std::uint32_t>(projectiles.get(entity).age, 255));
         }

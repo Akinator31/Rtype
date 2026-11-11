@@ -14,7 +14,7 @@ end
 return {
     id = "bydo_berserker",
     ship = "bydo_berserker",
-    health = 90,
+    health = 38,
     speed = 360,
     acceleration = 720,
     weapon = "rapid_rifle",
@@ -23,7 +23,7 @@ return {
 
     update = function(enemy, game)
         local target = nearestPlayer(enemy, game.players)
-        if enemy.health <= 40 then
+        if enemy.health <= 17 then
             local climb = target and (target.y - enemy.y) * 2 or 0
             climb = math.max(-enemy.speed * 0.5, math.min(enemy.speed * 0.5, climb))
             enemy:setVelocity(-enemy.speed * 0.85, climb)

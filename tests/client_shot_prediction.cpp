@@ -62,18 +62,61 @@ std::optional<EntityState> find(const Snapshot &snapshot, std::uint32_t id)
     return *found;
 }
 
+/// Where shot() is at a tick, from the drawn tick 100: 10 units per tick.
+float shotAt(double tick)
+{
+    return 200.0f + (10.0f * static_cast<float>(tick - 100.0));
+}
+
 } // namespace
 
-TEST_CASE("The shots of the player are moved on to the tick of its ship", "[shot-prediction]")
+TEST_CASE("The time of a shot glides from the ship to the drawn tick as it flies", "[shot-prediction]")
+{
+    // Fired now: in the time of the ship, at its nose
+    CHECK(ShotPrediction::timeOf(112.0, 100.0, 112.0) == 112.0);
+    // Flown long enough: in the time of the world it may hit
+    CHECK(ShotPrediction::timeOf(50.0, 100.0, 112.0) == 100.0);
+    // The ship not ahead of the world: nothing to glide
+    CHECK(ShotPrediction::timeOf(90.0, 100.0, 98.0) == 98.0);
+
+    // Frame after frame, it goes forward, never slower than half the time
+    for (const double gap : {2.0, 6.0, 12.0, 24.0}) {
+        CAPTURE(gap);
+        double before = ShotPrediction::timeOf(200.0, 200.0 - gap, 200.0);
+        for (int frame = 1; frame <= 400; ++frame) {
+            const double ship = 200.0 + (frame * 0.25);
+            const double time = ShotPrediction::timeOf(200.0, ship - gap, ship);
+            REQUIRE(time - before >= 0.125 - 1e-9);
+            REQUIRE(time - before <= 0.25 + 1e-9);
+            before = time;
+        }
+        CHECK(before == Approx(300.0 - gap));
+    }
+}
+
+TEST_CASE("The shots of the player are moved on to their time, ahead of the drawn tick", "[shot-prediction]")
 {
     ShotPrediction shots;
     Snapshot snapshot = world();
-    // Drawn at tick 100, the ship at tick 112: 12 ticks, 0.2 s, 120 units further
+    // Drawn at tick 100, the ship at tick 112: fired at 100, the shot is between both
     shots.apply(snapshot, Slot, 100.0, 112.0);
+    const double time = ShotPrediction::timeOf(100.0, 100.0, 112.0);
+    REQUIRE(time > 100.0);
+    REQUIRE(time < 112.0);
 
-    CHECK(find(snapshot, 1)->x == Approx(320.0f));
+    CHECK(find(snapshot, 1)->x == Approx(shotAt(time)));
     CHECK(find(snapshot, 1)->y == Approx(300.0f));
-    CHECK(find(snapshot, 2)->x == Approx(320.0f));
+    CHECK(find(snapshot, 2)->x == Approx(shotAt(time)));
+}
+
+TEST_CASE("A shot of the player too old to tell when it was fired is in the time of the world",
+          "[shot-prediction]")
+{
+    ShotPrediction shots;
+    Snapshot snapshot = world();
+    snapshot.entities[0].age = 255;
+    shots.apply(snapshot, Slot, 100.0, 112.0);
+    CHECK(find(snapshot, 1)->x == Approx(200.0f));
 }
 
 TEST_CASE("The rest of the world stays in the past", "[shot-prediction]")
@@ -107,7 +150,7 @@ TEST_CASE("A shot destroyed is drawn once where it ended, then no more", "[shot-
     REQUIRE(find(first, 1));
     CHECK(find(first, 1)->x == Approx(250.0f));
     // The others go on
-    CHECK(find(first, 2)->x == Approx(320.0f));
+    CHECK(find(first, 2)->x == Approx(shotAt(ShotPrediction::timeOf(100.0, 100.0, 112.0))));
 
     // Not through what it hit: gone, though the interpolation still has it
     Snapshot second = world();
@@ -116,14 +159,16 @@ TEST_CASE("A shot destroyed is drawn once where it ended, then no more", "[shot-
     CHECK(find(second, 2));
 }
 
-TEST_CASE("A shot destroyed later than the ship flies on until then", "[shot-prediction]")
+TEST_CASE("A shot destroyed later than its time flies on until then", "[shot-prediction]")
 {
     ShotPrediction shots;
-    shots.destroyed(1, 120);
+    shots.destroyed(1, 110);
 
     Snapshot snapshot = world();
     shots.apply(snapshot, Slot, 100.0, 112.0);
-    CHECK(find(snapshot, 1)->x == Approx(320.0f));
+    // Its time is short of its end, though the ship is past it: it has not hit yet
+    REQUIRE(ShotPrediction::timeOf(100.0, 100.0, 112.0) < 110.0);
+    CHECK(find(snapshot, 1)->x == Approx(shotAt(ShotPrediction::timeOf(100.0, 100.0, 112.0))));
 }
 
 TEST_CASE("A destruction is forgotten once the drawn tick passes it", "[shot-prediction]")
@@ -144,12 +189,13 @@ TEST_CASE("A destruction is forgotten once the drawn tick passes it", "[shot-pre
 namespace
 {
 
-const rtype::game::ShotLaunch Launch{{300.0f, 400.0f}, {1200.0f, 0.0f}};
+const rtype::client::PredictedShot Launch{{{300.0f, 400.0f}, {1200.0f, 0.0f}},
+                                          rtype::game::ProjectileCategory::Bullet};
 
 ShotPrediction armed()
 {
     ShotPrediction shots;
-    shots.arm(rtype::game::ProjectileCategory::Bullet, rtype::game::Rules{});
+    shots.arm(rtype::game::Rules{});
     return shots;
 }
 
@@ -182,12 +228,13 @@ TEST_CASE("A predicted shot is drawn from the tick it is fired at, along the pat
     CHECK(shot.x == 300.0f);
     CHECK(shot.y == 400.0f);
 
-    // 6 ticks later, 6 steps of the game: 120 units
+    // The ship 6 ticks later: the steps of the game up to the time of the shot, 20 units each
     Snapshot later;
     shots.apply(later, Slot, 101.0, 116.0);
     REQUIRE(ownShots(later).size() == 1);
     CHECK(ownShots(later)[0].id == shot.id);
-    CHECK(ownShots(later)[0].x == Approx(420.0f));
+    const double time = ShotPrediction::timeOf(110.0, 101.0, 116.0);
+    CHECK(ownShots(later)[0].x == Approx(300.0 + (20.0 * (time - 110.0))));
 }
 
 TEST_CASE("A predicted shot the prediction no longer gives, or the game never sends, is dropped",
@@ -226,24 +273,33 @@ TEST_CASE("The shot of the game takes the place of the predicted one, under its 
     CHECK(shots.idOf(77) == ghost);
     CHECK(shots.idOf(78) == 78);
 
-    // Drawn in the past by the interpolation, then 4 ticks later in the time of the ship
+    // Drawn in the past by the interpolation, then on the path of the predicted one, in its time
     Snapshot second;
     second.entities = {server};
     shots.apply(second, Slot, 112.0, 116.0);
     REQUIRE(ownShots(second).size() == 1);
     CHECK(ownShots(second)[0].id == ghost);
-    CHECK(ownShots(second)[0].x == Approx(420.0f));
+    CHECK(ownShots(second)[0].x ==
+          Approx(300.0 + (20.0 * (ShotPrediction::timeOf(110.0, 112.0, 116.0) - 110.0))));
 
-    // Destroyed at 118: drawn there once, then gone with the predicted shot
+    // Destroyed at 118: flying while its time is short of it, then drawn there once, then gone with the
+    // predicted shot
     shots.destroyed(77, 118);
+    Snapshot flying;
+    flying.entities = {server};
+    REQUIRE(ShotPrediction::timeOf(110.0, 113.0, 120.0) < 118.0);
+    shots.apply(flying, Slot, 113.0, 120.0);
+    REQUIRE(ownShots(flying).size() == 1);
+    CHECK(ownShots(flying)[0].x < 460.0f);
     Snapshot third;
     third.entities = {server};
-    shots.apply(third, Slot, 113.0, 120.0);
+    REQUIRE(ShotPrediction::timeOf(110.0, 118.0, 122.0) >= 118.0);
+    shots.apply(third, Slot, 118.0, 122.0);
     REQUIRE(ownShots(third).size() == 1);
     CHECK(ownShots(third)[0].x == Approx(460.0f));
     Snapshot fourth;
     fourth.entities = {server};
-    shots.apply(fourth, Slot, 114.0, 121.0);
+    shots.apply(fourth, Slot, 119.0, 123.0);
     CHECK(ownShots(fourth).empty());
     CHECK(shots.predicted() == 0);
 }
@@ -313,10 +369,11 @@ struct Duel {
     /// The shots of the player in the game, by tick, then by id.
     std::map<std::uint32_t, std::map<std::uint32_t, EntityState>> game;
     std::set<std::uint32_t> known;
-    /// What the client drew: the id, the tick of the ship, the position.
+    /// What the client drew: the id, the tick of the ship, the drawn tick, the position.
     struct Drawn {
         std::uint32_t id;
         std::uint32_t ship;
+        double world;
         float x;
         float y;
     };
@@ -340,7 +397,7 @@ struct Duel {
                 simulation->context().projectiles.getDefinition(weapon.projectile).collider)
                 .x;
         prediction.arm(weapon, halfWidth, 0);
-        shots.arm(weapon.mechanic, rules);
+        shots.arm(rules);
         prediction.reconcile(shipOf(simulation->snapshot()), simulation->tick(), weaponOf());
     }
 
@@ -433,7 +490,7 @@ struct Duel {
         shots.apply(frame, 0, latest, stamp);
         for (const EntityState &entity : frame.entities) {
             if (ShotPrediction::isShotOf(entity, 0)) {
-                drawn.push_back({entity.id, stamp, entity.x, entity.y});
+                drawn.push_back({entity.id, stamp, latest, entity.x, entity.y});
             }
         }
     }
@@ -447,27 +504,56 @@ struct Duel {
         }
     }
 
-    /// The shot of the game a drawn shot is, and where the game has it at the tick of the ship.
-    [[nodiscard]] std::optional<EntityState> truth(const Drawn &shot) const
+    /// Where the game has the shot of the game at a tick, if it has it.
+    [[nodiscard]] std::optional<EntityState> at(std::uint32_t id, std::uint32_t tick) const
     {
-        const auto server = became.find(shot.id);
-        const std::uint32_t id = server == became.end() ? shot.id : server->second;
-        const auto tick = game.find(shot.ship);
-        if (tick == game.end()) {
+        const auto shots = game.find(tick);
+        if (shots == game.end()) {
             return std::nullopt;
         }
-        const auto found = tick->second.find(id);
-        if (found == tick->second.end()) {
+        const auto found = shots->second.find(id);
+        if (found == shots->second.end()) {
             return std::nullopt;
         }
         return found->second;
+    }
+
+    /// The shot of the game a drawn shot is, and where the game has it at the time of the drawn shot
+    /// (ShotPrediction::timeOf()), between two ticks if it falls between them.
+    [[nodiscard]] std::optional<rtype::ecs::Position> truth(const Drawn &shot) const
+    {
+        const auto server = became.find(shot.id);
+        const std::uint32_t id = server == became.end() ? shot.id : server->second;
+        // The tick it was fired at: the one the game has it 0 ticks old
+        std::optional<std::uint32_t> fired;
+        for (const auto &[tick, shots] : game) {
+            if (const auto found = shots.find(id); found != shots.end() && found->second.age == 0) {
+                fired = tick;
+                break;
+            }
+        }
+        if (!fired) {
+            return std::nullopt;
+        }
+        const double time = ShotPrediction::timeOf(*fired, shot.world, shot.ship);
+        const auto before = static_cast<std::uint32_t>(time);
+        const std::optional<EntityState> from = at(id, before);
+        const std::optional<EntityState> to = at(id, before + 1);
+        if (!from || !to) {
+            // A tick the game did not simulate yet, or the one it destroyed the shot at
+            return std::nullopt;
+        }
+        const auto part = static_cast<float>(time - before);
+        return rtype::ecs::Position{from->x + ((to->x - from->x) * part),
+                                    from->y + ((to->y - from->y) * part)};
     }
 };
 
 } // namespace
 
-TEST_CASE("Online, each shot of the player is drawn from the frame it fires, where the game will have it",
-          "[shot-prediction]")
+TEST_CASE(
+    "Online, each shot of the player is drawn from the frame it fires, where the game has it in its time",
+    "[shot-prediction]")
 {
     const rtype::game::LoadedGameConfig loaded = rtype::game::loadGameConfig(RTYPE_TEST_CONFIG);
     REQUIRE(loaded.isValid());
@@ -480,13 +566,12 @@ TEST_CASE("Online, each shot of the player is drawn from the frame it fires, whe
         std::size_t compared = 0;
         for (const Duel::Drawn &shot : duel.drawn) {
             REQUIRE(shot.id >= ShotPrediction::FirstGhostId);
-            const std::optional<EntityState> truth = duel.truth(shot);
+            const std::optional<rtype::ecs::Position> truth = duel.truth(shot);
             if (!truth) {
-                // A tick the game did not simulate yet, or the one it destroyed the shot at
                 continue;
             }
-            REQUIRE(shot.x == truth->x);
-            REQUIRE(shot.y == truth->y);
+            REQUIRE(shot.x == Approx(truth->x).margin(0.01));
+            REQUIRE(shot.y == Approx(truth->y).margin(0.01));
             ++compared;
         }
         CHECK(compared > 50);
@@ -533,8 +618,8 @@ TEST_CASE("A predicted shot is drawn between two ticks at the frame rate", "[sho
     ShotPrediction shots = armed();
     shots.predict({{110, Launch}}, 100);
     Snapshot snapshot;
-    // 20 units per tick: a quarter of the way past tick 113
-    shots.apply(snapshot, Slot, 100.0, 113.25);
+    // 20 units per tick: a quarter of the way past tick 113, the world drawn there too
+    shots.apply(snapshot, Slot, 113.25, 113.25);
     REQUIRE(ownShots(snapshot).size() == 1);
     CHECK(ownShots(snapshot)[0].x == Approx(365.0f));
 }

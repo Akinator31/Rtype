@@ -19,19 +19,29 @@ namespace rtype::client
 /// clock.receive(part.inputLead, rtt + 0.05);   // each snapshot that has a lead
 /// @endcode
 ///
-/// - **The pace**: the smallest lead of the last Window seconds is kept between TargetLead and TargetLead +
-///   Tolerance by sending the inputs a little faster or slower than 60 per second. The stamps stay
+/// - **The pace**: the smallest lead of the last Window seconds is kept between the target() and the
+///   target() + Tolerance by sending the inputs a little faster or slower than 60 per second. The stamps stay
 ///   consecutive: no input is lost, none is stamped twice, and a stamp too far ahead comes back down.
 /// - **The jump**: inputs too late are lost until the stamps catch up, so they jump ahead at once, by what is
 ///   missing. The reports of the inputs sent before the jump are ignored until it reaches the game.
+/// - **The margin**: a datagram held back longer than the others, rarer than Window, would be late again
+///   and again: each time inputs are too late, the target() goes a tick higher, up to MaxMargin ticks above
+///   TargetLead. It comes back down by a tick after Calm seconds without a late one, if no lead of those
+///   seconds was 1: a tick less would have made it late. The first report does not count: the stamps were
+///   only estimated. Each tick of margin is
+///   a tick of input latency, so only the network that needs it pays it.
 /// - Before the first report, it is not **synced**: the stamps are those the round-trip time estimates.
 ///
 /// Pure: no clock, no network. The time is given by advance().
 class InputClock
 {
 public:
-    /// The smallest lead aimed at: one tick of margin over just in time.
+    /// The smallest lead aimed at on a steady network: one tick of margin over just in time.
     static constexpr int TargetLead = 2;
+    /// Ticks the target goes above TargetLead at most, after inputs too late.
+    static constexpr int MaxMargin = 4;
+    /// Seconds without inputs too late before the margin comes down by a tick.
+    static constexpr double Calm = 15.0;
     /// Ticks of lead above the target that are not corrected: the jitter of the network.
     static constexpr int Tolerance = 1;
     /// Seconds of reports over which the smallest lead is taken: a late datagram among them counts.
@@ -55,6 +65,11 @@ private:
     double _settled = 0.0;
     std::uint32_t _jump = 0;
     bool _synced = false;
+    int _margin = 0;
+    /// The time of the last inputs too late, or of the last calm period.
+    double _lastLate = 0.0;
+    /// The smallest lead since then.
+    std::optional<int> _lowest;
 
 public:
     /// Time goes by: the old reports are forgotten.
@@ -75,6 +90,9 @@ public:
 
     /// The smallest lead of the last reports, nothing without one.
     [[nodiscard]] std::optional<int> lead() const;
+
+    /// The smallest lead aimed at now: TargetLead, and the margin the late inputs asked for.
+    [[nodiscard]] int target() const { return TargetLead + _margin; }
 };
 
 } // namespace rtype::client

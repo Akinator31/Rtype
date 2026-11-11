@@ -1,4 +1,4 @@
--- Circles around a point of the screen, firing needles at the nearest player as it goes.
+-- Circles around a point of the screen, firing zigzagging sparks at the nearest player as it goes.
 local CenterX = 1450
 local Radius = 230
 local Pulsation = 1.4
@@ -18,10 +18,10 @@ end
 return {
     id = "bydo_orbiter",
     ship = "bydo_orbiter",
-    health = 90,
+    health = 38,
     speed = 460,
     acceleration = 1200,
-    weapon = "wriggler_gun",
+    weapon = "spark_scatterer",
     score = 300,
     collisionDamage = 25,
 

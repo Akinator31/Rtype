@@ -2,12 +2,15 @@
 
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
+#include "rtype/game/Item/ItemRegistry.hpp"
+#include "rtype/game/Loadout.hpp"
 #include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Progression.hpp"
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 #include "rtype/game/Rules.hpp"
 #include "rtype/game/Ship/ShipRegistry.hpp"
+#include "rtype/game/ShipUnlock.hpp"
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/game/Wave/WaveProgress.hpp"
 #include "rtype/game/Wave/WaveRegistry.hpp"
@@ -40,6 +43,11 @@ struct PlayerSlot {
     std::uint16_t bestStreak = 0;
     /// Experience earned in this game, endless games only (Progression).
     std::uint32_t xp = 0;
+    /// The weapons its ships have (Simulation::setLoadout()); empty, the weapon of GameContext::player.
+    Loadout loadout{};
+    /// The characteristics of the ship of the hangar it flies (Simulation::setShip()); by default, the ship
+    /// of the rules.
+    ShipStats stats{};
 
     /// Its ship is in the game: it has lives left and is not waiting for the next one.
     [[nodiscard]] bool isAlive() const { return present && lives > 0 && respawnIn == 0; }
@@ -76,8 +84,14 @@ struct GameContext {
     WeaponRegistry weapons;
     EnemyRegistry enemies;
     WaveRegistry waves;
+    ItemRegistry items;
     /// The ship and the weapon of every player.
     PlayerDefinition player;
+    /// The weapons of the hangar (GameConfig::weaponUnlocks): with that of `player`, those a loadout may
+    /// have.
+    std::vector<std::string> loadoutWeapons;
+    /// The ships of the hangar (GameConfig::shipUnlocks): those a player may fly, with their characteristics.
+    std::vector<ShipUnlock> hangarShips;
     /// The experience of the endless games.
     Progression progression;
     /// The tick being simulated, from 1.
@@ -105,6 +119,20 @@ struct GameContext {
         if (rules.endless) {
             killer.xp += applyMultiplier(enemy.xp, streakMultiplier(progression, killer.streak));
         }
+    }
+
+    /// The health of the ships of a player: that of `player`, times its armor.
+    [[nodiscard]] std::uint8_t maxHealth(const PlayerSlot &slot) const
+    {
+        return scaleByStat(player.health, slot.stats.armor);
+    }
+
+    /// The ship of a player was lost: one life less, and a new ship after Rules::respawnDelay if it has
+    /// lives left.
+    void loseLife(PlayerSlot &player) const
+    {
+        player.lives = static_cast<std::uint8_t>(player.lives > 0 ? player.lives - 1 : 0);
+        player.respawnIn = player.lives > 0 ? rules.respawnDelay : 0;
     }
 
     /// A number from `first` to `last` included. Same result on every platform, unlike the distributions of

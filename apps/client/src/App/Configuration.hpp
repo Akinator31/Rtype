@@ -19,7 +19,7 @@ namespace rtype::client
 void readSettings(engine::Settings &settings);
 
 /// Applies the choices of the player read by readSettings(): the keys of the game, the window, the language,
-/// the volumes and the colour filter. Call it once the translations are loaded.
+/// the volumes, the colour filter and the colours of the auras. Call it once the translations are loaded.
 void applySavedSettings(engine::Engine &engine, const SettingsTargets &targets);
 
 } // namespace rtype::client

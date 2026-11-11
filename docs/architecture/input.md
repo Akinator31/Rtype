@@ -19,11 +19,12 @@ flowchart TB
     Map --> Source["InputSource<br/>(interface)"]
     Source --> Devices["Devices<br/>keyboard and gamepads (raylib)"]
     Source --> Fake["FakeInput<br/>unit tests"]
-    Source -.-> VR["VR controllers<br/>(planned)"]
+    Source --> Virtual["VirtualInput<br/>the devices, with the VR controllers over them"]
+    Virtual --> Devices
 ```
 
 *The client reads actions from an `ActionMap`, which queries an `InputSource`; the real devices, the tests
-and future VR controllers are interchangeable sources.*
+and the controllers of a VR headset are interchangeable sources.*
 
 | Class / header | Role |
 |---|---|
@@ -33,6 +34,7 @@ and future VR controllers are interchangeable sources.*
 | `Binding` | One physical input: a key, a gamepad button, or one direction of a stick or trigger. |
 | `ActionMap<Action>` | Binds each action to its inputs, and updates the actions once per frame. |
 | `TextInput` | The text of an input field, edited with the typed characters and Backspace. |
+| `VirtualInput` | An `InputSource` over another one, with a virtual gamepad (`GamepadState`) and a pointer (`PointerState`) added: the controllers of a VR headset. |
 
 The library does not know the actions of R-Type: the client defines them, in
 `apps/client/src/Controls.hpp`, and `ActionMap` is a template over their type.
@@ -213,7 +215,13 @@ than one already held when the scene opened:
   therefore not be chosen while the banner asks.
 
 ++escape++ cancels, and is never bound. The gamepads keep their buttons. A button under the table puts every
-key back to its default (`Controls::resetDefaults()`).
+key back to its default (`Controls::resetDefaults()`), those of the voice included.
+
+The keys of the voice (push to talk, mute, deafen) are chosen the same way on the Voice page
+([Voice](voice.md#the-keys)): they are actions too (`VoiceActions`), on controls the game does not read, and
+`assignKey()` and `findKeyOwner()` go through every action (`BoundActions`), so that a key does one thing among
+those of the game and those of the voice. Both pages share their rows and the scene that asks for the key
+(`Controls/KeyChoice.hpp`).
 
 A key is shown as it is printed on the keyboard of the player (`input::keyLabel()`, from GLFW): `Key::W` shows
 "Z" on AZERTY. A key that prints no character is shown by its translated name, `key.<name>` in the
@@ -363,11 +371,33 @@ actions.update(input);
 REQUIRE(actions.wasPressed(Action::Shoot));
 ```
 
+`tests/virtual_input.cpp` tests the `VirtualInput` over a `FakeInput`.
+
+## The controllers of a VR headset
+
+The client reads a `VirtualInput`, over the `Devices`: the controllers of a VR headset are added to them as a
+gamepad and a pointer, so that every `ActionMap` and the menus work with them without knowing they exist
+([VR](vr.md#the-controllers)). The library does not know VR: the client fills them each frame.
+
+- **The virtual gamepad** (`setGamepad()`) is gamepad 0, the one the bindings read by default, held together
+  with the real gamepad 0: a button is held when it is held on either, an axis is the one pushed the farthest.
+- **The pointer** (`setPointer()`), while it is given, replaces the mouse: its position, its button as the left
+  one, its scrolling as the wheel. Its position is in the units the interface reads the mouse in; in a headset,
+  game units of the panel, which `engine::RendererMetrics::windowToGame()` keeps as they are.
+- The keyboard, the text typed and the clipboard are those of the devices.
+
+```cpp
+VirtualInput input(devices);
+engine.setInputSource(input);
+// Each frame, before the engine reads the input
+input.setGamepad(controllers.gamepad());
+input.setPointer(controllers.pointer());
+```
+
 ## Adding an input source
 
-Any class implementing `InputSource` works with `ActionMap`, without changing the game. This is how VR
-controllers are planned to be supported: a new source, and if needed new kinds of bindings for their
-buttons and gestures.
+Any class implementing `InputSource` works with `ActionMap`, without changing the game, as `VirtualInput`
+does for the controllers of a VR headset.
 
 ## Limits and next steps
 

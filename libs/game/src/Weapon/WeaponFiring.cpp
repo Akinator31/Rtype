@@ -3,8 +3,10 @@
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Projectile/ProjectileBehavior.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <utility>
 
 namespace rtype::game
 {
@@ -42,6 +44,10 @@ void spendRound(Armed &armed, const WeaponDefinition &weapon)
 bool stepWeapon(Armed &armed, const WeaponDefinition &weapon, bool wantsToFire)
 {
     tickDown(armed.cooldown);
+    const bool boosted = armed.boostTicks > 0;
+    if (boosted) {
+        --armed.boostTicks;
+    }
     if (armed.reloadLeft > 0 && tickDown(armed.reloadLeft)) {
         armed.ammo = weapon.magazineSize;
     }
@@ -49,9 +55,18 @@ bool stepWeapon(Armed &armed, const WeaponDefinition &weapon, bool wantsToFire)
     if (!ready || !wantsToFire) {
         return false;
     }
-    armed.cooldown = weapon.fireInterval;
+    armed.cooldown = boosted ? std::max<std::uint32_t>(1, armed.boostInterval) : weapon.fireInterval;
     spendRound(armed, weapon);
     return true;
+}
+
+void selectWeapon(Armed &armed, Holster &holster, std::uint8_t wanted)
+{
+    if (wanted == holster.inHand) {
+        return;
+    }
+    std::swap(armed, holster.weapon);
+    holster.inHand = wanted;
 }
 
 ShotLaunch aimShot(const WeaponDefinition &weapon, float projectileHalfWidth, std::uint8_t owner,

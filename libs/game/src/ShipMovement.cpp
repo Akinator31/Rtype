@@ -8,19 +8,19 @@
 namespace rtype::game
 {
 
-physics::Velocity shipVelocity(PlayerInput input, const Rules &rules)
+physics::Velocity shipVelocity(PlayerInput input, const Rules &rules, float speedFactor)
 {
+    const float speed = rules.shipSpeed * speedFactor;
     // A diagonal is as fast as a straight line
     const float diagonal = 1.0f / std::sqrt(2.0f);
     const PlayerInput::Direction direction = input.direction();
     const float scale = direction.x != 0 && direction.y != 0 ? diagonal : 1.0f;
-    return {static_cast<float>(direction.x) * rules.shipSpeed * scale,
-            static_cast<float>(direction.y) * rules.shipSpeed * scale};
+    return {static_cast<float>(direction.x) * speed * scale, static_cast<float>(direction.y) * speed * scale};
 }
 
-ecs::Position moveShip(ecs::Position position, PlayerInput input, const Rules &rules)
+ecs::Position moveShip(ecs::Position position, PlayerInput input, const Rules &rules, float speedFactor)
 {
-    const physics::Velocity velocity = shipVelocity(input, rules);
+    const physics::Velocity velocity = shipVelocity(input, rules, speedFactor);
     // As physics::MovementSystem, with the elapsed time of a tick
     position.x += velocity.x * TickDuration;
     position.y += velocity.y * TickDuration;

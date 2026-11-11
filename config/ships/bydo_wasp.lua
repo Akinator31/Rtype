@@ -2,5 +2,5 @@
 return {
     id = "bydo_wasp",
     model = "models/spaceship.glb",
-    collider = { shape = "box", halfWidth = 66, halfHeight = 22 },
+    collider = { shape = "box", halfWidth = 84, halfHeight = 49 },
 }

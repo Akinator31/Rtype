@@ -70,6 +70,29 @@ export const handlers = [
     checked(() => HttpResponse.json({ account: fixtures.accounts[0] })),
   ),
   http.post(
+    '*/api/accounts/:id/mute-voice',
+    checked(async (request) => {
+      const body = (await request.json()) as { duration: number; reason: string };
+      return HttpResponse.json({
+        account: {
+          ...fixtures.accounts.find((account) => account.id === accountId(request)),
+          voiceMute: {
+            accountId: accountId(request),
+            createdAt: fixtures.now,
+            expiresAt: fixtures.now + body.duration * 1000,
+            reason: body.reason,
+            actor: 'local',
+          },
+        },
+        removed: 1,
+      });
+    }),
+  ),
+  http.post(
+    '*/api/accounts/:id/unmute-voice',
+    checked(() => HttpResponse.json({ account: fixtures.accounts[0], removed: 1 })),
+  ),
+  http.post(
     '*/api/accounts/:id/delete',
     checked(() => HttpResponse.json({ account: null, removed: 0 })),
   ),
@@ -82,6 +105,18 @@ export const handlers = [
     '*/api/players/:id/kick',
     checked((request) =>
       HttpResponse.json({ playerId: Number(new URL(request.url).pathname.split('/')[3]) }),
+    ),
+  ),
+  http.post(
+    '*/api/players/:id/mute-voice',
+    checked((request) =>
+      HttpResponse.json({ playerId: Number(new URL(request.url).pathname.split('/')[3]), voiceMuted: true }),
+    ),
+  ),
+  http.post(
+    '*/api/players/:id/unmute-voice',
+    checked((request) =>
+      HttpResponse.json({ playerId: Number(new URL(request.url).pathname.split('/')[3]), voiceMuted: false }),
     ),
   ),
   http.post(

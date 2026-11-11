@@ -16,6 +16,12 @@ struct EntitySound {
     float volume = 1.0f;
 };
 
+/// Where a sound of the game is heard from, from -1 (left) to 1 (right), for its place along the game (x, in
+/// game units): from the side of the screen, or of the board in a VR headset, it is on, never fully on one
+/// side, which would be hard to hear with one ear. The voices of the other players are heard from their
+/// ship this way in a VR headset.
+[[nodiscard]] float soundPan(float x);
+
 /// The EntitySound of each kind of entity that has one, for one moment of their life (docs/architecture/
 /// client-game.md, "Sounds"). The engine plays them: the entity that sounds is given an engine::SoundEffect,
 /// played by the engine::SoundSystem.

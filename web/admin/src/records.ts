@@ -18,9 +18,13 @@ export function actionBadge(action: Action): { label: string; tone: BadgeTone } 
     case 'end_game':
     case 'ban_account':
     case 'delete_account':
+    case 'mute_voice':
+    case 'mute_account_voice':
       return { label, tone: 'alert' };
     case 'unban':
     case 'unban_account':
+    case 'unmute_voice':
+    case 'unmute_account_voice':
       return { label, tone: 'muted' };
     default:
       return { label, tone: 'neutral' };
@@ -48,6 +52,8 @@ export function detailsLine(action: Action): string {
   const parts: (string | undefined)[] = [];
   switch (action.action) {
     case 'kick':
+    case 'mute_voice':
+    case 'unmute_voice':
       parts.push(
         text(details.name),
         text(details.address),
@@ -91,6 +97,25 @@ export function detailsLine(action: Action): string {
       parts.push(
         reason,
         number(details.removed) !== undefined ? words.removed(details.removed as number) : undefined,
+      );
+      break;
+    case 'mute_account_voice':
+      parts.push(
+        number(details.duration) !== undefined ? words.seconds(details.duration as number) : undefined,
+        number(details.expiresAt) !== undefined
+          ? words.endsAt(dayTime(details.expiresAt as number))
+          : undefined,
+        reason,
+        number(details.players) !== undefined ? words.inGames(details.players as number) : undefined,
+      );
+      break;
+    case 'unmute_account_voice':
+      parts.push(
+        number(details.expiresAt) !== undefined
+          ? words.plannedEnd(dayTime(details.expiresAt as number))
+          : undefined,
+        text(details.mutedBy) !== undefined ? words.mutedBy(String(details.mutedBy)) : undefined,
+        reason,
       );
       break;
     case 'role':

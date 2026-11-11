@@ -1,6 +1,6 @@
--- A small hull: it is hard to hit.
+-- A caved hull that dives.
 return {
     id = "bydo_drone",
     model = "models/spaceship_caved.glb",
-    collider = { shape = "box", halfWidth = 30, halfHeight = 12 },
+    collider = { shape = "box", halfWidth = 84, halfHeight = 49 },
 }

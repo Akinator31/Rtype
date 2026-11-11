@@ -28,7 +28,7 @@ acknowledgements and the messages.*
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | 0 | Magic | `u16` | `0x5254` (`"RT"`) |
-| 2 | Version | `u8` | Protocol version, 3 |
+| 2 | Version | `u8` | Protocol version, 6 |
 | 3 | Reserved | `u8` | 0 |
 | 4 | Session id | `u32` | Session given by the master, never 0, unique across the master |
 | 8 | Packet number | `u64` | Number of this datagram in its direction, from 1 |
@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-03                        version 3
+08                        version 8
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -74,7 +74,7 @@ The body is encrypted with **AEAD_CHACHA20_POLY1305** as defined in
 A receiver processes a datagram in this order, and drops it silently at the first failed step:
 
 1. The size is between 32 and 1200 bytes.
-2. The magic is `0x5254`, the version is 3, the reserved byte is 0.
+2. The magic is `0x5254`, the version is 6, the reserved byte is 0.
 3. The session id is a known session.
 4. The source address has not sent more than 200 datagrams in the last second.
 5. The packet number is accepted by the replay window ([section 4](#4-replay-window)).
@@ -237,9 +237,11 @@ valid tag.
 | 0 | Player slot | `u8` | 0 to 3: the player's place in the game, which sets the colour of its ship |
 | 1 | Tick rate | `u8` | Ticks per second of the simulation, 60 |
 | 2 | Tick | `u32` | Current tick of the game |
+| 6 | Flags | `u8` | Bit 0: the game carries the voice (version 5, `[voice] enabled` of the server). Other bits: 0 |
 
 **Receiver behaviour:** the client moves to the connected state. A slot above 3 or a tick rate of 0 makes the
-message malformed.
+message malformed; the reserved bits are ignored. Without the voice, the client sends no voice message and
+shows no voice: the game would drop them.
 
 ### DISCONNECT (`0x03`)
 
@@ -275,6 +277,10 @@ message malformed.
 | 0 | Player slot | `u8` | 0 to 3 |
 | 1 | Player id | `u32` | Id given by the master |
 | 5 | Name | `str8` | 1 to 16 bytes |
+| 6 + n | Account id | `u64` | The account of the player on the server, 0 for a guest (version 4) |
+
+**Receiver behaviour:** the client names the player in its HUD, and keeps what its player chose for it (its
+volume, muted) under its account, or under its name for a guest ([section 9.4](#94-the-voice)).
 
 ### PLAYER_LEFT (`0x05`)
 
@@ -307,10 +313,17 @@ player does, and draws the world the game sends back.
 | Type | Message | Direction | Reliability |
 |---|---|---|---|
 | `0x40` | [`INPUT`](#input-0x40) | Client → Game | Unreliable, sent again in the next datagrams |
+| `0x41` | [`VOICE`](#voice-0x41) | Client → Game | Unreliable |
+| `0x42` | [`VOICE_STATE`](#voice_state-0x42) | Client → Game | Reliable |
+| `0x43` | [`VOICE_STATUS`](#voice_status-0x43) | Client → Game | Reliable |
+| `0x44` | [`LOADOUT`](#loadout-0x44) | Client → Game | Reliable |
 | `0x80` | [`SNAPSHOT`](#snapshot-0x80) | Game → Client | Unreliable, replaced by the next one |
 | `0x81` | [`ENTITIES_DESTROYED`](#entities_destroyed-0x81) | Game → Client | Reliable |
 | `0x82` | [`WAVE_STARTED`](#wave_started-0x82) | Game → Client | Reliable |
 | `0x83` | [`GAME_OVER`](#game_over-0x83) | Game → Client | Reliable |
+| `0x84` | [`VOICE_FRAME`](#voice_frame-0x84) | Game → Client | Unreliable |
+| `0x85` | [`VOICE_ROSTER`](#voice_roster-0x85) | Game → Client | Reliable |
+| `0x86` | [`VOICE_STATUSES`](#voice_statuses-0x86) | Game → Client | Reliable |
 
 Types `0x40`–`0x7F` are sent by the client, `0x80`–`0xFF` by the game. The client MUST NOT send game messages
 before `ACCEPTED`, and the game sends them only to connected sessions.
@@ -350,9 +363,14 @@ hence what the client draws:
 | `BYDO_BOSS` | `0x1F` | None | Hit points left |
 | `BYDO_SHOT` | `0x40` | None | Age |
 | `BYDO_PLASMA_SHOT` | `0x41` | None | Age |
+| `ITEM` | `0x60` | None | 0 |
 
-- Ranges: `0x01`–`0x0F` players and their shots, `0x10`–`0x3F` Bydos, `0x40`–`0x5F` Bydo shots, `0x60`–`0xFF`
-  reserved for later kinds (power-ups, the Force, obstacles). Kind `0x00` is invalid.
+- Ranges: `0x01`–`0x0F` players and their shots, `0x10`–`0x3F` Bydos, `0x40`–`0x5F` Bydo shots, `0x60`–`0x6F`
+  items, `0x70`–`0xFF` reserved for later kinds (the Force, obstacles). Kind `0x00` is invalid.
+- The **ship** byte of a Bydo is the index of its ship among the ids of `config/ships/` in alphabetical order;
+  that of an **item** (`0x60`) is the index of its item among the ids of `config/items/`, so that the client,
+  which reads the same configuration, draws its model. An item the ship of a player picked up is destroyed
+  with the cause *killed*; one nobody picked up, with the cause *removed*.
 - The **owner** is a player slot (0 to 3), or `0xFF` for none.
 - A **shot** (`0x02`, `0x03`, `0x40`–`0x5F`) has no hit points: in their place, its **age**, the ticks since it
   was fired, at most 255. A snapshot of tick `T` with a shot of age `a` says it was fired at tick `T − a`: the
@@ -373,9 +391,15 @@ An input is the state of the player's controls during one tick, one byte:
 | 4 | Fire (held: the game decides what holding it does, for instance charging a shot) |
 | 5 | Aim up (held: the ship turns its nose up by 30° and fires that way) |
 | 6 | Aim down (held: the ship turns its nose down by 30° and fires that way) |
-| 7 | Reserved: senders set it to 0, receivers ignore it |
+| 7 | Second weapon (version 7): set, the second weapon of the [loadout](#loadout-0x44) is in hand, the first otherwise |
 
 Up and down together, left and right together, or aim up and aim down together, cancel each other.
+
+Bit 7 is a state, not a press: the client flips it each time its player presses the key that switches the
+weapons, and sends it in every input, so that a lost input switches nothing. At each tick, before the weapons
+fire, a ship with two weapons takes in hand the one its input asks for; the other is put away with its
+cooldown, its ammunition and its reload, which stay as they are until it is in hand again. A ship with one
+weapon ignores the bit.
 
 **Client.** Once per tick, the client samples its controls and sends `INPUT` with the inputs of the last
 **8** ticks, newest first: a lost datagram loses no input, since the next ones carry it again. It stamps each
@@ -415,14 +439,16 @@ is ignored.
 its ship: each `SNAPSHOT` gives the state of the weapon of its ship at its tick (cooldown, ammo, reload), from
 which it replays the inputs not applied yet, with the rules of the game, to know at which ticks the weapon
 fires and from where. The shot of the game fired at the same tick, told by its age, then takes the place of the
-predicted one. A predicted shot the game never sends is a wrong guess: the client stops drawing it.
+predicted one. A predicted shot the game never sends is a wrong guess: the client stops drawing it. With two
+weapons, the snapshot also gives which one is in hand and the state of the other, so that the inputs replayed
+switch them as the game does.
 
 ### 9.3 Snapshots
 
 **Sending.** Every **2** ticks (30 times per second), after simulating the tick, the game sends each connected
 client a snapshot: the players' scores and lives, and the state of every entity. When the entities do not fit
 in one datagram, the snapshot is split in **parts** (at most 16), each in its own datagram, each with the tick
-and the players. With four players, a part holds up to 65 entities.
+and the players. With four players, a part holds up to 61 entities.
 
 **Receiving.** The client keeps the tick `L` of the latest snapshot it applied, and for each part received:
 
@@ -444,6 +470,70 @@ losses, closer shows a more recent world. A fixed **100 ms** is safe; the client
 instead: for each snapshot that arrives, the ticks since the previous one plus how much later than the
 earliest of the last 3 s it arrived, plus a tick, the largest over those 3 s, from 50 to 250 ms.
 
+### 9.4 The voice
+
+The players of a game talk to each other ([ADR 0035](../decisions/0035-voice-chat-in-the-game-session.md)).
+The voice is **Opus** ([RFC 6716](https://www.rfc-editor.org/rfc/rfc6716)), 48 kHz, mono, in **frames of
+20 ms** of 1 to 160 bytes: 50 frames per second while a player talks. The game forwards the frames without
+decoding them.
+
+**Backends.** What carries the voice of a player is its backend:
+
+| Backend | Value | The player talks and hears |
+|---|---|---|
+| `NONE` | 0 | Not at all: no voice, or the client has none. The backend of every player until it says otherwise |
+| `GAME` | 1 | Through the game: `VOICE` and `VOICE_FRAME` |
+| `DISCORD` | 2 | Through a voice lobby of Discord, and through the game for the players on `GAME` |
+
+A client tells the game its backend with [`VOICE_STATE`](#voice_state-0x42), and the game tells every client
+the backend of each player with [`VOICE_ROSTER`](#voice_roster-0x85).
+
+**Forwarding.** The game forwards each [`VOICE`](#voice-0x41) of a player as a
+[`VOICE_FRAME`](#voice_frame-0x84) to every other connected player, except:
+
+- to and from a player on `NONE`;
+- from a player on `DISCORD` to a player on `DISCORD`: Discord already carries it between them.
+
+| From → to | `GAME` | `DISCORD` | `NONE` |
+|---|---|---|---|
+| `GAME` | forwarded | forwarded | — |
+| `DISCORD` | forwarded | — | — |
+| `NONE` | — | — | — |
+
+So in a game of two players on Discord and two on the game, each player hears each of the three others once.
+
+**Rate.** The game SHOULD forward at most 60 frames per second of one player, with bursts of 10: a token bucket.
+A client that sends more loses the frames beyond. Frames are never resent: a lost frame is rebuilt by the
+receiver from the copy the next one carries (the in-band FEC of Opus), or made up.
+
+**Receiver behaviour:** the client keeps one Opus decoder per player, and decodes the frames of each in the
+order of their sequence numbers, after a short buffer that evens out the network. It refuses a frame that is not
+a valid Opus packet of 20 ms. It never stores nor logs the voice.
+
+**Status.** Each player tells the others what it does with its voice, for their HUD: muted by itself, deafened,
+or without a microphone. A client sends it with [`VOICE_STATUS`](#voice_status-0x43), and the game tells every
+client the status of each player with [`VOICE_STATUSES`](#voice_statuses-0x86). It only informs: the game
+forwards the frames of a player whatever its status says, unless an administrator muted it. The flags:
+
+| Bit | Flag | Set while |
+|---|---|---|
+| 0 | Muted | The player muted itself: nobody hears it |
+| 1 | Deafened | The player hears nobody |
+| 2 | No microphone | The player has no microphone it can open: it listens only |
+| 3 | Muted by an administrator | Version 5, in `VOICE_STATUSES` only: the game drops the voice of the player until its mute ends. A client sets it to 0 in `VOICE_STATUS`, and the game ignores it there |
+| 4–7 | Reserved | Senders set them to 0, receivers ignore them |
+
+**The rules of the server.** The game forwards a `VOICE` only if the server carries the voice (`ACCEPTED`), the
+player is not muted by an administrator, the frame is at most `[voice] max_frame_bytes` (160 by default), and
+the player sends at most `[voice] max_frames_per_second` (60 by default, with bursts of 10). Otherwise it drops
+it, without a word ([Voice](../architecture/voice.md#the-rules-of-the-server)).
+
+**Choices of each player.** A client may turn down or mute another player for its own player only. It keeps
+that choice under the account of that player (`PLAYER_JOINED`), and the address of the server, or under its
+name for a guest: the choice comes back in the next game with the same player.
+
+The messages of the voice are new types that older receivers ignore ([versioning](index.md#4-versioning)).
+
 ### INPUT (`0x40`)
 
 | | |
@@ -460,6 +550,85 @@ earliest of the last 3 s it arrived, plus a tick, the largest over those 3 s, fr
 
 **Receiver behaviour:** the game keeps the inputs as [section 9.2](#92-inputs) says. A count of 0 or above 32,
 or more inputs than `Tick + 1`, makes the message malformed.
+
+### VOICE (`0x41`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Unreliable |
+| **Sent when** | Every 20 ms while the player talks, once connected, on a backend other than `NONE`. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Sequence | `u16` | Number of the frame: one more every 20 ms while the player talks, 0 after 65535 |
+| 2 | Flags | `u8` | Bit 0: the last frame of a talk spurt, the player stopped talking. Other bits: 0 |
+| 3 | Size | `u8` | Size of the frame, 1 to 160 |
+| 4 | Frame | `bytes[Size]` | 20 ms of Opus |
+
+A client SHOULD send it in the datagram of its next `INPUT`: the voice then costs no datagram of its own.
+
+**Receiver behaviour:** the game forwards it as [section 9.4](#94-the-voice) says, as a `VOICE_FRAME` with the
+slot of the player. A frame of a player on `NONE`, or beyond its rate, is dropped. A size of 0 or above 160, or a
+frame shorter than the size, makes the message malformed. The reserved bits of the flags are ignored.
+
+### VOICE_STATE (`0x42`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Reliable |
+| **Sent when** | Once connected, if the player has a voice; then at every change: its Discord call started or ended, the voice turned off. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Backend | `u8` | The backend of the player ([section 9.4](#94-the-voice)) |
+
+**Receiver behaviour:** the game keeps the backend of the player, forwards its voice and the voice of the
+others to it from then on, and sends [`VOICE_ROSTER`](#voice_roster-0x85) to every client. An unknown backend is
+treated as `NONE`.
+
+### VOICE_STATUS (`0x43`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Reliable |
+| **Sent when** | Once connected, then at every change: the player muted or deafened itself, or its microphone could not be opened. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Flags | `u8` | The status of the player ([section 9.4](#94-the-voice)) |
+
+**Receiver behaviour:** the game keeps the status of the player, and sends
+[`VOICE_STATUSES`](#voice_statuses-0x86) to every client if it changed. The reserved bits are ignored.
+
+### LOADOUT (`0x44`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Reliable |
+| **Sent when** | Version 8: once, after `ACCEPTED` (version 7: only when the player chose two weapons in the hangar). |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | First weapon | `str8` | 1 to 255 bytes: the id of a weapon of the configuration (`config/weapons/`), in hand when the ship appears; empty, with the second, for the weapon of every player (version 8) |
+| 1 + n | Second weapon | `str8` | 1 to 255 bytes: the one put away ([section 9.2](#92-inputs)); empty with the first |
+| 2 + n + m | Ship | `str8` | 0 to 32 bytes: the code of the ship of the hangar the player flies, such as `VX-03`; empty for the ship of the rules (version 8) |
+
+**Receiver behaviour:** the game gives the two weapons to the ship of the player at once, magazines full, the
+first in hand, and to each ship it gets later. Two weapons that are the same, or that are neither in the hangar
+of the configuration (`config/hangar.lua`) nor the weapon of every player, are refused: the player keeps the
+weapon of every player. The game does not know the accounts: the level each weapon needs is checked by the
+client. Only the first `LOADOUT` of a session counts; the next ones are ignored, so that sending it again does
+not fill the magazines. Without it, the ship has the weapon of every player alone.
+
+The ship gives its characteristics (`speed`, `power`, `armor` of `config/hangar.lua`) to the ships of the
+player: their speed, the damage of their shots, their health. A code that is not in the hangar of the
+configuration is refused: the player flies the ship of the rules. The client predicts its ship with the same
+characteristics, from the same file. A first weapon empty without the second, or the opposite, makes the
+message malformed.
 
 ### SNAPSHOT (`0x80`)
 
@@ -479,10 +648,14 @@ or more inputs than `Tick + 1`, makes the message malformed.
 | 13 | Weapon reload | `u16` | Ticks before its magazine is full again, 0 when it is not reloading |
 | 15 | Part | `u8` | Number of this part, from 0 |
 | 16 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
-| 17 | Player count | `u8` | 0 to 4 |
-| 18 | Players | | Player count times the fields below |
-| 18 + 20p | Entity count | `u8` | Number of entities in this part |
-| 19 + 20p | Entities | | Entity count times the fields below |
+| 17 | Weapon in hand | `u8` | 0 or 1: which weapon of the loadout of the ship of this client the fields at 9 to 14 are about, 0 with one weapon or without a ship (version 7) |
+| 18 | Spare cooldown | `u16` | The same as at 9 for the weapon put away; 0 without one (version 7) |
+| 20 | Spare ammo | `u16` | |
+| 22 | Spare reload | `u16` | |
+| 24 | Player count | `u8` | 0 to 4 |
+| 25 | Players | | Player count times the fields below |
+| 25 + 20p | Entity count | `u8` | Number of entities in this part |
+| 26 + 20p | Entities | | Entity count times the fields below |
 
 Each player, 20 bytes:
 
@@ -497,7 +670,7 @@ Each player, 20 bytes:
 | 14 | Best streak | `u16` | The longest streak of the game |
 | 16 | Experience | `u32` | Experience earned in this game; always 0 offline. Online, the waves follow each other without end and earn experience ([progression](../architecture/accounts.md#progression)) |
 
-Each entity, 16 bytes:
+Each entity, 17 bytes:
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
@@ -510,9 +683,10 @@ Each entity, 16 bytes:
 | 12 | Velocity Y | `i16` | |
 | 14 | Health, or age | `u8` | Hit points left, for health bars; 0 for kinds without. For a shot, its age in ticks, at most 255 ([section 9.1](#91-the-world)) |
 | 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bit 3: aiming up. Bit 4: aiming down (a ship of a player turned by 30°, [section 9.2](#92-inputs)). Bit 5: guarding, bit 6: slashing, bit 7: shooting (the stance of a Bydo, at most one, drawn with its animation) |
+| 16 | Ship | `u8` | For a Bydo, its ship: the index of its id among the ids of the ships of the configuration (`config/ships/`), in alphabetical order, so that the client draws its model at the size of its collider (version 6). For a shot, its projectile: the index of its id among the ids of the projectiles of the configuration (`config/projectiles/`), in alphabetical order, so that the client draws the model of the weapon that fired it (version 7 for the shots of the players; the shots of the Bydos carry it too, which an older client ignores). `0xFF` for none: the ships of the players, beyond 254 |
 
 **Receiver behaviour:** the client applies the part as [section 9.3](#93-snapshots) says. A part number not below
-the number of parts, a number of parts of 0 or above 16, more than 4 players, a slot above 3 or given twice, an
+the number of parts, a number of parts of 0 or above 16, a weapon in hand above 1, more than 4 players, a slot above 3 or given twice, an
 entity id or kind of 0, or a size that does not match the counts makes the message malformed.
 
 ### ENTITIES_DESTROYED (`0x81`)
@@ -587,6 +761,55 @@ closes the sessions with [`DISCONNECT`](#disconnect-0x03) (`GAME_OVER`).
 **Receiver behaviour:** the client shows the outcome with the last scores it received. Unknown outcomes are
 treated as `DEFEAT`.
 
+### VOICE_FRAME (`0x84`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Unreliable |
+| **Sent when** | A `VOICE` of another player is received, unless [section 9.4](#94-the-voice) says otherwise. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Player slot | `u8` | The player who talks, 0 to 3 |
+| 1 | Sequence | `u16` | As in its `VOICE` |
+| 3 | Flags | `u8` | As in its `VOICE`, the reserved bits 0 |
+| 4 | Size | `u8` | 1 to 160 |
+| 5 | Frame | `bytes[Size]` | As in its `VOICE` |
+
+**Receiver behaviour:** the client plays it as the voice of that player ([section 9.4](#94-the-voice)). A slot
+above 3, a size of 0 or above 160, or a frame shorter than the size, makes the message malformed.
+
+### VOICE_ROSTER (`0x85`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Reliable |
+| **Sent when** | To a client that connects, after the `PLAYER_JOINED` of the others; to every client when a player changes its backend (`VOICE_STATE`), or leaves with a backend other than `NONE`. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Backends | `bytes[4]` | The backend of the player of slot 0, 1, 2 and 3; `NONE` for a slot without a player |
+
+**Receiver behaviour:** the client knows from it which voices come through the game, and which through Discord.
+An unknown backend is treated as `NONE`.
+
+### VOICE_STATUSES (`0x86`)
+
+| | |
+|---|---|
+| **Direction** | Game → Client |
+| **Reliability** | Reliable |
+| **Sent when** | To a client that connects, after `VOICE_ROSTER` (to every client when it is muted by an administrator already); to every client when a player changes its status (`VOICE_STATUS`), leaves with flags set, or is muted by an administrator or let talk again. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | Flags | `bytes[4]` | The status of the player of slot 0, 1, 2 and 3 ([section 9.4](#94-the-voice)); 0 for a slot without a player |
+
+**Receiver behaviour:** the client shows the status of each player beside its name. The reserved bits are
+ignored.
+
 ## 10. Example
 
 A client sends its input at tick 1000: up and fire held for the last two ticks, up only the tick before. It has
@@ -616,7 +839,7 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 ```
 80                        type: SNAPSHOT
 00                        flags: unreliable
-00 37                     size: 55 bytes
+00 3F                     size: 63 bytes
 00 00 03 E8                 tick: 1000
 00 00 03 E6                 last input applied: tick 998
 02                          input lead: 2 ticks
@@ -625,6 +848,8 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 00 00                         not reloading
 00                          part 0
 01                          of 1 part
+00                          weapon in hand: the first,
+00 00 00 00 00 00             none put away
 01                          1 player
 00 03 00 00 05 DC             slot 0, 3 lives, score 1500
 00 00 00 0C                   12 Bydos shot down
@@ -640,4 +865,5 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 F6 A0                         velocity y: −2400 / 8 = −300 units per second
 03                            health: 3
 01                            flags: invulnerable
+FF                            ship: none
 ```

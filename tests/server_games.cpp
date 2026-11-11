@@ -10,6 +10,7 @@
 #include "Master/Lobby.hpp"
 #include "Master/Process.hpp"
 #include "Master/Relay.hpp"
+#include "Master/VoiceMutes.hpp"
 #include "Web/LocalAccess.hpp"
 #include "rtype/game/Messages.hpp"
 #include "rtype/lobby/Messages.hpp"
@@ -69,6 +70,8 @@ struct GameClient {
     std::optional<rtype::game::AcceptedMessage> accepted;
     /// The latest snapshot part received.
     std::optional<rtype::game::SnapshotPart> snapshot;
+    /// The latest VOICE_STATUSES received.
+    std::optional<rtype::game::VoiceStatusesMessage> statuses;
     std::optional<SessionEnd> end;
     bool updating = true;
 
@@ -89,6 +92,8 @@ struct GameClient {
                     if (auto part = rtype::game::decodeSnapshotPart(payload)) {
                         snapshot = std::move(part);
                     }
+                } else if (type == rtype::game::message_type::VoiceStatuses) {
+                    statuses = rtype::game::decodeVoiceStatuses(payload);
                 }
             },
             [this](SessionEnd ended) { end = ended; }, Clock::now());
@@ -468,8 +473,15 @@ TEST_CASE("The master reads the score of a player who just destroyed a Bydo, wit
     std::uint32_t stamped = 0;
     std::optional<float> target;
     auto nextInput = Clock::now();
+    auto nextPing = Clock::now();
     const auto play = [&] {
         client.update();
+        // The lobby closes a player silent for 30 s, and its game with it: on a slow machine, the first kill
+        // can take longer
+        if (Clock::now() >= nextPing) {
+            alice->send(message_type::Ping);
+            nextPing += 5s;
+        }
         const rtype::game::SnapshotPart &part = *client.snapshot;
         std::optional<rtype::game::EntityState> ship;
         target.reset();
@@ -745,4 +757,110 @@ TEST_CASE("r-type_server, run as a master, starts the instance of a game created
     std::filesystem::remove(database);
     std::filesystem::remove(settings);
     std::filesystem::remove(std::filesystem::temp_directory_path() / AdminUrlFileName);
+}
+
+TEST_CASE("A game carries the voice as the settings say, and drops the voice of a player muted by an "
+          "administrator, or by its account",
+          "[games][voice]")
+{
+    const auto now = std::chrono::system_clock::now();
+    VoiceMutes mutes(
+        {VoiceMute{.accountId = 7, .createdAt = now, .expiresAt = now + 1h, .reason = "", .actor = "local"}});
+    MasterFixture master;
+    master.games.setVoiceMutes(&mutes);
+    std::optional<Games::JoinResult> created;
+    master.games.create({.id = 1, .name = "Alice", .accountId = 0}, CreateGameMessage{"Voices", 4},
+                        [&](Games::JoinResult result) { created = std::move(result); });
+    REQUIRE(master.wait([&] { return created.has_value(); }));
+    REQUIRE(std::holds_alternative<GameJoinedMessage>(*created));
+    const GameJoinedMessage aliceJoined = std::get<GameJoinedMessage>(*created);
+    GameClient alice(master.loop, aliceJoined);
+    master.gameClients.push_back(&alice);
+    REQUIRE(master.wait([&] { return alice.accepted.has_value(); }));
+    CHECK(alice.accepted->voice);
+
+    // Bob plays with the account whose voice is muted: it joins muted
+    const Games::JoinResult bobJoined =
+        master.games.join({.id = 2, .name = "Bob", .accountId = 7}, aliceJoined.gameId);
+    REQUIRE(std::holds_alternative<GameJoinedMessage>(bobJoined));
+    GameClient bob(master.loop, std::get<GameJoinedMessage>(bobJoined));
+    master.gameClients.push_back(&bob);
+    const auto mutedByAdmin = [&](std::uint8_t slot) {
+        return alice.statuses && alice.statuses->statuses[slot].mutedByAdmin;
+    };
+    REQUIRE(master.wait([&] { return bob.accepted.has_value() && mutedByAdmin(1); }));
+    const auto shown = [&](std::uint32_t player) {
+        const std::vector<AdminGame> games = master.games.adminGames();
+        REQUIRE(games.size() == 1);
+        const auto found = std::ranges::find(games[0].players, player, &AdminGamePlayer::id);
+        REQUIRE(found != games[0].players.end());
+        return *found;
+    };
+    CHECK(shown(2).voiceMutedUntil == now + 1h);
+    CHECK_FALSE(shown(2).voiceMuted);
+
+    // An administrator mutes Alice for the rest of the game
+    CHECK(master.games.muteVoice(1, true));
+    REQUIRE(master.wait([&] { return mutedByAdmin(0); }));
+    CHECK(shown(1).voiceMuted);
+    CHECK_FALSE(shown(1).voiceMutedUntil);
+
+    // The mute of the account of Bob lifted: it talks again at once
+    mutes.remove(7);
+    CHECK(master.games.accountVoiceChanged(7) == 1);
+    CHECK(master.games.accountVoiceChanged(8) == 0);
+    REQUIRE(master.wait([&] { return !mutedByAdmin(1); }));
+    CHECK(master.games.muteVoice(1, false));
+    REQUIRE(master.wait([&] { return !mutedByAdmin(0); }));
+    CHECK_FALSE(master.games.muteVoice(99, true));
+    master.games.setVoiceMutes(nullptr);
+}
+
+TEST_CASE("A game of a master whose voice is off tells its clients so", "[games][voice]")
+{
+    GamesSettings settings = instances();
+    settings.voice.enabled = false;
+    MasterFixture master(settings);
+    std::optional<Games::JoinResult> created;
+    master.games.create({.id = 1, .name = "Alice", .accountId = 0}, CreateGameMessage{"Quiet", 2},
+                        [&](Games::JoinResult result) { created = std::move(result); });
+    REQUIRE(master.wait([&] { return created.has_value(); }));
+    REQUIRE(std::holds_alternative<GameJoinedMessage>(*created));
+    GameClient alice(master.loop, std::get<GameJoinedMessage>(*created));
+    master.gameClients.push_back(&alice);
+    REQUIRE(master.wait([&] { return alice.accepted.has_value(); }));
+    CHECK_FALSE(alice.accepted->voice);
+    CHECK_FALSE(master.games.adminGames().at(0).voice);
+}
+
+TEST_CASE("Every game of a master with the social features of Discord has the secret of its voice lobby, the "
+          "same for its players",
+          "[games][voice]")
+{
+    // Without them, no secret
+    {
+        MasterFixture master;
+        auto alice = master.player("Alice");
+        alice->send(message_type::CreateGame, encode(CreateGameMessage{"Bydo hunters", 2}));
+        CHECK_FALSE(master.joined(*alice, 1).voiceSecret.has_value());
+    }
+    GamesSettings settings = instances();
+    settings.discordVoice = true;
+    MasterFixture master(settings);
+    auto alice = master.player("Alice");
+    auto bob = master.player("Bob");
+    auto carol = master.player("Carol");
+    alice->send(message_type::CreateGame, encode(CreateGameMessage{"Bydo hunters", 2}));
+    const GameJoinedMessage aliceGame = master.joined(*alice, 1);
+    REQUIRE(aliceGame.voiceSecret.has_value());
+    bob->send(message_type::JoinGame, encode(JoinGameMessage{aliceGame.gameId}));
+    const GameJoinedMessage bobGame = master.joined(*bob, 1);
+    CHECK(bobGame.voiceSecret == aliceGame.voiceSecret);
+    // Another game, another lobby
+    carol->send(message_type::CreateGame, encode(CreateGameMessage{"Another", 1}));
+    const GameJoinedMessage carolGame = master.joined(*carol, 1);
+    REQUIRE(carolGame.voiceSecret.has_value());
+    CHECK(carolGame.voiceSecret != aliceGame.voiceSecret);
+    // Neither the keys of the sessions
+    CHECK(*aliceGame.voiceSecret != aliceGame.clientKey);
 }

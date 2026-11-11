@@ -2,7 +2,7 @@
 return {
     id = "bydo_carrier",
     ship = "bydo_carrier",
-    health = 255,
+    health = 107,
     speed = 150,
     acceleration = 150,
     weapon = "plasma_core_cannon",

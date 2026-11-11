@@ -1,6 +1,7 @@
 #include "Game/GameSessionSystem.hpp"
 
 #include "Game/EntityLook.hpp"
+#include "Settings/ControlSettings.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
@@ -46,9 +48,19 @@ bool isPlayerSideShip(game::EntityKind kind)
     return kind == game::EntityKind::PlayerShip || kind == game::EntityKind::AllyShip;
 }
 
+/// How far the aura of a ship stands out of its model, in game units, and how much of it spreads in the
+/// glow of the frame.
+constexpr float AuraThickness = 2.5f;
+constexpr float AuraBloom = 0.35f;
+
 /// A shot appears at the nose of the ship that fired it, half a ship ahead of its centre, and has flown for a
 /// snapshot or so when it is drawn: no farther than this from its centre.
 const float ShooterReach = 2.0f * game::Rules{}.shipHalfWidth;
+
+/// The badges of the voice are drawn over the health bars (order 35), under the damage numbers.
+constexpr int VoiceBadgeOrder = 36;
+/// How fast a badge of the voice fades in and out, in opacity per second.
+constexpr float VoiceBadgeFade = 8.0f;
 
 } // namespace
 
@@ -76,6 +88,7 @@ GameSessionSystem::GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs
     use<engine::ModelAnimation>(caches);
     use<ShipAttitude>(caches);
     use<BossModel>(caches);
+    use<ItemModel>(caches);
     use<engine::Drawable>(caches);
     use<engine::SceneMember>(caches);
     use<Impact>(caches);
@@ -97,6 +110,8 @@ void GameSessionSystem::start(std::unique_ptr<GameSession> session, engine::Scen
     stop();
     _session = std::move(session);
     _scene = scene;
+    _secondWeapon = false;
+    _startedAt = std::chrono::system_clock::now();
     _onOver = std::move(onOver);
 }
 
@@ -109,16 +124,26 @@ void GameSessionSystem::stop()
     _killed.clear();
     _players.clear();
     _localHealth = 0;
+    _localMaxHealth = 0;
+    _boss = false;
+    _ships.clear();
+    _localShots = 0;
     _tick = 0;
     _inputLockedUntil = 0;
+    _wave = 0;
     _rescue = game::RescueStage::None;
-    _outcomeTold = false;
+    _outcome.reset();
     _clock = 0.0f;
 }
 
 void GameSessionSystem::setShipLook(game::EntityKind kind, const ShipLook &look)
 {
     _shipLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setShipLook(std::uint8_t ship, const ShipLook &look, render::Vector2 size)
+{
+    _shipLooks.setShipLook(ship, look, size);
 }
 
 void GameSessionSystem::setShipLooks(game::EntityKind kind, std::vector<ShipLook> looks)
@@ -131,6 +156,11 @@ void GameSessionSystem::setLocalShipLook(const ShipLook &look)
     _shipLooks.setLocalLook(look);
 }
 
+void GameSessionSystem::setAuraColors(const AuraColors *colors)
+{
+    _auraColors = colors;
+}
+
 void GameSessionSystem::setBossLook(game::EntityKind kind, const BossLook &look)
 {
     _bossLooks.setLook(kind, look);
@@ -139,6 +169,22 @@ void GameSessionSystem::setBossLook(game::EntityKind kind, const BossLook &look)
 void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
 {
     _shotLooks.setLook(kind, look);
+}
+
+void GameSessionSystem::setProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size)
+{
+    _shotLooks.setProjectileLook(projectile, look, size);
+}
+
+void GameSessionSystem::setBydoProjectileLook(std::uint8_t projectile, const ShotLook &look,
+                                              render::Vector2 size)
+{
+    _shotLooks.setBydoProjectileLook(projectile, look, size);
+}
+
+void GameSessionSystem::setItemLook(std::uint8_t item, const ItemLook &look)
+{
+    _itemLooks.setLook(item, look);
 }
 
 void GameSessionSystem::setImpactLook(game::EntityKind kind, const ImpactLook &look)
@@ -179,6 +225,15 @@ void GameSessionSystem::setStrikeSound(game::EntityKind kind, const EntitySound 
 void GameSessionSystem::setStrikeHandler(std::function<void()> onStrike)
 {
     _onStrike = std::move(onStrike);
+}
+
+void GameSessionSystem::switchWeapon(bool playing)
+{
+    const game::Loadout loadout = _session->loadout();
+    if (!playing || loadout[1].empty() || !_controls.wasPressed(SwitchWeaponControl)) {
+        return;
+    }
+    _secondWeapon = !_secondWeapon;
 }
 
 void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
@@ -226,7 +281,11 @@ void GameSessionSystem::update(float elapsed)
     const bool playing = _scenes.receivesInput(*_scene);
     _session->setPaused(!playing);
     const bool locked = _tick < _inputLockedUntil;
-    _session->setInput(playing && !locked ? inputFrom(_controls) : game::PlayerInput{});
+    switchWeapon(playing && !locked);
+    game::PlayerInput input = playing && !locked ? inputFrom(_controls) : game::PlayerInput{};
+    // Kept in the pause too: the weapon in hand is a state of the input, not a press
+    input.set(game::PlayerInput::SecondWeapon, _secondWeapon);
+    _session->setInput(input);
     _session->update(elapsed);
     _clock += elapsed;
     for (const game::Snapshot &snapshot : _session->takeSnapshots()) {
@@ -236,6 +295,7 @@ void GameSessionSystem::update(float elapsed)
         place(*drawn);
     }
     placeShipModels(elapsed);
+    showVoiceBadges(elapsed);
     if (_session->isOver() && _onOver) {
         // Once: it usually switches scenes, at the next update
         const std::function<void()> onOver = std::exchange(_onOver, nullptr);
@@ -248,6 +308,9 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
     _tick = snapshot.tick;
     _players = snapshot.players;
     _localHealth = 0;
+    bool localShip = false;
+    _boss = false;
+    _ships.clear();
 
     std::unordered_set<std::uint32_t> present;
     present.reserve(snapshot.entities.size());
@@ -255,7 +318,12 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         present.insert(state.id);
         if (isLocalShip(state)) {
             _localHealth = state.health;
+            localShip = true;
         }
+        if (state.kind == game::EntityKind::PlayerShip) {
+            _ships.emplace_back(state.owner, state.x);
+        }
+        _boss = _boss || state.kind == game::EntityKind::BydoBoss;
         const auto found = _entities.find(state.id);
         if (found == _entities.end() || !_ecs.isAlive(found->second)) {
             createEntity(state);
@@ -263,17 +331,25 @@ void GameSessionSystem::apply(const game::Snapshot &snapshot)
         }
         moveEntity(found->second.id, state);
     }
+    // A ship destroyed comes back with all its hit points: counted again from them
+    _localMaxHealth = localShip ? std::max(_localMaxHealth, _localHealth) : std::uint8_t{0};
     showStrikes(snapshot.struck);
     rememberKilled(snapshot.destroyed);
     reportKills(snapshot.destroyed);
-    if (snapshot.waveStarted && _onWave) {
-        _onWave(*snapshot.waveStarted, snapshot.waveMusic);
+    if (snapshot.waveStarted) {
+        _wave = *snapshot.waveStarted;
+        if (_onWave) {
+            _onWave(*snapshot.waveStarted, snapshot.waveMusic);
+        }
     }
     if (snapshot.rescue != std::exchange(_rescue, snapshot.rescue) && _onRescue) {
         _onRescue(snapshot.rescue);
     }
-    if (snapshot.gameOver && !std::exchange(_outcomeTold, true) && _onOutcome) {
-        _onOutcome(*snapshot.gameOver);
+    if (snapshot.gameOver && !_outcome) {
+        _outcome = snapshot.gameOver;
+        if (_onOutcome) {
+            _onOutcome(*snapshot.gameOver);
+        }
     }
 
     // Each snapshot holds the whole world: what is not in it any more is gone
@@ -373,17 +449,19 @@ std::optional<std::uint8_t> GameSessionSystem::findKiller(ecs::entity_t bydo,
 
 void GameSessionSystem::createEntity(const game::EntityState &state)
 {
-    const EntityLook look = lookOf(state);
+    const EntityLook look = _shipLooks.resizeToShip(state, lookOf(state));
     const ecs::entity_t entity = _ecs.createEntity();
     _ecs.addComponent<engine::SceneMember>(entity, *_scene);
     _ecs.addComponent<Replicated>(entity, state.id, state.kind, state.owner, state.health, state.health);
     _ecs.addComponent<ecs::Position>(entity, state.x, state.y);
     _ecs.addComponent<engine::Drawable>(entity, engine::Layer::World, look.order);
-    if (_shipLooks.hasLook(state.kind)) {
+    if (state.kind == game::EntityKind::Item && _itemLooks.hasLook(state.ship)) {
+        _itemLooks.addModel(_ecs, entity, state);
+    } else if (_shipLooks.hasLook(state.kind)) {
         _shipLooks.addModel(_ecs, entity, state, look, _clock, isLocalShip(state));
     } else if (_bossLooks.hasLook(state.kind)) {
         _bossLooks.addModel(_ecs, entity, state, look);
-    } else if (_shotLooks.hasLook(state.kind)) {
+    } else if (_shotLooks.hasLook(state)) {
         _shotLooks.addModel(_ecs, entity, state, look);
     } else {
         _ecs.addComponent<engine::Box>(entity, look.box);
@@ -391,11 +469,35 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
     if (const std::optional<physics::Collider> collider = _session->findCollider(state)) {
         _ecs.addComponent<physics::Collider>(entity, *collider);
     }
+    addAura(entity, state);
     _shotSounds.addSound(_ecs, entity, state.kind, state.x);
     _entities.insert_or_assign(state.id, _ecs.ref(entity));
     if (isPlayerShot(state.kind)) {
         recoilShooter(state);
+        if (_session && state.owner == _session->localSlot()) {
+            ++_localShots;
+        }
     }
+}
+
+void GameSessionSystem::addAura(ecs::entity_t entity, const game::EntityState &state)
+{
+    if (_auraColors == nullptr || !_ecs.hasComponent<engine::Model>(entity)) {
+        return;
+    }
+    std::string_view name;
+    if (isLocalShip(state)) {
+        name = _auraColors->own;
+    } else if (isPlayerSideShip(state.kind)) {
+        name = _auraColors->allies;
+    } else if (isBydoShip(state.kind) && state.kind != game::EntityKind::BydoBoss) {
+        name = _auraColors->enemies;
+    }
+    const std::optional<render::Color> color = auraColor(name);
+    if (!color) {
+        return;
+    }
+    _ecs.getComponent<engine::Model>(entity).aura = render::Aura{*color, AuraThickness, AuraBloom};
 }
 
 void GameSessionSystem::recoilShooter(const game::EntityState &shot)
@@ -434,6 +536,12 @@ void GameSessionSystem::removeEntity(std::uint32_t networkId, const ecs::EntityR
     if (killed) {
         showDamage(entity.id, _ecs.getComponent<Replicated>(entity.id).health);
     }
+    // An item picked up plays its Collect animation where it was, instead of an impact
+    if (killed && _ecs.hasComponent<ItemModel>(entity.id) &&
+        _itemLooks.createCollect(_ecs, *_scene, entity.id)) {
+        _ecs.destroyEntity(entity.id);
+        return;
+    }
     if (killed && _impactLooks.hasLook(kind)) {
         const ecs::Position position = _ecs.getComponent<ecs::Position>(entity.id);
         const ecs::entity_t impact = _impactLooks.createImpact(_ecs, *_scene, kind, position);
@@ -458,6 +566,8 @@ void GameSessionSystem::moveEntity(ecs::entity_t entity, const game::EntityState
         _shipLooks.moveModel(_ecs, entity, state, _clock);
     } else if (_ecs.hasComponent<BossModel>(entity)) {
         _bossLooks.moveModel(_ecs, entity, state);
+    } else if (_ecs.hasComponent<ItemModel>(entity)) {
+        ItemLooks::moveModel(_ecs, entity, state);
     } else if (_ecs.hasComponent<engine::Model>(entity)) {
         _shotLooks.placeModel(_ecs, entity, state);
     }
@@ -492,6 +602,43 @@ void GameSessionSystem::showHealth(ecs::entity_t entity, const game::EntityState
     }
 }
 
+void GameSessionSystem::showVoiceBadges(float elapsed)
+{
+    const std::optional<VoiceView> voice = _voiceBadgeLook ? _session->voiceView() : std::nullopt;
+    if (!voice) {
+        return;
+    }
+    const std::uint8_t local = _session->localSlot();
+    for (const auto &[networkId, ref] : _entities) {
+        if (!_ecs.isAlive(ref)) {
+            continue;
+        }
+        Replicated &replicated = _ecs.getComponent<Replicated>(ref.id);
+        if (replicated.kind != game::EntityKind::PlayerShip || replicated.owner == local) {
+            continue;
+        }
+        const auto pilot = std::ranges::find(voice->others, replicated.owner, &voice::Participant::slot);
+        const bool speaking = pilot != voice->others.end() && voiceIconOf(*pilot) == VoiceIcon::Speaking;
+        if (!replicated.voiceBadge) {
+            if (!speaking) {
+                continue;
+            }
+            const ecs::entity_t badge = _ecs.createEntity();
+            _ecs.addComponent<engine::SceneMember>(badge, *_scene);
+            _ecs.addComponent<engine::Drawable>(badge, engine::Layer::World, VoiceBadgeOrder);
+            ecs::attach(_ecs, badge, ref.id, {_voiceBadgeLook->x, _voiceBadgeLook->y});
+            _ecs.addComponent<engine::Sprite>(badge, _voiceBadgeLook->texture, _voiceBadgeLook->source,
+                                              _voiceBadgeLook->size, _voiceBadgeLook->size);
+            _ecs.addComponent<engine::Opacity>(badge, 0.0f);
+            replicated.voiceBadge = badge;
+        }
+        // Faded in and out, so that a short silence between two words does not blink
+        float &opacity = _ecs.getComponent<engine::Opacity>(*replicated.voiceBadge).value;
+        const float step = elapsed * VoiceBadgeFade;
+        opacity = speaking ? std::min(1.0f, opacity + step) : std::max(0.0f, opacity - step);
+    }
+}
+
 bool GameSessionSystem::isLocalShip(const game::EntityState &state) const
 {
     return state.kind == game::EntityKind::PlayerShip && _session && state.owner == _session->localSlot();
@@ -507,6 +654,8 @@ void GameSessionSystem::placeShipModels(float elapsed)
             ShipLooks::placeModel(_ecs, entity.id, elapsed);
         } else if (_ecs.hasComponent<BossModel>(entity.id)) {
             BossLooks::placeModel(_ecs, entity.id);
+        } else if (_ecs.hasComponent<ItemModel>(entity.id)) {
+            ItemLooks::placeModel(_ecs, entity.id, elapsed);
         }
     }
 }

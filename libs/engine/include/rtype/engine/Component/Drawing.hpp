@@ -1,9 +1,11 @@
 #pragma once
 
+#include "rtype/render/Aura.hpp"
 #include "rtype/render/Energy.hpp"
 #include "rtype/render/ResourceManager.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
@@ -15,10 +17,39 @@ namespace rtype::engine
 {
 
 /// The two drawing passes: the world first, then the interface on top of it. In VR, the world is drawn on the
-/// board and the interface on a floating panel.
+/// board and the interface on the surfaces of the cockpit (Surface).
 enum class Layer {
     World,
     Interface,
+};
+
+/// Where an entity of the interface is drawn in a VR headset
+/// (docs/architecture/vr.md#the-interface-in-the-cockpit): each surface is drawn into an image of its own, of
+/// its own size in game units. On the screen, everything is drawn as before, whatever its surface.
+enum class Surface {
+    /// The holographic panel in front of the seat: the menus, the dialogs, the console. The default.
+    Panel,
+    /// The board, over the world of the game: what belongs to the game itself (the intro, the lore, a
+    /// prompt).
+    Board,
+    /// The screen on the right of the dashboard: the ship of the player, its lives, its score.
+    HudShip,
+    /// The screen in the middle: the wave, the boss, the session and the ping.
+    HudNav,
+    /// The small screens on both sides: the other players and who talks.
+    HudAux,
+    /// The hologram over the dashboard: a radar of the board.
+    Holo,
+};
+
+/// The number of surfaces, to index arrays by Surface.
+inline constexpr std::size_t SurfaceCount = 6;
+
+/// Puts an entity of the interface on a surface other than the panel, in a VR headset: its Anchor then places
+/// it in the area of this surface. An entity without one is on the panel, except a toast, which goes where
+/// SceneRenderer::setToastSurface() says.
+struct OnSurface {
+    Surface surface = Surface::Panel;
 };
 
 /// Makes an entity drawn, in a pass and at an order inside this pass: higher orders are drawn on top. An
@@ -125,6 +156,9 @@ struct Model {
     /// Set for a model of energy (a shot, a beam): it glows over what is behind it instead of being lit by
     /// the light (render::Renderer::drawEnergyModel()).
     std::optional<render::Energy> energy;
+    /// Set for a light of one colour cast around the model, along its silhouette, after it is drawn
+    /// (render::Renderer::drawAura()): the side of a ship. Ignored for a model of energy.
+    std::optional<render::Aura> aura;
 };
 
 /// The camera that the 3D models are seen through. The first visible entity with a Camera is used; without

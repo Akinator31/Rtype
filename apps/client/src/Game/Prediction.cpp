@@ -22,23 +22,51 @@ game::Armed equipped(const game::WeaponDefinition &weapon)
 
 void Prediction::arm(game::WeaponDefinition weapon, float projectileHalfWidth, std::uint8_t slot)
 {
-    _weapon = Weapon{std::move(weapon), projectileHalfWidth, slot};
+    arm(std::vector<Weapon>{{std::move(weapon), projectileHalfWidth, game::NoShip}}, slot);
+}
+
+void Prediction::arm(std::vector<Weapon> weapons, std::uint8_t slot)
+{
+    _weapons = std::move(weapons);
+    _weapons.resize(std::min(_weapons.size(), game::LoadoutSize));
+    _slot = slot;
     if (_predicted && !_armed) {
-        _armed = equipped(_weapon->definition);
+        equip();
     }
 }
 
-std::optional<game::ShotLaunch> Prediction::step(ecs::Position &position, std::optional<game::Armed> &armed,
-                                                 game::PlayerInput input) const
+void Prediction::equip()
 {
-    std::optional<game::ShotLaunch> shot;
-    // As the game: the weapon fires from where the ship was, then the ship moves (WeaponFiring.hpp)
-    if (_weapon && armed &&
-        game::stepWeapon(*armed, _weapon->definition, input.isHeld(game::PlayerInput::Fire))) {
-        shot = game::playerShot(_weapon->definition, _weapon->projectileHalfWidth, _weapon->slot, position,
-                                input.aim(), _rules);
+    _armed.reset();
+    _holster.reset();
+    if (_weapons.empty()) {
+        return;
     }
-    position = game::moveShip(position, input, _rules);
+    _armed = equipped(_weapons[0].definition);
+    if (_weapons.size() == game::LoadoutSize) {
+        _holster = game::Holster{equipped(_weapons[1].definition), 0};
+    }
+}
+
+std::optional<PredictedShot> Prediction::step(ecs::Position &position, std::optional<game::Armed> &armed,
+                                              std::optional<game::Holster> &holster,
+                                              game::PlayerInput input) const
+{
+    std::optional<PredictedShot> shot;
+    // As the game: the weapon asked for is taken in hand, fires from where the ship was, then the ship moves
+    // (WeaponFiring.hpp)
+    if (!_weapons.empty() && armed) {
+        if (holster) {
+            game::selectWeapon(*armed, *holster, input.weaponInHand());
+        }
+        const Weapon &weapon = _weapons[holster ? holster->inHand : 0];
+        if (game::stepWeapon(*armed, weapon.definition, input.isHeld(game::PlayerInput::Fire))) {
+            shot = PredictedShot{game::playerShot(weapon.definition, weapon.projectileHalfWidth, _slot,
+                                                  position, input.aim(), _rules),
+                                 weapon.definition.mechanic, weapon.projectile};
+        }
+    }
+    position = game::moveShip(position, input, _rules, _speedFactor);
     return shot;
 }
 
@@ -51,7 +79,7 @@ void Prediction::apply(std::uint32_t tick, game::PlayerInput input)
         for (std::uint32_t skipped = first; skipped < tick; ++skipped) {
             _sent.push_back({skipped, previous});
             if (_predicted) {
-                if (const auto shot = step(*_predicted, _armed, previous)) {
+                if (const auto shot = step(*_predicted, _armed, _holster, previous)) {
                     _shots[skipped] = *shot;
                 }
             }
@@ -63,7 +91,7 @@ void Prediction::apply(std::uint32_t tick, game::PlayerInput input)
     }
     _sent.push_back({tick, input});
     if (_predicted) {
-        if (const auto shot = step(*_predicted, _armed, input)) {
+        if (const auto shot = step(*_predicted, _armed, _holster, input)) {
             _shots[tick] = *shot;
         }
     }
@@ -83,33 +111,43 @@ void Prediction::reconcile(std::optional<ecs::Position> ship, std::uint32_t tick
         // Destroyed, or not back yet: the game decides
         _predicted.reset();
         _armed.reset();
+        _holster.reset();
         _shots.clear();
         _offsetX = 0.0f;
         _offsetY = 0.0f;
         return;
     }
 
-    // From where the game had it, and its weapon, the inputs it has not applied yet
+    // From where the game had it, and its weapons, the inputs it has not applied yet
     ecs::Position replayed = *ship;
-    const bool rewound = _weapon && weapon;
+    const bool rewound = !_weapons.empty() && weapon;
     std::optional<game::Armed> armed;
+    std::optional<game::Holster> holster;
     if (rewound) {
-        armed = game::Armed{_weapon->definition.id, weapon->cooldown, weapon->ammo, weapon->reloadLeft};
+        const bool two = _weapons.size() == game::LoadoutSize;
+        const std::uint8_t hand = two && weapon->inHand == 1 ? 1 : 0;
+        armed = game::Armed{_weapons[hand].definition.id, weapon->cooldown, weapon->ammo, weapon->reloadLeft};
+        if (two) {
+            holster = game::Holster{game::Armed{_weapons[1 - hand].definition.id, weapon->spareCooldown,
+                                                weapon->spareAmmo, weapon->spareReloadLeft},
+                                    hand};
+        }
     }
-    std::map<std::uint32_t, game::ShotLaunch> shots;
+    std::map<std::uint32_t, PredictedShot> shots;
     for (const Sent &sent : _sent) {
-        if (const auto shot = step(replayed, armed, sent.input)) {
+        if (const auto shot = step(replayed, armed, holster, sent.input)) {
             shots[sent.tick] = *shot;
         }
     }
     if (rewound) {
         _armed = armed;
+        _holster = holster;
         _shots = std::move(shots);
     } else {
         // Without the weapon of the snapshot: the ticks up to it are the game's
         std::erase_if(_shots, [tick](const auto &entry) { return entry.first <= tick; });
-        if (_weapon && !_armed) {
-            _armed = equipped(_weapon->definition);
+        if (!_weapons.empty() && !_armed) {
+            equip();
         }
     }
 
@@ -149,7 +187,7 @@ std::optional<ecs::Position> Prediction::position(double fraction, game::PlayerI
         return std::nullopt;
     }
     const auto part = static_cast<float>(std::clamp(fraction, 0.0, 1.0));
-    const ecs::Position next = game::moveShip(*_predicted, held, _rules);
+    const ecs::Position next = game::moveShip(*_predicted, held, _rules, _speedFactor);
     return ecs::Position{_predicted->x + ((next.x - _predicted->x) * part) + _offsetX,
                          _predicted->y + ((next.y - _predicted->y) * part) + _offsetY};
 }

@@ -20,6 +20,11 @@ namespace rtype::game
 /// player whose ship is alive clears it and earns its experience (Progression); the streak of the others
 /// goes back to 0.
 ///
+/// A wave also makes its items appear (WaveDefinition::items): as many as it says of each, or a number
+/// drawn at random between its two quantities, each at a random tick while its enemies come and at a random
+/// place of the screen (Rules::itemMinX, Rules::itemMargin). Those still to come when the wave ends appear
+/// then.
+///
 /// Nothing happens without a wave in context.waves, nor while no player is in the game, nor during the
 /// rescue against the final boss (RescueSystem), which ends the game itself. The enemies are created after
 /// the systems of the tick.
@@ -39,6 +44,12 @@ class WaveSystem : public ecs::System
     void spawnAt(const WaveSpawn &spawn);
     void spawnEnemyOf(const WaveDefinition &wave, std::uint16_t index);
     void endWave();
+    /// Ticks the items of a wave appear over: while its enemies come, at least Rules::itemMinWindow.
+    [[nodiscard]] std::uint32_t findItemWindow(const WaveDefinition &wave) const;
+    /// Draws how many items of each kind the wave has, and when each appears.
+    void scheduleItems(const WaveDefinition &wave);
+    void spawnDueItems();
+    void spawnItemAtRandom(const std::string &item);
 
 public:
     WaveSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, GameContext &context);

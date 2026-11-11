@@ -1,10 +1,13 @@
 #pragma once
 
 #include "rtype/game/Enemy/EnemyDefinition.hpp"
+#include "rtype/game/Item/ItemDefinition.hpp"
+#include "rtype/game/Loadout.hpp"
 #include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/Progression.hpp"
 #include "rtype/game/Projectile/ProjectileDefinition.hpp"
 #include "rtype/game/Ship/ShipDefinition.hpp"
+#include "rtype/game/ShipUnlock.hpp"
 #include "rtype/game/Wave/WaveDefinition.hpp"
 #include "rtype/game/Weapon/WeaponDefinition.hpp"
 
@@ -25,6 +28,14 @@ struct GameConfig {
     PlayerDefinition player;
     /// From config/progression.lua, optional: the defaults without it.
     Progression progression;
+    /// From config/hangar.lua, optional: the level each ship of the hangar needs, empty without it.
+    std::vector<ShipUnlock> shipUnlocks;
+    /// From config/items/: what the waves make appear (WaveDefinition::items).
+    std::vector<ItemDefinition> items;
+    /// From config/hangar.lua, optional: the weapons a player can take into a game, in the order of the
+    /// hangar, and the level each one needs; empty without it, and the players only have the weapon of
+    /// `player`.
+    std::vector<WeaponUnlock> weaponUnlocks;
 };
 
 } // namespace rtype::game

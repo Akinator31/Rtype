@@ -79,11 +79,44 @@ void Engine::retrySceneLoad()
     beginSceneRequest(request);
 }
 
+void Engine::preloadScene(const std::string &name)
+{
+    const std::vector<SceneAsset> &assets = _sceneDefinitions.at(name).settings.assets;
+    if (assets.empty() || !_sceneAssets.hasLoader() || _preloads.contains(name)) {
+        return;
+    }
+    // A request that throws is left to the opening of the scene, which shows the error
+    try {
+        _sceneAssets.acquireAssets(assets);
+    } catch (...) {
+        return;
+    }
+    _preloads.emplace(name, assets);
+}
+
+bool Engine::isSceneReady(const std::string &name) const
+{
+    const std::vector<SceneAsset> &assets = _sceneDefinitions.at(name).settings.assets;
+    if (assets.empty()) {
+        return true;
+    }
+    const auto preload = _preloads.find(name);
+    return preload != _preloads.end() && _sceneAssets.areAssetsReady(preload->second);
+}
+
 void Engine::unloadSceneAssets()
 {
     if (_pendingScene) {
         cancelPendingScene();
     }
+    for (const auto &[name, assets] : _preloads) {
+        _sceneAssets.releaseAssets(assets);
+    }
+    _preloads.clear();
+    for (const std::string &name : _scenesKeepingAssets) {
+        _sceneAssets.releaseAssets(_sceneDefinitions.at(name).settings.assets);
+    }
+    _scenesKeepingAssets.clear();
     _scenes.clear();
     destroyClosedScenes();
     _sceneAssets.forgetAssets();
@@ -249,8 +282,17 @@ void Engine::applySceneRequests()
 void Engine::openScene(const std::string &name, std::vector<SceneAsset> assets)
 {
     const SceneDefinition &definition = _sceneDefinitions.at(name);
+    if (definition.settings.keepsAssets && !assets.empty() && _scenesKeepingAssets.insert(name).second) {
+        // A second use of assets already loaded, never released: the loader is not called
+        _sceneAssets.acquireAssets(assets);
+    }
     const SceneId id = _scenes.open(definition.settings);
     _namedScenes.push_back({id, name, std::move(assets)});
+    // The scene holds its assets now: the preload has done its work
+    if (const auto preload = _preloads.find(name); preload != _preloads.end()) {
+        _sceneAssets.releaseAssets(preload->second);
+        _preloads.erase(preload);
+    }
     try {
         if (definition.build) {
             definition.build(*this, id);
