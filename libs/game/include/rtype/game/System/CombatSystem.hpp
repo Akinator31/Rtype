@@ -62,10 +62,12 @@ class CombatSystem : public ecs::System
     /// Takes the damage of `source` from the health of `target`. Returns true if it has none left.
     bool hurt(ecs::entity_t target, ecs::entity_t source);
     [[nodiscard]] bool isGuarding(ecs::entity_t enemy) const;
+    [[nodiscard]] bool isBoss(ecs::entity_t enemy) const;
     /// Starts the next phase of a Bydo with no hit points left, with all its health. Returns false if it was
     /// in its last one.
     bool startNextPhase(ecs::entity_t enemy);
-    void rewardKill(ecs::entity_t shot, ecs::entity_t enemy);
+    /// Rewards the player who owns `killer`, its shot or its ship, for destroying `enemy`.
+    void rewardKill(ecs::entity_t killer, ecs::entity_t enemy);
     void protectShip(ecs::entity_t ship);
     void loseShip(ecs::entity_t ship);
     void destroyLater(ecs::entity_t entity, DestroyCause cause);

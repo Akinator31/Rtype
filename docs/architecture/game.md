@@ -136,7 +136,8 @@ of what it hits:
   (`EnemyDefinition::phases`, `Enemy::phase`): a boss outlasts the 255 hit points of a `Health`. Otherwise it is
   destroyed (`DestroyCause::Killed`) and `EnemyDefinition::score` goes to the player of the shot.
 - **A Bydo shot** (`NoOwner`) hurts a ship and is spent, killed as well; **a Bydo** hurts a ship it runs into
-  (`EnemyDefinition::collisionDamage`) and keeps going. A ship that survives is invulnerable for
+  (`EnemyDefinition::collisionDamage`) and is destroyed (`DestroyCause::Killed`), its score going to the
+  player of the ship; a boss keeps going. A ship that survives is invulnerable for
   `hitInvulnerableTicks`, so that a Bydo on it does not take its health away tick after tick.
 - The damage of a shot is that of its weapon (`WeaponDefinition::damage`): `spawnWeaponShot()` gives it its
   `Damage`. A projectile made by `spawnProjectile()` alone has none: it hurts nothing.
