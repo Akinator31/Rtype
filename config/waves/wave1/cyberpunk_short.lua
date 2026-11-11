@@ -9,7 +9,7 @@ return {
     beats = {
         bass = { enemies = { "bydo_wanderer", "bydo_scout", "bydo_orbiter" }, minGap = 4.5 },
         mid = { enemies = { "bydo_scout", "bydo_mosquito", "bydo_raider" }, minGap = 4.0 },
-        high = { enemies = { "bydo_mosquito", "bydo_drone", "bydo_stinger" }, minGap = 4.0 },
+        high = { enemies = { "bydo_interceptor", "bydo_drone", "bydo_stinger" }, minGap = 4.0 },
     },
     -- Items that appear at random places and times during the wave: `quantity` of each, or a number
     -- drawn from `quantity` to `maxQuantity`
