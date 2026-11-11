@@ -671,8 +671,46 @@ void GameScenes::buildPause(engine::SceneId scene)
                                                      },
                                                      {engine::AnchorPoint::TopLeft, left, top});
     settings_page::bindText(ecs, leaveRow, translations, "game.leave");
+    addFriends(interface, left, top + _style.setting.height + settings_page::groupGap);
 
     addPlayerVoices(interface, left + width + settings_page::columnGap);
+}
+
+void GameScenes::addFriends(engine::InterfaceBuilder &interface, float left, float top)
+{
+    constexpr std::size_t MaxFriendsShown = 5;
+    if (_friends == nullptr || !_friends->ready() || onlineSession() == nullptr) {
+        return;
+    }
+    const std::vector<FriendRow> rows =
+        friendRows(*_friends, FriendsView::Game, _translations, MaxFriendsShown);
+    if (rows.empty()) {
+        return;
+    }
+    ecs::Ecs &ecs = _engine.getEcs();
+    top = settings_page::addGroup(interface, ecs, _style, _translations, "game.group.friends", left, top,
+                                  _style.setting.width);
+    for (const FriendRow &row : rows) {
+        const auto act = [this, row] {
+            const auto told = [this, name = row.name](bool sent) {
+                _engine.showToast(sent ? std::format("{} {}", _translations.text("friends.invite_sent"), name)
+                                       : _translations.text("friends.not_sent"),
+                                  sent ? engine::ToastType::Success : engine::ToastType::Error);
+            };
+            if (_friends == nullptr) {
+                return;
+            }
+            if (row.action == FriendRow::Action::AcceptRequest) {
+                _friends->accept(
+                    row.id, [told](bool accepted, const std::optional<std::string> &) { told(accepted); });
+            } else if (row.action == FriendRow::Action::Invite) {
+                _friends->invite(row.id, told);
+            }
+        };
+        interface.linkRow(std::format("{} · {} · {}", row.side, row.name, row.detail), act,
+                          {engine::AnchorPoint::TopLeft, left, top});
+        top += _style.setting.height;
+    }
 }
 
 void GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left)

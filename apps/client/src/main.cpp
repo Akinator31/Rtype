@@ -33,6 +33,7 @@
 #include "rtype/discord/Session.hpp"
 #include "rtype/discord/SocialSdkAuthorizer.hpp"
 #include "rtype/discord/SocialSdkConnection.hpp"
+#include "rtype/discord/SocialSdkFriends.hpp"
 #include "rtype/discord/SocialSdkPresence.hpp"
 #include "rtype/discord/SocialSdkVoiceCall.hpp"
 #include "rtype/engine/Engine.hpp"
@@ -160,14 +161,23 @@ void run(const std::vector<std::string_view> &arguments)
     rtype::network::EventLoop network;
     // Signing in with Discord, on the client of the Social SDK, and connecting it with the token of a server
     rtype::discord::SocialSdkAuthorizer discord(discordSession);
+    // The Discord friends of the player, followed while connected with a token: before the connection, whose
+    // last status stops them
+    rtype::discord::SocialSdkFriends discordFriends(discordSession);
     rtype::discord::SocialSdkConnection discordConnection(discordSession);
     // The voice of the games through their Discord lobby, for a player connected to Discord
     rtype::discord::SocialSdkVoiceCall discordCall(discordSession);
     voice.discordCall = &discordCall;
-    // Connected, the activity shown before is cleared by Discord: shown again
-    discordConnection.onStatusChanged([&presence](rtype::discord::ConnectionStatus status) {
-        if (status == rtype::discord::ConnectionStatus::Ready) {
+    // Connected with a token, Discord cleared the activity shown before; disconnected, the one shown through
+    // the connection went with it, a failed connection included: shown again either way
+    discordConnection.onStatusChanged([&presence, &discordFriends](rtype::discord::ConnectionStatus status) {
+        if (status != rtype::discord::ConnectionStatus::Connecting) {
             presence.resend();
+        }
+        if (status == rtype::discord::ConnectionStatus::Ready) {
+            discordFriends.start();
+        } else {
+            discordFriends.stop();
         }
     });
     engine.setInputSource(input);
@@ -401,11 +411,15 @@ void run(const std::vector<std::string_view> &arguments)
     rtype::client::readEquippedShip(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships,
                                     config.ships, config.items);
+    games.setFriends(&discordFriends);
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord,
-                                       discordConnection, ships,
+                                       discordConnection, discordFriends, ships,
                                        rtype::render::userDataDirectory() / "pictures", config, voice);
     rtype::client::createMenuScenes(engine, resources, style, metrics, games, config, settingsTargets,
                                     vrTargets, ships);
+    // A friend invited the player, or accepted it, in Discord: its game, from the start, since Discord may
+    // launch the game to join it
+    discordPresence.onJoin([&online](const std::string &secret) { online.joinFromDiscord(secret); });
     rtype::client::registerClientCommands(console, engine, window, games, config, debugViews);
     rtype::client::registerQuests(engine, translations);
     engine.getEcs().registerSystem<rtype::client::VoiceKeysSystem>(engine, sessions, voice, translations);
@@ -415,8 +429,9 @@ void run(const std::vector<std::string_view> &arguments)
     }
     while (!window.shouldClose()) {
         playFrame();
-        presence.update(rtype::client::observeActivity(engine, sessions, ships),
-                        std::chrono::steady_clock::now());
+        presence.update(
+            rtype::client::observeActivity(engine, sessions, ships, games.results(), online.lobbyServer()),
+            std::chrono::steady_clock::now());
     }
 }
 

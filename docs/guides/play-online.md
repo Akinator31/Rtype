@@ -61,6 +61,17 @@ Run a server and play the same game from several machines, or from several clien
    sets the volume of each player for you (Left, Right), and Enter mutes or unmutes it: the choice is kept for
    its account, and found again in the next game.
 
+8. **Play with your Discord friends.** Signed in with Discord on a server that gives the token (its
+   `[discord] social = true`), the lobby lists your Discord friends right of the games: those playing R-Type
+   first, with what they do. **Ask to join** a friend whose game has room: it accepts in its game, or in
+   Discord, then you get an invitation. An invitation shows a toast, then **Join** in the lobby: the game
+   connects to its server, asks you to trust it the first time, then opens the hangar before the game. In a
+   game, the pause menu lists your friends online: **Invite** one, or **Accept** a friend who asks to join.
+   In the lobby, **Invite** a friend online: it comes to your server. From Discord too, without any of this:
+   **Join** on the profile of a friend in the lobby of a server or in a game online with room, or **+** →
+   *Invite to play* in a conversation while you are in the lobby or in a game online; Discord starts the game if it
+   is closed.
+
 ## Result
 
 The players see each other's ships move. The server shows them in its logs:

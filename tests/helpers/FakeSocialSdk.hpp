@@ -7,9 +7,11 @@
 
 #include "rtype/discord/Authorizer.hpp"
 #include "rtype/discord/Connection.hpp"
+#include "rtype/discord/Friends.hpp"
 #include "rtype/discord/Presence.hpp"
 #include "rtype/discord/VoiceCall.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -91,22 +93,52 @@ public:
     void refuse(rtype::discord::AuthorizationError error) { answer(error); }
 };
 
-/// The profile of the player in Discord: what it shows.
+/// The profile of the player in Discord: what it shows. Discord takes each activity, or refuses it while the
+/// test makes it (`refusing`: Discord not running, or connecting); the answer comes at the next poll().
 class FakePresence final : public rtype::discord::Presence
 {
+    FakeCallbacks &_callbacks;
+    JoinAccepted _joined;
+
 public:
     /// What the profile shows, nothing once cleared.
     std::optional<rtype::discord::Activity> shown;
-    /// Every update(), in order.
+    /// Every update(), in order, refused ones included.
     std::vector<rtype::discord::Activity> updates;
+    /// Discord refuses the next updates.
+    bool refusing = false;
 
-    void update(const rtype::discord::Activity &activity) override
+    explicit FakePresence(FakeCallbacks &callbacks) : _callbacks(callbacks) {}
+
+    void update(const rtype::discord::Activity &activity, Shown answer) override
     {
-        shown = activity;
         updates.push_back(activity);
+        const bool taken = !refusing;
+        if (taken) {
+            shown = activity;
+        }
+        if (answer) {
+            _callbacks.post([answer = std::move(answer), taken] { answer(taken); });
+        }
     }
 
     void clear() override { shown.reset(); }
+
+    void onJoin(JoinAccepted joined) override { _joined = std::move(joined); }
+
+    /// The player accepts, in Discord, to join the activity of a friend: its handler gets `secret` at the
+    /// next poll().
+    void join(std::string secret)
+    {
+        _callbacks.post([this, secret = std::move(secret)] {
+            if (_joined) {
+                _joined(secret);
+            }
+        });
+    }
+
+    /// Discord lost what it showed: a connection with a token clears the activity set before it.
+    void lose() { shown.reset(); }
 };
 
 /// The connection to Discord: the test makes it ready, loses it, or lets its token expire.
@@ -162,6 +194,110 @@ public:
         _callbacks.post([this] {
             if (_expiring) {
                 _expiring();
+            }
+        });
+    }
+};
+
+/// The Discord friends of the player: the test sets them and the invitations received, then tells the game
+/// they changed; what the game sends them is kept, and Discord takes it at the next poll().
+class FakeFriends final : public rtype::discord::Friends
+{
+    FakeCallbacks &_callbacks;
+    bool _started = false;
+    std::function<void()> _changed;
+
+public:
+    /// The friends, in the order list() gives them.
+    std::vector<rtype::discord::Friend> friends;
+    /// The invitations received and still valid.
+    std::vector<rtype::discord::Invitation> received;
+    /// The join secret each invitation of `received` leads to, by its id.
+    std::map<std::uint64_t, std::string> secrets;
+    /// The friends invited, and those asked to join, in order.
+    std::vector<std::uint64_t> invited;
+    std::vector<std::uint64_t> askedToJoin;
+    /// The invitations accepted, in order.
+    std::vector<std::uint64_t> accepted;
+    /// Discord refuses what the game sends.
+    bool refusing = false;
+
+    explicit FakeFriends(FakeCallbacks &callbacks) : _callbacks(callbacks) {}
+
+    void start() override
+    {
+        _started = true;
+        changed();
+    }
+    void stop() override
+    {
+        _started = false;
+        changed();
+    }
+    [[nodiscard]] bool ready() const override { return _started; }
+    [[nodiscard]] std::vector<rtype::discord::Friend> list() const override
+    {
+        return _started ? friends : std::vector<rtype::discord::Friend>{};
+    }
+    [[nodiscard]] std::vector<rtype::discord::Invitation> invitations() const override
+    {
+        return _started ? received : std::vector<rtype::discord::Invitation>{};
+    }
+    void onChanged(std::function<void()> changed) override { _changed = std::move(changed); }
+
+    void invite(std::uint64_t friendId, Sent sent) override
+    {
+        invited.push_back(friendId);
+        answer(std::move(sent));
+    }
+    void askToJoin(std::uint64_t friendId, Sent sent) override
+    {
+        askedToJoin.push_back(friendId);
+        answer(std::move(sent));
+    }
+    void accept(std::uint64_t invitationId, Accepted done) override
+    {
+        const auto found = std::ranges::find(received, invitationId, &rtype::discord::Invitation::id);
+        if (found == received.end()) {
+            return;
+        }
+        const bool join = found->kind == rtype::discord::Invitation::Kind::Invite;
+        received.erase(found);
+        accepted.push_back(invitationId);
+        std::optional<std::string> secret;
+        if (join && !refusing && secrets.contains(invitationId)) {
+            secret = secrets.at(invitationId);
+        }
+        _callbacks.post([done = std::move(done), taken = !refusing, secret] {
+            if (done) {
+                done(taken, secret);
+            }
+        });
+        changed();
+    }
+    void dismiss(std::uint64_t invitationId) override
+    {
+        std::erase_if(received,
+                      [invitationId](const auto &invitation) { return invitation.id == invitationId; });
+        changed();
+    }
+
+    /// The friends or the invitations changed: the game is told at the next poll().
+    void changed()
+    {
+        _callbacks.post([this] {
+            if (_changed) {
+                _changed();
+            }
+        });
+    }
+
+private:
+    void answer(Sent sent)
+    {
+        _callbacks.post([sent = std::move(sent), taken = !refusing] {
+            if (sent) {
+                sent(taken);
             }
         });
     }
@@ -295,9 +431,10 @@ public:
 struct FakeSocialSdk {
     FakeCallbacks callbacks;
     FakeAuthorizer authorizer{callbacks};
-    FakePresence presence;
+    FakePresence presence{callbacks};
     FakeConnection connection{callbacks};
     FakeVoiceCall call{callbacks};
+    FakeFriends friends{callbacks};
 
     void poll() { callbacks.poll(); }
 };

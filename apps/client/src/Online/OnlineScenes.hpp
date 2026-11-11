@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Discord/DiscordFriends.hpp"
+#include "Discord/DiscordInvite.hpp"
+#include "Discord/FriendPictures.hpp"
 #include "Game/GameScenes.hpp"
 #include "Online/FormErrors.hpp"
 #include "Online/KnownProfiles.hpp"
@@ -93,6 +96,10 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 /// - **The profile**: signed in, the client reads the Discord profile of the account (GET_PROFILE) and its
 ///   picture (GET_AVATAR), shown in the lobby and in My account, and remembered with the server for the
 ///   Online menu (KnownProfiles), the picture kept on disk under its version.
+/// - **Invitations**: a friend invited from Discord, or accepted, joins the game: joinFromDiscord().
+/// - **Friends**, connected to Discord: the lobby lists the Discord friends of the player beside the games,
+///   the invitations received first (Join), then those playing R-Type (Ask to join while their game has
+///   room), online, offline. A new invitation shows a toast wherever the player is.
 /// - What goes wrong with a field is shown under it; the rest in a toast, in the language of the game: the
 ///   server cannot be reached, is not the expected one, the game is full...
 class OnlineScenes
@@ -111,6 +118,13 @@ class OnlineScenes
     discord::Authorizer &_discord;
     /// The connection to Discord with the token of the player, on a master with the social features.
     discord::Connection &_discordConnection;
+    /// The Discord friends of the player, once connected with that token.
+    discord::Friends &_friends;
+    /// The rows of friends the lobby shows, and the invitations already told in a toast.
+    std::vector<FriendRow> _friendRows;
+    std::vector<std::uint64_t> _toldInvitations;
+    /// The pictures of the friends, downloaded from the CDN of Discord.
+    FriendPictures _friendPictures;
     GameScenes &_games;
     localization::Localization &_translations;
     ShipSelection &_ships;
@@ -146,6 +160,8 @@ class OnlineScenes
     std::optional<render::TextureId> _newUserPicture;
     /// The experience of the account as the player joined the game played: none for a guest.
     std::optional<std::uint64_t> _xpBefore;
+    /// The game of a friend the player accepted to join from Discord, joined once on its server.
+    std::optional<GameInvite> _invite;
     /// Where a Discord confirmation stands, for DiscordScene: 0 Discord opened, 1 waiting for the player,
     /// 2 the server checking.
     int _discordStep = 0;
@@ -161,6 +177,13 @@ class OnlineScenes
     /// Lists the games, then shows them.
     void refresh();
     void joined(const LobbyClient::JoinResult &result);
+    /// The hangar, then the game: a friend invited the player to it.
+    void joinInvited(std::uint32_t gameId);
+    /// The friends or the invitations changed: a toast for each new invitation, the lobby built again if its
+    /// rows changed.
+    void friendsChanged();
+    /// The action of a row of friends of the lobby.
+    void actOnFriend(const FriendRow &row);
     /// The game played ends: leaves it, then back to the list.
     void gameEnded();
     void lobbyClosed(const std::string &reason);
@@ -222,17 +245,29 @@ public:
     /// @param discord Asks the player to accept the Discord application of a server; polled by the game loop.
     /// @param discordConnection Connects to Discord with the token a server gives (DISCORD_TOKEN), and
     ///   disconnects when the player leaves the server.
+    /// @param friends The Discord friends of the player, shown in the lobby, joined from there.
     /// @param ships The ship the player picks in the hangar, before creating or joining a game.
     /// @param config The definitions of the client (loadGameConfig()): the weapon of the player, whose shots
     ///   its games online predict.
     OnlineScenes(engine::Engine &engine, render::ResourceManager &resources, network::EventLoop &loop,
                  GameScenes &games, const engine::InterfaceStyle &style,
                  localization::Localization &translations, discord::Authorizer &discord,
-                 discord::Connection &discordConnection, ShipSelection &ships, std::filesystem::path pictures,
-                 const game::GameConfig &config, VoiceDevices &voice);
+                 discord::Connection &discordConnection, discord::Friends &friends, ShipSelection &ships,
+                 std::filesystem::path pictures, const game::GameConfig &config, VoiceDevices &voice);
+
+    /// Tells the friends no longer: they outlive the scenes.
+    ~OnlineScenes();
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;
+
+    /// The player accepted, in Discord, to join the game of a friend (discord::Presence::onJoin()): connects
+    /// to its server, through the usual trust and sign-in, then joins it after the hangar. Refused during a
+    /// game, or for a secret that is not one of a game.
+    void joinFromDiscord(const std::string &secret);
+    /// The server whose list of games the player is looking at, as KnownServers knows it: friends can be
+    /// invited to it from Discord. None elsewhere.
+    [[nodiscard]] std::optional<std::string> lobbyServer() const;
 };
 
 } // namespace rtype::client
