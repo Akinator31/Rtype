@@ -23,6 +23,10 @@ namespace rtype::client
 /// - During the combined attack (Combined), it pushes in slowly on the shogun, closer than for the dashes,
 ///   tilted, rumbling under the fire; the fall of the shogun shakes it hard.
 /// - Once the shogun has fallen (Finished), it pulls back slowly from its explosion to the whole game.
+///
+/// A game opened from the take-off of the hangar starts on the shot the hangar ends with (ArrivalShot in
+/// GameView.hpp): close up on the ship of the local player, which it follows while it pulls back to the whole
+/// game; the ship takes the colour of its player meanwhile, from the white of the hangar.
 struct RescueCamera {
     /// The part of the game the camera sees at rest.
     render::Rectangle area;
@@ -38,6 +42,10 @@ struct RescueCamera {
     float shake = 0.0f;
     /// Seconds it has been moved: the time of its shake.
     float time = 0.0f;
+    /// Seconds since the game opened on the shot of the hangar, while it pulls back from it; none after.
+    std::optional<float> arrival;
+    /// The colour of the ship of the local player, read when it first shows during the arrival.
+    std::optional<render::Color> shipTint;
 };
 
 /// Shakes a camera by a blow of a strength from 0 to 1: the blade of the shogun through a ship, its fall.
@@ -53,11 +61,14 @@ class RescueCameraSystem : public ecs::System
     ecs::ComponentCache<engine::Camera> &_cameras;
     ecs::ComponentCache<Replicated> &_replicated;
     ecs::ComponentCache<ecs::Position> &_positions;
+    ecs::ComponentCache<engine::Model> &_models;
 
     /// Where the shogun is drawn, if it is.
     [[nodiscard]] std::optional<ecs::Position> findBoss() const;
-    /// Where the ship of the local player is drawn, if it is.
-    [[nodiscard]] std::optional<ecs::Position> findLocalShip() const;
+    /// The entity of the ship of the local player, if it is drawn.
+    [[nodiscard]] std::optional<ecs::entity_t> findLocalShip() const;
+    /// Pulls a camera back from the shot of the hangar, `ship` the entity of the ship of the local player.
+    void arrive(RescueCamera &camera, engine::Camera &view, std::optional<ecs::entity_t> ship, float elapsed);
 
 public:
     RescueCameraSystem(ecs::ComponentCaches &caches, const GameSessionSystem &sessions);

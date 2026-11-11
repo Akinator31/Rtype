@@ -22,10 +22,6 @@ namespace
 /// The speed of the ships of the players, to which their vertical speed is compared.
 const game::Rules DefaultRules{};
 
-/// The ships are seen from the side, and a little from above: this many degrees more than the half turn
-/// around their length show their top.
-constexpr float ShipTilt = 20.0f;
-
 /// A ship at full vertical speed rolls by this many degrees around its length: its belly towards the camera
 /// while it climbs, further, its top while it dives.
 constexpr float MaxClimbRoll = 40.0f;
@@ -36,10 +32,6 @@ constexpr float RollResponse = 10.0f;
 constexpr float AimResponse = 20.0f;
 
 constexpr float RadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
-
-/// The flames of a ship, whatever it does: a little flame, halfway between the Idle pose of the rig (0),
-/// whose flames hide in the thrusters, and the Move one (1).
-constexpr float Flame = 0.5f;
 
 /// The roll a ship turns towards: its vertical speed, as a fraction of the speed of the ships of the players.
 float computeTargetRoll(const game::EntityState &state)
@@ -153,7 +145,7 @@ void ShipLooks::addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::Entity
     engine::ModelAnimation &animation =
         ecs.addComponent<engine::ModelAnimation>(entity, ship.model.animations.idle);
     animation.blendedAnimation = ship.model.animations.move;
-    animation.blendAmount = Flame;
+    animation.blendAmount = ShipFlame;
     const render::Vector2 hullCentre{hull.x + (hull.width / 2.0f), hull.y + (hull.height / 2.0f)};
     ShipAttitude &attitude = ecs.addComponent<ShipAttitude>(entity, hullCentre);
     attitude.shoot = ship.model.animations.shoot;

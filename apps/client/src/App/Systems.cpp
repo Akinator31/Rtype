@@ -56,7 +56,7 @@ ClientSystems registerClientSystems(engine::Engine &engine, input::InputSource &
     // After the intro and the tweens: it has the last word on the camera and the opacities of the menus
     ecs.registerSystem<MenuTransitionSystem>(ecs, engine, engine.getScenes());
     ecs.registerSystem<CrawlSystem>(engine.getScenes());
-    ecs.registerSystem<ShipSelectorSystem>(engine.getScenes(), engine.getControls(), input);
+    ecs.registerSystem<ShipSelectorSystem>(engine.getScenes(), engine.getControls(), input, metrics);
     ecs.registerSystem<engine::ModelAnimationSystem>();
     ecs.registerSystem<engine::HitboxSystem>(metrics, style);
     ecs.registerSystem<engine::ColumnLayoutSystem>(ecs);

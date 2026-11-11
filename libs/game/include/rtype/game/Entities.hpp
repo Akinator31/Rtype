@@ -14,8 +14,11 @@
 namespace rtype::game
 {
 
-/// The ship of a player, at its place on the left of the game area: one height per slot. It has the health
-/// of context.player, and the weapons of the loadout of its player (equipLoadout()).
+/// Where the ship of a player appears: on the left of the game area, one height per slot.
+[[nodiscard]] ecs::Position getShipSpawn(std::uint8_t slot);
+
+/// The ship of a player, at its place (getShipSpawn()). It has the health of context.player, and the weapons
+/// of the loadout of its player (equipLoadout()).
 ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot);
 
 /// An ally of the rescue against the final boss (RescueSystem), at a position, still: an AllyShip that

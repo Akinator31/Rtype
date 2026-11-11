@@ -44,6 +44,7 @@ add_library(r-type_client_core STATIC
     src/Game/GameRecorder.cpp
     src/Game/GameScenes.cpp
     src/Game/GameSessionSystem.cpp
+    src/Game/GameSky.cpp
     src/Game/GameView.cpp
     src/Game/HealthBarLooks.cpp
     src/Game/HealthBarSystem.cpp

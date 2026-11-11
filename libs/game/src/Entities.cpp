@@ -53,11 +53,16 @@ ecs::entity_t spawnVisible(ecs::Ecs &ecs, GameContext &context, EntityKind kind,
 
 } // namespace
 
+ecs::Position getShipSpawn(std::uint8_t slot)
+{
+    return {ShipStartX, GameHeight * static_cast<float>(slot + 1) / static_cast<float>(MaxPlayers + 1)};
+}
+
 ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot)
 {
     const Rules &rules = context.rules;
-    const float y = GameHeight * static_cast<float>(slot + 1) / static_cast<float>(MaxPlayers + 1);
-    const ecs::entity_t ship = spawnVisible(ecs, context, EntityKind::PlayerShip, slot, ShipStartX, y);
+    const ecs::Position spawn = getShipSpawn(slot);
+    const ecs::entity_t ship = spawnVisible(ecs, context, EntityKind::PlayerShip, slot, spawn.x, spawn.y);
     ecs.addComponent<PlayerShip>(ship, slot);
     ecs.addComponent<Health>(ship, context.player.health);
     ecs.addComponent<physics::Velocity>(ship);
