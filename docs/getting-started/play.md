@@ -84,6 +84,14 @@ Each player has three lives. A ship lost with lives left comes back three second
 
 ### The final boss
 
+![The Shogun, the final boss, swings its red blade and fires bursts of plasma orbs while the player shoots at it](../assets/gifs/boss.gif)
+
+*The Shogun, its blade and its bursts of plasma.*
+
+![The rescue: REINFORCEMENTS, allied ships join the fight, the Shogun dashes through them, then the COMBINED ATTACK destroys it and the Boss slayer quest is completed](../assets/gifs/rescue.gif)
+
+*The squadron to the rescue, then the combined attack.*
+
 The Shogun ends a game offline: several phases, dashes of its blade across the screen, and its own music. The
 last life lost against it calls the squadron to the rescue, with a cinematic camera, then a combined attack on
 ++space++ ([The rescue against the final boss](../architecture/client-game.md#the-rescue-against-the-final-boss)).
@@ -112,6 +120,14 @@ The console command `boss` starts a game that goes straight to it.
   ([Voice](../architecture/voice.md)).
 - **Discord**: the activity of the player in its profile, the invitations, and its friends in the lobby
   ([Discord](../architecture/client-online.md#discord)).
+
+![Discord Rich Presence: the activity card in the Discord profile goes from In the hangar to Choosing a ship, then Solo, Wave 1/8, as the player launches a game](../assets/gifs/discord-presence.gif)
+
+*The activity in the Discord profile follows the game: the hangar, the choice of a ship, then the wave.*
+
+![The lobby of a server with the Discord friends of the player and an Invite button for each, their names blurred](../assets/gifs/discord-friends.gif)
+
+*The Discord friends of the player in the lobby, each with an Invite button (names blurred here).*
 
 ## Story and quests
 

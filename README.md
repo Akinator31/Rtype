@@ -63,7 +63,7 @@ administration panel, and a VR cockpit.
 
 ## 🚀 Overview
 
-R-Type is the Epitech **B-CPP-500** project: a remake of the 1987 arcade shoot'em up, played over the network
+R-Type is the Epitech **RType** project: a remake of the 1987 arcade shoot'em up, played over the network
 by up to four players. Everything below the game is our own: an **ECS engine**, a **physics engine**, a
 **networking layer** (Asio, TLS and encrypted UDP), an **interface toolkit** whose menus are entities, and a
 **renderer** over raylib that draws the world in 3D.
@@ -598,10 +598,14 @@ requests target `main`, pass the CI and are reviewed. The code is formatted with
 
 ## 👥 Team
 
-<a href="https://github.com/Akinator31/Rtype/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Akinator31/Rtype" alt="Contributors">
-</a>
+<table align="center">
+<tr>
+<td align="center"><a href="https://github.com/Akinator31"><img src="https://github.com/Akinator31.png?size=120" width="100" alt="Akinator31"><br><sub><b>Akinator31</b></sub></a></td>
+<td align="center"><a href="https://github.com/Nogo4"><img src="https://github.com/Nogo4.png?size=120" width="100" alt="Nogo4"><br><sub><b>Nogo4</b></sub></a></td>
+<td align="center"><a href="https://github.com/AlexyLegrand"><img src="https://github.com/AlexyLegrand.png?size=120" width="100" alt="AlexyLegrand"><br><sub><b>AlexyLegrand</b></sub></a></td>
+</tr>
+</table>
 
 <div align="center">
-<sub>Made at <b>Epitech</b> for the B-CPP-500 project.</sub>
+<sub>Made at <b>Epitech</b> for the RType project.</sub>
 </div>
