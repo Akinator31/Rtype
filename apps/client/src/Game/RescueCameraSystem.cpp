@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <numbers>
 
 namespace rtype::client
@@ -145,8 +146,39 @@ void shakeCamera(RescueCamera &camera, float strength)
 
 RescueCameraSystem::RescueCameraSystem(ecs::ComponentCaches &caches, const GameSessionSystem &sessions)
     : _sessions(sessions), _rescueCameras(use<RescueCamera>(caches)), _cameras(use<engine::Camera>(caches)),
-      _replicated(use<Replicated>(caches)), _positions(use<ecs::Position>(caches))
+      _replicated(use<Replicated>(caches)), _positions(use<ecs::Position>(caches)),
+      _models(use<engine::Model>(caches))
 {
+}
+
+void RescueCameraSystem::arrive(RescueCamera &camera, engine::Camera &view, std::optional<ecs::entity_t> ship,
+                                float elapsed)
+{
+    *camera.arrival += elapsed;
+    const float progress = std::clamp(*camera.arrival / ArrivalDuration, 0.0f, 1.0f);
+    const float amount = progress * progress * (3.0f - (2.0f * progress));
+    const render::Rectangle from = computeArrivalFrame(camera.area, camera.ship);
+    const render::Rectangle &to = camera.area;
+    const auto mix = [amount](float first, float second) { return first + ((second - first) * amount); };
+    view.view = computeGameView(
+        {mix(from.x, to.x), mix(from.y, to.y), mix(from.width, to.width), mix(from.height, to.height)});
+
+    // The ship was white in the hangar: it takes the colour of its player
+    if (ship && _models.has(*ship)) {
+        engine::Model &model = _models.get(*ship);
+        if (!camera.shipTint) {
+            camera.shipTint = model.tint;
+        }
+        const render::Color tint = *camera.shipTint;
+        const auto channel = [&mix](std::uint8_t colour) {
+            return static_cast<std::uint8_t>(std::lround(mix(255.0f, static_cast<float>(colour))));
+        };
+        model.tint = {channel(tint.r), channel(tint.g), channel(tint.b), tint.a};
+    }
+    if (progress >= 1.0f) {
+        camera.arrival.reset();
+        camera.focus = camera.ship;
+    }
 }
 
 std::optional<ecs::Position> RescueCameraSystem::findBoss() const
@@ -160,7 +192,7 @@ std::optional<ecs::Position> RescueCameraSystem::findBoss() const
     return std::nullopt;
 }
 
-std::optional<ecs::Position> RescueCameraSystem::findLocalShip() const
+std::optional<ecs::entity_t> RescueCameraSystem::findLocalShip() const
 {
     const GameSession *session = _sessions.session();
     if (session == nullptr) {
@@ -170,7 +202,7 @@ std::optional<ecs::Position> RescueCameraSystem::findLocalShip() const
         if (_replicated.has(entity) && _positions.has(entity) &&
             _replicated.get(entity).kind == game::EntityKind::PlayerShip &&
             _replicated.get(entity).owner == session->localSlot()) {
-            return _positions.get(entity);
+            return entity;
         }
     }
     return std::nullopt;
@@ -179,7 +211,7 @@ std::optional<ecs::Position> RescueCameraSystem::findLocalShip() const
 void RescueCameraSystem::update(float elapsed)
 {
     const std::optional<ecs::Position> boss = findBoss();
-    const std::optional<ecs::Position> ship = findLocalShip();
+    const std::optional<ecs::entity_t> ship = findLocalShip();
     const Shot shot = shotOf(_sessions.rescue(), boss.has_value());
     for (ecs::entity_t entity = 0; entity < _rescueCameras.size(); ++entity) {
         if (!_rescueCameras.has(entity) || !_cameras.has(entity)) {
@@ -190,7 +222,11 @@ void RescueCameraSystem::update(float elapsed)
         camera.zoom = approach(camera.zoom, shot.zoom, shot.rate, elapsed);
         camera.tilt = approach(camera.tilt, shot.tilt, shot.rate, elapsed);
         if (ship) {
-            camera.ship = {ship->x, ship->y};
+            camera.ship = {_positions.get(*ship).x, _positions.get(*ship).y};
+        }
+        if (camera.arrival) {
+            arrive(camera, _cameras.get(entity), ship, elapsed);
+            continue;
         }
         const std::optional<render::Vector2> subject = findSubject(shot.subject, camera, boss);
         if (subject) {

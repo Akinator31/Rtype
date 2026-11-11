@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -38,13 +39,19 @@ struct ShipSelection {
     /// What to do once the player has picked the ship of the game it starts: the hangar then launches the
     /// game instead of only equipping the ship. Empty when the hangar is opened to look at the ships.
     std::function<void()> launch;
+    /// The ship picked for the game takes off (ShipCarousel): the ship and the weapons no longer change.
+    bool departing = false;
+    /// The take-off has flown the ship into the sky of the game, which has scrolled for this long, in
+    /// seconds: the game opens on the shot the hangar shows (ArrivalZoom in Game/GameView.hpp), its sky going
+    /// on, and takes it. None otherwise.
+    std::optional<float> arrivalSky;
     /// The weapons of the hangar, in the order of config/hangar.lua, with the level each one needs.
     std::vector<game::WeaponUnlock> weapons;
     /// The two weapons equipped, as indices in `weapons`: different, and open at `level`, once the hangar
     /// has two weapons open.
     std::array<std::size_t, game::LoadoutSize> loadout{0, 1};
 
-    /// Looks at the next ship (+1) or the previous one (-1), around.
+    /// Looks at the next ship (+1) or the previous one (-1), around; not while departing.
     void step(int direction);
     /// Equips the ship looked at, unless it is locked.
     void equipFocused();
@@ -75,7 +82,7 @@ struct ShipSelection {
     [[nodiscard]] bool isWeaponLocked(std::size_t index) const { return level < weapons[index].level; }
     /// Equips the next weapon (+1) or the previous one (-1) of the hangar at a place of the loadout (0 or 1),
     /// around, past the locked ones and the one at the other place. Nothing changes without another weapon
-    /// to take.
+    /// to take, nor while departing.
     void stepWeapon(std::size_t place, int direction);
     /// The loadout to take into a game: the ids of the two weapons equipped. Empty, for the weapon of
     /// config/player.lua alone, while the hangar has fewer than two weapons open.

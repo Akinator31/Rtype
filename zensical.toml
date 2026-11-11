@@ -10,13 +10,14 @@ site_url = "https://akinator31.github.io/Rtype/"
 repo_url = "https://github.com/Akinator31/Rtype"
 repo_name = "Akinator31/Rtype"
 edit_uri = "edit/main/docs/"
-copyright = "R-Type team — Epitech B-CPP-500"
+copyright = "R-Type team — Epitech RType project"
 
 nav = [
     { "Home" = "index.md" },
     { "Getting started" = [
         "getting-started/index.md",
         "getting-started/build.md",
+        "getting-started/play.md",
     ] },
     { "Architecture" = [
         "architecture/index.md",

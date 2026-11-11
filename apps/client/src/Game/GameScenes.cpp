@@ -1,6 +1,7 @@
 #include "Game/GameScenes.hpp"
 
 #include "Assets.hpp"
+#include "Game/GameSky.hpp"
 #include "Game/GameView.hpp"
 #include "Game/Hud.hpp"
 #include "Game/LocalSession.hpp"
@@ -18,6 +19,7 @@
 #include "rtype/engine/Component/Layout.hpp"
 #include "rtype/engine/Interface/InterfaceBuilder.hpp"
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Entities.hpp"
 #include "rtype/game/Hitbox.hpp"
 #include "rtype/game/Item/ItemRegistry.hpp"
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
@@ -147,15 +149,6 @@ const std::vector<int> DropShipTrails{10, 12};
 constexpr render::Rectangle ShotBasicCore{-1.6f, -0.55f, 4.0f, 1.1f};
 constexpr render::Rectangle ShotSpiralCore{-2.4f, -0.73f, 4.48f, 1.46f};
 constexpr render::Rectangle OrbPlasmaCore{-0.9f, -0.9f, 1.8f, 1.8f};
-
-/// The ships are lit from the top left, in front of them, in the world of the game where y points down. A
-/// cold rim light from behind, at the top right where the Bydos come from, outlines their hulls against
-/// space.
-constexpr render::Light GameLight{.direction = {0.5f, 0.8f, 0.6f},
-                                  .color = {255, 248, 240, 255},
-                                  .ambient = {48, 50, 62, 255},
-                                  .rimDirection = {-0.6f, 0.35f, -1.0f},
-                                  .rim = {95, 135, 210, 255}};
 
 /// The colours of the light around the shots, those of their energy; the alpha is how bright it is.
 constexpr render::Color PlayerShotLight{80, 200, 255, 130};
@@ -559,69 +552,25 @@ void configureGameLooks(GameSessionSystem &sessions, render::ResourceManager &re
     setCollisionSounds(sessions, audio);
 }
 
-/// A layer of the sky of the game, covering the screen, scrolling at its speed in game units per second.
-struct SkyLayer {
-    const char *path;
-    float speed;
-};
-
-/// A picture passing in the sky of the game, between the layers, as in engine::BackdropSprite.
-struct SkyObject {
-    const char *path;
-    float speed;
-    float height;
-    float y;
-    float period;
-    float start;
-};
-
-/// The layers from the back to the front: the nearer, the faster, so that the ships seem to fly to the right.
-/// Even the deep sky moves visibly: nothing of the sky stays still on the screen.
-const std::array<SkyLayer, 4> SkyLayers{{
-    {RTYPE_IMAGE_SKY_DEEP, 40.0f},
-    {RTYPE_IMAGE_SKY_NEBULA, 80.0f},
-    {RTYPE_IMAGE_SKY_STARS, 140.0f},
-    {RTYPE_IMAGE_SKY_NEAR, 300.0f},
-}};
-
-/// The objects of the sky, each drawn just in front of a layer: the galaxy in front of the deep sky, the
-/// moon and the ringed planet in front of the stars, which they hide, at about their speed. They come back
-/// every minute or so, the galaxy seen from the start.
-const std::array<std::pair<std::size_t, SkyObject>, 3> SkyObjects{{
-    {0, {RTYPE_IMAGE_SKY_GALAXY, 50.0f, 360.0f, 280.0f, 4200.0f, 1300.0f}},
-    {2, {RTYPE_IMAGE_SKY_MOON, 160.0f, 200.0f, 760.0f, 9000.0f, 3000.0f}},
-    {2, {RTYPE_IMAGE_SKY_PLANET, 170.0f, 640.0f, 380.0f, 13000.0f, 8000.0f}},
-}};
-
-/// The order of the Backdrop of a layer: room is left in between for the objects in front of it.
-int skyOrder(std::size_t layer)
+/// Fades in the HUD of a game opened from the hangar, as the camera pulls back: what shows of it, the parts
+/// hidden for now staying hidden.
+void fadeInHud(ecs::Ecs &ecs, engine::SceneId scene)
 {
-    return static_cast<int>(layer) * 2;
-}
-
-/// Creates the scrolling sky of the game: its layers and the objects passing between them.
-void createGameSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
-{
-    for (std::size_t layer = 0; layer < SkyLayers.size(); ++layer) {
-        const ecs::entity_t entity = ecs.createEntity();
-        ecs.addComponent<engine::SceneMember>(entity, scene);
-        ecs.addComponent<engine::Backdrop>(
-            entity, resources.loadTexture(SkyLayers[layer].path, render::TextureFiltering::Smooth),
-            render::colors::White, skyOrder(layer));
-        ecs.addComponent<engine::Scroll>(entity, SkyLayers[layer].speed);
-    }
-    for (const auto &[layer, object] : SkyObjects) {
-        const ecs::entity_t entity = ecs.createEntity();
-        ecs.addComponent<engine::SceneMember>(entity, scene);
-        ecs.addComponent<engine::BackdropSprite>(
-            entity, engine::BackdropSprite{
-                        .texture = resources.loadTexture(object.path, render::TextureFiltering::Smooth),
-                        .height = object.height,
-                        .y = object.y,
-                        .period = object.period,
-                        .start = object.start,
-                        .order = skyOrder(layer) + 1});
-        ecs.addComponent<engine::Scroll>(entity, object.speed);
+    auto &members = ecs.cache<engine::SceneMember>();
+    auto &drawables = ecs.cache<engine::Drawable>();
+    auto &opacities = ecs.cache<engine::Opacity>();
+    for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
+        if (!drawables.has(entity) || drawables.get(entity).layer != engine::Layer::Interface ||
+            !members.has(entity) || members.get(entity).scene != scene ||
+            (opacities.has(entity) && opacities.get(entity).value < 1.0f)) {
+            continue;
+        }
+        opacities.emplace(entity, 0.0f);
+        ecs.addComponent<engine::Tween>(entity, engine::Tween{.target = engine::TweenTarget::Opacity,
+                                                              .from = 0.0f,
+                                                              .to = 1.0f,
+                                                              .duration = ArrivalDuration,
+                                                              .easing = engine::Easing::EaseOut});
     }
 }
 
@@ -670,7 +619,7 @@ bool isAssetPath(const std::string &path)
 GameScenes::GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                        const engine::Metrics &metrics, const engine::InterfaceStyle &style,
                        GameSessionSystem &sessions, localization::Localization &translations,
-                       const ShipSelection &ships, const std::vector<game::ShipDefinition> &shipDefinitions,
+                       ShipSelection &ships, const std::vector<game::ShipDefinition> &shipDefinitions,
                        const std::vector<game::ItemDefinition> &itemDefinitions,
                        const game::GameConfig &config)
     : _engine(engine), _audio(audio), _metrics(metrics), _style(style), _sessions(sessions),
@@ -1175,13 +1124,22 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
 
     ecs::Ecs &ecs = _engine.getEcs();
 
-    createGameSky(ecs, scene, resources);
+    // Opened from the take-off of the hangar: on the shot it ends with, its sky going on
+    const std::optional<float> arrival = std::exchange(_ships.arrivalSky, std::nullopt);
+    createGameSky(ecs, scene, resources, arrival.value_or(0.0f));
     const ecs::entity_t sky = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(sky, scene);
-    ecs.addComponent<engine::Camera>(sky, computeGameView(metrics.visibleArea()));
     const render::Rectangle area = metrics.visibleArea();
     const render::Vector2 centre{area.x + (area.width / 2.0f), area.y + (area.height / 2.0f)};
-    ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre);
+    RescueCamera &rescue = ecs.addComponent<RescueCamera>(sky, area, 1.0f, 0.0f, centre, centre);
+    render::Camera view = computeGameView(area);
+    if (arrival) {
+        const ecs::Position spawn = game::getShipSpawn(_next ? _next->localSlot() : 0);
+        rescue.arrival = 0.0f;
+        rescue.ship = {spawn.x, spawn.y};
+        view = computeGameView(computeArrivalFrame(area, rescue.ship));
+    }
+    ecs.addComponent<engine::Camera>(sky, view);
     _camera = ecs.ref(sky);
     ecs.addComponent<engine::Light>(sky, GameLight);
 
@@ -1213,6 +1171,9 @@ void GameScenes::build(engine::SceneId scene, render::ResourceManager &resources
                        .alone = _translations.text("hud.alone"),
                        .weapons = std::move(weaponNames)}},
             game::Rules{}.lives);
+    if (arrival) {
+        fadeInHud(ecs, scene);
+    }
 
     _onEnd = std::exchange(_nextEnd, nullptr);
     _sessions.start(_next ? std::move(_next) : std::make_unique<LocalSession>(), scene, [this] { end(); });

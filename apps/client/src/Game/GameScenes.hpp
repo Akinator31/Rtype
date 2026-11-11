@@ -77,7 +77,8 @@ class GameScenes
     const engine::InterfaceStyle &_style;
     GameSessionSystem &_sessions;
     localization::Localization &_translations;
-    const ShipSelection &_ships;
+    /// The ship equipped, and the shot of the hangar a game opened from its take-off starts on.
+    ShipSelection &_ships;
     /// The ships of the configuration, whose models the Bydos fly.
     const std::vector<game::ShipDefinition> &_shipDefinitions;
     const std::vector<game::ItemDefinition> &_itemDefinitions;
@@ -169,8 +170,8 @@ public:
     /// Declares the scenes. Everything given must outlive the engine.
     GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                const engine::Metrics &metrics, const engine::InterfaceStyle &style,
-               GameSessionSystem &sessions, localization::Localization &translations,
-               const ShipSelection &ships, const std::vector<game::ShipDefinition> &shipDefinitions,
+               GameSessionSystem &sessions, localization::Localization &translations, ShipSelection &ships,
+               const std::vector<game::ShipDefinition> &shipDefinitions,
                const std::vector<game::ItemDefinition> &itemDefinitions, const game::GameConfig &config);
 
     GameScenes(const GameScenes &) = delete;

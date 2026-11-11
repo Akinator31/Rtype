@@ -9,7 +9,18 @@ To play: **Play**, then **Solo**, in the main menu. The hangar opens first, on t
 **Launch** starts the game with the ship looked at, and keeps it for the next time. A ship locked by the level
 of the account ([config/hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-and-the-weapons-of-the-hangar-confighangarlua))
 can be looked at, not launched. In the top right corner, the player chooses its two weapons among those its
-level opens: the primary one, in hand when the ship appears, and the secondary one. Arrows (or WASD, ZQSD) move
+level opens: the primary one, in hand when the ship appears, and the secondary one.
+
+The game opens without a loading screen nor a cut. The hangar preloads the game scene as it opens
+(`Engine::preloadScene()`). On **Launch**, the ship takes off (`ShipSelectorSystem`): the interface fades out, the
+pedestal sinks, the ship turns to its profile, speeds off to the right and levels off as the game shows it. The
+camera follows it, the sky and the light of the game replace those of the hangar, and the camera pulls back while
+it narrows until it frames the ship as the game opens (`ArrivalZoom` in `Game/GameView.hpp`, without perspective).
+Then the game is launched; online, the ship flies on until the master answers. The game opens on the same shot,
+its sky scrolled as far (`ShipSelection::arrivalSky`), and its camera pulls back to the whole game while the HUD
+fades in (`RescueCamera::arrival`).
+
+Arrows (or WASD, ZQSD) move
 the ship, Space fires, Q and E (A and E on AZERTY) held turn the ship by 30° up and down to fire diagonally,
 Left Shift takes the other weapon in hand (the HUD names both, the one in hand bright), Escape opens the pause menu.
 

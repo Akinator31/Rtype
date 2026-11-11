@@ -1,6 +1,8 @@
 #include "ShipSelector/ShipSelector.hpp"
 
 #include "Assets.hpp"
+#include "Game/GameScenes.hpp"
+#include "Game/GameSky.hpp"
 #include "MainMenu/Layout.hpp"
 #include "ShipModel.hpp"
 #include "ShipSelector/ShipCarousel.hpp"
@@ -64,24 +66,25 @@ constexpr float gaugesSpacing = 600.0f;
 /// The rows of the two weapons, one under the other in the top right corner, over the sky.
 constexpr float weaponsWidth = 640.0f;
 constexpr float weaponsGap = 12.0f;
-
-void createHangarCamera(ecs::Ecs &ecs, engine::SceneId scene)
+ecs::entity_t createHangarCamera(ecs::Ecs &ecs, engine::SceneId scene)
 {
     const ecs::entity_t camera = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(camera, scene);
     ecs.addComponent<engine::Camera>(camera, createHangarView());
     ecs.addComponent<engine::Light>(camera, createHangarLight());
+    return camera;
 }
 
-void createHangarSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
+ecs::entity_t createHangarSky(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
 {
     const ecs::entity_t sky = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(sky, scene);
     ecs.addComponent<engine::Backdrop>(
         sky, resources.loadTexture(RTYPE_IMAGE_STARFIELD, render::TextureFiltering::Smooth));
+    return sky;
 }
 
-void createPedestal(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
+ecs::entity_t createPedestal(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources)
 {
     const ecs::entity_t pedestal = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(pedestal, scene);
@@ -89,12 +92,13 @@ void createPedestal(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManage
     ecs.addComponent<engine::Model>(pedestal, resources.loadModel(RTYPE_MODEL_PEDESTAL),
                                     render::Vector3{0.0f, 0.0f, 0.0f}, render::Vector3{0.0f, 1.0f, 0.0f},
                                     0.0f, pedestalScale);
+    return pedestal;
 }
 
-/// The ship of the catalog at `index`, over the pedestal or on a side of it: the ShipSelectorSystem places
-/// it.
-ecs::entity_t createShip(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources,
-                         std::size_t index)
+/// The ship of the catalog at `index`, over the pedestal or on a side of it, added to the carousel: the
+/// ShipSelectorSystem places it.
+void createShip(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceManager &resources, std::size_t index,
+                ShipCarousel &carousel)
 {
     const ShipEntry &entry = getShipCatalog()[index];
     const ShipModel ship = loadShipModel(resources, entry.modelPath);
@@ -104,7 +108,9 @@ ecs::entity_t createShip(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceM
     ecs.addComponent<engine::Model>(entity, ship.model, shipPosition, render::Vector3{0.0f, 1.0f, 0.0f}, 0.0f,
                                     entry.modelScale);
     ecs.addComponent<engine::ModelAnimation>(entity, ship.animations.idle);
-    return entity;
+    carousel.ships.push_back(entity);
+    carousel.animations.push_back(ship.animations);
+    carousel.yaws.push_back(restingYaw);
 }
 
 /// The carousel that runs the ships, which start at rest on the one looked at, a little turned so that their
@@ -113,14 +119,20 @@ ecs::entity_t createCarousel(ecs::Ecs &ecs, engine::SceneId scene, render::Resou
                              ShipSelection &selection)
 {
     selection.slide = static_cast<float>(selection.focused);
+    selection.departing = false;
+    selection.arrivalSky.reset();
+    ShipCarousel carousel;
+    carousel.selection = &selection;
+    carousel.camera = createHangarCamera(ecs, scene);
+    carousel.sky = createHangarSky(ecs, scene, resources);
+    carousel.pedestal = createPedestal(ecs, scene, resources);
+    carousel.openGameSky = [&ecs, scene, &resources] { createGameSky(ecs, scene, resources); };
+    for (std::size_t index = 0; index < shipCount; ++index) {
+        createShip(ecs, scene, resources, index, carousel);
+    }
     const ecs::entity_t entity = ecs.createEntity();
     ecs.addComponent<engine::SceneMember>(entity, scene);
-    ShipCarousel &carousel = ecs.addComponent<ShipCarousel>(entity);
-    carousel.selection = &selection;
-    for (std::size_t index = 0; index < shipCount; ++index) {
-        carousel.ships.push_back(createShip(ecs, scene, resources, index));
-        carousel.yaws.push_back(restingYaw);
-    }
+    ecs.addComponent<ShipCarousel>(entity, std::move(carousel));
     return entity;
 }
 
@@ -164,28 +176,41 @@ std::string getEquipText(localization::Localization &translations, const ShipSel
     return translations.text(equipped ? "ship.equipped" : "ship.equip");
 }
 
-/// Equips the ship looked at and keeps it in the settings; before a game, closes the hangar and launches it.
-void equip(engine::Engine &target, ShipSelection &selection)
+/// Equips the ship looked at and keeps it in the settings; before a game, the ship takes off into the sky of
+/// the game, which is launched, and opens on it.
+void equip(engine::Engine &target, ShipSelection &selection, ecs::entity_t carouselEntity)
 {
-    if (selection.isLocked(selection.focused)) {
+    if (selection.departing || selection.isLocked(selection.focused)) {
         return;
     }
     selection.equipFocused();
     writeEquippedShip(selection, target.getSettings());
     if (selection.launch) {
-        const std::function<void()> launch = std::exchange(selection.launch, nullptr);
+        ShipCarousel &carousel = target.getEcs().getComponent<ShipCarousel>(carouselEntity);
+        carousel.onDeparted = std::exchange(selection.launch, nullptr);
+        carousel.onLost = [&target] { target.popScene(); };
+        carousel.isArrivalReady = [&target] { return target.isSceneReady(GameScene); };
+        selection.departing = true;
+    }
+}
+
+/// Closes the hangar, unless the ship is taking off.
+void leave(engine::Engine &target, const ShipSelection &selection)
+{
+    if (!selection.departing) {
         target.popScene();
-        launch();
     }
 }
 
 ecs::entity_t createEquipButton(engine::Engine &target, engine::InterfaceBuilder &interface,
-                                localization::Localization &translations, ShipSelection &selection)
+                                localization::Localization &translations, ShipSelection &selection,
+                                ecs::entity_t carouselEntity)
 {
     ecs::Ecs &ecs = target.getEcs();
-    const ecs::entity_t button = interface.button(getEquipText(translations, selection),
-                                                  [&target, &selection] { equip(target, selection); },
-                                                  {engine::AnchorPoint::Bottom, 0.0f, equipBottom});
+    const ecs::entity_t button =
+        interface.button(getEquipText(translations, selection),
+                         [&target, &selection, carouselEntity] { equip(target, selection, carouselEntity); },
+                         {engine::AnchorPoint::Bottom, 0.0f, equipBottom});
     ecs.addComponent<engine::BoundText>(
         button, [&translations, &selection] { return getEquipText(translations, selection); });
     ecs.addComponent<engine::Opacity>(button);
@@ -255,6 +280,21 @@ void createStatGauges(engine::InterfaceBuilder &interface, localization::Localiz
                     {engine::AnchorPoint::Bottom, gaugesSpacing, gaugesBottom});
 }
 
+/// The entities of the interface of the scene, which fade out as the ship takes off.
+std::vector<ecs::entity_t> listInterface(ecs::Ecs &ecs, engine::SceneId scene)
+{
+    auto &members = ecs.cache<engine::SceneMember>();
+    auto &drawables = ecs.cache<engine::Drawable>();
+    std::vector<ecs::entity_t> entities;
+    for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
+        if (drawables.has(entity) && drawables.get(entity).layer == engine::Layer::Interface &&
+            members.has(entity) && members.get(entity).scene == scene) {
+            entities.push_back(entity);
+        }
+    }
+    return entities;
+}
+
 } // namespace
 
 void createShipSelectorScene(engine::Engine &engine, render::ResourceManager &resources,
@@ -262,27 +302,26 @@ void createShipSelectorScene(engine::Engine &engine, render::ResourceManager &re
                              ShipSelection &selection)
 {
     engine.createScene(
-        ShipSelectorScene, {},
+        ShipSelectorScene, {.onBack = [&engine, &selection] { leave(engine, selection); }},
         [&resources, &style, &translations, &selection](engine::Engine &target, engine::SceneId scene) {
             ecs::Ecs &ecs = target.getEcs();
             selection.focused = selection.equipped;
-            createHangarCamera(ecs, scene);
-            createHangarSky(ecs, scene, resources);
-            createPedestal(ecs, scene, resources);
             const ecs::entity_t carouselEntity = createCarousel(ecs, scene, resources, selection);
 
             engine::InterfaceBuilder interface(ecs, scene, style);
             interface.boundHeader([&translations] { return translations.text("ship.title"); },
-                                  [&target] { target.popScene(); },
+                                  [&target, &selection] { leave(target, selection); },
                                   {engine::AnchorPoint::TopLeft, screenMargin, screenMargin});
             createArrows(interface, selection);
             const ecs::entity_t name = createShipName(ecs, interface, translations, selection);
-            const ecs::entity_t equip = createEquipButton(target, interface, translations, selection);
+            const ecs::entity_t equip =
+                createEquipButton(target, interface, translations, selection, carouselEntity);
             ShipCarousel &carousel = ecs.getComponent<ShipCarousel>(carouselEntity);
             carousel.fading = {name, equip};
             carousel.dots = createDots(interface);
             createStatGauges(interface, translations, selection);
             createWeaponRows(target, interface, style, translations, selection);
+            carousel.interface = listInterface(ecs, scene);
         });
 }
 
@@ -290,6 +329,10 @@ void openShipSelector(engine::Engine &engine, ShipSelection &selection, std::fun
                       bool allUnlocked)
 {
     selection.setAllUnlocked(allUnlocked);
+    // The game loads while the player picks a ship and it takes off: it then opens without the loading scene
+    if (launch) {
+        engine.preloadScene(GameScene);
+    }
     selection.launch = std::move(launch);
     engine.pushScene(ShipSelectorScene);
 }

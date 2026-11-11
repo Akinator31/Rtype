@@ -22,4 +22,11 @@ render::Camera computeGameView(render::Rectangle visibleArea)
             render::Projection::Orthographic};
 }
 
+render::Rectangle computeArrivalFrame(render::Rectangle visibleArea, render::Vector2 ship)
+{
+    const float width = visibleArea.width * ArrivalZoom;
+    const float height = visibleArea.height * ArrivalZoom;
+    return {ship.x - (ArrivalScreen.x * width), ship.y - (ArrivalScreen.y * height), width, height};
+}
+
 } // namespace rtype::client
