@@ -298,7 +298,6 @@ void buildVoicePage(engine::Engine &engine, engine::SceneId scene, const engine:
     settings_page::addHint(
         interface, ecs, translations, page.hints,
         {engine::AnchorPoint::TopLeft, right + style.setting.inset, top + (3.0f * groupGap)});
-    settings_page::addKeys(interface, ecs, translations, "settings.keys");
 }
 
 } // namespace

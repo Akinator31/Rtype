@@ -102,7 +102,6 @@ void buildControlsPage(engine::Engine &engine, engine::SceneId scene, const engi
         {engine::AnchorPoint::TopLeft, screenMargin, bottomTop(style)});
     choice->hidden = reset;
     settings_page::bindText(ecs, reset, translations, "controls.reset");
-    settings_page::addKeys(interface, ecs, translations, "controls.keys");
 }
 
 } // namespace

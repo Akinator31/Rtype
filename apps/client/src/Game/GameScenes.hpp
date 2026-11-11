@@ -111,8 +111,7 @@ class GameScenes
     /// The pause menu: the game on the left, the voices of the players on the right.
     void buildPause(engine::SceneId scene);
     /// The voice of each other player, in a column of the pause menu, if the game has a voice and players.
-    /// @return Whether there was any.
-    bool addPlayerVoices(engine::InterfaceBuilder &interface, float left);
+    void addPlayerVoices(engine::InterfaceBuilder &interface, float left);
     /// Keeps the choices made for the other players in the settings, and writes them.
     void keepPlayerVoices();
     /// Closes the pause menu.
