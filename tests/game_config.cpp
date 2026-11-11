@@ -422,11 +422,38 @@ TEST_CASE("The levels of the ships of the hangar are read from hangar.lua, none 
         ContainsSubstring("level"));
 }
 
+TEST_CASE("The weapons of the hangar are read from hangar.lua, and must be weapons of the configuration",
+          "[game]")
+{
+    const ConfigDirectory directory("hangar_weapons");
+    directory.writeValid();
+    const LoadedGameConfig none = loadGameConfig(directory.path);
+    REQUIRE(none.isValid());
+    CHECK(none.config.weaponUnlocks.empty());
+
+    directory.write("hangar.lua", "return { weapons = { { weapon = 'blaster', level = 2 } } }");
+    const LoadedGameConfig loaded = loadGameConfig(directory.path);
+    INFO(listErrors(loaded));
+    REQUIRE(loaded.isValid());
+    REQUIRE(loaded.config.weaponUnlocks.size() == 1);
+    CHECK(loaded.config.weaponUnlocks[0].weapon == "blaster");
+    CHECK(loaded.config.weaponUnlocks[0].level == 2);
+    CHECK(loaded.config.shipUnlocks.empty());
+
+    CHECK(errorWith("hangar_weapon_twice", "hangar.lua",
+                    "return { weapons = { { weapon = 'blaster', level = 1 }, { weapon = 'blaster', level = 2 "
+                    "} } }") == "hangar.lua: weapons: 'blaster' listed twice");
+    CHECK(errorWith("hangar_weapon_unknown", "hangar.lua",
+                    "return { weapons = { { weapon = 'nope', level = 1 } } }") ==
+          "hangar.lua: weapons: unknown weapon 'nope'");
+}
+
 TEST_CASE("The hangar of the repository loads", "[game]")
 {
     const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
     REQUIRE(loaded.isValid());
     CHECK(loaded.config.shipUnlocks.size() == 6);
+    CHECK(loaded.config.weaponUnlocks.size() == 11);
 }
 
 TEST_CASE("A directory without player.lua is an error, as a missing one", "[game]")

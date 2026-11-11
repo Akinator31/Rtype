@@ -23,7 +23,7 @@ constexpr std::array<std::string_view, 4> CategoryNames{"bullet", "missile", "la
 /// In the order of the values of WavePlacement.
 constexpr std::array<std::string_view, 3> PlacementNames{"manual", "random", "music"};
 /// In the order of WaveDefinition::beats.
-constexpr std::array<std::string, 3> BeatNames{"bass", "mid", "high"};
+const std::array<std::string, 3> BeatNames{"bass", "mid", "high"};
 /// In the order of the values of ItemEffectType.
 constexpr std::array<std::string_view, 5> EffectNames{"heal", "extra_life", "damage", "rapid_fire", "shield"};
 /// In the order of ShapeReaders.
@@ -317,21 +317,31 @@ Progression readProgression(TableReader &table)
     return progression;
 }
 
-std::vector<ShipUnlock> readShipUnlocks(TableReader &table)
+Hangar readHangar(TableReader &table)
 {
-    std::vector<ShipUnlock> unlocks;
+    Hangar hangar;
     for (TableReader &item : table.readList("ships")) {
         ShipUnlock unlock;
         unlock.ship = item.readString("ship");
         unlock.level = static_cast<std::uint32_t>(item.readInteger("level", 1, MaxU32));
         item.checkAllFieldsRead();
-        if (std::ranges::find(unlocks, unlock.ship, &ShipUnlock::ship) != unlocks.end()) {
+        if (std::ranges::find(hangar.ships, unlock.ship, &ShipUnlock::ship) != hangar.ships.end()) {
             throw ConfigError(std::format("ships: '{}' listed twice", unlock.ship));
         }
-        unlocks.push_back(std::move(unlock));
+        hangar.ships.push_back(std::move(unlock));
+    }
+    for (TableReader &item : table.readList("weapons")) {
+        WeaponUnlock unlock;
+        unlock.weapon = item.readString("weapon");
+        unlock.level = static_cast<std::uint32_t>(item.readInteger("level", 1, MaxU32));
+        item.checkAllFieldsRead();
+        if (std::ranges::find(hangar.weapons, unlock.weapon, &WeaponUnlock::weapon) != hangar.weapons.end()) {
+            throw ConfigError(std::format("weapons: '{}' listed twice", unlock.weapon));
+        }
+        hangar.weapons.push_back(std::move(unlock));
     }
     table.checkAllFieldsRead();
-    return unlocks;
+    return hangar;
 }
 
 } // namespace rtype::game
