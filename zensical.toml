@@ -108,6 +108,8 @@ nav = [
         "decisions/0035-voice-chat-in-the-game-session.md",
         "decisions/0036-webrtc-audio-processing.md",
         "decisions/0037-vr-through-openxr.md",
+        "decisions/0038-shots-glide-to-the-time-of-the-world.md",
+        "decisions/0039-input-lead-margin.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

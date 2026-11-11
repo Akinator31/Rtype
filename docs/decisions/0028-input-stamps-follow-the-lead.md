@@ -44,7 +44,9 @@ and the client paces its inputs on it.**
   is ignored. 1 is just in time; 0 or less is lost. A signed byte after "Last input" in `SNAPSHOT`, −128 when no
   `INPUT` came: the game protocol goes to version 2.
 - The client keeps the smallest lead of the last 0.5 s between 2 and 3 by sending its inputs a little faster
-  (at most 10%) or slower (at least half as fast) than once per tick. The stamps stay consecutive: no input
+  (at most 10%) or slower (at least half as fast) than once per tick. **Amended by
+  [ADR 0039](0039-input-lead-margin.md)**: the target goes up a tick at each late input, up to 6, and back
+  down when the network is calm. The stamps stay consecutive: no input
   lost, none twice, and the stamps too far ahead come back down.
 - A lead of 0 or less jumps the next stamp forward at once, by what is missing to reach 2. The ticks skipped
   carry the previous input, as the game and the prediction do, and the leads of the next RTT + 2 ticks, those of

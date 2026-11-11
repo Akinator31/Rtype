@@ -42,6 +42,8 @@ technical and comparative study of the project.
 | [0035](0035-voice-chat-in-the-game-session.md)          | A voice chat of our own in the game session, and Discord beside it in the same game | Accepted                                                       |
 | [0036](0036-webrtc-audio-processing.md)                 | The echo, the noise and the gain of the microphone by the audio processing of WebRTC | Accepted                                                      |
 | [0037](0037-vr-through-openxr.md)                       | VR through OpenXR, seated in a cockpit                      | Accepted                                                                               |
+| [0038](0038-shots-glide-to-the-time-of-the-world.md)    | The time of a shot of the player glides from its ship to the world | Accepted; amends [0029](0029-predicted-shots.md)                                |
+| [0039](0039-input-lead-margin.md)                       | The lead the inputs aim at grows with the late ones         | Accepted; amends [0028](0028-input-stamps-follow-the-lead.md)                          |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

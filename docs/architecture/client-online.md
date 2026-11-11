@@ -29,7 +29,7 @@ apps/client/src/
     Interpolation.cpp  the world drawn a little in the past, between the snapshots around that time
     Prediction.cpp     the ship of the player, moved at once by its inputs, then reconciled with the game
     InputClock.cpp     the pace of the inputs, kept just in time by the lead the snapshots report
-    ShotPrediction.cpp the shots of the player, drawn from the moment it fires, in the time of its ship
+    ShotPrediction.cpp the shots of the player, drawn from the moment it fires, then in the time of the world
 ```
 
 The client has one `EventLoop` for its network, polled by the game loop once per frame before the engine
@@ -431,23 +431,35 @@ tick the game simulated when they came. 1 is just in time, 0 or less lost.
 
 `InputClock` turns the leads into a pace:
 
-| The smallest lead of the last 0.5 s | What the client does |
+| The smallest lead of the last 0.5 s, against the target (2, plus the margin) | What the client does |
 |---|---|
-| 2 or 3 | One input per tick |
-| 1: no margin left | A little faster: 3% per tick missing, 10% at most |
-| Above 3: latency for nothing | A little slower: 3% per tick too many, half as fast at most |
-| 0 or less: inputs lost (one report is enough) | The next stamp jumps forward at once, to a lead of 2; the ticks skipped carry the previous input, and the leads of the next RTT + 2 ticks are ignored |
+| The target, or a tick above | One input per tick |
+| Below the target | A little faster: 3% per tick missing, 10% at most |
+| More than a tick above: latency for nothing | A little slower: 3% per tick too many, half as fast at most |
+| 0 or less: inputs lost (one report is enough) | The next stamp jumps forward at once, to the target; the ticks skipped carry the previous input, and the leads of the next RTT + 2 ticks are ignored |
+
+**The margin.** A datagram held back longer than the others more rarely than every 0.5 s (a distant server,
+a busy Wi-Fi) leaves the smallest lead of the window before the next one comes: with a fixed target, it was
+late each time. The game then applies the previous input at its tick, and the prediction, which applied the
+right one, is corrected: the small rollbacks of a distant server. So each time inputs are too late, after the
+first report, the target goes a tick higher, up to 6. It comes back down by a tick after 15 s without inputs
+too late, unless a lead of those 15 s was 1: a tick less would have lost that one. Each tick of margin is a
+tick of input latency, which only a network that needs it pays (`InputClock::target()`).
 
 ```cpp
 clock.advance(elapsed);                     // each frame
 pending += elapsed * clock.rate();          // one INPUT each time a tick of pending is there
 stamp += 1 + clock.takeJump();              // each INPUT sent
 clock.receive(part.inputLead, rtt + 0.033); // each snapshot with a lead, once
+clock.target();                             // the lead aimed at: 2, plus the margin
 ```
 
 The stamps stay consecutive: no input is lost, none is stamped twice, and stamps too far ahead come back down
 by sending fewer of them. A frame too long (more than 5 ticks at once are not sent) or a scene that stops
 updating leaves the stamps behind: the next lead is 0 or less, and they jump.
+
+The `INPUT` and the `VOICE` of a frame leave at the end of its `update()`, not with the next one: a frame of
+latency less for the controls and the voice, 16 ms at 60 frames per second, 33 ms at 30.
 
 ## Interpolation
 
@@ -538,8 +550,8 @@ from the moment it fires ([ADR 0029](../decisions/0029-predicted-shots.md)):
    shots of the later ticks are replayed from there, like the ship. `prediction.shots()` holds those after the
    latest snapshot, by tick.
 2. **`ShotPrediction` draws them at once**, under an id of its own (from `0xF0000000`), along the path of the
-   game (`game::moveShot()`), in the time of the ship, the fraction of a tick included: between two ticks, on
-   the way to the next one.
+   game (`game::moveShot()`), in their time ([below](#the-time-of-a-shot)), the fraction of a tick included:
+   between two ticks, on the way to the next one.
 3. **The shot of the game takes its place.** A shot of the player in a snapshot of tick `T` with the age `a`
    was fired at `T − a`: it is matched with the predicted shot of that tick, and drawn under the id of the
    predicted one, along the same path. The drawing goes on without a jump, without a new entity, without a
@@ -557,17 +569,41 @@ shots.apply(snapshot, slot, drawnTick, inputTick); // then, on the world of the 
 
 | The shot | Where it is drawn |
 |---|---|
-| Predicted, or the game's in its place | On the path of the game, at the tick of the ship |
-| The game's, not predicted (its age is 255, or no prediction at its tick) | Its position at the drawn tick, moved on by `velocity × (ship tick − drawn tick) / 60` |
-| Destroyed, the ship past its destruction | Once where the game destroyed it, for its impact; then no more, though the interpolation still has it |
-| Destroyed, the ship not there yet | As flying, until the ship reaches it |
+| Predicted, or the game's in its place | On the path of the game, at its time |
+| The game's, not predicted (no prediction at its tick) | Its position at the drawn tick, moved on by `velocity × (its time − drawn tick) / 60` |
+| The game's, its age 255 (too old to tell when it was fired) | At the drawn tick, with the world |
+| Destroyed, its time past its destruction | Once where the game destroyed it, for its impact; then no more, though the interpolation still has it |
+| Destroyed, its time not there yet | As flying, until its time reaches it |
 
 - `RemoteSession` gets the definitions of the client (`loadGameConfig()`, through `OnlineScenes`): the weapon
   of the players and its projectile. Without them, the shots are only moved on, drawn when the game sends them.
-- Drawn ahead, a shot would fly through what it hit until the drawn tick reaches its destruction: it is drawn
-  where the game destroyed it as soon as `ENTITIES_DESTROYED` comes, a round trip after the ship reached that
-  tick, then removed.
 - The shots of the others, the Bydos and their shots stay in the past, with the world they hit.
+
+### The time of a shot
+
+The ship is drawn at the tick of its newest input, the Bydos at the drawn tick: the gap is the lead of the
+inputs, a round trip and the delay of the interpolation, 5 ticks on the same machine, 12 to 15 with a server
+80 ms away. A shot drawn in the time of the ship all along met the Bydos that far in their future: on the
+screen it went through a Bydo the game had already moved away (no damage), or stopped short of one it hit.
+
+So the time of a shot **glides**, `ShotPrediction::timeOf(fired, drawn, ship)`: fired, it is at the tick of the
+ship, out of its nose at once; as it flies, its time goes back to the drawn tick, by a smoothstep over
+`max(15, 3 × gap)` ticks of flight, then stays there. By the time it reaches the Bydos, it is in their time:
+drawn where the game has it when the game has them where they are drawn, and what it seems to hit is what it
+hits; its impact comes when the Bydo it hit flashes.
+
+```
+time of the ship   ─────────────────────────────►
+                      ╲   the shot, from the nose
+                       ╲____
+time of the world   ────────╲________________►  the Bydos, and the shot once it glided
+```
+
+- While it glides, the shot seems to fly slower, never less than half its speed: the time it gives back over
+  `3 × gap` ticks is at most `1.5 × gap / (3 × gap)` of each tick (the steepest slope of the smoothstep).
+- A Bydo right in front of the nose is still met in the time of the ship: the shot hit it in the game, its
+  impact is drawn where the game destroyed it as soon as `ENTITIES_DESTROYED` comes and its time is past it.
+- Without a gap (the drawn tick at the ship, or ahead), the shot is in the time of the ship.
 
 ## Tests
 
