@@ -89,7 +89,7 @@ RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &g
       _session(joined.sessionId, network::DatagramKey(joined.clientKey),
                network::DatagramKey(joined.serverKey),
                [this](std::span<const std::byte> datagram) { _socket.send(_game, datagram); }),
-      _server(std::move(server))
+      _server(std::move(server)), _gameId(joined.gameId)
 {
     if (voiceDevices != nullptr) {
         _devices = voiceDevices;

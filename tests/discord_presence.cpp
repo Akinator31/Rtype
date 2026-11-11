@@ -49,8 +49,11 @@ TEST_CASE("Discord presence: each place of the game has its texts", "[discord]")
     CHECK(hangar.state.empty());
     CHECK_FALSE(hangar.party);
     CHECK_FALSE(hangar.startedAt);
-    CHECK(hangar.largeImage == "vx-03");
-    CHECK(hangar.largeText.starts_with("VX-03 · "));
+    CHECK(hangar.largeImage == "logo");
+    CHECK(hangar.largeText == "R-Type");
+    // The ship in a game only
+    CHECK(hangar.smallImage.empty());
+    CHECK(hangar.smallText.empty());
 
     const rtype::discord::Activity online = describeActivity(at(Place::Online), translations);
     CHECK(online.details == "En ligne");
@@ -65,6 +68,9 @@ TEST_CASE("Discord presence: each place of the game has its texts", "[discord]")
     CHECK(soloShown.details == "Solo");
     CHECK(soloShown.state == "Vague 7/12");
     CHECK(soloShown.startedAt == started);
+    CHECK(soloShown.largeImage == "logo");
+    CHECK(soloShown.smallImage == "vx-03");
+    CHECK(soloShown.smallText.starts_with("VX-03 · "));
     CHECK_FALSE(soloShown.party);
 
     PlayerActivity game = at(Place::OnlineGame);
@@ -81,6 +87,51 @@ TEST_CASE("Discord presence: each place of the game has its texts", "[discord]")
     const rtype::discord::Activity results = describeActivity(at(Place::OnlineResults), translations);
     CHECK(results.details == "Partie en ligne");
     CHECK(results.state == "Partie terminée");
+    PlayerActivity cleared = at(Place::OnlineResults);
+    cleared.wavesCleared = 31;
+    CHECK(describeActivity(cleared, translations).state == "Partie terminée · 31 vagues franchies");
+    cleared.wavesCleared = 1;
+    CHECK(describeActivity(cleared, translations).state == "Partie terminée · 1 vague franchie");
+}
+
+TEST_CASE("Discord presence: each screen out of a game says where the player is", "[discord]")
+{
+    const rtype::localization::Localization translations = loadTranslations("en");
+    const auto shown = [&translations](Place place) {
+        const rtype::discord::Activity activity = describeActivity(at(place), translations);
+        return activity.details + " / " + activity.state;
+    };
+    CHECK(shown(Place::Ships) == "In the hangar / Choosing a ship");
+    CHECK(shown(Place::Settings) == "In the settings / ");
+    CHECK(shown(Place::Lore) == "In the hangar / Reading the lore");
+    CHECK(shown(Place::Quests) == "In the hangar / Checking the quests");
+    CHECK(shown(Place::Servers) == "Online / Choosing a server");
+    CHECK(shown(Place::SigningIn) == "Online / Signing in");
+    CHECK(shown(Place::Account) == "Online / Managing the account");
+    CHECK(shown(Place::Online) == "Online / Choosing a game");
+}
+
+TEST_CASE("Discord presence: a game tells its boss, its pause, its final battle and its end", "[discord]")
+{
+    const rtype::localization::Localization translations = loadTranslations("en");
+    PlayerActivity solo = at(Place::Solo);
+    solo.wave = 12;
+    solo.waveCount = 12;
+    solo.boss = true;
+    CHECK(describeActivity(solo, translations).state == "Wave 12/12 · Boss fight");
+    solo.paused = true;
+    CHECK(describeActivity(solo, translations).state == "Wave 12/12 · Paused");
+    solo.finalBattle = true;
+    CHECK(describeActivity(solo, translations).state == "Wave 12/12 · Final battle");
+    solo.outcome = rtype::game::GameOutcome::Victory;
+    CHECK(describeActivity(solo, translations).state == "Wave 12/12 · Victory");
+
+    PlayerActivity online = at(Place::OnlineGame);
+    online.boss = true;
+    CHECK(describeActivity(online, translations).state == "Boss fight");
+    online.wave = 9;
+    online.outcome = rtype::game::GameOutcome::Defeat;
+    CHECK(describeActivity(online, translations).state == "Wave 9 · Defeat");
 }
 
 TEST_CASE("Discord presence: every text is in English and in French", "[discord]")
@@ -88,10 +139,33 @@ TEST_CASE("Discord presence: every text is in English and in French", "[discord]
     for (const std::string language : {"en", "fr"}) {
         CAPTURE(language);
         const rtype::localization::Localization translations = loadTranslations(language);
-        for (const char *key :
-             {"presence.hangar", "presence.online", "presence.choosing_game", "presence.solo",
-              "presence.online_game", "presence.wave", "presence.game_over", "settings.discord_activity",
-              "settings.group.discord", "settings.hint.discord_activity"}) {
+        for (const char *key : {"presence.hangar",
+                                "presence.online",
+                                "presence.choosing_game",
+                                "presence.solo",
+                                "presence.online_game",
+                                "presence.wave",
+                                "presence.game_over",
+                                "presence.choosing_ship",
+                                "presence.settings",
+                                "presence.lore",
+                                "presence.quests",
+                                "presence.choosing_server",
+                                "presence.signing_in",
+                                "presence.account",
+                                "presence.boss",
+                                "presence.final_battle",
+                                "presence.paused",
+                                "presence.victory",
+                                "presence.defeat",
+                                "presence.wave_cleared",
+                                "presence.waves_cleared",
+                                "invite.invalid",
+                                "invite.in_game",
+                                "invite.joining",
+                                "settings.discord_activity",
+                                "settings.group.discord",
+                                "settings.hint.discord_activity"}) {
             CAPTURE(key);
             CHECK(translations.text(key) != key);
         }
@@ -158,6 +232,71 @@ TEST_CASE("Discord presence: turned off, the activity is cleared and nothing is 
     PresenceTracker off(other.presence, translations, false);
     off.update(at(Place::Hangar), now);
     CHECK(other.presence.updates.empty());
+}
+
+TEST_CASE("Discord presence: an activity Discord refused is sent again until it takes it", "[discord]")
+{
+    const rtype::localization::Localization translations = loadTranslations("en");
+    testing::FakeSocialSdk sdk;
+    PresenceTracker tracker(sdk.presence, translations);
+    PresenceTracker::Clock::time_point now{};
+
+    // Discord not running yet: refused, at the next poll
+    sdk.presence.refusing = true;
+    tracker.update(at(Place::Hangar), now);
+    REQUIRE(sdk.presence.updates.size() == 1);
+    sdk.poll();
+    now += PresenceTracker::MinInterval;
+    tracker.update(at(Place::Hangar), now);
+    CHECK(sdk.presence.updates.size() == 1);
+
+    // Started: taken at the next try, once the retry interval passed
+    sdk.presence.refusing = false;
+    now += PresenceTracker::RetryInterval;
+    tracker.update(at(Place::Hangar), now);
+    REQUIRE(sdk.presence.updates.size() == 2);
+    sdk.poll();
+    REQUIRE(sdk.presence.shown);
+    CHECK(sdk.presence.shown->details == "In the hangar");
+    now += PresenceTracker::RetryInterval;
+    tracker.update(at(Place::Hangar), now);
+    CHECK(sdk.presence.updates.size() == 2);
+}
+
+TEST_CASE("Discord presence: lost by a connection to Discord, the activity is sent again", "[discord]")
+{
+    const rtype::localization::Localization translations = loadTranslations("en");
+    testing::FakeSocialSdk sdk;
+    PresenceTracker tracker(sdk.presence, translations);
+    sdk.connection.onStatusChanged([&tracker](rtype::discord::ConnectionStatus status) {
+        if (status != rtype::discord::ConnectionStatus::Connecting) {
+            tracker.resend();
+        }
+    });
+    PresenceTracker::Clock::time_point now{};
+
+    tracker.update(at(Place::Online), now);
+    sdk.poll();
+    REQUIRE(sdk.presence.shown);
+
+    // Connect() clears it: once ready, shown again at the next frame, whatever the interval
+    sdk.connection.connect("access");
+    sdk.presence.lose();
+    sdk.connection.becomeReady();
+    sdk.poll();
+    now += std::chrono::seconds(1);
+    tracker.update(at(Place::Online), now);
+    REQUIRE(sdk.presence.shown);
+    CHECK(sdk.presence.shown->state == "Choosing a game");
+
+    // Disconnected, a failed connection included: shown again
+    sdk.presence.lose();
+    sdk.connection.lose();
+    sdk.poll();
+    now += PresenceTracker::MinInterval;
+    tracker.update(at(Place::Online), now);
+    REQUIRE(sdk.presence.shown);
+    CHECK(sdk.presence.updates.size() == 3);
 }
 
 TEST_CASE("Discord presence: the language changed, the texts follow", "[discord]")

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Discord/DiscordFriends.hpp"
 #include "Game/DeathScreen.hpp"
 #include "Game/GameRecorder.hpp"
 #include "Game/GameSession.hpp"
@@ -53,8 +54,9 @@ class RemoteSession;
 ///   pushes in slowly on the shogun, rumbling, until its fall shakes it hard, then pulls back.
 /// - Escape (or Start on a gamepad) opens the pause menu (Figma, Série 16): Resume, or Leave the game, and
 ///   online with a voice, the voice of each other player: its volume for this client (Left, Right) and
-///   muted (Confirm), with the icon of its voice. They are kept for the next games when the menu closes
-///   (VoicePreferences::players). Offline, the game stops while it is open.
+///   muted (Confirm), with the icon of its voice. Online and connected to Discord, the Discord friends: those
+///   asking to join the game (Accept), then those online (Invite). They are kept for the next games when the
+///   menu closes (VoicePreferences::players). Offline, the game stops while it is open.
 /// - The game ends when the player leaves it or when its session is over: what to do then is given to play(),
 ///   back to the main menu by default.
 /// - Online, a game that went to its end keeps what the local player did in it (results()), which
@@ -113,6 +115,11 @@ class GameScenes
     /// The voice of each other player, in a column of the pause menu, if the game has a voice and players.
     /// @return Whether there was any.
     bool addPlayerVoices(engine::InterfaceBuilder &interface, float left);
+    /// The Discord friends of the pause menu of a game online, under the group of the game, from `top`: those
+    /// asking to join first (Accept), then those online (Invite).
+    void addFriends(engine::InterfaceBuilder &interface, float left, float top);
+    /// The Discord friends of the player, none until given.
+    discord::Friends *_friends = nullptr;
     /// Keeps the choices made for the other players in the settings, and writes them.
     void keepPlayerVoices();
     /// Closes the pause menu.
@@ -153,6 +160,10 @@ class GameScenes
     void closePrompt();
 
 public:
+    /// The Discord friends of the player, invited from the pause menu of a game online. They outlive the
+    /// scenes.
+    void setFriends(discord::Friends *friends) { _friends = friends; }
+
     /// Declares the scenes. Everything given must outlive the engine.
     GameScenes(engine::Engine &engine, render::ResourceManager &resources, audio::AudioPlayer &audio,
                const engine::Metrics &metrics, const engine::InterfaceStyle &style,

@@ -35,6 +35,8 @@ add_executable(rtype_tests
     datagram.cpp
     debug_commands.cpp
     discord.cpp
+    discord_friends.cpp
+    discord_invite.cpp
     discord_presence.cpp
     discord_voice.cpp
     display_settings.cpp

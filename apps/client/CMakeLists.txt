@@ -27,6 +27,9 @@ add_library(r-type_client_core STATIC
     src/Console/ConsoleSystem.cpp
     src/Controls/KeyCaptureSystem.cpp
     src/Controls/KeyChoice.cpp
+    src/Discord/DiscordFriends.cpp
+    src/Discord/FriendPictures.cpp
+    src/Discord/DiscordInvite.cpp
     src/Discord/DiscordPresence.cpp
     src/Game/BossLooks.cpp
     src/Game/DamageLooks.cpp
@@ -117,10 +120,12 @@ add_library(r-type_client_core STATIC
     src/Vr/VrView.cpp
 )
 target_include_directories(r-type_client_core PUBLIC src)
+# libcurl downloads the pictures of the Discord friends (cmake/Curl.cmake, shared with the server)
+include(${PROJECT_SOURCE_DIR}/cmake/Curl.cmake)
 target_link_libraries(r-type_client_core
     PUBLIC rtype::audio rtype::discord rtype::discord_voice rtype::ecs rtype::engine rtype::game rtype::input rtype::lobby rtype::localization
            rtype::log rtype::network rtype::physics rtype::render rtype::voice_client rtype::xr
-    PRIVATE rtype_options)
+    PRIVATE rtype_options CURL::libcurl)
 
 # The Discord application whose activity the client shows in the profile of the player (its rich presence), by
 # default: the official one of R-Type, its id from the developer portal, the one the official server signs in
