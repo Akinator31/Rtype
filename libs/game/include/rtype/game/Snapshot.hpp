@@ -127,7 +127,9 @@ struct EntityState {
     std::uint8_t age = 0;
     /// For a Bydo: the index of its ship among those of the configuration (ShipRegistry::getIndex()), so that
     /// the client draws its model at the size of its collider. For an item (EntityKind::Item): the index of
-    /// its item among those of the configuration (ItemRegistry::getIndex()). NoShip otherwise.
+    /// its item among those of the configuration (ItemRegistry::getIndex()). For a shot of a player: the index
+    /// of its projectile among those of the configuration (ProjectileRegistry::getIndex()), so that the client
+    /// draws the model of the weapon that fired it. NoShip otherwise.
     std::uint8_t ship = NoShip;
 
     friend bool operator==(const EntityState &, const EntityState &) = default;

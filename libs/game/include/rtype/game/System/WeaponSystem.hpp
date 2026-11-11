@@ -15,12 +15,13 @@ namespace rtype::game
 /// or down by Rules::aimAngle while AimUp or AimDown is held (spawnAimedShot()); a Bydo's as soon as it is in
 /// the game area, to the left, or, if it has EnemyOrders, when they say so, to the left or towards their
 /// target (spawnAimedShot()). The shots are created after the systems of the tick, so they move from the next
-/// one.
+/// one. A player with two weapons first takes in hand the one its input asks for (selectWeapon()).
 class WeaponSystem : public ecs::System
 {
     ecs::Ecs &_ecs;
     GameContext &_context;
     ecs::ComponentCache<Armed> &_weapons;
+    ecs::ComponentCache<Holster> &_holsters;
     ecs::ComponentCache<PlayerShip> &_ships;
     ecs::ComponentCache<Enemy> &_enemies;
     ecs::ComponentCache<EnemyOrders> &_orders;

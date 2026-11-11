@@ -100,6 +100,12 @@ void Simulation::registerConfig(const GameConfig &config)
         _context.waves.addDefinition(wave, _context.enemies);
     }
     registerPlayer(config.player);
+    for (const WeaponUnlock &unlock : config.weaponUnlocks) {
+        if (!_context.weapons.hasDefinition(unlock.weapon)) {
+            throw std::invalid_argument(std::format("the hangar has the unknown weapon '{}'", unlock.weapon));
+        }
+        _context.loadoutWeapons.push_back(unlock.weapon);
+    }
     _context.progression = config.progression;
 }
 
@@ -152,6 +158,41 @@ std::optional<Armed> Simulation::weaponOf(std::uint8_t slot)
         return std::nullopt;
     }
     return _ecs.getComponent<Armed>(*ship);
+}
+
+std::optional<Holster> Simulation::holsterOf(std::uint8_t slot)
+{
+    const std::optional<ecs::entity_t> ship = findPlayerShip(_ecs, slot);
+    if (!ship || !_ecs.hasComponent<Holster>(*ship)) {
+        return std::nullopt;
+    }
+    return _ecs.getComponent<Holster>(*ship);
+}
+
+bool Simulation::isLoadoutAllowed(const Loadout &loadout) const
+{
+    if (loadout[0].empty() && loadout[1].empty()) {
+        return true;
+    }
+    const auto allowed = [this](const std::string &weapon) {
+        return _context.weapons.hasDefinition(weapon) &&
+               (weapon == _context.player.weapon ||
+                std::ranges::find(_context.loadoutWeapons, weapon) != _context.loadoutWeapons.end());
+    };
+    return allowed(loadout[0]) && allowed(loadout[1]) && loadout[0] != loadout[1];
+}
+
+bool Simulation::setLoadout(std::uint8_t slot, const Loadout &loadout)
+{
+    if (!hasPlayer(slot) || !isLoadoutAllowed(loadout)) {
+        return false;
+    }
+    _context.players[slot].loadout = loadout;
+    if (const auto ship = findPlayerShip(_ecs, slot)) {
+        equipLoadout(_ecs, _context, *ship, loadout);
+    }
+    logger().debug("Player {} takes {} and {}", slot, loadout[0], loadout[1]);
+    return true;
 }
 
 bool Simulation::hasPlayer(std::uint8_t slot) const
@@ -210,6 +251,7 @@ void Simulation::buildSnapshot()
     ecs::ComponentCache<Projectile> &projectiles = _ecs.cache<Projectile>();
     ecs::ComponentCache<ShipIndex> &shipIndexes = _ecs.cache<ShipIndex>();
     ecs::ComponentCache<ItemIndex> &itemIndexes = _ecs.cache<ItemIndex>();
+    ecs::ComponentCache<ProjectileIndex> &projectileIndexes = _ecs.cache<ProjectileIndex>();
     for (ecs::entity_t entity = 0; entity < ids.size(); ++entity) {
         if (!ids.has(entity) || !kinds.has(entity) || !positions.has(entity) || !_ecs.isAlive(entity)) {
             continue;
@@ -228,6 +270,9 @@ void Simulation::buildSnapshot()
         state.ship = shipIndexes.has(entity) ? shipIndexes.get(entity).value : NoShip;
         if (itemIndexes.has(entity)) {
             state.ship = itemIndexes.get(entity).value;
+        }
+        if (projectileIndexes.has(entity)) {
+            state.ship = projectileIndexes.get(entity).value;
         }
         if (projectiles.has(entity)) {
             state.age = static_cast<std::uint8_t>(std::min<std::uint32_t>(projectiles.get(entity).age, 255));

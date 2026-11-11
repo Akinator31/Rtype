@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <utility>
 
 namespace rtype::game
 {
@@ -57,6 +58,15 @@ bool stepWeapon(Armed &armed, const WeaponDefinition &weapon, bool wantsToFire)
     armed.cooldown = boosted ? std::max<std::uint32_t>(1, armed.boostInterval) : weapon.fireInterval;
     spendRound(armed, weapon);
     return true;
+}
+
+void selectWeapon(Armed &armed, Holster &holster, std::uint8_t wanted)
+{
+    if (wanted == holster.inHand) {
+        return;
+    }
+    std::swap(armed, holster.weapon);
+    holster.inHand = wanted;
 }
 
 ShotLaunch aimShot(const WeaponDefinition &weapon, float projectileHalfWidth, std::uint8_t owner,

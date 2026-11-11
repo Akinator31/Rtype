@@ -29,9 +29,13 @@ struct PlayerInput {
         /// Held: the ship turns its nose up, or down, by AimAngle, and fires that way.
         AimUp = 1 << 5,
         AimDown = 1 << 6,
+        /// Set: the second weapon of the loadout is in hand (Loadout), the first otherwise. A state, not a
+        /// press: the client switches it each time its player presses the key, so that a lost input switches
+        /// nothing.
+        SecondWeapon = 1 << 7,
     };
-    /// The bits the protocol reserves: ignored.
-    static constexpr std::uint8_t Reserved = 0x80;
+    /// The bits the protocol reserves: ignored. None since version 7.
+    static constexpr std::uint8_t Reserved = 0x00;
 
     /// The bits of the buttons held.
     std::uint8_t buttons = 0;
@@ -61,6 +65,9 @@ struct PlayerInput {
     /// Where the player turns its ship: -1 nose up, 1 nose down, 0 straight ahead; both together cancel each
     /// other.
     [[nodiscard]] int aim() const;
+
+    /// The weapon of the loadout in hand: 0 or 1 (SecondWeapon).
+    [[nodiscard]] std::uint8_t weaponInHand() const { return isHeld(SecondWeapon) ? 1 : 0; }
 
     friend bool operator==(const PlayerInput &, const PlayerInput &) = default;
 };
