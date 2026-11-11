@@ -162,6 +162,10 @@ constexpr float ShotLightSpread = 1.5f;
 constexpr render::Color PlayerMissileLight{255, 150, 60, 130};
 constexpr render::Color PlayerLaserLight{255, 90, 200, 130};
 constexpr render::Color PlayerPlasmaLight{110, 255, 140, 130};
+/// The light around the shots of the Bydos by the mechanic of their weapon, when their projectile has a look
+/// of its own: purple bullets, red missiles, magenta lasers, orange plasma.
+constexpr render::Color BydoMissileLight{255, 70, 50, 125};
+constexpr render::Color BydoLaserLight{255, 60, 170, 120};
 /// The core of a projectile model measured from its bounds: its front, at most this many times as long as it
 /// is tall, the rest being its trail.
 constexpr float ProjectileCoreRatio = 3.0f;
@@ -414,6 +418,22 @@ render::Color playerShotLight(game::ProjectileCategory mechanic)
     return PlayerShotLight;
 }
 
+/// The light of the shots of a Bydo with this mechanic.
+render::Color bydoShotLight(game::ProjectileCategory mechanic)
+{
+    switch (mechanic) {
+    case game::ProjectileCategory::Missile:
+        return BydoMissileLight;
+    case game::ProjectileCategory::Laser:
+        return BydoLaserLight;
+    case game::ProjectileCategory::Plasma:
+        return PlasmaOrbLight;
+    case game::ProjectileCategory::Bullet:
+        break;
+    }
+    return BydoShotLight;
+}
+
 /// The core of a projectile model, as in ShotLook, from its bounds: the models fly along +x, nose first, and
 /// their trail behind is left out.
 render::Rectangle measureProjectileCore(const render::Box3 &bounds)
@@ -425,9 +445,10 @@ render::Rectangle measureProjectileCore(const render::Box3 &bounds)
 }
 
 /// Gives each projectile of the configuration its model, the asset its file names, at the size of its
-/// collider: the shots of the players are drawn with the model of their projectile (game::EntityState::ship),
-/// the one of the ProjectileRegistry of the game, lit in the colour of the mechanic of the weapon that fires
-/// it. A projectile whose model cannot be loaded is drawn with the look of PlayerShot.
+/// collider: the shots of the players and of the Bydos are drawn with the model of their projectile
+/// (game::EntityState::ship), the one of the ProjectileRegistry of the game, lit in the colour of the mechanic
+/// of the weapon that fires it. The models of the shots of the Bydos measured by hand keep their core, facing
+/// left. A projectile whose model cannot be loaded is drawn with the look of its kind.
 void setConfiguredProjectileLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
                                   const game::GameConfig &config)
 {
@@ -458,10 +479,17 @@ void setConfiguredProjectileLooks(GameSessionSystem &sessions, render::ResourceM
                                                ? ShotBasicCore
                                                : measureProjectileCore(resources.getModelBounds(model));
             const physics::Vec3 half = game::halfSizeOf(projectile.collider);
+            const render::Vector2 size{half.x * 2.0f, half.y * 2.0f};
+            const auto slot = static_cast<std::uint8_t>(index);
             sessions.setProjectileLook(
-                static_cast<std::uint8_t>(index),
-                {model, core, false, shine(energy, light, core, playerShotLight(mechanic))},
-                {half.x * 2.0f, half.y * 2.0f});
+                slot, {model, core, false, shine(energy, light, core, playerShotLight(mechanic))}, size);
+            const bool spiral = projectile.model == RTYPE_MODEL_SHOT_SPIRAL;
+            const bool orb = projectile.model == RTYPE_MODEL_ORB_PLASMA;
+            const render::Rectangle bydoCore = spiral ? ShotSpiralCore : orb ? OrbPlasmaCore : core;
+            sessions.setBydoProjectileLook(
+                slot,
+                {model, bydoCore, spiral || orb, shine(energy, light, bydoCore, bydoShotLight(mechanic))},
+                size);
         } catch (const std::runtime_error &error) {
             log::Logger("game").warning("The model of the projectile '{}' cannot be loaded: {}",
                                         projectile.id, error.what());
