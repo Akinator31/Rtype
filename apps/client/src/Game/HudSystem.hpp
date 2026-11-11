@@ -22,7 +22,8 @@ namespace rtype::client
 
 /// Plays the HUD of the game (see openHud()). Each frame, it stretches its shadows across the screen, then
 /// writes the players of the latest snapshot of the session: the lives of the local player lit for those
-/// left, its slot, its name online and its score; the slot, the name online and the score of each other
+/// left, its slot, its name online, its score, its hit points and, with two weapons, the one in hand then
+/// the one put away; the slot, the name online and the score of each other
 /// player, their lines piled up from the ping; and the ping, with as many signal bars lit as it is short, or
 /// nothing offline. With the voice of the session (GameSession::voiceView()), each pilot shows the icon of
 /// its voice (voiceIconOf()), and the name of another pilot who talks lights up.
@@ -52,6 +53,9 @@ class HudSystem : public ecs::System
     void showPilot(const Hud &hud, std::uint8_t slot, const std::map<std::uint8_t, std::string> &names,
                    const std::optional<VoiceView> &voice);
     void showHealth(const Hud &hud);
+    /// The names of the two weapons of the local player, the one in hand first, right of its hit points;
+    /// nothing with one weapon.
+    void showWeapons(const Hud &hud, bool cockpit);
     void showAllies(const Hud &hud, std::uint8_t local, const std::map<std::uint8_t, std::string> &names,
                     const std::optional<VoiceView> &voice);
     /// Shows an icon of the voice, or hides it for VoiceIcon::None.

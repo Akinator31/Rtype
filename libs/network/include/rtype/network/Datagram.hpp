@@ -50,8 +50,9 @@ inline constexpr std::uint16_t DatagramMagic = 0x5254;
 /// and the age of the shots; 3 adds to the players of SNAPSHOT their kills, waves cleared, streak and
 /// experience; 4, the account id of each player in PLAYER_JOINED; 5, whether the game carries the voice in
 /// ACCEPTED, and a player muted by an administrator in VOICE_STATUSES; 6 adds to the entities of SNAPSHOT
-/// their ship.
-inline constexpr std::uint8_t DatagramVersion = 6;
+/// their ship; 7, the second weapon: LOADOUT, the bit of the weapon in hand in the inputs, and the weapon put
+/// away in SNAPSHOT.
+inline constexpr std::uint8_t DatagramVersion = 7;
 
 struct DatagramHeader;
 

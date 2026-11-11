@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-06                        version 6
+07                        version 7
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -316,6 +316,7 @@ player does, and draws the world the game sends back.
 | `0x41` | [`VOICE`](#voice-0x41) | Client → Game | Unreliable |
 | `0x42` | [`VOICE_STATE`](#voice_state-0x42) | Client → Game | Reliable |
 | `0x43` | [`VOICE_STATUS`](#voice_status-0x43) | Client → Game | Reliable |
+| `0x44` | [`LOADOUT`](#loadout-0x44) | Client → Game | Reliable |
 | `0x80` | [`SNAPSHOT`](#snapshot-0x80) | Game → Client | Unreliable, replaced by the next one |
 | `0x81` | [`ENTITIES_DESTROYED`](#entities_destroyed-0x81) | Game → Client | Reliable |
 | `0x82` | [`WAVE_STARTED`](#wave_started-0x82) | Game → Client | Reliable |
@@ -390,9 +391,15 @@ An input is the state of the player's controls during one tick, one byte:
 | 4 | Fire (held: the game decides what holding it does, for instance charging a shot) |
 | 5 | Aim up (held: the ship turns its nose up by 30° and fires that way) |
 | 6 | Aim down (held: the ship turns its nose down by 30° and fires that way) |
-| 7 | Reserved: senders set it to 0, receivers ignore it |
+| 7 | Second weapon (version 7): set, the second weapon of the [loadout](#loadout-0x44) is in hand, the first otherwise |
 
 Up and down together, left and right together, or aim up and aim down together, cancel each other.
+
+Bit 7 is a state, not a press: the client flips it each time its player presses the key that switches the
+weapons, and sends it in every input, so that a lost input switches nothing. At each tick, before the weapons
+fire, a ship with two weapons takes in hand the one its input asks for; the other is put away with its
+cooldown, its ammunition and its reload, which stay as they are until it is in hand again. A ship with one
+weapon ignores the bit.
 
 **Client.** Once per tick, the client samples its controls and sends `INPUT` with the inputs of the last
 **8** ticks, newest first: a lost datagram loses no input, since the next ones carry it again. It stamps each
@@ -432,7 +439,9 @@ is ignored.
 its ship: each `SNAPSHOT` gives the state of the weapon of its ship at its tick (cooldown, ammo, reload), from
 which it replays the inputs not applied yet, with the rules of the game, to know at which ticks the weapon
 fires and from where. The shot of the game fired at the same tick, told by its age, then takes the place of the
-predicted one. A predicted shot the game never sends is a wrong guess: the client stops drawing it.
+predicted one. A predicted shot the game never sends is a wrong guess: the client stops drawing it. With two
+weapons, the snapshot also gives which one is in hand and the state of the other, so that the inputs replayed
+switch them as the game does.
 
 ### 9.3 Snapshots
 
@@ -594,6 +603,26 @@ treated as `NONE`.
 **Receiver behaviour:** the game keeps the status of the player, and sends
 [`VOICE_STATUSES`](#voice_statuses-0x86) to every client if it changed. The reserved bits are ignored.
 
+### LOADOUT (`0x44`)
+
+| | |
+|---|---|
+| **Direction** | Client → Game |
+| **Reliability** | Reliable |
+| **Sent when** | Version 7: once, after `ACCEPTED`, when the player chose two weapons in the hangar. |
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| 0 | First weapon | `str8` | 1 to 255 bytes: the id of a weapon of the configuration (`config/weapons/`), in hand when the ship appears |
+| 1 + n | Second weapon | `str8` | 1 to 255 bytes: the one put away ([section 9.2](#92-inputs)) |
+
+**Receiver behaviour:** the game gives the two weapons to the ship of the player at once, magazines full, the
+first in hand, and to each ship it gets later. Two weapons that are the same, or that are neither in the hangar
+of the configuration (`config/hangar.lua`) nor the weapon of every player, are refused: the player keeps the
+weapon of every player. The game does not know the accounts: the level each weapon needs is checked by the
+client. Only the first `LOADOUT` of a session counts; the next ones are ignored, so that sending it again does
+not fill the magazines. Without it, the ship has the weapon of every player alone.
+
 ### SNAPSHOT (`0x80`)
 
 | | |
@@ -612,10 +641,14 @@ treated as `NONE`.
 | 13 | Weapon reload | `u16` | Ticks before its magazine is full again, 0 when it is not reloading |
 | 15 | Part | `u8` | Number of this part, from 0 |
 | 16 | Parts | `u8` | Number of parts of this snapshot, 1 to 16 |
-| 17 | Player count | `u8` | 0 to 4 |
-| 18 | Players | | Player count times the fields below |
-| 18 + 20p | Entity count | `u8` | Number of entities in this part |
-| 19 + 20p | Entities | | Entity count times the fields below |
+| 17 | Weapon in hand | `u8` | 0 or 1: which weapon of the loadout of the ship of this client the fields at 9 to 14 are about, 0 with one weapon or without a ship (version 7) |
+| 18 | Spare cooldown | `u16` | The same as at 9 for the weapon put away; 0 without one (version 7) |
+| 20 | Spare ammo | `u16` | |
+| 22 | Spare reload | `u16` | |
+| 24 | Player count | `u8` | 0 to 4 |
+| 25 | Players | | Player count times the fields below |
+| 25 + 20p | Entity count | `u8` | Number of entities in this part |
+| 26 + 20p | Entities | | Entity count times the fields below |
 
 Each player, 20 bytes:
 
@@ -643,10 +676,10 @@ Each entity, 17 bytes:
 | 12 | Velocity Y | `i16` | |
 | 14 | Health, or age | `u8` | Hit points left, for health bars; 0 for kinds without. For a shot, its age in ticks, at most 255 ([section 9.1](#91-the-world)) |
 | 15 | Flags | `u8` | Bit 0: invulnerable (just respawned, drawn blinking). Bit 1: charging a shot. Bit 2: hit since the last snapshot. Bit 3: aiming up. Bit 4: aiming down (a ship of a player turned by 30°, [section 9.2](#92-inputs)). Bit 5: guarding, bit 6: slashing, bit 7: shooting (the stance of a Bydo, at most one, drawn with its animation) |
-| 16 | Ship | `u8` | For a Bydo, its ship: the index of its id among the ids of the ships of the configuration (`config/ships/`), in alphabetical order, so that the client draws its model at the size of its collider (version 6). `0xFF` for none: the ships of the players, the shots, a Bydo beyond 254 ships |
+| 16 | Ship | `u8` | For a Bydo, its ship: the index of its id among the ids of the ships of the configuration (`config/ships/`), in alphabetical order, so that the client draws its model at the size of its collider (version 6). For a shot of a player, its projectile: the index of its id among the ids of the projectiles of the configuration (`config/projectiles/`), in alphabetical order, so that the client draws the model of the weapon that fired it (version 7). `0xFF` for none: the ships of the players, the shots of the Bydos, beyond 254 |
 
 **Receiver behaviour:** the client applies the part as [section 9.3](#93-snapshots) says. A part number not below
-the number of parts, a number of parts of 0 or above 16, more than 4 players, a slot above 3 or given twice, an
+the number of parts, a number of parts of 0 or above 16, a weapon in hand above 1, more than 4 players, a slot above 3 or given twice, an
 entity id or kind of 0, or a size that does not match the counts makes the message malformed.
 
 ### ENTITIES_DESTROYED (`0x81`)
@@ -799,7 +832,7 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 ```
 80                        type: SNAPSHOT
 00                        flags: unreliable
-00 38                     size: 56 bytes
+00 3F                     size: 63 bytes
 00 00 03 E8                 tick: 1000
 00 00 03 E6                 last input applied: tick 998
 02                          input lead: 2 ticks
@@ -808,6 +841,8 @@ The game answers with a snapshot of tick 1000, in one part: player 0 has 3 lives
 00 00                         not reloading
 00                          part 0
 01                          of 1 part
+00                          weapon in hand: the first,
+00 00 00 00 00 00             none put away
 01                          1 player
 00 03 00 00 05 DC             slot 0, 3 lives, score 1500
 00 00 00 0C                   12 Bydos shot down

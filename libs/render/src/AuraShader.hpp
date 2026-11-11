@@ -25,6 +25,8 @@ private:
     int _viewDirectionLocation = -1;
     int _orthographicLocation = -1;
     int _timeLocation = -1;
+    /// Whether the mesh drawn moves with the bones of its model (GPU skinning)
+    int _skinnedLocation = -1;
     bool _available = false;
 
 public:

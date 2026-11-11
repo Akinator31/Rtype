@@ -91,7 +91,8 @@ TEST_CASE("An input gives the direction of its buttons, opposite ones cancelling
     input.set(PlayerInput::Up, true);
     input.set(PlayerInput::Up, false);
     CHECK(input.buttons == PlayerInput::Fire);
-    CHECK(PlayerInput::fromByte(0xFF).buttons == 0x7F);
+    // Every bit is a control since version 7: none is dropped
+    CHECK(PlayerInput::fromByte(0xFF).buttons == 0xFF);
 }
 
 TEST_CASE("An input aims up or down, both cancelling", "[game]")

@@ -44,8 +44,8 @@ void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources
     createSubmenuScenes(
         engine, style, translations,
         [&engine, &ships, &games, &config] {
-            openShipSelector(engine, ships, [&games, &config] {
-                games.play(std::make_unique<LocalSession>(game::Rules{}, config));
+            openShipSelector(engine, ships, [&games, &config, &ships] {
+                games.play(std::make_unique<LocalSession>(game::Rules{}, config, ships.getLoadout()));
             });
         },
         [&engine, &ships] { openShipSelector(engine, ships); });

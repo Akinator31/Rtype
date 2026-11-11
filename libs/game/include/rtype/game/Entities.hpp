@@ -15,7 +15,7 @@ namespace rtype::game
 {
 
 /// The ship of a player, at its place on the left of the game area: one height per slot. It has the health
-/// and the weapon of context.player (no weapon if its id is empty).
+/// of context.player, and the weapons of the loadout of its player (equipLoadout()).
 ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot);
 
 /// An ally of the rescue against the final boss (RescueSystem), at a position, still: an AllyShip that
@@ -43,6 +43,11 @@ ecs::entity_t spawnItem(ecs::Ecs &ecs, GameContext &context, const std::string &
 /// Gives a weapon of context.weapons to a ship, with a full magazine (it replaces the one it had). From then
 /// on the WeaponSystem makes it fire. Throws std::out_of_range if `weaponId` is not in context.weapons.
 void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const std::string &weaponId);
+
+/// Gives the weapons of a loadout to the ship of a player, magazines full: the first in hand, the second in
+/// its Holster. Empty, the ship has the weapon of context.player alone (no weapon if its id is empty), and
+/// no Holster. Throws std::out_of_range if a weapon is not in context.weapons.
+void equipLoadout(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const Loadout &loadout);
 
 /// A shot of a weapon: its projectile, fired forward at the speed of the weapon, with the firing mechanic,
 /// the range and the damage of the weapon. Forward is to the right for a player, to the left for a Bydo

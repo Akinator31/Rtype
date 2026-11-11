@@ -28,9 +28,13 @@ inline constexpr engine::Control PushToTalkControl = engine::Control::LeftTrigge
 inline constexpr engine::Control MuteControl = engine::Control::FaceUp;
 inline constexpr engine::Control DeafenControl = engine::Control::Select;
 
+/// The control that takes in hand the other weapon of the loadout (LeftShift, X): the game reads it as a
+/// press, which switches the weapon until the next one (GameSessionSystem).
+inline constexpr engine::Control SwitchWeaponControl = engine::Control::FaceLeft;
+
 /// Every action the player can rebind: those of the game, in the order of the Controls page, then those of
 /// the voice, in the order of the Voice page. A key does one thing among all of them.
-inline constexpr std::array<GameAction, 10> BoundActions{{
+inline constexpr std::array<GameAction, 11> BoundActions{{
     {engine::Control::Up, "move_up"},
     {engine::Control::Down, "move_down"},
     {engine::Control::Left, "move_left"},
@@ -38,12 +42,13 @@ inline constexpr std::array<GameAction, 10> BoundActions{{
     {engine::Control::FaceDown, "fire"},
     {engine::Control::LeftShoulder, "aim_up"},
     {engine::Control::RightShoulder, "aim_down"},
+    {SwitchWeaponControl, "switch_weapon"},
     {PushToTalkControl, "push_to_talk"},
     {MuteControl, "mute"},
     {DeafenControl, "deafen"},
 }};
 /// The actions of the game, on the Controls page.
-inline constexpr std::span<const GameAction, 7> GameActions = std::span(BoundActions).first<7>();
+inline constexpr std::span<const GameAction, 8> GameActions = std::span(BoundActions).first<8>();
 /// The actions of the voice, on the Voice page.
 inline constexpr std::span<const GameAction, 3> VoiceActions = std::span(BoundActions).last<3>();
 

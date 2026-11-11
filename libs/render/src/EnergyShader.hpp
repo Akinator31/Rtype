@@ -21,6 +21,8 @@ private:
     int _timeLocation = -1;
     int _boostLocation = -1;
     int _dissolveLocation = -1;
+    /// Whether the mesh drawn moves with the bones of its model (GPU skinning)
+    int _skinnedLocation = -1;
     bool _available = false;
 
     /// Sends the camera, the time and the look of the energy to the shader.

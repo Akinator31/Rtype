@@ -1,5 +1,6 @@
 #include "AuraShader.hpp"
 
+#include "SkeletonPose.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/shaders/Aura.hpp"
 
@@ -32,6 +33,7 @@ AuraShader::AuraShader() : _shader(LoadShaderFromMemory(shaders::auraVertex, sha
     _viewDirectionLocation = GetShaderLocation(_shader, "viewDirection");
     _orthographicLocation = GetShaderLocation(_shader, "orthographic");
     _timeLocation = GetShaderLocation(_shader, "time");
+    _skinnedLocation = GetShaderLocation(_shader, "skinned");
     _available = IsShaderValid(_shader) && _colorLocation >= 0 && _thicknessLocation >= 0;
     if (!_available) {
         log::Logger("render").warning("Cannot compile the aura shader: the ships are drawn without auras");
@@ -77,12 +79,16 @@ void AuraShader::draw(const Model &model, const Aura &aura, const Camera3D &came
     BeginBlendMode(BLEND_ADDITIVE);
     rlDisableDepthMask();
     rlDisableBackfaceCulling();
+    // The shell follows the pose the model was last given, moved on the graphics card
+    setBoneMatrices(_shader, model);
     for (int mesh = 0; mesh < model.meshCount; ++mesh) {
         if (std::ranges::find(hiddenMeshes, mesh) != hiddenMeshes.end()) {
             continue;
         }
         Material material = model.materials[model.meshMaterial[mesh]];
         material.shader = _shader;
+        const int skinned = isSkinned(model.meshes[mesh]) && model.boneMatrices != nullptr ? 1 : 0;
+        SetShaderValue(_shader, _skinnedLocation, &skinned, SHADER_UNIFORM_INT);
         DrawMesh(model.meshes[mesh], material, transform);
     }
     rlEnableBackfaceCulling();

@@ -31,4 +31,17 @@ using BonePoses = std::vector<Transform>;
 // skeleton.
 void applyBonePoses(const ::Model &model, BonePoses &poses);
 
+/// The bones the vertex stages of the shaders take at most: MAX_BONES in Lighting.vert and Aura.vert. A model
+/// with more is posed with its first bones only.
+inline constexpr int MaxShaderBones = 128;
+
+/// Whether a mesh moves with the bones of its model: on the graphics card, by the vertex stage of the shader
+/// (GPU skinning).
+[[nodiscard]] bool isSkinned(const ::Mesh &mesh);
+
+/// Gives a shader the matrices of the bones of a model in its current pose, which UpdateModelAnimation() and
+/// applyBonePoses() compute: to call before drawing its meshes with DrawMesh(), which, unlike DrawModelEx(),
+/// does not give them. Does nothing for a model without bones, or a shader without "boneMatrices".
+void setBoneMatrices(const ::Shader &shader, const ::Model &model);
+
 } // namespace rtype::render::detail

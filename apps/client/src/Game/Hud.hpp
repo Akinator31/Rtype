@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,9 @@ struct HudWords {
     std::string solo = "SOLO";
     std::string pilots = "PILOTS";
     std::string alone = "FLYING SOLO";
+    /// The name of each weapon the player may take, by its id: the HUD names the two of its loadout. An id
+    /// without one is written as it is.
+    std::map<std::string, std::string> weapons;
 };
 
 /// The look of the HUD: the pictures of a life left and of a life lost, its font, the icons of the voice, and
@@ -114,6 +118,10 @@ struct Hud {
     ecs::entity_t health = 0;
     /// Online, right of the score: the experience earned in the game, and the streak from 2 waves.
     ecs::entity_t xp = 0;
+    /// Right of the hit points, with two weapons: the one in hand, bright, then the one put away, dim, which
+    /// the key of the switch takes in hand. Empty with one weapon.
+    ecs::entity_t weapon = 0;
+    ecs::entity_t spareWeapon = 0;
     /// One line per other player at most.
     std::vector<HudAlly> allies;
     /// The bars of the signal, from the shortest, left of the ping.

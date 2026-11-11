@@ -33,26 +33,41 @@ const log::Logger &logger()
     return instance;
 }
 
-/// The weapon the players start with, if the definitions have it.
-std::optional<game::WeaponDefinition> playerWeapon(const game::GameConfig &config)
+/// A weapon of the definitions and half the width of its projectile, where its shots start, if the
+/// definitions have both.
+std::optional<Prediction::Weapon> findWeapon(const game::GameConfig &config, const std::string &id)
 {
-    const auto weapon = std::ranges::find(config.weapons, config.player.weapon, &game::WeaponDefinition::id);
-    if (config.player.weapon.empty() || weapon == config.weapons.end()) {
+    const auto weapon = std::ranges::find(config.weapons, id, &game::WeaponDefinition::id);
+    if (id.empty() || weapon == config.weapons.end()) {
         return std::nullopt;
     }
-    if (std::ranges::find(config.projectiles, weapon->projectile, &game::ProjectileDefinition::id) ==
-        config.projectiles.end()) {
+    const auto projectile =
+        std::ranges::find(config.projectiles, weapon->projectile, &game::ProjectileDefinition::id);
+    if (projectile == config.projectiles.end()) {
         return std::nullopt;
     }
-    return *weapon;
+    // Its rank among the ids in alphabetical order, as the ProjectileRegistry of the game numbers them
+    const auto index = static_cast<std::size_t>(
+        std::ranges::count_if(config.projectiles, [&](const game::ProjectileDefinition &other) {
+            return other.id < projectile->id;
+        }));
+    return Prediction::Weapon{*weapon, game::halfSizeOf(projectile->collider).x,
+                              index < game::NoShip ? static_cast<std::uint8_t>(index) : game::NoShip};
 }
 
-/// Half the width of the projectile of a weapon, where its shots start.
-float projectileHalfWidth(const game::GameConfig &config, const game::WeaponDefinition &weapon)
+/// The weapons of the ship of the player: those of its loadout if the definitions have both, else the one
+/// the players start with, if they have it.
+std::vector<Prediction::Weapon> findWeapons(const game::GameConfig &config, const game::Loadout &loadout)
 {
-    const auto projectile =
-        std::ranges::find(config.projectiles, weapon.projectile, &game::ProjectileDefinition::id);
-    return game::halfSizeOf(projectile->collider).x;
+    const std::optional<Prediction::Weapon> first = findWeapon(config, loadout[0]);
+    const std::optional<Prediction::Weapon> second = findWeapon(config, loadout[1]);
+    if (first && second) {
+        return {*first, *second};
+    }
+    if (const std::optional<Prediction::Weapon> weapon = findWeapon(config, config.player.weapon)) {
+        return {*weapon};
+    }
+    return {};
 }
 
 std::string reasonOf(const network::SessionEnd &end)
@@ -84,7 +99,8 @@ std::string reasonOf(const network::SessionEnd &end)
 
 RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &game,
                              const lobby::GameJoinedMessage &joined, const game::GameConfig &config,
-                             VoiceDevices *voiceDevices, std::string server, std::uint32_t playerId)
+                             VoiceDevices *voiceDevices, std::string server, std::uint32_t playerId,
+                             game::Loadout loadout)
     : _socket(loop, game.isIpv6() ? network::Address::anyIpv6(0) : network::Address::anyIpv4(0)), _game(game),
       _session(joined.sessionId, network::DatagramKey(joined.clientKey),
                network::DatagramKey(joined.serverKey),
@@ -107,9 +123,9 @@ RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &g
                                                         discord::lobbySecret(*joined.voiceSecret), playerId);
         }
     }
-    _weapon = playerWeapon(config);
-    if (_weapon) {
-        _projectileHalfWidth = projectileHalfWidth(config, *_weapon);
+    _weapons = findWeapons(config, loadout);
+    if (_weapons.size() == game::LoadoutSize) {
+        _loadout = std::move(loadout);
     }
     _socket.startReceiving([this](const network::Address &from, std::span<const std::byte> datagram) {
         if (from == _game) {
@@ -139,9 +155,13 @@ void RemoteSession::accept(std::span<const std::byte> payload)
     }
     _snapshotReceived = Clock::now();
     logger().info("In the game, slot {}", _accepted->slot);
-    if (_weapon) {
-        _prediction.arm(*_weapon, _projectileHalfWidth, _accepted->slot);
-        _shots.arm(_weapon->mechanic, game::Rules{});
+    if (!_loadout[0].empty()) {
+        _session.send(game::message_type::Loadout, game::encode(game::LoadoutMessage{_loadout}),
+                      network::Delivery::Reliable);
+    }
+    if (!_weapons.empty()) {
+        _prediction.arm(_weapons, _accepted->slot);
+        _shots.arm(game::Rules{});
     }
     if (!_accepted->voice) {
         // The server turned the voice off: none sent, none shown

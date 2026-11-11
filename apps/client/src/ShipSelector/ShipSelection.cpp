@@ -50,6 +50,47 @@ void writeSettings(engine::Settings &settings)
     }
 }
 
+/// The index of the weapon of the hangar with this id, the number of weapons when there is none.
+std::size_t findWeapon(const ShipSelection &selection, std::string_view id)
+{
+    const auto found = std::ranges::find(selection.weapons, id, &game::WeaponUnlock::weapon);
+    return static_cast<std::size_t>(found - selection.weapons.begin());
+}
+
+/// Whether the weapon at `index` can be at a place of the loadout: open, and not at the other place.
+bool canEquipWeapon(const ShipSelection &selection, std::size_t place, std::size_t index)
+{
+    return index < selection.weapons.size() && !selection.isWeaponLocked(index) &&
+           selection.loadout[1 - place] != index;
+}
+
+/// Puts an open weapon at each place of the loadout that has a locked one, or the same as the first place.
+void fixLoadout(ShipSelection &selection)
+{
+    for (std::size_t place = 0; place < game::LoadoutSize; ++place) {
+        const std::size_t current = selection.loadout[place];
+        if (current < selection.weapons.size() && !selection.isWeaponLocked(current) &&
+            (place == 0 || current != selection.loadout[0])) {
+            continue;
+        }
+        for (std::size_t index = 0; index < selection.weapons.size(); ++index) {
+            if (canEquipWeapon(selection, place, index)) {
+                selection.loadout[place] = index;
+                break;
+            }
+        }
+    }
+}
+
+/// Keeps the weapons equipped in the settings, without writing them.
+void keepEquippedWeapons(const ShipSelection &selection, engine::Settings &settings)
+{
+    const game::Loadout loadout = selection.getLoadout();
+    if (!loadout[0].empty()) {
+        settings.setString(EquippedWeaponsSettingsKey, loadout[0] + "," + loadout[1]);
+    }
+}
+
 } // namespace
 
 void readRequiredLevels(ShipSelection &selection, const std::vector<game::ShipUnlock> &unlocks)
@@ -62,6 +103,13 @@ void readRequiredLevels(ShipSelection &selection, const std::vector<game::ShipUn
         }
         selection.requiredLevels[index] = unlock.level;
     }
+    selection.setLevel(selection.level);
+}
+
+void readHangarWeapons(ShipSelection &selection, const std::vector<game::WeaponUnlock> &weapons)
+{
+    selection.weapons = weapons;
+    selection.loadout = {0, 1};
     selection.setLevel(selection.level);
 }
 
@@ -81,7 +129,8 @@ void writePlayerLevel(ShipSelection &selection, std::uint32_t level, engine::Set
         return;
     }
     settings.setInt(PlayerLevelSettingsKey, kept);
-    // A lower level may have changed the ship equipped
+    // A lower level may have changed the ship and the weapons equipped
+    keepEquippedWeapons(selection, settings);
     writeEquippedShip(selection, settings);
 }
 
@@ -117,6 +166,28 @@ void writeEquippedShip(const ShipSelection &selection, engine::Settings &setting
     writeSettings(settings);
 }
 
+void readEquippedWeapons(ShipSelection &selection, const engine::Settings &settings)
+{
+    const std::optional<std::string> kept = settings.getString(EquippedWeaponsSettingsKey);
+    const std::size_t comma = kept ? kept->find(',') : std::string::npos;
+    if (comma == std::string::npos) {
+        return;
+    }
+    const std::size_t first = findWeapon(selection, std::string_view(*kept).substr(0, comma));
+    const std::size_t second = findWeapon(selection, std::string_view(*kept).substr(comma + 1));
+    const std::size_t count = selection.weapons.size();
+    if (first < count && second < count && first != second && !selection.isWeaponLocked(first) &&
+        !selection.isWeaponLocked(second)) {
+        selection.loadout = {first, second};
+    }
+}
+
+void writeEquippedWeapons(const ShipSelection &selection, engine::Settings &settings)
+{
+    keepEquippedWeapons(selection, settings);
+    writeSettings(settings);
+}
+
 void ShipSelection::step(int direction)
 {
     const std::size_t offset = direction >= 0 ? 1 : shipCount - 1;
@@ -138,6 +209,33 @@ void ShipSelection::setLevel(std::uint32_t value)
             equipped = index;
         }
     }
+    fixLoadout(*this);
+}
+
+void ShipSelection::stepWeapon(std::size_t place, int direction)
+{
+    const std::size_t count = weapons.size();
+    if (place >= game::LoadoutSize || count == 0) {
+        return;
+    }
+    const std::size_t offset = direction >= 0 ? 1 : count - 1;
+    std::size_t index = loadout[place];
+    for (std::size_t tried = 1; tried < count; ++tried) {
+        index = (index + offset) % count;
+        if (canEquipWeapon(*this, place, index)) {
+            loadout[place] = index;
+            return;
+        }
+    }
+}
+
+game::Loadout ShipSelection::getLoadout() const
+{
+    const auto open = [this](std::size_t index) { return index < weapons.size() && !isWeaponLocked(index); };
+    if (!open(loadout[0]) || !open(loadout[1]) || loadout[0] == loadout[1]) {
+        return {};
+    }
+    return {weapons[loadout[0]].weapon, weapons[loadout[1]].weapon};
 }
 
 std::size_t ShipSelection::getShownIndex() const

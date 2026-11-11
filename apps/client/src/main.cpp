@@ -5,6 +5,7 @@
 #include "Commands/Commands.hpp"
 #include "Commands/FpsCommand.hpp"
 #include "Console/Console.hpp"
+#include "Diagnostics/FrameProfile.hpp"
 #include "Discord/DiscordPresence.hpp"
 #include "Game/EntityLook.hpp"
 #include "Game/EntitySounds.hpp"
@@ -55,6 +56,7 @@
 #include <cstdlib>
 #include <exception>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -198,6 +200,13 @@ void run(const std::vector<std::string_view> &arguments)
     rtype::client::DebugViews debugViews{.hitboxes =
                                              debugEnvironment && std::string_view(debugEnvironment) == "1"};
     bool debugKeyWasDown = false;
+    // The diagnostics of the frames, in the log: "profile" in the console, or RTYPE_PROFILE_FRAMES=1
+    const char *profileEnvironment = std::getenv("RTYPE_PROFILE_FRAMES");
+    debugViews.profile = profileEnvironment && std::string_view(profileEnvironment) == "1";
+    const rtype::log::Logger profileLogger("profile");
+    rtype::client::FrameProfile frameProfile(
+        [&profileLogger](const std::string &line) { profileLogger.info("{}", line); });
+    rtype::client::FrameTimer frameTimer(frameProfile);
     rtype::client::SceneLoadStatus sceneLoadStatus(engine, devices);
     bool assetsLoaded = false;
     // The game in a VR headset, with --xr or the VR setting: opened on the OpenGL context of the window, and
@@ -264,6 +273,11 @@ void run(const std::vector<std::string_view> &arguments)
     };
 
     const auto playFrame = [&] {
+        // What the previous frame drew, read every frame so that it counts one frame only
+        const rtype::render::PoseStats poses = renderer.takePoseStats();
+        frameTimer.startFrame(
+            debugViews.profile, poses,
+            debugViews.profile ? rtype::client::countAnimatedModels(engine.getEcs(), engine.getScenes()) : 0);
         const bool debugKeyDown = devices.isKeyDown(rtype::input::Key::F3);
         if (debugKeyDown && !debugKeyWasDown) {
             debugViews.hitboxes = !debugViews.hitboxes;
@@ -305,6 +319,7 @@ void run(const std::vector<std::string_view> &arguments)
         }
         audio.finishPendingLoads();
         audio.update();
+        frameTimer.endUpdate();
         const bool inHeadset = vr.isShowing();
         const bool playing = inHeadset && sessions.running();
         for (const auto &[hand, vibration] : haptics.update(
@@ -358,6 +373,7 @@ void run(const std::vector<std::string_view> &arguments)
                     sceneLoadStatus.draw(renderer);
                 }
             });
+            frameTimer.endDraw();
         } else {
             renderer.beginFrame();
             sceneRenderer.draw(renderer, rtype::engine::Layer::World);
@@ -369,6 +385,7 @@ void run(const std::vector<std::string_view> &arguments)
                 rtype::client::drawFpsCounter(renderer);
             }
             sceneLoadStatus.draw(renderer);
+            frameTimer.endDraw();
             renderer.endFrame();
         }
         vr.update();
@@ -404,13 +421,15 @@ void run(const std::vector<std::string_view> &arguments)
 
     assetsLoaded = true;
     // The scenes of the game are built from the loaded assets, which they find in the cache
-    // The ships the level of the last account opens, and the ship equipped at the last run
+    // The ships and the weapons the level of the last account opens, and those equipped at the last run
     rtype::client::ShipSelection ships;
     rtype::client::readRequiredLevels(ships, config.shipUnlocks);
+    rtype::client::readHangarWeapons(ships, config.weaponUnlocks);
     rtype::client::readPlayerLevel(ships, engine.getSettings());
     rtype::client::readEquippedShip(ships, engine.getSettings());
+    rtype::client::readEquippedWeapons(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships,
-                                    config.ships, config.items);
+                                    config.ships, config.items, config);
     games.setFriends(&discordFriends);
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord,
                                        discordConnection, discordFriends, ships,

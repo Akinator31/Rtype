@@ -8,6 +8,7 @@
 #include "SkeletonPose.hpp"
 #include "rtype/core/AsyncResourceRequests.hpp"
 #include "rtype/core/ResourceCache.hpp"
+#include "rtype/log/Logger.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
 #include <external/cgltf.h>
@@ -292,6 +293,10 @@ public:
         if (_model.skeleton.boneCount > 0) {
             _animations = LoadModelAnimations(file.string().c_str(), &_animationCount);
         }
+        if (_model.skeleton.boneCount > MaxShaderBones) {
+            log::Logger("render").warning("Model {} has {} bones, the shaders pose {} at most", file.string(),
+                                          _model.skeleton.boneCount, MaxShaderBones);
+        }
     }
     ~Model()
     {
@@ -410,46 +415,56 @@ public:
     // Moves the vertices of the model to their place at a time of an animation, in seconds. The animation
     // loops. The model keeps this pose until it is animated again. Const like drawing: only the vertices in
     // graphics memory change, and the renderer, which poses models, only reads the resources.
-    void animate(int animation, float time) const
+    // @return Whether the vertices moved: false if the model already was in this pose.
+    bool animate(int animation, float time) const
     {
-        applyPose({.from = animation, .fromTime = time, .to = animation, .toTime = time});
+        return applyPose({.from = animation, .fromTime = time, .to = animation, .toTime = time});
     }
 
     // Like animate(), with a pose between two animations: `amount` goes from 0 for the first one to 1 for the
     // second one.
-    void blendAnimations(int first, float firstTime, int second, float secondTime, float amount) const
+    bool blendAnimations(int first, float firstTime, int second, float secondTime, float amount) const
     {
-        applyPose({.from = first,
-                   .fromTime = firstTime,
-                   .to = second,
-                   .toTime = secondTime,
-                   .amount = std::clamp(amount, 0.0f, 1.0f)});
+        return applyPose({.from = first,
+                          .fromTime = firstTime,
+                          .to = second,
+                          .toTime = secondTime,
+                          .amount = std::clamp(amount, 0.0f, 1.0f)});
     }
 
     // The pose of the vertices, none if the model was never animated.
     [[nodiscard]] const std::optional<Pose> &getPose() const { return _pose; }
 
-    // Moves the vertices of the model to a pose, unless they already are in it: several entities share the
-    // model, each posing it before it is drawn.
-    void applyPose(const Pose &pose) const
+    // Moves the bones of the model to a pose, unless they already are in it: several entities share the
+    // model, each posing it before it is drawn. raylib computes the matrices of the bones, which the shaders
+    // apply to the vertices on the graphics card (GPU skinning).
+    // @return Whether the bones moved: false if the model already was in this pose, or has no animation.
+    bool applyPose(const Pose &pose) const
     {
         if (_pose == pose) {
-            return;
+            return false;
         }
         _pose = pose;
         if (!hasAnimation(pose.to)) {
-            return;
+            return false;
         }
         if (hasAnimation(pose.added)) {
             applyAddedPose(pose);
-            return;
+            return true;
         }
         if (pose.amount >= 1.0f || !hasAnimation(pose.from)) {
             UpdateModelAnimation(_model, _animations[pose.to], pose.toTime * framesPerSecond);
-            return;
+            return true;
         }
         UpdateModelAnimationEx(_model, _animations[pose.from], pose.fromTime * framesPerSecond,
                                _animations[pose.to], pose.toTime * framesPerSecond, pose.amount);
+        return true;
+    }
+
+    // The bones that a pose moves.
+    [[nodiscard]] std::size_t countBones() const
+    {
+        return static_cast<std::size_t>(std::max(_model.skeleton.boneCount, 0));
     }
 
 private:

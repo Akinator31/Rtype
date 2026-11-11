@@ -68,6 +68,8 @@ const std::vector<std::byte> ExampleSnapshot = bytes({
     0x02,                               // input lead 2
     0x00, 0x04, 0x00, 0x07, 0x00, 0x00, // weapon: cooldown 4, ammo 7, not reloading
     0x00, 0x01,                         // part 0 of 1
+    0x00,                               // weapon in hand: the first,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //   none put away
     0x01, 0x00, 0x03, 0x00, 0x00, 0x05, // 1 player: slot 0, 3 lives,
     0xDC,                               //   score 1500
     0x00, 0x00, 0x00, 0x0C,             //   12 Bydos shot down
@@ -327,10 +329,11 @@ TEST_CASE("Unknown reasons, causes and outcomes are read as the specification sa
     CHECK(decodeGameOver(bytes({0x09}))->outcome == GameOutcome::Defeat);
 }
 
-TEST_CASE("The reserved bits of inputs are dropped; every bit of the flags is defined", "[game][messages]")
+TEST_CASE("Every bit of the inputs and of the flags is defined", "[game][messages]")
 {
-    CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0x7F);
-    CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0x7F});
+    // The last bit of the inputs is the weapon in hand since version 7
+    CHECK(decodeInput(bytes({0, 0, 0, 0, 1, 0xFF}))->inputs[0].buttons == 0xFF);
+    CHECK(encode(InputMessage{0, {PlayerInput{0xFF}}}).back() == std::byte{0xFF});
 
     // The stances of the Bydos take the last three bits of the flags, the byte before the ship
     std::vector<std::byte> payload = ExampleSnapshot;
@@ -358,7 +361,7 @@ TEST_CASE("The ship of a Bydo travels with its state, a ship of a player has non
 TEST_CASE("A kind this version does not know is decoded, and recognized as unknown", "[game][messages]")
 {
     std::vector<std::byte> payload = ExampleSnapshot;
-    payload[43] = std::byte{0x70}; // the kind of the entity: reserved for later kinds
+    payload[50] = std::byte{0x70}; // the kind of the entity: reserved for later kinds
     const auto part = decodeSnapshotPart(payload);
 
     REQUIRE(part);
@@ -426,18 +429,21 @@ TEST_CASE("A snapshot part refuses the values the specification forbids", "[game
     CHECK_FALSE(changed(16, 0));  // 0 parts
     CHECK_FALSE(changed(16, 17)); // 17 parts
     CHECK(changed(16, 16));       // part 0 of 16
-    CHECK_FALSE(changed(18, 4));  // slot 4
-    CHECK_FALSE(changed(42, 0));  // entity id 0
-    CHECK_FALSE(changed(43, 0));  // kind 0
-    CHECK_FALSE(changed(38, 2));  // 2 entities announced, 1 given
-    CHECK_FALSE(changed(38, 0));  // 0 entities announced, 1 given
-    CHECK_FALSE(changed(17, 5));  // 5 players
+    CHECK(changed(17, 1));        // the second weapon in hand
+    CHECK_FALSE(changed(17, 2));  // a third weapon
+    CHECK(changed(18, 0xFF));     // the weapon put away: any value
+    CHECK_FALSE(changed(25, 4));  // slot 4
+    CHECK_FALSE(changed(49, 0));  // entity id 0
+    CHECK_FALSE(changed(50, 0));  // kind 0
+    CHECK_FALSE(changed(45, 2));  // 2 entities announced, 1 given
+    CHECK_FALSE(changed(45, 0));  // 0 entities announced, 1 given
+    CHECK_FALSE(changed(24, 5));  // 5 players
 
     // The same slot twice
     SnapshotPart part = examplePart();
     part.players = {{1, 3, 0}, {2, 3, 0}};
     std::vector<std::byte> payload = encode(part);
-    payload[38] = std::byte{1}; // the slot of the second player
+    payload[45] = std::byte{1}; // the slot of the second player
     CHECK_FALSE(decodeSnapshotPart(payload));
 }
 

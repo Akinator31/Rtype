@@ -133,10 +133,11 @@ private:
     InputClock _inputClock;
     /// The tick of the last snapshot whose input lead was given to the InputClock.
     std::uint32_t _leadTick = 0;
-    /// The weapon of the ships of the players, from the definitions of the client: what its shots are
-    /// predicted with, once the slot is known.
-    std::optional<game::WeaponDefinition> _weapon;
-    float _projectileHalfWidth = 0.0f;
+    /// The weapons of the ship of the player, from the definitions of the client: what its shots are
+    /// predicted with, once the slot is known. Those of its loadout, or the weapon of every player.
+    std::vector<Prediction::Weapon> _weapons;
+    /// The weapons the player chose in the hangar, sent once accepted (`LOADOUT`); empty without.
+    game::Loadout _loadout;
     std::optional<game::AcceptedMessage> _accepted;
     /// The id of the ship of the player, 0 while it has none.
     std::uint32_t _shipId = 0;
@@ -243,10 +244,13 @@ public:
     ///   the other players are kept under (playerVoiceKey()).
     /// @param playerId The id the master gave the player (WELCOME): its member of the Discord lobby has it.
     ///   0 joins no Discord lobby.
+    /// @param loadout The weapons the player chose in the hangar, told to the game once accepted. Empty, or
+    ///   with a weapon the config does not have, the player has the weapon of every player.
     /// @throws std::system_error if no UDP socket can be opened.
     RemoteSession(network::EventLoop &loop, const network::Address &game,
                   const lobby::GameJoinedMessage &joined, const game::GameConfig &config = {},
-                  VoiceDevices *voiceDevices = nullptr, std::string server = {}, std::uint32_t playerId = 0);
+                  VoiceDevices *voiceDevices = nullptr, std::string server = {}, std::uint32_t playerId = 0,
+                  game::Loadout loadout = {});
     /// Says goodbye to the game (DISCONNECT) if still in it.
     ~RemoteSession() override;
 
@@ -263,6 +267,7 @@ public:
     [[nodiscard]] std::optional<std::chrono::milliseconds> ping() const override;
     [[nodiscard]] bool isEndless() const override { return true; }
     [[nodiscard]] bool isOnline() const override { return true; }
+    [[nodiscard]] game::Loadout loadout() const override { return _loadout; }
     [[nodiscard]] std::map<std::uint8_t, std::string> playerNames() const override { return _names; }
     [[nodiscard]] std::optional<VoiceView> voiceView() const override;
 

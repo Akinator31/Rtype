@@ -12,6 +12,16 @@
 namespace rtype::client
 {
 
+/// A shot the Prediction gives: where it starts, its velocity, and the mechanic of the weapon that fires it,
+/// which moves it.
+struct PredictedShot {
+    game::ShotLaunch launch;
+    game::ProjectileCategory mechanic = game::ProjectileCategory::Bullet;
+    /// The projectile of the weapon, by its index in the configuration (game::EntityState::ship): the model
+    /// it is drawn with.
+    std::uint8_t projectile = game::NoShip;
+};
+
 /// Draws the shots of the player online from the moment it fires, from the nose of its ship, then in the time
 /// of the world they hit (docs/architecture/client-online.md).
 ///
@@ -22,7 +32,7 @@ namespace rtype::client
 /// short of one it hits.
 ///
 /// @code
-/// shots.arm(weapon.mechanic, rules);                         // the weapon of the ship of the player
+/// shots.arm(rules);                                          // the ship of the player has a weapon
 /// shots.received(entity, part.tick);                         // each shot of the player in a SNAPSHOT
 /// shots.destroyed(id, tick);                                 // ENTITIES_DESTROYED of one of them
 /// shots.predict(prediction.shots(), world.tick());           // each frame
@@ -71,17 +81,15 @@ private:
     struct Ghost {
         std::uint32_t id = 0;
         game::ShotLaunch launch;
+        game::ProjectileCategory mechanic = game::ProjectileCategory::Bullet;
+        std::uint8_t projectile = game::NoShip;
         /// The id of the shot of the game it became.
         std::optional<std::uint32_t> server;
         /// The shot of the game was drawn: once it is no longer, this one is done.
         bool seen = false;
     };
-    struct Weapon {
-        game::ProjectileCategory mechanic = game::ProjectileCategory::Bullet;
-        game::Rules rules;
-    };
-
-    std::optional<Weapon> _weapon;
+    /// The rules the shots move by, once armed().
+    std::optional<game::Rules> _rules;
     std::map<std::uint32_t, Ghost> _ghosts;
     /// The id of the predicted shot each shot of the game took the place of.
     std::map<std::uint32_t, std::uint32_t> _aliases;
@@ -107,8 +115,9 @@ public:
     /// tick. The tick of the ship if it is not ahead of the drawn tick.
     [[nodiscard]] static double timeOf(double fired, double drawn, double ship);
 
-    /// The ship of the player fires with this mechanic: its shots are drawn as the game moves them.
-    void arm(game::ProjectileCategory mechanic, game::Rules rules);
+    /// The ship of the player has a weapon: its shots are drawn as the game moves them, each with the
+    /// mechanic of the weapon that fired it.
+    void arm(game::Rules rules);
 
     /// A shot of the player in a snapshot of `tick`: it takes the place of the shot predicted at the tick it
     /// was fired at, if there is one.
@@ -119,7 +128,7 @@ public:
 
     /// The shots the prediction gives, for the ticks after the latest snapshot.
     /// @param confirmed The tick of the latest snapshot: up to it, the game says what was fired.
-    void predict(const std::map<std::uint32_t, game::ShotLaunch> &shots, std::uint32_t confirmed);
+    void predict(const std::map<std::uint32_t, PredictedShot> &shots, std::uint32_t confirmed);
 
     /// Draws the shots of the player in the world drawn, the predicted ones too, each in its time
     /// (timeOf()), and leaves out those past their end.

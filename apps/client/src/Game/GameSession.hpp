@@ -2,6 +2,7 @@
 
 #include "Game/EntityLook.hpp"
 #include "Voice/VoiceIcons.hpp"
+#include "rtype/game/Loadout.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/physics/Component/Collider.hpp"
@@ -61,6 +62,10 @@ public:
 
     /// The game is played on a server (RemoteSession), not in the client.
     [[nodiscard]] virtual bool isOnline() const { return false; }
+
+    /// The two weapons of the local player, which it switches between (game::PlayerInput::SecondWeapon);
+    /// empty when it has only the weapon of every player.
+    [[nodiscard]] virtual game::Loadout loadout() const { return {}; }
 
     /// The waves of the game, when it has an end: none online, where they follow each other without end.
     [[nodiscard]] virtual std::optional<std::uint16_t> waveCount() const { return std::nullopt; }
