@@ -672,16 +672,15 @@ void GameScenes::buildPause(engine::SceneId scene)
                                                      {engine::AnchorPoint::TopLeft, left, top});
     settings_page::bindText(ecs, leaveRow, translations, "game.leave");
 
-    const bool voices = addPlayerVoices(interface, left + width + settings_page::columnGap);
-    settings_page::addKeys(interface, ecs, translations, voices ? "game.keys" : "settings.keys");
+    addPlayerVoices(interface, left + width + settings_page::columnGap);
 }
 
-bool GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left)
+void GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left)
 {
     const RemoteSession *session = onlineSession();
     const std::optional<VoiceView> view = session != nullptr ? session->voiceView() : std::nullopt;
     if (!view || view->others.empty() || session->voiceDevices() == nullptr) {
-        return false;
+        return;
     }
     ecs::Ecs &ecs = _engine.getEcs();
     const localization::Localization &translations = _translations;
@@ -764,7 +763,6 @@ bool GameScenes::addPlayerVoices(engine::InterfaceBuilder &interface, float left
                                               {engine::AnchorPoint::TopLeft, left + _style.setting.inset,
                                                top + settings_page::groupGap + VoiceNoteLine});
     settings_page::bindText(ecs, note, translations, "game.voices.note");
-    return true;
 }
 
 void GameScenes::play(std::unique_ptr<GameSession> session, std::function<void()> onEnd)
