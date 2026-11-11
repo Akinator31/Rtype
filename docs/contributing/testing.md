@@ -204,7 +204,8 @@ The Windows runner needs Visual Studio 2022 and CMake; it tests the database on 
 
 Several runners can share one machine, and run their jobs at once. The tests name their files in the temporary
 directory (the SQLite databases, keys, settings), the same in every run: the *Test* steps set `TMPDIR` to the
-directory of their runner, so that two jobs never read each other's files. By hand, two builds tested at once
+directory of their runner, and `TMP` and `TEMP` too, the ones Windows reads (`temp_directory_path()` ignores
+`TMPDIR` there), so that two jobs never read each other's files. By hand, two builds tested at once
 (`build` and `build-asan`, for instance) need the same: `TMPDIR=$(mktemp -d) ctest --test-dir build`.
 
 ## Roadmap
