@@ -17,6 +17,7 @@ nav = [
     { "Getting started" = [
         "getting-started/index.md",
         "getting-started/build.md",
+        "getting-started/play.md",
     ] },
     { "Architecture" = [
         "architecture/index.md",
