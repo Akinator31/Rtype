@@ -72,11 +72,6 @@ ecs::entity_t OnlineScreen::note(const std::string &text, engine::Anchor anchor,
     return entity;
 }
 
-void OnlineScreen::keys(const std::string &text)
-{
-    note(toCapitals(text), {engine::AnchorPoint::BottomLeft, screenMargin, -screenMargin}, Tone::Hint, 22.0f);
-}
-
 ecs::entity_t OnlineScreen::field(const std::string &caption, const std::string &content, int row,
                                   std::size_t maxLength, std::function<void(const std::string &)> onSubmit)
 {

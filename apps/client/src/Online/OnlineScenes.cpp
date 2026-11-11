@@ -223,7 +223,6 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                                   {engine::AnchorPoint::TopLeft, rightLeft, top});
                 top += style.list.height;
             }
-            page.keys(_translations.text("online.keys_menu"));
         });
 
     // O2: a server met for the first time shows its key, and is trusted only if the player says so
@@ -262,8 +261,6 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                                             connect();
                                         },
                                         {engine::AnchorPoint::Top, 330.0f, 680.0f});
-                            page.note(toCapitals(_translations.text("online.keys_cancel")),
-                                      {engine::AnchorPoint::Bottom, 0.0f, -84.0f}, Tone::Hint, 20.0f);
                         });
 
     // O3: a known server with another key is refused, the two keys side by side, under a red banner
@@ -408,7 +405,6 @@ void OnlineScenes::declareLobbyScene(const engine::InterfaceStyle &style)
             }
             page.note(under, {engine::AnchorPoint::TopRight, nameRight - 12.0f, screenMargin + 40.0f},
                       Tone::Hint, 20.0f);
-            page.keys(_translations.text("online.keys_lobby"));
         });
 }
 
