@@ -33,6 +33,9 @@ constexpr render::Rectangle LifeSource{0.0f, 0.0f, 120.0f, 48.0f};
 
 constexpr render::Color PilotColor{138, 144, 151, 255};
 constexpr render::Color HealthColor{80, 220, 100, 255};
+/// The weapon in hand, and the one put away.
+constexpr render::Color WeaponColor = render::colors::White;
+constexpr render::Color SpareWeaponColor{107, 113, 119, 255};
 
 constexpr render::Color AllySlotColor{107, 113, 119, 255};
 constexpr render::Color AllyNameColor{138, 144, 151, 255};
@@ -134,6 +137,10 @@ ecs::entity_t openHud(ecs::Ecs &ecs, engine::SceneId scene, const HudLook &look,
                             ScreenHud.health.size, HealthColor, ScreenHud.health.spacing);
     hud.xp = createText(ecs, scene, engine::AnchorPoint::BottomLeft, ship, look.font, ScreenHud.xp.size,
                         XpColor, ScreenHud.xp.spacing);
+    hud.weapon = createText(ecs, scene, engine::AnchorPoint::BottomLeft, ship, look.font,
+                            ScreenHud.health.size, WeaponColor, ScreenHud.health.spacing);
+    hud.spareWeapon = createText(ecs, scene, engine::AnchorPoint::BottomLeft, ship, look.font,
+                                 ScreenHud.health.size, SpareWeaponColor, ScreenHud.health.spacing);
 
     for (std::uint8_t index = 1; index < game::MaxPlayers; ++index) {
         const ecs::entity_t slot = createText(ecs, scene, engine::AnchorPoint::BottomRight, aux, look.font,
