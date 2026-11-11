@@ -224,7 +224,8 @@ TEST_CASE("During the voice of the rescue, the ship of the player may come back,
         game.step();
     }
     REQUIRE(countOf(game.snapshot(), EntityKind::AllyShip) == 1);
-    const auto arriving = std::ranges::find(game.snapshot().entities, EntityKind::AllyShip, &EntityState::kind);
+    const auto arriving =
+        std::ranges::find(game.snapshot().entities, EntityKind::AllyShip, &EntityState::kind);
     CHECK(arriving->x < 0.0f);
     for (int tick = 0; tick < 3 * TickRate; ++tick) {
         game.step();

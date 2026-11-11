@@ -172,7 +172,8 @@ GameVoices missionVoices(const CampaignMission &mission)
 {
     return {.start = {std::string(mission.voice), mission.voice.empty() ? 0 : mission.firstWaveDelay},
             .rescue = mission.rescueVoices,
-            .rescueCutscene = mission.rescueShipTicks > 0 ? std::optional(mission.rescueShipTicks) : std::nullopt,
+            .rescueCutscene =
+                mission.rescueShipTicks > 0 ? std::optional(mission.rescueShipTicks) : std::nullopt,
             .victory = mission.victoryVoice.path};
 }
 

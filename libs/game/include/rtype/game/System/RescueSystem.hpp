@@ -73,7 +73,8 @@ private:
     void giveShipBack(bool atTip);
     /// The first ally, the escort, flies in next to the ship of the player, after the systems, if not there.
     void callEscort();
-    /// During the voice: the ship of the player holds the tip of the formation, the escort its spot next to it.
+    /// During the voice: the ship of the player holds the tip of the formation, the escort its spot next to
+    /// it.
     void holdEscort(float elapsed);
     /// The allies not there yet fly in, with a new ship for the player if it has none.
     void callAllies();

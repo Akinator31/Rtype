@@ -167,8 +167,7 @@ void createLoreScene(engine::Engine &engine, render::ResourceManager &resources,
         LoreScene, {.assets = LoreAssets},
         [&resources, &audio, &style, &metrics, &translations](engine::Engine &target, engine::SceneId scene) {
             buildLoreScene(target, scene, resources, audio, style, metrics,
-                           readLore(StoryFiles, translations),
-                           [&target] { target.popScene(); });
+                           readLore(StoryFiles, translations), [&target] { target.popScene(); });
         });
 }
 

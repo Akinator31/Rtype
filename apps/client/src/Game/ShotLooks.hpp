@@ -27,8 +27,8 @@ struct ShotLook {
 
 /// The ShotLook of each kind of shot drawn in 3D, and the models of energy they give to the entities of the
 /// game scene (docs/architecture/client-game.md, "Shots in 3D"). A shot, of a player or of a Bydo, whose
-/// projectile has a look of its own (game::EntityState::ship) is drawn with it, at the size of the collider of
-/// the projectile: each weapon fires its own model.
+/// projectile has a look of its own (game::EntityState::ship) is drawn with it, at the size of the collider
+/// of the projectile: each weapon fires its own model.
 class ShotLooks
 {
     struct ProjectileLook {

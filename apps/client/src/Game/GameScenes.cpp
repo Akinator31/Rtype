@@ -447,9 +447,9 @@ render::Rectangle measureProjectileCore(const render::Box3 &bounds)
 
 /// Gives each projectile of the configuration its model, the asset its file names, at the size of its
 /// collider: the shots of the players and of the Bydos are drawn with the model of their projectile
-/// (game::EntityState::ship), the one of the ProjectileRegistry of the game, lit in the colour of the mechanic
-/// of the weapon that fires it. The models of the shots of the Bydos measured by hand keep their core, facing
-/// left. A projectile whose model cannot be loaded is drawn with the look of its kind.
+/// (game::EntityState::ship), the one of the ProjectileRegistry of the game, lit in the colour of the
+/// mechanic of the weapon that fires it. The models of the shots of the Bydos measured by hand keep their
+/// core, facing left. A projectile whose model cannot be loaded is drawn with the look of its kind.
 void setConfiguredProjectileLooks(GameSessionSystem &sessions, render::ResourceManager &resources,
                                   const game::GameConfig &config)
 {
