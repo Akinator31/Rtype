@@ -115,11 +115,8 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
     ecs.addComponent<physics::Collider>(projectile, definition.collider);
     const physics::Vec3 half = halfSizeOf(definition.collider);
     ecs.addComponent<LeavesArea>(projectile, half.x, half.y);
-    if (owner < MaxPlayers) {
-        const std::size_t index = context.projectiles.getIndex(id);
-        ecs.addComponent<ProjectileIndex>(projectile,
-                                          index < NoShip ? static_cast<std::uint8_t>(index) : NoShip);
-    }
+    const std::size_t index = context.projectiles.getIndex(id);
+    ecs.addComponent<ProjectileIndex>(projectile, index < NoShip ? static_cast<std::uint8_t>(index) : NoShip);
     return projectile;
 }
 
