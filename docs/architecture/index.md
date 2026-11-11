@@ -153,7 +153,8 @@ apps/       executables, one subdirectory per program
   client/   graphical client (r-type_client)
     assets/ sprites, fonts and sounds, copied next to the executable
   server/   game server (r-type_server)
-  minigame/ Orbit Breaker, a brick breaker made with the engine alone (orbit_breaker)
+example/    games made with the engine alone, to show that it runs other games
+  minigame/ Orbit Breaker, a brick breaker (orbit_breaker)
 config/     the Lua configuration of the game: enemies, weapons... (client and server)
 libs/       libraries shared by the programs, one subdirectory per library
   audio/    sound effects, music and the voices played (client)

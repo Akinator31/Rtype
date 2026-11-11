@@ -1,7 +1,7 @@
 # Orbit Breaker
 
 **Orbit Breaker** is a brick breaker made with the engine of R-Type alone, to show that the engine runs
-another game than R-Type. It is its own program, `orbit_breaker`, in `apps/minigame/`. It uses the libraries of
+another game than R-Type. It is its own program, `orbit_breaker`, in `example/minigame/`. It uses the libraries of
 `libs/` (ECS, physics, rendering, input, audio, scenes and interface, settings) and no code of the R-Type client
 nor of its game.
 

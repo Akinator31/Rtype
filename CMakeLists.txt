@@ -31,6 +31,7 @@ endif()
 
 add_subdirectory(libs)
 add_subdirectory(apps)
+add_subdirectory(example)
 
 if(RTYPE_BUILD_TESTS)
   enable_testing()
