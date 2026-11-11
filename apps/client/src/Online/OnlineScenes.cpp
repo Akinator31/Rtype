@@ -195,6 +195,8 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                           Tone::Hint);
             }
             constexpr std::size_t MaxServersShown = 5;
+            // The right of each row, for its Forget button
+            constexpr float forgetWidth = 280.0f;
             float top = online_layout::fieldsTop + 30.0f;
             for (std::size_t index = 0; index < std::min(keys.size(), MaxServersShown); ++index) {
                 const std::string address = keys[index].substr(KnownServers::SettingsKeyPrefix.size());
@@ -214,13 +216,24 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                 }
                 page.ui().listRow(toCapitals(address),
                                   {.detail = detail + " · " + _translations.text("online.known_trusted"),
-                                   .width = rightWidth,
+                                   .width = rightWidth - forgetWidth,
                                    .avatar = avatar},
                                   [this, address] {
                                       _serverText = address;
                                       connect();
                                   },
                                   {engine::AnchorPoint::TopLeft, rightLeft, top});
+                // Forgets the key of this server without typing it: the row leaves the list
+                page.ui().arrowButton(_translations.text("online.known_forget"),
+                                      [this, address] {
+                                          forgetKey(address);
+                                          // Built again over the main menu: switchScene() would close it,
+                                          // and with it the background and the way back
+                                          _engine.popScene();
+                                          _engine.pushScene(OnlineMenuScene);
+                                      },
+                                      {engine::AnchorPoint::TopRight, rightLeft + rightWidth - 1920.0f,
+                                       top + (style.list.height - style.flare.height) / 2.0f});
                 top += style.list.height;
             }
             page.keys(_translations.text("online.keys_menu"));
@@ -308,8 +321,17 @@ void OnlineScenes::declareServerScenes(const engine::InterfaceStyle &style)
                       Tone::Detail, 24.0f);
             page.note(_translations.text("changed.forget"), {engine::AnchorPoint::Top, 0.0f, 738.0f},
                       Tone::Detail, 24.0f);
+            // Refusing is the default: the old key is forgotten on purpose
             page.button(_translations.text("changed.back"), [&target] { target.popScene(); },
-                        {engine::AnchorPoint::Top, 0.0f, 820.0f});
+                        {engine::AnchorPoint::Top, -330.0f, 820.0f});
+            // Forgets the old key, then connects again: the new one is shown, to be checked and trusted
+            page.dangerButton(_translations.text("changed.forget_key"),
+                              [this, &target] {
+                                  target.popScene();
+                                  forgetKey(_address);
+                                  connect();
+                              },
+                              {engine::AnchorPoint::Top, 330.0f, 820.0f});
         });
 }
 
@@ -501,7 +523,11 @@ void OnlineScenes::forgetServer()
         _engine.showToast("Invalid server: give host:port", engine::ToastType::Error);
         return;
     }
-    const std::string address = serverAddress(parts->first, parts->second);
+    forgetKey(serverAddress(parts->first, parts->second));
+}
+
+void OnlineScenes::forgetKey(const std::string &address)
+{
     if (_known.forget(address)) {
         _engine.showToast(
             std::format("Key of {} forgotten: it is asked again at the next connection", address));
