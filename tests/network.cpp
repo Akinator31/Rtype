@@ -328,6 +328,35 @@ TEST_CASE("A closed UDP socket no longer calls its handler", "[network]")
     CHECK(received == 0);
 }
 
+TEST_CASE("A UDP socket closed while a datagram it received waits for the loop no longer calls its handler",
+          "[network]")
+{
+    EventLoop loop;
+    UdpSocket sender(loop, Address::loopbackIpv4(0));
+    std::optional<UdpSocket> first(std::in_place, loop, Address::loopbackIpv4(0));
+    std::optional<UdpSocket> second(std::in_place, loop, Address::loopbackIpv4(0));
+    int received = 0;
+    // The first handler run closes the other socket, whose datagram is already received: on Windows, its
+    // completion already waits in the loop, as a datagram of a game for a client that leaves
+    first->startReceiving([&](const Address &, std::span<const std::byte>) {
+        ++received;
+        second.reset();
+    });
+    second->startReceiving([&](const Address &, std::span<const std::byte>) {
+        ++received;
+        first.reset();
+    });
+    loop.poll();
+    sender.send(first->localAddress(), bytesOf("one"));
+    sender.send(second->localAddress(), bytesOf("two"));
+    loop.poll();
+    // Both datagrams arrived before the loop handles them
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    pollFor(loop, std::chrono::milliseconds(50));
+
+    CHECK(received == 1);
+}
+
 TEST_CASE("A UDP socket can be destroyed while it is receiving", "[network]")
 {
     EventLoop loop;

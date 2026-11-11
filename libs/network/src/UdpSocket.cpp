@@ -2,6 +2,7 @@
 
 #include "Asio.hpp"
 
+#include <atomic>
 #include <format>
 #include <system_error>
 #include <vector>
@@ -16,6 +17,10 @@ using detail::logger;
 // the Impl still alive, and sees that it is closed.
 struct UdpSocket::Impl : std::enable_shared_from_this<Impl> {
     udp::socket socket;
+    /// Set by close() at once, while the socket itself is closed later on the loop's thread: a datagram
+    /// already received then, whose completion waits in the loop before the close (on Windows, in the
+    /// completion port), must not reach the handler, whose owner may be gone.
+    std::atomic<bool> closed{false};
     udp::endpoint sender;
     std::vector<std::byte> buffer = std::vector<std::byte>(MaxDatagramSize);
     ReceiveHandler handler;
@@ -34,7 +39,7 @@ struct UdpSocket::Impl : std::enable_shared_from_this<Impl> {
 
     void onReceived(const std::error_code &error, std::size_t size)
     {
-        if (!socket.is_open()) {
+        if (closed.load(std::memory_order_acquire) || !socket.is_open()) {
             return;
         }
         if (!error) {
@@ -120,7 +125,7 @@ void UdpSocket::startReceiving(ReceiveHandler handler)
         return;
     }
     asio::post(_impl->socket.get_executor(), [impl = _impl, handler = std::move(handler)]() mutable {
-        if (impl->socket.is_open()) {
+        if (!impl->closed.load(std::memory_order_acquire) && impl->socket.is_open()) {
             impl->handler = std::move(handler);
             impl->receiveNext();
         }
@@ -143,6 +148,8 @@ void UdpSocket::close()
     if (!_impl) {
         return;
     }
+    // The handler is no longer called from now on; the datagrams given to send() before still go out
+    _impl->closed.store(true, std::memory_order_release);
     asio::post(_impl->socket.get_executor(), [impl = _impl] { impl->closeNow(); });
 }
 
