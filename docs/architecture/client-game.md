@@ -110,7 +110,7 @@ carry its index, `EntityState::ship`), the other kinds that of the configuration
 | Ship | 168 × 98: the 3D model `spaceship_ezno.glb`, tinted with the colour of its player (blue, red, green, yellow for the slots 0 to 3) |
 | Shot | 68 × 18.8: the model of energy `projectiles/player/shot_basic.glb` (a charged shot: a 48 × 16 box in the colour of the player) |
 | Bydo (`BydoFlyer`) | The size of the collider of its ship, and the model of its ship (`config/ships/`), facing left, when it is a model of the hangar (`ShipCatalog`, which gives its hull and trails); otherwise `drop_ship_v2.glb`. Every ship of `config/ships/` but the boss has the box of the ships of the players, 168 × 98 |
-| Bydo shot (`pulse`) | 68 × 22: the model of energy `projectiles/enemy/shot_spiral.glb`, facing left |
+| Bydo shot (`pulse`) | The size of the collider of its projectile and the model of its projectile (`config/projectiles/`); otherwise 68 × 22: the model of energy `projectiles/enemy/shot_spiral.glb`, facing left |
 | Bydo plasma orb (`BydoPlasmaShot`) | 44 × 44: the model of energy `projectiles/enemy/orb_plasma.glb` |
 | Any other kind | A grey square |
 
@@ -150,13 +150,15 @@ plane of the game the way it flies, from its velocity: a Bydo shot aimed at a pl
 stays a box aligned with the axes. The plasma orbs of the Bydos have their own kind, `BYDO_PLASMA_SHOT`, so
 that they have their own model.
 
-The shots of the players are drawn with the model of their projectile (`model` of `config/projectiles/`):
-each weapon its own. The snapshots give the index of the projectile of a shot of a player among the ids of
-the projectiles, in alphabetical order (`EntityState::ship`), and the client loads every projectile of its
+The shots of the players and of the Bydos are drawn with the model of their projectile (`model` of
+`config/projectiles/`): each weapon its own. The snapshots give the index of the projectile of a shot among
+the ids of the projectiles, in alphabetical order (`EntityState::ship`), and the client loads every projectile of its
 configuration at the opening of the game (`setConfiguredProjectileLooks()`): its core is measured on the
 bounds of the model, the front of the model, at most three times as long as it is tall, the rest being its
-trail, and its light takes the colour of the mechanic of the weapon that fires it (blue bullets, orange
-missiles, pink lasers, green plasma). The basic shot keeps its measured core.
+trail, and its light takes the colour of the mechanic of the weapon that fires it (for the players blue
+bullets, orange missiles, pink lasers, green plasma; for the Bydos purple bullets, red missiles, magenta
+lasers, orange plasma). The basic shot keeps its measured core, and so do `shot_spiral.glb` and
+`orb_plasma.glb` for the Bydos, facing left.
 
 ### Ships in 3D
 

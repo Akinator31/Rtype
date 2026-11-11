@@ -26,9 +26,9 @@ struct ShotLook {
 };
 
 /// The ShotLook of each kind of shot drawn in 3D, and the models of energy they give to the entities of the
-/// game scene (docs/architecture/client-game.md, "Shots in 3D"). A shot of a player whose projectile has a
-/// look of its own (game::EntityState::ship) is drawn with it, at the size of the collider of the projectile:
-/// each weapon fires its own model.
+/// game scene (docs/architecture/client-game.md, "Shots in 3D"). A shot, of a player or of a Bydo, whose
+/// projectile has a look of its own (game::EntityState::ship) is drawn with it, at the size of the collider of
+/// the projectile: each weapon fires its own model.
 class ShotLooks
 {
     struct ProjectileLook {
@@ -39,6 +39,7 @@ class ShotLooks
 
     std::unordered_map<game::EntityKind, ShotLook> _looks;
     std::unordered_map<std::uint8_t, ProjectileLook> _projectiles;
+    std::unordered_map<std::uint8_t, ProjectileLook> _bydoProjectiles;
 
     /// The look of the projectile of the shot, if it has one.
     [[nodiscard]] const ProjectileLook *findProjectile(const game::EntityState &state) const;
@@ -49,6 +50,8 @@ public:
     /// The shots of the players with the projectile of this index of the configuration are drawn with this
     /// look, at this size, instead of the look of their kind.
     void setProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size);
+    /// The same for the shots of the Bydos, lit in their own colours.
+    void setBydoProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size);
     /// The shots of this kind are drawn in 3D.
     [[nodiscard]] bool hasLook(game::EntityKind kind) const;
     /// This shot is drawn in 3D: its kind or its projectile has a look.

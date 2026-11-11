@@ -151,8 +151,8 @@ struct ItemIndex {
     std::uint8_t value = NoShip;
 };
 
-/// The projectile of a shot of a player, sent to the clients so that they draw its model: its index in the
-/// ProjectileRegistry (EntityState::ship), NoShip beyond what a byte holds.
+/// The projectile of a shot, of a player or of a Bydo, sent to the clients so that they draw its model: its
+/// index in the ProjectileRegistry (EntityState::ship), NoShip beyond what a byte holds.
 struct ProjectileIndex {
     std::uint8_t value = NoShip;
 };

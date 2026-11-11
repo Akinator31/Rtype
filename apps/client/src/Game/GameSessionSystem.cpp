@@ -175,6 +175,12 @@ void GameSessionSystem::setProjectileLook(std::uint8_t projectile, const ShotLoo
     _shotLooks.setProjectileLook(projectile, look, size);
 }
 
+void GameSessionSystem::setBydoProjectileLook(std::uint8_t projectile, const ShotLook &look,
+                                              render::Vector2 size)
+{
+    _shotLooks.setBydoProjectileLook(projectile, look, size);
+}
+
 void GameSessionSystem::setItemLook(std::uint8_t item, const ItemLook &look)
 {
     _itemLooks.setLook(item, look);

@@ -1336,7 +1336,7 @@ TEST_CASE("A shot that hits is killed, for the client to draw its impact", "[gam
     CHECK(cause == DestroyCause::Killed);
 }
 
-TEST_CASE("A Bydo that runs into a ship hurts it and keeps going; the ship is safe for a while", "[game]")
+TEST_CASE("A Bydo that runs into a ship hurts it and is destroyed; the ship is safe for a while", "[game]")
 {
     Rules rules;
     rules.hitInvulnerableTicks = 30;
@@ -1352,11 +1352,30 @@ TEST_CASE("A Bydo that runs into a ship hurts it and keeps going; the ship is sa
     const EntityState hit = *shipOf(simulation.snapshot(), 0);
     CHECK(hit.health == 80);
     CHECK((hit.flags & EntityState::Invulnerable) != 0);
-    CHECK(findEntity(simulation.snapshot(), enemy));
+    CHECK_FALSE(findEntity(simulation.snapshot(), enemy));
+    CHECK(wasDestroyed(simulation.snapshot(), enemy, DestroyCause::Killed));
+    CHECK(simulation.snapshot().players[0].score == 100);
 
-    // Still on it, and its shots too: nothing more while it is safe
+    // Its shots too: nothing more while it is safe
     run(simulation, 10);
     CHECK(shipOf(simulation.snapshot(), 0)->health == 80);
+}
+
+TEST_CASE("A boss that runs into a ship hurts it and keeps going", "[game]")
+{
+    GameConfig config = battleConfig();
+    config.enemies.front().boss = true;
+    Simulation simulation({}, config);
+    simulation.addPlayer(0);
+    simulation.step();
+    const EntityState ship = *shipOf(simulation.snapshot(), 0);
+    const rtype::ecs::entity_t spawned =
+        spawnEnemy(simulation.ecs(), simulation.context(), "bydo_scout", ship.x, ship.y);
+    const std::uint32_t boss = networkIdOf(simulation, spawned);
+
+    simulation.step();
+    CHECK(shipOf(simulation.snapshot(), 0)->health == 80);
+    CHECK(findEntity(simulation.snapshot(), boss));
 }
 
 TEST_CASE("Nothing comes without a player, nor without waves", "[game]")
@@ -1549,7 +1568,10 @@ TEST_CASE("An endless game is lost once every player is out of lives", "[game]")
 {
     Rules rules = endlessRules();
     rules.lives = 1;
-    Simulation simulation(rules, battleConfig({waveOf("line", 1)}));
+    GameConfig config = battleConfig({waveOf("line", 1)});
+    // Destroyed by the ram: it has to take the ship with it
+    config.enemies.front().collisionDamage = 255;
+    Simulation simulation(rules, config);
     simulation.addPlayer(0);
     runUntilWave(simulation, 10);
     clearAndRunUntilWave(simulation);

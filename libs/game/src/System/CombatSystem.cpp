@@ -106,10 +106,14 @@ void CombatSystem::hitShips(const Targets &targets, std::unordered_set<ecs::enti
         if (!danger) {
             continue;
         }
-        // A shot is spent, a Bydo keeps going
-        if (!_enemies.has(*danger)) {
+        // A shot is spent, a Bydo rammed is destroyed with it, a boss keeps going
+        const bool rammed = _enemies.has(*danger);
+        if (!rammed || !isBoss(*danger)) {
             spent.insert(*danger);
             destroyLater(*danger, DestroyCause::Killed);
+            if (rammed) {
+                rewardKill(ship, *danger);
+            }
         }
         if (hurt(ship, *danger)) {
             loseShip(ship);
@@ -132,6 +136,11 @@ bool CombatSystem::isGuarding(ecs::entity_t enemy) const
            (_orders.get(enemy).stance == EnemyStance::Guard || _orders.get(enemy).invulnerable);
 }
 
+bool CombatSystem::isBoss(ecs::entity_t enemy) const
+{
+    return _context.enemies.getDefinition(_enemies.get(enemy).id).boss;
+}
+
 bool CombatSystem::startNextPhase(ecs::entity_t enemy)
 {
     Enemy &state = _enemies.get(enemy);
@@ -144,9 +153,9 @@ bool CombatSystem::startNextPhase(ecs::entity_t enemy)
     return true;
 }
 
-void CombatSystem::rewardKill(ecs::entity_t shot, ecs::entity_t enemy)
+void CombatSystem::rewardKill(ecs::entity_t killer, ecs::entity_t enemy)
 {
-    const std::uint8_t slot = _owners.get(shot).slot;
+    const std::uint8_t slot = _owners.get(killer).slot;
     PlayerSlot &player = _context.players[slot];
     if (player.present) {
         _context.rewardKill(player, _context.enemies.getDefinition(_enemies.get(enemy).id));

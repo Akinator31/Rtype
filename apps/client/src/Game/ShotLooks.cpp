@@ -49,6 +49,11 @@ void ShotLooks::setProjectileLook(std::uint8_t projectile, const ShotLook &look,
     _projectiles.insert_or_assign(projectile, ProjectileLook{look, size});
 }
 
+void ShotLooks::setBydoProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size)
+{
+    _bydoProjectiles.insert_or_assign(projectile, ProjectileLook{look, size});
+}
+
 bool ShotLooks::hasLook(game::EntityKind kind) const
 {
     return _looks.contains(kind);
@@ -56,11 +61,14 @@ bool ShotLooks::hasLook(game::EntityKind kind) const
 
 const ShotLooks::ProjectileLook *ShotLooks::findProjectile(const game::EntityState &state) const
 {
-    if (state.kind != game::EntityKind::PlayerShot) {
+    const bool bydo =
+        state.kind == game::EntityKind::BydoShot || state.kind == game::EntityKind::BydoPlasmaShot;
+    if (state.kind != game::EntityKind::PlayerShot && !bydo) {
         return nullptr;
     }
-    const auto found = _projectiles.find(state.ship);
-    return found == _projectiles.end() ? nullptr : &found->second;
+    const auto &projectiles = bydo ? _bydoProjectiles : _projectiles;
+    const auto found = projectiles.find(state.ship);
+    return found == projectiles.end() ? nullptr : &found->second;
 }
 
 bool ShotLooks::hasLook(const game::EntityState &state) const

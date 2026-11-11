@@ -233,6 +233,8 @@ public:
     /// Draws the shots of the players fired with the projectile of this index of the configuration
     /// (game::EntityState::ship) with this look, at this size, from now on: each weapon its own model.
     void setProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size);
+    /// The same for the shots of the Bydos.
+    void setBydoProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size);
     /// Draws the items of this index of the configuration (game::EntityState::ship) with this animated 3D
     /// model from now on, instead of a box.
     void setItemLook(std::uint8_t item, const ItemLook &look);
