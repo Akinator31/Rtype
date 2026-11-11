@@ -167,6 +167,16 @@ void readMusicWave(TableReader &table, WaveDefinition &definition)
     }
 }
 
+/// A characteristic of a ship of the hangar, from 0 to 1.
+float readStat(TableReader &item, const std::string &ship, const std::string &name, float fallback)
+{
+    const float stat = item.readNumber(name, NumberRange::ZeroOrMore, fallback);
+    if (stat > 1.0f) {
+        throw ConfigError(std::format("ships: the {} of '{}' is above 1", name, ship));
+    }
+    return stat;
+}
+
 } // namespace
 
 ProjectileDefinition readProjectileDefinition(TableReader &table)
@@ -324,6 +334,9 @@ Hangar readHangar(TableReader &table)
         ShipUnlock unlock;
         unlock.ship = item.readString("ship");
         unlock.level = static_cast<std::uint32_t>(item.readInteger("level", 1, MaxU32));
+        unlock.stats.speed = readStat(item, unlock.ship, "speed", unlock.stats.speed);
+        unlock.stats.power = readStat(item, unlock.ship, "power", unlock.stats.power);
+        unlock.stats.armor = readStat(item, unlock.ship, "armor", unlock.stats.armor);
         item.checkAllFieldsRead();
         if (std::ranges::find(hangar.ships, unlock.ship, &ShipUnlock::ship) != hangar.ships.end()) {
             throw ConfigError(std::format("ships: '{}' listed twice", unlock.ship));

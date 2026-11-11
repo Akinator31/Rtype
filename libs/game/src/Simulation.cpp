@@ -106,6 +106,7 @@ void Simulation::registerConfig(const GameConfig &config)
         }
         _context.loadoutWeapons.push_back(unlock.weapon);
     }
+    _context.hangarShips = config.shipUnlocks;
     _context.progression = config.progression;
 }
 
@@ -193,6 +194,37 @@ bool Simulation::setLoadout(std::uint8_t slot, const Loadout &loadout)
     }
     logger().debug("Player {} takes {} and {}", slot, loadout[0], loadout[1]);
     return true;
+}
+
+bool Simulation::setShip(std::uint8_t slot, const std::string &ship)
+{
+    if (!hasPlayer(slot)) {
+        return false;
+    }
+    ShipStats stats;
+    if (!ship.empty()) {
+        const auto unlock = std::ranges::find(_context.hangarShips, ship, &ShipUnlock::ship);
+        if (unlock == _context.hangarShips.end()) {
+            return false;
+        }
+        stats = unlock->stats;
+    }
+    PlayerSlot &player = _context.players[slot];
+    const std::uint8_t previousHealth = _context.maxHealth(player);
+    player.stats = stats;
+    if (const auto current = findPlayerShip(_ecs, slot)) {
+        // A ship not hit yet gets all its new health, another keeps what it has left, within it
+        std::uint8_t &points = _ecs.getComponent<Health>(*current).points;
+        const std::uint8_t health = _context.maxHealth(player);
+        points = points == previousHealth ? health : std::min(points, health);
+    }
+    logger().debug("Player {} flies {}", slot, ship.empty() ? "the ship of the rules" : ship);
+    return true;
+}
+
+ShipStats Simulation::statsOf(std::uint8_t slot) const
+{
+    return hasPlayer(slot) ? _context.players[slot].stats : ShipStats{};
 }
 
 bool Simulation::hasPlayer(std::uint8_t slot) const

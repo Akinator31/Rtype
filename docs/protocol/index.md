@@ -103,14 +103,15 @@ The lobby protocol has its version, a `u16` sent by the client in `HELLO`, curre
 messages of the administrators, version 3 those of the player accounts, version 4 the profiles, version 5
 `PROGRESS`, version 6 the Discord token of the player, version 7 the secret of the Discord lobby of a game in
 `GAME_JOINED`, [lobby](lobby.md)). The game protocol has its own, in the
-header of every datagram (as a `u8`), currently **7** (version 2 adds the `Ack delay` of the body, and to
+header of every datagram (as a `u8`), currently **8** (version 2 adds the `Ack delay` of the body, and to
 `SNAPSHOT` the input lead, the weapon of the ship of the client and the age of the shots; `ENTITIES_DESTROYED`
 becomes unreliable, sent again with the snapshots; the messages of the voice, new types, came without a new
 version; version 3 adds to the players of `SNAPSHOT` their kills, waves cleared, streaks and experience;
 version 4, the account of each player to `PLAYER_JOINED`; version 5, to `ACCEPTED` whether the game carries the
 voice, and to `VOICE_STATUSES` a player muted by an administrator; version 6, to the entities of `SNAPSHOT`
 their ship; version 7, the second weapon: `LOADOUT`, the bit of the weapon in hand in the inputs, and the
-weapon put away in `SNAPSHOT`). The instances have a version of their own, sent in `INSTANCE_HELLO`, currently **7**
+weapon put away in `SNAPSHOT`; version 8, the ship of the hangar in `LOADOUT`, sent even without two weapons).
+The instances have a version of their own, sent in `INSTANCE_HELLO`, currently **7**
 ([master and instances](instances.md)): master and instances come from the same build, so it changes without
 the clients.
 

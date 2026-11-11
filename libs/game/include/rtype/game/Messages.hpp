@@ -110,6 +110,8 @@ inline constexpr std::size_t MaxDestroyedPerMessage = 228;
 inline constexpr std::size_t MaxPlayerNameLength = 16;
 /// Most bytes of the id of a weapon in LOADOUT.
 inline constexpr std::size_t MaxWeaponIdLength = 255;
+/// Most bytes of the code of a ship of the hangar in LOADOUT.
+inline constexpr std::size_t MaxShipCodeLength = 32;
 /// Most bytes of the music of a wave in WAVE_STARTED.
 inline constexpr std::size_t MaxWaveMusicLength = 128;
 
@@ -250,10 +252,14 @@ struct VoiceFrameMessage {
     friend bool operator==(const VoiceFrameMessage &, const VoiceFrameMessage &) = default;
 };
 
-/// `LOADOUT`: the two weapons a player chose in the hangar, by the ids of their definitions (version 7).
+/// `LOADOUT`: the two weapons a player chose in the hangar, by the ids of their definitions (version 7), and
+/// the ship it flies, by its code (version 8).
 struct LoadoutMessage {
-    /// 1 to MaxWeaponIdLength bytes each.
+    /// 1 to MaxWeaponIdLength bytes each, or both empty: the weapon of every player.
     Loadout weapons;
+    /// 0 to MaxShipCodeLength bytes: the code of a ship of the hangar (GameConfig::shipUnlocks), empty for
+    /// the ship of the rules.
+    std::string ship;
 
     friend bool operator==(const LoadoutMessage &, const LoadoutMessage &) = default;
 };

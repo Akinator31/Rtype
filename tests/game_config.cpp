@@ -401,8 +401,8 @@ TEST_CASE("The levels of the ships of the hangar are read from hangar.lua, none 
     REQUIRE(none.isValid());
     CHECK(none.config.shipUnlocks.empty());
 
-    directory.write("hangar.lua",
-                    "return { ships = { { ship = 'VX-01', level = 1 }, { ship = 'VX-02', level = 4 } } }");
+    directory.write("hangar.lua", "return { ships = { { ship = 'VX-01', level = 1 }, "
+                                  "{ ship = 'VX-02', level = 4, speed = 0.9, power = 0, armor = 1 } } }");
     const LoadedGameConfig loaded = loadGameConfig(directory.path);
     INFO(listErrors(loaded));
     REQUIRE(loaded.isValid());
@@ -411,12 +411,21 @@ TEST_CASE("The levels of the ships of the hangar are read from hangar.lua, none 
     CHECK(loaded.config.shipUnlocks[0].level == 1);
     CHECK(loaded.config.shipUnlocks[1].ship == "VX-02");
     CHECK(loaded.config.shipUnlocks[1].level == 4);
+    // The characteristics of the rules without them
+    CHECK(loaded.config.shipUnlocks[0].stats == ShipStats{});
+    CHECK(loaded.config.shipUnlocks[1].stats == ShipStats{0.9f, 0.0f, 1.0f});
 
     CHECK(errorWith("hangar_level", "hangar.lua", "return { ships = { { ship = 'VX-01', level = 0 } } }") ==
           "hangar.lua: ships[1].level: expected an integer from 1 to 4294967295");
     CHECK(errorWith("hangar_twice", "hangar.lua",
                     "return { ships = { { ship = 'VX-01', level = 1 }, { ship = 'VX-01', level = 2 } } }") ==
           "hangar.lua: ships: 'VX-01' listed twice");
+    CHECK(errorWith("hangar_stat_high", "hangar.lua",
+                    "return { ships = { { ship = 'VX-01', level = 1, armor = 1.5 } } }") ==
+          "hangar.lua: ships: the armor of 'VX-01' is above 1");
+    CHECK_THAT(errorWith("hangar_stat_negative", "hangar.lua",
+                         "return { ships = { { ship = 'VX-01', level = 1, speed = -0.1 } } }"),
+               ContainsSubstring("speed"));
     CHECK_THAT(
         errorWith("hangar_unknown", "hangar.lua", "return { ships = { { ship = 'VX-01', lvl = 2 } } }"),
         ContainsSubstring("level"));

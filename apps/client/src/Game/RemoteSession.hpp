@@ -138,6 +138,9 @@ private:
     std::vector<Prediction::Weapon> _weapons;
     /// The weapons the player chose in the hangar, sent once accepted (`LOADOUT`); empty without.
     game::Loadout _loadout;
+    /// The code of the ship the player equipped in the hangar, sent with them; empty for the ship of the
+    /// rules.
+    std::string _ship;
     std::optional<game::AcceptedMessage> _accepted;
     /// The id of the ship of the player, 0 while it has none.
     std::uint32_t _shipId = 0;
@@ -246,11 +249,14 @@ public:
     ///   0 joins no Discord lobby.
     /// @param loadout The weapons the player chose in the hangar, told to the game once accepted. Empty, or
     ///   with a weapon the config does not have, the player has the weapon of every player.
+    /// @param ship The code of the ship the player equipped in the hangar, told to the game with them: its
+    ///   ship moves, hits and resists with its characteristics, and is predicted at its speed. Empty, or not
+    ///   in the hangar of the config, the ship of the rules.
     /// @throws std::system_error if no UDP socket can be opened.
     RemoteSession(network::EventLoop &loop, const network::Address &game,
                   const lobby::GameJoinedMessage &joined, const game::GameConfig &config = {},
                   VoiceDevices *voiceDevices = nullptr, std::string server = {}, std::uint32_t playerId = 0,
-                  game::Loadout loadout = {});
+                  game::Loadout loadout = {}, std::string ship = {});
     /// Says goodbye to the game (DISCONNECT) if still in it.
     ~RemoteSession() override;
 

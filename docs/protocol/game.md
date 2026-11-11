@@ -43,7 +43,7 @@ Example of a header: session 42, packet 1:
 
 ```
 52 54                     magic "RT"
-07                        version 7
+08                        version 8
 00                        reserved
 00 00 00 2A               session id: 42
 00 00 00 00 00 00 00 01   packet number: 1
@@ -609,12 +609,13 @@ treated as `NONE`.
 |---|---|
 | **Direction** | Client → Game |
 | **Reliability** | Reliable |
-| **Sent when** | Version 7: once, after `ACCEPTED`, when the player chose two weapons in the hangar. |
+| **Sent when** | Version 8: once, after `ACCEPTED` (version 7: only when the player chose two weapons in the hangar). |
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
-| 0 | First weapon | `str8` | 1 to 255 bytes: the id of a weapon of the configuration (`config/weapons/`), in hand when the ship appears |
-| 1 + n | Second weapon | `str8` | 1 to 255 bytes: the one put away ([section 9.2](#92-inputs)) |
+| 0 | First weapon | `str8` | 1 to 255 bytes: the id of a weapon of the configuration (`config/weapons/`), in hand when the ship appears; empty, with the second, for the weapon of every player (version 8) |
+| 1 + n | Second weapon | `str8` | 1 to 255 bytes: the one put away ([section 9.2](#92-inputs)); empty with the first |
+| 2 + n + m | Ship | `str8` | 0 to 32 bytes: the code of the ship of the hangar the player flies, such as `VX-03`; empty for the ship of the rules (version 8) |
 
 **Receiver behaviour:** the game gives the two weapons to the ship of the player at once, magazines full, the
 first in hand, and to each ship it gets later. Two weapons that are the same, or that are neither in the hangar
@@ -622,6 +623,12 @@ of the configuration (`config/hangar.lua`) nor the weapon of every player, are r
 weapon of every player. The game does not know the accounts: the level each weapon needs is checked by the
 client. Only the first `LOADOUT` of a session counts; the next ones are ignored, so that sending it again does
 not fill the magazines. Without it, the ship has the weapon of every player alone.
+
+The ship gives its characteristics (`speed`, `power`, `armor` of `config/hangar.lua`) to the ships of the
+player: their speed, the damage of their shots, their health. A code that is not in the hangar of the
+configuration is refused: the player flies the ship of the rules. The client predicts its ship with the same
+characteristics, from the same file. A first weapon empty without the second, or the opposite, makes the
+message malformed.
 
 ### SNAPSHOT (`0x80`)
 

@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace rtype::game
 {
@@ -82,6 +83,17 @@ public:
     /// first in hand; and every ship it gets later.
     /// @return false, and nothing changes, for an empty slot or a loadout that is not allowed.
     bool setLoadout(std::uint8_t slot, const Loadout &loadout);
+
+    /// The ship of the hangar a player flies, by its code (GameConfig::shipUnlocks), from now on: its
+    /// characteristics (ShipStats) make the speed of its ships, the damage of their shots and their health.
+    /// Empty, the ship of the rules. Its ship, if it has one, gets its new health at once if it was not hit
+    /// yet, else keeps what it has left, within it. The level it needs is the client's to check.
+    /// @return false, and nothing changes, for an empty slot or a ship that is not in the hangar.
+    bool setShip(std::uint8_t slot, const std::string &ship);
+
+    /// The characteristics of the ship of a player (setShip()): those of the rules for an empty slot.
+    [[nodiscard]] ShipStats statsOf(std::uint8_t slot) const;
+
     [[nodiscard]] std::size_t playerCount() const;
 
     /// The input of a player, applied at every tick until the next call. Ignored for an empty slot.

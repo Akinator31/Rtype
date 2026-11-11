@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -27,6 +28,11 @@ struct ShipSelection {
     std::uint32_t level = 1;
     /// The level each ship of the catalog needs, in the order of the catalog: 0 and 1 are open to all.
     std::array<std::uint32_t, shipCount> requiredLevels{};
+    /// Every ship is open, whatever the level: the hangar of a game offline (setAllUnlocked()).
+    bool allUnlocked = false;
+    /// The characteristics of each ship of the catalog, in the order of the catalog, that the gauges show
+    /// and the game applies: those of the rules for a ship config/hangar.lua leaves out.
+    std::array<game::ShipStats, shipCount> stats{};
     /// Where the carousel is, as an index of the catalog that glides towards `focused`, around: 2.5 is
     /// halfway between the third and the fourth ship. Moved by the ShipSelectorSystem.
     float slide = 0.0f;
@@ -50,11 +56,19 @@ struct ShipSelection {
     /// Equips the ship looked at, unless it is locked.
     void equipFocused();
     /// A locked ship can be looked at but not equipped: it needs a higher level than the player's.
-    [[nodiscard]] bool isLocked(std::size_t index) const { return level < requiredLevels[index]; }
+    [[nodiscard]] bool isLocked(std::size_t index) const
+    {
+        return !allUnlocked && level < requiredLevels[index];
+    }
+    /// Opens every ship (a game offline), or locks again those above the level, the ship equipped giving way
+    /// to the first one open if it is one of them.
+    void setAllUnlocked(bool value);
     /// Changes the level of the player; a ship equipped that it locks gives way to the first one open.
     void setLevel(std::uint32_t value);
     [[nodiscard]] bool isFocusedEquipped() const { return focused == equipped; }
     [[nodiscard]] const ShipEntry &getFocused() const { return getShipCatalog()[focused]; }
+    /// The code of the ship equipped, told to the game (Simulation::setShip(), `LOADOUT`).
+    [[nodiscard]] std::string getEquippedCode() const { return getShipCatalog()[equipped].code; }
 
     /// The ship the carousel is nearest to: what the texts and the gauges show while it glides.
     [[nodiscard]] std::size_t getShownIndex() const;
@@ -62,7 +76,7 @@ struct ShipSelection {
     /// 1 when the carousel rests on a ship, 0 halfway between two: the texts fade out and in while it glides.
     [[nodiscard]] float getShownClarity() const;
     /// A characteristic mixed between the two ships the carousel is between.
-    [[nodiscard]] float getBlend(float ShipEntry::*characteristic) const;
+    [[nodiscard]] float getBlend(float game::ShipStats::*characteristic) const;
 
     /// A locked weapon cannot be equipped: it needs a higher level than the player's.
     [[nodiscard]] bool isWeaponLocked(std::size_t index) const { return level < weapons[index].level; }
@@ -75,8 +89,9 @@ struct ShipSelection {
     [[nodiscard]] game::Loadout getLoadout() const;
 };
 
-/// Takes the levels the ships need from config/hangar.lua: a ship of the catalog it leaves out is open from
-/// level 1, a code it names that is not in the catalog is logged.
+/// Takes the levels the ships need and their characteristics from config/hangar.lua: a ship of the catalog it
+/// leaves out is open from level 1, with the characteristics of the rules; a code it names that is not in the
+/// catalog is logged.
 void readRequiredLevels(ShipSelection &selection, const std::vector<game::ShipUnlock> &unlocks);
 
 /// Where the level of the last account signed in is kept in the settings.

@@ -64,7 +64,7 @@ ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
     const ecs::Position spawn = getShipSpawn(slot);
     const ecs::entity_t ship = spawnVisible(ecs, context, EntityKind::PlayerShip, slot, spawn.x, spawn.y);
     ecs.addComponent<PlayerShip>(ship, slot);
-    ecs.addComponent<Health>(ship, context.player.health);
+    ecs.addComponent<Health>(ship, context.maxHealth(context.players[slot]));
     ecs.addComponent<physics::Velocity>(ship);
     ecs.addComponent<physics::Collider>(ship, box(rules.shipHalfWidth, rules.shipHalfHeight));
     ecs.addComponent<physics::ConfinedToBounds>(ship, ecs::Position{0.0f, 0.0f},
@@ -186,7 +186,10 @@ ecs::entity_t spawnShot(ecs::Ecs &ecs, GameContext &context, const std::string &
     Projectile &projectile = ecs.getComponent<Projectile>(shot);
     projectile.category = weapon.mechanic;
     projectile.range = weapon.range;
-    ecs.addComponent<Damage>(shot, weapon.damage);
+    // The shots of a player hit as hard as the power of its ship
+    const std::uint8_t damage =
+        owner < MaxPlayers ? scaleByStat(weapon.damage, context.players[owner].stats.power) : weapon.damage;
+    ecs.addComponent<Damage>(shot, damage);
     return shot;
 }
 

@@ -100,7 +100,7 @@ std::string reasonOf(const network::SessionEnd &end)
 RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &game,
                              const lobby::GameJoinedMessage &joined, const game::GameConfig &config,
                              VoiceDevices *voiceDevices, std::string server, std::uint32_t playerId,
-                             game::Loadout loadout)
+                             game::Loadout loadout, std::string ship)
     : _socket(loop, game.isIpv6() ? network::Address::anyIpv6(0) : network::Address::anyIpv4(0)), _game(game),
       _session(joined.sessionId, network::DatagramKey(joined.clientKey),
                network::DatagramKey(joined.serverKey),
@@ -126,6 +126,12 @@ RemoteSession::RemoteSession(network::EventLoop &loop, const network::Address &g
     _weapons = findWeapons(config, loadout);
     if (_weapons.size() == game::LoadoutSize) {
         _loadout = std::move(loadout);
+    }
+    // The ship the game will apply, from the same hangar: the prediction moves at its speed
+    const auto unlock = std::ranges::find(config.shipUnlocks, ship, &game::ShipUnlock::ship);
+    if (unlock != config.shipUnlocks.end()) {
+        _ship = std::move(ship);
+        _prediction.setSpeedFactor(game::statFactor(unlock->stats.speed));
     }
     _socket.startReceiving([this](const network::Address &from, std::span<const std::byte> datagram) {
         if (from == _game) {
@@ -155,10 +161,8 @@ void RemoteSession::accept(std::span<const std::byte> payload)
     }
     _snapshotReceived = Clock::now();
     logger().info("In the game, slot {}", _accepted->slot);
-    if (!_loadout[0].empty()) {
-        _session.send(game::message_type::Loadout, game::encode(game::LoadoutMessage{_loadout}),
-                      network::Delivery::Reliable);
-    }
+    _session.send(game::message_type::Loadout, game::encode(game::LoadoutMessage{_loadout, _ship}),
+                  network::Delivery::Reliable);
     if (!_weapons.empty()) {
         _prediction.arm(_weapons, _accepted->slot);
         _shots.arm(game::Rules{});

@@ -102,6 +102,7 @@ void readRequiredLevels(ShipSelection &selection, const std::vector<game::ShipUn
             continue;
         }
         selection.requiredLevels[index] = unlock.level;
+        selection.stats[index] = unlock.stats;
     }
     selection.setLevel(selection.level);
 }
@@ -204,6 +205,12 @@ void ShipSelection::equipFocused()
     }
 }
 
+void ShipSelection::setAllUnlocked(bool value)
+{
+    allUnlocked = value;
+    setLevel(level);
+}
+
 void ShipSelection::setLevel(std::uint32_t value)
 {
     level = value;
@@ -252,14 +259,13 @@ float ShipSelection::getShownClarity() const
     return std::clamp(1.0f - (2.8f * distance), 0.0f, 1.0f);
 }
 
-float ShipSelection::getBlend(float ShipEntry::*characteristic) const
+float ShipSelection::getBlend(float game::ShipStats::*characteristic) const
 {
     const float wrapped = slide - (count * std::floor(slide / count));
     const auto first = static_cast<std::size_t>(wrapped) % shipCount;
     const float amount = wrapped - std::floor(wrapped);
-    const auto &catalog = getShipCatalog();
-    const float from = catalog[first].*characteristic;
-    const float to = catalog[(first + 1) % shipCount].*characteristic;
+    const float from = stats[first].*characteristic;
+    const float to = stats[(first + 1) % shipCount].*characteristic;
     return from + ((to - from) * amount);
 }
 

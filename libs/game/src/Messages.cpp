@@ -644,13 +644,18 @@ std::optional<VoiceFrameMessage> decodeVoiceFrame(std::span<const std::byte> pay
 
 std::vector<std::byte> encode(const LoadoutMessage &message)
 {
+    const bool noWeapons = message.weapons[0].empty() && message.weapons[1].empty();
     for (const std::string &weapon : message.weapons) {
-        require(!weapon.empty() && weapon.size() <= MaxWeaponIdLength, "A weapon id is 1 to 255 bytes");
+        require(noWeapons || (!weapon.empty() && weapon.size() <= MaxWeaponIdLength),
+                "A weapon id is 1 to 255 bytes, or both are empty");
     }
-    Writer writer(message.weapons[0].size() + message.weapons[1].size() + LoadoutSize);
+    require(message.ship.size() <= MaxShipCodeLength, "A ship code is 0 to 32 bytes");
+    Writer writer(message.weapons[0].size() + message.weapons[1].size() + message.ship.size() + LoadoutSize +
+                  1);
     for (const std::string &weapon : message.weapons) {
         writer.writeString(weapon);
     }
+    writer.writeString(message.ship);
     return writer.take();
 }
 
@@ -659,8 +664,13 @@ std::optional<LoadoutMessage> decodeLoadout(std::span<const std::byte> payload)
     Reader reader(payload);
     LoadoutMessage message;
     for (std::string &weapon : message.weapons) {
-        weapon = reader.readString(1, MaxWeaponIdLength);
+        weapon = reader.readString(0, MaxWeaponIdLength);
     }
+    // Two weapons, or none
+    if (message.weapons[0].empty() != message.weapons[1].empty()) {
+        reader.fail();
+    }
+    message.ship = reader.readString(0, MaxShipCodeLength);
     if (!reader.finish()) {
         return std::nullopt;
     }

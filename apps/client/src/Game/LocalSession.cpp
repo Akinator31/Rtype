@@ -34,10 +34,14 @@ game::Rules storyRules(game::Rules rules)
 
 } // namespace
 
-LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config, const game::Loadout &loadout)
+LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config, const game::Loadout &loadout,
+                           const std::string &ship)
     : _simulation(storyRules(rules), config), _waveCount(static_cast<std::uint16_t>(config.waves.size()))
 {
     _simulation.addPlayer(localSlot());
+    if (!_simulation.setShip(localSlot(), ship)) {
+        logger().warning("The ship {} is not in the hangar: the player flies the one of the rules", ship);
+    }
     if (_simulation.setLoadout(localSlot(), loadout)) {
         _loadout = loadout;
     } else {
@@ -97,7 +101,8 @@ std::optional<game::Snapshot> LocalSession::between() const
             _last->rescue == game::RescueStage::None) {
             // As the next step will move it, walls included. Not during the rescue, which flies it on its own
             const game::Rules &rules = _simulation.rules();
-            const ecs::Position next = game::moveShip({entity.x, entity.y}, _input, rules);
+            const float speed = game::statFactor(_simulation.statsOf(localSlot()).speed);
+            const ecs::Position next = game::moveShip({entity.x, entity.y}, _input, rules, speed);
             entity.x += (next.x - entity.x) * fraction;
             entity.y += (next.y - entity.y) * fraction;
             continue;
