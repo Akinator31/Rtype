@@ -35,6 +35,10 @@ struct Link {
     double down = 0.03;
     /// Up to this much more for each INPUT, at random: they may arrive out of order.
     double jitter = 0.0;
+    /// Every this many INPUT, one held back `spike` seconds more: a network that hiccups now and then.
+    std::uint32_t spikeEvery = 0;
+    double spike = 0.0;
+    std::uint32_t sentCount = 0;
     std::uint32_t random = 12345;
     /// The first stamp, ahead of the game: what the estimate gave.
     std::uint32_t firstLead = 3;
@@ -93,7 +97,10 @@ struct Link {
             stamp = stamp == 0 ? simulated + firstLead : stamp + 1;
             stamp += clock.takeJump();
             random = (random * 1103515245U) + 12345U;
-            const double late = jitter * static_cast<double>((random >> 16) % 1000) / 1000.0;
+            double late = jitter * static_cast<double>((random >> 16) % 1000) / 1000.0;
+            if (spikeEvery != 0 && ++sentCount % spikeEvery == 0) {
+                late += spike;
+            }
             const Sent sent{now + up + late, stamp};
             inputs.insert(std::ranges::upper_bound(inputs, sent.arrives, {}, &Sent::arrives), sent);
         }
@@ -218,7 +225,32 @@ TEST_CASE("Inputs too late jump at once, and the reports of before the jump are 
     clock.receive(2, 0.2);
     CHECK(clock.lead() == 2);
     clock.receive(0, 0.2);
-    CHECK(clock.takeJump() == static_cast<std::uint32_t>(InputClock::TargetLead));
+    // Late after the first report: a tick of margin more
+    CHECK(clock.target() == InputClock::TargetLead + 1);
+    CHECK(clock.takeJump() == static_cast<std::uint32_t>(InputClock::TargetLead + 1));
+}
+
+TEST_CASE("Inputs too late raise the margin, a calm network lowers it", "[input-clock]")
+{
+    InputClock clock;
+    clock.receive(3, 0.0);
+    CHECK(clock.target() == InputClock::TargetLead);
+
+    for (int late = 1; late <= InputClock::MaxMargin + 2; ++late) {
+        clock.receive(0, 0.0);
+        CHECK(clock.target() == InputClock::TargetLead + std::min(late, InputClock::MaxMargin));
+    }
+    (void)clock.takeJump();
+
+    // A tick back at each calm period
+    clock.advance(InputClock::Calm - 0.1);
+    CHECK(clock.target() == InputClock::TargetLead + InputClock::MaxMargin);
+    clock.advance(0.2);
+    CHECK(clock.target() == InputClock::TargetLead + InputClock::MaxMargin - 1);
+    for (int calm = 0; calm < InputClock::MaxMargin; ++calm) {
+        clock.advance(InputClock::Calm);
+    }
+    CHECK(clock.target() == InputClock::TargetLead);
 }
 
 TEST_CASE("A clock of the client 1% fast keeps its inputs just in time for minutes", "[input-clock]")
@@ -301,4 +333,23 @@ TEST_CASE("A network that jitters keeps the inputs just in time, with a margin f
     CHECK(lowest(last) >= 1);
     // Not much more than the jitter, 2.4 ticks, above the target
     CHECK(highest(last) <= InputClock::TargetLead + InputClock::Tolerance + 4);
+}
+
+TEST_CASE("A network that hiccups more rarely than the window stops losing inputs once the margin is there",
+          "[input-clock]")
+{
+    // A datagram 70 ms late every 2 s: the smallest lead of the window forgets it before the next one
+    Link link;
+    link.up = 0.04;
+    link.down = 0.04;
+    link.spikeEvery = 120;
+    link.spike = 0.07;
+    link.run(30.0);
+    CAPTURE(link.missed);
+    CHECK(link.missed > 0);
+    CHECK(link.clock.target() > InputClock::TargetLead);
+
+    link.missed = 0;
+    link.run(60.0);
+    CHECK(link.missed == 0);
 }
