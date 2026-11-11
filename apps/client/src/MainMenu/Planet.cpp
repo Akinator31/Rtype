@@ -89,11 +89,15 @@ float getPlanetRadius()
     return planetModelRadius * PlanetSystem.scale;
 }
 
+render::Vector3 getRingsNormal()
+{
+    return rotate({0.0f, 1.0f, 0.0f}, {PlanetSystem.rotationAxis, PlanetSystem.rotationAngle});
+}
+
 render::Camera createAsteroidsView(const render::Camera &view)
 {
-    const Rotation tilt{PlanetSystem.rotationAxis, PlanetSystem.rotationAngle};
     // The viewer is above the plane of the rings, on the side of their normal
-    const render::Vector3 normal = rotate({0.0f, 1.0f, 0.0f}, tilt);
+    const render::Vector3 normal = getRingsNormal();
     const render::Vector3 towardsViewer = viewSide - PlanetSystem.position;
     const render::Vector3 outwards = normalize(towardsViewer - (normal * dot(towardsViewer, normal)));
     // Along the rings, towards the left of the screen, where there is nothing behind them
