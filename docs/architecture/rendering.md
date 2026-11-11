@@ -372,6 +372,29 @@ in the colour of the aura where they graze the view and clear where they face th
 with the time. The shell is added to the image, both of its sides, without writing its depth: it hides nothing.
 The game uses it to tell apart the sides of the ships ([Auras](client-game.md#auras)).
 
+### Animated models
+
+`animateModel()`, `blendModelAnimations()` and `poseModel()` give an animated model a pose: the matrices of its
+bones, which raylib computes on the processor. The vertices are moved on the graphics card (GPU skinning):
+raylib is built with `SUPPORT_GPU_SKINNING=1`, and the vertex stages of `Lighting.vert`, `Aura.vert` and
+`Energy.vert` move each vertex of a mesh with bones by the weighted matrices of up to four of them. Every shader
+that draws models must do so: the vertices a shader does not move keep their rest pose. The impacts (sparks,
+bursts, splashes, explosions) are energy models with bones: `Energy.vert` poses them first, then applies its
+spin and pulse. They take 128 bones at most
+(`MaxShaderBones`, `SkeletonPose.hpp`); the boss, the largest skeleton of the game, has 123. As `DrawMesh()`
+does not give the bones to the shader, unlike `DrawModelEx()`, `LightingShader`, `AuraShader` and
+`EnergyShader` send them (`setBoneMatrices()`), and draw mesh by mesh with a `skinned` uniform telling whether
+the mesh drawn has bones: raylib gives none to a mesh of an animated model that is not under a bone.
+
+The entities of a model share it, each posing it before it is drawn: a pose costs only its matrices, a few
+microseconds. Before, raylib moved every vertex on the processor and sent them all again at each pose: the
+ships of the menu, about 220 000 vertices, took 10 ms a frame, and up to 30 ms when several ships shot at once,
+which made the frames lag. The `profile` command of the client measures it
+([Frame diagnostics](scenes-and-interface.md#frame-diagnostics)).
+
+Without the lighting shader, models are drawn by the shader of raylib, which does not move the vertices: the
+animated models keep their rest pose.
+
 ### Antialiasing, glow, vignette and dithering
 
 `drawGlow()`, called after the 3D models and before the interface:

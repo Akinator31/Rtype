@@ -1,6 +1,7 @@
 # The code of the client is a library of its own, so that the tests can use it, like the server's:
 #   App/                 what the program puts together: its configuration, its systems and its scenes
 #   Commands/, Console/  the console and its commands
+#   Diagnostics/         what the client measures to find what is slow
 #   Game/                a game: its session, offline or online, and its scenes (ADR 0015)
 #   Loading/             the loading screen at startup, and the loading of the assets of the scenes
 #   Lore/                the story of the game, scrolling away towards the horizon
@@ -18,6 +19,7 @@ add_library(r-type_client_core STATIC
     src/Commands/Commands.cpp
     src/Commands/FpsCommand.cpp
     src/Commands/HitboxesCommand.cpp
+    src/Commands/ProfileCommand.cpp
     src/Commands/QuitCommand.cpp
     src/Commands/SceneCommand.cpp
     src/Commands/Switch.cpp
@@ -27,6 +29,7 @@ add_library(r-type_client_core STATIC
     src/Console/ConsoleSystem.cpp
     src/Controls/KeyCaptureSystem.cpp
     src/Controls/KeyChoice.cpp
+    src/Diagnostics/FrameProfile.cpp
     src/Discord/DiscordFriends.cpp
     src/Discord/FriendPictures.cpp
     src/Discord/DiscordInvite.cpp

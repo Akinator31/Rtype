@@ -9,15 +9,25 @@
 // - alpha: unused.
 // time (seconds) is set by the renderer. The noise of Energy.frag is sampled in model space before the
 // animation, so that its pattern travels with the shot instead of sliding over it.
+//
+// An animated mesh (skinned is 1), such as an explosion, is first moved by its bones, as in Lighting.vert:
+// the animation of the colours applies to its pose.
+
+// MaxShaderBones in SkeletonPose.hpp
+#define MAX_BONES 128
 
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 in vec3 vertexNormal;
 in vec4 vertexColor;
+in vec4 vertexBoneIndices;
+in vec4 vertexBoneWeights;
 
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
+uniform mat4 boneMatrices[MAX_BONES];
+uniform int skinned;
 uniform float time;
 
 out vec2 fragTexCoord;
@@ -32,15 +42,23 @@ const float pulseFrequency = 9.0;
 void main()
 {
     float angle = (vertexColor.r - vertexColor.g) * maxSpin * time;
-    float pulse = (1.0 - vertexColor.b) * maxPulse * sin(time * pulseFrequency - vertexPosition.x * 1.5);
-    mat2 rotation = mat2(cos(angle), sin(angle), -sin(angle), cos(angle));
-    vec3 position = vertexPosition;
+    vec3 posed = vertexPosition;
     vec3 normal = vertexNormal;
+    if (skinned == 1) {
+        ivec4 bones = ivec4(vertexBoneIndices);
+        mat4 skin = boneMatrices[bones.x] * vertexBoneWeights.x + boneMatrices[bones.y] * vertexBoneWeights.y +
+                    boneMatrices[bones.z] * vertexBoneWeights.z + boneMatrices[bones.w] * vertexBoneWeights.w;
+        posed = vec3(skin * vec4(posed, 1.0));
+        normal = mat3(skin) * normal;
+    }
+    float pulse = (1.0 - vertexColor.b) * maxPulse * sin(time * pulseFrequency - posed.x * 1.5);
+    mat2 rotation = mat2(cos(angle), sin(angle), -sin(angle), cos(angle));
+    vec3 position = posed;
     position.yz = rotation * position.yz * (1.0 + pulse);
     normal.yz = rotation * normal.yz;
 
     fragTexCoord = vertexTexCoord;
-    fragLocalPosition = vertexPosition;
+    fragLocalPosition = posed;
     fragPosition = vec3(matModel * vec4(position, 1.0));
     fragNormal = normalize(mat3(matNormal) * normal);
     gl_Position = mvp * vec4(position, 1.0);

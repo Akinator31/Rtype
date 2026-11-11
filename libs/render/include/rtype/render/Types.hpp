@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace rtype::render
@@ -141,6 +142,20 @@ struct ModelPose {
     float addedTime = 0.0f;
 
     friend bool operator==(const ModelPose &, const ModelPose &) = default;
+};
+
+/// What posing the animated models cost since it was last read (Renderer::takePoseStats()): raylib computes
+/// the matrices of their bones each time a shared model changes pose, and the shaders move the vertices on
+/// the graphics card. For the diagnostics of the frames.
+struct PoseStats {
+    /// Times the bones of a model moved: the poses asked for that were not the current pose of the model.
+    std::size_t poses = 0;
+    /// Of these, the ones made again to draw a model in the glow (drawGlow()).
+    std::size_t glowPoses = 0;
+    /// The bones moved, added up over the poses.
+    std::size_t bones = 0;
+    /// Time spent computing their matrices, in seconds, on the processor.
+    double seconds = 0.0;
 };
 
 } // namespace rtype::render

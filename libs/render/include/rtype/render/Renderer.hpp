@@ -391,6 +391,9 @@ public:
     /// it says so (ModelPose::added): the recoil of a gun over a flight.
     void poseModel(ModelId model, const ModelPose &pose);
 
+    /// What the poses of the animated models cost since the previous call, then counts from zero again.
+    [[nodiscard]] PoseStats takePoseStats();
+
     /// Draws text with a loaded font.
     /// @param position Top-left corner of the text, in game units.
     /// @param size Height of the characters, in game units.
