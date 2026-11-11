@@ -167,6 +167,23 @@ of the screen, over the interface (`drawFpsCounter()`, `apps/client/src/Commands
 then orange and red as the frame rate drops. It checks the limit of frames per second and the vertical
 synchronisation chosen on the Settings page ([Settings](settings.md#the-settings-page)).
 
+### Frame diagnostics
+
+Type `profile [on|off]` in the console, or start the client with `RTYPE_PROFILE_FRAMES=1`, to log what the
+frames take, under the `profile` logger (`apps/client/src/Diagnostics/FrameProfile.hpp`). Each frame is cut in
+three parts: the update (input, network, engine, loads, audio), the drawing calls on the processor, and the
+showing of the frame (waiting for the graphics card and the vertical synchronisation). The renderer adds what
+posing the animated models cost (`Renderer::takePoseStats()`): raylib moves their vertices on the processor and
+sends them again to the graphics card each time a shared model changes pose, in the frame and again in its glow.
+
+```text
+INFO  profile  59 frames, 0 slow | frame 17.0 ms (longest 21.7) | update 0.0 (0.1) | draw 12.0 (21.4) | present 4.9 (5.7) | poses 3.0 a frame (3), glow 0.0 (0), 223247 vertices (223247), 10.24 ms (18.76) | animated models 3.0 (3)
+INFO  profile  slow frame: 35.3 ms (usual 17.0 ms) | update 0.1 ms, draw 35.0 ms, present 0.2 ms | poses 3 (0 for the glow), 223247 vertices, 31.0 ms, 3 animated models
+```
+
+Once a second, a line gives the average of each part and, in brackets, the longest. A frame twice as long as
+the average of the second before, and of 10 ms at least, gets a line of its own.
+
 The debug views are kept in `DebugViews` (`Commands/Commands.hpp`), read by the game loop. The commands that show
 and hide something read their `on` / `off` argument with `readSwitch()` (`Commands/Switch.hpp`).
 
