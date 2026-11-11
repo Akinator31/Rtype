@@ -120,6 +120,9 @@ class GameSessionSystem : public ecs::System
     /// The outcome of the game was told: a game ends once, though several snapshots may tell it.
     bool _outcomeTold = false;
     std::function<void()> _onStrike;
+    /// The local player holds the second weapon of its loadout: switched by SwitchWeaponControl, sent in
+    /// every input (game::PlayerInput::SecondWeapon).
+    bool _secondWeapon = false;
     /// The stage of the rescue against the final boss in the latest snapshot.
     game::RescueStage _rescue = game::RescueStage::None;
     /// The entity of the scene of each entity of the game, by id.
@@ -199,6 +202,9 @@ class GameSessionSystem : public ecs::System
     void placeShipModels(float elapsed);
     /// Shows the badge of the voice above the ship of each other player who talks.
     void showVoiceBadges(float elapsed);
+    /// Takes the other weapon of the loadout in hand when the local player presses SwitchWeaponControl, while
+    /// it plays.
+    void switchWeapon(bool playing);
 
 public:
     GameSessionSystem(ecs::ComponentCaches &caches, ecs::Ecs &ecs, engine::Scenes &scenes,
@@ -224,6 +230,9 @@ public:
     void setBossLook(game::EntityKind kind, const BossLook &look);
     /// Draws the shots of this kind with a 3D model of energy from now on, instead of a box.
     void setShotLook(game::EntityKind kind, const ShotLook &look);
+    /// Draws the shots of the players fired with the projectile of this index of the configuration
+    /// (game::EntityState::ship) with this look, at this size, from now on: each weapon its own model.
+    void setProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size);
     /// Draws the items of this index of the configuration (game::EntityState::ship) with this animated 3D
     /// model from now on, instead of a box.
     void setItemLook(std::uint8_t item, const ItemLook &look);
@@ -251,6 +260,7 @@ public:
     void setAuraColors(const AuraColors *colors);
     /// Calls this for each ship drawn that the blade of the shogun goes through from now on.
     void setStrikeHandler(std::function<void()> onStrike);
+
     /// Calls this for each ship killed in the game while drawn from now on: a Bydo or the ship of a player.
     void setKillHandler(std::function<void(const Kill &)> onKill);
     /// Calls this with the number of each wave started in the game from now on, from 1, and its music (empty
@@ -273,6 +283,8 @@ public:
     [[nodiscard]] const std::vector<game::PlayerState> &players() const { return _players; }
     /// Hit points of the ship of the local player in the latest snapshot: for the HUD.
     [[nodiscard]] std::uint8_t localHealth() const { return _localHealth; }
+    /// The local player holds the second weapon of its loadout (GameSession::loadout()): for the HUD.
+    [[nodiscard]] bool holdsSecondWeapon() const { return _secondWeapon; }
     /// The most hit points the ship of the local player had since it appeared, its full health: 0 while it is
     /// not there. The cockpit of a VR headset warns when the ship is low on life.
     [[nodiscard]] std::uint8_t localMaxHealth() const { return _localMaxHealth; }

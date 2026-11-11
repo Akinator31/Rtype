@@ -144,12 +144,13 @@ TEST_CASE("A destruction is forgotten once the drawn tick passes it", "[shot-pre
 namespace
 {
 
-const rtype::game::ShotLaunch Launch{{300.0f, 400.0f}, {1200.0f, 0.0f}};
+const rtype::client::PredictedShot Launch{{{300.0f, 400.0f}, {1200.0f, 0.0f}},
+                                          rtype::game::ProjectileCategory::Bullet};
 
 ShotPrediction armed()
 {
     ShotPrediction shots;
-    shots.arm(rtype::game::ProjectileCategory::Bullet, rtype::game::Rules{});
+    shots.arm(rtype::game::Rules{});
     return shots;
 }
 
@@ -340,7 +341,7 @@ struct Duel {
                 simulation->context().projectiles.getDefinition(weapon.projectile).collider)
                 .x;
         prediction.arm(weapon, halfWidth, 0);
-        shots.arm(weapon.mechanic, rules);
+        shots.arm(rules);
         prediction.reconcile(shipOf(simulation->snapshot()), simulation->tick(), weaponOf());
     }
 

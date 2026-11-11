@@ -1,6 +1,7 @@
 #include "Game/GameSessionSystem.hpp"
 
 #include "Game/EntityLook.hpp"
+#include "Settings/ControlSettings.hpp"
 #include "rtype/ecs/Hierarchy.hpp"
 #include "rtype/engine/Component/Animation.hpp"
 #include "rtype/engine/Component/Drawing.hpp"
@@ -109,6 +110,7 @@ void GameSessionSystem::start(std::unique_ptr<GameSession> session, engine::Scen
     stop();
     _session = std::move(session);
     _scene = scene;
+    _secondWeapon = false;
     _startedAt = std::chrono::system_clock::now();
     _onOver = std::move(onOver);
 }
@@ -168,6 +170,11 @@ void GameSessionSystem::setShotLook(game::EntityKind kind, const ShotLook &look)
     _shotLooks.setLook(kind, look);
 }
 
+void GameSessionSystem::setProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size)
+{
+    _shotLooks.setProjectileLook(projectile, look, size);
+}
+
 void GameSessionSystem::setItemLook(std::uint8_t item, const ItemLook &look)
 {
     _itemLooks.setLook(item, look);
@@ -211,6 +218,15 @@ void GameSessionSystem::setStrikeSound(game::EntityKind kind, const EntitySound 
 void GameSessionSystem::setStrikeHandler(std::function<void()> onStrike)
 {
     _onStrike = std::move(onStrike);
+}
+
+void GameSessionSystem::switchWeapon(bool playing)
+{
+    const game::Loadout loadout = _session->loadout();
+    if (!playing || loadout[1].empty() || !_controls.wasPressed(SwitchWeaponControl)) {
+        return;
+    }
+    _secondWeapon = !_secondWeapon;
 }
 
 void GameSessionSystem::setKillHandler(std::function<void(const Kill &)> onKill)
@@ -257,7 +273,11 @@ void GameSessionSystem::update(float elapsed)
     }
     const bool playing = _scenes.receivesInput(*_scene);
     _session->setPaused(!playing);
-    _session->setInput(playing ? inputFrom(_controls) : game::PlayerInput{});
+    switchWeapon(playing);
+    game::PlayerInput input = playing ? inputFrom(_controls) : game::PlayerInput{};
+    // Kept in the pause too: the weapon in hand is a state of the input, not a press
+    input.set(game::PlayerInput::SecondWeapon, _secondWeapon);
+    _session->setInput(input);
     _session->update(elapsed);
     _clock += elapsed;
     for (const game::Snapshot &snapshot : _session->takeSnapshots()) {
@@ -430,7 +450,7 @@ void GameSessionSystem::createEntity(const game::EntityState &state)
         _shipLooks.addModel(_ecs, entity, state, look, _clock, isLocalShip(state));
     } else if (_bossLooks.hasLook(state.kind)) {
         _bossLooks.addModel(_ecs, entity, state, look);
-    } else if (_shotLooks.hasLook(state.kind)) {
+    } else if (_shotLooks.hasLook(state)) {
         _shotLooks.addModel(_ecs, entity, state, look);
     } else {
         _ecs.addComponent<engine::Box>(entity, look.box);

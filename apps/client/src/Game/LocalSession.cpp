@@ -3,6 +3,7 @@
 #include "rtype/game/Component/Components.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/ShipMovement.hpp"
+#include "rtype/log/Logger.hpp"
 
 #include <algorithm>
 #include <random>
@@ -16,6 +17,12 @@ namespace
 
 constexpr double Tick = 1.0 / game::TickRate;
 
+const log::Logger &logger()
+{
+    static const log::Logger instance("game");
+    return instance;
+}
+
 /// The rules of a game offline: the story mode, where allies come to the rescue against the final boss. Each
 /// game draws its own seed, so the waves are not the same every time.
 game::Rules storyRules(game::Rules rules)
@@ -27,10 +34,16 @@ game::Rules storyRules(game::Rules rules)
 
 } // namespace
 
-LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config)
+LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config, const game::Loadout &loadout)
     : _simulation(storyRules(rules), config), _waveCount(static_cast<std::uint16_t>(config.waves.size()))
 {
     _simulation.addPlayer(localSlot());
+    if (_simulation.setLoadout(localSlot(), loadout)) {
+        _loadout = loadout;
+    } else {
+        logger().warning("The weapons {} and {} are not in the hangar: the player has the one of the game",
+                         loadout[0], loadout[1]);
+    }
 }
 
 void LocalSession::update(float elapsed)
