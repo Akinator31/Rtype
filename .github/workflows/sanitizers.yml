@@ -56,7 +56,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .cpm-cache
-          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/**', 'CMakeLists.txt', 'apps/**/CMakeLists.txt', 'libs/**/CMakeLists.txt', 'tests/**/CMakeLists.txt') }}
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/**', 'CMakeLists.txt', 'apps/**/CMakeLists.txt', 'example/**/CMakeLists.txt', 'libs/**/CMakeLists.txt', 'tests/**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
       - name: Configure
