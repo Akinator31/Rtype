@@ -32,7 +32,7 @@ env:
 jobs:
   sanitizers:
     name: Sanitizers (${{ inputs.sanitizers || 'address,undefined' }})
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux]
 
     env:
       CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
@@ -46,7 +46,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev ninja-build \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libssl-dev libpq-dev \
             libpulse0 libasound2t64
 
       - name: Start PostgreSQL for the tests

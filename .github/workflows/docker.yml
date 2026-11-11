@@ -20,7 +20,7 @@ permissions:
 jobs:
   image:
     name: Image
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux]
     permissions:
       contents: read
       packages: write
@@ -32,9 +32,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # BuildKit keeps the downloads of CPM and the build folder in its cache mounts, for the time of the job: a
-      # GitHub-hosted runner starts empty. The build folder is one per branch: shared, it would hold objects of
-      # another branch that Ninja finds up to date
+      # BuildKit keeps the downloads of CPM and the build folder in its cache mounts, on this runner. The build
+      # folder is one per branch: shared, it would hold objects of another branch that Ninja finds up to date
       - name: Build the image
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
@@ -56,8 +55,8 @@ jobs:
         run: docker/smoke-test-accounts.sh "$SERVER_IMAGE" "$SMOKE_IMAGE"
 
       # The image for linux/amd64 and linux/arm64 in one manifest, Dokploy pulls the one of its machine. arm64
-      # is built under QEMU, slower, and only here: the smoke tests above run on amd64. The builder is created
-      # on each run, the runner starting empty
+      # is built under QEMU, slower, and only here: the smoke tests above run on amd64. The builder keeps its
+      # cache mounts on this runner, from one publication to the next
       - name: Publish on GHCR
         if: github.event_name == 'push'
         env:
