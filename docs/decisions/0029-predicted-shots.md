@@ -49,5 +49,7 @@ still appear that late, already that far ahead.
 - The client must have the same definitions as the server (`config/`): with another weapon, the shots are
   predicted wrong, then dropped, and those of the game drawn as they come, late.
 - Bydos are drawn in the past: a shot that hits within a round trip of the ship flies through its target for
-  that long, until its destruction comes.
+  that long, until its destruction comes. **Amended by [ADR 0038](0038-shots-glide-to-the-time-of-the-world.md)**:
+  the time of a shot glides from the ship to the drawn tick as it flies, so that it meets the Bydos in their
+  time.
 - A part of a snapshot holds the same 69 entities with four players; 70 instead of 71 without players.
