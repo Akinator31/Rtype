@@ -190,6 +190,9 @@ void writeEquippedWeapons(const ShipSelection &selection, engine::Settings &sett
 
 void ShipSelection::step(int direction)
 {
+    if (departing) {
+        return;
+    }
     const std::size_t offset = direction >= 0 ? 1 : shipCount - 1;
     focused = (focused + offset) % shipCount;
 }
@@ -215,7 +218,7 @@ void ShipSelection::setLevel(std::uint32_t value)
 void ShipSelection::stepWeapon(std::size_t place, int direction)
 {
     const std::size_t count = weapons.size();
-    if (place >= game::LoadoutSize || count == 0) {
+    if (departing || place >= game::LoadoutSize || count == 0) {
         return;
     }
     const std::size_t offset = direction >= 0 ? 1 : count - 1;
