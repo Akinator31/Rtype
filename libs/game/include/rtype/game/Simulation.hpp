@@ -69,6 +69,19 @@ public:
 
     /// The weapon of the ship of a player, as the last step() left it: nothing without a ship or a weapon.
     [[nodiscard]] std::optional<Armed> weaponOf(std::uint8_t slot);
+    /// The weapon the ship of a player has put away, as the last step() left it: nothing without a ship or a
+    /// second weapon.
+    [[nodiscard]] std::optional<Holster> holsterOf(std::uint8_t slot);
+
+    /// Whether a loadout can be given to a player: empty, or two different weapons, each one of the hangar
+    /// (GameConfig::weaponUnlocks) or that of the PlayerDefinition. The levels they need are the client's to
+    /// check: the game does not know the accounts.
+    [[nodiscard]] bool isLoadoutAllowed(const Loadout &loadout) const;
+
+    /// The weapons of a player, from now on: its ship, if it has one, gets them at once, magazines full, the
+    /// first in hand; and every ship it gets later.
+    /// @return false, and nothing changes, for an empty slot or a loadout that is not allowed.
+    bool setLoadout(std::uint8_t slot, const Loadout &loadout);
     [[nodiscard]] std::size_t playerCount() const;
 
     /// The input of a player, applied at every tick until the next call. Ignored for an empty slot.

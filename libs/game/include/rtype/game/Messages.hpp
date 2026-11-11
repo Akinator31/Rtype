@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtype/game/Constants.hpp"
+#include "rtype/game/Loadout.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/voice/Backend.hpp"
@@ -58,6 +59,8 @@ inline constexpr std::uint8_t Voice = 0x41;
 inline constexpr std::uint8_t VoiceState = 0x42;
 /// Client → game: whether the player is muted, deafened, without a microphone.
 inline constexpr std::uint8_t VoiceStatus = 0x43;
+/// Client → game: the weapons the player chose in the hangar.
+inline constexpr std::uint8_t Loadout = 0x44;
 /// Game → client: one part of a snapshot.
 inline constexpr std::uint8_t Snapshot = 0x80;
 /// Game → client: the entities destroyed during a tick.
@@ -80,15 +83,21 @@ inline constexpr std::size_t MaxInputsPerMessage = 32;
 inline constexpr std::size_t InputRedundancy = 8;
 /// Most parts of one snapshot.
 inline constexpr std::size_t MaxSnapshotParts = 16;
-/// The weapon of the ship of a client, in its snapshots (docs/protocol/game.md, section 9.3): what its
+/// The weapons of the ship of a client, in its snapshots (docs/protocol/game.md, section 9.3): what its
 /// prediction of the shots starts again from. All 0 without a ship.
 struct WeaponState {
-    /// Ticks before it can fire again.
+    /// Ticks before the weapon in hand can fire again.
     std::uint16_t cooldown = 0;
-    /// Shots left in the magazine.
+    /// Shots left in its magazine.
     std::uint16_t ammo = 0;
-    /// Ticks before the magazine is full again, 0 when it is not reloading.
+    /// Ticks before its magazine is full again, 0 when it is not reloading.
     std::uint16_t reloadLeft = 0;
+    /// Which weapon of the loadout is in hand, 0 or 1 (version 7).
+    std::uint8_t inHand = 0;
+    /// The weapon put away (Holster), all 0 without one (version 7).
+    std::uint16_t spareCooldown = 0;
+    std::uint16_t spareAmmo = 0;
+    std::uint16_t spareReloadLeft = 0;
 
     friend bool operator==(const WeaponState &, const WeaponState &) = default;
 };
@@ -99,6 +108,8 @@ inline constexpr std::int8_t NoInputLead = -128;
 inline constexpr std::size_t MaxDestroyedPerMessage = 228;
 /// Longest name of a player, in bytes of UTF-8.
 inline constexpr std::size_t MaxPlayerNameLength = 16;
+/// Most bytes of the id of a weapon in LOADOUT.
+inline constexpr std::size_t MaxWeaponIdLength = 255;
 /// Most bytes of the music of a wave in WAVE_STARTED.
 inline constexpr std::size_t MaxWaveMusicLength = 128;
 
@@ -239,6 +250,14 @@ struct VoiceFrameMessage {
     friend bool operator==(const VoiceFrameMessage &, const VoiceFrameMessage &) = default;
 };
 
+/// `LOADOUT`: the two weapons a player chose in the hangar, by the ids of their definitions (version 7).
+struct LoadoutMessage {
+    /// 1 to MaxWeaponIdLength bytes each.
+    Loadout weapons;
+
+    friend bool operator==(const LoadoutMessage &, const LoadoutMessage &) = default;
+};
+
 /// `VOICE_STATE`: what carries the voice of the player (ADR 0035).
 struct VoiceStateMessage {
     voice::Backend backend = voice::Backend::None;
@@ -291,6 +310,7 @@ struct VoiceStatusesMessage {
 [[nodiscard]] std::vector<std::byte> encode(const GameOverMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const VoiceMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const VoiceFrameMessage &message);
+[[nodiscard]] std::vector<std::byte> encode(const LoadoutMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const VoiceStateMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const VoiceRosterMessage &message);
 [[nodiscard]] std::vector<std::byte> encode(const VoiceStatusMessage &message);
@@ -310,6 +330,7 @@ decodeEntitiesDestroyed(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<GameOverMessage> decodeGameOver(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceMessage> decodeVoice(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceFrameMessage> decodeVoiceFrame(std::span<const std::byte> payload);
+[[nodiscard]] std::optional<LoadoutMessage> decodeLoadout(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceStateMessage> decodeVoiceState(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceRosterMessage> decodeVoiceRoster(std::span<const std::byte> payload);
 [[nodiscard]] std::optional<VoiceStatusMessage> decodeVoiceStatus(std::span<const std::byte> payload);

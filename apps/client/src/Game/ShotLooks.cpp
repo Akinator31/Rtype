@@ -44,24 +44,51 @@ void ShotLooks::setLook(game::EntityKind kind, const ShotLook &look)
     _looks.insert_or_assign(kind, look);
 }
 
+void ShotLooks::setProjectileLook(std::uint8_t projectile, const ShotLook &look, render::Vector2 size)
+{
+    _projectiles.insert_or_assign(projectile, ProjectileLook{look, size});
+}
+
 bool ShotLooks::hasLook(game::EntityKind kind) const
 {
     return _looks.contains(kind);
 }
 
+const ShotLooks::ProjectileLook *ShotLooks::findProjectile(const game::EntityState &state) const
+{
+    if (state.kind != game::EntityKind::PlayerShot) {
+        return nullptr;
+    }
+    const auto found = _projectiles.find(state.ship);
+    return found == _projectiles.end() ? nullptr : &found->second;
+}
+
+bool ShotLooks::hasLook(const game::EntityState &state) const
+{
+    return findProjectile(state) != nullptr || hasLook(state.kind);
+}
+
+const ShotLook &ShotLooks::lookOf(const game::EntityState &state) const
+{
+    const ProjectileLook *projectile = findProjectile(state);
+    return projectile != nullptr ? projectile->look : _looks.at(state.kind);
+}
+
 void ShotLooks::addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state,
                          const EntityLook &look) const
 {
-    const ShotLook &shot = _looks.at(state.kind);
+    const ProjectileLook *projectile = findProjectile(state);
+    const ShotLook &shot = lookOf(state);
+    const float width = projectile != nullptr ? projectile->size.x : look.box.width;
     ecs.addComponent<engine::Model>(entity, shot.model, render::Vector3{}, LengthAxis, HalfTurn,
-                                    look.box.width / shot.core.width, render::colors::White,
+                                    width / shot.core.width, render::colors::White,
                                     shot.facesLeft ? HalfTurn : 0.0f, std::vector<int>{}, shot.energy);
     placeModel(ecs, entity, state);
 }
 
 void ShotLooks::placeModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state) const
 {
-    const ShotLook &shot = _looks.at(state.kind);
+    const ShotLook &shot = lookOf(state);
     const float heading = computeHeading(shot, state);
     engine::Model &model = ecs.getComponent<engine::Model>(entity);
     model.rotationAxis = computeFlipAxis(heading);

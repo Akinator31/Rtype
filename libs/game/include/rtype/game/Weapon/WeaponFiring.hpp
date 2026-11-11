@@ -27,6 +27,11 @@ struct ShotLaunch {
 /// @return Whether it fires this tick.
 [[nodiscard]] bool stepWeapon(Armed &armed, const WeaponDefinition &weapon, bool wantsToFire);
 
+/// Takes in hand the weapon of the loadout at `wanted` (0 or 1, PlayerInput::weaponInHand()): when it is the
+/// one put away, it swaps places with the one in hand, each with its own cooldown, ammo, reload and boost.
+/// Before stepWeapon(), so that the weapon taken in hand steps at once.
+void selectWeapon(Armed &armed, Holster &holster, std::uint8_t wanted);
+
 /// A shot fired from a point towards another: it starts half its width further along the line, at the speed
 /// of the weapon. Towards the point itself, it flies forward: right for a player, left for the others.
 /// @param projectileHalfWidth Half the width of the collider of the projectile of the weapon.

@@ -25,8 +25,10 @@ constexpr float LivesCentre = 146.7f;
 constexpr float PilotCentre = 114.0f;
 constexpr float ScoreCentre = 75.3f;
 constexpr float HealthCentre = 38.0f;
-/// Between the score and the experience.
+/// Between the score and the experience, and between the hit points and the weapons.
 constexpr float XpGap = 21.3f;
+/// Between the weapon in hand and the one put away.
+constexpr float WeaponGap = 16.0f;
 
 /// The line of the other player nearest to the ping, and the distance between two lines.
 constexpr float AllyCentre = 92.7f;
@@ -174,6 +176,7 @@ void HudSystem::update(float /*elapsed*/)
         showShadows(hud, cockpit);
         showPilot(hud, local, names, voice);
         showHealth(hud);
+        showWeapons(hud, cockpit);
         showAllies(hud, local, names, voice);
         showPing(hud, ping);
         showCockpitOnly(hud, cockpit);
@@ -197,6 +200,8 @@ void HudSystem::applyScale(const Hud &hud, const HudScale &scale)
     size(hud.pilot, scale.pilot, left);
     size(hud.score, scale.score, left);
     size(hud.health, scale.health, left);
+    size(hud.weapon, scale.health, left);
+    size(hud.spareWeapon, scale.health, left);
     size(hud.xp, scale.xp, left);
     size(hud.ping, scale.ping, right);
     for (const HudAlly &ally : hud.allies) {
@@ -366,6 +371,10 @@ void HudSystem::placeInCockpit(const Hud &hud)
     pin(hud.score, AnchorPoint::TopLeft, ship::Margin, ship::ScoreCentre, _texts.get(hud.score).size);
     pin(hud.xp, AnchorPoint::TopLeft, ship::Margin, ship::XpCentre, _texts.get(hud.xp).size);
     pin(hud.health, AnchorPoint::TopLeft, ship::Margin, ship::HealthCentre, _texts.get(hud.health).size);
+    const float weaponLeft = ship::Margin + measureWidth(hud.health) + XpGap;
+    pin(hud.weapon, AnchorPoint::TopLeft, weaponLeft, ship::HealthCentre, _texts.get(hud.weapon).size);
+    pin(hud.spareWeapon, AnchorPoint::TopLeft, weaponLeft + measureWidth(hud.weapon) + WeaponGap,
+        ship::HealthCentre, _texts.get(hud.spareWeapon).size);
 
     // The navigation: the wave, the boss, then the kind of game, and under it the ping and its bars
     pin(hud.waveLabel, AnchorPoint::Top, 0.0f, nav::LabelCentre, nav::Label.size);
@@ -444,6 +453,33 @@ void HudSystem::showHealth(const Hud &hud)
     engine::Text &health = _texts.get(hud.health);
     health.text = std::format("HP {}", _sessions.localHealth());
     placeAbove(hud.health, Margin, HealthCentre, health.size);
+}
+
+void HudSystem::showWeapons(const Hud &hud, bool cockpit)
+{
+    const GameSession *session = _sessions.session();
+    const game::Loadout loadout = session != nullptr ? session->loadout() : game::Loadout{};
+    const auto nameOf = [&hud](const std::string &weapon) {
+        const auto name = hud.look.words.weapons.find(weapon);
+        return name == hud.look.words.weapons.end() ? weapon : name->second;
+    };
+    engine::Text &weapon = _texts.get(hud.weapon);
+    engine::Text &spare = _texts.get(hud.spareWeapon);
+    if (loadout[1].empty()) {
+        weapon.text.clear();
+        spare.text.clear();
+        return;
+    }
+    const std::size_t hand = _sessions.holdsSecondWeapon() ? 1 : 0;
+    weapon.text = nameOf(loadout[hand]);
+    spare.text = nameOf(loadout[1 - hand]);
+    if (cockpit) {
+        // Placed on the screen of the ship with the rest (placeInCockpit())
+        return;
+    }
+    const float left = Margin + measureWidth(hud.health) + XpGap;
+    placeAbove(hud.weapon, left, HealthCentre, weapon.size);
+    placeAbove(hud.spareWeapon, left + measureWidth(hud.weapon) + WeaponGap, HealthCentre, spare.size);
 }
 
 void HudSystem::showAllies(const Hud &hud, std::uint8_t local,

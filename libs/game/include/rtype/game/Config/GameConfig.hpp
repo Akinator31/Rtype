@@ -2,6 +2,7 @@
 
 #include "rtype/game/Enemy/EnemyDefinition.hpp"
 #include "rtype/game/Item/ItemDefinition.hpp"
+#include "rtype/game/Loadout.hpp"
 #include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/Progression.hpp"
 #include "rtype/game/Projectile/ProjectileDefinition.hpp"
@@ -31,6 +32,10 @@ struct GameConfig {
     std::vector<ShipUnlock> shipUnlocks;
     /// From config/items/: what the waves make appear (WaveDefinition::items).
     std::vector<ItemDefinition> items;
+    /// From config/hangar.lua, optional: the weapons a player can take into a game, in the order of the
+    /// hangar, and the level each one needs; empty without it, and the players only have the weapon of
+    /// `player`.
+    std::vector<WeaponUnlock> weaponUnlocks;
 };
 
 } // namespace rtype::game

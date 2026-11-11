@@ -62,6 +62,15 @@ struct Armed {
     std::uint32_t boostInterval = 0;
 };
 
+/// The weapon of the loadout of a player that its ship has put away (PlayerSlot::loadout): it keeps its
+/// state, frozen, until the player takes it in hand (PlayerInput::SecondWeapon), and the Armed takes its
+/// place (selectWeapon()). Only the ships of players with two weapons have one.
+struct Holster {
+    Armed weapon;
+    /// Which weapon of the loadout is in hand, in the Armed of the ship: 0 or 1.
+    std::uint8_t inHand = 0;
+};
+
 /// Hit points left.
 struct Health {
     std::uint8_t points = 0;
@@ -139,6 +148,12 @@ struct Item {
 /// The index of the ItemDefinition of an item in the ItemRegistry, sent to the clients so that they draw its
 /// model (EntityState::ship).
 struct ItemIndex {
+    std::uint8_t value = NoShip;
+};
+
+/// The projectile of a shot of a player, sent to the clients so that they draw its model: its index in the
+/// ProjectileRegistry (EntityState::ship), NoShip beyond what a byte holds.
+struct ProjectileIndex {
     std::uint8_t value = NoShip;
 };
 

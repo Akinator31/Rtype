@@ -174,6 +174,9 @@ void GameHost::received(std::uint32_t session, std::uint8_t type, std::span<cons
     case rtype::game::message_type::VoiceStatus:
         receivedVoiceStatus(found->second, session, payload);
         return;
+    case rtype::game::message_type::Loadout:
+        receivedLoadout(found->second, session, payload);
+        return;
     default:
         logger().debug("Message {:#04x} of session {} ignored: not one a client sends", type, session);
         return;
@@ -189,6 +192,22 @@ void GameHost::receivedInput(Player &player, std::uint32_t session, std::span<co
     }
     // Each one applied at its tick: the older ones are those a lost datagram did not bring
     _game.receiveInputs(player.slot, input->tick, std::move(input->inputs));
+}
+
+void GameHost::receivedLoadout(Player &player, std::uint32_t session, std::span<const std::byte> payload)
+{
+    std::optional<rtype::game::LoadoutMessage> loadout = rtype::game::decodeLoadout(payload);
+    if (!loadout) {
+        logger().debug("Malformed LOADOUT of session {} dropped", session);
+        return;
+    }
+    if (!player.connected || player.loadoutChosen) {
+        return;
+    }
+    player.loadoutChosen = true;
+    logger().debug("{} ({}) takes {} and {}", player.name, player.playerId, loadout->weapons[0],
+                   loadout->weapons[1]);
+    _game.setLoadout(player.slot, std::move(loadout->weapons));
 }
 
 void GameHost::receivedVoice(Player &player, std::uint32_t session, std::span<const std::byte> payload)

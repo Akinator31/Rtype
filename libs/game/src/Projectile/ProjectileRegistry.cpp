@@ -1,6 +1,7 @@
 #include "rtype/game/Projectile/ProjectileRegistry.hpp"
 
 #include <format>
+#include <iterator>
 #include <stdexcept>
 #include <utility>
 
@@ -31,6 +32,28 @@ const ProjectileDefinition &ProjectileRegistry::getDefinition(const std::string 
         throw std::out_of_range(std::format("unknown projectile '{}'", id));
     }
     return found->second;
+}
+
+std::size_t ProjectileRegistry::getDefinitionCount() const
+{
+    return _definitions.size();
+}
+
+std::size_t ProjectileRegistry::getIndex(const std::string &id) const
+{
+    const auto found = _definitions.find(id);
+    if (found == _definitions.end()) {
+        throw std::out_of_range(std::format("unknown projectile '{}'", id));
+    }
+    return static_cast<std::size_t>(std::distance(_definitions.begin(), found));
+}
+
+const ProjectileDefinition &ProjectileRegistry::getDefinitionAt(std::size_t index) const
+{
+    if (index >= _definitions.size()) {
+        throw std::out_of_range(std::format("no projectile at index {}", index));
+    }
+    return std::next(_definitions.begin(), static_cast<std::ptrdiff_t>(index))->second;
 }
 
 } // namespace rtype::game

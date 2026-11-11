@@ -167,7 +167,7 @@ struct ReadFiles {
     std::vector<FromFile<ItemDefinition>> items;
     std::optional<FromFile<PlayerDefinition>> player;
     Progression progression;
-    std::vector<ShipUnlock> shipUnlocks;
+    std::optional<FromFile<Hangar>> hangar;
 };
 
 /// The assets of the programs, next to the configuration: `assets/` beside `config/` once built or installed,
@@ -239,16 +239,21 @@ Progression readProgressionFile(const std::filesystem::path &directory, std::vec
     return readScript(directory / name, name, readProgression, errors).value_or(Progression{});
 }
 
-/// The file of the hangar, at the root of the directory: no ship needs a level without it.
-std::vector<ShipUnlock> readHangarFile(const std::filesystem::path &directory,
-                                       std::vector<std::string> &errors)
+/// The file of the hangar, at the root of the directory: without it, no ship needs a level and the players
+/// have no weapon to choose.
+std::optional<FromFile<Hangar>> readHangarFile(const std::filesystem::path &directory,
+                                               std::vector<std::string> &errors)
 {
     const std::string name(HangarFile);
     std::error_code error;
     if (!std::filesystem::is_regular_file(directory / name, error)) {
-        return {};
+        return std::nullopt;
     }
-    return readScript(directory / name, name, readShipUnlocks, errors).value_or(std::vector<ShipUnlock>{});
+    std::optional<Hangar> hangar = readScript(directory / name, name, readHangar, errors);
+    if (!hangar) {
+        return std::nullopt;
+    }
+    return FromFile<Hangar>{name, std::move(*hangar)};
 }
 
 ReadFiles readFiles(const std::filesystem::path &directory, const std::filesystem::path &assets,
@@ -268,7 +273,7 @@ ReadFiles readFiles(const std::filesystem::path &directory, const std::filesyste
     }
     files.player = readPlayerFile(directory, errors);
     files.progression = readProgressionFile(directory, errors);
-    files.shipUnlocks = readHangarFile(directory, errors);
+    files.hangar = readHangarFile(directory, errors);
     return files;
 }
 
@@ -307,6 +312,12 @@ void checkDefinitions(const ReadFiles &files, std::vector<std::string> &errors)
     const auto &[file, player] = *files.player;
     checkReference(ships.hasDefinition(player.ship), file, "ship", "ship", player.ship, errors);
     checkReference(weapons.hasDefinition(player.weapon), file, "weapon", "weapon", player.weapon, errors);
+    if (files.hangar) {
+        for (const WeaponUnlock &unlock : files.hangar->definition.weapons) {
+            checkReference(weapons.hasDefinition(unlock.weapon), files.hangar->file, "weapons", "weapon",
+                           unlock.weapon, errors);
+        }
+    }
 }
 
 GameConfig takeConfig(ReadFiles &files)
@@ -318,8 +329,9 @@ GameConfig takeConfig(ReadFiles &files)
             takeDefinitions(files.waves),
             std::move(files.player->definition),
             files.progression,
-            std::move(files.shipUnlocks),
-            takeDefinitions(files.items)};
+            files.hangar ? std::move(files.hangar->definition.ships) : std::vector<ShipUnlock>{},
+            takeDefinitions(files.items),
+            files.hangar ? std::move(files.hangar->definition.weapons) : std::vector<WeaponUnlock>{}};
 }
 
 } // namespace

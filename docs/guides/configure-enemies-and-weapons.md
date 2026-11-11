@@ -26,7 +26,7 @@ config/
   items/         what the ships of the players pick up: its model, its hitbox, its effects
   player.lua     what every player starts with: its ship, its weapon, its health
   progression.lua  the experience the players earn online, optional
-  hangar.lua     the level of the account each ship of the hangar needs, optional
+  hangar.lua     the level of the account each ship and each weapon of the hangar needs, optional
 ```
 
 - **One file per definition.** The file returns the table of one projectile, one weapon... Its name is free
@@ -306,7 +306,7 @@ One file, at the root of `config/`, **required**: without it, the configuration 
 | Field | Type | Default | What it is |
 |---|---|---|---|
 | `ship` | string | *required* | The id of the ship of every player |
-| `weapon` | string | *required* | The id of the weapon every player fires while Fire is held |
+| `weapon` | string | *required* | The id of the weapon every player fires while Fire is held, unless it chose two in the hangar (`config/hangar.lua`) |
 | `health` | whole number from 1 to 255 | `100` | Hit points of each ship: the damage of the Bydos is taken from them, and a ship with none left costs a life |
 
 ### The experience (`config/progression.lua`)
@@ -322,20 +322,34 @@ alive as the wave ends; its **streak** counts the waves it cleared in a row.
 | `streakBonus` | whole number from 0 to 65535 | `25` | Percent added to the multiplier for each wave of the streak after the first: `25` gives x1, x1.25, x1.5... It counts for the Bydos shot down too |
 | `streakCap` | whole number from 100 to 65535 | `300` | Highest multiplier, in percent |
 
-### The ships of the hangar (`config/hangar.lua`)
+### The ships and the weapons of the hangar (`config/hangar.lua`)
 
-One file, at the root of `config/`, optional: without it, every ship of the hangar is open. A ship needs a
+One file, at the root of `config/`, optional: without it, every ship of the hangar is open, and the players
+only have the weapon of `config/player.lua`. A ship needs a
 **level** of the account before the player can equip it; a locked one can still be looked at, and its button
 says the level it needs. The level is that of the account signed in, or, offline and as a guest, of the last
 account signed in on this machine (`account.level` in the [settings](../architecture/settings.md)). A level
 up that opens a ship shows a toast. The ships of the hangar are those of the client, named by their code:
-only the client uses this file.
+only the client reads them.
+
+The **weapons** are those the players choose two of in the hangar, under the ship: a primary weapon, in hand
+when the ship appears, and a secondary one, put away. In a game, Left Shift (X on a gamepad, rebindable in the
+Controls page as *Switch weapon*) takes the other one in hand; each one keeps its cooldown, its ammunition and
+its reload while it is put away. A weapon needs a level too, and only an open one can be chosen. The game
+checks the weapons a player sends against this list, and refuses those that are not in it (or that of
+`config/player.lua`): the server and the clients need the same file. The name a weapon has in the hangar is
+the translation `weapon.<id>` of the client (`apps/client/assets/locales/`).
 
 ```lua
 return {
     ships = {
         { ship = "VX-01", level = 1 },
         { ship = "VX-02", level = 3 },
+    },
+    weapons = {
+        { weapon = "player_cannon", level = 1 },
+        { weapon = "rapid_rifle", level = 1 },
+        { weapon = "plasma_gun", level = 4 },
     },
 }
 ```
@@ -345,6 +359,9 @@ return {
 | `ships` | list of tables | empty | The ships that need a level; a ship of the hangar left out is open from level 1 |
 | `ships[i].ship` | string | *required* | The code of a ship of the hangar, such as `VX-03`, listed once; an unknown code is logged by the client |
 | `ships[i].level` | whole number, 1 or more | *required* | The level of the account from which the ship can be equipped |
+| `weapons` | list of tables | empty | The weapons the players can choose, in the order of the hangar; with fewer than two open, the players only have the weapon of `config/player.lua` |
+| `weapons[i].weapon` | string | *required* | The id of a weapon of `config/weapons/`, listed once |
+| `weapons[i].level` | whole number, 1 or more | *required* | The level of the account from which the weapon can be chosen |
 
 ## Computing values
 

@@ -3,6 +3,7 @@
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/Enemy/EnemyRegistry.hpp"
 #include "rtype/game/Item/ItemRegistry.hpp"
+#include "rtype/game/Loadout.hpp"
 #include "rtype/game/Player/PlayerDefinition.hpp"
 #include "rtype/game/PlayerInput.hpp"
 #include "rtype/game/Progression.hpp"
@@ -41,6 +42,8 @@ struct PlayerSlot {
     std::uint16_t bestStreak = 0;
     /// Experience earned in this game, endless games only (Progression).
     std::uint32_t xp = 0;
+    /// The weapons its ships have (Simulation::setLoadout()); empty, the weapon of GameContext::player.
+    Loadout loadout{};
 
     /// Its ship is in the game: it has lives left and is not waiting for the next one.
     [[nodiscard]] bool isAlive() const { return present && lives > 0 && respawnIn == 0; }
@@ -80,6 +83,9 @@ struct GameContext {
     ItemRegistry items;
     /// The ship and the weapon of every player.
     PlayerDefinition player;
+    /// The weapons of the hangar (GameConfig::weaponUnlocks): with that of `player`, those a loadout may
+    /// have.
+    std::vector<std::string> loadoutWeapons;
     /// The experience of the endless games.
     Progression progression;
     /// The tick being simulated, from 1.

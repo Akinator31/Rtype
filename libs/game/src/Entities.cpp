@@ -64,9 +64,7 @@ ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t 
     ecs.addComponent<physics::Collider>(ship, box(rules.shipHalfWidth, rules.shipHalfHeight));
     ecs.addComponent<physics::ConfinedToBounds>(ship, ecs::Position{0.0f, 0.0f},
                                                 ecs::Position{GameWidth, GameHeight});
-    if (!context.player.weapon.empty()) {
-        equipWeapon(ecs, context, ship, context.player.weapon);
-    }
+    equipLoadout(ecs, context, ship, context.players[slot].loadout);
     return ship;
 }
 
@@ -112,6 +110,11 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
     ecs.addComponent<physics::Collider>(projectile, definition.collider);
     const physics::Vec3 half = halfSizeOf(definition.collider);
     ecs.addComponent<LeavesArea>(projectile, half.x, half.y);
+    if (owner < MaxPlayers) {
+        const std::size_t index = context.projectiles.getIndex(id);
+        ecs.addComponent<ProjectileIndex>(projectile,
+                                          index < NoShip ? static_cast<std::uint8_t>(index) : NoShip);
+    }
     return projectile;
 }
 
@@ -135,6 +138,22 @@ void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const 
 {
     const WeaponDefinition &weapon = context.weapons.getDefinition(weaponId);
     ecs.addComponent<Armed>(ship, weaponId, 0U, weapon.magazineSize, 0U);
+}
+
+void equipLoadout(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const Loadout &loadout)
+{
+    const std::string &first = loadout[0].empty() ? context.player.weapon : loadout[0];
+    if (!first.empty()) {
+        equipWeapon(ecs, context, ship, first);
+    }
+    if (first.empty() || loadout[1].empty()) {
+        if (ecs.hasComponent<Holster>(ship)) {
+            ecs.removeComponent<Holster>(ship);
+        }
+        return;
+    }
+    const WeaponDefinition &second = context.weapons.getDefinition(loadout[1]);
+    ecs.addComponent<Holster>(ship, Armed{loadout[1], 0U, second.magazineSize, 0U}, std::uint8_t{0});
 }
 
 ecs::entity_t spawnWeaponShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,

@@ -421,13 +421,15 @@ void run(const std::vector<std::string_view> &arguments)
 
     assetsLoaded = true;
     // The scenes of the game are built from the loaded assets, which they find in the cache
-    // The ships the level of the last account opens, and the ship equipped at the last run
+    // The ships and the weapons the level of the last account opens, and those equipped at the last run
     rtype::client::ShipSelection ships;
     rtype::client::readRequiredLevels(ships, config.shipUnlocks);
+    rtype::client::readHangarWeapons(ships, config.weaponUnlocks);
     rtype::client::readPlayerLevel(ships, engine.getSettings());
     rtype::client::readEquippedShip(ships, engine.getSettings());
+    rtype::client::readEquippedWeapons(ships, engine.getSettings());
     rtype::client::GameScenes games(engine, resources, audio, metrics, style, sessions, translations, ships,
-                                    config.ships, config.items);
+                                    config.ships, config.items, config);
     games.setFriends(&discordFriends);
     rtype::client::OnlineScenes online(engine, resources, network, games, style, translations, discord,
                                        discordConnection, discordFriends, ships,
