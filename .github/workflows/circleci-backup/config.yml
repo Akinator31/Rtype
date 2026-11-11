@@ -286,7 +286,7 @@ commands:
               echo "GHCR_USER and GHCR_TOKEN are not set (Project Settings > Environment Variables): cannot publish."
               exit 1
             fi
-            echo "export IMAGE='ghcr.io/${GITHUB_REPOSITORY,,}'" >> "$BASH_ENV"
+            echo "export IMAGE='ghcr.io/${GITHUB_REPOSITORY%%/*}/rtype-server'" >> "$BASH_ENV"
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
 jobs:
