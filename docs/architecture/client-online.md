@@ -19,8 +19,11 @@ apps/client/src/
     KnownProfiles.cpp  the account remembered for each server, and the pictures kept on disk
   Discord/
     DiscordPresence.cpp  the activity of the player in its Discord profile, from the scenes and the game
+    DiscordInvite.cpp    the join secret and the party of a game online, for the invitations
+    DiscordFriends.cpp   the rows of the Discord friends, in the lobby and in the pause menu
   main.cpp             the discord::Session of libs/discord, polled every frame, its SocialSdkAuthorizer,
-                       its SocialSdkPresence, its SocialSdkConnection and its SocialSdkVoiceCall
+                       its SocialSdkPresence, its SocialSdkConnection, its SocialSdkVoiceCall and its
+                       SocialSdkFriends
   Game/
     RemoteSession.cpp  a game online: the UDP session with the instance, inputs out, world in
     Interpolation.cpp  the world drawn a little in the past, between the snapshots around that time
@@ -262,6 +265,7 @@ built on one of them (`DiscordVoice`, [Voice](voice.md#the-voice-of-discord)), w
 | `Authorizer` | the sign-in, above | `SocialSdkAuthorizer` |
 | `Presence` | the activity of the player in its Discord profile, without a token ([below](#rich-presence)) | `SocialSdkPresence` |
 | `Connection` | the connection with the token of the player, which lobbies and voice need ([above](#discord)) | `SocialSdkConnection` |
+| `Friends` | the Discord friends of the player and the invitations between them, once connected ([below](#friends)) | `SocialSdkFriends` |
 | `VoiceCall` | the Discord lobby of a game, from the secret of `GAME_JOINED`, and its call ([Voice](voice.md#the-voice-of-discord)) | `SocialSdkVoiceCall` |
 
 The implementations share **one `discordpp::Client`**, owned by `discord::Session`: its log callback (the logger
@@ -284,28 +288,98 @@ server signs in with, `[discord] client_id`; `discord.presence_application_id` i
 change it). Without an application, nothing is shown and the SDK never starts.
 
 Every frame, once the scenes are built, `observeActivity()` (`apps/client/src/Discord/DiscordPresence.hpp`) reads
-what the player does: the game played (`GameSessionSystem`: online or not, the last wave, when it started, the
-players), else the screens open. `describeActivity()` makes the texts, in the language of the game:
+what the player does: the game played (`GameSessionSystem`: online or not, the last wave, a boss, the rescue
+against the final boss, the outcome, when it started, the players; the pause menu offline), else the results of
+the last game online (`GameScenes::results()`), else the screens open. `describeActivity()` makes the texts, in
+the language of the game:
 
 | Where | First line | Second line | Party | Time |
 |---|---|---|---|---|
-| The menus, the hangar, the settings | In the hangar | | | |
-| The screens of a server | Online | Choosing a game | | |
-| A solo game | Solo | Wave 7/12 | | since it started |
-| A game online | Online game | Wave 7 | 3 of 4 | since it started |
-| The results of a game online | Online game | Game over | | |
+| The main menu, the menu Play | In the hangar | | | |
+| The ship selector | In the hangar | Choosing a ship | | |
+| The settings, the controls, the voice, the VR | In the settings | | | |
+| The lore | In the hangar | Reading the lore | | |
+| The quests | In the hangar | Checking the quests | | |
+| The servers known, the trust of a server | Online | Choosing a server | | |
+| The accounts of a server, signing in, Discord | Online | Signing in | | |
+| The account signed in | Online | Managing the account | | |
+| The games of a server | Online | Choosing a game | 1 of 4, joinable | |
+| A solo game | Solo | Wave 7/12 · Boss fight | | since it started |
+| A game online | Online game | Wave 7 · Boss fight | 3 of 4 | since it started |
+| The results of a game online | Online game | Game over · 31 waves cleared | | |
 
-The large image is the ship equipped, its key the code of the ship in lower case (`vx-03`), its code and name
-over it: the images are uploaded under those keys on the *Rich Presence* page of the application. Nothing tells
+In a game, the wave is followed by what happens in it, the first that applies: **Victory** or **Defeat** once it
+ended, **Final battle** during the rescue against the shogun (solo), **Paused** while the pause menu stops a solo
+game (online, the game goes on), **Boss fight** while a boss is there.
+
+The large image is the logo of the game, its key `logo`, "R-Type" over it; the small one, in its corner, in a
+game only (solo or online), the ship equipped, its key the code of the ship in lower case (`vx-03`), its code and name over it. The images are
+uploaded under those keys (`logo`, `vx-01` to `vx-06`) on the *Rich Presence* page of the application.
+Through a connection with a token, Discord refuses a whole activity whose image it does not find:
+`SocialSdkPresence` sends it again at once without that image, warns once by the logger `discord` which key to
+upload, and leaves that image out until the client closes. Nothing tells
 where the player is: neither the address of the server nor the name of the game, which another player chose.
 
 `PresenceTracker` sends the changes only, at most one every 4 s, the last one once that time passed: Discord
-limits a presence to 5 updates in 20 s. **Activity on Discord** on the Settings page turns it off, which clears
-the activity at once; `SocialSdkPresence` clears it when the client closes. Discord not running, the SDK answers
-an error, logged by the logger `discord` (info), and the game goes on.
+limits a presence to 5 updates in 20 s. `Presence::update()` tells what Discord answered: an activity refused
+(Discord not running, or the connection with a token not ready) is sent again every 15 s until Discord takes it,
+and `SocialSdkPresence` logs the refusal once, by the logger `discord` (info), then that it shows the activity
+again. **Activity on Discord** on the Settings page turns it off, which clears the activity at once;
+`SocialSdkPresence` clears it when the client closes.
 
 Once the client connects to Discord with a token (`Connection`), `Connect()` clears the activity set before it,
-and the activity is the one of the application of the master: a later step chooses which.
+and the activity is the one of the application of the master, through the connection. Discord shows no activity from
+`Connect()` until the connection is `Ready`, a moment when the player reaches the lobby of a server: the client
+sends it again (`PresenceTracker::resend()`) at the next frame once it is `Ready`, whatever the interval, and once it is `Disconnected`: a failed connection,
+or the lobby left, takes the activity shown through it, and the Discord client shows the next one.
+
+### Invitations
+
+The list of games of a server can be joined from Discord too: while the player looks at it
+(`OnlineScenes::lobbyServer()`), its activity is a party of one with room, whose join secret is
+`rtype1::<server>`, without a game: the friend comes to the server, through its trust and its sign-in, and stays on
+its list of games. So **+** → *Invite to play* works from the lobby already, and **Invite** on a friend online in
+the lobby, below.
+
+A game online can be joined from Discord. Its activity carries a party whose id is the same for all its
+players (`partyId()`, a hash of the server and the game, which tells neither), and, while the game has room and
+is not over, a **join secret** (`inviteSecret()` in `apps/client/src/Discord/DiscordInvite.hpp`):
+`rtype1:<game id>:<server>`, the server as the Online menu knows it. It tells nothing the server does not tell
+every player, since its games are listed to all; Discord gives it only to the friends the player invites, or
+accepts. The party is public: the friends of the player see **Join** on its profile, and the player invites them
+from the **+** of a conversation in Discord.
+
+At the start, `Presence::onJoin()` tells Discord how to launch the game (`RegisterLaunchCommand`, the
+executable running) and gives each secret the player accepts to `OnlineScenes::joinFromDiscord()`, from the
+start of the game: Discord may launch it to join. A secret that is not one of a game (`parseInviteSecret()`
+refuses it: another prefix, a game id that is not a number, a server the Online menu could not connect to,
+more than 128 bytes) shows a toast, and so does one accepted during a game. Otherwise, already on that server,
+the hangar opens, then `JOIN_GAME`; on another one, the client connects to it, through the usual trust of its
+key and the sign-in, and joins the game once the list of the games comes: the invitation is forgotten when the
+player leaves the server, or connects to another one by hand.
+
+### Friends
+
+Once connected to Discord with a token (`Ready`), `SocialSdkFriends` follows the Discord friends of the player
+(`GetRelationshipsByGroup`: those playing R-Type, those online, those offline) and the invitations it receives
+(`SetActivityInviteCreatedCallback`, forgotten when they are no longer valid). It stops when the connection
+goes. `friendRows()` (`apps/client/src/Discord/DiscordFriends.hpp`) makes their rows:
+
+| Where | Rows, in this order | Action |
+|---|---|---|
+| The lobby of a server, right of the games (7 rows) | the invitations into the games of friends | **Join**: `AcceptActivityInvite`, then its secret is joined as above |
+| | the friends, those playing R-Type first, their activity under their name | **Ask to join** while their game has room: `SendActivityJoinRequest`; else, online, **Invite** to the server: `SendActivityInvite` |
+| The pause menu of a game online, under the group of the game (5 rows) | the friends asking to join the game | **Accept**: `SendActivityJoinRequestReply`, the friend gets an invitation |
+| | the friends online | **Invite**: `SendActivityInvite` |
+
+Each row shows the picture of the friend: the SDK gives only its address on the CDN of Discord
+(`UserHandle::AvatarUrl`, a PNG of 64 pixels), which `FriendPictures` (`apps/client/src/Discord/FriendPictures.hpp`)
+downloads with libcurl on a thread of its own, once each, from `https://cdn.discordapp.com/` only, a PNG of at
+most 512 KiB, then hands to the game loop; the lobby is built again as each comes, its initial shown meanwhile.
+A friend online is lit as the other rows, even with nothing to do; offline, it is dimmed.
+
+A new invitation shows a toast wherever the player is; the lobby is built again when its rows change. Not
+connected to Discord, the lobby says to sign in with Discord on the server to see the friends.
 
 ## RemoteSession
 

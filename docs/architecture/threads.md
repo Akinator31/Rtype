@@ -28,6 +28,7 @@ main thread.
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | **Main**   | window, raylib (graphics, input, audio), `Renderer`, `ResourceManager`, `AudioPlayer`, `Ecs`, scenes, events, game systems, `network::EventLoop`, `discord::Session` | the frame loop: input, `network.poll()`, `discordSession.poll()`, `engine.update()`, finishing the loads, drawing |
 | **Assets** | nothing persistent                                                                                                                               | reads asset files and decodes them in CPU memory, one request at a time                  |
+| **Friend pictures** | nothing persistent: the URL it downloads | downloads the pictures of the Discord friends from the CDN of Discord with libcurl, one at a time (`client::FriendPictures`); hands each PNG to Main through `network::EventLoop::post()`. Its queue is under a mutex, its stop an `atomic<bool>` that aborts the download running |
 
 Why nothing else gets a thread:
 

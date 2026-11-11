@@ -123,7 +123,7 @@ The programs are built on twelve libraries:
 | `libs/engine` | Client systems on the ECS: scenes, drawing, animations, menus as entities, navigation. | [Scenes and interface](scenes-and-interface.md) |
 | `libs/audio` | Sound effects, streamed music and the voices of the other players, with separate volumes, and what the output plays, for the echo cancellation. Wraps raylib. | [Audio](audio.md) |
 | `libs/database` | The data a program keeps from one run to the next, in SQLite or PostgreSQL: opening by address, migrations, transactions. Wraps SOCI and SQLite. For the server. | [Database](database.md) |
-| `libs/discord` | Discord in the client: an interface per feature (the sign-in, the presence, then the connection), and their implementations through the Discord Social SDK, kept in `libs/discord/sdk/`, on one shared `Session`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
+| `libs/discord` | Discord in the client: an interface per feature (the sign-in, the presence and the invitations, the connection, the voice call, the friends), and their implementations through the Discord Social SDK, kept in `libs/discord/sdk/`, on one shared `Session`. Wraps the SDK. For the client. | [The client online](client-online.md#discord) |
 | `libs/voice` | The voice chat of an online game: the interface the client knows, the rule of what carries each voice, the game or Discord, the devices as interfaces (`rtype::voice`, header only), the codec of the voice (`rtype::voice_codec`), the echo cancellation, noise suppression and gain control of the microphone (`rtype::voice_processing`), and the voice of the game with its jitter buffer and the microphone (`rtype::voice_client`). Wraps libopus, webrtc-audio-processing, and the miniaudio of raylib for the microphone. For the client. | [Voice](voice.md) |
 | `libs/xr` | The game in a VR headset: the session of a headset on the OpenGL context of the window, the images of its eyes, its controllers and their vibrations, behind an interface with no OpenXR type. Wraps OpenXR (the loader, built and linked statically). For the client. | [VR](vr.md) |
 | `libs/core` | Building blocks shared by the other libraries: resource handles and caches. Header-only, no dependency. | — |
@@ -135,8 +135,10 @@ raylib: the ECS, the physics, the game, the scripting, the lobby, the log, the c
 private dependencies of `network`, and reproc, which starts the instances of the server, toml++, which reads
 its settings file, Crow, which serves its panel ([Web server](web.md)), and Argon2, which hashes the passwords of
 the accounts ([Accounts](accounts.md#passwords)), private dependencies of `r-type_server`. libcurl, which sends
-the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who a player is, and is the HTTP
-client of the tests, comes through CPM too, with OpenSSL from the system on Linux. The Discord Social SDK is a
+the mails of the accounts ([Accounts](accounts.md#the-mails)), asks Discord who a player is, downloads the
+pictures of the Discord friends in the client ([Friends](client-online.md#friends)), and is the HTTP client of the
+tests, comes through CPM too (`cmake/Curl.cmake`, shared by the server and the client), a private dependency of
+`r-type_server` and of the client, with OpenSSL from the system on Linux. The Discord Social SDK is a
 private dependency of `rtype::discord_sdk`, linked by `r-type_client` alone
 ([ADR 0026](../decisions/0026-discord-social-sdk.md)). libopus, which encodes the voice, is a private dependency
 of `rtype::voice_codec` ([Voice](voice.md#the-codec)); webrtc-audio-processing and abseil, which take the echo
