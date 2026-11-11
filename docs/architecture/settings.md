@@ -81,7 +81,7 @@ flowchart LR
 page closes.*
 
 The page is two columns of named groups ([Pages of settings](scenes-and-interface.md#pages-of-settings)): on the
-left *General*, *Audio*, *Accessibility* and *Discord*, on the right *Display*, *Controls*, *Voice* and *VR*. Each row shows its caption on
+left *General*, *Audio* and *Accessibility*, on the right *Display*, *Controls*, *Voice*, *VR* and *Discord*. Each row shows its caption on
 the left and its value on the right, on a column shared by every row; Right, the wheel, Enter and a click go to
 the next value, Left to the previous one (`stepValue()`, `apps/client/src/Settings/NextValue.hpp`). Under the
 right column, a note explains the row that has the focus (`settings.hint.*` in the translations).
