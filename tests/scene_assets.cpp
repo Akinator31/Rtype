@@ -191,3 +191,49 @@ TEST_CASE("A scene keeping its assets opens again without loading them", "[engin
     engine.unloadSceneAssets();
     CHECK(assets.states[planet].unloaded == 1);
 }
+
+TEST_CASE("A preloaded scene opens without the loading scene", "[engine][assets]")
+{
+    Engine engine;
+    FakeAssets assets;
+    configure(engine, assets);
+    const SceneAsset ship{AssetType::Model, "ship.glb"};
+    engine.createScene("game", {.assets = {ship}});
+    engine.createScene("hangar");
+    CHECK_FALSE(engine.isSceneReady("game"));
+    CHECK(engine.isSceneReady("hangar"));
+
+    engine.switchScene("hangar");
+    engine.preloadScene("game");
+    engine.preloadScene("game");
+    engine.update(0.016f);
+    CHECK(assets.states[ship].requests == 1);
+    CHECK_FALSE(engine.isSceneReady("game"));
+    CHECK_FALSE(engine.isSceneOpen("loading"));
+
+    assets.states[ship].ready = true;
+    CHECK(engine.isSceneReady("game"));
+    engine.switchScene("game");
+    engine.update(0.016f);
+    CHECK(engine.isSceneOpen("game"));
+    CHECK_FALSE(engine.isSceneOpen("loading"));
+    CHECK(assets.states[ship].requests == 1);
+
+    // Held by the scene alone once it opened: closing it unloads them
+    engine.switchScene("hangar");
+    engine.update(0.016f);
+    CHECK(assets.states[ship].unloaded == 1);
+}
+
+TEST_CASE("Preloaded scene assets are unloaded at shutdown", "[engine][assets]")
+{
+    Engine engine;
+    FakeAssets assets;
+    configure(engine, assets);
+    const SceneAsset ship{AssetType::Model, "ship.glb"};
+    assets.states[ship].ready = true;
+    engine.createScene("game", {.assets = {ship}});
+    engine.preloadScene("game");
+    engine.unloadSceneAssets();
+    CHECK(assets.states[ship].unloaded == 1);
+}
