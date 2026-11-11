@@ -13,6 +13,7 @@ add_executable(rtype_tests
     audio.cpp
     aura_settings.cpp
     beat.cpp
+    client_frame_profile.cpp
     client_game.cpp
     client_input_clock.cpp
     client_interpolation.cpp
