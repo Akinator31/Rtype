@@ -56,7 +56,8 @@ sequenceDiagram
 
 1. **Online** asks for the name of the player and the server (`host:port`, the port 4242 by default,
    `[::1]:4242` for IPv6), or offers the servers met before, on the right: those whose key the player trusted,
-   each with the account remembered for it ([Profiles](#profiles)). An IP address is used as it is; a host name
+   each with the account remembered for it ([Profiles](#profiles)) and a **Forget** button that forgets its key
+   ([Trusted servers](#trusted-servers)). An IP address is used as it is; a host name
    is looked up when Connect is pressed.
 2. **The key of the server** is the one `KnownServers` trusts for it ([Trusted servers](#trusted-servers)). A
    server that does not hold a matching private key is refused during the handshake, before `HELLO` leaves: the
@@ -102,7 +103,7 @@ When the server presents a key it does not trust, the LobbyClient calls `onUntru
 | Verdict | The client |
 |---|---|
 | `FirstUse`: a server never met | Shows its fingerprint (`fingerprintLines()`, in groups of 4 digits) in the scene `online_trust`. **Trust and connect** remembers it (`trust()`, which writes the settings) and connects again |
-| `Changed`: a server trusted with another key | Refuses it, and shows the key expected and the key presented in the scene `online_changed_key`. No button accepts the new key: the player must **Forget the server key** in the Online menu first (`forget()`) |
+| `Changed`: a server trusted with another key | Refuses it, and shows the key expected and the key presented in the scene `online_changed_key`. No button accepts the new key: the player first forgets the old one (`forget()`), with **Forget the old key** on this warning, which then connects again to show the new key in `online_trust`, with **Forget** on the row of the server in the servers met, or with **Forget the server key** for the server typed |
 
 The settings are in the data directory of the player (`rtype::render::userDataDirectory()`: `%APPDATA%\R-Type` on
 Windows, `~/.local/share/r-type` elsewhere), read when the client starts. Settings that cannot be written keep

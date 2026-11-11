@@ -74,8 +74,9 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 ///
 /// - **Connect** opens a LobbyClient to the server, trusting the key KnownServers knows for it (ADR 0021).
 ///   A server never met shows its key, which the player may trust: it is remembered, and the client connects
-///   again. A known server with another key is refused, with a warning, until the player forgets its key
-///   (**Forget the server key**).
+///   again. A known server with another key is refused, with a warning, until the player forgets its key:
+///   from the warning itself (**Forget the old key**, which connects again to show the new one), from the
+///   row of the server in the servers met (**Forget**), or by typing it (**Forget the server key**).
 /// - **The lobby** lists the games: Create a game, Join one, Refresh, Disconnect. Creating or joining one
 ///   first opens the hangar, where the player picks its ship. Joining plays a RemoteSession in the game
 ///   scene; when the game ends, the player is back in the lobby, after its results if it went to its end
@@ -154,6 +155,8 @@ class OnlineScenes
     void untrusted(const network::KeyFingerprint &presented);
     /// Forgets the key of the server typed, if the player trusted one.
     void forgetServer();
+    /// Forgets the key trusted for this server, if any, and tells the player in a toast.
+    void forgetKey(const std::string &address);
     void disconnect();
     /// Lists the games, then shows them.
     void refresh();
