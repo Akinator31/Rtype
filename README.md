@@ -277,7 +277,7 @@ See [Accessibility](https://akinator31.github.io/Rtype/accessibility/).
 - **A web administration panel** (React, served by the master over HTTP): the live state of the server, the
   games and the players through a WebSocket, and actions: kick, end a game, send a message, ban an address
   or an account, mute a voice, change a role, delete an account. Every action is recorded.
-- **A Docker image** for `linux/amd64` and `linux/arm64`: `ghcr.io/akinator31/rtype`, ready for Docker
+- **A Docker image** for `linux/amd64` and `linux/arm64`: `ghcr.io/akinator31/rtype-server`, ready for Docker
   Compose or Dokploy.
 - **`--check`** to validate a configuration without starting, and clear exit codes.
 
@@ -408,7 +408,7 @@ troubleshooting.
 docker run -d --name rtype \
     -p 4242:4242/tcp -p 4242:4242/udp \
     -v rtype-data:/data \
-    ghcr.io/akinator31/rtype:latest
+    ghcr.io/akinator31/rtype-server:latest
 ```
 
 The key, the SQLite database and the address of the panel (`admin-url.txt`, with its token) are kept in the
