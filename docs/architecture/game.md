@@ -136,7 +136,8 @@ of what it hits:
   (`EnemyDefinition::phases`, `Enemy::phase`): a boss outlasts the 255 hit points of a `Health`. Otherwise it is
   destroyed (`DestroyCause::Killed`) and `EnemyDefinition::score` goes to the player of the shot.
 - **A Bydo shot** (`NoOwner`) hurts a ship and is spent, killed as well; **a Bydo** hurts a ship it runs into
-  (`EnemyDefinition::collisionDamage`) and keeps going. A ship that survives is invulnerable for
+  (`EnemyDefinition::collisionDamage`) and is destroyed (`DestroyCause::Killed`), its score going to the
+  player of the ship; a boss keeps going. A ship that survives is invulnerable for
   `hitInvulnerableTicks`, so that a Bydo on it does not take its health away tick after tick.
 - The damage of a shot is that of its weapon (`WeaponDefinition::damage`): `spawnWeaponShot()` gives it its
   `Damage`. A projectile made by `spawnProjectile()` alone has none: it hurts nothing.
@@ -660,7 +661,7 @@ one implementation.
 | Message | Type | Direction | Struct |
 |---|---|---|---|
 | `ACCEPTED` | `0x02` | Game → Client | `AcceptedMessage`: slot, tick rate, tick |
-| `PLAYER_JOINED` | `0x04` | Game → Client | `PlayerJoinedMessage`: slot, player id, name |
+| `PLAYER_JOINED` | `0x04` | Game → Client | `PlayerJoinedMessage`: slot, player id, name, account (0 for a guest) |
 | `PLAYER_LEFT` | `0x05` | Game → Client | `PlayerLeftMessage`: slot, reason |
 | `INPUT` | `0x40` | Client → Game | `InputMessage`: tick, inputs newest first |
 | `SNAPSHOT` | `0x80` | Game → Client | `SnapshotPart`: tick, last input, input lead, weapon of the ship of the client, part, players, entities (the age of the shots in the byte of the health) |

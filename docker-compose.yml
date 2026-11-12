@@ -11,7 +11,7 @@
 
 services:
   server:
-    image: ${RTYPE_IMAGE:-ghcr.io/akinator31/rtype:latest}
+    image: ${RTYPE_IMAGE:-ghcr.io/akinator31/rtype-server:latest}
     restart: unless-stopped
     # A small init as PID 1: it hands SIGTERM to the master, and reaps what it would not
     init: true

@@ -7,6 +7,7 @@
 #include "rtype/physics/Component/Collider.hpp"
 #include "rtype/physics/Component/Motion.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace rtype::game
@@ -32,6 +33,13 @@ EntityKind findProjectileKind(std::uint8_t owner, ProjectileCategory category)
     return category == ProjectileCategory::Plasma ? EntityKind::BydoPlasmaShot : EntityKind::BydoShot;
 }
 
+/// The index the snapshots send for a ship: NoShip beyond what a byte holds.
+std::uint8_t findShipIndex(const ShipRegistry &ships, const std::string &ship)
+{
+    const std::size_t index = ships.getIndex(ship);
+    return index < NoShip ? static_cast<std::uint8_t>(index) : NoShip;
+}
+
 ecs::entity_t spawnVisible(ecs::Ecs &ecs, GameContext &context, EntityKind kind, std::uint8_t owner, float x,
                            float y)
 {
@@ -45,20 +53,23 @@ ecs::entity_t spawnVisible(ecs::Ecs &ecs, GameContext &context, EntityKind kind,
 
 } // namespace
 
+ecs::Position getShipSpawn(std::uint8_t slot)
+{
+    return {ShipStartX, GameHeight * static_cast<float>(slot + 1) / static_cast<float>(MaxPlayers + 1)};
+}
+
 ecs::entity_t spawnPlayerShip(ecs::Ecs &ecs, GameContext &context, std::uint8_t slot)
 {
     const Rules &rules = context.rules;
-    const float y = GameHeight * static_cast<float>(slot + 1) / static_cast<float>(MaxPlayers + 1);
-    const ecs::entity_t ship = spawnVisible(ecs, context, EntityKind::PlayerShip, slot, ShipStartX, y);
+    const ecs::Position spawn = getShipSpawn(slot);
+    const ecs::entity_t ship = spawnVisible(ecs, context, EntityKind::PlayerShip, slot, spawn.x, spawn.y);
     ecs.addComponent<PlayerShip>(ship, slot);
-    ecs.addComponent<Health>(ship, context.player.health);
+    ecs.addComponent<Health>(ship, context.maxHealth(context.players[slot]));
     ecs.addComponent<physics::Velocity>(ship);
     ecs.addComponent<physics::Collider>(ship, box(rules.shipHalfWidth, rules.shipHalfHeight));
     ecs.addComponent<physics::ConfinedToBounds>(ship, ecs::Position{0.0f, 0.0f},
                                                 ecs::Position{GameWidth, GameHeight});
-    if (!context.player.weapon.empty()) {
-        equipWeapon(ecs, context, ship, context.player.weapon);
-    }
+    equipLoadout(ecs, context, ship, context.players[slot].loadout);
     return ship;
 }
 
@@ -78,6 +89,7 @@ ecs::entity_t spawnEnemy(ecs::Ecs &ecs, GameContext &context, const std::string 
     const EntityKind kind = enemy.boss ? EntityKind::BydoBoss : EntityKind::BydoFlyer;
     const ecs::entity_t entity = spawnVisible(ecs, context, kind, NoOwner, x, y);
     ecs.addComponent<Enemy>(entity, enemyId);
+    ecs.addComponent<ShipIndex>(entity, findShipIndex(context.ships, enemy.ship));
     ecs.addComponent<Health>(entity, enemy.health);
     ecs.addComponent<Damage>(entity, enemy.collisionDamage);
     ecs.addComponent<physics::Velocity>(entity);
@@ -103,13 +115,47 @@ ecs::entity_t spawnProjectile(ecs::Ecs &ecs, GameContext &context, const std::st
     ecs.addComponent<physics::Collider>(projectile, definition.collider);
     const physics::Vec3 half = halfSizeOf(definition.collider);
     ecs.addComponent<LeavesArea>(projectile, half.x, half.y);
+    const std::size_t index = context.projectiles.getIndex(id);
+    ecs.addComponent<ProjectileIndex>(projectile, index < NoShip ? static_cast<std::uint8_t>(index) : NoShip);
     return projectile;
+}
+
+ecs::entity_t spawnItem(ecs::Ecs &ecs, GameContext &context, const std::string &itemId, float x, float y)
+{
+    const ItemDefinition &item = context.items.getDefinition(itemId);
+    const std::size_t index = context.items.getIndex(itemId);
+    const ecs::entity_t entity = spawnVisible(ecs, context, EntityKind::Item, NoOwner, x, y);
+    const auto lifetime =
+        static_cast<std::uint32_t>(std::lround(item.lifetime * static_cast<float>(TickRate)));
+    ecs.addComponent<Item>(entity, itemId, 0U, std::max<std::uint32_t>(1, lifetime));
+    ecs.addComponent<ItemIndex>(entity, index < NoShip ? static_cast<std::uint8_t>(index) : NoShip);
+    ecs.addComponent<physics::Velocity>(entity, -item.speed, 0.0f);
+    ecs.addComponent<physics::Collider>(entity, item.collider);
+    const physics::Vec3 half = halfSizeOf(item.collider);
+    ecs.addComponent<LeavesArea>(entity, half.x, half.y);
+    return entity;
 }
 
 void equipWeapon(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const std::string &weaponId)
 {
     const WeaponDefinition &weapon = context.weapons.getDefinition(weaponId);
     ecs.addComponent<Armed>(ship, weaponId, 0U, weapon.magazineSize, 0U);
+}
+
+void equipLoadout(ecs::Ecs &ecs, GameContext &context, ecs::entity_t ship, const Loadout &loadout)
+{
+    const std::string &first = loadout[0].empty() ? context.player.weapon : loadout[0];
+    if (!first.empty()) {
+        equipWeapon(ecs, context, ship, first);
+    }
+    if (first.empty() || loadout[1].empty()) {
+        if (ecs.hasComponent<Holster>(ship)) {
+            ecs.removeComponent<Holster>(ship);
+        }
+        return;
+    }
+    const WeaponDefinition &second = context.weapons.getDefinition(loadout[1]);
+    ecs.addComponent<Holster>(ship, Armed{loadout[1], 0U, second.magazineSize, 0U}, std::uint8_t{0});
 }
 
 ecs::entity_t spawnWeaponShot(ecs::Ecs &ecs, GameContext &context, const std::string &weaponId,
@@ -137,7 +183,10 @@ ecs::entity_t spawnShot(ecs::Ecs &ecs, GameContext &context, const std::string &
     Projectile &projectile = ecs.getComponent<Projectile>(shot);
     projectile.category = weapon.mechanic;
     projectile.range = weapon.range;
-    ecs.addComponent<Damage>(shot, weapon.damage);
+    // The shots of a player hit as hard as the power of its ship
+    const std::uint8_t damage =
+        owner < MaxPlayers ? scaleByStat(weapon.damage, context.players[owner].stats.power) : weapon.damage;
+    ecs.addComponent<Damage>(shot, damage);
     return shot;
 }
 

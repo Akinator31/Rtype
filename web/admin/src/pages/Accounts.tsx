@@ -128,6 +128,7 @@ function AccountSheet({ account, act }: { account: Account; act: (action: Accoun
   const t = strings.accounts;
   const banned = account.bannedAt !== null;
   const shown = account.discord?.displayName ?? null;
+  const voiceMute = account.voiceMute ?? null;
   return (
     <Card
       title={t.sheet}
@@ -150,6 +151,7 @@ function AccountSheet({ account, act }: { account: Account; act: (action: Accoun
             {account.role === 'admin' && <Badge tone="active">{t.admin}</Badge>}
             {account.discord && <Badge tone="neutral">Discord</Badge>}
             {banned && <Badge tone="alert">{t.banned}</Badge>}
+            {voiceMute && <Badge tone="alert">{t.voiceMuted}</Badge>}
           </Flex>
         </Flex>
       </Flex>
@@ -176,6 +178,16 @@ function AccountSheet({ account, act }: { account: Account; act: (action: Accoun
           {account.banReason || strings.none}
         </Pair>
       )}
+      {voiceMute && (
+        <>
+          <Pair label={t.voice} plain>
+            {t.voiceMutedUntil(dayTime(voiceMute.expiresAt))}
+          </Pair>
+          <Pair label={t.voiceMuteReason} plain>
+            {voiceMute.reason || strings.none}
+          </Pair>
+        </>
+      )}
       {account.locked ? (
         <Text textStyle="hint" color="fg.subtle">
           {t.lockedHint}
@@ -184,6 +196,9 @@ function AccountSheet({ account, act }: { account: Account; act: (action: Accoun
         <Flex direction="column" gap="10px" pt="8px">
           <Button variant="secondary" onClick={() => act(account.role === 'admin' ? 'demote' : 'promote')}>
             {account.role === 'admin' ? t.demote : t.promote}
+          </Button>
+          <Button variant="secondary" onClick={() => act(voiceMute === null ? 'mute_voice' : 'unmute_voice')}>
+            {voiceMute === null ? t.muteVoice : t.unmuteVoice}
           </Button>
           <Button variant={banned ? 'secondary' : 'danger'} onClick={() => act(banned ? 'unban' : 'ban')}>
             {banned ? t.unban : t.ban}

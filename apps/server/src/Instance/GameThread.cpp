@@ -20,13 +20,22 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
-/// The weapon of a ship in a SNAPSHOT: each count within what a u16 holds.
-rtype::game::WeaponState toWeaponState(const rtype::game::Armed &armed)
+/// The weapons of a ship in a SNAPSHOT, the one in hand and the one put away if any: each count within what
+/// a u16 holds.
+rtype::game::WeaponState toWeaponState(const rtype::game::Armed &armed,
+                                       const std::optional<rtype::game::Holster> &holster)
 {
     const auto clamp = [](std::uint32_t value) {
         return static_cast<std::uint16_t>(std::min<std::uint32_t>(value, 0xFFFF));
     };
-    return {clamp(armed.cooldown), clamp(armed.ammo), clamp(armed.reloadLeft)};
+    rtype::game::WeaponState state{clamp(armed.cooldown), clamp(armed.ammo), clamp(armed.reloadLeft)};
+    if (holster) {
+        state.inHand = holster->inHand;
+        state.spareCooldown = clamp(holster->weapon.cooldown);
+        state.spareAmmo = clamp(holster->weapon.ammo);
+        state.spareReloadLeft = clamp(holster->weapon.reloadLeft);
+    }
+    return state;
 }
 
 template <typename... Visitors>
@@ -87,6 +96,11 @@ void GameThread::receiveInputs(std::uint8_t slot, std::uint32_t tick,
     push(ReceiveInputs{slot, tick, std::move(inputs)});
 }
 
+void GameThread::setLoadout(std::uint8_t slot, rtype::game::Loadout loadout, std::string ship)
+{
+    push(SetLoadout{slot, std::move(loadout), std::move(ship)});
+}
+
 void GameThread::run()
 {
     using Clock = std::chrono::steady_clock;
@@ -127,6 +141,17 @@ void GameThread::run()
                                                                       simulation.tick());
                                    }
                                },
+                               [&](const SetLoadout &chosen) {
+                                   if (!chosen.loadout[0].empty() &&
+                                       !simulation.setLoadout(chosen.slot, chosen.loadout)) {
+                                       logger().warning("Loadout {} and {} of slot {} refused",
+                                                        chosen.loadout[0], chosen.loadout[1], chosen.slot);
+                                   }
+                                   if (!simulation.setShip(chosen.slot, chosen.ship)) {
+                                       logger().warning("Ship {} of slot {} refused", chosen.ship,
+                                                        chosen.slot);
+                                   }
+                               },
                            },
                            command);
             }
@@ -147,7 +172,7 @@ void GameThread::run()
             _tick = simulation.tick();
             for (std::uint8_t slot = 0; slot < buffers.size(); ++slot) {
                 if (const std::optional<rtype::game::Armed> armed = simulation.weaponOf(slot)) {
-                    result.weapons[slot] = toWeaponState(*armed);
+                    result.weapons[slot] = toWeaponState(*armed, simulation.holsterOf(slot));
                 }
             }
             result.snapshot = simulation.snapshot();

@@ -20,6 +20,7 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <random>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -48,11 +49,13 @@ const rtype::log::Logger &logger()
     return instance;
 }
 
-/// Online, the waves follow each other until every player is out of lives, and earn experience.
+/// Online, the waves follow each other until every player is out of lives, and earn experience. Each game
+/// draws its own seed, so the waves come in a different order.
 rtype::game::Rules onlineRules()
 {
     rtype::game::Rules rules;
     rules.endless = true;
+    rules.seed = std::random_device{}();
     return rules;
 }
 
@@ -94,12 +97,15 @@ class Instance
     rtype::network::Timer _linger;
     rtype::network::Timer _gameOverWait;
     rtype::network::Timer _status;
+    /// The scores of the game once over, until they are sent to the master.
+    std::optional<GameOverReport> _report;
     int _exitCode = Success;
     bool _stopping = false;
 
     /// Opens the UDP port of the game, or its port on the loopback behind the relay of the master on
     /// `127.0.0.1:relayPort` (0: no relay), and starts the simulation.
-    bool openGame(std::uint8_t maxPlayers, std::uint16_t relayPort, GameHost::Handlers handlers)
+    bool openGame(std::uint8_t maxPlayers, std::uint16_t relayPort, GameHost::Handlers handlers,
+                  VoiceRules voice = {})
     {
         try {
             std::unique_ptr<GameTransport> transport;
@@ -109,7 +115,7 @@ class Instance
                 transport = std::make_unique<DirectTransport>(
                     _loop, rtype::network::Address::anyIpv4(_options.udpPort));
             }
-            _host.emplace(_loop, std::move(transport), maxPlayers, _game, std::move(handlers));
+            _host.emplace(_loop, std::move(transport), maxPlayers, _game, std::move(handlers), voice);
         } catch (const std::system_error &error) {
             if (relayPort != 0) {
                 logger().error("Cannot open a UDP port on the loopback for the relay: {}",
@@ -136,17 +142,25 @@ class Instance
     {
         _game.stop();
         _status.cancel();
+        _report = report;
         const auto deadline = std::chrono::steady_clock::now() + GameOverWait;
-        _gameOverWait.startRepeating(GameOverCheck, [this, report, deadline] {
+        _gameOverWait.startRepeating(GameOverCheck, [this, deadline] {
             if (!_host->acknowledged() && std::chrono::steady_clock::now() < deadline) {
                 return;
             }
-            _gameOverWait.cancel();
-            if (_link) {
-                _link->sendGameOver(report);
-            }
             stop(Success, DisconnectReason::GameOver);
         });
+    }
+
+    /// Gives the master the scores of the game over, whatever stops the instance meanwhile: a client leaves
+    /// its game as soon as it receives GAME_OVER, and the master shuts the empty game down before the
+    /// clients acknowledged it.
+    void sendReport()
+    {
+        if (_report && _link) {
+            _link->sendGameOver(*_report);
+        }
+        _report.reset();
     }
 
     void configure(const ConfigureMessage &game)
@@ -161,7 +175,11 @@ class Instance
                                  _link->sendPlayerDisconnected(player, reason);
                              },
                          .onGameOver = [this](const GameOverReport &report) { gameOver(report); },
-                     });
+                     },
+                     game.voice);
+        if (!game.voice.enabled) {
+            logger().info("No voice in this game: the server turned it off");
+        }
         if (!opened) {
             stop(Failure, DisconnectReason::Shutdown);
             return;
@@ -241,6 +259,13 @@ public:
                                                      player.playerId);
                                   }
                               },
+                          .onMuteVoice =
+                              [this](const MuteVoiceMessage &mute) {
+                                  if (!_host->muteVoice(mute.playerId, mute.duration)) {
+                                      logger().debug("Player {} muted by the master was already gone",
+                                                     mute.playerId);
+                                  }
+                              },
                           .onShutdown =
                               [this](const ShutdownMessage &shutdown) {
                                   logger().info("Shut down by the master: {}", describe(shutdown.reason));
@@ -271,6 +296,7 @@ public:
         if (_host) {
             _host->closeAll(reason);
         }
+        sendReport();
         if (_link) {
             _link->close();
         }

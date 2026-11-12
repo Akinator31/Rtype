@@ -31,13 +31,19 @@ technical and comparative study of the project.
 | [0023](0023-server-database.md)                         | SOCI over SQLite and PostgreSQL for the server data         | Accepted                                                                               |
 | [0024](0024-player-accounts.md)                         | Player accounts, per server, all or nothing                 | Accepted; its Discord sign-in superseded by [0026](0026-discord-social-sdk.md)         |
 | [0025](0025-server-administration.md)                   | Administration through a web panel served by the master     | Accepted                                                                               |
-| [0026](0026-discord-social-sdk.md)                      | Discord sign-in through the Discord Social SDK in the client | Accepted                                                                               |
+| [0026](0026-discord-social-sdk.md)                      | Discord sign-in through the Discord Social SDK in the client | Accepted; its token dropped superseded by [0034](0034-discord-token-in-the-client.md) on a master with `social` |
 | [0027](0027-one-udp-port-relay.md)                      | One UDP port for every game, through a relay in the master  | Accepted                                                                               |
 | [0028](0028-input-stamps-follow-the-lead.md)            | The stamps of the inputs follow the lead the game reports   | Accepted                                                                               |
 | [0029](0029-predicted-shots.md)                         | The shots of the player are predicted, then matched by their age | Accepted                                                                          |
 | [0030](0030-measured-delays.md)                         | A round-trip time without the delay of the acknowledgements, an interpolation delay measured | Accepted                                                              |
 | [0031](0031-destructions-sent-again.md)                 | The destructions, unreliable, sent again with the snapshots | Accepted                                                                               |
 | [0032](0032-endless-waves-and-progression.md)           | Endless waves online, and the experience of the accounts    | Accepted                                                                               |
+| [0034](0034-discord-token-in-the-client.md)             | The Discord token of the player given to its client         | Accepted                                                                               |
+| [0035](0035-voice-chat-in-the-game-session.md)          | A voice chat of our own in the game session, and Discord beside it in the same game | Accepted                                                       |
+| [0036](0036-webrtc-audio-processing.md)                 | The echo, the noise and the gain of the microphone by the audio processing of WebRTC | Accepted                                                      |
+| [0037](0037-vr-through-openxr.md)                       | VR through OpenXR, seated in a cockpit                      | Accepted                                                                               |
+| [0038](0038-shots-glide-to-the-time-of-the-world.md)    | The time of a shot of the player glides from its ship to the world | Accepted; amends [0029](0029-predicted-shots.md)                                |
+| [0039](0039-input-lead-margin.md)                       | The lead the inputs aim at grows with the late ones         | Accepted; amends [0028](0028-input-stamps-follow-the-lead.md)                          |
 
 To record a new decision, copy the [ADR template](../contributing/templates.md#architecture-decision-record)
 into a new file `NNNN-short-title.md` in this folder, add it to the navigation and to this table.

@@ -385,6 +385,42 @@ void SceneRenderer::draw(render::Renderer &renderer)
     draw(renderer, Layer::Interface);
 }
 
+void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
+{
+    drawLayer(renderer, layer, std::nullopt);
+}
+
+void SceneRenderer::draw(render::Renderer &renderer, Surface surface)
+{
+    drawLayer(renderer, Layer::Interface, surface);
+}
+
+Surface SceneRenderer::surfaceOf(ecs::entity_t entity)
+{
+    auto &surfaces = _ecs.cache<OnSurface>();
+    if (surfaces.has(entity)) {
+        return surfaces.get(entity).surface;
+    }
+    return _ecs.cache<Toast>().has(entity) ? _toastSurface : Surface::Panel;
+}
+
+bool SceneRenderer::hasContent(Surface surface)
+{
+    auto &drawables = _ecs.cache<Drawable>();
+    auto &positions = _ecs.cache<ecs::Position>();
+    auto &toasts = _ecs.cache<Toast>();
+    auto &opacities = _ecs.cache<Opacity>();
+    for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
+        if (drawables.has(entity) && drawables.get(entity).layer == Layer::Interface &&
+            positions.has(entity) && !toasts.has(entity) &&
+            (!opacities.has(entity) || opacities.get(entity).value > 0.0f) && surfaceOf(entity) == surface &&
+            isShown(entity, Layer::Interface)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool SceneRenderer::isShown(ecs::entity_t entity)
 {
     return _scenes.isVisible(entity) && !ecs::isHidden(_ecs, entity);
@@ -445,6 +481,38 @@ std::optional<ecs::entity_t> SceneRenderer::findFirstBackdrop()
         }
     }
     return std::nullopt;
+}
+
+render::Light SceneRenderer::light()
+{
+    return findLight();
+}
+
+std::optional<Backdrop> SceneRenderer::sky()
+{
+    const std::optional<ecs::entity_t> first = findFirstBackdrop();
+    if (!first) {
+        return std::nullopt;
+    }
+    const std::optional<SceneId> scene = _scenes.sceneOf(*first);
+    auto &backdrops = _ecs.cache<Backdrop>();
+    std::optional<Backdrop> back;
+    for (ecs::entity_t entity = 0; entity < backdrops.size(); ++entity) {
+        if (backdrops.has(entity) && isShown(entity) && _scenes.sceneOf(entity) == scene &&
+            (!back || backdrops.get(entity).order < back->order)) {
+            back = backdrops.get(entity);
+        }
+    }
+    return back;
+}
+
+std::optional<render::Camera> SceneRenderer::camera()
+{
+    const Camera *shown = findCamera();
+    if (shown == nullptr) {
+        return std::nullopt;
+    }
+    return shown->view;
 }
 
 float SceneRenderer::getScrollOffset(ecs::entity_t entity)
@@ -562,6 +630,11 @@ void SceneRenderer::drawModels(render::Renderer &renderer)
             renderer.drawModel(model.model, camera->view, light, model.position, model.rotationAxis,
                                model.rotationAngle, model.scale, model.tint, model.spinAngle,
                                model.hiddenMeshes);
+            // Right after the model, in its pose: the entities of a model share it, each posing it in turn
+            if (model.aura) {
+                renderer.drawAura(model.model, camera->view, *model.aura, model.position, model.rotationAxis,
+                                  model.rotationAngle, model.scale, model.spinAngle, model.hiddenMeshes);
+            }
         }
     }
     // The light of the energy models spreads over the world, under the 2D entities and the interface
@@ -1054,9 +1127,12 @@ void SceneRenderer::drawSectionLabel(render::Renderer &renderer, const SectionLa
 }
 
 void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider, const SliderTrack &track,
-                               const Text &text, render::Vector2 centre, float opacity) const
+                               const Text &text, render::Vector2 centre, float rowOpacity) const
 {
     const SliderStyle &style = _style.slider;
+    // Locked, the row is dimmed and its value red
+    const bool locked = slider.locked && slider.locked();
+    const float opacity = locked ? rowOpacity * style.lockedOpacity : rowOpacity;
     const float value = std::clamp(slider.get ? slider.get() : 0.0f, 0.0f, 1.0f);
     // The looks ease in and out, instead of changing at a constant speed
     const float lit = smooth(track.hover);
@@ -1074,13 +1150,27 @@ void SceneRenderer::drawSlider(render::Renderer &renderer, const Slider &slider,
     const float captionTop = area.y + style.paddingTop;
     renderer.drawText(text.font, slider.caption, {area.x + style.inset, captionTop}, style.captionSize,
                       faded(mix(style.caption, style.litCaption, shown), opacity), style.letterSpacing);
-    const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + " %";
+    if (const std::optional<Slider::Icon> icon = slider.icon ? slider.icon() : std::nullopt) {
+        const float captionWidth =
+            renderer.measureText(text.font, slider.caption, style.captionSize, style.letterSpacing).x;
+        const float size = style.iconSize;
+        renderer.drawTexture(icon->texture, icon->source,
+                             {area.x + style.inset + captionWidth + style.iconGap,
+                              captionTop + ((style.captionSize - size) / 2.0f), size, size},
+                             0.0f, faded(icon->tint, opacity));
+    }
+    std::string percentage = slider.label ? slider.label() : std::string();
+    if (percentage.empty()) {
+        percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + " %";
+    }
     const render::Vector2 measured =
         renderer.measureText(style.valueFont, percentage, style.valueSize, style.valueSpacing);
     renderer.drawText(style.valueFont, percentage,
                       {area.x + rowWidth - style.valueInset - measured.x,
                        captionTop + ((style.captionSize - measured.y) / 2.0f)},
-                      style.valueSize, faded(mix(style.value, style.litCaption, shown), opacity),
+                      style.valueSize,
+                      locked ? faded(style.lockedValue, rowOpacity)
+                             : faded(mix(style.value, style.litCaption, shown), opacity),
                       style.valueSpacing);
 
     // The rail, from the caption to the percentage, and its part up to the value in light
@@ -1188,7 +1278,8 @@ void SceneRenderer::drawGauge(render::Renderer &renderer, const Gauge &gauge, re
     const float y = gauge.caption.empty() ? centre.y : style.getRailY(centre.y);
 
     if (!gauge.caption.empty()) {
-        const std::string percentage = std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%";
+        const std::string percentage =
+            gauge.showsPercentage ? std::to_string(static_cast<int>(std::lround(value * 100.0f))) + "%" : "";
         drawCaption(renderer, style.font, gauge.caption, percentage, left, left + width, top,
                     style.captionSize, style.letterSpacing, faded(style.caption, opacity),
                     faded(style.litCaption, opacity));
@@ -1425,7 +1516,7 @@ void SceneRenderer::drawEventLine(render::Renderer &renderer, const Toast &toast
                   style.iconThickness, faded(accent, opacity));
 }
 
-void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
+void SceneRenderer::drawLayer(render::Renderer &renderer, Layer layer, std::optional<Surface> surface)
 {
     if (layer == Layer::World) {
         drawBackdrop(renderer);
@@ -1460,7 +1551,7 @@ void SceneRenderer::draw(render::Renderer &renderer, Layer layer)
     std::vector<ecs::entity_t> entities;
     for (ecs::entity_t entity = 0; entity < drawables.size(); ++entity) {
         if (drawables.has(entity) && drawables.get(entity).layer == layer && positions.has(entity) &&
-            isShown(entity, layer)) {
+            isShown(entity, layer) && (!surface || surfaceOf(entity) == *surface)) {
             entities.push_back(entity);
         }
     }

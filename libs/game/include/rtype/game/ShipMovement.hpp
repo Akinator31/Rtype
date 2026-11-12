@@ -11,12 +11,14 @@
 namespace rtype::game
 {
 
-/// The velocity of a ship for an input: Rules::shipSpeed in the direction held, as fast in diagonal.
-[[nodiscard]] physics::Velocity shipVelocity(PlayerInput input, const Rules &rules);
+/// The velocity of a ship for an input: Rules::shipSpeed times the factor of the speed of the ship
+/// (statFactor() of ShipStats::speed) in the direction held, as fast in diagonal.
+[[nodiscard]] physics::Velocity shipVelocity(PlayerInput input, const Rules &rules, float speedFactor = 1.0f);
 
 /// The position of a ship after one tick with this input: moved by its velocity for TickDuration, then kept
 /// entirely in the game area. The same operations as PlayerControlSystem, physics::MovementSystem and
 /// physics::BoundsSystem, in the same order.
-[[nodiscard]] ecs::Position moveShip(ecs::Position position, PlayerInput input, const Rules &rules);
+[[nodiscard]] ecs::Position moveShip(ecs::Position position, PlayerInput input, const Rules &rules,
+                                     float speedFactor = 1.0f);
 
 } // namespace rtype::game

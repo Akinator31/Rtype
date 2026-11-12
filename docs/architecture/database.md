@@ -185,7 +185,7 @@ thread.run("record game 4", [game](rtype::database::Database &database) { record
 The tests of the database run on every engine available: SQLite always, PostgreSQL when this program has it and
 `RTYPE_TEST_POSTGRESQL_URL` gives a server, on which each test gets a schema of its own
 (`tests/helpers/TestDatabase.hpp`). On SQLite, each test gets a directory named after it in the temporary
-directory of the system (`TMPDIR`): two runs of the tests at once must not share it, see
+directory of the system (`TMPDIR`, `TMP` or `TEMP` on Windows): two runs of the tests at once must not share it, see
 [Runners](../contributing/testing.md#runners). The [testing policy](../contributing/testing.md#running-the-tests) shows how
 to run one in Docker; the CI does it on Linux.
 

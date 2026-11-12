@@ -24,9 +24,21 @@ bool ShotPrediction::isShotOf(const game::EntityState &entity, std::uint8_t slot
                                     entity.kind == game::EntityKind::PlayerChargedShot);
 }
 
-void ShotPrediction::arm(game::ProjectileCategory mechanic, game::Rules rules)
+double ShotPrediction::timeOf(double fired, double drawn, double ship)
 {
-    _weapon = Weapon{mechanic, rules};
+    if (ship <= drawn) {
+        return ship;
+    }
+    const double gap = ship - drawn;
+    const double glide = std::max(MinGlide, GlidePerTick * gap);
+    const double part = std::clamp((ship - fired) / glide, 0.0, 1.0);
+    // A smoothstep: it leaves the nose at the speed of the shot, and lands on the drawn tick without a jolt
+    return ship - (gap * part * part * (3.0 - (2.0 * part)));
+}
+
+void ShotPrediction::arm(game::Rules rules)
+{
+    _rules = rules;
 }
 
 void ShotPrediction::received(const game::EntityState &shot, std::uint32_t tick)
@@ -48,15 +60,19 @@ void ShotPrediction::destroyed(std::uint32_t id, std::uint32_t tick)
     _ends.try_emplace(id, End{tick, false});
 }
 
-void ShotPrediction::predict(const std::map<std::uint32_t, game::ShotLaunch> &shots, std::uint32_t confirmed)
+void ShotPrediction::predict(const std::map<std::uint32_t, PredictedShot> &shots, std::uint32_t confirmed)
 {
-    for (const auto &[tick, launch] : shots) {
+    for (const auto &[tick, shot] : shots) {
         const auto ghost = _ghosts.find(tick);
         if (ghost == _ghosts.end()) {
-            _ghosts.emplace(tick, Ghost{_nextId++, launch, std::nullopt, false});
+            _ghosts.emplace(
+                tick, Ghost{_nextId++, shot.launch, shot.mechanic, shot.projectile, std::nullopt, false});
         } else if (!ghost->second.server) {
-            // Predicted again from a snapshot: the ship was elsewhere, or aimed another way
-            ghost->second.launch = launch;
+            // Predicted again from a snapshot: the ship was elsewhere, aimed another way, or held the other
+            // weapon
+            ghost->second.launch = shot.launch;
+            ghost->second.mechanic = shot.mechanic;
+            ghost->second.projectile = shot.projectile;
         }
     }
     for (auto ghost = _ghosts.begin(); ghost != _ghosts.end();) {
@@ -82,25 +98,24 @@ game::EntityState ShotPrediction::place(const Ghost &ghost, std::uint32_t fired,
     game::EntityState state;
     state.id = ghost.id;
     state.kind = game::EntityKind::PlayerShot;
+    state.ship = ghost.projectile;
     state.owner = slot;
     const double since = std::clamp(tick - static_cast<double>(fired), 0.0, static_cast<double>(MaxSteps));
     const auto steps = static_cast<std::uint32_t>(since);
     ecs::Position position = ghost.launch.position;
     physics::Velocity velocity = ghost.launch.velocity;
-    if (_weapon) {
+    if (_rules) {
         for (std::uint32_t age = 0; age < steps; ++age) {
-            position =
-                game::moveShot(position, _weapon->mechanic, ghost.launch.velocity, age, _weapon->rules);
+            position = game::moveShot(position, ghost.mechanic, ghost.launch.velocity, age, *_rules);
         }
         if (steps > 0) {
-            velocity = game::getProjectileVelocity(_weapon->mechanic, ghost.launch.velocity, steps - 1,
-                                                   _weapon->rules);
+            velocity = game::getProjectileVelocity(ghost.mechanic, ghost.launch.velocity, steps - 1, *_rules);
         }
         // Between two ticks, on the way to the next one: drawn at the frame rate
         const auto part = static_cast<float>(since - static_cast<double>(steps));
         if (part > 0.0f) {
             const ecs::Position next =
-                game::moveShot(position, _weapon->mechanic, ghost.launch.velocity, steps, _weapon->rules);
+                game::moveShot(position, ghost.mechanic, ghost.launch.velocity, steps, *_rules);
             position.x += (next.x - position.x) * part;
             position.y += (next.y - position.y) * part;
         }
@@ -113,11 +128,11 @@ game::EntityState ShotPrediction::place(const Ghost &ghost, std::uint32_t fired,
     return state;
 }
 
-std::optional<double> ShotPrediction::targetOf(std::uint32_t id, double ship)
+std::optional<double> ShotPrediction::targetOf(std::uint32_t id, double time)
 {
     const auto end = _ends.find(id);
-    if (end == _ends.end() || ship < end->second.tick) {
-        return ship;
+    if (end == _ends.end() || time < end->second.tick) {
+        return time;
     }
     if (end->second.shown) {
         return std::nullopt;
@@ -146,6 +161,10 @@ void ShotPrediction::apply(game::Snapshot &snapshot, std::uint8_t slot, double d
     };
 
     // The shots of the game: past their end, gone; predicted, on the path of their prediction; else moved on
+    // to their time. Too old to tell when it was fired: it is in the time of the world
+    const auto timeOfShot = [&](const game::EntityState &entity) {
+        return entity.age == 255 ? drawn : timeOf(drawn - static_cast<double>(entity.age), drawn, ship);
+    };
     std::set<std::uint32_t> drawnGhosts;
     std::vector<game::EntityState> entities;
     entities.reserve(snapshot.entities.size() + _ghosts.size());
@@ -154,11 +173,14 @@ void ShotPrediction::apply(game::Snapshot &snapshot, std::uint8_t slot, double d
             entities.push_back(entity);
             continue;
         }
-        const std::optional<double> target = targetOf(entity.id, ship);
+        const auto ghost = ghostOf(entity.id);
+        const double time = ghost != _ghosts.end() ? timeOf(static_cast<double>(ghost->first), drawn, ship)
+                                                   : timeOfShot(entity);
+        const std::optional<double> target = targetOf(entity.id, time);
         if (!target) {
             continue;
         }
-        if (const auto ghost = ghostOf(entity.id); ghost != _ghosts.end()) {
+        if (ghost != _ghosts.end()) {
             ghost->second.seen = true;
             drawnGhosts.insert(ghost->second.id);
             entities.push_back(place(ghost->second, ghost->first, *target, slot));
@@ -184,8 +206,9 @@ void ShotPrediction::apply(game::Snapshot &snapshot, std::uint8_t slot, double d
             ghost = next;
             continue;
         }
+        const double time = timeOf(static_cast<double>(ghost->first), drawn, ship);
         const std::optional<double> target =
-            predicted.server ? targetOf(*predicted.server, ship) : std::optional<double>(ship);
+            predicted.server ? targetOf(*predicted.server, time) : std::optional<double>(time);
         if (!target) {
             const auto next = std::next(ghost);
             forget(ghost);

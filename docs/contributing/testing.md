@@ -86,7 +86,7 @@ TEST_CASE("A packet shorter than the header is rejected", "[protocol]")
 
 - Name the test after the expected behaviour, as a sentence.
 - Tag it with its subsystem, for instance `[ecs]`, `[scenes]`, `[engine]`, `[render]`, `[input]`, `[audio]`,
-  `[log]`, `[network]`, `[platform]`, and later `[protocol]`, `[game]`. Run one subsystem with
+  `[voice]`, `[log]`, `[network]`, `[platform]`, and later `[protocol]`, `[game]`. Run one subsystem with
   `./build/bin/rtype_tests "[scenes]"`.
 - Use `SECTION`s to share a setup between related checks.
 
@@ -180,32 +180,28 @@ clang-format -i path/to/file.cpp
 
 ### Runners
 
-The workflows run on the team's self-hosted runners. The Linux runner needs:
+The workflows run on the runners hosted by GitHub: `ubuntu-24.04` for every Linux job, `windows-2022` for the
+Windows build. Each job starts on a fresh machine, so nothing is kept from one run to the next but what
+`actions/cache` restores (the downloads of CPM) and the artifacts.
 
-- **Docker**, usable by the user of the runner: the tests of the database start their PostgreSQL in it, and
-  *Docker* builds the image with BuildKit (Docker 25 or newer, for `--start-interval` in its health check).
-  Without Docker, *Build*, *Sanitizers* and *Docker* fail on Linux instead of testing on SQLite only. The
-  smoke tests publish the UDP ports 47243 to 47245, then 47253 to 47255, on the loopback of the runner; the
-  build keeps its downloads and its build folder in the cache of BuildKit, `docker builder prune` empties it.
-  To publish, the user of the runner must be allowed `docker run --privileged`: *Docker* installs the QEMU
-  of arm64 with `tonistiigi/binfmt`, then builds in the buildx builder `rtype-multi-arch`, a container kept
-  from one publication to the next with its own cache (`docker buildx prune --builder rtype-multi-arch`).
-- **curl** and GNU **tar**: the smoke test with accounts asks the panel with curl, and gives the image its
-  secret with tar.
-- `sudo` without a password for `apt-get`, which installs the system libraries (X11, OpenGL, OpenSSL, libpq,
-  PulseAudio and ALSA for the Discord Social SDK of the client, and those **Chromium** needs for the end-to-end
-  tests of the panel). The packages are named for Debian 13
-  (trixie) and Ubuntu 24.04 or newer, the ones with the `t64` libraries.
-- GCC or Clang with their sanitizer runtimes (`libasan`, `libubsan`, `libtsan`), Ninja and CMake 3.25 or newer.
-- Nothing else for the panel: `actions/setup-node` provides Node LTS, and Playwright downloads Chromium into the
-  cache of the user of the runner.
+- **Linux** (`ubuntu-24.04`): Docker, curl, GNU tar, GCC with its sanitizer runtimes (`libasan`, `libubsan`,
+  `libtsan`) and CMake come with the image. The jobs install the rest with `apt-get`: the system libraries
+  (X11, OpenGL, OpenSSL, libpq, PulseAudio and ALSA for the Discord Social SDK of the client, and those
+  **Chromium** needs for the end-to-end tests of the panel), and Ninja. The packages are named for Ubuntu
+  24.04, the one with the `t64` libraries. The tests of the database start their PostgreSQL in Docker; the
+  smoke tests of *Docker* publish the UDP ports 47243 to 47245, then 47253 to 47255, on the loopback of the
+  runner. The image is built with BuildKit, whose cache mounts last for the job only: each run of *Docker*
+  compiles the server from scratch. To publish, *Docker* installs the QEMU of arm64 with `tonistiigi/binfmt`,
+  then builds in a buildx builder `rtype-multi-arch` created for the run. `actions/setup-node` provides Node
+  LTS, and Playwright downloads Chromium.
+- **Windows** (`windows-2022`): Visual Studio 2022 and CMake come with the image (`windows-2025` has moved to
+  Visual Studio 2026, which the generator `Visual Studio 17 2022` does not find); it tests the database on
+  SQLite only.
 
-The Windows runner needs Visual Studio 2022 and CMake; it tests the database on SQLite only.
-
-Several runners can share one machine, and run their jobs at once. The tests name their files in the temporary
-directory (the SQLite databases, keys, settings), the same in every run: the *Test* steps set `TMPDIR` to the
-directory of their runner, so that two jobs never read each other's files. By hand, two builds tested at once
-(`build` and `build-asan`, for instance) need the same: `TMPDIR=$(mktemp -d) ctest --test-dir build`.
+The *Test* steps set `TMPDIR` to the temporary directory of their runner, and `TMP` and `TEMP` too, the ones
+Windows reads (`temp_directory_path()` ignores `TMPDIR` there). By hand, two builds tested at once (`build`
+and `build-asan`, for instance) must not share the temporary files the tests name (the SQLite databases, keys,
+settings): `TMPDIR=$(mktemp -d) ctest --test-dir build`.
 
 ## Roadmap
 

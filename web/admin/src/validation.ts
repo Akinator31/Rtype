@@ -24,6 +24,13 @@ export function isValidBanDuration(seconds: number): boolean {
   return Number.isInteger(seconds) && seconds >= 1 && seconds <= MaxBanSeconds;
 }
 
+/** The longest mute of the voice of an account, as the server takes it: 30 days. */
+export const MaxVoiceMuteSeconds = 2592000;
+
+export function isValidVoiceMuteDuration(seconds: number): boolean {
+  return Number.isInteger(seconds) && seconds >= 1 && seconds <= MaxVoiceMuteSeconds;
+}
+
 const ipv4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 
 /** An IP address without a port, as the server takes it: IPv4, or IPv6 written without brackets. */

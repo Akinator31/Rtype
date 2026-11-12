@@ -20,7 +20,7 @@ permissions:
 jobs:
   image:
     name: Image
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -32,15 +32,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # BuildKit keeps the downloads of CPM and the build folder in its cache mounts, on this runner
+      # BuildKit keeps the downloads of CPM and the build folder in its cache mounts, for the time of the job: a
+      # GitHub-hosted runner starts empty. The build folder is one per branch: shared, it would hold objects of
+      # another branch that Ninja finds up to date
       - name: Build the image
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           if ! command -v docker >/dev/null || ! docker info >/dev/null 2>&1; then
             echo "::error::No Docker on this runner. See docs/contributing/testing.md#runners"
             exit 1
           fi
-          docker build --target server -t "$SERVER_IMAGE" .
-          docker build --target smoke -t "$SMOKE_IMAGE" .
+          cache=$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9_.-' '-')
+          docker build --build-arg BUILD_CACHE="$cache" --target server -t "$SERVER_IMAGE" .
+          docker build --build-arg BUILD_CACHE="$cache" --target smoke -t "$SMOKE_IMAGE" .
 
       - name: Smoke test
         run: docker/smoke-test.sh "$SERVER_IMAGE" "$SMOKE_IMAGE"
@@ -51,8 +56,8 @@ jobs:
         run: docker/smoke-test-accounts.sh "$SERVER_IMAGE" "$SMOKE_IMAGE"
 
       # The image for linux/amd64 and linux/arm64 in one manifest, Dokploy pulls the one of its machine. arm64
-      # is built under QEMU, slower, and only here: the smoke tests above run on amd64. The builder keeps its
-      # cache mounts on this runner, from one publication to the next
+      # is built under QEMU, slower, and only here: the smoke tests above run on amd64. The builder is created
+      # on each run, the runner starting empty
       - name: Publish on GHCR
         if: github.event_name == 'push'
         env:
@@ -61,7 +66,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           BUILDER: rtype-multi-arch
         run: |
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/rtype-server"
           if [ "$REF_TYPE" = tag ]; then
             tags=("${REF_NAME#v}")
             # A prerelease never becomes latest

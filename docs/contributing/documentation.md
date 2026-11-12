@@ -82,6 +82,25 @@ flowchart LR
 ```
 ````
 
+### Images and GIFs
+
+Pictures live in `docs/assets/`: the logo and the banner in `logo/`, the recordings of the game in `gifs/`. The
+README at the root of the repository shows the same files, by their path from the root
+(`docs/assets/gifs/gameplay.gif`); a page of the documentation by its path from the page
+(`../assets/gifs/gameplay.gif`).
+
+A GIF is cut from a recording of the screen, and kept light, as it is in the history of the repository for
+good: 720 pixels wide, 10 to 12 images per second, 64 colours without dithering, 6 to 12 seconds, a few
+megabytes at most. With [FFmpeg](https://ffmpeg.org/), from the second 117 to the second 127 of `game.mp4`:
+
+```sh
+ffmpeg -ss 117 -to 127 -i game.mp4 -filter_complex \
+    "fps=12,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
+    docs/assets/gifs/gameplay.gif
+```
+
+Leave out of a recording what is not the game: the windows of the desktop, an email, the names of friends.
+
 ### Accessibility rules
 
 - Every image has an alternative text: `![Player ship sprite sheet](img/ship.png)`.

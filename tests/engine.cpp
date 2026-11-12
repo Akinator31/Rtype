@@ -56,6 +56,14 @@ public:
     {
         return position;
     }
+
+    // The surfaces of a VR headset, drawn apart, if set
+    std::optional<SurfaceAreas> surfaces;
+    [[nodiscard]] bool surfacesApart() const override { return surfaces.has_value(); }
+    [[nodiscard]] rtype::render::Rectangle surfaceArea(Surface surface) const override
+    {
+        return surfaces ? (*surfaces)[static_cast<std::size_t>(surface)] : screen;
+    }
 };
 
 // The systems of the client, in the order they must be registered
@@ -328,6 +336,103 @@ TEST_CASE("The keys and the wheel step a slider with a rail", "[engine][interfac
     CHECK(std::abs(volume - 0.25f) < 1e-6f);
 }
 
+TEST_CASE("A slider can write a label instead of its percentage, and do something on Confirm",
+          "[engine][interface][slider]")
+{
+    World world;
+    float volume = 0.5f;
+    bool muted = false;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t slider = ui.slider(
+        "Nova", [&] { return volume; }, [&](float value) { volume = value; }, 0.25f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    Slider &row = world.ecs.getComponent<Slider>(slider);
+    row.label = [&] { return muted ? std::string("MUTED") : std::string(); };
+    row.onConfirm = [&] { muted = !muted; };
+    world.update();
+    CHECK(widgetLabel(row) == "Nova: 50%");
+
+    world.press({Key::Enter});
+    CHECK(muted);
+    CHECK(widgetLabel(row) == "Nova: MUTED");
+    // Left and Right still set the volume
+    world.press({Key::Right});
+    CHECK(std::abs(volume - 0.75f) < 1e-6f);
+    world.press({Key::Enter});
+    CHECK_FALSE(muted);
+}
+
+TEST_CASE("A locked slider is passed over by the focus and the pointer, and changes nothing",
+          "[engine][interface][slider]")
+{
+    World world;
+    float first = 0.5f;
+    float second = 0.5f;
+    bool locked = true;
+    bool confirmed = false;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t muted = ui.slider(
+        "Nova", [&] { return first; }, [&](float value) { first = value; }, 0.25f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    Slider &row = world.ecs.getComponent<Slider>(muted);
+    row.locked = [&] { return locked; };
+    row.onConfirm = [&] { confirmed = true; };
+    const entity_t other = ui.slider(
+        "Orion", [&] { return second; }, [&](float value) { second = value; }, 0.25f,
+        {AnchorPoint::TopLeft, 100.0f, 300.0f});
+    world.update();
+
+    // The focus goes to the other one, and stays there
+    CHECK_FALSE(world.isFocused(muted));
+    CHECK(world.isFocused(other));
+    world.press({Key::Up});
+    CHECK(world.isFocused(other));
+    world.press({Key::Right});
+    world.press({Key::Enter});
+    CHECK(first == 0.5f);
+    CHECK(std::abs(second - 0.75f) < 1e-6f);
+    CHECK_FALSE(confirmed);
+
+    // A click on its rail moves nothing
+    const rtype::ecs::Position rail = world.ecs.getComponent<rtype::ecs::Position>(muted);
+    world.input.mouse = {world.style.slider.getRailLeft(rail.x), world.style.slider.getRailY(rail.y)};
+    world.input.mouseButtons = {MouseButton::Left};
+    world.update();
+    world.input.mouseButtons.clear();
+    world.update();
+    CHECK(first == 0.5f);
+
+    // Unlocked, it is one again
+    locked = false;
+    world.press({Key::Up});
+    CHECK(world.isFocused(muted));
+}
+
+TEST_CASE("A click on a slider moves its handle and never runs its action", "[engine][interface][slider]")
+{
+    World world;
+    float volume = 0.5f;
+    bool muted = false;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t slider = ui.slider(
+        "Nova", [&] { return volume; }, [&](float value) { volume = value; }, 0.05f,
+        {AnchorPoint::TopLeft, 100.0f, 100.0f});
+    world.ecs.getComponent<Slider>(slider).onConfirm = [&] { muted = !muted; };
+    world.update();
+
+    const rtype::ecs::Position rail = world.ecs.getComponent<rtype::ecs::Position>(slider);
+    const float left = world.style.slider.getRailLeft(rail.x);
+    world.input.mouse = {left + (0.25f * world.style.slider.getRailWidth()),
+                         world.style.slider.getRailY(rail.y)};
+    world.input.mouseButtons = {MouseButton::Left};
+    world.update();
+    world.input.mouseButtons.clear();
+    world.update();
+
+    CHECK(std::abs(volume - 0.25f) < 0.01f);
+    CHECK_FALSE(muted);
+}
+
 TEST_CASE("A slider with a rail is as big as its row", "[engine][interface][slider]")
 {
     World world;
@@ -598,6 +703,109 @@ TEST_CASE("An anchored element follows the edges of a screen of another shape", 
     CHECK(positionOf(world, bottomRight).y == 1140.0f - 10.0f - 28.0f);
     CHECK(positionOf(world, centre).x == 960.0f);
     CHECK(positionOf(world, centre).y == 540.0f);
+}
+
+TEST_CASE(
+    "An anchored element on a surface is placed in the area of its surface while the surfaces are apart",
+    "[engine][layout][vr]")
+{
+    World world;
+    InterfaceBuilder ui(world.ecs, world.scenes.open(), world.style);
+    const entity_t onScreen = ui.box(100.0f, 50.0f, rtype::render::colors::Red, {AnchorPoint::BottomRight});
+    world.ecs.addComponent<OnSurface>(onScreen, Surface::HudShip);
+    const entity_t onPanel = ui.box(100.0f, 50.0f, rtype::render::colors::Red, {AnchorPoint::BottomRight});
+
+    // On the screen, the surface changes nothing
+    world.update();
+    CHECK(positionOf(world, onScreen).x == 1920.0f - 50.0f);
+
+    SurfaceAreas areas{};
+    areas.fill({0.0f, 0.0f, 1920.0f, 1080.0f});
+    areas[static_cast<std::size_t>(Surface::HudShip)] = {0.0f, 0.0f, 480.0f, 360.0f};
+    world.metrics.surfaces = areas;
+    world.update();
+    CHECK(positionOf(world, onScreen).x == 480.0f - 50.0f);
+    CHECK(positionOf(world, onScreen).y == 360.0f - 25.0f);
+    // Without a surface, on the panel, of the size of the game
+    CHECK(positionOf(world, onPanel).x == 1920.0f - 50.0f);
+}
+
+TEST_CASE("A surface has content when something of the interface is shown on it", "[engine][vr]")
+{
+    World world;
+    const SceneId scene = world.scenes.open();
+    InterfaceBuilder ui(world.ecs, scene, world.style);
+    SceneRenderer renderer(world.ecs, world.scenes, world.style);
+    CHECK_FALSE(renderer.hasContent(Surface::Panel));
+
+    const entity_t score = ui.text("0024500", {AnchorPoint::TopLeft});
+    world.ecs.addComponent<OnSurface>(score, Surface::HudShip);
+    world.update();
+    CHECK(renderer.hasContent(Surface::HudShip));
+    CHECK_FALSE(renderer.hasContent(Surface::Panel));
+
+    // A menu on the panel, the default surface; a fully transparent one is not there yet
+    const entity_t title = ui.text("PAUSE", {});
+    world.ecs.addComponent<Opacity>(title, 0.0f);
+    world.update();
+    CHECK_FALSE(renderer.hasContent(Surface::Panel));
+    world.ecs.getComponent<Opacity>(title).value = 1.0f;
+    CHECK(renderer.hasContent(Surface::Panel));
+
+    // Gone with its scene
+    world.scenes.close(scene);
+    world.update();
+    CHECK_FALSE(renderer.hasContent(Surface::Panel));
+    CHECK_FALSE(renderer.hasContent(Surface::HudShip));
+}
+
+TEST_CASE("The toasts do not open the panel", "[engine][vr]")
+{
+    World world;
+    SceneRenderer renderer(world.ecs, world.scenes, world.style);
+    world.engine.showToast("Hello", ToastType::Info);
+    world.update();
+    world.update(0.5f);
+    CHECK_FALSE(renderer.hasContent(Surface::Panel));
+    CHECK_FALSE(renderer.hasContent(Surface::Board));
+}
+
+TEST_CASE("The camera of the scenes shown is the one the board in relief lays their world with",
+          "[engine][vr]")
+{
+    World world;
+    SceneRenderer renderer(world.ecs, world.scenes, world.style);
+    CHECK_FALSE(renderer.camera().has_value());
+
+    const SceneId scene = world.scenes.open();
+    const entity_t camera = world.ecs.createEntity();
+    world.ecs.addComponent<SceneMember>(camera, scene);
+    rtype::render::Camera view;
+    view.fieldOfView = 1080.0f;
+    view.projection = rtype::render::Projection::Orthographic;
+    world.ecs.addComponent<Camera>(camera, view);
+    world.update();
+    REQUIRE(renderer.camera().has_value());
+    CHECK(renderer.camera()->projection == rtype::render::Projection::Orthographic);
+    CHECK(renderer.camera()->fieldOfView == 1080.0f);
+
+    // Gone with its scene
+    world.scenes.close(scene);
+    world.update();
+    CHECK_FALSE(renderer.camera().has_value());
+}
+
+TEST_CASE("The scene at the bottom changes when the scenes are switched, not when one opens over it",
+          "[engine][scenes]")
+{
+    World world;
+    CHECK_FALSE(world.scenes.bottom().has_value());
+    const SceneId game = world.scenes.open();
+    world.scenes.open();
+    CHECK(world.scenes.bottom() == game);
+    world.scenes.clear();
+    const SceneId menu = world.scenes.open();
+    CHECK(world.scenes.bottom() == menu);
 }
 
 TEST_CASE("An anchored element follows the size of its text", "[engine][layout]")

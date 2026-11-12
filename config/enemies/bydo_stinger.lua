@@ -17,7 +17,7 @@ end
 return {
     id = "bydo_stinger",
     ship = "bydo_stinger",
-    health = 45,
+    health = 19,
     speed = 480,
     acceleration = 960,
     weapon = "swarm_launcher",

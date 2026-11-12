@@ -9,6 +9,9 @@
 #include "MainMenu/MainMenu.hpp"
 #include "MainMenu/SettingsMenu.hpp"
 #include "MainMenu/Submenus.hpp"
+#include "MainMenu/VoiceMenu.hpp"
+#include "MainMenu/VrMenu.hpp"
+#include "Quests/QuestsMenu.hpp"
 #include "ShipSelector/ShipSelector.hpp"
 
 #include <memory>
@@ -34,24 +37,34 @@ void createLoadingScenes(engine::Engine &engine, render::ResourceManager &resour
 void createMenuScenes(engine::Engine &engine, render::ResourceManager &resources,
                       const engine::InterfaceStyle &style, const engine::RendererMetrics &metrics,
                       GameScenes &games, const game::GameConfig &config, const SettingsTargets &targets,
-                      ShipSelection &ships, Campaign &campaign)
+                      const VrTargets &vr, ShipSelection &ships, Campaign &campaign)
 {
     localization::Localization &translations = targets.translations;
     createMainMenuScene(engine, resources, style, metrics, translations,
                         [&window = targets.window] { window.requestClose(); });
-    const auto playOffline = [&games, &config] {
-        games.play(std::make_unique<LocalSession>(game::Rules{}, config));
-    };
-    const auto playSolo = [&engine, &ships, playOffline] { openShipSelector(engine, ships, playOffline); };
-    createSubmenuScenes(engine, style, translations, playSolo,
-                        [&engine, &ships] { openShipSelector(engine, ships); });
+    createSubmenuScenes(
+        engine, style, translations,
+        [&engine, &ships, &games, &config] {
+            // Offline, every ship of the hangar is open
+            openShipSelector(
+                engine, ships,
+                [&games, &config, &ships] {
+                    games.play(std::make_unique<LocalSession>(game::Rules{}, config, ships.getLoadout(),
+                                                              ships.getEquippedCode()));
+                },
+                true);
+        },
+        [&engine, &ships] { openShipSelector(engine, ships); });
     createSettingsScene(engine, style, targets);
     createControlsScenes(engine, style, translations);
+    createVoiceScenes(engine, style, targets);
+    createVrScene(engine, style, translations, vr);
     createShipSelectorScene(engine, resources, style, translations, ships);
     createLoreScene(engine, resources, targets.audio, style, metrics, translations);
     createCampaignEndingScene(engine, resources, targets.audio, style, metrics, translations);
     // After its briefing, each mission flies the ship equipped straight into space, without the hangar
     createCampaignScene(engine, resources, targets.audio, metrics, translations, campaign);
+    createQuestsMenuScene(engine, style, translations);
 }
 
 } // namespace rtype::client

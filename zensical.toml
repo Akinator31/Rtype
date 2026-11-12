@@ -10,13 +10,14 @@ site_url = "https://akinator31.github.io/Rtype/"
 repo_url = "https://github.com/Akinator31/Rtype"
 repo_name = "Akinator31/Rtype"
 edit_uri = "edit/main/docs/"
-copyright = "R-Type team — Epitech B-CPP-500"
+copyright = "R-Type team — Epitech RType project"
 
 nav = [
     { "Home" = "index.md" },
     { "Getting started" = [
         "getting-started/index.md",
         "getting-started/build.md",
+        "getting-started/play.md",
     ] },
     { "Architecture" = [
         "architecture/index.md",
@@ -39,6 +40,8 @@ nav = [
         "architecture/client-online.md",
         "architecture/minigame.md",
         "architecture/audio.md",
+        "architecture/voice.md",
+        "architecture/vr.md",
         "architecture/scenes-and-interface.md",
         "architecture/threads.md",
     ] },
@@ -59,6 +62,7 @@ nav = [
         "guides/deploy-with-docker.md",
         "guides/use-an-external-database.md",
         "guides/play-online.md",
+        "guides/play-in-vr.md",
     ] },
     { "Network protocol" = [
         "protocol/index.md",
@@ -101,6 +105,12 @@ nav = [
         "decisions/0030-measured-delays.md",
         "decisions/0031-destructions-sent-again.md",
         "decisions/0032-endless-waves-and-progression.md",
+        "decisions/0034-discord-token-in-the-client.md",
+        "decisions/0035-voice-chat-in-the-game-session.md",
+        "decisions/0036-webrtc-audio-processing.md",
+        "decisions/0037-vr-through-openxr.md",
+        "decisions/0038-shots-glide-to-the-time-of-the-world.md",
+        "decisions/0039-input-lead-margin.md",
     ] },
     { "Accessibility" = "accessibility.md" },
     { "Contributing" = [

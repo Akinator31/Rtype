@@ -68,6 +68,7 @@ Most settings can be changed while the game runs, for instance from an options m
 | `setCursorVisible(bool)`, `isCursorVisible()` | Shows or hides the mouse pointer over the window.                                               |
 | `setVsync(bool)`                              | Turns vertical synchronisation on or off.                                                       |
 | `setTargetFps(fps)`                           | Sets the maximum number of frames per second, 0 for no limit.                                   |
+| `setPacedElsewhere(bool)`                     | While a VR headset paces the frames: no vertical synchronisation nor limit, the values asked kept ([VR](vr.md#who-paces-the-frames)). |
 | `requestClose()`                              | Asks the window to close, for instance from a _Quit_ button: `shouldClose()` then returns true. |
 
 **Fullscreen** covers the screen the window is on, at the resolution of that screen: the screen keeps its
@@ -118,6 +119,14 @@ Internally, each kind of resource is stored in a `ResourceCache`, a generic cont
 path) to a handle and loads missing resources with a function given by the caller. It does not depend on
 raylib, which is why it is unit tested without a window (`tests/resource_cache.cpp`). It is part of the core
 library (`libs/core`), with the `Handle` type, so that the [audio library](audio.md) uses it too.
+
+### The meshes of a model
+
+`getModelMeshes(model)` lists the meshes of a loaded model, by the index that `drawModel()` hides them by: for a
+glTF file, the name of the node that holds each one (or of its mesh), and the centre of its box at rest. raylib
+makes a mesh per primitive, node by node, in the order of the file; the names are read again from the file in
+that order, since raylib keeps none. A part is found by its name instead of an index that would change with the
+file: the cockpit of [VR](vr.md#the-cockpit) finds its canopy and its hologram so.
 
 ### Pictures from the network
 
@@ -210,6 +219,58 @@ copies it into the window._
 The visible area is computed by `computeVisibleArea()` (`Viewport.hpp`), a pure function that is unit tested
 (`tests/viewport.cpp`).
 
+### Frames into an image, and the eyes of a headset
+
+In a VR headset ([VR](vr.md#in-the-headset)), the frame is not shown in the window: it is drawn into images,
+the board, the panel of the menus and the screens of the cockpit, which each eye of the headset then shows in
+3D.
+
+| Function                              | Does                                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `createImage(resolution)`             | Creates an image to draw frames into, filled with black. It lives as long as the renderer.                  |
+| `beginFrame(image, background)`       | Starts a frame into the image instead of the window. `endFrame()` leaves it there and makes its mipmaps.     |
+| `beginFrame(image, area, background)` | Starts a frame into the image showing an area of the game of its own, stretched to the image: a surface of the interface, a screen of the cockpit of 480 × 360 game units for instance. |
+| `beginEye(eye, view, background)`     | Starts a 3D pass for an eye, into an image of the renderer of the size of the eye, with the view and the projection of the headset (`EyeView`). |
+| `drawImageQuad(image, transform, look)` | Draws an image as a rectangle in 3D: the square of side 1 around the origin, facing +z, moved by `transform`, transparent where the image is. The images keep their transparency: a frame drawn into an image adds up how much of each pixel is covered, its colours premultiplied, so that a background with a low alpha leaves a pane clear where nothing is drawn on it. `ImageQuadLook` gives its tint, how far its sides bend towards the eye (a curved panel, drawn in 32 strips), and whether it is drawn over everything, whatever its depth. |
+| `setModelMaterialImage(model, material, image)` | Shows an image as the emission map of a material of a model, found by its name in the glTF file: the screens of the cockpit show the HUD in the frame and with the glow of the artist. |
+| `setModelMaterialGlow(model, material, color)` | Sets the light a material emits: its emission map multiplied by the colour, white as the artist made it, darker to dim it; a material without a map emits the colour all over. The lights of the cockpit that react to the game ([The cockpit alive](vr.md#the-cockpit-alive)). Black is kept one step over black, which the lighting shader would read as no emissive colour, white. |
+| `drawSky(texture, tint)`              | Wraps a picture on a sphere around the eye, at infinity (it follows the eye, so it never comes nearer), repeated twice around and twice from top to bottom. Drawn first: it writes no depth. |
+| `drawModel(model, light, ...)`, `drawEnergyModel(model, energy, ...)` | The models of a frame, seen by the eye instead of a camera. They do not glow.                 |
+| `beginBoard(board)`, `endBoard()`     | Inside an eye, lays the World layer on the board in relief (`BoardView`, `Board.hpp`): between them, the drawings of a frame draw in 3D on the board, the 2D on its plane, the models of an orthographic camera with their depth, out of it, the 2D drawn after `drawGlow()` in front of them; `drawGlow()` makes the glow for the eye. A frame around the board, written in the depth only, hides what goes beyond it. `endBoard()` darkens it by `BoardView::brightness`. See [The board in relief](vr.md#the-board-in-relief). |
+| `drawTransparentModel(model, light, ..., hiddenMeshes)` | The transparent meshes of a model (a canopy, a hologram), seen from both sides and without writing their depth, so that what is behind them stays sharp. Drawn after the opaque ones, from the farthest to the nearest. |
+| `drawBeam(from, to, width, color)`, `drawDot(centre, radius, color)` | A ribbon of light turned to face the eye, fading towards its end, and a disc of light facing it, added to what is behind them and over everything: the ray of a controller and where it meets the panel. |
+| `drawBox(transform, color, edge)`     | The cube of side 1 around the origin, moved by `transform`, of one colour with lit edges: a controller in a hand. |
+| `endEye()`                            | Copies the image of the eye, through the colour filter and the dithering, into the framebuffer bound before `beginEye()`: the image of the headset. |
+| `showMirror()`                        | Shows the left eye in the window, in place of a frame, cropped to the shape of the window (`computeMirrorCrop()`). |
+
+```mermaid
+flowchart LR
+    Frame["beginFrame(board)<br/>... endFrame()"] --> Board["Board image<br/>2560x1440"]
+    Board -- "drawImageQuad()" --> Eye["Image of an eye<br/>beginEye() ... endEye()"]
+    Relief["beginBoard() ... endBoard()<br/>the world in relief"] --> Eye
+    Eye -- "endEye(): colour filter" --> Headset["Image of the headset"]
+    Eye -- "showMirror(): left eye, cropped" --> Window["Window"]
+```
+
+_In the headset: the frame goes into the board, the board into each eye, with the world in relief for each eye
+unless the board is flat, each eye into the headset and the left one into the window._
+
+The frame of an image is the frame of the window, glow and smoothing included, without the vignette, which
+belongs to a screen: in the headset the eye looks around the board. The colour filter is not applied to the
+image either, but where the eyes are copied to the headset and to the window: it is for the whole view, not
+only for the board. While the last frame was drawn into an image, `visibleArea()` is the area that frame showed:
+the client draws the board last, so that it is the visible area of the game.
+
+`setModelMaterialImage()` replaces the emission map of the material, and turns the texture coordinates of its
+meshes upside down once: an image drawn into is stored from its bottom row, a texture of a glTF file from its
+top row. The model keeps its own map aside and gives it back before it is unloaded, as raylib frees the maps
+of the materials of a model with it.
+
+An eye is drawn in an image of its own rather than directly in the image of the headset so that it can go
+through the colour filter, as the frame of the window does. Its world is in metres, y up, -z ahead, the space of
+the headset. The lighting shader takes where the models are seen from (`detail::ViewPoint`): a `Camera` of a
+frame is one way to give it, the view matrix of an eye another.
+
 ### Drawing functions
 
 | Function                                               | Draws                                                                                                                    |
@@ -236,7 +297,13 @@ multiplied with the texture: white keeps it unchanged, a lower alpha fades it.
 
 Drawing outside of a frame, starting a frame twice or ending a frame that was not started throws
 `std::logic_error`, with a message telling how to fix the call. These are programming errors: raylib would
-otherwise draw to the wrong place without any warning.
+otherwise draw to the wrong place without any warning. The same goes for the eyes: a frame and an eye are never
+drawn at the same time, the 2D drawings and the models seen through a camera are for a frame or a board,
+`drawImageQuad()`, `drawSky()`, `drawBeam()`, `drawDot()`, `drawBox()` and the models without a camera for an eye
+out of its board, a board is drawn inside an eye and ended before it, and `showMirror()` is called between two
+passes.
+`PassOrder` (`PassOrder.hpp`) keeps this order; it holds no graphics resource, so `tests/render_passes.cpp`
+checks it without a window.
 
 ### Colour filters
 
@@ -299,6 +366,35 @@ Models emit their emission map multiplied by their emissive colour, or that colo
 (the engine flames of some ships): it shows on the night side and glows (`drawGlow()`). The emissive
 strength of glTF is not applied.
 
+`drawAura()`, called right after `drawModel()` with the same placement, casts a `render::Aura` on the model
+(`Aura.vert`, `Aura.frag`): its meshes are drawn again, pushed `thickness` world units out along their normals,
+in the colour of the aura where they graze the view and clear where they face the camera (Fresnel), breathing
+with the time. The shell is added to the image, both of its sides, without writing its depth: it hides nothing.
+The game uses it to tell apart the sides of the ships ([Auras](client-game.md#auras)).
+
+### Animated models
+
+`animateModel()`, `blendModelAnimations()` and `poseModel()` give an animated model a pose: the matrices of its
+bones, which raylib computes on the processor. The vertices are moved on the graphics card (GPU skinning):
+raylib is built with `SUPPORT_GPU_SKINNING=1`, and the vertex stages of `Lighting.vert`, `Aura.vert` and
+`Energy.vert` move each vertex of a mesh with bones by the weighted matrices of up to four of them. Every shader
+that draws models must do so: the vertices a shader does not move keep their rest pose. The impacts (sparks,
+bursts, splashes, explosions) are energy models with bones: `Energy.vert` poses them first, then applies its
+spin and pulse. They take 128 bones at most
+(`MaxShaderBones`, `SkeletonPose.hpp`); the boss, the largest skeleton of the game, has 123. As `DrawMesh()`
+does not give the bones to the shader, unlike `DrawModelEx()`, `LightingShader`, `AuraShader` and
+`EnergyShader` send them (`setBoneMatrices()`), and draw mesh by mesh with a `skinned` uniform telling whether
+the mesh drawn has bones: raylib gives none to a mesh of an animated model that is not under a bone.
+
+The entities of a model share it, each posing it before it is drawn: a pose costs only its matrices, a few
+microseconds. Before, raylib moved every vertex on the processor and sent them all again at each pose: the
+ships of the menu, about 220 000 vertices, took 10 ms a frame, and up to 30 ms when several ships shot at once,
+which made the frames lag. The `profile` command of the client measures it
+([Frame diagnostics](scenes-and-interface.md#frame-diagnostics)).
+
+Without the lighting shader, models are drawn by the shader of raylib, which does not move the vertices: the
+animated models keep their rest pose.
+
 ### Antialiasing, glow, vignette and dithering
 
 `drawGlow()`, called after the 3D models and before the interface:
@@ -306,13 +402,13 @@ strength of glTF is not applied.
 1. smooths the jagged edges of what the frame holds (FXAA, `Antialiasing.frag`, `setAntialiasing()`, on by
    default). The frame is drawn in an image without multisampling: without it, the edges of the models are
    staircases of pixels that crawl as they move. The interface, drawn afterwards, keeps its sharp text;
-2. draws the energy models and the light the lit models emit (engine flames, windows, beacons) again, at a
-   quarter of the resolution. The lit models write their depth there, so that a hull hides the glow of what
+2. draws the energy models, the auras (as much as their `bloom`) and the light the lit models emit (engine
+   flames, windows, beacons) again, at a quarter of the resolution. The lit models write their depth there, so that a hull hides the glow of what
    is behind it;
 3. blurs this image, then blurs it again at an eighth of the resolution and adds it back as a wider, fainter
    halo, so that the light fades out slowly instead of stopping at the edge of the blur;
 4. adds the result over the frame, then darkens its corners (`setVignette()`, 0.22 by default, 0 to turn it
-   off). The interface, drawn afterwards, is not darkened.
+   off), in the frames of the window only. The interface, drawn afterwards, is not darkened.
 
 `endFrame()` always adds a faint noise of plus or minus one level per channel (dithering) when it copies the
 frame to the window, in the same pass as the colour filter: the dark gradients of space and of the glow show
@@ -343,7 +439,14 @@ These details only matter when working inside `libs/render`:
   raylib, and puts them where raylib puts those of textured materials (`value` of the roughness and
   metalness maps, `color` of the emission map). A roughness factor of 0 is taken as none.
 - **Upside-down render target.** OpenGL stores off-screen images upside down: `endFrame()` copies the image
-  with a negative source height to flip it back.
+  with a negative source height to flip it back. `drawImageQuad()` reads the top of an image at v = 1 for the
+  same reason.
+- **Framebuffers raylib did not create.** The image of an eye of the headset is a framebuffer of `libs/xr`.
+  `beginEye()` reads which one is bound (`rlGetActiveFramebuffer()`), and `endEye()` binds it again and sets a
+  2D view of its size by hand, as `BeginTextureMode()` does for its own images. The eye pass sets the
+  matrices of the headset with rlgl, as `BeginMode3D()` does with those of a camera.
+- **`render::Matrix` and raylib's `Matrix`.** Both exist inside the library: raylib's one is written
+  `::Matrix`.
 
 ## Limits and next steps
 

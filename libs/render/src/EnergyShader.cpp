@@ -1,5 +1,6 @@
 #include "EnergyShader.hpp"
 
+#include "SkeletonPose.hpp"
 #include "rtype/log/Logger.hpp"
 #include "rtype/shaders/Energy.hpp"
 
@@ -31,6 +32,7 @@ EnergyShader::EnergyShader() : _shader(LoadShaderFromMemory(shaders::energyVerte
     _timeLocation = GetShaderLocation(_shader, "time");
     _boostLocation = GetShaderLocation(_shader, "boost");
     _dissolveLocation = GetShaderLocation(_shader, "dissolve");
+    _skinnedLocation = GetShaderLocation(_shader, "skinned");
     _available = IsShaderValid(_shader) && _timeLocation >= 0;
     if (!_available) {
         log::Logger("render").warning("Cannot compile the energy shader: shots are drawn without it");
@@ -71,9 +73,27 @@ void EnergyShader::draw(const Model &model, const Energy &energy, const Texture2
     }
     drawn.materials = materials.data();
 
+    // As DrawModelEx(), mesh by mesh, to tell the shader which ones move with the bones: the pose the model
+    // was last given, moved on the graphics card (the explosions)
+    const ::Matrix rotation = MatrixRotate(rotationAxis, rotationAngle * DEG2RAD);
+    const ::Matrix placement = MatrixMultiply(MatrixMultiply(MatrixScale(scale, scale, scale), rotation),
+                                              MatrixTranslate(position.x, position.y, position.z));
+    const ::Matrix transform = MatrixMultiply(drawn.transform, placement);
+    setBoneMatrices(_shader, drawn);
+
     BeginBlendMode(BLEND_ADDITIVE);
     rlDisableDepthMask();
-    DrawModelEx(drawn, position, rotationAxis, rotationAngle, scales, tint);
+    for (int mesh = 0; mesh < drawn.meshCount; ++mesh) {
+        Material &material = drawn.materials[drawn.meshMaterial[mesh]];
+        // The maps are those of the model: its colour is given back after the draw, as DrawModelEx() does
+        MaterialMap &diffuse = material.maps[MATERIAL_MAP_DIFFUSE];
+        const ::Color color = diffuse.color;
+        diffuse.color = ColorTint(color, tint);
+        const int skinned = isSkinned(drawn.meshes[mesh]) && drawn.boneMatrices != nullptr ? 1 : 0;
+        SetShaderValue(_shader, _skinnedLocation, &skinned, SHADER_UNIFORM_INT);
+        DrawMesh(drawn.meshes[mesh], material, transform);
+        diffuse.color = color;
+    }
     rlEnableDepthMask();
     EndBlendMode();
 }

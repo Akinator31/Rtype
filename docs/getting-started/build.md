@@ -30,8 +30,8 @@ system-wide besides a compiler and, on Linux, the X11/OpenGL and OpenSSL develop
     Install [Visual Studio 2022](https://visualstudio.microsoft.com/) with the
     **Desktop development with C++** workload, which includes CMake.
 
-OpenSSL (`libssl-dev`, `openssl`) is required on Linux: libcurl, which sends the mails of the server and is the
-HTTP client of the tests, takes its TLS from it, and so does the fake mail server of the tests. Windows uses its
+OpenSSL (`libssl-dev`, `openssl`) is required on Linux: libcurl, which sends the mails of the server, downloads
+the pictures of the Discord friends in the client, and is the HTTP client of the tests, takes its TLS from it, and so does the fake mail server of the tests. Windows uses its
 own (Schannel).
 
 PulseAudio and ALSA (`libpulse0`, `libasound2t64`) are required on Linux by the Discord Social SDK the client
@@ -113,6 +113,24 @@ Without it, the server runs, and its panel says it is not built.
 ```sh
 (cd web/admin && npm ci && npm run build)
 cmake -S . -B build -DRTYPE_ADMIN_PANEL_DIR=$PWD/web/admin/dist
+```
+
+The client shows the activity of the player in its Discord profile as the one of an application of Discord, given
+at the configure by its id (from the [developer portal](https://discord.com/developers/applications)): the official
+application of R-Type by default, `1565673565163102250`. Another one, or none with an empty id (unless the
+settings of the client give one, [Rich presence](../architecture/client-online.md#rich-presence)):
+
+```sh
+cmake -S . -B build -DRTYPE_DISCORD_APPLICATION_ID=<id of the application>
+```
+
+The client is built with VR on Linux and Windows ([VR](../architecture/vr.md)): the configure says
+`VR: OpenXR 1.1.60`. The OpenXR loader is downloaded and built with the game, and linked into the client, so no
+OpenXR package is needed, to build or to play; on Linux it uses the GLX of Mesa, already listed above. Without
+VR, for instance on a computer that cannot build it:
+
+```sh
+cmake -S . -B build -DRTYPE_OPENXR=OFF
 ```
 
 ## Troubleshooting

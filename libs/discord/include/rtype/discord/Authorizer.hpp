@@ -37,16 +37,15 @@ using AuthorizationResult = std::variant<Authorization, AuthorizationError>;
 /// Asks the player to accept a Discord application, in the Discord client or in the browser.
 ///
 /// @code
-/// authorizer.authorize(applicationId, [&](const rtype::discord::AuthorizationResult &result) {
+/// authorizer.authorize(applicationId, "identify", [&](const rtype::discord::AuthorizationResult &result) {
 ///     if (const auto *accepted = std::get_if<rtype::discord::Authorization>(&result)) {
 ///         lobby.discordConfirm({accepted->code, accepted->codeVerifier, accepted->redirectUri}, ...);
 ///     }
 /// });
-/// // In the game loop, every frame
-/// authorizer.poll();
 /// @endcode
 ///
-/// Everything runs on the thread that calls poll(): in the client, the game loop.
+/// Everything runs on the thread that polls Discord (Session::poll(), the fake in the tests): in the client,
+/// the game loop.
 class Authorizer
 {
 public:
@@ -54,13 +53,13 @@ public:
 
     virtual ~Authorizer() = default;
 
-    /// Asks the player to accept the application, with the scope `identify` only. `done` is called once,
-    /// from poll(). Another authorize() gives up the one running, whose `done` is never called.
-    virtual void authorize(std::uint64_t applicationId, Done done) = 0;
+    /// Asks the player to accept the application, with the scopes the master asks (DISCORD_AUTHORIZE):
+    /// `identify`, or `identify openid sdk.social_layer` for a token of the Social SDK. `done` is called
+    /// once, when Discord is polled. Another authorize() gives up the one running, whose `done` is never
+    /// called.
+    virtual void authorize(std::uint64_t applicationId, const std::string &scopes, Done done) = 0;
     /// Gives up the authorization running, if any: its `done` is never called.
     virtual void cancel() = 0;
-    /// Runs what came back from Discord: the `done` of an authorization.
-    virtual void poll() = 0;
 };
 
 } // namespace rtype::discord

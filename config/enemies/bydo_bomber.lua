@@ -16,7 +16,7 @@ end
 return {
     id = "bydo_bomber",
     ship = "bydo_bomber",
-    health = 120,
+    health = 50,
     speed = 200,
     acceleration = 400,
     weapon = "bomb_launcher",

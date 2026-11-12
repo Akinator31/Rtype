@@ -4,6 +4,7 @@
 #include "Lore/LoreScene.hpp"
 #include "MainMenu/Column.hpp"
 #include "MainMenu/UiShowcase.hpp"
+#include "Quests/QuestsMenu.hpp"
 
 #include <string>
 #include <utility>
@@ -57,7 +58,8 @@ void createSubmenuScenes(engine::Engine &engine, const engine::InterfaceStyle &s
                        {{"menu.campaign", [&engine] { engine.pushScene(CampaignScene); }},
                         {"menu.solo", std::move(playSolo)},
                         {"menu.ships", std::move(openHangar)},
-                        {"menu.lore", [&engine] { engine.pushScene(LoreScene); }}});
+                        {"menu.lore", [&engine] { engine.pushScene(LoreScene); }},
+                        {"menu.quests", [&engine] { engine.pushScene(QuestsMenuScene); }}});
     createUiShowcaseScene(engine, style, translations);
 }
 

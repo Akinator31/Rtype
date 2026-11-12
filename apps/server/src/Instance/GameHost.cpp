@@ -17,12 +17,23 @@ namespace
 using rtype::network::Delivery;
 using rtype::network::DisconnectReason;
 using rtype::network::SessionEnd;
-using Clock = rtype::network::SessionHost::Clock;
-
+using Clock = GameHost::Clock;
 const rtype::log::Logger &logger()
 {
     static const rtype::log::Logger instance("instance");
     return instance;
+}
+
+/// When a mute of `seconds` from `now` ends.
+std::optional<Clock::time_point> mutedUntil(Clock::time_point now, std::uint32_t seconds)
+{
+    if (seconds == 0) {
+        return std::nullopt;
+    }
+    if (seconds == VoiceMutedForTheGame) {
+        return Clock::time_point::max();
+    }
+    return now + std::chrono::seconds(seconds);
 }
 
 /// The input lead of a SNAPSHOT: within what an i8 holds, the lowest value meaning none.
@@ -37,9 +48,9 @@ std::int8_t toInputLead(std::optional<std::int64_t> lead)
 } // namespace
 
 GameHost::GameHost(rtype::network::EventLoop &loop, std::unique_ptr<GameTransport> transport,
-                   std::uint8_t maxPlayers, GameThread &game, Handlers handlers)
+                   std::uint8_t maxPlayers, GameThread &game, Handlers handlers, VoiceRules voice)
     : _transport(std::move(transport)), _game(game), _maxPlayers(std::min(maxPlayers, MaxInstancePlayers)),
-      _handlers(std::move(handlers)),
+      _handlers(std::move(handlers)), _voice(voice),
       _sessions(
           [this](const rtype::network::Address &to, std::span<const std::byte> datagram) {
               _transport->send(to, datagram);
@@ -58,7 +69,11 @@ GameHost::GameHost(rtype::network::EventLoop &loop, std::unique_ptr<GameTranspor
     });
     // Sends, resends, acknowledgements, heartbeats and timeouts, at the pace of the ticks, but on its own:
     // the network never waits for the game
-    _updates.startRepeating(GameThread::TickInterval, [this] { _sessions.update(Clock::now()); });
+    _updates.startRepeating(GameThread::TickInterval, [this] {
+        const Clock::time_point now = Clock::now();
+        expireVoiceMutes(now);
+        _sessions.update(now);
+    });
 }
 
 std::optional<std::uint8_t> GameHost::freeSlot() const
@@ -81,7 +96,14 @@ bool GameHost::addPlayer(const AddPlayerMessage &player)
     }
     _sessions.add(player.sessionId, rtype::network::DatagramKey(player.clientKey),
                   rtype::network::DatagramKey(player.serverKey), Clock::now());
-    _players.emplace(player.sessionId, Player{player.playerId, *slot, player.name, false});
+    Player added;
+    added.playerId = player.playerId;
+    added.slot = *slot;
+    added.name = player.name;
+    added.accountId = player.accountId;
+    added.voiceRate = VoiceRate(_voice.maxFramesPerSecond);
+    added.voiceMutedUntil = mutedUntil(Clock::now(), player.voiceMuted);
+    _players.emplace(player.sessionId, std::move(added));
     logger().debug("Player {} ({}) expected on session {}, slot {}", player.name, player.playerId,
                    player.sessionId, *slot);
     return true;
@@ -98,24 +120,36 @@ void GameHost::connected(std::uint32_t session, const rtype::network::Address &f
     _game.addPlayer(player.slot);
     logger().info("{} ({}) connected from {}, slot {}", player.name, player.playerId, from, player.slot);
 
-    _sessions.send(
-        session, rtype::game::message_type::Accepted,
-        rtype::game::encode(rtype::game::AcceptedMessage{player.slot, rtype::game::TickRate, _game.tick()}),
-        Delivery::Reliable);
+    _sessions.send(session, rtype::game::message_type::Accepted,
+                   rtype::game::encode(rtype::game::AcceptedMessage{.slot = player.slot,
+                                                                    .tickRate = rtype::game::TickRate,
+                                                                    .tick = _game.tick(),
+                                                                    .voice = _voice.enabled}),
+                   Delivery::Reliable);
     // The players already there, for the newcomer
     for (const auto &[otherSession, other] : _players) {
         if (other.connected && otherSession != session) {
-            _sessions.send(
-                session, rtype::game::message_type::PlayerJoined,
-                rtype::game::encode(rtype::game::PlayerJoinedMessage{other.slot, other.playerId, other.name}),
-                Delivery::Reliable);
+            _sessions.send(session, rtype::game::message_type::PlayerJoined,
+                           rtype::game::encode(rtype::game::PlayerJoinedMessage{other.slot, other.playerId,
+                                                                                other.name, other.accountId}),
+                           Delivery::Reliable);
         }
     }
     // The newcomer, for everyone, itself included
-    sendToConnected(
-        rtype::game::message_type::PlayerJoined,
-        rtype::game::encode(rtype::game::PlayerJoinedMessage{player.slot, player.playerId, player.name}),
-        Delivery::Reliable);
+    sendToConnected(rtype::game::message_type::PlayerJoined,
+                    rtype::game::encode(rtype::game::PlayerJoinedMessage{player.slot, player.playerId,
+                                                                         player.name, player.accountId}),
+                    Delivery::Reliable);
+    // What carries the voice of the others, for the newcomer; its own is None until it says
+    _sessions.send(session, rtype::game::message_type::VoiceRoster, rtype::game::encode(voiceRoster()),
+                   Delivery::Reliable);
+    if (player.voiceMuted(Clock::now())) {
+        // Muted already by its account: the others see it at once
+        sendVoiceStatuses();
+    } else {
+        _sessions.send(session, rtype::game::message_type::VoiceStatuses,
+                       rtype::game::encode(voiceStatuses()), Delivery::Reliable);
+    }
     if (_handlers.onConnected) {
         _handlers.onConnected(player.playerId);
     }
@@ -127,17 +161,187 @@ void GameHost::received(std::uint32_t session, std::uint8_t type, std::span<cons
     if (found == _players.end()) {
         return;
     }
-    if (type != rtype::game::message_type::Input) {
+    switch (type) {
+    case rtype::game::message_type::Input:
+        receivedInput(found->second, session, payload);
+        return;
+    case rtype::game::message_type::Voice:
+        receivedVoice(found->second, session, payload);
+        return;
+    case rtype::game::message_type::VoiceState:
+        receivedVoiceState(found->second, session, payload);
+        return;
+    case rtype::game::message_type::VoiceStatus:
+        receivedVoiceStatus(found->second, session, payload);
+        return;
+    case rtype::game::message_type::Loadout:
+        receivedLoadout(found->second, session, payload);
+        return;
+    default:
         logger().debug("Message {:#04x} of session {} ignored: not one a client sends", type, session);
         return;
     }
+}
+
+void GameHost::receivedInput(Player &player, std::uint32_t session, std::span<const std::byte> payload)
+{
     std::optional<rtype::game::InputMessage> input = rtype::game::decodeInput(payload);
     if (!input) {
         logger().debug("Malformed INPUT of session {} dropped", session);
         return;
     }
     // Each one applied at its tick: the older ones are those a lost datagram did not bring
-    _game.receiveInputs(found->second.slot, input->tick, std::move(input->inputs));
+    _game.receiveInputs(player.slot, input->tick, std::move(input->inputs));
+}
+
+void GameHost::receivedLoadout(Player &player, std::uint32_t session, std::span<const std::byte> payload)
+{
+    std::optional<rtype::game::LoadoutMessage> loadout = rtype::game::decodeLoadout(payload);
+    if (!loadout) {
+        logger().debug("Malformed LOADOUT of session {} dropped", session);
+        return;
+    }
+    if (!player.connected || player.loadoutChosen) {
+        return;
+    }
+    player.loadoutChosen = true;
+    logger().debug("{} ({}) flies {} with {} and {}", player.name, player.playerId, loadout->ship,
+                   loadout->weapons[0], loadout->weapons[1]);
+    _game.setLoadout(player.slot, std::move(loadout->weapons), std::move(loadout->ship));
+}
+
+void GameHost::receivedVoice(Player &player, std::uint32_t session, std::span<const std::byte> payload)
+{
+    std::optional<rtype::game::VoiceMessage> voice = rtype::game::decodeVoice(payload);
+    if (!voice) {
+        logger().debug("Malformed VOICE of session {} dropped", session);
+        return;
+    }
+    // The voice off, a player on None or muted talks to nobody; a frame bigger than the server allows, or
+    // past its rate, is more than a voice
+    const Clock::time_point now = Clock::now();
+    if (!_voice.enabled || player.voice == rtype::voice::Backend::None || player.voiceMuted(now) ||
+        voice->frame.size() > _voice.maxFrameBytes || !player.voiceRate.allow(now)) {
+        ++player.voiceDropped;
+        return;
+    }
+    const std::vector<std::byte> frame =
+        rtype::game::encode(rtype::game::VoiceFrameMessage{.slot = player.slot,
+                                                           .sequence = voice->sequence,
+                                                           .last = voice->last,
+                                                           .frame = std::move(voice->frame)});
+    for (const auto &[otherSession, other] : _players) {
+        if (other.connected && otherSession != session &&
+            rtype::voice::carriedByGame(player.voice, other.voice)) {
+            _sessions.send(otherSession, rtype::game::message_type::VoiceFrame, frame, Delivery::Unreliable);
+        }
+    }
+}
+
+void GameHost::receivedVoiceState(Player &player, std::uint32_t session, std::span<const std::byte> payload)
+{
+    const std::optional<rtype::game::VoiceStateMessage> state = rtype::game::decodeVoiceState(payload);
+    if (!state) {
+        logger().debug("Malformed VOICE_STATE of session {} dropped", session);
+        return;
+    }
+    if (state->backend == player.voice) {
+        return;
+    }
+    player.voice = state->backend;
+    logger().debug("{} ({}) talks on the voice of {}", player.name, player.playerId,
+                   rtype::voice::name(player.voice));
+    sendVoiceRoster();
+}
+
+void GameHost::receivedVoiceStatus(Player &player, std::uint32_t session, std::span<const std::byte> payload)
+{
+    const std::optional<rtype::game::VoiceStatusMessage> status = rtype::game::decodeVoiceStatus(payload);
+    if (!status) {
+        logger().debug("Malformed VOICE_STATUS of session {} dropped", session);
+        return;
+    }
+    if (status->status == player.voiceStatus) {
+        return;
+    }
+    player.voiceStatus = status->status;
+    sendVoiceStatuses();
+}
+
+rtype::game::VoiceStatusesMessage GameHost::voiceStatuses() const
+{
+    rtype::game::VoiceStatusesMessage statuses;
+    const Clock::time_point now = Clock::now();
+    for (const auto &[session, player] : _players) {
+        if (player.connected && player.slot < statuses.statuses.size()) {
+            statuses.statuses[player.slot] = player.voiceStatus;
+            // The game's to say, whatever the player told
+            statuses.statuses[player.slot].mutedByAdmin = player.voiceMuted(now);
+        }
+    }
+    return statuses;
+}
+
+bool GameHost::muteVoice(std::uint32_t playerId, std::uint32_t seconds)
+{
+    const auto found = std::ranges::find_if(
+        _players, [playerId](const auto &entry) { return entry.second.playerId == playerId; });
+    if (found == _players.end()) {
+        return false;
+    }
+    Player &player = found->second;
+    const Clock::time_point now = Clock::now();
+    const bool before = player.voiceMuted(now);
+    player.voiceMutedUntil = mutedUntil(now, seconds);
+    if (seconds == 0) {
+        logger().info("{} ({}) may talk again", player.name, playerId);
+    } else if (seconds == VoiceMutedForTheGame) {
+        logger().info("{} ({}) muted by an administrator for the rest of the game", player.name, playerId);
+    } else {
+        logger().info("{} ({}) muted by an administrator for {} s", player.name, playerId, seconds);
+    }
+    if (player.connected && before != player.voiceMuted(now)) {
+        sendVoiceStatuses();
+    }
+    return true;
+}
+
+void GameHost::expireVoiceMutes(Clock::time_point now)
+{
+    bool expired = false;
+    for (auto &[session, player] : _players) {
+        if (player.voiceMutedUntil && now >= *player.voiceMutedUntil) {
+            player.voiceMutedUntil.reset();
+            logger().info("{} ({}) may talk again: its mute ended", player.name, player.playerId);
+            expired = expired || player.connected;
+        }
+    }
+    if (expired) {
+        sendVoiceStatuses();
+    }
+}
+
+void GameHost::sendVoiceStatuses()
+{
+    sendToConnected(rtype::game::message_type::VoiceStatuses, rtype::game::encode(voiceStatuses()),
+                    Delivery::Reliable);
+}
+
+rtype::game::VoiceRosterMessage GameHost::voiceRoster() const
+{
+    rtype::game::VoiceRosterMessage roster;
+    for (const auto &[session, player] : _players) {
+        if (player.connected && player.slot < roster.backends.size()) {
+            roster.backends[player.slot] = player.voice;
+        }
+    }
+    return roster;
+}
+
+void GameHost::sendVoiceRoster()
+{
+    sendToConnected(rtype::game::message_type::VoiceRoster, rtype::game::encode(voiceRoster()),
+                    Delivery::Reliable);
 }
 
 void GameHost::leave(std::uint32_t session, rtype::game::LeaveReason reason)
@@ -148,11 +352,21 @@ void GameHost::leave(std::uint32_t session, rtype::game::LeaveReason reason)
     }
     const Player player = found->second;
     _players.erase(found);
+    if (player.voiceDropped > 0) {
+        logger().debug("{} ({}): {} frames of voice dropped", player.name, player.playerId,
+                       player.voiceDropped);
+    }
     if (player.connected) {
         _game.removePlayer(player.slot);
         sendToConnected(rtype::game::message_type::PlayerLeft,
                         rtype::game::encode(rtype::game::PlayerLeftMessage{player.slot, reason}),
                         Delivery::Reliable);
+        if (player.voice != rtype::voice::Backend::None) {
+            sendVoiceRoster();
+        }
+        if (player.voiceStatus != rtype::voice::Status{}) {
+            sendVoiceStatuses();
+        }
     }
 }
 

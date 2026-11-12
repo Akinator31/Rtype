@@ -16,6 +16,7 @@ namespace rtype::server
 [[nodiscard]] crow::json::wvalue toJson(const AdminPlayer &player);
 [[nodiscard]] crow::json::wvalue toJson(const AdminAction &action);
 [[nodiscard]] crow::json::wvalue toJson(const AddressBan &ban);
+[[nodiscard]] crow::json::wvalue toJson(const VoiceMute &mute);
 [[nodiscard]] crow::json::wvalue toJson(const AdminAccount &account);
 /// The Discord profile of an account, without its picture: null without one, else `{"username",
 /// "displayName", "avatar"}`, the avatar the version of the picture, or null.

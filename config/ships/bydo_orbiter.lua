@@ -2,5 +2,5 @@
 return {
     id = "bydo_orbiter",
     model = "models/battleship.glb",
-    collider = { shape = "box", halfWidth = 70, halfHeight = 27 },
+    collider = { shape = "box", halfWidth = 84, halfHeight = 49 },
 }

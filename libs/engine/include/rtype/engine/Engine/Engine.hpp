@@ -16,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace rtype::engine
@@ -92,6 +93,10 @@ class Engine
     SceneAssets _sceneAssets;
     std::string _loadingScene;
     std::optional<PendingScene> _pendingScene;
+    /// The scenes with SceneSettings::keepsAssets opened once: the engine holds their assets for good.
+    std::unordered_set<std::string> _scenesKeepingAssets;
+    /// The assets of the scenes preloaded (preloadScene()), by scene, held until the scene opens.
+    std::unordered_map<std::string, std::vector<SceneAsset>> _preloads;
 
     void applySceneRequests();
     void openScene(const std::string &name, std::vector<SceneAsset> assets = {});
@@ -137,8 +142,16 @@ public:
     [[nodiscard]] const std::string &getSceneLoadError() const;
     /// Loads the assets of the waiting scene again. Does nothing unless getSceneLoadState() is Failed.
     void retrySceneLoad();
-    /// Closes every scene and unloads their assets: at shutdown, before the loader and what it loads with
-    /// are destroyed.
+    /// Starts loading the assets of a scene before it is asked for, without the loading scene: while an
+    /// animation plays, so that the scene then opens at once (isSceneReady()). They are held until the scene
+    /// opens. Does nothing without a loader, for a scene without assets, or one preloaded already.
+    /// @throws std::out_of_range if the scene does not exist.
+    void preloadScene(const std::string &name);
+    /// Tells whether the scene would open at once, without the loading scene: it has no assets, or the loads
+    /// of its assets preloaded are over, successfully or not. False for a scene with assets not preloaded.
+    [[nodiscard]] bool isSceneReady(const std::string &name) const;
+    /// Closes every scene and unloads their assets, those kept by SceneSettings::keepsAssets too: at
+    /// shutdown, before the loader and what it loads with are destroyed.
     void unloadSceneAssets();
 
     /// Sets where the controls are read from, usually the real devices. It must outlive the engine. Without

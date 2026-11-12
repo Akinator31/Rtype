@@ -15,9 +15,11 @@ namespace rtype::engine
 {
 
 /// Writes the Position of the entities with an Anchor, every frame, from the part of the game shown on the
-/// screen (Metrics::visibleArea(), so that anchored elements follow the edges of any screen) and the size of
-/// the entity: its Hitbox at scale 1 if it has one (a widget, with its padding), otherwise its Text, Sprite
-/// Box or Extent. The size does not include the Scale, so that an entity does not move when it bounces.
+/// screen (Metrics::visibleArea(), so that anchored elements follow the edges of any screen), or the area of
+/// their surface (OnSurface, Metrics::surfaceArea()) while a VR headset draws the surfaces apart, and the
+/// size of the entity: its Hitbox at scale 1 if it has one (a widget, with its padding), otherwise its Text,
+/// Sprite Box or Extent. The size does not include the Scale, so that an entity does not move when it
+/// bounces.
 ///
 /// Register it after the systems that change the texts and the hitboxes (BoundTextSystem, HitboxSystem), and
 /// before the TransformSystem.
@@ -31,6 +33,7 @@ class AnchorSystem : public ecs::System
     ecs::ComponentCache<Sprite> &_sprites;
     ecs::ComponentCache<Box> &_boxes;
     ecs::ComponentCache<Extent> &_extents;
+    ecs::ComponentCache<OnSurface> &_surfaces;
 
     [[nodiscard]] std::optional<render::Vector2> sizeOf(ecs::entity_t entity) const;
 

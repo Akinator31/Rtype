@@ -151,7 +151,7 @@ TEST_CASE("The new Bydo behaviors issue their first orders", "[game]")
 
     const rtype::ecs::entity_t wounded =
         spawnEnemy(ecs, simulation.context(), "bydo_berserker", 1600.0f, 216.0f);
-    ecs.getComponent<Health>(wounded).points = 40;
+    ecs.getComponent<Health>(wounded).points = 17;
     simulation.step();
     CHECK(ecs.getComponent<rtype::physics::Velocity>(wounded).x < -250.0f);
     CHECK(ecs.getComponent<EnemyOrders>(wounded).target.has_value());
@@ -390,6 +390,79 @@ TEST_CASE("The progression of the repository loads", "[game]")
     CHECK(loaded.config.progression.xpPerWave == 100);
     CHECK(loaded.config.progression.streakBonus == 25);
     CHECK(loaded.config.progression.streakCap == 300);
+}
+
+TEST_CASE("The levels of the ships of the hangar are read from hangar.lua, none without it", "[game]")
+{
+    const ConfigDirectory directory("hangar");
+    directory.writeValid();
+    const LoadedGameConfig none = loadGameConfig(directory.path);
+    INFO(listErrors(none));
+    REQUIRE(none.isValid());
+    CHECK(none.config.shipUnlocks.empty());
+
+    directory.write("hangar.lua", "return { ships = { { ship = 'VX-01', level = 1 }, "
+                                  "{ ship = 'VX-02', level = 4, speed = 0.9, power = 0, armor = 1 } } }");
+    const LoadedGameConfig loaded = loadGameConfig(directory.path);
+    INFO(listErrors(loaded));
+    REQUIRE(loaded.isValid());
+    REQUIRE(loaded.config.shipUnlocks.size() == 2);
+    CHECK(loaded.config.shipUnlocks[0].ship == "VX-01");
+    CHECK(loaded.config.shipUnlocks[0].level == 1);
+    CHECK(loaded.config.shipUnlocks[1].ship == "VX-02");
+    CHECK(loaded.config.shipUnlocks[1].level == 4);
+    // The characteristics of the rules without them
+    CHECK(loaded.config.shipUnlocks[0].stats == ShipStats{});
+    CHECK(loaded.config.shipUnlocks[1].stats == ShipStats{0.9f, 0.0f, 1.0f});
+
+    CHECK(errorWith("hangar_level", "hangar.lua", "return { ships = { { ship = 'VX-01', level = 0 } } }") ==
+          "hangar.lua: ships[1].level: expected an integer from 1 to 4294967295");
+    CHECK(errorWith("hangar_twice", "hangar.lua",
+                    "return { ships = { { ship = 'VX-01', level = 1 }, { ship = 'VX-01', level = 2 } } }") ==
+          "hangar.lua: ships: 'VX-01' listed twice");
+    CHECK(errorWith("hangar_stat_high", "hangar.lua",
+                    "return { ships = { { ship = 'VX-01', level = 1, armor = 1.5 } } }") ==
+          "hangar.lua: ships: the armor of 'VX-01' is above 1");
+    CHECK_THAT(errorWith("hangar_stat_negative", "hangar.lua",
+                         "return { ships = { { ship = 'VX-01', level = 1, speed = -0.1 } } }"),
+               ContainsSubstring("speed"));
+    CHECK_THAT(
+        errorWith("hangar_unknown", "hangar.lua", "return { ships = { { ship = 'VX-01', lvl = 2 } } }"),
+        ContainsSubstring("level"));
+}
+
+TEST_CASE("The weapons of the hangar are read from hangar.lua, and must be weapons of the configuration",
+          "[game]")
+{
+    const ConfigDirectory directory("hangar_weapons");
+    directory.writeValid();
+    const LoadedGameConfig none = loadGameConfig(directory.path);
+    REQUIRE(none.isValid());
+    CHECK(none.config.weaponUnlocks.empty());
+
+    directory.write("hangar.lua", "return { weapons = { { weapon = 'blaster', level = 2 } } }");
+    const LoadedGameConfig loaded = loadGameConfig(directory.path);
+    INFO(listErrors(loaded));
+    REQUIRE(loaded.isValid());
+    REQUIRE(loaded.config.weaponUnlocks.size() == 1);
+    CHECK(loaded.config.weaponUnlocks[0].weapon == "blaster");
+    CHECK(loaded.config.weaponUnlocks[0].level == 2);
+    CHECK(loaded.config.shipUnlocks.empty());
+
+    CHECK(errorWith("hangar_weapon_twice", "hangar.lua",
+                    "return { weapons = { { weapon = 'blaster', level = 1 }, { weapon = 'blaster', level = 2 "
+                    "} } }") == "hangar.lua: weapons: 'blaster' listed twice");
+    CHECK(errorWith("hangar_weapon_unknown", "hangar.lua",
+                    "return { weapons = { { weapon = 'nope', level = 1 } } }") ==
+          "hangar.lua: weapons: unknown weapon 'nope'");
+}
+
+TEST_CASE("The hangar of the repository loads", "[game]")
+{
+    const LoadedGameConfig loaded = loadGameConfig(RTYPE_TEST_CONFIG);
+    REQUIRE(loaded.isValid());
+    CHECK(loaded.config.shipUnlocks.size() == 6);
+    CHECK(loaded.config.weaponUnlocks.size() == 11);
 }
 
 TEST_CASE("A directory without player.lua is an error, as a missing one", "[game]")

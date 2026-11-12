@@ -1170,6 +1170,16 @@ struct WebServer::Impl {
         CROW_ROUTE(app, "/api/players/<uint>/kick")
             .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
                                                     std::uint64_t id) { kick(request, response, id); });
+        CROW_ROUTE(app, "/api/players/<uint>/mute-voice")
+            .methods(crow::HTTPMethod::Post)(
+                [this](const crow::request &request, crow::response &response, std::uint64_t id) {
+                    muteVoice(request, response, id, true);
+                });
+        CROW_ROUTE(app, "/api/players/<uint>/unmute-voice")
+            .methods(crow::HTTPMethod::Post)(
+                [this](const crow::request &request, crow::response &response, std::uint64_t id) {
+                    muteVoice(request, response, id, false);
+                });
         CROW_ROUTE(app, "/api/games/<uint>/end")
             .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
                                                     std::uint64_t id) { endGame(request, response, id); });
@@ -1197,6 +1207,28 @@ struct WebServer::Impl {
                 logger().info("Player {} removed from the panel, from {}", id, visitor);
                 crow::json::wvalue done;
                 done["playerId"] = id;
+                reply(jsonOf(200, done));
+            });
+    }
+
+    /// `POST /api/players/{id}/mute-voice` and `unmute-voice`: for the rest of its game.
+    void muteVoice(const crow::request &request, crow::response &response, std::uint64_t id, bool muted)
+    {
+        const auto reason = reasonOf(request);
+        api(request, response, true,
+            [id, muted, reason](Administration &administration, const SignedIn &who, const Reply &reply) {
+                if (!reason) {
+                    reply(error(400, ReasonOnly));
+                    return;
+                }
+                if (id > std::numeric_limits<std::uint32_t>::max() ||
+                    !administration.muteVoice(static_cast<std::uint32_t>(id), muted, *reason, who.actor)) {
+                    reply(error(404, "no such player in a game"));
+                    return;
+                }
+                crow::json::wvalue done;
+                done["playerId"] = id;
+                done["voiceMuted"] = muted;
                 reply(jsonOf(200, done));
             });
     }
@@ -1419,6 +1451,41 @@ struct WebServer::Impl {
                                   return true;
                               });
             });
+        CROW_ROUTE(app, "/api/accounts/<uint>/mute-voice")
+            .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
+                                                    std::uint64_t id) {
+                const auto read = body(request, false);
+                const auto reason = read ? textField(*read, "reason", MaxAdminReasonLength) : std::nullopt;
+                const auto duration = read ? integerField(*read, "duration") : std::nullopt;
+                const auto longest =
+                    std::chrono::duration_cast<std::chrono::seconds>(MaxVoiceMuteDuration).count();
+                const bool valid = reason && duration && *duration >= 1 && *duration <= longest;
+                changeAccount(request, response, id, false,
+                              [valid, reason, duration](Administration &administration, long long account,
+                                                        const SignedIn &who,
+                                                        Administration::ChangeCallback done) {
+                                  if (!valid) {
+                                      return false;
+                                  }
+                                  administration.muteAccountVoice(account, std::chrono::seconds(*duration),
+                                                                  *reason, who.actor, std::move(done));
+                                  return true;
+                              });
+            });
+        CROW_ROUTE(app, "/api/accounts/<uint>/unmute-voice")
+            .methods(crow::HTTPMethod::Post)([this](const crow::request &request, crow::response &response,
+                                                    std::uint64_t id) {
+                changeAccount(
+                    request, response, id, false,
+                    [reason = reasonOf(request)](Administration &administration, long long account,
+                                                 const SignedIn &who, Administration::ChangeCallback done) {
+                        if (!reason) {
+                            return false;
+                        }
+                        administration.unmuteAccountVoice(account, *reason, who.actor, std::move(done));
+                        return true;
+                    });
+            });
         CROW_ROUTE(app, "/api/accounts/<uint>/role")
             .methods(crow::HTTPMethod::Post)(
                 [this](const crow::request &request, crow::response &response, std::uint64_t id) {
@@ -1476,9 +1543,10 @@ struct WebServer::Impl {
                                               reply(changed(done));
                                           });
                 if (!started) {
-                    reply(error(400,
-                                "the body is a JSON object, with an optional reason of at most 200 bytes, or "
-                                "the role player or admin"));
+                    reply(error(
+                        400, "the body is a JSON object, with an optional reason of at most 200 bytes, the "
+                             "role player or admin, or a duration of 1 to 2592000 seconds to mute the "
+                             "voice"));
                 }
             });
     }

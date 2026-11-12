@@ -6,6 +6,7 @@
 #include "rtype/game/Snapshot.hpp"
 #include "rtype/render/Types.hpp"
 
+#include <cstdint>
 #include <optional>
 #include <unordered_map>
 #include <vector>
@@ -51,9 +52,19 @@ struct ShipLook {
 /// client-game.md, "Ships in 3D").
 class ShipLooks
 {
+    /// The look of a ship of the configuration, and the size of its collider, which it is drawn at.
+    struct SizedLook {
+        ShipLook look;
+        render::Vector2 size;
+    };
+
     /// The looks of each kind: an entity of the kind is drawn with one of them, picked by its id.
     std::unordered_map<game::EntityKind, std::vector<ShipLook>> _looks;
+    /// The looks of the ships of the configuration, by index (EntityState::ship): before those of the kinds.
+    std::unordered_map<std::uint8_t, SizedLook> _shipLooks;
     std::optional<ShipLook> _localLook;
+
+    [[nodiscard]] const ShipLook &findLook(const game::EntityState &state, bool local) const;
 
 public:
     void setLook(game::EntityKind kind, const ShipLook &look);
@@ -63,11 +74,16 @@ public:
     /// The ship of the local player is drawn with this look instead of the one of its kind: the ship it
     /// equipped in the hangar.
     void setLocalLook(const ShipLook &look);
+    /// The entities that fly this ship of the configuration (EntityState::ship) are drawn with this look
+    /// rather than with one of their kind, at this size, that of the collider of the ship.
+    void setShipLook(std::uint8_t ship, const ShipLook &look, render::Vector2 size);
     /// The ships of this kind are drawn in 3D.
     [[nodiscard]] bool hasLook(game::EntityKind kind) const;
+    /// The look of an entity at the size of its ship, if its ship has a look; unchanged otherwise.
+    [[nodiscard]] EntityLook resizeToShip(const game::EntityState &state, EntityLook look) const;
 
-    /// Gives an entity the model of its kind (one of them, by its id), or the local look for the ship of the
-    /// local player, with its ShipAttitude, placed on it.
+    /// Gives an entity the model of its ship, or else of its kind (one of them, by its id), or the local look
+    /// for the ship of the local player, with its ShipAttitude, placed on it.
     /// @param clock Seconds the session has been played: the time of the animations.
     /// @param local The entity is the ship of the local player.
     void addModel(ecs::Ecs &ecs, ecs::entity_t entity, const game::EntityState &state, const EntityLook &look,

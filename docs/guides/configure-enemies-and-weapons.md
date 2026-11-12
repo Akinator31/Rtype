@@ -22,9 +22,12 @@ config/
   weapons/       how it fires, grouped by bullet/, missile/, laser/ and plasma/
   ships/         what a ship looks and sounds like, whoever flies it
   enemies/       a kind of Bydo: its ship, its health, its speed, its weapon
-  waves/         a group of enemies that appear one after the other
+  waves/         a group of enemies that appear one after the other, and the items they bring
+  items/         what the ships of the players pick up: its model, its hitbox, its effects
   player.lua     what every player starts with: its ship, its weapon, its health
   progression.lua  the experience the players earn online, optional
+  hangar.lua     the level of the account each ship and each weapon of the hangar needs, and the
+                 characteristics of the ships, optional
 ```
 
 - **One file per definition.** The file returns the table of one projectile, one weapon... Its name is free
@@ -126,7 +129,7 @@ written `5` or `5.0`, not `5.5`.
 | Field | Type | Default | What it is |
 |---|---|---|---|
 | `id` | string | *required* | Unique among the projectiles |
-| `model` | string | `""` | Path of the 3D model. The client chooses the model by kind of shot (shot of a player, plasma orb or other shot of a Bydo) and draws it to the width of the collider: give the collider the proportions of the core of the model |
+| `model` | string | `""` | Path of the 3D model, under the assets of the client. The client draws the shots of the players and of the Bydos with it, to the width of the collider: give the collider the proportions of the core of the model. Without one, a shot is drawn with the model of its kind (shot of a player, plasma orb or other shot of a Bydo) |
 | `category` | `"bullet"`, `"missile"`, `"laser"` or `"plasma"` | `"bullet"` | How it moves: straight, speeding up, straight, zigzagging ([behaviors](../architecture/game.md#projectiles)) |
 | `collider` | table | *required* | The shape that hits, see below |
 
@@ -175,7 +178,7 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `weapon` | string | *required* | The id of its weapon |
 | `score` | whole number, 0 or more | `100` | Points for the player who destroys it |
 | `xp` | whole number, 0 or more | a tenth of `score` | Experience for the player who destroys it, online only, times its streak ([The experience](#the-experience-configprogressionlua)) |
-| `collisionDamage` | whole number from 0 to 255 | `20` | Hit points a player ship loses when it runs into it; the enemy keeps going |
+| `collisionDamage` | whole number from 0 to 255 | `20` | Hit points a player ship loses when it runs into it; the enemy is destroyed, and the player scores it, unless it is a boss, which keeps going |
 | `update` | function | none | Its behavior, called at every tick: see [Script the behavior of an enemy](script-enemy-behaviors.md). Without one, it flies left and fires as soon as it is in the game area |
 | `phases` | whole number from 1 to 255 | `1` | How many times its `health` is filled: once it runs out, it gets all of it back, until its last phase. A boss lasts `health × phases` hit points |
 | `boss` | boolean | `false` | The clients draw it as a boss (the shogun model) instead of a Bydo ship |
@@ -197,6 +200,8 @@ The `collider` is a box or a sphere, centred on the projectile:
 | `quantity` | whole number from 1 to 65535 | the number of `spawns` | How many enemies; *required* for a random wave; not allowed for a music wave (it is the number of beats found) |
 | `beats` | `{ bass = {...}, mid = {...}, high = {...} }` | | Music only, *required*: what comes at the beats of each band, each band optional (see below) |
 | `lead` | number, 0 or more | `1.5` | Music only: seconds an enemy needs to cross the screen. It appears this long before its beat, so that it is in sight on it |
+
+| `items` | list of `{ item = "...", quantity = ..., maxQuantity = ... }` | none | The items that appear during the wave, whatever its placement (see [Items](#items-configitems)) |
 
 A manual wave sets no `enemy` and a random wave no `spawns`: a wave does not mix the modes.
 
@@ -240,6 +245,61 @@ per level, and the final boss in `wave6/`: the shogun (`config/enemies/bydo_shog
 phases. The loader also accepts Lua files elsewhere under `config/waves/`.
 A difficulty without a wave is skipped, and the game is won once the last wave is over.
 
+### Items (`config/items/`)
+
+An item appears at a random place of the screen and drifts to the left; the ship of a player that touches it
+picks it up and gets its **effects**, in order. The behaviors are written in C++
+(`libs/game/src/Item/ItemEffects.cpp`): a file only chooses them and sets their numbers.
+
+| Field | Type | Default | What it is |
+|---|---|---|---|
+| `id` | string | *required* | Unique among the items; what the waves name |
+| `model` | string | *required* | The 3D model the client draws, a path in its assets (`"models/items/pu_immunity.glb"`), facing the camera, fitted to the hitbox. Its animation `Idle`, if any, loops while the item lies in the game; its animation `Collect`, if any, plays once where it is picked up (a golden flash otherwise) |
+| `collider` | table | *required* | Its hitbox, like that of a projectile: `{ shape = "sphere", radius = 28 }` or `{ shape = "box", halfWidth = 22, halfHeight = 32 }` |
+| `effects` | list of tables | *required*, at least one | What it does, below |
+| `lifetime` | number above 0 | `10` | Seconds before it vanishes, if nobody picks it up |
+| `speed` | number, 0 or more | `60` | Units per second it drifts to the left at |
+
+Each effect is a table with a `type` and only the fields of its type:
+
+| `type` | Fields | What it does |
+|---|---|---|
+| `"heal"` | `amount`, 1 to 255, *required* | Gives back that many hit points, up to the `health` of the player |
+| `"extra_life"` | `amount`, 1 to 255, default `1` | Gives that many lives more |
+| `"damage"` | `amount`, 1 to 255, *required* | Takes that many hit points: a trap. A ship left with none is lost, as when it is shot; a ship that cannot be hit takes nothing |
+| `"rapid_fire"` | `factor` above 1, `duration` in seconds, both *required* | The weapon fires `factor` times faster (its `fireInterval` divided, at least 1 tick) for `duration` seconds |
+| `"shield"` | `duration` in seconds, *required* | The ship cannot be hit for `duration` seconds; it blinks |
+
+```lua
+-- config/items/shield.lua
+return {
+    id = "shield",
+    model = "models/items/pu_immunity.glb",
+    collider = { shape = "sphere", radius = 30 },
+    effects = { { type = "shield", duration = 6 } },
+}
+```
+
+A wave makes items appear with its `items` field: `quantity` of each, or, with a `maxQuantity` above it, a
+number drawn at random from `quantity` to `maxQuantity` each time the wave is played. Each one appears at a
+random tick while the enemies of the wave come, at a random place of the screen (right of x = 640, 120 units
+from the edges), popping up in half a second, during which it cannot be picked up. Those still to come when the
+wave ends appear then.
+
+```lua
+items = {
+    { item = "repair_kit", quantity = 1, maxQuantity = 3 },
+    { item = "bydo_mine", quantity = 2 },
+},
+```
+
+The items of the repository fly the orbs of `apps/client/assets/models/items/` (`pu_heal.glb`,
+`pu_extra_life.glb`, `pu_damage.glb`, `pu_fire_rate.glb`, `pu_immunity.glb`), each with its `Idle` and
+`Collect` animations.
+
+Online, the client predicts the shots of its ship from the `fireInterval` of its weapon: during a rapid fire,
+its predicted shots are corrected by the game, which fires them faster.
+
 ### The players (`config/player.lua`)
 
 One file, at the root of `config/`, **required**: without it, the configuration is not valid.
@@ -247,7 +307,7 @@ One file, at the root of `config/`, **required**: without it, the configuration 
 | Field | Type | Default | What it is |
 |---|---|---|---|
 | `ship` | string | *required* | The id of the ship of every player |
-| `weapon` | string | *required* | The id of the weapon every player fires while Fire is held |
+| `weapon` | string | *required* | The id of the weapon every player fires while Fire is held, unless it chose two in the hangar (`config/hangar.lua`) |
 | `health` | whole number from 1 to 255 | `100` | Hit points of each ship: the damage of the Bydos is taken from them, and a ship with none left costs a life |
 
 ### The experience (`config/progression.lua`)
@@ -262,6 +322,56 @@ alive as the wave ends; its **streak** counts the waves it cleared in a row.
 | `xpPerWave` | whole number, 0 or more | `100` | Experience for a wave cleared, times the multiplier of the streak |
 | `streakBonus` | whole number from 0 to 65535 | `25` | Percent added to the multiplier for each wave of the streak after the first: `25` gives x1, x1.25, x1.5... It counts for the Bydos shot down too |
 | `streakCap` | whole number from 100 to 65535 | `300` | Highest multiplier, in percent |
+
+### The ships and the weapons of the hangar (`config/hangar.lua`)
+
+One file, at the root of `config/`, optional: without it, every ship of the hangar is open, and the players
+only have the weapon of `config/player.lua`. A ship needs a
+**level** of the account before the player can equip it; a locked one can still be looked at, and its button
+says the level it needs. The level is that of the account signed in, or, offline and as a guest, of the last
+account signed in on this machine (`account.level` in the [settings](../architecture/settings.md)). A level
+up that opens a ship shows a toast. The ships of the hangar are those of the client, named by their code.
+
+Each ship has three **characteristics**, from 0 to 1, shown as gauges in the hangar and applied in the game:
+`speed` multiplies the speed of the ship, `power` the damage of its shots, `armor` its health (that of
+`config/player.lua`). A characteristic multiplies by 0.75 at 0, 1 at 0.5 and 1.25 at 1: a ship left out of
+the list, or a characteristic left out, is the ship of the rules. The client tells the server the ship it
+flies, and the server applies the characteristics of its own file: the server and the clients need the same
+file.
+
+The **weapons** are those the players choose two of in the hangar, under the ship: a primary weapon, in hand
+when the ship appears, and a secondary one, put away. In a game, Left Shift (X on a gamepad, rebindable in the
+Controls page as *Switch weapon*) takes the other one in hand; each one keeps its cooldown, its ammunition and
+its reload while it is put away. A weapon needs a level too, and only an open one can be chosen. The game
+checks the weapons a player sends against this list, and refuses those that are not in it (or that of
+`config/player.lua`): the server and the clients need the same file. The name a weapon has in the hangar is
+the translation `weapon.<id>` of the client (`apps/client/assets/locales/`).
+
+```lua
+return {
+    ships = {
+        { ship = "VX-01", level = 1, speed = 0.9, power = 0.3, armor = 0.25 },
+        { ship = "VX-02", level = 3 },
+    },
+    weapons = {
+        { weapon = "player_cannon", level = 1 },
+        { weapon = "rapid_rifle", level = 1 },
+        { weapon = "plasma_gun", level = 4 },
+    },
+}
+```
+
+| Field | Type | Default | What it is |
+|---|---|---|---|
+| `ships` | list of tables | empty | The ships that need a level; a ship of the hangar left out is open from level 1 |
+| `ships[i].ship` | string | *required* | The code of a ship of the hangar, such as `VX-03`, listed once; an unknown code is logged by the client |
+| `ships[i].level` | whole number, 1 or more | *required* | The level of the account from which the ship can be equipped |
+| `ships[i].speed` | number from 0 to 1 | `0.5` | Its speed: `Rules::shipSpeed` times 0.75 at 0, 1.25 at 1 |
+| `ships[i].power` | number from 0 to 1 | `0.5` | The damage of its shots, rounded, times 0.75 at 0, 1.25 at 1 |
+| `ships[i].armor` | number from 0 to 1 | `0.5` | Its health, rounded, times 0.75 at 0, 1.25 at 1, at most 255 |
+| `weapons` | list of tables | empty | The weapons the players can choose, in the order of the hangar; with fewer than two open, the players only have the weapon of `config/player.lua` |
+| `weapons[i].weapon` | string | *required* | The id of a weapon of `config/weapons/`, listed once |
+| `weapons[i].level` | whole number, 1 or more | *required* | The level of the account from which the weapon can be chosen |
 
 ## Computing values
 

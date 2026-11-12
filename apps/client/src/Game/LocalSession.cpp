@@ -3,8 +3,10 @@
 #include "rtype/game/Component/Components.hpp"
 #include "rtype/game/Constants.hpp"
 #include "rtype/game/ShipMovement.hpp"
+#include "rtype/log/Logger.hpp"
 
 #include <algorithm>
+#include <random>
 #include <utility>
 
 namespace rtype::client
@@ -15,19 +17,37 @@ namespace
 
 constexpr double Tick = 1.0 / game::TickRate;
 
-/// The rules of a game offline: the story mode, where allies come to the rescue against the final boss.
+const log::Logger &logger()
+{
+    static const log::Logger instance("game");
+    return instance;
+}
+
+/// The rules of a game offline: the story mode, where allies come to the rescue against the final boss. Each
+/// game draws its own seed, so the waves are not the same every time.
 game::Rules storyRules(game::Rules rules)
 {
     rules.rescue = true;
+    rules.seed = std::random_device{}();
     return rules;
 }
 
 } // namespace
 
-LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config)
-    : _simulation(storyRules(rules), config)
+LocalSession::LocalSession(game::Rules rules, const game::GameConfig &config, const game::Loadout &loadout,
+                           const std::string &ship)
+    : _simulation(storyRules(rules), config), _waveCount(static_cast<std::uint16_t>(config.waves.size()))
 {
     _simulation.addPlayer(localSlot());
+    if (!_simulation.setShip(localSlot(), ship)) {
+        logger().warning("The ship {} is not in the hangar: the player flies the one of the rules", ship);
+    }
+    if (_simulation.setLoadout(localSlot(), loadout)) {
+        _loadout = loadout;
+    } else {
+        logger().warning("The weapons {} and {} are not in the hangar: the player has the one of the game",
+                         loadout[0], loadout[1]);
+    }
 }
 
 void LocalSession::update(float elapsed)
@@ -81,7 +101,8 @@ std::optional<game::Snapshot> LocalSession::between() const
             _last->rescue == game::RescueStage::None) {
             // As the next step will move it, walls included. Not during the rescue, which flies it on its own
             const game::Rules &rules = _simulation.rules();
-            const ecs::Position next = game::moveShip({entity.x, entity.y}, _input, rules);
+            const float speed = game::statFactor(_simulation.statsOf(localSlot()).speed);
+            const ecs::Position next = game::moveShip({entity.x, entity.y}, _input, rules, speed);
             entity.x += (next.x - entity.x) * fraction;
             entity.y += (next.y - entity.y) * fraction;
             continue;

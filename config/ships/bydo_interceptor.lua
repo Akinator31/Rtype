@@ -1,6 +1,6 @@
--- A small interceptor with a 90-by-36 rectangular collision box.
+-- An interceptor.
 return {
     id = "bydo_interceptor",
     model = "models/spaceship_caved.glb",
-    collider = { shape = "box", halfWidth = 45, halfHeight = 18 },
+    collider = { shape = "box", halfWidth = 84, halfHeight = 49 },
 }

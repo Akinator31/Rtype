@@ -1,6 +1,6 @@
--- A small armoured striker.
+-- An armoured striker.
 return {
     id = "bydo_striker",
     model = "models/battlestar_galactica_ship.glb",
-    collider = { shape = "box", halfWidth = 45, halfHeight = 18 },
+    collider = { shape = "box", halfWidth = 84, halfHeight = 49 },
 }

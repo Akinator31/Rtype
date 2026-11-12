@@ -34,9 +34,9 @@ std::string because(const std::string &reason)
 
 Administration::Administration(rtype::network::EventLoop &loop, AdminGames &games, AdminLobby &lobby,
                                AddressBans &bans, rtype::database::DatabaseThread *database,
-                               AdministrationSettings settings)
-    : _games(games), _lobby(lobby), _bans(bans), _database(database), _settings(std::move(settings)),
-      _purge(loop)
+                               AdministrationSettings settings, VoiceMutes *voiceMutes)
+    : _games(games), _lobby(lobby), _bans(bans), _database(database), _voiceMutes(voiceMutes),
+      _settings(std::move(settings)), _purge(loop)
 {
     _purge.startRepeating(PurgeInterval, [this] { purge(); });
 }
@@ -62,6 +62,8 @@ AdminServer Administration::server() const
         .players = _lobby.adminPlayers().size(),
         .games = _games.adminGames().size(),
         .bans = _bans.list().size(),
+        .voice = _settings.voice,
+        .voiceMutes = _voiceMutes == nullptr ? 0 : _voiceMutes->list().size(),
     };
 }
 
@@ -287,7 +289,9 @@ AdminAccount Administration::adminAccount(AccountEntry entry) const
 {
     const bool locked = isListedAdmin(
         _settings.admins, entry.account.verified() ? entry.account.email : std::nullopt, entry.discordId);
-    return {.entry = std::move(entry), .locked = locked};
+    std::optional<VoiceMute> mute =
+        _voiceMutes == nullptr ? std::nullopt : _voiceMutes->find(entry.account.id);
+    return {.entry = std::move(entry), .locked = locked, .voiceMute = std::move(mute)};
 }
 
 void Administration::accounts(std::string search, std::size_t limit, std::optional<long long> before,
@@ -522,6 +526,10 @@ void Administration::deleteAccount(long long accountId, const std::string &reaso
         },
         [this, accountId, reason, actor, done = std::move(done)](AccountChanged changed) {
             if (changed.outcome == AccountChanged::Outcome::Done) {
+                // Its row went with it, by its foreign key
+                if (_voiceMutes != nullptr) {
+                    _voiceMutes->remove(accountId);
+                }
                 changed.removed = removeAccountPlayers(accountId, rtype::lobby::ErrorCode::Kicked);
                 logger().info("Account {} deleted by {}{}: {} players removed", accountId, actor,
                               because(reason), changed.removed);
@@ -535,14 +543,135 @@ void Administration::deleteAccount(long long accountId, const std::string &reaso
         });
 }
 
+// --- The voice ---
+
+bool Administration::muteVoice(std::uint32_t playerId, bool muted, const std::string &reason,
+                               const std::string &actor)
+{
+    const std::optional<AdminPlayer> player = findPlayer(playerId);
+    if (!player || !player->gameId || !_games.muteVoice(playerId, muted)) {
+        return false;
+    }
+    logger().info("{} ({}) {} in game {} by {}{}", player->name, playerId, muted ? "muted" : "let talk again",
+                  *player->gameId, actor, because(reason));
+
+    crow::json::wvalue details;
+    details["name"] = player->name;
+    details["address"] = player->address.ip();
+    if (player->accountId) {
+        details["account"] = static_cast<std::int64_t>(*player->accountId);
+    }
+    details["gameId"] = *player->gameId;
+    details["reason"] = reason;
+    record(actor, muted ? "mute_voice" : "unmute_voice", std::format("player:{}", playerId), details.dump());
+    return true;
+}
+
+void Administration::muteAccountVoice(long long accountId, std::chrono::seconds duration,
+                                      const std::string &reason, const std::string &actor,
+                                      ChangeCallback done)
+{
+    if (_voiceMutes == nullptr) {
+        done({.outcome = AccountChanged::Outcome::NoAccount, .account = std::nullopt, .removed = 0});
+        return;
+    }
+    const Clock::time_point now = std::chrono::floor<std::chrono::milliseconds>(Clock::now());
+    const VoiceMute mute{
+        .accountId = accountId,
+        .createdAt = now,
+        .expiresAt =
+            now + std::clamp<std::chrono::seconds>(duration, std::chrono::seconds(1), MaxVoiceMuteDuration),
+        .reason = reason,
+        .actor = actor,
+    };
+    changeAccount(
+        "mute the voice of an account", accountId, true,
+        [mute](rtype::database::Database &database, const AccountEntry & /*entry*/) {
+            saveVoiceMute(database, mute);
+        },
+        [this, mute, now, done = std::move(done)](AccountChanged changed) {
+            if (changed.outcome == AccountChanged::Outcome::Done && changed.account) {
+                _voiceMutes->add(mute);
+                changed.account->voiceMute = mute;
+                changed.removed = _games.accountVoiceChanged(mute.accountId);
+                const std::string &name = changed.account->entry.account.username;
+                const auto seconds =
+                    std::chrono::duration_cast<std::chrono::seconds>(mute.expiresAt - now).count();
+                logger().info("The voice of account {} ({}) muted by {} for {} s{}: {} players in a game",
+                              name, mute.accountId, mute.actor, seconds, because(mute.reason),
+                              changed.removed);
+                crow::json::wvalue details;
+                details["account"] = static_cast<std::int64_t>(mute.accountId);
+                details["name"] = name;
+                details["duration"] = static_cast<std::int64_t>(seconds);
+                details["expiresAt"] = static_cast<std::int64_t>(unixMilliseconds(mute.expiresAt));
+                details["reason"] = mute.reason;
+                details["players"] = static_cast<std::uint64_t>(changed.removed);
+                record(mute.actor, "mute_account_voice", std::format("account:{}", mute.accountId),
+                       details.dump());
+            }
+            done(std::move(changed));
+        });
+}
+
+void Administration::unmuteAccountVoice(long long accountId, const std::string &reason,
+                                        const std::string &actor, ChangeCallback done)
+{
+    if (_voiceMutes == nullptr) {
+        done({.outcome = AccountChanged::Outcome::NoAccount, .account = std::nullopt, .removed = 0});
+        return;
+    }
+    changeAccount(
+        "lift the mute of the voice of an account", accountId, false,
+        [](rtype::database::Database &database, const AccountEntry &entry) {
+            deleteVoiceMute(database, entry.account.id);
+        },
+        [this, accountId, reason, actor, done = std::move(done)](AccountChanged changed) {
+            if (changed.outcome == AccountChanged::Outcome::Done && changed.account) {
+                const std::optional<VoiceMute> lifted = _voiceMutes->remove(accountId);
+                changed.account->voiceMute.reset();
+                // A mute that ended already is not lifted: nothing to tell, nothing to record
+                if (lifted) {
+                    changed.removed = _games.accountVoiceChanged(accountId);
+                    const std::string &name = changed.account->entry.account.username;
+                    logger().info("The mute of the voice of account {} ({}) lifted by {}{}", name, accountId,
+                                  actor, because(reason));
+                    crow::json::wvalue details;
+                    details["account"] = static_cast<std::int64_t>(accountId);
+                    details["name"] = name;
+                    details["expiresAt"] = static_cast<std::int64_t>(unixMilliseconds(lifted->expiresAt));
+                    details["mutedBy"] = lifted->actor;
+                    details["reason"] = reason;
+                    record(actor, "unmute_account_voice", std::format("account:{}", accountId),
+                           details.dump());
+                }
+            }
+            done(std::move(changed));
+        });
+}
+
+std::vector<VoiceMute> Administration::voiceMutes() const
+{
+    return _voiceMutes == nullptr ? std::vector<VoiceMute>{} : _voiceMutes->list();
+}
+
 void Administration::purge()
 {
     const Clock::time_point now = Clock::now();
-    if (_bans.purge(now) == 0 || _database == nullptr) {
+    const std::size_t bans = _bans.purge(now);
+    const std::size_t mutes = _voiceMutes == nullptr ? 0 : _voiceMutes->purge(now);
+    if (_database == nullptr) {
         return;
     }
-    (void)_database->run("purge the expired bans",
-                         [now](rtype::database::Database &database) { purgeAddressBans(database, now); });
+    if (bans > 0) {
+        (void)_database->run("purge the expired bans",
+                             [now](rtype::database::Database &database) { purgeAddressBans(database, now); });
+    }
+    // The games let the players talk again themselves, at the end of their mute
+    if (mutes > 0) {
+        (void)_database->run("purge the expired mutes of the voice",
+                             [now](rtype::database::Database &database) { purgeVoiceMutes(database, now); });
+    }
 }
 
 // --- The events ---

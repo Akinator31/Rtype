@@ -15,6 +15,11 @@ constexpr float PanSpread = 0.6f;
 
 } // namespace
 
+float soundPan(float x)
+{
+    return ((x / game::GameWidth) * 2.0f - 1.0f) * PanSpread;
+}
+
 void EntitySounds::setSound(game::EntityKind kind, const EntitySound &sound)
 {
     _sounds.insert_or_assign(kind, sound);
@@ -26,7 +31,7 @@ void EntitySounds::addSound(ecs::Ecs &ecs, ecs::entity_t entity, game::EntityKin
     if (found == _sounds.end()) {
         return;
     }
-    const float pan = ((x / game::GameWidth) * 2.0f - 1.0f) * PanSpread;
+    const float pan = soundPan(x);
     ecs.addComponent<engine::SoundEffect>(entity, found->second.sound,
                                           audio::PlaySettings{.volume = found->second.volume, .pan = pan});
 }

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Discord/DiscordFriends.hpp"
+#include "Discord/DiscordInvite.hpp"
+#include "Discord/FriendPictures.hpp"
 #include "Game/GameScenes.hpp"
 #include "Online/FormErrors.hpp"
 #include "Online/KnownProfiles.hpp"
@@ -9,6 +12,7 @@
 #include "Online/SessionTokens.hpp"
 #include "ShipSelector/ShipSelection.hpp"
 #include "rtype/discord/Authorizer.hpp"
+#include "rtype/discord/Connection.hpp"
 #include "rtype/engine/Engine/Engine.hpp"
 #include "rtype/engine/Interface/Metrics.hpp"
 #include "rtype/engine/Interface/Style.hpp"
@@ -20,6 +24,7 @@
 #include "rtype/network/Tls.hpp"
 #include "rtype/render/ResourceManager.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -30,6 +35,8 @@
 
 namespace rtype::client
 {
+
+struct VoiceDevices;
 
 /// Name of the list of the games of a server.
 inline constexpr const char *LobbyScene = "online_lobby";
@@ -70,8 +77,9 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 ///
 /// - **Connect** opens a LobbyClient to the server, trusting the key KnownServers knows for it (ADR 0021).
 ///   A server never met shows its key, which the player may trust: it is remembered, and the client connects
-///   again. A known server with another key is refused, with a warning, until the player forgets its key
-///   (**Forget the server key**).
+///   again. A known server with another key is refused, with a warning, until the player forgets its key:
+///   from the warning itself (**Forget the old key**, which connects again to show the new one), from the
+///   row of the server in the servers met (**Forget**), or by typing it (**Forget the server key**).
 /// - **The lobby** lists the games: Create a game, Join one, Refresh, Disconnect. Creating or joining one
 ///   first opens the hangar, where the player picks its ship. Joining plays a RemoteSession in the game
 ///   scene; when the game ends, the player is back in the lobby, after its results if it went to its end
@@ -88,6 +96,10 @@ splitServer(const std::string &text, std::uint16_t defaultPort = 4242);
 /// - **The profile**: signed in, the client reads the Discord profile of the account (GET_PROFILE) and its
 ///   picture (GET_AVATAR), shown in the lobby and in My account, and remembered with the server for the
 ///   Online menu (KnownProfiles), the picture kept on disk under its version.
+/// - **Invitations**: a friend invited from Discord, or accepted, joins the game: joinFromDiscord().
+/// - **Friends**, connected to Discord: the lobby lists the Discord friends of the player beside the games,
+///   the invitations received first (Join), then those playing R-Type (Ask to join while their game has
+///   room), online, offline. A new invitation shows a toast wherever the player is.
 /// - What goes wrong with a field is shown under it; the rest in a toast, in the language of the game: the
 ///   server cannot be reached, is not the expected one, the game is full...
 class OnlineScenes
@@ -104,11 +116,22 @@ class OnlineScenes
     render::ResourceManager &_resources;
     network::EventLoop &_loop;
     discord::Authorizer &_discord;
+    /// The connection to Discord with the token of the player, on a master with the social features.
+    discord::Connection &_discordConnection;
+    /// The Discord friends of the player, once connected with that token.
+    discord::Friends &_friends;
+    /// The rows of friends the lobby shows, and the invitations already told in a toast.
+    std::vector<FriendRow> _friendRows;
+    std::vector<std::uint64_t> _toldInvitations;
+    /// The pictures of the friends, downloaded from the CDN of Discord.
+    FriendPictures _friendPictures;
     GameScenes &_games;
     localization::Localization &_translations;
     ShipSelection &_ships;
     /// The definitions of the client: the weapon of the player, whose shots its games predict.
     const game::GameConfig &_config;
+    /// The devices of the voice of the games joined.
+    VoiceDevices &_voice;
     KnownServers _known;
     SessionTokens _sessions;
     KnownProfiles _profiles;
@@ -137,6 +160,8 @@ class OnlineScenes
     std::optional<render::TextureId> _newUserPicture;
     /// The experience of the account as the player joined the game played: none for a guest.
     std::optional<std::uint64_t> _xpBefore;
+    /// The game of a friend the player accepted to join from Discord, joined once on its server.
+    std::optional<GameInvite> _invite;
     /// Where a Discord confirmation stands, for DiscordScene: 0 Discord opened, 1 waiting for the player,
     /// 2 the server checking.
     int _discordStep = 0;
@@ -146,16 +171,27 @@ class OnlineScenes
     void untrusted(const network::KeyFingerprint &presented);
     /// Forgets the key of the server typed, if the player trusted one.
     void forgetServer();
+    /// Forgets the key trusted for this server, if any, and tells the player in a toast.
+    void forgetKey(const std::string &address);
     void disconnect();
     /// Lists the games, then shows them.
     void refresh();
     void joined(const LobbyClient::JoinResult &result);
+    /// The hangar, then the game: a friend invited the player to it.
+    void joinInvited(std::uint32_t gameId);
+    /// The friends or the invitations changed: a toast for each new invitation, the lobby built again if its
+    /// rows changed.
+    void friendsChanged();
+    /// The action of a row of friends of the lobby.
+    void actOnFriend(const FriendRow &row);
     /// The game played ends: leaves it, then back to the list.
     void gameEnded();
     void lobbyClosed(const std::string &reason);
     /// A game online counted for the account: its results show the experience it gave; in a toast with the
     /// level, LEVEL UP if it went up, if they are not shown.
     void showProgress(const lobby::ProgressMessage &progress);
+    /// A toast for each ship of the hangar that a level up from `before` to `level` unlocks.
+    void showUnlockedShips(std::uint32_t before, std::uint32_t level);
     /// Forgets the lobby later: this may run in one of its handlers.
     void forgetLobby();
 
@@ -195,6 +231,11 @@ class OnlineScenes
     void discordConfirmed(DiscordPurpose purpose, const LobbyClient::DiscordConfirmResult &result);
     /// The scene a Discord confirmation goes back to when it fails.
     [[nodiscard]] static const char *discordOrigin(DiscordPurpose purpose);
+    /// DISCORD_TOKEN: keeps its refresh token for this server, and connects to Discord with it.
+    void discordToken(const lobby::DiscordTokenMessage &token);
+    /// DISCORD_REFRESH with the refresh token kept for this server, signed in: at the connection, and when
+    /// the token expires. A refresh token refused is forgotten.
+    void refreshDiscord();
 
 public:
     /// Declares the Online menu and the lobby. Everything given must outlive the engine.
@@ -202,16 +243,31 @@ public:
     /// @param resources Loads the sky, the logo of Discord and the pictures of the accounts.
     /// @param pictures The folder the pictures of the accounts are kept in.
     /// @param discord Asks the player to accept the Discord application of a server; polled by the game loop.
+    /// @param discordConnection Connects to Discord with the token a server gives (DISCORD_TOKEN), and
+    ///   disconnects when the player leaves the server.
+    /// @param friends The Discord friends of the player, shown in the lobby, joined from there.
     /// @param ships The ship the player picks in the hangar, before creating or joining a game.
     /// @param config The definitions of the client (loadGameConfig()): the weapon of the player, whose shots
     ///   its games online predict.
     OnlineScenes(engine::Engine &engine, render::ResourceManager &resources, network::EventLoop &loop,
                  GameScenes &games, const engine::InterfaceStyle &style,
-                 localization::Localization &translations, discord::Authorizer &discord, ShipSelection &ships,
-                 std::filesystem::path pictures, const game::GameConfig &config);
+                 localization::Localization &translations, discord::Authorizer &discord,
+                 discord::Connection &discordConnection, discord::Friends &friends, ShipSelection &ships,
+                 std::filesystem::path pictures, const game::GameConfig &config, VoiceDevices &voice);
+
+    /// Tells the friends no longer: they outlive the scenes.
+    ~OnlineScenes();
 
     OnlineScenes(const OnlineScenes &) = delete;
     OnlineScenes &operator=(const OnlineScenes &) = delete;
+
+    /// The player accepted, in Discord, to join the game of a friend (discord::Presence::onJoin()): connects
+    /// to its server, through the usual trust and sign-in, then joins it after the hangar. Refused during a
+    /// game, or for a secret that is not one of a game.
+    void joinFromDiscord(const std::string &secret);
+    /// The server whose list of games the player is looking at, as KnownServers knows it: friends can be
+    /// invited to it from Discord. None elsewhere.
+    [[nodiscard]] std::optional<std::string> lobbyServer() const;
 };
 
 } // namespace rtype::client

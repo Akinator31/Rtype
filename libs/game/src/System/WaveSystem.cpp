@@ -41,6 +41,7 @@ void WaveSystem::update(float)
         return;
     }
     const WaveDefinition &wave = _context.waves.getDefinition(progress.name);
+    spawnDueItems();
     // The enemies sent are created after the systems: they count from the next tick
     if (progress.spawned == wave.quantity && !hasEnemiesLeft()) {
         endWave();
@@ -98,6 +99,7 @@ void WaveSystem::startWave(std::string name)
     progress.elapsed = 0;
     _context.waveStarted = progress.number;
     _context.waveMusic = _context.waves.getDefinition(progress.name).music;
+    scheduleItems(_context.waves.getDefinition(progress.name));
     spawnDueEnemies(_context.waves.getDefinition(progress.name));
 }
 
@@ -146,6 +148,54 @@ void WaveSystem::spawnEnemyOf(const WaveDefinition &wave, std::uint16_t index)
     spawnAt(spawn);
 }
 
+std::uint32_t WaveSystem::findItemWindow(const WaveDefinition &wave) const
+{
+    std::uint32_t window = 0;
+    if (wave.placement == WavePlacement::Music) {
+        window = wave.timeline.empty() ? 0 : wave.timeline.back().tick;
+    } else if (wave.quantity > 1) {
+        window = toTicks(wave.spawnInterval) * static_cast<std::uint32_t>(wave.quantity - 1);
+    }
+    return std::max(window, _context.rules.itemMinWindow);
+}
+
+void WaveSystem::scheduleItems(const WaveDefinition &wave)
+{
+    WaveProgress &progress = _context.wave;
+    progress.items.clear();
+    progress.itemTicks = 0;
+    const std::uint32_t window = findItemWindow(wave);
+    for (const WaveItem &item : wave.items) {
+        const std::uint32_t count = item.maxQuantity > item.quantity
+                                        ? _context.randomBetween(item.quantity, item.maxQuantity)
+                                        : item.quantity;
+        for (std::uint32_t i = 0; i < count; ++i) {
+            progress.items.push_back({_context.randomBetween(0, window), item.item});
+        }
+    }
+    std::ranges::stable_sort(progress.items, {}, &ScheduledItem::tick);
+}
+
+void WaveSystem::spawnDueItems()
+{
+    WaveProgress &progress = _context.wave;
+    std::size_t due = 0;
+    while (due < progress.items.size() && progress.items[due].tick <= progress.itemTicks) {
+        spawnItemAtRandom(progress.items[due].item);
+        ++due;
+    }
+    progress.items.erase(progress.items.begin(), progress.items.begin() + static_cast<std::ptrdiff_t>(due));
+    ++progress.itemTicks;
+}
+
+void WaveSystem::spawnItemAtRandom(const std::string &item)
+{
+    const Rules &rules = _context.rules;
+    const float x = _context.randomNumber(rules.itemMinX, GameWidth - rules.itemMargin);
+    const float y = _context.randomNumber(rules.itemMargin, GameHeight - rules.itemMargin);
+    _ecs.defer([this, item, x, y] { spawnItem(_ecs, _context, item, x, y); });
+}
+
 void WaveSystem::clearWave()
 {
     for (PlayerSlot &player : _context.players) {
@@ -170,6 +220,11 @@ void WaveSystem::endWave()
 {
     WaveProgress &progress = _context.wave;
     progress.name.clear();
+    // The items of a wave cleared before their time come all the same
+    for (const ScheduledItem &item : progress.items) {
+        spawnItemAtRandom(item.item);
+    }
+    progress.items.clear();
     clearWave();
     if (_context.rules.endless || progress.number < MaxWaveDifficulty) {
         progress.pauseLeft = _context.rules.wavePause;

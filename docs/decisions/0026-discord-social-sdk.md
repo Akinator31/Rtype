@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted; the token dropped (point 3) superseded by [0034](0034-discord-token-in-the-client.md) on a master with `[discord] social` |
 | **Date** | 2026-10-30 |
 
 ## Context

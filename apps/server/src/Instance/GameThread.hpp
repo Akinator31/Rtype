@@ -15,6 +15,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <thread>
 #include <variant>
 #include <vector>
@@ -32,7 +33,7 @@ struct TickResult {
     /// (InputBuffer::takeLead()), nothing if none came: gathered over the ticks between two snapshots, the
     /// "input lead" sent to its client.
     std::array<std::optional<std::int64_t>, rtype::game::MaxPlayers> inputLeads{};
-    /// For each slot, the weapon of its ship after the tick, all 0 without one: what the prediction of its
+    /// For each slot, the weapons of its ship after the tick, all 0 without one: what the prediction of its
     /// client starts again from.
     std::array<rtype::game::WeaponState, rtype::game::MaxPlayers> weapons{};
 };
@@ -79,7 +80,12 @@ private:
         std::uint32_t tick;
         std::vector<rtype::game::PlayerInput> inputs;
     };
-    using Command = std::variant<AddPlayer, RemovePlayer, ReceiveInputs>;
+    struct SetLoadout {
+        std::uint8_t slot;
+        rtype::game::Loadout loadout;
+        std::string ship;
+    };
+    using Command = std::variant<AddPlayer, RemovePlayer, ReceiveInputs, SetLoadout>;
 
     rtype::game::Rules _rules;
     rtype::game::GameConfig _config;
@@ -118,6 +124,10 @@ public:
     /// The inputs of an INPUT of a player, from any thread: the input of `tick`, then of `tick - 1`, and so
     /// on. Each one is applied at its tick (InputBuffer, docs/protocol/game.md, section 9.2).
     void receiveInputs(std::uint8_t slot, std::uint32_t tick, std::vector<rtype::game::PlayerInput> inputs);
+    /// The weapons and the ship a player chose (`LOADOUT`), from any thread: its ship gets them at the next
+    /// tick, unless the game refuses them (Simulation::setLoadout(), Simulation::setShip()), which is logged.
+    /// Without weapons, it keeps the weapon of every player.
+    void setLoadout(std::uint8_t slot, rtype::game::Loadout loadout, std::string ship);
 
     /// The last tick simulated, from any thread: for `ACCEPTED`.
     [[nodiscard]] std::uint32_t tick() const { return _tick; }

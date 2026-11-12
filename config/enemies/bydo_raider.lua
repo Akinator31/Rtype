@@ -1,4 +1,4 @@
--- Rushes the nearest player, fires one close-range shot, then escapes to the right.
+-- Rushes the nearest player, spits one burst of flame at close range, then escapes to the right.
 local function nearestPlayer(enemy, players)
     local nearest, distance = nil, math.huge
     for _, player in ipairs(players) do
@@ -14,9 +14,9 @@ end
 return {
     id = "bydo_raider",
     ship = "bydo_raider",
-    health = 65,
+    health = 28,
     speed = 800,
-    weapon = "close_range_cannon",
+    weapon = "flame_burst",
     score = 275,
     collisionDamage = 30,
 

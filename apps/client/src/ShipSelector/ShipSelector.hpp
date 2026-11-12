@@ -27,7 +27,13 @@ void createShipSelectorScene(engine::Engine &engine, render::ResourceManager &re
 
 /// Opens the hangar over the open scenes.
 /// @param launch Starts the game the player picks a ship for: the button of the hangar then equips the ship
-/// looked at, closes the hangar and calls it. Empty, the hangar only equips ships.
-void openShipSelector(engine::Engine &engine, ShipSelection &selection, std::function<void()> launch = {});
+/// looked at and plays its take-off into the sky of the game, then calls it; the ship flies on until the game
+/// opens, on the shot the hangar shows, without a cut. The game scene loads meanwhile, from the opening of
+/// the hangar (Engine::preloadScene()), so that it opens without the loading scene. Empty, the hangar only
+/// equips ships.
+/// @param allUnlocked Every ship is open, whatever the level of the account: for a game offline. Otherwise
+/// the ships above the level are locked again (ShipSelection::setAllUnlocked()).
+void openShipSelector(engine::Engine &engine, ShipSelection &selection, std::function<void()> launch = {},
+                      bool allUnlocked = false);
 
 } // namespace rtype::client

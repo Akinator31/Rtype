@@ -6,9 +6,23 @@ How the client plays a game: one game scene, fed by a **game session**, offline 
 snapshots (the online session comes with `client: networking`).
 
 To play: **Play**, then **Solo**, in the main menu. The hangar opens first, on the ship equipped last:
-**Launch** starts the game with the ship looked at, and keeps it for the next time. Arrows (or WASD, ZQSD)
-move the ship, Space fires, Q and E (A and E on AZERTY) held turn the ship by 30° up and down to fire
-diagonally, Escape opens the pause menu.
+**Launch** starts the game with the ship looked at, and keeps it for the next time. A ship locked by the level
+of the account ([config/hangar.lua](../guides/configure-enemies-and-weapons.md#the-ships-and-the-weapons-of-the-hangar-confighangarlua))
+can be looked at, not launched. In the top right corner, the player chooses its two weapons among those its
+level opens: the primary one, in hand when the ship appears, and the secondary one.
+
+The game opens without a loading screen nor a cut. The hangar preloads the game scene as it opens
+(`Engine::preloadScene()`). On **Launch**, the ship takes off (`ShipSelectorSystem`): the interface fades out, the
+pedestal sinks, the ship turns to its profile, speeds off to the right and levels off as the game shows it. The
+camera follows it, the sky and the light of the game replace those of the hangar, and the camera pulls back while
+it narrows until it frames the ship as the game opens (`ArrivalZoom` in `Game/GameView.hpp`, without perspective).
+Then the game is launched; online, the ship flies on until the master answers. The game opens on the same shot,
+its sky scrolled as far (`ShipSelection::arrivalSky`), and its camera pulls back to the whole game while the HUD
+fades in (`RescueCamera::arrival`).
+
+Arrows (or WASD, ZQSD) move
+the ship, Space fires, Q and E (A and E on AZERTY) held turn the ship by 30° up and down to fire diagonally,
+Left Shift takes the other weapon in hand (the HUD names both, the one in hand bright), Escape opens the pause menu.
 
 ## Code layout
 
@@ -78,7 +92,7 @@ the input. When the game scene closes, the engine destroys its entities and the 
 | Scene | What it holds |
 |---|---|
 | `game` | The [scrolling sky](#the-sky), the world of the session, and the [HUD](#hud). Escape opens the pause menu. |
-| `pause` | Over the game, dimmed: **Resume**, or **Leave the game**. Offline, the game stops while it is open. |
+| `pause` | Over the game, a veil on its left, as the pages of settings: **Resume**, or **Leave the game**; online with other players, the voice of each ([Voice](voice.md#in-the-hud-and-the-pause-menu)). Offline, the game stops while it is open. |
 
 `GameScenes::play(session, onEnd)` starts a game with a session: the game scene replaces every scene. "Solo"
 plays a `LocalSession`, and goes back to the main menu when it ends; the lobby plays a `RemoteSession`, and
@@ -88,15 +102,15 @@ pause menu, or when its session is over (`isOver()`): game over, or the game los
 ## What it looks like
 
 Each entity has the size of its collider in the game. The snapshots carry the kind of an entity, not its
-size: a ship has the size of the [rules](game.md), the other kinds that of the configuration of the
-repository.
+size: a ship has the size of the [rules](game.md), a Bydo that of the collider of its ship (the snapshots
+carry its index, `EntityState::ship`), the other kinds that of the configuration of the repository.
 
 | Entity | Look |
 |---|---|
 | Ship | 168 × 98: the 3D model `spaceship_ezno.glb`, tinted with the colour of its player (blue, red, green, yellow for the slots 0 to 3) |
 | Shot | 68 × 18.8: the model of energy `projectiles/player/shot_basic.glb` (a charged shot: a 48 × 16 box in the colour of the player) |
-| Bydo (`BydoFlyer`) | 140 × 54: the 3D model `drop_ship_v2.glb`, facing left |
-| Bydo shot (`pulse`) | 68 × 22: the model of energy `projectiles/enemy/shot_spiral.glb`, facing left |
+| Bydo (`BydoFlyer`) | The size of the collider of its ship, and the model of its ship (`config/ships/`), facing left, when it is a model of the hangar (`ShipCatalog`, which gives its hull and trails); otherwise `drop_ship_v2.glb`. Every ship of `config/ships/` but the boss has the box of the ships of the players, 168 × 98 |
+| Bydo shot (`pulse`) | The size of the collider of its projectile and the model of its projectile (`config/projectiles/`); otherwise 68 × 22: the model of energy `projectiles/enemy/shot_spiral.glb`, facing left |
 | Bydo plasma orb (`BydoPlasmaShot`) | 44 × 44: the model of energy `projectiles/enemy/orb_plasma.glb` |
 | Any other kind | A grey square |
 
@@ -136,6 +150,16 @@ plane of the game the way it flies, from its velocity: a Bydo shot aimed at a pl
 stays a box aligned with the axes. The plasma orbs of the Bydos have their own kind, `BYDO_PLASMA_SHOT`, so
 that they have their own model.
 
+The shots of the players and of the Bydos are drawn with the model of their projectile (`model` of
+`config/projectiles/`): each weapon its own. The snapshots give the index of the projectile of a shot among
+the ids of the projectiles, in alphabetical order (`EntityState::ship`), and the client loads every projectile of its
+configuration at the opening of the game (`setConfiguredProjectileLooks()`): its core is measured on the
+bounds of the model, the front of the model, at most three times as long as it is tall, the rest being its
+trail, and its light takes the colour of the mechanic of the weapon that fires it (for the players blue
+bullets, orange missiles, pink lasers, green plasma; for the Bydos purple bullets, red missiles, magenta
+lasers, orange plasma). The basic shot keeps its measured core, and so do `shot_spiral.glb` and
+`orb_plasma.glb` for the Bydos, facing left.
+
 ### Ships in 3D
 
 The game is flat, its models are not. The game scene has an **orthographic** camera
@@ -148,9 +172,9 @@ where its box would be, with the same size anywhere on the screen: what is drawn
   The Bydos are also turned by a half turn around their vertical axis, to face left.
 - **Size**: `ShipLook::hull` is the box around the hull of the model seen through this camera, flames and
   trails excluded, in model units, measured on the model in its `Move` pose. The model is scaled to make the
-  width of this box that of the collider, and moved to put its centre on the entity. The colliders have the
-  proportions of these hulls: `Rules::shipHalfWidth/Height` 84 × 49 for the players, `halfWidth = 70,
-  halfHeight = 27` in `config/ships/bydo_scout.lua`. A new model means measuring its hull again.
+  width of this box that of the collider, and moved to put its centre on the entity. Every ship but the
+  boss has the box of `Rules::shipHalfWidth/Height`, 84 × 49: the players, and the Bydos of `config/ships/`
+  (`halfWidth = 84, halfHeight = 49`), all as wide on the screen. A new model means measuring its hull again.
 - **Roll**: a ship rolls around its length while it climbs (its belly towards the camera, up to 40°) or
   dives (its top, up to 25°), at full vertical speed (`ShipAttitude`, from the vertical velocity of the snapshots). The
   roll eases towards its target every frame and adds to the tilt, around the same x axis; the hull stays
@@ -175,8 +199,12 @@ where its box would be, with the same size anywhere on the screen: what is drawn
   again only when its pose changes: ten Bydos cost one pose per frame. A ship recoiling has a pose of its
   own for 0.3 s.
 
-The models are chosen by the client (`Assets.hpp`): the snapshots do not say which ship of `config/ships/`
-an entity flies.
+The ships of the players, the allies and the Bydos of an unknown ship have their models chosen by the client
+(`Assets.hpp`). A Bydo flies the model of its ship: the snapshots carry the index of the ship
+(`EntityState::ship`, its rank among the ids of `config/ships/` in alphabetical order, `ShipRegistry::getIndex()`),
+and the client, which reads the same configuration, gives each ship whose model is one of the hangar a
+`ShipLook` (`GameSessionSystem::setShipLook(ship, look, size)`, from `GameScenes`), before the looks of the
+kinds. Client and game must read the same `config/ships/`: another configuration gives other indexes.
 
 **The boss** (`EntityKind::BydoBoss`, the shogun) is a standing figure, not a ship: a `BossLook`
 (`Game/BossLooks.hpp`), without roll nor tilt. Its model is turned by the same half turn around x, then by
@@ -255,6 +283,23 @@ turns red. The bar is created at the first hit, attached to the entity (`ecs::Pa
 and goes with it), and kept in `Replicated::healthBar`: an entity drawn in the World layer, under the damage
 numbers, whose gauge reads `HealthBar::shown`. The `HealthBarSystem` slides it down and fades it out.
 
+### Auras
+
+Each ship drawn in 3D casts an aura in the colour of its side, so that the player tells at a glance its own
+ship, those of its allies and those of its enemies. It is a shader projected on the model
+(`render::Aura`, `Renderer::drawAura()`, `libs/shaders/glsl/Aura.vert` and `Aura.frag`): the meshes of the
+model are drawn again, their vertices pushed 2.5 units out along their normals, lit in the colour of the aura
+where they graze the view (Fresnel) and clear where they face the camera, so that the model shows through. The
+light is faint and breathes a little; it is added to the image without hiding anything, and
+spreads around the ship in the glow of the frame (`Aura::bloom`). The hidden meshes of the model (the trails of
+the flames) have none.
+
+The Settings page chooses the three colours, or none (`AuraColors`, [Settings](settings.md)): the ship of the
+local player (green by default), the ships of the other players and of the allies of the rescue (blue), the
+Bydos (red). The bosses have none. `GameSessionSystem::setAuraColors()` gives the system the colours the page
+changes; a ship reads them when it appears, and its `engine::Model` keeps its aura, which the `SceneRenderer`
+draws right after the model, in its pose.
+
 ### Sounds
 
 A shot that appears in the game plays the sound of the weapon that fired it (`sounds/fx/blaster/`):
@@ -289,21 +334,50 @@ The HUD is the one of the Figma design (file `RrrH0ic4ttdyDoc3nRnWBr`, "Rangée 
 - a shadow along the top of the screen (black at 60 % fading out) and one along the bottom (fading in to 65 %),
   under the HUD and the toasts: `engine::Box` with a `bottom` colour, a vertical gradient;
 - bottom left, the local player: one picture per life of the start (`images/hud/life.png`, `life_lost.png`, as
-  on the death screen), lit for the lives left; its slot, `1P`; its score on seven digits, in large;
-- bottom right, the other players, one line each from the top in the order of their slots, `P2` then its
-  score; under them, online, the ping (`28 MS`) with four signal bars, lit under 25, 60 and 120 ms
+  on the death screen), lit for the lives left; its slot, `1P`, and online its name (`1P · KAZE`) and the icon
+  of its voice; its score on seven digits, in large;
+- bottom right, the other players, one line each from the top in the order of their slots: online, the icon of
+  its voice, then `P2`, its name and its score, its name turned white while it talks; offline, `P2` and its
+  score. Under them, online, the ping (`28 MS`) with four signal bars, lit under 25, 60 and 120 ms
   (`HudSystem::FourBars`…), one at least. Offline, there is no ping: nothing is shown;
 - top right, the events, which stay the toasts of the engine ([Events](#events)).
 
 `openHud()` creates its entities in the game scene, in the Interface layer under the death screen, and a `Hud`
 that lists them. The `HudSystem` writes them each frame from the players of the latest snapshot
-(`GameSessionSystem::players()`) and the ping of the session (`GameSession::ping()`: the round-trip time of the
-`network::ClientSession` online, none offline), and places them through their `Anchor`: the lines of the other
-players pile up from the ping, and their names follow the width of their score. Before the first snapshot, the
-local player has all its lives and a score of 0.
+(`GameSessionSystem::players()`), the ping of the session (`GameSession::ping()`: the round-trip time of the
+`network::ClientSession` online, none offline), the names of the players (`GameSession::playerNames()`, none
+offline) and its voice (`GameSession::voiceView()`, none offline), and places them through their `Anchor`: the
+lines of the other players pile up from the ping, and their parts follow the width of the one on their right.
+Before the first snapshot, the local player has all its lives and a score of 0.
 
-The design also has a record (`HI`), a Beam gauge and the names of the pilots: the game keeps no record, has no
-charged shot yet, and the HUD names the players by slot, as the events do.
+The voice in the HUD is the one of Série 16 of the design (`Voix en jeu`, node 210:1483): the icons, and the
+badge above the ship of a pilot who talks, are described in [Voice](voice.md#in-the-hud-and-the-pause-menu).
+
+The design also has a record (`HI`) and a Beam gauge: the game keeps no record and has no charged shot yet.
+The events name the players by slot.
+
+#### In the cockpit
+
+In a VR headset, the HUD is on the screens of the cockpit (Figma, Série 17, `Cockpit VR`, section 221:1772),
+each part given the surface of its screen (`engine::OnSurface`, [VR](vr.md#the-interface-in-the-cockpit)).
+While the surfaces are apart (`Metrics::surfacesApart()`), the `HudSystem` gives the parts the sizes of
+`CockpitHud`, larger than those of the screen (`ScreenHud`) to be read at arm's length, and places them from the
+top of the part of their screen the pilot sees: the panel of the dashboard hides the sides of the screens of
+the ship and of the navigation ([VR](vr.md#the-interface-in-the-cockpit)), so what is left of them is about
+square, and taller than wide for the navigation. The screen of the ship keeps everything on its left, out from
+under the flight stick, which hides its bottom right; the navigation puts the kind of game and the ping on two
+lines.
+
+| Screen | Size, game units | Shows |
+| ------ | ---------------- | ----- |
+| Ship (`HudShip`, on the right) | 317 × 360 | The slot and the name of the pilot, the icon of its voice, its lives, its score, its experience, its hit points. |
+| Navigation (`HudNav`, in the middle) | 230 × 310 | `WAVE` over the wave (`03 / 08`, or `WAVE · ENDLESS` over `07`), `BOSS APPROACHING` in red while a boss is in the game, the kind of game (`SOLO`, `ONLINE` after a cyan light), and under it the ping and its bars. |
+| Sides (`HudAux`, the four small screens) | 420 × 300 | `PILOTS` over a line per other pilot: the icon of its voice, its slot, its name, its score; `FLYING SOLO` alone. |
+| Hologram (`Holo`) | 480 × 330 | The radar: the frame of the board and its grid, a square per ship and Bydo (`radarBlip()`, `Game/Radar.hpp`): the pilot in white, the other players and the allies in cyan, the Bydos in red, the boss framed in orange. The shots are not shown. |
+
+The wave, the boss, the kind of game, the title of the pilots and the radar are on the screens of the cockpit
+only: on the screen their texts are empty and the radar transparent. The shadows, which belong to the screen,
+are hidden in the cockpit. The words come from the locales (`hud.*`).
 
 ### Events
 
@@ -519,7 +593,12 @@ added with a line in one of the tables and its name in `en.lang` and `fr.lang`.
   just lost goes out after the veil and the rest have faded in;
 - the HUD: the lives left of the local player lit, its slot and its score on seven digits, all its lives before
   the first snapshot; the scores of the other players, the first on top, a player gone leaving its line; the
-  ping with its signal bars when the session has one, nothing offline.
+  ping with its signal bars when the session has one, nothing offline; online, the names of the pilots and the
+  icons of their voice, and the badge above the ship of a pilot who talks (tag `[voice]`);
+- the HUD in the cockpit (tag `[vr]`): each part on the surface of its screen; on the screen, its look kept and
+  nothing of the cockpit shown; in the cockpit, larger, placed from the top of its screens, with the wave, the
+  kind of game and the other pilots, and back as before on the screen; the radar, which shows the ships and the
+  Bydos but not the shots, and warns of the boss; where a blip is in the frame of the board.
 
 ```sh
 ./build/bin/rtype_tests "[client]"

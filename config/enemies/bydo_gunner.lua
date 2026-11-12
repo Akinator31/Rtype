@@ -23,7 +23,7 @@ end
 return {
     id = "bydo_gunner",
     ship = "bydo_gunner",
-    health = 80,
+    health = 34,
     speed = 450,
     weapon = "plasma_gun",
     score = 250,

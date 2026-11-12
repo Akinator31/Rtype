@@ -336,6 +336,9 @@ struct SliderStyle {
     float paddingTop = 20.0f;
     float captionGap = 22.0f;
     float paddingBottom = 26.0f;
+    /// The picture after the caption (Slider::icon): its size, and the space between the caption and it.
+    float iconSize = 22.0f;
+    float iconGap = 12.0f;
     float railThickness = 3.0f;
     float fillThickness = 4.0f;
     render::Color rail{255, 255, 255, 41};
@@ -358,6 +361,9 @@ struct SliderStyle {
     render::Color caption{213, 217, 221, 255};
     render::Color litCaption{255, 255, 255, 255};
     render::Color value{195, 200, 205, 255};
+    /// A locked slider (Slider::locked): the row dimmed by this, its value in this red (Figma, Série 16).
+    float lockedOpacity = 0.45f;
+    render::Color lockedValue{232, 114, 110, 255};
     /// Time to go from one look to another, in seconds.
     float fadeDuration = 0.15f;
 

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rtype::client
@@ -42,13 +43,23 @@ private:
     std::vector<game::Snapshot> _snapshots;
     /// The world at the last step, for between().
     std::optional<game::Snapshot> _last;
+    /// The waves of the game config, played one after the other.
+    std::uint16_t _waveCount = 0;
+    /// The weapons of the player, empty with the one of the game alone.
+    game::Loadout _loadout;
 
 public:
     /// @param config The definitions of the game, loaded once by the client (loadGameConfig()).
-    explicit LocalSession(game::Rules rules = {}, const game::GameConfig &config = {});
+    /// @param loadout The weapons the player chose in the hangar; empty, that of the config alone.
+    /// @param ship The code of the ship the player equipped in the hangar, whose characteristics the game
+    /// applies (Simulation::setShip()); empty, or not in the hangar of the config, the ship of the rules.
+    explicit LocalSession(game::Rules rules = {}, const game::GameConfig &config = {},
+                          const game::Loadout &loadout = {}, const std::string &ship = {});
 
     [[nodiscard]] std::uint8_t localSlot() const override { return 0; }
+    [[nodiscard]] std::optional<std::uint16_t> waveCount() const override { return _waveCount; }
     void setInput(game::PlayerInput input) override { _input = input; }
+    [[nodiscard]] game::Loadout loadout() const override { return _loadout; }
     void update(float elapsed) override;
     [[nodiscard]] std::vector<game::Snapshot> takeSnapshots() override;
     [[nodiscard]] std::optional<game::Snapshot> between() const override;

@@ -14,6 +14,17 @@
 namespace rtype::game
 {
 
+/// Items a wave makes appear: how many of one kind, at random places of the screen and at random times while
+/// its enemies come.
+struct WaveItem {
+    /// The id of an ItemDefinition.
+    std::string item;
+    /// How many appear: `quantity` (above 0), or a number drawn from `quantity` to `maxQuantity` each time
+    /// the wave is played, when `maxQuantity` is above it.
+    std::uint16_t quantity = 1;
+    std::uint16_t maxQuantity = 0;
+};
+
 /// The difficulty of the easiest waves, and of the hardest: the last one, the final boss.
 constexpr std::uint8_t MinWaveDifficulty = 1;
 constexpr std::uint8_t MaxWaveDifficulty = 6;
@@ -48,6 +59,8 @@ struct WaveDefinition {
     /// Music only: seconds an enemy needs to cross the screen, so that it comes in sight before its beat,
     /// not on it.
     float lead = 1.5f;
+    /// The items that appear during the wave, whatever its placement.
+    std::vector<WaveItem> items;
     /// Music only: the enemies and the tick they appear at, by increasing tick. Not written in the files:
     /// loadGameConfig() fills it from the music, and `quantity` with its size.
     std::vector<WaveTimedSpawn> timeline;

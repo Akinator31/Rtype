@@ -16,6 +16,9 @@ void createPlanetSystem(ecs::Ecs &ecs, engine::SceneId scene, render::ResourceMa
 /// Where the centre of the planet is, and its radius, in world units: the ships of the menu hide behind it.
 [[nodiscard]] render::Vector3 getPlanetCentre();
 [[nodiscard]] float getPlanetRadius();
+/// The direction the rings of the planet face, of length 1: straight above their plane, on the side of the
+/// camera of the menu.
+[[nodiscard]] render::Vector3 getRingsNormal();
 
 /// A view from inside the rings of asteroids, close to the rocks, on the side of the planet facing the menu:
 /// it looks along the rings, so that only asteroids are seen, not the planet. A camera flying

@@ -1,10 +1,12 @@
-# Keyboard and gamepad input, turned into game actions.
+# Keyboard, mouse and gamepad input, turned into game actions, and a virtual gamepad and pointer (the
+# controllers of a VR headset) over them.
 # Built on raylib, which stays out of the public headers.
 add_library(rtype_input
     src/Binding.cpp
     src/Devices.cpp
     src/Keys.cpp
     src/TextInput.cpp
+    src/VirtualInput.cpp
 )
 add_library(rtype::input ALIAS rtype_input)
 target_include_directories(rtype_input PUBLIC include)
