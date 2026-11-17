@@ -1,0 +1,4 @@
+#!/usr/bin/with-contenv bash
+# The server of the session, as the desktop's user, on the loopback of the container
+cd /var/lib/rtype || exit 1
+exec s6-setuidgid abc /opt/rtype/r-type_server --settings /etc/rtype/server.toml

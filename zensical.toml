@@ -60,6 +60,7 @@ nav = [
         "guides/set-up-accounts.md",
         "guides/administer-a-server.md",
         "guides/deploy-with-docker.md",
+        "guides/try-in-the-browser.md",
         "guides/use-an-external-database.md",
         "guides/play-online.md",
         "guides/play-in-vr.md",

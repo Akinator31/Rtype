@@ -1,0 +1,23 @@
+# The context of docker/tryout/Dockerfile: the sources and the assets of the client, without the history, the
+# builds, the panel and the data of the machine that builds it
+.git
+.tmp
+build
+build-*
+cmake-build-*
+out
+.cpm-cache
+.cache
+.vscode
+.idea
+site
+docs
+web
+**/node_modules
+keys
+/server.toml
+*.key
+*.db
+*.db-*
+/screenshot*.png
+admin-url.txt

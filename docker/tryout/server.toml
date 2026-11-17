@@ -1,0 +1,14 @@
+# The server of a Tryout session (docs/guides/try-in-the-browser.md): guests only, on the loopback of the
+# container, for the one visitor of the session. Its key is made when the image is built and trusted by the
+# client's settings: every session has the same one, which nothing outside the container ever sees.
+
+[server]
+port = 4242
+game_port = 4242
+max_games = 2
+key = "/var/lib/rtype/server.key"
+database = "sqlite:/var/lib/rtype/rtype.db"
+
+[web]
+# The panel on a free port of the loopback: the ports of the desktop stay free
+listen = "127.0.0.1:0"
