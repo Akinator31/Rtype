@@ -1,0 +1,16 @@
+#!/usr/bin/with-contenv bash
+# The server's folder to the desktop's user, and, at the first start, the client's settings: the key of the
+# local server already trusted, so that the visitor connects to 127.0.0.1:4242 with no question, and 30 frames
+# per second, the rate of the stream, since the desktop renders in software
+chown -R abc:abc /var/lib/rtype
+
+settings=/config/.local/share/r-type/settings.txt
+if [ ! -f "$settings" ]; then
+    install -d -o abc -g abc /config/.local /config/.local/share /config/.local/share/r-type
+    {
+        echo "display.fps_limit=30"
+        echo "servers.known.127.0.0.1:4242=$(cat /etc/rtype/fingerprint)"
+    } > "$settings"
+    chown abc:abc "$settings"
+    chmod 600 "$settings"
+fi

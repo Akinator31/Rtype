@@ -18,6 +18,7 @@ Step-by-step guides for common tasks in the client and the server. They assume t
 | [Set up accounts](set-up-accounts.md) | Give the players of a server their accounts: the mail server their codes are sent through, what they can do, and the data kept. |
 | [Administer a server](administer-a-server.md) | Open the panel of a server, watch its games and players live, end a game, message, remove, ban. |
 | [Deploy with Docker](deploy-with-docker.md) | Run the server from its image in Dokploy, publish its ports, keep its volume, back up its database; then with its accounts, its secrets as files, and the panel on its domain. |
+| [Try in the browser](try-in-the-browser.md) | Serve the client and a server of its own on a desktop streamed into a web page by Tryout, for the visitors of a portfolio. |
 | [Use an external database](use-an-external-database.md) | Give a server a PostgreSQL database hosted elsewhere, without its password on the command line. |
 | [Play online](play-online.md) | Start a server, connect to it, trust its key, create and join a game. |
 | [Play in VR](play-in-vr.md) | Start a runtime, connect a headset, start the client in it, and find why it shows nothing. |

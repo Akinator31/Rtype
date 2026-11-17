@@ -1,0 +1,72 @@
+name: Tryout
+
+# The image that plays R-Type in a browser with Tryout (docs/guides/try-in-the-browser.md): the client and a
+# server on a streamed desktop. Built and checked on every pull request, then published on GHCR for
+# linux/amd64 only (the Discord Social SDK of the client exists for no other Linux) from main (tag main) and
+# from the tags of the releases (their version, and latest)
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tryout-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Image
+    runs-on: [self-hosted, linux]
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: rtype-tryout:ci-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build the image
+        run: docker build --platform linux/amd64 -f docker/tryout/Dockerfile -t "$IMAGE" .
+
+      # Both programs find every library of the desktop image, and the client trusts the key of the server
+      - name: Check the image
+        run: |
+          docker run --rm --entrypoint sh "$IMAGE" -c '
+            missing=$(ldd /opt/rtype/r-type_client /opt/rtype/r-type_server | grep "not found") \
+              && { echo "$missing"; exit 1; }
+            test -s /etc/rtype/fingerprint && test -s /var/lib/rtype/server.key
+            /opt/rtype/r-type_server --fingerprint --key /var/lib/rtype/server.key | tr -d "[:space:]" \
+              | cmp -s - /etc/rtype/fingerprint'
+
+      - name: Publish on GHCR
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/rtype-tryout"
+          if [ "$REF_TYPE" = tag ]; then
+            tags=("${REF_NAME#v}")
+            # A prerelease never becomes latest
+            [[ "$REF_NAME" == *-* ]] || tags+=(latest)
+          else
+            tags=(main)
+          fi
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for tag in "${tags[@]}"; do
+            docker tag "$IMAGE" "$image:$tag"
+            docker push "$image:$tag"
+          done
+          docker logout ghcr.io
+
+      - name: Remove the image
+        if: always()
+        run: docker rmi -f "$IMAGE" >/dev/null 2>&1 || true

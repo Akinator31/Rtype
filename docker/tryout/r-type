@@ -1,0 +1,3 @@
+#!/bin/sh
+# Starts the client, which finds its assets next to it
+cd /opt/rtype && exec ./r-type_client
