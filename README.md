@@ -271,6 +271,23 @@ See [Accessibility](https://akinator31.github.io/Rtype/accessibility/).
 
 ### Server and administration
 
+<p align="center">
+<img src="docs/assets/gifs/panel.gif" alt="The web panel: sign in with the local token, the overview, the players with the details of one, the bans, then a message sent to the whole lobby" width="85%">
+<br>
+<sub>The web panel: sign in, the live overview, the players, the bans, a message to the lobby</sub>
+</p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/assets/gifs/panel-live.gif" alt="The panel next to a client: the player joins and shows up in the list, the messages of the panel appear in the game, then the admin opens the game of the player, sends it a message and removes the player"></td>
+<td width="50%"><img src="docs/assets/gifs/panel-pages.gif" alt="The history of the actions, the accounts with the details of one, their emails and Discord identifiers blurred, then the settings"></td>
+</tr>
+<tr>
+<td align="center"><sub>Live: messages and a kick reach the game at once</sub></td>
+<td align="center"><sub>The history, the accounts and the settings</sub></td>
+</tr>
+</table>
+
 - **Master and instances**: the master runs the lobby, the accounts and the panel, and starts one process per
   game, up to a configurable limit.
 - **A settings file** (TOML) for the ports, the accounts, the mail server, Discord and the administrators; the

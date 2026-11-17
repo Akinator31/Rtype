@@ -84,7 +84,7 @@ flowchart LR
 
 ### Images and GIFs
 
-Pictures live in `docs/assets/`: the logo and the banner in `logo/`, the recordings of the game in `gifs/`. The
+Pictures live in `docs/assets/`: the logo and the banner in `logo/`, the recordings of the game and of the panel in `gifs/`. The
 README at the root of the repository shows the same files, by their path from the root
 (`docs/assets/gifs/gameplay.gif`); a page of the documentation by its path from the page
 (`../assets/gifs/gameplay.gif`).

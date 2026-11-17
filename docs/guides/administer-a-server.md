@@ -56,6 +56,10 @@ administrator also signs in from anywhere ([From anywhere, with an account](#fro
     | Accounts | With accounts: every account, searched by username, email or Discord id; its role and whether it is banned |
     | Settings | The version and the ports of the server, and the preferences of the panel |
 
+    ![The web panel: sign in with the local token, the overview, the players with the details of one, the bans, then a message sent to the whole lobby](../assets/gifs/panel.gif)
+
+    ![The history of the actions, the accounts with the details of one, their emails and Discord identifiers blurred, then the settings](../assets/gifs/panel-pages.gif)
+
 4. **Act**. Removing a player, ending a game, muting a voice, banning and lifting a ban ask for a confirmation and an optional
    reason, recorded with it; a toast then says what happened at the top right, and the action shows in
    **History**:
@@ -73,6 +77,8 @@ administrator also signs in from anywhere ([From anywhere, with an account](#fro
     | Unban an account | Accounts, **Unban** | It signs in again |
     | Name an administrator | Accounts, **Make admin**, **Make player** | It signs in to the panel, or loses it at once |
     | Delete an account | Accounts, **Delete** | The account is deleted for good; its actions stay, anonymized |
+
+    ![The panel next to a client: the player joins and shows up in the list, the messages of the panel appear in the game, then the admin opens the game of the player, sends it a message and removes the player](../assets/gifs/panel-live.gif)
 
     A ban is temporary: an address is shared, by a household or a network, and changes. The server never keeps
     a voice, so none can be reported nor heard again: a mute is all it does. In **Settings**, turn
